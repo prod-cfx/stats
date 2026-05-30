@@ -687,14 +687,8 @@
   "tabWhale": "巨鲸",
   "tabStrategy": "策略",
   "tabMe": "我的",
-  "liveStrategyEntryTitle": "实盘策略",
+  "liveStrategyEntryTitle": "查看实盘策略",
   "liveStrategyEntrySubtitle": "查看运行状态、持仓与收益",
-  "liveStrategyEntryRunning": "{count} 运行中",
-  "@liveStrategyEntryRunning": {
-    "placeholders": {
-      "count": {"type": "int"}
-    }
-  },
   "liveListTitle": "实盘策略",
   "liveListTotalAssets": "总资产 (持仓 + 可用)",
   "liveListTodayPnl": "今日盈亏",

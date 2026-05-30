@@ -211,6 +211,12 @@ class LiveStrategySummary {
   final double todayPnl;
   final double totalPnl;
   final int runningCount;
+
+  /// 需关注（warning）策略数。计入活跃统计。
+  final int warningCount;
+
+  /// 已暂停（paused）策略数。计入活跃统计。
+  final int pausedCount;
   final int stoppedCount;
 
   const LiveStrategySummary({
@@ -219,8 +225,13 @@ class LiveStrategySummary {
     required this.todayPnl,
     required this.totalPnl,
     required this.runningCount,
+    required this.warningCount,
+    required this.pausedCount,
     required this.stoppedCount,
   });
+
+  /// 活跃策略总数（非 stopped），口径与设计稿 `active.length` 一致。
+  int get activeCount => runningCount + warningCount + pausedCount;
 
   /// 总收益率（基于本金）。本金为 0 时返回 0 避免除零。
   double get totalPct => totalCapital == 0 ? 0 : (totalPnl / totalCapital) * 100;

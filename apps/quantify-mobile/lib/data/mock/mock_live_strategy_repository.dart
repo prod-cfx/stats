@@ -30,11 +30,22 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
     double today = 0;
     double total = 0;
     int running = 0;
+    int warning = 0;
+    int paused = 0;
     for (final LiveStrategy s in active) {
       cap += s.capital;
       today += s.todayPnl;
       total += s.totalPnl;
-      if (s.status == LiveStrategyStatus.running) running++;
+      switch (s.status) {
+        case LiveStrategyStatus.running:
+          running++;
+        case LiveStrategyStatus.warning:
+          warning++;
+        case LiveStrategyStatus.paused:
+          paused++;
+        case LiveStrategyStatus.stopped:
+          break;
+      }
     }
     final int stopped = mockLiveStrategies
         .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
@@ -45,6 +56,8 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
       todayPnl: today,
       totalPnl: total,
       runningCount: running,
+      warningCount: warning,
+      pausedCount: paused,
       stoppedCount: stopped,
     );
   }

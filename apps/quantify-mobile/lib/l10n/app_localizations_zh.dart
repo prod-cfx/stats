@@ -1779,15 +1779,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tabMe => '我的';
 
   @override
-  String get liveStrategyEntryTitle => '实盘策略';
+  String get liveStrategyEntryTitle => '查看实盘策略';
 
   @override
   String get liveStrategyEntrySubtitle => '查看运行状态、持仓与收益';
-
-  @override
-  String liveStrategyEntryRunning(int count) {
-    return '$count 运行中';
-  }
 
   @override
   String get liveListTitle => '实盘策略';

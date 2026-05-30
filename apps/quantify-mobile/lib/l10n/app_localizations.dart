@@ -3527,7 +3527,7 @@ abstract class AppLocalizations {
   /// No description provided for @liveStrategyEntryTitle.
   ///
   /// In zh, this message translates to:
-  /// **'实盘策略'**
+  /// **'查看实盘策略'**
   String get liveStrategyEntryTitle;
 
   /// No description provided for @liveStrategyEntrySubtitle.
@@ -3535,12 +3535,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'查看运行状态、持仓与收益'**
   String get liveStrategyEntrySubtitle;
-
-  /// No description provided for @liveStrategyEntryRunning.
-  ///
-  /// In zh, this message translates to:
-  /// **'{count} 运行中'**
-  String liveStrategyEntryRunning(int count);
 
   /// No description provided for @liveListTitle.
   ///

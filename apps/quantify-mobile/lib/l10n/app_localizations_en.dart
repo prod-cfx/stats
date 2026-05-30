@@ -1818,15 +1818,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tabMe => 'Me';
 
   @override
-  String get liveStrategyEntryTitle => 'Live Strategies';
+  String get liveStrategyEntryTitle => 'View Live Strategies';
 
   @override
   String get liveStrategyEntrySubtitle => 'Track status, positions and PnL';
-
-  @override
-  String liveStrategyEntryRunning(int count) {
-    return '$count running';
-  }
 
   @override
   String get liveListTitle => 'Live Strategies';

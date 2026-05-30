@@ -13,6 +13,7 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_spinner.dart';
+import '../live/widgets/live_status_style.dart';
 import 'api_form_sheet.dart';
 import 'widgets/qz_account_header.dart';
 import 'widgets/qz_section_title.dart';
@@ -255,9 +256,19 @@ class _LiveStrategiesHeroCard extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<LiveStrategySummary> summary =
         ref.watch(liveStrategySummaryProvider);
-    final int runningCount = summary.maybeWhen(
-      data: (LiveStrategySummary s) => s.runningCount,
-      orElse: () => 0,
+    // 加载/错误态退化为 0 计数；整卡始终可点。
+    final LiveStrategySummary s = summary.maybeWhen(
+      data: (LiveStrategySummary v) => v,
+      orElse: () => const LiveStrategySummary(
+        totalAssets: 0,
+        totalCapital: 0,
+        todayPnl: 0,
+        totalPnl: 0,
+        runningCount: 0,
+        warningCount: 0,
+        pausedCount: 0,
+        stoppedCount: 0,
+      ),
     );
 
     return Material(
@@ -294,22 +305,25 @@ class _LiveStrategiesHeroCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Text(
-                      l10n.liveStrategyEntryTitle,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            l10n.liveStrategyEntryTitle,
+                            style: TextStyle(
+                              color: c.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _ActiveCountBadge(count: s.activeCount, c: c),
+                      ],
                     ),
                     const SizedBox(height: 3),
-                    if (runningCount > 0)
-                      _RunningBadge(count: runningCount, l10n: l10n, c: c)
-                    else
-                      Text(
-                        l10n.liveStrategyEntrySubtitle,
-                        style: TextStyle(color: c.textMid, fontSize: 11),
-                      ),
+                    _LiveStatusBreakdown(summary: s, l10n: l10n, c: c),
                   ],
                 ),
               ),
@@ -322,34 +336,126 @@ class _LiveStrategiesHeroCard extends ConsumerWidget {
   }
 }
 
-class _RunningBadge extends StatelessWidget {
-  const _RunningBadge({
-    required this.count,
+/// 标题旁的活跃计数 pill（紫底），对齐设计稿 `m-screens-4.jsx:2546-2551`。
+class _ActiveCountBadge extends StatelessWidget {
+  const _ActiveCountBadge({required this.count, required this.c});
+  final int count;
+  final QzColorScheme c;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          color: c.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          fontFamilyFallback: const <String>['ui-monospace', 'monospace'],
+        ),
+      ),
+    );
+  }
+}
+
+/// 多状态明细行：`N 运行中 · N 需关注 · N 已暂停 · N 已停止`，对齐设计稿
+/// `m-screens-4.jsx:2556-2589`。计数为 0 的状态不渲染；首项带状态圆点。
+class _LiveStatusBreakdown extends StatelessWidget {
+  const _LiveStatusBreakdown({
+    required this.summary,
     required this.l10n,
     required this.c,
   });
-  final int count;
+  final LiveStrategySummary summary;
   final AppLocalizations l10n;
   final QzColorScheme c;
 
   @override
   Widget build(BuildContext context) {
+    final List<(LiveStrategyStatus, int)> entries = <(LiveStrategyStatus, int)>[
+      (LiveStrategyStatus.running, summary.runningCount),
+      (LiveStrategyStatus.warning, summary.warningCount),
+      (LiveStrategyStatus.paused, summary.pausedCount),
+      (LiveStrategyStatus.stopped, summary.stoppedCount),
+    ].where(((LiveStrategyStatus, int) e) => e.$2 > 0).toList();
+
+    if (entries.isEmpty) {
+      return Text(
+        l10n.liveStrategyEntrySubtitle,
+        style: TextStyle(color: c.textMid, fontSize: 11),
+      );
+    }
+
+    final List<Widget> children = <Widget>[];
+    for (int i = 0; i < entries.length; i++) {
+      if (i > 0) {
+        children.add(Text('·', style: TextStyle(color: c.textDim, fontSize: 11)));
+      }
+      final (LiveStrategyStatus status, int count) = entries[i];
+      children.add(_StatusChip(
+        status: status,
+        count: count,
+        showDot: i == 0,
+        c: c,
+        l10n: l10n,
+      ));
+    }
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.status,
+    required this.count,
+    required this.showDot,
+    required this.c,
+    required this.l10n,
+  });
+  final LiveStrategyStatus status;
+  final int count;
+  final bool showDot;
+  final QzColorScheme c;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final LiveStatusStyle style = liveStatusStyle(status, c, l10n);
+    // stopped/paused 按设计稿走 dim 灰；running/warning 用其 tone 色。
+    final Color tone = switch (status) {
+      LiveStrategyStatus.running => c.statusOk,
+      LiveStrategyStatus.warning => c.statusWarn,
+      LiveStrategyStatus.paused => c.textDim,
+      LiveStrategyStatus.stopped => c.textDim,
+    };
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: c.statusOk,
-            shape: BoxShape.circle,
+        if (showDot) ...<Widget>[
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
           ),
-        ),
-        const SizedBox(width: QzSpacing.sm),
+          const SizedBox(width: 4),
+        ],
         Text(
-          l10n.liveStrategyEntryRunning(count),
+          '$count ${style.label}',
           style: TextStyle(
-            color: c.statusOk,
+            color: tone,
             fontSize: 11,
             fontWeight: FontWeight.w500,
           ),

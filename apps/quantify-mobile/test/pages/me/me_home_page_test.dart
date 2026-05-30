@@ -29,6 +29,16 @@ Future<ProviderContainer> _pumpMe(
   WidgetTester tester, {
   AuthSession? initialSession,
   QzTheme theme = QzTheme.fallback,
+  LiveStrategySummary summary = const LiveStrategySummary(
+    totalAssets: 0,
+    totalCapital: 0,
+    todayPnl: 0,
+    totalPnl: 0,
+    runningCount: 2,
+    warningCount: 1,
+    pausedCount: 1,
+    stoppedCount: 1,
+  ),
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -49,19 +59,9 @@ Future<ProviderContainer> _pumpMe(
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
       accountRepositoryProvider.overrideWithValue(MockAccountRepository()),
       apiKeyRepositoryProvider.overrideWithValue(MockApiKeyRepository()),
-      // 大卡计数（#1792）直接喂确定值，避免 mock repo 的 200ms 延时
-      // 在 widget 树 dispose 后留下 pending timer。runningCount=2 与
-      // mock fixture 一致。
-      liveStrategySummaryProvider.overrideWith(
-        (Ref ref) async => const LiveStrategySummary(
-          totalAssets: 0,
-          totalCapital: 0,
-          todayPnl: 0,
-          totalPnl: 0,
-          runningCount: 2,
-          stoppedCount: 0,
-        ),
-      ),
+      // 大卡计数（#1792 / #1816）直接喂确定值，避免 mock repo 的 200ms 延时
+      // 在 widget 树 dispose 后留下 pending timer。
+      liveStrategySummaryProvider.overrideWith((Ref ref) async => summary),
     ],
   );
   // M6 修复：每个 testWidgets 结束 dispose 容器（9 主题循环防止 9 个容器泄漏）。
@@ -154,8 +154,79 @@ void main() {
   testWidgets('实盘策略大卡展示运行中策略计数（#1792）',
       (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
-    // mock fixture 含 2 个 running 策略 → 「2 运行中」。
+    // fixture 含 2 个 running 策略 → 「2 运行中」。
     expect(find.text('2 运行中'), findsOneWidget);
+  });
+
+  testWidgets('标题文案对齐设计稿「查看实盘策略」（#1816）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    // 限定在入口卡内（避免与他处同名文案撞车）。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('me-live-strategies-entry')),
+        matching: find.text('查看实盘策略'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('标题旁渲染活跃计数 badge（非 stopped 总数）（#1816）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    // active = running 2 + warning 1 + paused 1 = 4（stopped 不计）。
+    expect(find.text('4'), findsOneWidget);
+  });
+
+  testWidgets('多状态明细行按顺序展示且 0 计数不渲染（#1816）',
+      (WidgetTester tester) async {
+    await _pumpMe(
+      tester,
+      initialSession: kSession,
+      summary: const LiveStrategySummary(
+        totalAssets: 0,
+        totalCapital: 0,
+        todayPnl: 0,
+        totalPnl: 0,
+        runningCount: 3,
+        warningCount: 2,
+        pausedCount: 0,
+        stoppedCount: 1,
+      ),
+    );
+    expect(find.text('3 运行中'), findsOneWidget);
+    expect(find.text('2 需关注'), findsOneWidget);
+    // pausedCount=0 → 不渲染。
+    expect(find.textContaining('已暂停'), findsNothing);
+    expect(find.text('1 已停止'), findsOneWidget);
+    // badge active = 3 + 2 + 0 = 5。
+    expect(find.text('5'), findsOneWidget);
+  });
+
+  testWidgets('全 0 计数退化为副标题且整卡仍可点进入 /me/live（#1816）',
+      (WidgetTester tester) async {
+    await _pumpMe(
+      tester,
+      initialSession: kSession,
+      summary: const LiveStrategySummary(
+        totalAssets: 0,
+        totalCapital: 0,
+        todayPnl: 0,
+        totalPnl: 0,
+        runningCount: 0,
+        warningCount: 0,
+        pausedCount: 0,
+        stoppedCount: 0,
+      ),
+    );
+    expect(find.text('查看运行状态、持仓与收益'), findsOneWidget);
+    // badge 显示 0，整卡可点。
+    expect(find.text('0'), findsWidgets);
+    final Finder entry = find.byKey(const Key('me-live-strategies-entry'));
+    await tester.ensureVisible(entry);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('live-stub')), findsOneWidget);
   });
 
   testWidgets('渲染 header + 分组 + 退出登录按钮', (WidgetTester tester) async {
