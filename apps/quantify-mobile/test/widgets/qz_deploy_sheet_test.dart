@@ -119,6 +119,21 @@ void main() {
     expect(find.byKey(const Key('deploy-allocate-per-trade')), findsOneWidget);
     expect(find.byKey(const Key('deploy-allocate-max-loss')), findsOneWidget);
     expect(find.byKey(const Key('deploy-allocate-notify')), findsOneWidget);
+    // #1796：单笔上限/日内亏损为滑块，通知拆 3 个分渠道开关
+    expect(find.byType(Slider), findsNWidgets(2));
+    expect(
+      find.byKey(const Key('deploy-allocate-notify-open')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('deploy-allocate-notify-close')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('deploy-allocate-notify-stop-loss')),
+      findsOneWidget,
+    );
+    expect(find.byType(Switch), findsNWidgets(3));
     // 步骤指示可见（authorize=1/5 起）
     expect(find.byKey(const Key('deploy-step-indicator')), findsOneWidget);
 
@@ -160,6 +175,55 @@ void main() {
     expect(find.byKey(const Key('deploy-next-notify')), findsOneWidget);
     expect(find.byKey(const Key('deploy-next-tune')), findsOneWidget);
     expect(find.byKey(const Key('deploy-finish')), findsOneWidget);
+  });
+
+  testWidgets(
+      'QzDeploySheet: 资金配置滑块可拖动、分渠道通知开关可独立切换（#1796）',
+      (WidgetTester tester) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    await _pumpSheet(tester, repo: repo);
+
+    await tester.tap(find.byKey(const Key('deploy-exchange-binance')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('deploy-confirm')));
+    await tester.pumpAndSettle();
+
+    // 默认：单笔 20%、日内亏损 -10%
+    expect(find.text('20%'), findsOneWidget);
+    expect(find.text('-10%'), findsOneWidget);
+
+    // 拖动单笔上限滑块 → 值变化（具体落点取决于轨道宽度，断言不再是默认 20%）
+    final Finder perTradeSlider = find.descendant(
+      of: find.byKey(const Key('deploy-allocate-per-trade')),
+      matching: find.byType(Slider),
+    );
+    await tester.drag(perTradeSlider, const Offset(80, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('20%'), findsNothing);
+
+    // 关闭「开仓时通知」开关 → 该行 Switch 变 false，另两个不受影响
+    final Finder openSwitch = find.descendant(
+      of: find.byKey(const Key('deploy-allocate-notify-open')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(openSwitch).value, isTrue);
+    await tester.tap(openSwitch);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(openSwitch).value, isFalse);
+
+    final Finder closeSwitch = find.descendant(
+      of: find.byKey(const Key('deploy-allocate-notify-close')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(closeSwitch).value, isTrue);
   });
 
   testWidgets(

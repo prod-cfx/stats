@@ -110,7 +110,10 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   double _amount = _defaultAmount;
   int _perTradePct = _defaultPerTradePct;
   int _maxDailyLossPct = _defaultMaxDailyLossPct;
-  bool _notify = true;
+  // 分渠道通知开关（#1796，对齐设计稿 3 个开关）。
+  bool _notifyOpen = true;
+  bool _notifyClose = true;
+  bool _notifyStopLoss = true;
 
   /// 选中交易所 → 授权步；授权/未授权变体由 `_buildBody` 按 `authorized` 分流。
   void _pickTarget(_DeployTarget t) {
@@ -267,12 +270,17 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           amount: _amount,
           perTradePct: _perTradePct,
           maxDailyLossPct: _maxDailyLossPct,
-          notify: _notify,
+          notifyOpen: _notifyOpen,
+          notifyClose: _notifyClose,
+          notifyStopLoss: _notifyStopLoss,
           onAmountChanged: (double v) => setState(() => _amount = v),
           onPerTradeChanged: (int v) => setState(() => _perTradePct = v),
           onMaxDailyLossChanged: (int v) =>
               setState(() => _maxDailyLossPct = v),
-          onNotifyChanged: (bool v) => setState(() => _notify = v),
+          onNotifyOpenChanged: (bool v) => setState(() => _notifyOpen = v),
+          onNotifyCloseChanged: (bool v) => setState(() => _notifyClose = v),
+          onNotifyStopLossChanged: (bool v) =>
+              setState(() => _notifyStopLoss = v),
           onNext: _goPreflight,
         );
       case DeployStep.preflight:
@@ -1360,18 +1368,23 @@ class _NextStepRow extends StatelessWidget {
 /// 资金配置（#1772 DpAllocate）。
 ///
 /// 投入金额 + 25/50/75/MAX 快捷比例（基于固定 mock 可用额度 10000 USDT）+
-/// 单笔仓位上限 / 日内最大亏损 stepper + 通知渠道开关。全部前端 mock 输入。
+/// 单笔仓位上限 / 日内最大亏损滑块 + 分渠道通知开关。全部前端 mock 输入。
+/// （#1796：stepper → Slider，单一通知 Switch → 3 个分渠道开关，对齐设计稿。）
 class _AllocatePane extends StatelessWidget {
   const _AllocatePane({
     required this.target,
     required this.amount,
     required this.perTradePct,
     required this.maxDailyLossPct,
-    required this.notify,
+    required this.notifyOpen,
+    required this.notifyClose,
+    required this.notifyStopLoss,
     required this.onAmountChanged,
     required this.onPerTradeChanged,
     required this.onMaxDailyLossChanged,
-    required this.onNotifyChanged,
+    required this.onNotifyOpenChanged,
+    required this.onNotifyCloseChanged,
+    required this.onNotifyStopLossChanged,
     required this.onNext,
   });
 
@@ -1382,11 +1395,15 @@ class _AllocatePane extends StatelessWidget {
   final double amount;
   final int perTradePct;
   final int maxDailyLossPct;
-  final bool notify;
+  final bool notifyOpen;
+  final bool notifyClose;
+  final bool notifyStopLoss;
   final ValueChanged<double> onAmountChanged;
   final ValueChanged<int> onPerTradeChanged;
   final ValueChanged<int> onMaxDailyLossChanged;
-  final ValueChanged<bool> onNotifyChanged;
+  final ValueChanged<bool> onNotifyOpenChanged;
+  final ValueChanged<bool> onNotifyCloseChanged;
+  final ValueChanged<bool> onNotifyStopLossChanged;
   final VoidCallback onNext;
 
   @override
@@ -1469,68 +1486,85 @@ class _AllocatePane extends StatelessWidget {
           style: TextStyle(color: c.textDim, fontSize: 11),
         ),
         const SizedBox(height: QzSpacing.md),
-        // 单笔仓位上限
-        _StepperRow(
+        // 单笔仓位上限（滑块）
+        _AllocateSliderRow(
           fieldKey: const Key('deploy-allocate-per-trade'),
           label: l10n.deployAllocatePerTradeLabel,
           caption: l10n.deployAllocatePerTradeCaption,
           value: perTradePct,
-          suffix: '%',
-          min: 5,
+          min: 10,
           max: 100,
           step: 5,
+          ticks: const <String>['10%', '50%', '100%'],
+          valueLabel: '$perTradePct%',
+          valueColor: c.accent,
           onChanged: onPerTradeChanged,
           scheme: c,
         ),
         const SizedBox(height: QzSpacing.sm),
-        // 日内最大亏损
-        _StepperRow(
+        // 日内最大亏损（滑块，danger 色）
+        _AllocateSliderRow(
           fieldKey: const Key('deploy-allocate-max-loss'),
           label: l10n.deployAllocateMaxDailyLossLabel,
           caption: l10n.deployAllocateMaxDailyLossCaption,
           value: maxDailyLossPct,
-          suffix: '%',
           min: 1,
-          max: 50,
+          max: 15,
           step: 1,
+          ticks: const <String>['-1%', '-8%', '-15%'],
+          valueLabel: '-$maxDailyLossPct%',
+          valueColor: c.statusDanger,
           onChanged: onMaxDailyLossChanged,
           scheme: c,
         ),
         const SizedBox(height: QzSpacing.sm),
-        // 通知渠道
+        // 通知（分渠道开关）
+        Text(
+          l10n.deployAllocateNotifySectionLabel,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: QzSpacing.xs),
         Container(
           key: const Key('deploy-allocate-notify'),
-          padding: const EdgeInsets.symmetric(
-            horizontal: QzSpacing.md,
-            vertical: QzSpacing.xs,
-          ),
           decoration: BoxDecoration(
             color: c.bgSoft,
             border: Border.all(color: c.border),
             borderRadius: BorderRadius.circular(QzRadii.card),
           ),
-          child: Row(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
             children: <Widget>[
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      l10n.deployAllocateNotifyLabel,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      l10n.deployAllocateNotifyCaption,
-                      style: TextStyle(color: c.textDim, fontSize: 11),
-                    ),
-                  ],
-                ),
+              _NotifyRow(
+                rowKey: const Key('deploy-allocate-notify-open'),
+                label: l10n.deployAllocateNotifyOpenLabel,
+                caption: l10n.deployAllocateNotifyOpenCaption,
+                value: notifyOpen,
+                onChanged: onNotifyOpenChanged,
+                showDivider: false,
+                scheme: c,
               ),
-              Switch(value: notify, onChanged: onNotifyChanged),
+              _NotifyRow(
+                rowKey: const Key('deploy-allocate-notify-close'),
+                label: l10n.deployAllocateNotifyCloseLabel,
+                caption: l10n.deployAllocateNotifyCloseCaption,
+                value: notifyClose,
+                onChanged: onNotifyCloseChanged,
+                showDivider: true,
+                scheme: c,
+              ),
+              _NotifyRow(
+                rowKey: const Key('deploy-allocate-notify-stop-loss'),
+                label: l10n.deployAllocateNotifyStopLossLabel,
+                caption: l10n.deployAllocateNotifyStopLossCaption,
+                value: notifyStopLoss,
+                onChanged: onNotifyStopLossChanged,
+                showDivider: true,
+                scheme: c,
+              ),
             ],
           ),
         ),
@@ -1546,17 +1580,19 @@ class _AllocatePane extends StatelessWidget {
   }
 }
 
-/// 资金配置内的「label + caption + 减/值/加」stepper 行。
-class _StepperRow extends StatelessWidget {
-  const _StepperRow({
+/// 资金配置内的「label + 值 + 滑块 + 刻度」行（#1796，对齐设计稿 DpSlider）。
+class _AllocateSliderRow extends StatelessWidget {
+  const _AllocateSliderRow({
     required this.fieldKey,
     required this.label,
     required this.caption,
     required this.value,
-    required this.suffix,
     required this.min,
     required this.max,
     required this.step,
+    required this.ticks,
+    required this.valueLabel,
+    required this.valueColor,
     required this.onChanged,
     required this.scheme,
   });
@@ -1565,16 +1601,21 @@ class _StepperRow extends StatelessWidget {
   final String label;
   final String caption;
   final int value;
-  final String suffix;
   final int min;
   final int max;
   final int step;
+
+  /// 滑块下方刻度标签（左/中/右），对齐设计稿三档。
+  final List<String> ticks;
+  final String valueLabel;
+  final Color valueColor;
   final ValueChanged<int> onChanged;
   final QzColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = scheme;
+    final int divisions = ((max - min) / step).round();
     return Container(
       key: fieldKey,
       padding: const EdgeInsets.all(QzSpacing.md),
@@ -1582,6 +1623,109 @@ class _StepperRow extends StatelessWidget {
         color: c.bgSoft,
         border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      caption,
+                      style: TextStyle(color: c.textDim, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                valueLabel,
+                style: TextStyle(
+                  color: valueColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: valueColor,
+              thumbColor: valueColor,
+              inactiveTrackColor: c.border,
+              overlayColor: valueColor.withValues(alpha: 0.16),
+              trackHeight: 4,
+            ),
+            child: Slider(
+              value: value.toDouble().clamp(min.toDouble(), max.toDouble()),
+              min: min.toDouble(),
+              max: max.toDouble(),
+              divisions: divisions,
+              label: valueLabel,
+              onChanged: (double v) =>
+                  onChanged(v.round().clamp(min, max)),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              for (final String t in ticks)
+                Text(
+                  t,
+                  style: TextStyle(color: c.textDim, fontSize: 10),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 通知分渠道开关行（#1796，对齐设计稿 3 个开关）。
+class _NotifyRow extends StatelessWidget {
+  const _NotifyRow({
+    required this.rowKey,
+    required this.label,
+    required this.caption,
+    required this.value,
+    required this.onChanged,
+    required this.showDivider,
+    required this.scheme,
+  });
+
+  final Key rowKey;
+  final String label;
+  final String caption;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool showDivider;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
+    return Container(
+      key: rowKey,
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.md,
+        vertical: QzSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        border: showDivider
+            ? Border(top: BorderSide(color: c.borderSoft))
+            : null,
       ),
       child: Row(
         children: <Widget>[
@@ -1604,68 +1748,8 @@ class _StepperRow extends StatelessWidget {
               ],
             ),
           ),
-          _StepperButton(
-            icon: Icons.remove,
-            enabled: value > min,
-            onTap: () => onChanged((value - step).clamp(min, max)),
-            scheme: c,
-          ),
-          SizedBox(
-            width: 56,
-            child: Text(
-              '$value$suffix',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: c.text,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          _StepperButton(
-            icon: Icons.add,
-            enabled: value < max,
-            onTap: () => onChanged((value + step).clamp(min, max)),
-            scheme: c,
-          ),
+          Switch(value: value, onChanged: onChanged),
         ],
-      ),
-    );
-  }
-}
-
-class _StepperButton extends StatelessWidget {
-  const _StepperButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-    required this.scheme,
-  });
-
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-  final QzColorScheme scheme;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = scheme;
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: c.border.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: enabled ? c.text : c.textDim,
-        ),
       ),
     );
   }

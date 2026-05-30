@@ -326,10 +326,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployAllocateMaxDailyLossCaption => '触发后自动暂停当日交易';
 
   @override
-  String get deployAllocateNotifyLabel => '部署与信号通知';
+  String get deployAllocateNotifySectionLabel => '通知';
 
   @override
-  String get deployAllocateNotifyCaption => '成交、止损与异常时推送提醒';
+  String get deployAllocateNotifyOpenLabel => '开仓时通知';
+
+  @override
+  String get deployAllocateNotifyOpenCaption => '推送 + 应用内消息';
+
+  @override
+  String get deployAllocateNotifyCloseLabel => '平仓时通知';
+
+  @override
+  String get deployAllocateNotifyCloseCaption => '推送 + 应用内消息';
+
+  @override
+  String get deployAllocateNotifyStopLossLabel => '触发止损时通知';
+
+  @override
+  String get deployAllocateNotifyStopLossCaption => '推送 + 邮件';
 
   @override
   String get deployAllocateNextButton => '下一步';

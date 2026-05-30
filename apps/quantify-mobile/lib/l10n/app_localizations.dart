@@ -722,17 +722,47 @@ abstract class AppLocalizations {
   /// **'触发后自动暂停当日交易'**
   String get deployAllocateMaxDailyLossCaption;
 
-  /// No description provided for @deployAllocateNotifyLabel.
+  /// No description provided for @deployAllocateNotifySectionLabel.
   ///
   /// In zh, this message translates to:
-  /// **'部署与信号通知'**
-  String get deployAllocateNotifyLabel;
+  /// **'通知'**
+  String get deployAllocateNotifySectionLabel;
 
-  /// No description provided for @deployAllocateNotifyCaption.
+  /// No description provided for @deployAllocateNotifyOpenLabel.
   ///
   /// In zh, this message translates to:
-  /// **'成交、止损与异常时推送提醒'**
-  String get deployAllocateNotifyCaption;
+  /// **'开仓时通知'**
+  String get deployAllocateNotifyOpenLabel;
+
+  /// No description provided for @deployAllocateNotifyOpenCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'推送 + 应用内消息'**
+  String get deployAllocateNotifyOpenCaption;
+
+  /// No description provided for @deployAllocateNotifyCloseLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'平仓时通知'**
+  String get deployAllocateNotifyCloseLabel;
+
+  /// No description provided for @deployAllocateNotifyCloseCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'推送 + 应用内消息'**
+  String get deployAllocateNotifyCloseCaption;
+
+  /// No description provided for @deployAllocateNotifyStopLossLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发止损时通知'**
+  String get deployAllocateNotifyStopLossLabel;
+
+  /// No description provided for @deployAllocateNotifyStopLossCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'推送 + 邮件'**
+  String get deployAllocateNotifyStopLossCaption;
 
   /// No description provided for @deployAllocateNextButton.
   ///

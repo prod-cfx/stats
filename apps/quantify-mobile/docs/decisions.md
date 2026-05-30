@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-05-30 · 部署资金配置控件形态：对齐设计稿（滑块 + 3 分渠道通知开关）（Issue #1796）
+
+**背景**：设计稿 `design/project/mobile/m-screens-deploy.jsx`（`DpAllocate:759-931`）资金配置为：投入金额 + 25/50/75/MAX 快捷比例 + 单笔仓位上限**滑块**（DpSlider，10-100 step5，刻度 10/50/100）+ 日内最大亏损**滑块**（1-15 step1，danger 色，刻度 -1/-8/-15）+ **3 个分渠道通知开关**（开仓/平仓/触发止损）。#1772 落地的 `apps/quantify-mobile/lib/widgets/qz_deploy_sheet.dart` `_AllocatePane` 用 stepper（±按钮）替代滑块，3 个通知合并为单一 Switch。#1796 目标：控件形态与设计稿对齐 OR 确认简化并记录。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 对齐设计稿（采纳） | stepper → `Slider`（带刻度标签 + 实时值显示），单一 Switch → 3 个分渠道开关（开仓/平仓/触发止损） | 纯前端 mock 控件，无数据通道依赖；滑块为设计稿明确交互，连续调节体验优于 ±5 step 点击；分渠道开关让用户精细控制通知，对齐设计语义；改动仅限单 widget + arb + test，零破坏 |
+| B. 维持 stepper + 单开关 | 保留现状，标简化 | stepper 与设计稿交互形态不一致；单一通知开关丢失「按事件类型订阅」语义；本控件无真实后端依赖，不存在「数据未就绪」阻塞，简化无正当理由 |
+
+**判定**：**采纳方案 A——对齐设计稿**。单笔上限 / 日内亏损改 `Slider`（per-trade 10-100 step5、刻度 10%/50%/100%、accent 色；max-loss 1-15 step1、刻度 -1%/-8%/-15%、danger 色），通知拆为 3 个分渠道开关（开仓 / 平仓 / 触发止损，各带「推送 + 应用内消息 / 推送 + 邮件」副标题）。
+
+**落地范围**：
+
+- `lib/widgets/qz_deploy_sheet.dart`：`_AllocatePane` 状态 `bool _notify` → `_notifyOpen/_notifyClose/_notifyStopLoss` 三 bool；`_StepperRow`/`_StepperButton` → `_AllocateSliderRow`（label + 值 + Slider + 刻度）/`_NotifyRow`（分渠道开关行）
+- `lib/l10n/app_zh.arb` / `app_en.arb`：删除 `deployAllocateNotifyLabel/Caption`，新增 `deployAllocateNotifySectionLabel` + 3 渠道 `*Label`/`*Caption`
+- `test/widgets/qz_deploy_sheet_test.dart`：断言 2 个 Slider + 3 个分渠道开关 key；新增「滑块拖动 + 分渠道开关独立切换」用例
+- 保留既有 widget key `deploy-allocate-per-trade` / `deploy-allocate-max-loss` / `deploy-allocate-notify`（Never break userspace，既有测试与外部引用不破坏）
+
+**对齐结论（对应 #1796 验收标准逐条）**：
+
+- [x] 产品确认控件基线 → 采纳方案 A，结论记入本节
+- [x] 单笔上限 / 日内亏损改滑块，通知拆为分渠道开关 → 已落地
+- [x] 更新 `qz_deploy_sheet_test.dart` → 已加滑块 / 分渠道开关断言与交互用例
+
+---
+
 ## 2026-05-30 · 交易详情数据来源切换（聚合/Binance/OKX）：暂缓、标 future（Issue #1794）
 
 **背景**：设计稿 `design/project/mobile/m-screens-3.jsx`（`ScreenTradingDetail`）交易详情头部含数据来源切换——聚合 / Binance / OKX 下拉抽屉，切换驱动行情数据源。Flutter app `apps/quantify-mobile/lib/pages/market/market_detail_page.dart:249` 顶栏副标题固定 `marketDetailSubtitlePerpBinance`（「永续 · Binance」/「Perp · Binance」），无来源切换。#1794 目标是「补来源切换 OR 按聚合数据就绪节奏标 future」二选一，先做产品取舍。

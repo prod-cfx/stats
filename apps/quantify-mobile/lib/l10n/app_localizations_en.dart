@@ -346,11 +346,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pauses today\'s trading once hit';
 
   @override
-  String get deployAllocateNotifyLabel => 'Deployment & signal alerts';
+  String get deployAllocateNotifySectionLabel => 'Notifications';
 
   @override
-  String get deployAllocateNotifyCaption =>
-      'Push on fills, stop-loss and anomalies';
+  String get deployAllocateNotifyOpenLabel => 'Notify on open';
+
+  @override
+  String get deployAllocateNotifyOpenCaption => 'Push + in-app message';
+
+  @override
+  String get deployAllocateNotifyCloseLabel => 'Notify on close';
+
+  @override
+  String get deployAllocateNotifyCloseCaption => 'Push + in-app message';
+
+  @override
+  String get deployAllocateNotifyStopLossLabel => 'Notify on stop-loss';
+
+  @override
+  String get deployAllocateNotifyStopLossCaption => 'Push + email';
 
   @override
   String get deployAllocateNextButton => 'Next';
