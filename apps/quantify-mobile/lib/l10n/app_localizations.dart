@@ -2561,7 +2561,7 @@ abstract class AppLocalizations {
   /// No description provided for @strategyHomeFeaturedView.
   ///
   /// In zh, this message translates to:
-  /// **'查看 →'**
+  /// **'查看详情'**
   String get strategyHomeFeaturedView;
 
   /// No description provided for @strategyHomeStatCagr.

@@ -204,6 +204,71 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('排序行：选中项尾部展示向下箭头，未选中无箭头 (#1823)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    // 默认 hot 选中：其 chip 内含向下箭头
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-hot')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+      findsOneWidget,
+    );
+    // 未选中 cagr：无箭头
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-cagr')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+      findsNothing,
+    );
+    // 切到 cagr 后箭头随选中态迁移
+    await tester.tap(find.byKey(const Key('strategy-sort-cagr')));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-cagr')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-hot')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('featured hero：副标题含作者 + 带箭头胶囊「查看详情」(#1823)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final Finder hero = find.byKey(const Key('strategy-featured-hero'));
+    expect(hero, findsOneWidget);
+    // 副标题结构「作者 · 市场中性 · 低回撤」
+    expect(
+      find.descendant(
+        of: hero,
+        matching: find.textContaining('· 市场中性 · 低回撤'),
+      ),
+      findsOneWidget,
+    );
+    // 「查看详情」胶囊按钮带 forward 箭头
+    expect(
+      find.descendant(of: hero, matching: find.text('查看详情')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: hero,
+        matching: find.byIcon(Icons.arrow_forward),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('筛选 sheet：点击右上 icon 弹出底部 sheet (#1565)',
       (WidgetTester tester) async {
     await _pump(tester);

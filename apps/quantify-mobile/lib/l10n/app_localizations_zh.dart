@@ -1281,7 +1281,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyHomeFeaturedSubtitle => '市场中性 · 低回撤';
 
   @override
-  String get strategyHomeFeaturedView => '查看 →';
+  String get strategyHomeFeaturedView => '查看详情';
 
   @override
   String get strategyHomeStatCagr => 'CAGR';

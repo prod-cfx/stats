@@ -575,13 +575,26 @@ class _SortChip extends StatelessWidget {
             color: selected ? c.accentSoft : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? c.accent : c.textDim,
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? c.accent : c.textDim,
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+              if (selected) ...<Widget>[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 14,
+                  color: c.accent,
+                ),
+              ],
+            ],
           ),
         ),
       ),

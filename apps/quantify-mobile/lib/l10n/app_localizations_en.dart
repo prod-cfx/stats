@@ -1318,7 +1318,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyHomeFeaturedSubtitle => 'Market neutral · low drawdown';
 
   @override
-  String get strategyHomeFeaturedView => 'View →';
+  String get strategyHomeFeaturedView => 'View details';
 
   @override
   String get strategyHomeStatCagr => 'CAGR';
