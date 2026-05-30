@@ -1553,6 +1553,57 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleHoldingsLabel24h => '24H';
 
   @override
+  String get whaleHoldingsSectionTitle => 'Whale Holdings';
+
+  @override
+  String get whaleHoldingsEmpty => 'No matching holdings';
+
+  @override
+  String get whaleHoldingsCoinAll => 'All';
+
+  @override
+  String get whaleHoldingsFilterDir => 'Direction';
+
+  @override
+  String get whaleHoldingsFilterPnl => 'PnL';
+
+  @override
+  String get whaleHoldingsDirLong => 'Long';
+
+  @override
+  String get whaleHoldingsDirShort => 'Short';
+
+  @override
+  String get whaleHoldingsPnlProfit => 'Profit';
+
+  @override
+  String get whaleHoldingsPnlLoss => 'Loss';
+
+  @override
+  String get whaleHoldingsSortValue => 'Value';
+
+  @override
+  String get whaleHoldingsSortMargin => 'Margin';
+
+  @override
+  String get whaleHoldingsSortTime => 'Opened';
+
+  @override
+  String get whaleHoldingsColValue => 'Position Value';
+
+  @override
+  String get whaleHoldingsColPnl => 'Unrealized PnL';
+
+  @override
+  String get whaleHoldingsColMargin => 'Margin';
+
+  @override
+  String get whaleHoldingsColOpen => 'Entry Price';
+
+  @override
+  String get whaleHoldingsColLiq => 'Liq. Price';
+
+  @override
   String get whaleSmartMoneyHoldingsPrefix => 'Holdings · ';
 
   @override

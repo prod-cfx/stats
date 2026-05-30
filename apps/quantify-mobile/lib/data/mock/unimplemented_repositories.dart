@@ -75,6 +75,13 @@ class UnimplementedWhaleLeaderboardRepository
       _todo('WhaleLeaderboardRepository');
 }
 
+class UnimplementedWhaleHoldingsRepository
+    implements WhaleHoldingsRepository {
+  @override
+  Future<List<WhaleHoldingPosition>> getHoldings() =>
+      _todo('WhaleHoldingsRepository');
+}
+
 class UnimplementedWhaleProfileRepository implements WhaleProfileRepository {
   @override
   Future<WhaleProfile> getProfile(String address) =>

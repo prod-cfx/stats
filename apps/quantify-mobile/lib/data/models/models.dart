@@ -11,6 +11,7 @@ export 'orderbook_models.dart';
 export 'strategy_models.dart';
 export 'ticker_models.dart';
 export 'trade_models.dart';
+export 'whale_holding_models.dart';
 export 'whale_leader_models.dart';
 export 'whale_models.dart';
 export 'whale_profile_models.dart';

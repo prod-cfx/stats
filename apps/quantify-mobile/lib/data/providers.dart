@@ -20,10 +20,12 @@ import 'mock/mock_orderbook_repository.dart';
 import 'mock/mock_strategy_repository.dart';
 import 'mock/mock_ticker_repository.dart';
 import 'mock/mock_whale_feed_repository.dart';
+import 'mock/mock_whale_holdings_repository.dart';
 import 'mock/mock_whale_leaderboard_repository.dart';
 import 'mock/mock_whale_profile_repository.dart';
 import 'mock/mock_whale_watch_repository.dart';
 import 'mock/unimplemented_repositories.dart';
+import 'models/whale_holding_models.dart';
 import 'models/whale_leader_models.dart';
 import 'models/whale_profile_models.dart';
 import 'repositories/repositories.dart';
@@ -114,6 +116,20 @@ final Provider<WhaleLeaderboardRepository> whaleLeaderboardRepositoryProvider =
 final FutureProvider<List<WhaleLeaderEntry>> whaleLeaderboardProvider =
     FutureProvider<List<WhaleLeaderEntry>>((Ref ref) async {
       return ref.watch(whaleLeaderboardRepositoryProvider).getLeaderboard();
+    });
+
+/// 巨鲸「持仓」tab 持仓明细 repository（#1790）。mock 驱动；真实读路径依赖 #1682。
+final Provider<WhaleHoldingsRepository> whaleHoldingsRepositoryProvider =
+    Provider<WhaleHoldingsRepository>((Ref ref) {
+      return ref.watch(useMockProvider)
+          ? MockWhaleHoldingsRepository()
+          : UnimplementedWhaleHoldingsRepository();
+    });
+
+/// 巨鲸持仓明细列表（#1790）。持仓 tab watch；筛选与排序在 tab 本地态完成。
+final FutureProvider<List<WhaleHoldingPosition>> whaleHoldingsProvider =
+    FutureProvider<List<WhaleHoldingPosition>>((Ref ref) async {
+      return ref.watch(whaleHoldingsRepositoryProvider).getHoldings();
     });
 
 /// 巨鲸搜索与地址监控（#1754）。mock 驱动；真实读写依赖 #1682/#1683。

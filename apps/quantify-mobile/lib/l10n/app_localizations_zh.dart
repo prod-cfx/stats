@@ -1514,6 +1514,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleHoldingsLabel24h => '24H';
 
   @override
+  String get whaleHoldingsSectionTitle => '巨鲸持仓';
+
+  @override
+  String get whaleHoldingsEmpty => '无匹配持仓';
+
+  @override
+  String get whaleHoldingsCoinAll => '全部';
+
+  @override
+  String get whaleHoldingsFilterDir => '方向';
+
+  @override
+  String get whaleHoldingsFilterPnl => '盈亏';
+
+  @override
+  String get whaleHoldingsDirLong => '做多';
+
+  @override
+  String get whaleHoldingsDirShort => '做空';
+
+  @override
+  String get whaleHoldingsPnlProfit => '盈利';
+
+  @override
+  String get whaleHoldingsPnlLoss => '亏损';
+
+  @override
+  String get whaleHoldingsSortValue => '持仓价值';
+
+  @override
+  String get whaleHoldingsSortMargin => '保证金';
+
+  @override
+  String get whaleHoldingsSortTime => '创建时间';
+
+  @override
+  String get whaleHoldingsColValue => '持仓价值';
+
+  @override
+  String get whaleHoldingsColPnl => '未实现盈亏';
+
+  @override
+  String get whaleHoldingsColMargin => '保证金';
+
+  @override
+  String get whaleHoldingsColOpen => '开盘价';
+
+  @override
+  String get whaleHoldingsColLiq => '清算价';
+
+  @override
   String get whaleSmartMoneyHoldingsPrefix => '主要持仓 · ';
 
   @override

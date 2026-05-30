@@ -3008,6 +3008,108 @@ abstract class AppLocalizations {
   /// **'24H'**
   String get whaleHoldingsLabel24h;
 
+  /// No description provided for @whaleHoldingsSectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'巨鲸持仓'**
+  String get whaleHoldingsSectionTitle;
+
+  /// No description provided for @whaleHoldingsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配持仓'**
+  String get whaleHoldingsEmpty;
+
+  /// No description provided for @whaleHoldingsCoinAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get whaleHoldingsCoinAll;
+
+  /// No description provided for @whaleHoldingsFilterDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'方向'**
+  String get whaleHoldingsFilterDir;
+
+  /// No description provided for @whaleHoldingsFilterPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏'**
+  String get whaleHoldingsFilterPnl;
+
+  /// No description provided for @whaleHoldingsDirLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'做多'**
+  String get whaleHoldingsDirLong;
+
+  /// No description provided for @whaleHoldingsDirShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'做空'**
+  String get whaleHoldingsDirShort;
+
+  /// No description provided for @whaleHoldingsPnlProfit.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈利'**
+  String get whaleHoldingsPnlProfit;
+
+  /// No description provided for @whaleHoldingsPnlLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'亏损'**
+  String get whaleHoldingsPnlLoss;
+
+  /// No description provided for @whaleHoldingsSortValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓价值'**
+  String get whaleHoldingsSortValue;
+
+  /// No description provided for @whaleHoldingsSortMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'保证金'**
+  String get whaleHoldingsSortMargin;
+
+  /// No description provided for @whaleHoldingsSortTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建时间'**
+  String get whaleHoldingsSortTime;
+
+  /// No description provided for @whaleHoldingsColValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓价值'**
+  String get whaleHoldingsColValue;
+
+  /// No description provided for @whaleHoldingsColPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏'**
+  String get whaleHoldingsColPnl;
+
+  /// No description provided for @whaleHoldingsColMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'保证金'**
+  String get whaleHoldingsColMargin;
+
+  /// No description provided for @whaleHoldingsColOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'开盘价'**
+  String get whaleHoldingsColOpen;
+
+  /// No description provided for @whaleHoldingsColLiq.
+  ///
+  /// In zh, this message translates to:
+  /// **'清算价'**
+  String get whaleHoldingsColLiq;
+
   /// No description provided for @whaleSmartMoneyHoldingsPrefix.
   ///
   /// In zh, this message translates to:

@@ -1,292 +1,441 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/mock/fixtures/whale_extras.dart';
-import '../../../data/models/whale_extra_models.dart';
+import '../../../data/models/whale_holding_models.dart';
+import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import '../widgets/whale_holding_card.dart';
 
-/// 巨鲸动向 — 持仓 tab（issue #1560）。
-class WhaleHoldingsTab extends StatelessWidget {
+/// 巨鲸动向 — 持仓 tab（issue #1790）。对齐设计稿 `WhaleHoldings`：
+/// 币种 chip + 方向/盈亏筛选 + 更多排序 + 持仓明细卡列表。
+/// mock 驱动（[whaleHoldingsProvider]），筛选与排序在本地态即时完成。
+class WhaleHoldingsTab extends ConsumerStatefulWidget {
   const WhaleHoldingsTab({super.key});
+
+  @override
+  ConsumerState<WhaleHoldingsTab> createState() => _WhaleHoldingsTabState();
+}
+
+class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
+  WhaleHoldingFilter _filter = const WhaleHoldingFilter();
+  WhaleHoldingSort? _sort;
+
+  void _cycleDir() {
+    const List<WhaleHoldingDirFilter> order = <WhaleHoldingDirFilter>[
+      WhaleHoldingDirFilter.all,
+      WhaleHoldingDirFilter.long,
+      WhaleHoldingDirFilter.short,
+    ];
+    final int next = (order.indexOf(_filter.dir) + 1) % order.length;
+    setState(() => _filter = _filter.copyWith(dir: order[next]));
+  }
+
+  void _cyclePnl() {
+    const List<WhaleHoldingPnlFilter> order = <WhaleHoldingPnlFilter>[
+      WhaleHoldingPnlFilter.all,
+      WhaleHoldingPnlFilter.profit,
+      WhaleHoldingPnlFilter.loss,
+    ];
+    final int next = (order.indexOf(_filter.pnl) + 1) % order.length;
+    setState(() => _filter = _filter.copyWith(pnl: order[next]));
+  }
+
+  void _selectCoin(String? coin) {
+    setState(() => _filter = _filter.copyWith(coin: coin));
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final int maxBar = mockExchangeFlows
-        .map((ExchangeFlowEntry e) => e.barWeight)
-        .reduce((int a, int b) => a > b ? a : b);
-
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: <Widget>[
-        Container(
-          color: c.bgElev,
-          padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.xs),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          l10n.whaleSectionExchangeFlow,
-                          style: TextStyle(
-                            color: c.text,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(l10n.whaleSectionExchangeFlowSub,
-                            style:
-                                TextStyle(color: c.textDim, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                  Text(l10n.whaleHoldingsLabel24h,
-                      style: TextStyle(color: c.textDim, fontSize: 11)),
-                ],
-              ),
-              const SizedBox(height: QzSpacing.sm),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: c.borderSoft),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < mockExchangeFlows.length; i++)
-                      _ExchangeFlowRow(
-                        entry: mockExchangeFlows[i],
-                        widthRatio: mockExchangeFlows[i].barWeight / maxBar,
-                        isLast: i == mockExchangeFlows.length - 1,
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+    final AsyncValue<List<WhaleHoldingPosition>> async =
+        ref.watch(whaleHoldingsProvider);
+    return async.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object e, StackTrace st) => Center(
+        child: Text(
+          l10n.whaleLoadError,
+          style: TextStyle(color: c.textMid, fontSize: 13),
         ),
-        Container(
-          color: c.bgElev,
-          padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.lg, QzSpacing.lg, QzSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      l10n.whaleSectionTopHolders,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
+      ),
+      data: (List<WhaleHoldingPosition> all) {
+        final List<String> coins = whaleHoldingCoins(all);
+        final List<WhaleHoldingPosition> rows =
+            sortWhaleHoldings(filterWhaleHoldings(all, _filter), _sort);
+        return ListView(
+          padding: const EdgeInsets.only(bottom: QzSpacing.lg),
+          children: <Widget>[
+            _CoinChips(
+              coins: coins,
+              selected: _filter.coin,
+              onSelect: _selectCoin,
+            ),
+            _FilterSortBar(
+              filter: _filter,
+              sort: _sort,
+              onDir: _cycleDir,
+              onPnl: _cyclePnl,
+              onSort: (WhaleHoldingSort? s) => setState(() => _sort = s),
+            ),
+            _SectionHeader(count: rows.length),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Text(
+                    l10n.whaleHoldingsEmpty,
+                    style: TextStyle(color: c.textDim, fontSize: 12),
                   ),
-                  Text(l10n.whaleSectionTopHoldersSub,
-                      style: TextStyle(color: c.textDim, fontSize: 11)),
-                ],
-              ),
-              const SizedBox(height: QzSpacing.sm),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: c.borderSoft),
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < mockTopHolders.length; i++)
-                      _TopHolderRow(
-                        entry: mockTopHolders[i],
-                        isLast: i == mockTopHolders.length - 1,
-                      ),
-                  ],
+              )
+            else
+              for (final WhaleHoldingPosition e in rows)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    QzSpacing.lg,
+                    0,
+                    QzSpacing.lg,
+                    QzSpacing.sm,
+                  ),
+                  child: WhaleHoldingCard(entry: e),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
 
-class _ExchangeFlowRow extends StatelessWidget {
-  const _ExchangeFlowRow({
-    required this.entry,
-    required this.widthRatio,
-    required this.isLast,
+/// 币种筛选 chip 条（全部 + 各币种）。
+class _CoinChips extends StatelessWidget {
+  const _CoinChips({
+    required this.coins,
+    required this.selected,
+    required this.onSelect,
   });
 
-  final ExchangeFlowEntry entry;
-  final double widthRatio;
-  final bool isLast;
+  final List<String> coins;
+  final String? selected;
+  final void Function(String?) onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    final bool up = entry.tone == 'up';
-    final Color toneColor = up ? c.marketUp : c.marketDown;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: isLast ? Colors.transparent : c.borderSoft,
-          ),
-        ),
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.lg,
+        vertical: QzSpacing.md,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: Color(entry.colorHex),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  entry.exchange,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                entry.netDisplay,
-                style: TextStyle(
-                  color: toneColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ],
+          _Chip(
+            label: l10n.whaleHoldingsCoinAll,
+            active: selected == null,
+            onTap: () => onSelect(null),
           ),
-          const SizedBox(height: QzSpacing.sm),
-          Padding(
-            padding: const EdgeInsets.only(left: 18),
-            child: LayoutBuilder(
-              builder: (BuildContext ctx, BoxConstraints constraints) {
-                return Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: c.bgSoft,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: (constraints.maxWidth * widthRatio)
-                          .clamp(0.0, constraints.maxWidth),
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: toneColor.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                );
-              },
+          for (final String coin in coins)
+            Padding(
+              padding: const EdgeInsets.only(left: QzSpacing.sm),
+              child: _Chip(
+                label: coin,
+                active: selected == coin,
+                onTap: () => onSelect(coin),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _TopHolderRow extends StatelessWidget {
-  const _TopHolderRow({required this.entry, required this.isLast});
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
-  final TopHolderEntry entry;
-  final bool isLast;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final Color changeColor = entry.tone == 'up'
-        ? c.marketUp
-        : entry.tone == 'dn'
-            ? c.marketDown
-            : c.textDim;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: isLast ? Colors.transparent : c.borderSoft,
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+        decoration: BoxDecoration(
+          color: active ? c.accent : c.bgSoft,
+          borderRadius: BorderRadius.circular(QzRadii.pill),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? c.accentOn : c.textMid,
+            fontSize: 12,
+            fontWeight: active ? FontWeight.w600 : FontWeight.w500,
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 方向/盈亏 筛选（左）+ 更多排序（右）工具条。
+class _FilterSortBar extends StatelessWidget {
+  const _FilterSortBar({
+    required this.filter,
+    required this.sort,
+    required this.onDir,
+    required this.onPnl,
+    required this.onSort,
+  });
+
+  final WhaleHoldingFilter filter;
+  final WhaleHoldingSort? sort;
+  final VoidCallback onDir;
+  final VoidCallback onPnl;
+  final void Function(WhaleHoldingSort?) onSort;
+
+  String _dirLabel(AppLocalizations l10n) {
+    switch (filter.dir) {
+      case WhaleHoldingDirFilter.long:
+        return l10n.whaleHoldingsDirLong;
+      case WhaleHoldingDirFilter.short:
+        return l10n.whaleHoldingsDirShort;
+      case WhaleHoldingDirFilter.all:
+        return l10n.whaleHoldingsFilterDir;
+    }
+  }
+
+  String _pnlLabel(AppLocalizations l10n) {
+    switch (filter.pnl) {
+      case WhaleHoldingPnlFilter.profit:
+        return l10n.whaleHoldingsPnlProfit;
+      case WhaleHoldingPnlFilter.loss:
+        return l10n.whaleHoldingsPnlLoss;
+      case WhaleHoldingPnlFilter.all:
+        return l10n.whaleHoldingsFilterPnl;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        QzSpacing.lg,
+        0,
+        QzSpacing.lg,
+        QzSpacing.md,
+      ),
       child: Row(
         children: <Widget>[
-          SizedBox(
-            width: 18,
-            child: Text(
-              '${entry.rank}',
-              textAlign: TextAlign.center,
+          _FilterPill(
+            key: const Key('whaleHoldingsDirFilter'),
+            label: _dirLabel(l10n),
+            active: filter.dir != WhaleHoldingDirFilter.all,
+            onTap: onDir,
+          ),
+          const SizedBox(width: QzSpacing.sm),
+          _FilterPill(
+            key: const Key('whaleHoldingsPnlFilter'),
+            label: _pnlLabel(l10n),
+            active: filter.pnl != WhaleHoldingPnlFilter.all,
+            onTap: onPnl,
+          ),
+          const Spacer(),
+          _SortMenu(sort: sort, onSort: onSort),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    super.key,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+        decoration: BoxDecoration(
+          color: active ? c.accentSoft : c.bgSoft,
+          borderRadius: BorderRadius.circular(QzRadii.pill),
+          border: Border.all(color: active ? c.accent : c.borderSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              label,
               style: TextStyle(
-                color: c.textDim,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+                color: active ? c.accent : c.textMid,
+                fontSize: 12,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
-          ),
-          const SizedBox(width: QzSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: active ? c.accent : c.textDim,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 更多排序入口：弹出菜单选择持仓价值 / 保证金 / 创建时间（降序，再点取消）。
+class _SortMenu extends StatelessWidget {
+  const _SortMenu({required this.sort, required this.onSort});
+
+  final WhaleHoldingSort? sort;
+  final void Function(WhaleHoldingSort?) onSort;
+
+  String _label(AppLocalizations l10n, WhaleHoldingSortKey key) {
+    switch (key) {
+      case WhaleHoldingSortKey.value:
+        return l10n.whaleHoldingsSortValue;
+      case WhaleHoldingSortKey.margin:
+        return l10n.whaleHoldingsSortMargin;
+      case WhaleHoldingSortKey.time:
+        return l10n.whaleHoldingsSortTime;
+    }
+  }
+
+  void _onTap(WhaleHoldingSortKey key) {
+    // 点击同字段在 降序→升序→取消 间循环；切换字段从降序开始。
+    if (sort == null || sort!.key != key) {
+      onSort(WhaleHoldingSort(key: key, dir: WhaleHoldingSortDir.desc));
+    } else if (sort!.dir == WhaleHoldingSortDir.desc) {
+      onSort(WhaleHoldingSort(key: key, dir: WhaleHoldingSortDir.asc));
+    } else {
+      onSort(null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    final bool active = sort != null;
+    return PopupMenuButton<WhaleHoldingSortKey>(
+      tooltip: l10n.whaleSortLabel,
+      onSelected: _onTap,
+      itemBuilder: (BuildContext context) =>
+          <PopupMenuEntry<WhaleHoldingSortKey>>[
+        for (final WhaleHoldingSortKey key in WhaleHoldingSortKey.values)
+          PopupMenuItem<WhaleHoldingSortKey>(
+            value: key,
+            child: Row(
               children: <Widget>[
-                Text(
-                  entry.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                Expanded(child: Text(_label(l10n, key))),
+                if (sort?.key == key)
+                  Icon(
+                    sort!.dir == WhaleHoldingSortDir.desc
+                        ? Icons.arrow_downward
+                        : Icons.arrow_upward,
+                    size: 16,
+                    color: c.accent,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.amountDisplay,
-                  style: TextStyle(color: c.textMid, fontSize: 11),
-                ),
               ],
             ),
           ),
-          SizedBox(
-            width: 64,
-            child: Text(
-              entry.changeDisplay,
-              textAlign: TextAlign.right,
+      ],
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+        decoration: BoxDecoration(
+          color: active ? c.accentSoft : c.bgSoft,
+          borderRadius: BorderRadius.circular(QzRadii.pill),
+          border: Border.all(color: active ? c.accent : c.borderSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              Icons.swap_vert,
+              size: 15,
+              color: active ? c.accent : c.textMid,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              l10n.whaleSortLabel,
               style: TextStyle(
-                color: changeColor,
+                color: active ? c.accent : c.textMid,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        QzSpacing.lg,
+        QzSpacing.xs,
+        QzSpacing.lg,
+        QzSpacing.sm,
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            l10n.whaleHoldingsSectionTitle,
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(width: QzSpacing.sm),
+          Expanded(child: Container(height: 1, color: c.borderSoft)),
+          const SizedBox(width: QzSpacing.sm),
+          Text(
+            '$count',
+            style: TextStyle(
+              color: c.textMid,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
