@@ -793,6 +793,143 @@ class AppLocalizationsZh extends AppLocalizations {
   String get orderbookSortFuture => '排序（即将上线）';
 
   @override
+  String get aggSubTabOrders => '聚合挂单';
+
+  @override
+  String get aggSubTabOpenInterest => '聚合持仓量';
+
+  @override
+  String get aggSubTabVolume => '聚合成交量';
+
+  @override
+  String get aggModeFutures => '合约';
+
+  @override
+  String get aggModeSpot => '现货';
+
+  @override
+  String get aggStat24hVolume => '24h 成交量';
+
+  @override
+  String get aggStat24hTurnover => '24h 成交额';
+
+  @override
+  String aggOrderbookTitle(String coin, String mode) {
+    return '$coin/USD 实时订单($mode)';
+  }
+
+  @override
+  String get aggColPrice => '价格(USDT)';
+
+  @override
+  String aggColQty(String coin) {
+    return '数量($coin)';
+  }
+
+  @override
+  String aggColTotal(String coin) {
+    return '总计($coin)';
+  }
+
+  @override
+  String get aggViewBoth => '双向';
+
+  @override
+  String get aggViewAsks => '卖单';
+
+  @override
+  String get aggViewBids => '买单';
+
+  @override
+  String get aggBestBidAsk => '买一 / 卖一';
+
+  @override
+  String get aggPrecisionTitle => '价格精度';
+
+  @override
+  String get aggExchangeSourceTitle => '交易所来源';
+
+  @override
+  String get aggExchangeSourceTooltip => '交易所来源设置';
+
+  @override
+  String get aggSelectAll => '全选';
+
+  @override
+  String get aggClearAll => '清空';
+
+  @override
+  String get aggCancel => '取消';
+
+  @override
+  String get aggDepthTitle => '订单深度';
+
+  @override
+  String get aggLiquidityHeatmap => '流动性热力图';
+
+  @override
+  String get aggDepthLegendBids => '买单累计';
+
+  @override
+  String get aggDepthLegendAsks => '卖单累计';
+
+  @override
+  String aggUnit(String coin) {
+    return '单位: $coin';
+  }
+
+  @override
+  String get aggOiColExchange => '交易所';
+
+  @override
+  String get aggOiColShare => '占比';
+
+  @override
+  String get aggOiColPosition => '持仓';
+
+  @override
+  String get aggOiCol24hChange => '24H变化';
+
+  @override
+  String get aggOiRowAll => '全部';
+
+  @override
+  String get aggSortQty => '持仓量';
+
+  @override
+  String get aggSortShare => '占比';
+
+  @override
+  String get aggSortH1 => '1h 变化';
+
+  @override
+  String get aggSortH4 => '4h 变化';
+
+  @override
+  String get aggSortH24 => '24h 变化';
+
+  @override
+  String get aggSortOiVol => 'OI/V';
+
+  @override
+  String get aggCoinSearchHint => '搜索币种';
+
+  @override
+  String get aggCoinSearchHot => '热门币种';
+
+  @override
+  String get aggCoinSearchEmpty => '无匹配币种';
+
+  @override
+  String get aggNoData => '暂无数据';
+
+  @override
+  String get aggNoMatchExchange => '无匹配交易所';
+
+  @override
+  String get aggVolumeTotal => '总计';
+
+  @override
   String get tradesTabLatest => '最新成交';
 
   @override

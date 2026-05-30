@@ -1616,6 +1616,264 @@ abstract class AppLocalizations {
   /// **'排序（即将上线）'**
   String get orderbookSortFuture;
 
+  /// No description provided for @aggSubTabOrders.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合挂单'**
+  String get aggSubTabOrders;
+
+  /// No description provided for @aggSubTabOpenInterest.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合持仓量'**
+  String get aggSubTabOpenInterest;
+
+  /// No description provided for @aggSubTabVolume.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合成交量'**
+  String get aggSubTabVolume;
+
+  /// No description provided for @aggModeFutures.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约'**
+  String get aggModeFutures;
+
+  /// No description provided for @aggModeSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货'**
+  String get aggModeSpot;
+
+  /// No description provided for @aggStat24hVolume.
+  ///
+  /// In zh, this message translates to:
+  /// **'24h 成交量'**
+  String get aggStat24hVolume;
+
+  /// No description provided for @aggStat24hTurnover.
+  ///
+  /// In zh, this message translates to:
+  /// **'24h 成交额'**
+  String get aggStat24hTurnover;
+
+  /// No description provided for @aggOrderbookTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{coin}/USD 实时订单({mode})'**
+  String aggOrderbookTitle(String coin, String mode);
+
+  /// No description provided for @aggColPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格(USDT)'**
+  String get aggColPrice;
+
+  /// No description provided for @aggColQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量({coin})'**
+  String aggColQty(String coin);
+
+  /// No description provided for @aggColTotal.
+  ///
+  /// In zh, this message translates to:
+  /// **'总计({coin})'**
+  String aggColTotal(String coin);
+
+  /// No description provided for @aggViewBoth.
+  ///
+  /// In zh, this message translates to:
+  /// **'双向'**
+  String get aggViewBoth;
+
+  /// No description provided for @aggViewAsks.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖单'**
+  String get aggViewAsks;
+
+  /// No description provided for @aggViewBids.
+  ///
+  /// In zh, this message translates to:
+  /// **'买单'**
+  String get aggViewBids;
+
+  /// No description provided for @aggBestBidAsk.
+  ///
+  /// In zh, this message translates to:
+  /// **'买一 / 卖一'**
+  String get aggBestBidAsk;
+
+  /// No description provided for @aggPrecisionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格精度'**
+  String get aggPrecisionTitle;
+
+  /// No description provided for @aggExchangeSourceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所来源'**
+  String get aggExchangeSourceTitle;
+
+  /// No description provided for @aggExchangeSourceTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所来源设置'**
+  String get aggExchangeSourceTooltip;
+
+  /// No description provided for @aggSelectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get aggSelectAll;
+
+  /// No description provided for @aggClearAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空'**
+  String get aggClearAll;
+
+  /// No description provided for @aggCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消'**
+  String get aggCancel;
+
+  /// No description provided for @aggDepthTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'订单深度'**
+  String get aggDepthTitle;
+
+  /// No description provided for @aggLiquidityHeatmap.
+  ///
+  /// In zh, this message translates to:
+  /// **'流动性热力图'**
+  String get aggLiquidityHeatmap;
+
+  /// No description provided for @aggDepthLegendBids.
+  ///
+  /// In zh, this message translates to:
+  /// **'买单累计'**
+  String get aggDepthLegendBids;
+
+  /// No description provided for @aggDepthLegendAsks.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖单累计'**
+  String get aggDepthLegendAsks;
+
+  /// No description provided for @aggUnit.
+  ///
+  /// In zh, this message translates to:
+  /// **'单位: {coin}'**
+  String aggUnit(String coin);
+
+  /// No description provided for @aggOiColExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所'**
+  String get aggOiColExchange;
+
+  /// No description provided for @aggOiColShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'占比'**
+  String get aggOiColShare;
+
+  /// No description provided for @aggOiColPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get aggOiColPosition;
+
+  /// No description provided for @aggOiCol24hChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H变化'**
+  String get aggOiCol24hChange;
+
+  /// No description provided for @aggOiRowAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get aggOiRowAll;
+
+  /// No description provided for @aggSortQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓量'**
+  String get aggSortQty;
+
+  /// No description provided for @aggSortShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'占比'**
+  String get aggSortShare;
+
+  /// No description provided for @aggSortH1.
+  ///
+  /// In zh, this message translates to:
+  /// **'1h 变化'**
+  String get aggSortH1;
+
+  /// No description provided for @aggSortH4.
+  ///
+  /// In zh, this message translates to:
+  /// **'4h 变化'**
+  String get aggSortH4;
+
+  /// No description provided for @aggSortH24.
+  ///
+  /// In zh, this message translates to:
+  /// **'24h 变化'**
+  String get aggSortH24;
+
+  /// No description provided for @aggSortOiVol.
+  ///
+  /// In zh, this message translates to:
+  /// **'OI/V'**
+  String get aggSortOiVol;
+
+  /// No description provided for @aggCoinSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索币种'**
+  String get aggCoinSearchHint;
+
+  /// No description provided for @aggCoinSearchHot.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门币种'**
+  String get aggCoinSearchHot;
+
+  /// No description provided for @aggCoinSearchEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配币种'**
+  String get aggCoinSearchEmpty;
+
+  /// No description provided for @aggNoData.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无数据'**
+  String get aggNoData;
+
+  /// No description provided for @aggNoMatchExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配交易所'**
+  String get aggNoMatchExchange;
+
+  /// No description provided for @aggVolumeTotal.
+  ///
+  /// In zh, this message translates to:
+  /// **'总计'**
+  String get aggVolumeTotal;
+
   /// No description provided for @tradesTabLatest.
   ///
   /// In zh, this message translates to:

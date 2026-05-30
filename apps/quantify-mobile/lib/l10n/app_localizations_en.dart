@@ -826,6 +826,143 @@ class AppLocalizationsEn extends AppLocalizations {
   String get orderbookSortFuture => 'Sort (coming soon)';
 
   @override
+  String get aggSubTabOrders => 'Agg Orders';
+
+  @override
+  String get aggSubTabOpenInterest => 'Open Interest';
+
+  @override
+  String get aggSubTabVolume => 'Volume';
+
+  @override
+  String get aggModeFutures => 'Futures';
+
+  @override
+  String get aggModeSpot => 'Spot';
+
+  @override
+  String get aggStat24hVolume => '24h Volume';
+
+  @override
+  String get aggStat24hTurnover => '24h Turnover';
+
+  @override
+  String aggOrderbookTitle(String coin, String mode) {
+    return '$coin/USD Live Orders ($mode)';
+  }
+
+  @override
+  String get aggColPrice => 'Price (USDT)';
+
+  @override
+  String aggColQty(String coin) {
+    return 'Qty ($coin)';
+  }
+
+  @override
+  String aggColTotal(String coin) {
+    return 'Total ($coin)';
+  }
+
+  @override
+  String get aggViewBoth => 'Both';
+
+  @override
+  String get aggViewAsks => 'Asks';
+
+  @override
+  String get aggViewBids => 'Bids';
+
+  @override
+  String get aggBestBidAsk => 'Bid / Ask';
+
+  @override
+  String get aggPrecisionTitle => 'Price Precision';
+
+  @override
+  String get aggExchangeSourceTitle => 'Exchange Sources';
+
+  @override
+  String get aggExchangeSourceTooltip => 'Exchange source settings';
+
+  @override
+  String get aggSelectAll => 'Select all';
+
+  @override
+  String get aggClearAll => 'Clear';
+
+  @override
+  String get aggCancel => 'Cancel';
+
+  @override
+  String get aggDepthTitle => 'Order Depth';
+
+  @override
+  String get aggLiquidityHeatmap => 'Liquidity Heatmap';
+
+  @override
+  String get aggDepthLegendBids => 'Cumulative bids';
+
+  @override
+  String get aggDepthLegendAsks => 'Cumulative asks';
+
+  @override
+  String aggUnit(String coin) {
+    return 'Unit: $coin';
+  }
+
+  @override
+  String get aggOiColExchange => 'Exchange';
+
+  @override
+  String get aggOiColShare => 'Share';
+
+  @override
+  String get aggOiColPosition => 'Open Interest';
+
+  @override
+  String get aggOiCol24hChange => '24H Change';
+
+  @override
+  String get aggOiRowAll => 'All';
+
+  @override
+  String get aggSortQty => 'Open interest';
+
+  @override
+  String get aggSortShare => 'Share';
+
+  @override
+  String get aggSortH1 => '1h change';
+
+  @override
+  String get aggSortH4 => '4h change';
+
+  @override
+  String get aggSortH24 => '24h change';
+
+  @override
+  String get aggSortOiVol => 'OI/V';
+
+  @override
+  String get aggCoinSearchHint => 'Search coin';
+
+  @override
+  String get aggCoinSearchHot => 'Popular coins';
+
+  @override
+  String get aggCoinSearchEmpty => 'No matching coin';
+
+  @override
+  String get aggNoData => 'No data';
+
+  @override
+  String get aggNoMatchExchange => 'No matching exchange';
+
+  @override
+  String get aggVolumeTotal => 'Total';
+
+  @override
   String get tradesTabLatest => 'Latest';
 
   @override

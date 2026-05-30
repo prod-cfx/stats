@@ -75,11 +75,17 @@ void main() {
     expect(find.byType(LongShortBar), findsWidgets);
   });
 
-  testWidgets('占位 tab（聚合挂单/预测/币股）切换不崩溃（AC5）',
+  testWidgets('占位 tab（预测/币股）切换不崩溃（AC5）',
       (WidgetTester tester) async {
     await _pumpHub(tester);
+    // 聚合挂单已落地（#1854）→ 不再是占位屏，单独验证不抛异常。
+    await tester.tap(_hubTab(DataHubScreen.aggOrders));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(tester.takeException(), isNull,
+        reason: '切到 aggOrders 不应抛异常');
+
     for (final DataHubScreen screen in <DataHubScreen>[
-      DataHubScreen.aggOrders,
       DataHubScreen.predict,
       DataHubScreen.coinStock,
     ]) {
