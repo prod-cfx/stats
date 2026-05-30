@@ -461,6 +461,28 @@ Bottom sheet（无独立 route，由调用方 `showXxxSheet(context, ...)` 打�
 
 **不变项**：设计稿 `StratDetail` 中已有的「收益曲线 + 统计网格 + 策略参数 + 策略说明」内容已在 Flutter 详情页覆盖（#1565），本次不扩展也不删减；不回流设计稿 `run-strat`（运行策略）独立按钮。本节仅落文档，不改设计稿、不改 app 代码。
 
+#### 6.1 策略广场列表卡操作基线（Issue #1793）
+
+**背景**：设计稿 `m-screens-2.jsx` `StratCard`（`m-screens-2.jsx:868` `function StratCard`）底栏为双按钮——「载入对话（ghost，`m-screens-2.jsx:957`）」+「运行（`run-strat`，紫色渐变主操作，`m-screens-2.jsx:959`-`969`）」。Flutter 列表卡 `strategy_card_tile.dart` 当前仅渲染「载入对话」紫色渐变实心主按钮（`_LoadConversationButton`），无独立「运行」。#1793 要求确认列表卡是否补「运行」，避免与详情页基线（#1666/#1757，本节 #6）冲突。
+
+**判定**：**列表卡维持现状——单「载入对话」主操作，不补「运行」按钮**，与详情页 #6 决策同源。设计稿 `StratCard` 的 `run-strat` 双按钮与 `StratDetail` 的 `run-strat` 一样仅作视觉探索，不作为 app 验收基线。
+
+**理由**：
+
+1. **与详情页基线一致（Never break userspace）**——详情页（#1666/#1757）已刻意把设计稿 `run-strat`（运行策略）主操作位让给「载入到对话」，不保留独立「运行」。列表卡若反向补「运行」，会让"列表卡有运行、详情页没有"，分裂同一策略的交互模型，破坏用户已习得的心智。
+2. **设计稿本身已自洽降级**——`m-screens-2.jsx:959` 中 `run-strat` 的 `onClick` 为 `(onRun || onLoad)`：未接 `onRun` 时直接 fallback 到 `onLoad`（载入对话）。即设计稿原型在无真实"运行"语义时，两个按钮行为收敛为同一动作，补独立「运行」无新增产品价值。
+3. **运行=部署，入口已在详情/部署流**——真实"运行/部署"是有资金配置 + 预检查 + 分步部署的重交互（见本文 2026-05-30 一键部署节 / #1772），不适合塞进广场列表卡的 32px 行内按钮；列表卡定位是"快速载入对话试聊"，与运行解耦。
+
+**验收对照（以 #1793 验收标准逐条核对，全部以 app 现状为基线）**：
+
+| # | 验收标准 | 结论 | 证据 |
+|---|---------|------|---------|
+| [1] | 产品确认列表卡操作基线，结论记入 `docs/decisions.md` | 已满足。基线＝仅「载入对话」，本节 6.1「判定」 | 本节 |
+| [2] | 若补运行：补主操作 + 接线 + 测试 | 不适用。判定为维持现状，不补「运行」 | 本节「判定」/「理由」 |
+| [3] | 若维持现状：decisions.md 记录与 #1757 一致的结论，差异关闭 | 已满足。本节与 #6（#1666/#1757）同源，明确 `StratCard` `run-strat` 仅视觉探索；差异作为"设计稿 vs app 已对齐"关闭 | 本节 + 本文 #6 |
+
+**不变项**：`strategy_card_tile.dart` 底栏保持单 `_LoadConversationButton`（accent 渐变，key `strategy-card-load-chat-<id>`），文案走 l10n `strategyCardLoadConversation`，点击 → toast → `/ai?loadStrategy=<id>`，与详情页 / 列表页 `_onLoadConversation` 流程统一。本节仅落文档，不改设计稿、不改 app 代码。
+
 ---
 
 ## 2026-05-18 · K 线图表组件库选型（Issue #1513）
