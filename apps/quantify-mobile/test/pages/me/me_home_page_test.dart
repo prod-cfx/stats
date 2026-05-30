@@ -8,6 +8,7 @@ import 'package:quantify_mobile/data/mock/mock_account_repository.dart';
 import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
+import 'package:quantify_mobile/data/models/live_strategy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
@@ -48,6 +49,19 @@ Future<ProviderContainer> _pumpMe(
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
       accountRepositoryProvider.overrideWithValue(MockAccountRepository()),
       apiKeyRepositoryProvider.overrideWithValue(MockApiKeyRepository()),
+      // 大卡计数（#1792）直接喂确定值，避免 mock repo 的 200ms 延时
+      // 在 widget 树 dispose 后留下 pending timer。runningCount=2 与
+      // mock fixture 一致。
+      liveStrategySummaryProvider.overrideWith(
+        (Ref ref) async => const LiveStrategySummary(
+          totalAssets: 0,
+          totalCapital: 0,
+          todayPnl: 0,
+          totalPnl: 0,
+          runningCount: 2,
+          stoppedCount: 0,
+        ),
+      ),
     ],
   );
   // M6 修复：每个 testWidgets 结束 dispose 容器（9 主题循环防止 9 个容器泄漏）。
@@ -123,6 +137,25 @@ void main() {
     await tester.tap(entry);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('live-stub')), findsOneWidget);
+  });
+
+  testWidgets('实盘策略入口为 header 下首位大卡（账户分组之前）（#1792）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    final Finder entry = find.byKey(const Key('me-live-strategies-entry'));
+    expect(entry, findsOneWidget);
+    // 大卡的「实盘策略」标题需位于「账户」分组标题之前（更靠上）。
+    final double entryY = tester.getTopLeft(entry).dy;
+    final double accountY = tester.getTopLeft(find.text('账户')).dy;
+    expect(entryY, lessThan(accountY),
+        reason: '实盘策略入口应在账户分组之前');
+  });
+
+  testWidgets('实盘策略大卡展示运行中策略计数（#1792）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    // mock fixture 含 2 个 running 策略 → 「2 运行中」。
+    expect(find.text('2 运行中'), findsOneWidget);
   });
 
   testWidgets('渲染 header + 分组 + 退出登录按钮', (WidgetTester tester) async {

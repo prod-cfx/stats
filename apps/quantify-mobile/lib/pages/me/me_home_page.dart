@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/auth/session_controller.dart';
 import '../../data/models/account_models.dart';
 import '../../data/models/api_key_models.dart';
+import '../../data/models/live_strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/utils/mask_helpers.dart';
 import '../../l10n/app_localizations.dart';
@@ -103,6 +104,10 @@ class _Content extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              // 实盘策略入口（#1792）：对齐设计稿 `m-screens-4.jsx:2516-2563`，
+              // header 下首位大卡，展示运行中策略计数，点击进入 `/me/live`。
+              QzSectionTitle(text: l10n.liveStrategyEntryTitle),
+              const _LiveStrategiesHeroCard(),
               QzSectionTitle(text: l10n.meSectionAccount),
               _SettingsGroup(
                 children: <Widget>[
@@ -123,19 +128,6 @@ class _Content extends ConsumerWidget {
                     // 真实安全状态接通后改读 `AccountInfo.security`。
                     value: l10n.meSettingsSecurityValue,
                     trailing: const QzSettingsCaret(),
-                    last: true,
-                  ),
-                ],
-              ),
-              // 实盘策略入口（#1752）：进入 `/me/live`（受登录守卫）。
-              _SettingsGroup(
-                children: <Widget>[
-                  QzSettingsRow(
-                    key: const Key('me-live-strategies-entry'),
-                    label: l10n.liveStrategyEntryTitle,
-                    value: l10n.liveStrategyEntrySubtitle,
-                    trailing: const QzSettingsCaret(),
-                    onTap: () => context.push('/me/live'),
                     last: true,
                   ),
                 ],
@@ -246,6 +238,123 @@ class _StatsCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 实盘策略入口大卡（#1792），对齐设计稿 `m-screens-4.jsx:2516-2563`：
+/// 图标 + 标题 + 活跃计数 badge + 「N 运行中」状态行。计数来自
+/// `liveStrategySummaryProvider`（mock fixture 派生）；加载/错误态退化为
+/// 0 计数，整卡始终可点进入 `/me/live`。
+class _LiveStrategiesHeroCard extends ConsumerWidget {
+  const _LiveStrategiesHeroCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final AsyncValue<LiveStrategySummary> summary =
+        ref.watch(liveStrategySummaryProvider);
+    final int runningCount = summary.maybeWhen(
+      data: (LiveStrategySummary s) => s.runningCount,
+      orElse: () => 0,
+    );
+
+    return Material(
+      color: c.bgElev,
+      borderRadius: BorderRadius.circular(QzRadii.card),
+      child: InkWell(
+        key: const Key('me-live-strategies-entry'),
+        onTap: () => context.push('/me/live'),
+        borderRadius: BorderRadius.circular(QzRadii.card),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: QzSpacing.lg,
+            vertical: 14,
+          ),
+          decoration: BoxDecoration(
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: c.accentSoft,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.auto_graph, size: 20, color: c.accent),
+              ),
+              const SizedBox(width: QzSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      l10n.liveStrategyEntryTitle,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    if (runningCount > 0)
+                      _RunningBadge(count: runningCount, l10n: l10n, c: c)
+                    else
+                      Text(
+                        l10n.liveStrategyEntrySubtitle,
+                        style: TextStyle(color: c.textMid, fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
+              const QzSettingsCaret(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RunningBadge extends StatelessWidget {
+  const _RunningBadge({
+    required this.count,
+    required this.l10n,
+    required this.c,
+  });
+  final int count;
+  final AppLocalizations l10n;
+  final QzColorScheme c;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: c.statusOk,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: QzSpacing.sm),
+        Text(
+          l10n.liveStrategyEntryRunning(count),
+          style: TextStyle(
+            color: c.statusOk,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

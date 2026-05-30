@@ -681,6 +681,12 @@
   "tabMe": "Me",
   "liveStrategyEntryTitle": "Live Strategies",
   "liveStrategyEntrySubtitle": "Track status, positions and PnL",
+  "liveStrategyEntryRunning": "{count} running",
+  "@liveStrategyEntryRunning": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "liveListTitle": "Live Strategies",
   "liveListTotalAssets": "Total Assets (position + available)",
   "liveListTodayPnl": "Today PnL",

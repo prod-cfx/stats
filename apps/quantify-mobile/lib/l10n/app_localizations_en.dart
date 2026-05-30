@@ -1810,6 +1810,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveStrategyEntrySubtitle => 'Track status, positions and PnL';
 
   @override
+  String liveStrategyEntryRunning(int count) {
+    return '$count running';
+  }
+
+  @override
   String get liveListTitle => 'Live Strategies';
 
   @override
