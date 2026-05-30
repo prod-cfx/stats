@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-05-30 · 登录认证方式基线：维持 app 邮箱+密码，设计稿验证码形态标历史/future（Issue #1788）
+
+**背景**：设计稿 `design/project/mobile/m-screens-1.jsx:124-144`（`ScreenLogin`）登录流程为**邮箱 + 验证码**（「发送验证码」按钮 + `secs` 60s 倒计时 + `sent ? '重新发送'` 重发，无密码字段）。Flutter app `apps/quantify-mobile/lib/pages/auth/login_page.dart:517-559` 为**邮箱 + 密码**（`obscureText` 密码框 + 「忘记?」suffix 入口 + `onSubmitEmail` 提交），无验证码。两者认证交互不同，属真实未对齐缺口，且是产品方向取舍而非纯视觉对齐。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 采纳设计稿验证码 | `login_page.dart` 改为邮箱 + 验证码：发送按钮 + 60s 倒计时 + 重发 + 错误态 + 表单校验 + widget 测试 | app 现有 `onSubmitEmail` 邮箱+密码是接真实后端鉴权的可用路径（backend email/password 登录），改为验证码会推翻可用认证链；而验证码下发/校验通道（邮件验证码 OTP）在 app 侧无对应 repository / 后端接口接入，当前只能落纯 mock 倒计时表单，真实接入后大概率重写，违反 YAGNI；且直接破坏现有可登录态（Never break userspace） |
+| B. 维持 app 邮箱+密码为准（采纳） | decisions.md 钉死「以 app 邮箱+密码为准」，设计稿验证码形态标历史/future，关闭差异 | 对齐 #1749 §2 已确立的「登录态以 app 为准、`proto.jsx` 登录原型差异不回流」基线；app 邮箱+密码接真实后端鉴权，零破坏；与 #1756/#1770/#1771/#1750 处理「设计超前 / 依赖真实数据通道未就绪」一致 |
+
+**判定**：**采纳方案 B——维持 app 邮箱 + 密码为登录认证唯一基线**。`login_page.dart` 登录表单维持「邮箱 + 密码（`obscureText`）+ 忘记密码入口 + Telegram 一键登录 + 访客模式」现状，不改为验证码。设计稿 `ScreenLogin` 的验证码形态（发送按钮 / 60s 倒计时 / 重发）标记为**历史原型 / future**，不回流 app，差异关闭。本节仅落文档，不改 `login_page.dart` 与测试、不改设计稿。
+
+**对齐结论（对应 #1788 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品对「验证码 vs 密码」给出结论并记入 decisions.md | 已满足。结论＝方案 B，以 app 邮箱+密码为准，记入本节 | 本节 |
+| [2] 若采纳验证码：login_page 提供验证码输入 + 发送 + 倒计时 + 校验 + 失败态 | 不适用。未采纳验证码，维持邮箱+密码现状 | 本节判定 |
+| [3] 若采纳验证码：补 widget 测试（发送→倒计时→重发→提交） | 不适用。未采纳验证码，不新增验证码测试 | 本节判定 |
+| [4] 若维持密码：decisions.md 记录结论，设计稿对应屏标注，差异关闭 | 已满足。本节记录方案 B；`m-screens-1.jsx` `ScreenLogin` 验证码形态标历史/future；差异关闭 | 本节 + README 设计真源段补 #1788 引用 |
+
+**理由**：
+
+1. **Never break userspace**：app `onSubmitEmail`（邮箱+密码）是接真实后端鉴权的现役可用登录路径，改为验证码会直接推翻该可用认证链。
+2. **YAGNI / 依赖未就绪**：邮件验证码（OTP）下发与校验依赖后端 OTP 接口与 app 侧对应数据通道，当前未接入；先在 app 堆纯 mock 倒计时表单，真实 OTP 接入后口径（重发节流、过期、错误码）大概率重写。
+3. **对齐既定基线**：#1749 §2 已钉死「冷启动 / 登录态以 app 为准，`proto.jsx` 登录原型（含 `LoginSheet`、游客 CTA）差异废弃、不回流」；登录认证方式同属该基线，验证码是同一原型层面的超前表达。
+4. 与 #1756/#1770/#1771/#1750 处理「设计超前 / 真实数据通道未就绪」一致：设计稿保留高保真表达作为历史/future，app 按真实数据就绪节奏落地。
+
+**设计超前 / 历史项（标 future，不算对齐缺口）**：`ScreenLogin` 的邮箱+验证码形态（发送验证码按钮 / 60s 倒计时 / 重发 / 6 位验证码输入）——待后端邮件验证码（OTP）登录通道就绪后另行立项评估是否引入为第二登录方式，未就绪前不在 app 落 mock，也不要在后续 PR 以「对齐缺口」名义补。
+
+**不变项**：`login_page.dart` 登录表单维持邮箱 + 密码（`obscureText`）+ 忘记密码 suffix 入口 + Telegram 一键登录 + 访客模式现状，`onSubmitEmail` 鉴权路径不变。设计稿 `m-screens-1.jsx` `ScreenLogin` 验证码表达保留为历史/future，不删除、不回流 app，直到后端 OTP 通道接入 issue 立项解除。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1788 引用。不改 `design/project/mobile/m-screens-1.jsx`、不改 `login_page.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · 一键部署补齐资金配置/预检查/部署步骤详情：方案 A 落地（Issue #1772，偏离 #1751 既定边界）
 
 **背景**：设计稿 `design/project/mobile/m-screens-deploy.jsx` 的部署流程为多页结构：选交易所（DpSelect）→ 资金配置（DpAllocate，`:759-931`）→ 部署中（DpDeploying，`:977-1084`）→ 成功（DpSuccess，`:1131-1198`），含部署前预检查（PreflightChecks，`:425-585`）。#1751（已 close）确立「部署走 `QzDeploySheet`（单 sheet 内状态机 `pickExchange → authorize → deploying → done`）」并通过验收，**跳过了资金配置页 / 预检查 / 部署步骤详情**。#1772 提出设计稿增强，需先对「落地 / 暂缓」做产品取舍。
