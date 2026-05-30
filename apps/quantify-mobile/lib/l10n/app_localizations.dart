@@ -2360,6 +2360,18 @@ abstract class AppLocalizations {
   /// **'策略详情'**
   String get strategyDetailTitle;
 
+  /// No description provided for @strategyDetailFavoriteTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏'**
+  String get strategyDetailFavoriteTooltip;
+
+  /// No description provided for @strategyDetailCloseTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get strategyDetailCloseTooltip;
+
   /// No description provided for @strategyDetailReturn7d.
   ///
   /// In zh, this message translates to:

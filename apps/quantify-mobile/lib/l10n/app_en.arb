@@ -437,6 +437,8 @@
   "strategyCategoryHedge": "Hedge",
   "strategyCategoryHighFreq": "HighFreq",
   "strategyDetailTitle": "Strategy Detail",
+  "strategyDetailFavoriteTooltip": "Favorite",
+  "strategyDetailCloseTooltip": "Close",
   "strategyDetailReturn7d": "7d Return",
   "strategyDetailReturn30d": "30d Return",
   "strategyDetailReturnAll": "Total Return",

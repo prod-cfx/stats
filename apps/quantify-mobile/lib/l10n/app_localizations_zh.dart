@@ -1178,6 +1178,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailTitle => '策略详情';
 
   @override
+  String get strategyDetailFavoriteTooltip => '收藏';
+
+  @override
+  String get strategyDetailCloseTooltip => '关闭';
+
+  @override
   String get strategyDetailReturn7d => '7日收益';
 
   @override

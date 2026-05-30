@@ -11,7 +11,9 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/qz_avatar.dart';
 import '../../widgets/qz_button.dart';
+import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_panel.dart';
 import '../../widgets/qz_spinner.dart';
@@ -124,13 +126,35 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
         ref.watch(strategySignalsProvider(id));
     final Set<String> subscriptions = ref.watch(strategySubscriptionsProvider);
     final bool subscribed = subscriptions.contains(id);
+    final Set<String> favorites = ref.watch(strategyFavoritesProvider);
+    final bool starred = favorites.contains(id);
 
+    // 对齐设计稿 StratDetail：bottom-sheet 形态——顶部留 48px scrim，
+    // 圆角顶 + 拖拽 handle + bgElev 头部。整页路由保留（深链 /strategy/:id
+    // 不变），仅视觉改造为从底部升起的 sheet。
     return Scaffold(
-      backgroundColor: c.bg,
-      appBar: AppBar(title: Text(l10n.strategyDetailTitle)),
-      body: Stack(
-        children: <Widget>[
-          detailAsync.when(
+      backgroundColor: c.scrim,
+      body: Padding(
+        padding: const EdgeInsets.only(top: 48),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: ColoredBox(
+            color: c.bg,
+            child: _SheetContent(
+              dragHandle: const _SheetDragHandle(),
+              header: _Header(
+                card: detailAsync.maybeWhen(
+                  data: (StrategyDetail d) => d.card,
+                  orElse: () => null,
+                ),
+                starred: starred,
+                onToggleStar: () =>
+                    ref.read(strategyFavoritesProvider.notifier).toggle(id),
+                onClose: () => _close(context),
+              ),
+              body: Stack(
+                children: <Widget>[
+                  detailAsync.when(
         loading: () => const Center(child: QzSpinner()),
         error: (Object err, _) => Center(
           child: QzEmptyState(title: l10n.commonLoadError, subtitle: err.toString()),
@@ -148,8 +172,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                _Header(card: d.card),
-                const SizedBox(height: QzSpacing.lg),
+                const SizedBox(height: QzSpacing.sm),
                 _MetricGrid(
                   cards: <Widget>[
                     StrategyMetricCard(
@@ -233,143 +256,286 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
           ),
         ),
       ),
-          if (_toast != null)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 24,
-              child: Center(
-                child: LoadConversationToast(
-                  key: const Key('strategy-load-conversation-toast'),
-                  text: _toast!,
-                ),
+                  if (_toast != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 24,
+                      child: Center(
+                        child: LoadConversationToast(
+                          key: const Key('strategy-load-conversation-toast'),
+                          text: _toast!,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            QzSpacing.lg,
-            QzSpacing.sm,
-            QzSpacing.lg,
-            QzSpacing.sm,
-          ),
-          child: Row(
-            children: <Widget>[
-              QzButton(
-                key: const Key('strategy-detail-share-btn'),
-                label: l10n.strategyDetailShareButton,
-                variant: QzButtonVariant.ghost,
-                onPressed: () => _share(context, id),
-              ),
-              const SizedBox(width: QzSpacing.sm),
-              // 「载入到对话」对齐设计稿 m-screens-2 StratDetail 底栏主操作（#1666）：
-              // accent 渐变 + toast + 700ms 跳 ai。detail 未加载完时按钮 disabled，
-              // 避免在没有名字的情况下显示空 toast。
-              Expanded(
-                child: QzButton(
-                  key: const Key('strategy-detail-load-chat-btn'),
-                  label: l10n.strategyDetailLoadConversation,
-                  variant: QzButtonVariant.accent,
-                  expanded: true,
-                  onPressed: detailAsync.maybeWhen(
-                    data: (StrategyDetail d) =>
-                        () => _onLoadConversation(d),
-                    orElse: () => null,
+              bottomBar: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    QzSpacing.lg,
+                    QzSpacing.sm,
+                    QzSpacing.lg,
+                    QzSpacing.sm,
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      QzButton(
+                        key: const Key('strategy-detail-share-btn'),
+                        label: l10n.strategyDetailShareButton,
+                        variant: QzButtonVariant.ghost,
+                        onPressed: () => _share(context, id),
+                      ),
+                      const SizedBox(width: QzSpacing.sm),
+                      // 「载入到对话」对齐设计稿 StratDetail 底栏主操作（#1666）：
+                      // accent 渐变 + toast + 700ms 跳 ai。detail 未加载完时
+                      // 按钮 disabled，避免在没有名字的情况下显示空 toast。
+                      Expanded(
+                        child: QzButton(
+                          key: const Key('strategy-detail-load-chat-btn'),
+                          label: l10n.strategyDetailLoadConversation,
+                          variant: QzButtonVariant.accent,
+                          expanded: true,
+                          onPressed: detailAsync.maybeWhen(
+                            data: (StrategyDetail d) =>
+                                () => _onLoadConversation(d),
+                            orElse: () => null,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: QzSpacing.sm),
+                      Expanded(
+                        child: QzButton(
+                          key: const Key('strategy-detail-subscribe-btn'),
+                          label: subscribed
+                              ? l10n.strategyDetailSubscribed
+                              : l10n.strategyDetailSubscribe,
+                          variant: QzButtonVariant.ghost,
+                          expanded: true,
+                          onPressed: () => ref
+                              .read(strategySubscriptionsProvider.notifier)
+                              .toggle(id),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: QzSpacing.sm),
-              Expanded(
-                child: QzButton(
-                  key: const Key('strategy-detail-subscribe-btn'),
-                  label: subscribed
-                      ? l10n.strategyDetailSubscribed
-                      : l10n.strategyDetailSubscribe,
-                  variant: QzButtonVariant.ghost,
-                  expanded: true,
-                  onPressed: () => ref
-                      .read(strategySubscriptionsProvider.notifier)
-                      .toggle(id),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// 关闭 sheet：能 pop 则 pop（保留 push 进入的导航栈），否则回首页。
+  /// 兼容深链直达 /strategy/:id（栈底无上一页）场景，不让关闭按钮失效。
+  void _close(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/strategy');
+    }
+  }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.card});
-  final StrategyCard card;
+/// Bottom-sheet 视觉骨架：bgElev 头部（含 handle + [header]）+ 可滚动
+/// [child] body + 置底 [bottomBar]。对齐设计稿 StratDetail 三段式结构。
+class _SheetContent extends StatelessWidget {
+  const _SheetContent({
+    required this.dragHandle,
+    required this.header,
+    required this.body,
+    required this.bottomBar,
+  });
+
+  final Widget dragHandle;
+  final Widget header;
+  final Widget body;
+  final Widget bottomBar;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
       children: <Widget>[
-        CircleAvatar(
-          radius: 22,
-          backgroundColor: c.accentSoft,
-          child: Text(
-            card.author.isEmpty ? '?' : card.author.characters.first,
-            style: TextStyle(
-              color: c.accent,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
+        ColoredBox(
+          color: c.bgElev,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              QzSpacing.lg,
+              QzSpacing.sm,
+              QzSpacing.lg,
+              QzSpacing.md,
+            ),
+            child: Column(
+              children: <Widget>[
+                dragHandle,
+                const SizedBox(height: QzSpacing.md),
+                header,
+              ],
             ),
           ),
         ),
+        Expanded(child: body),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: c.bgElev,
+            border: Border(top: BorderSide(color: c.borderSoft)),
+          ),
+          child: bottomBar,
+        ),
+      ],
+    );
+  }
+}
+
+/// 顶部 42×4 拖拽 handle（对齐设计稿 StratDetail）。
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      width: 42,
+      height: 4,
+      decoration: BoxDecoration(
+        color: c.border,
+        borderRadius: BorderRadius.circular(QzRadii.pill),
+      ),
+    );
+  }
+}
+
+/// 详情头部（对齐设计稿 StratDetail head）：
+/// 头像 + 名 + (类型 Chip + `pair · period`) + 收藏 star + 关闭。
+///
+/// [card] 在 detail 加载中为 null，此时名称/Chip 占位、star/close 仍可用
+/// （star 状态由外部 favorites 提供，与列表同源，不依赖 detail 数据）。
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.card,
+    required this.starred,
+    required this.onToggleStar,
+    required this.onClose,
+  });
+
+  final StrategyCard? card;
+  final bool starred;
+  final VoidCallback onToggleStar;
+  final VoidCallback onClose;
+
+  String? _categoryLabel(BuildContext context, StrategyCategory category) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return switch (category) {
+      StrategyCategory.all => null,
+      StrategyCategory.trend => l10n.strategyCategoryTrend,
+      StrategyCategory.grid => l10n.strategyCategoryGrid,
+      StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
+      StrategyCategory.reversal => l10n.strategyCategoryReversal,
+      StrategyCategory.hedge => l10n.strategyCategoryHedge,
+      StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
+    };
+  }
+
+  QzChipTone _categoryTone(StrategyCategory category) {
+    return switch (category) {
+      StrategyCategory.trend => QzChipTone.accent,
+      StrategyCategory.grid => QzChipTone.info,
+      StrategyCategory.arbitrage => QzChipTone.ok,
+      StrategyCategory.reversal => QzChipTone.warn,
+      StrategyCategory.hedge => QzChipTone.info,
+      StrategyCategory.highFreq => QzChipTone.danger,
+      StrategyCategory.all => QzChipTone.neutral,
+    };
+  }
+
+  String _pairPeriod(StrategyCard card) {
+    final List<String> parts = <String>[
+      if (card.pair.isNotEmpty) card.pair,
+      if (card.period.isNotEmpty) card.period,
+    ];
+    return parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final StrategyCard? card = this.card;
+    final String initial = (card == null || card.author.isEmpty)
+        ? '?'
+        : card.author.characters.first;
+    final String? catLabel =
+        card == null ? null : _categoryLabel(context, card.category);
+    final String pairPeriod = card == null ? '' : _pairPeriod(card);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        QzAvatar(label: initial, size: 48),
         const SizedBox(width: QzSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                card.name,
+                card?.name ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: c.text,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: QzSpacing.xxs),
-              Text(
-                '${card.author} · ${card.subscribers}${AppLocalizations.of(context).strategyDetailSubscribersSuffix}',
-                style: TextStyle(color: c.textDim, fontSize: 12),
-              ),
-              const SizedBox(height: QzSpacing.sm),
+              const SizedBox(height: 6),
               Wrap(
                 spacing: QzSpacing.xs,
                 runSpacing: QzSpacing.xs,
-                children: card.tags
-                    .map((String t) => Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: QzSpacing.sm,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: c.bgSoft,
-                            borderRadius:
-                                BorderRadius.circular(QzRadii.pill),
-                          ),
-                          child: Text(
-                            t,
-                            style: TextStyle(
-                              color: c.textMid,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ))
-                    .toList(growable: false),
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  if (catLabel != null && catLabel.isNotEmpty)
+                    QzChip(
+                      label: catLabel,
+                      tone: _categoryTone(card!.category),
+                    ),
+                  if (pairPeriod.isNotEmpty)
+                    Text(
+                      pairPeriod,
+                      style: TextStyle(
+                        color: c.textDim,
+                        fontSize: 11,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
+        ),
+        const SizedBox(width: QzSpacing.sm),
+        IconButton(
+          key: const Key('strategy-detail-star-btn'),
+          tooltip: l10n.strategyDetailFavoriteTooltip,
+          onPressed: onToggleStar,
+          visualDensity: VisualDensity.compact,
+          icon: Icon(
+            starred ? Icons.star_rounded : Icons.star_outline_rounded,
+            size: 22,
+            color: starred ? const Color(0xFFF59E0B) : c.textMid,
+          ),
+        ),
+        IconButton(
+          key: const Key('strategy-detail-close-btn'),
+          tooltip: l10n.strategyDetailCloseTooltip,
+          onPressed: onClose,
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.close_rounded, size: 20, color: c.textMid),
         ),
       ],
     );

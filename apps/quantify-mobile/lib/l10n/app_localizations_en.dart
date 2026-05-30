@@ -1213,6 +1213,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailTitle => 'Strategy Detail';
 
   @override
+  String get strategyDetailFavoriteTooltip => 'Favorite';
+
+  @override
+  String get strategyDetailCloseTooltip => 'Close';
+
+  @override
   String get strategyDetailReturn7d => '7d Return';
 
   @override

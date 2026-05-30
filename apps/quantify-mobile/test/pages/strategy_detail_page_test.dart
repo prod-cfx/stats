@@ -235,4 +235,169 @@ void main() {
     // 等 toast 自然消失，避免 pending timer
     await tester.pump(const Duration(milliseconds: 2500));
   });
+
+  testWidgets('bottom-sheet 视觉：圆角顶 + 拖拽 handle + 顶部留白（#1820）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+    // sheet 顶部留 48px scrim + 圆角顶 ClipRRect
+    expect(find.byType(ClipRRect), findsWidgets);
+    // 头部 star / close 按钮存在
+    expect(find.byKey(const Key('strategy-detail-star-btn')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-detail-close-btn')), findsOneWidget);
+    // 头部信息为「类型 Chip + pair · period」结构：grid 策略 → 类型「网格」
+    expect(find.text('网格'), findsWidgets);
+  });
+
+  testWidgets('收藏 star：点击切换 favorites，与列表同源 provider 双向同步（#1820）',
+      (WidgetTester tester) async {
+    final ProviderContainer c = (await _pumpDetail(tester)).container;
+    expect(c.read(strategyFavoritesProvider).contains(_kId), isFalse);
+
+    await tester.tap(find.byKey(const Key('strategy-detail-star-btn')));
+    await tester.pump();
+    await tester.pump();
+    expect(c.read(strategyFavoritesProvider).contains(_kId), isTrue,
+        reason: 'star 点击应写入与列表同一 strategyFavoritesProvider');
+
+    await tester.tap(find.byKey(const Key('strategy-detail-star-btn')));
+    await tester.pump();
+    await tester.pump();
+    expect(c.read(strategyFavoritesProvider).contains(_kId), isFalse);
+  });
+
+  testWidgets('收藏 star：列表先收藏 → 详情进入时 star 已点亮（双向同步）（#1820）',
+      (WidgetTester tester) async {
+    final ProviderContainer c = (await _pumpDetail(
+      tester,
+      initialPrefs: <String, Object>{
+        'qz.strategy.favorites': <String>[_kId],
+      },
+    )).container;
+    expect(c.read(strategyFavoritesProvider).contains(_kId), isTrue);
+    // 点亮态：实心 star 图标
+    expect(find.byIcon(Icons.star_rounded), findsOneWidget);
+  });
+
+  testWidgets('关闭按钮：深链直达无栈时 fallback 到 /strategy，不失效（#1820）',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2400));
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+    );
+    addTearDown(container.dispose);
+    // 深链直达 /strategy/:id（栈底无上一页）：close 应 fallback 到 /strategy
+    // 列表，不让关闭按钮失效（Never break userspace）。
+    final GoRouter router = GoRouter(
+      initialLocation: '/strategy/$_kId',
+      routes: <RouteBase>[
+        GoRoute(
+          path: '/strategy',
+          builder: (BuildContext context, GoRouterState state) =>
+              const Scaffold(key: Key('list-stub'), body: SizedBox()),
+        ),
+        GoRoute(
+          path: '/strategy/:id',
+          builder: (BuildContext _, GoRouterState state) =>
+              StrategyDetailPage(id: state.pathParameters['id']!),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+              const QzTheme(bg: QzBg.light, accent: QzAccent.violet)),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(router.routerDelegate.currentConfiguration.uri.toString(),
+        contains('/strategy/'));
+
+    await tester.tap(find.byKey(const Key('strategy-detail-close-btn')));
+    await tester.pumpAndSettle();
+    expect(router.routerDelegate.currentConfiguration.uri.toString(),
+        '/strategy');
+  });
+
+  testWidgets('关闭按钮：从列表 push 进入时 close 应 pop 回上一页（#1820）',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2400));
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+    );
+    addTearDown(container.dispose);
+    // 从 /strategy 列表 push 进入详情（栈底有上一页）：close 应 canPop→pop
+    // 回列表，而不是 fallback go。
+    final GoRouter router = GoRouter(
+      initialLocation: '/strategy',
+      routes: <RouteBase>[
+        GoRoute(
+          path: '/strategy',
+          builder: (BuildContext context, GoRouterState state) => Scaffold(
+            key: const Key('list-stub'),
+            body: Center(
+              child: TextButton(
+                key: const Key('open-detail'),
+                onPressed: () => context.push('/strategy/$_kId'),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/strategy/:id',
+          builder: (BuildContext _, GoRouterState state) =>
+              StrategyDetailPage(id: state.pathParameters['id']!),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+              const QzTheme(bg: QzBg.light, accent: QzAccent.violet)),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('open-detail')));
+    // push 后让 detail 的 mock future（detail 200ms）推进，header 渲染出
+    // close 按钮。go_router 14 的 imperative push 不改基址 URL，但会压入
+    // detail 页 —— 以 close 按钮出现 + 列表被遮挡判定已进入详情。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.byKey(const Key('strategy-detail-close-btn')), findsOneWidget);
+    expect(find.byKey(const Key('list-stub')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('strategy-detail-close-btn')));
+    await tester.pumpAndSettle();
+    // canPop 为真 → pop 回栈底 /strategy 列表，而非 fallback go；
+    // 列表重新可见、详情 close 按钮消失。
+    expect(find.byKey(const Key('list-stub')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-detail-close-btn')), findsNothing);
+  });
 }

@@ -440,6 +440,8 @@
   "strategyCategoryHedge": "对冲",
   "strategyCategoryHighFreq": "高频",
   "strategyDetailTitle": "策略详情",
+  "strategyDetailFavoriteTooltip": "收藏",
+  "strategyDetailCloseTooltip": "关闭",
   "strategyDetailReturn7d": "7日收益",
   "strategyDetailReturn30d": "30日收益",
   "strategyDetailReturnAll": "全部收益",
