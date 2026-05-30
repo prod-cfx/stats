@@ -11,7 +11,7 @@ import '../../../theme/tokens.dart';
 import '../../../widgets/qz_avatar.dart';
 import '../../../widgets/qz_stat_chip.dart';
 
-/// 三列 flex 配比；与 [MarketHomePage] 的 _ColumnHeader 保持一致：
+/// 三列 flex 配比；与 [MarketHomeBody] 的 _ColumnHeader 保持一致：
 /// 名称/量 12 | 最新价 10 | 24H 涨跌 10。
 const int kTickerRowNameFlex = 12;
 const int kTickerRowPriceFlex = 10;

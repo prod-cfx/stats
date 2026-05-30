@@ -100,13 +100,32 @@ void main() {
     // mockWhaleNotifications 含未读项 → badge 显示数字（非 0）。
     final Finder bell =
         find.byKey(const Key('data-hub-notification-bell'));
+    final Finder bellStack =
+        find.ancestor(of: bell, matching: find.byType(Stack)).first;
     expect(
       find.descendant(
-        of: find.ancestor(of: bell, matching: find.byType(Stack)).first,
+        of: bellStack,
         matching: find.byIcon(Icons.notifications_outlined),
       ),
       findsOneWidget,
     );
+    // badge 渲染未读数字（QzNotificationBell 在 unread > 0 时显示 `$unread` / `9+`）。
+    expect(
+      find.descendant(
+        of: bellStack,
+        matching: find.textContaining(RegExp(r'\d')),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('点击 hub header 铃铛打开通知中心 sheet（AC3）',
+      (WidgetTester tester) async {
+    await _pumpHub(tester);
+    await tester.tap(find.byKey(const Key('data-hub-notification-bell')));
+    await tester.pumpAndSettle();
+    // 复用 #1560 WhaleNotificationSheet → 通知中心标题可见。
+    expect(find.text('通知中心'), findsOneWidget);
   });
 
   testWidgets('DataHubTitle 下拉切换子屏', (WidgetTester tester) async {

@@ -616,9 +616,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authLoginForgotMockToast => 'Reset password (mock)';
 
   @override
-  String get marketHomeTitle => 'Market';
-
-  @override
   String get marketHomeTabWatchlist => 'Watchlist';
 
   @override
@@ -653,9 +650,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketHomeSearchPlaceholder => 'Search symbol · BTC, ETH, SOL…';
-
-  @override
-  String get marketHomeNotificationTooltip => 'Notifications';
 
   @override
   String get dataHubTabMarket => 'Market';

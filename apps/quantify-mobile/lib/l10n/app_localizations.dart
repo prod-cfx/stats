@@ -1208,12 +1208,6 @@ abstract class AppLocalizations {
   /// **'重置密码（mock）'**
   String get authLoginForgotMockToast;
 
-  /// No description provided for @marketHomeTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'行情'**
-  String get marketHomeTitle;
-
   /// No description provided for @marketHomeTabWatchlist.
   ///
   /// In zh, this message translates to:
@@ -1285,12 +1279,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'搜索币种 · BTC, ETH, SOL…'**
   String get marketHomeSearchPlaceholder;
-
-  /// No description provided for @marketHomeNotificationTooltip.
-  ///
-  /// In zh, this message translates to:
-  /// **'通知'**
-  String get marketHomeNotificationTooltip;
 
   /// No description provided for @dataHubTabMarket.
   ///

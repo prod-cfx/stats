@@ -583,9 +583,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginForgotMockToast => '重置密码（mock）';
 
   @override
-  String get marketHomeTitle => '行情';
-
-  @override
   String get marketHomeTabWatchlist => '自选';
 
   @override
@@ -620,9 +617,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketHomeSearchPlaceholder => '搜索币种 · BTC, ETH, SOL…';
-
-  @override
-  String get marketHomeNotificationTooltip => '通知';
 
   @override
   String get dataHubTabMarket => '行情数据';

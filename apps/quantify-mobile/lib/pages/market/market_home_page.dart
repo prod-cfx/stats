@@ -2,90 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/mock/fixtures/whale_extras.dart';
 import '../../data/models/ticker_models.dart';
-import '../../data/models/whale_extra_models.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_empty_state.dart';
-import '../../widgets/qz_notification_bell.dart';
 import '../../widgets/qz_spinner.dart';
-import '../../widgets/qz_top_bar.dart';
-import '../whale/widgets/whale_notification_sheet.dart';
 import 'widgets/ticker_row.dart'
     show TickerRow, kTickerRowNameFlex, kTickerRowPriceFlex, kTickerRowChangeFlex;
 
 enum _MarketTab { watchlist, spot, perp, gainers, losers }
 
-/// 行情列表 standalone 页（issue #1561）。
-///
-/// QzTopBar + 通知铃铛（复用 #1560 的 WhaleNotificationSheet 数据/弹层），
-/// 通知铃铛为 36x36 圆形描边样式（issue #1597 对齐设计稿 ScreenTickers）。
-///
-/// issue #1851：列表/搜索/二级 tab 主体抽到 [MarketHomeBody]，供「数据」hub
-/// （`DataHubPage`）内嵌复用；本 wrapper 保留自带 QzTopBar + 铃铛，供既有
-/// standalone 测试使用（router 已全切 `DataHubPage`，本 wrapper 当前无路由入口），
-/// hub 内的通知铃铛由 hub header 统一承担。
-class MarketHomePage extends ConsumerStatefulWidget {
-  const MarketHomePage({super.key});
-
-  @override
-  ConsumerState<MarketHomePage> createState() => _MarketHomePageState();
-}
-
-class _MarketHomePageState extends ConsumerState<MarketHomePage> {
-  late List<WhaleNotification> _notifications;
-
-  @override
-  void initState() {
-    super.initState();
-    _notifications = List<WhaleNotification>.of(mockWhaleNotifications);
-  }
-
-  int get _unreadCount =>
-      _notifications.where((WhaleNotification n) => n.unread).length;
-
-  Future<void> _openNotifications() async {
-    final WhaleNotificationSheetResult? result =
-        await WhaleNotificationSheet.show(
-      context,
-      notifications: _notifications,
-    );
-    if (!mounted || result == null) return;
-    setState(() => _notifications = result.notifications);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
-    return Scaffold(
-      backgroundColor: c.bg,
-      appBar: QzTopBar(
-        title: l10n.marketHomeTitle,
-        actions: <Widget>[
-          QzNotificationBell(
-            iconKey: const Key('market-notification-bell'),
-            unread: _unreadCount,
-            onTap: _openNotifications,
-            tooltip: l10n.marketHomeNotificationTooltip,
-            circular: true,
-          ),
-          const SizedBox(width: QzSpacing.md),
-        ],
-      ),
-      body: const MarketHomeBody(),
-    );
-  }
-}
-
 /// 行情列表主体（搜索 + 5 个二级 tab + 列表），无 Scaffold / 顶栏 / 铃铛。
 ///
-/// issue #1851：供 [MarketHomePage] standalone wrapper 与「数据」hub
-/// （`DataHubPage`）共用；hub 内不重复渲染铃铛（由 hub header 承担）。
+/// issue #1561 起步为 standalone 页；issue #1851 抽出本主体；issue #1852 起
+/// 行情数据屏统一由「数据」hub（`DataHubPage`）的 [DataHubHeader] 承载标题/铃铛，
+/// 不再有独立 `QzTopBar` 标题层——本主体只渲染搜索 + 二级 tab + 列表。
 /// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜，默认选中「自选」（#1600）。
 class MarketHomeBody extends ConsumerStatefulWidget {
   const MarketHomeBody({super.key});

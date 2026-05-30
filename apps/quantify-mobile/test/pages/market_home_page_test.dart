@@ -17,6 +17,14 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
+/// 行情数据屏（issue #1561/#1600/#1597）的二级 tab / 搜索 / 列表行为测试。
+///
+/// issue #1852 起，行情数据屏不再有独立 `QzTopBar` 标题层——统一由「数据」hub
+/// （`DataHubPage`）的 hub header 承载标题/铃铛。这里直接挂被测主体
+/// [MarketHomeBody]（即行情数据 tab 的内容），验证既有 tab/搜索/列表行为不变；
+/// 不挂整个 hub，避免兄弟子屏（多空比的 mock kline 流式 Timer）噪声干扰本屏断言。
+/// hub header（横滑 tab + 铃铛 badge）与 hub 集成本身的覆盖见
+/// `data_hub_page_test.dart`。
 class _FakeTickerRepository implements TickerRepository {
   final Map<String, StreamController<Ticker>> controllers =
       <String, StreamController<Ticker>>{};
@@ -49,7 +57,7 @@ Future<void> _pump(
       GoRoute(
         path: '/market',
         builder: (BuildContext context, GoRouterState state) =>
-            const MarketHomePage(),
+            const Scaffold(body: SafeArea(child: MarketHomeBody())),
       ),
       GoRoute(
         path: r'/market/:symbol([A-Z0-9-]{2,})',
@@ -84,7 +92,18 @@ Finder _findTab(String tabName) {
 }
 
 void main() {
-  testWidgets('/market 默认自选 tab 展示 5 条 + 推流变价生效（#1600）',
+  testWidgets('行情数据主体无独立 QzTopBar / 自带铃铛（#1852）',
+      (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    // 被测主体为 MarketHomeBody，不再有 standalone QzTopBar 包装层。
+    expect(find.byType(MarketHomeBody), findsOneWidget);
+    // 标题/铃铛归 hub header；行情数据主体内不再自带 market-notification-bell。
+    expect(find.byKey(const Key('market-notification-bell')), findsNothing);
+  });
+
+  testWidgets('默认自选 tab 展示 5 条 + 推流变价生效（#1600）',
       (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
@@ -236,26 +255,6 @@ void main() {
     expect(find.byType(TickerRow), findsNWidgets(perpCount));
   });
 
-  testWidgets('通知铃铛存在并显示未读 badge，点击打开通知中心 sheet',
-      (WidgetTester tester) async {
-    final _FakeTickerRepository repo = _FakeTickerRepository();
-    await _pump(tester, repo);
-
-    expect(find.byKey(const Key('market-notification-bell')), findsOneWidget);
-    // 沿用 #1560 mock 通知，默认存在 unread badge（数字 > 0）。
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('market-notification-bell')),
-        matching: find.byIcon(Icons.notifications_outlined),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byKey(const Key('market-notification-bell')));
-    await tester.pumpAndSettle();
-    expect(find.text('通知中心'), findsOneWidget);
-  });
-
   testWidgets('点击行情行 push /market/:symbol 进入详情页', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
@@ -269,45 +268,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MarketDetailPage), findsOneWidget);
-    expect(find.byType(MarketHomePage), findsNothing);
+    expect(find.byType(MarketHomeBody), findsNothing);
     final MarketDetailPage detailPage =
         tester.widget<MarketDetailPage>(find.byType(MarketDetailPage));
     expect(detailPage.symbol, expectedSymbol);
-  });
-
-  testWidgets('顶部铃铛为 36x36 圆形描边按钮（#1597 设计稿）',
-      (WidgetTester tester) async {
-    final _FakeTickerRepository repo = _FakeTickerRepository();
-    await _pump(tester, repo);
-
-    final Finder bell = find.byKey(const Key('market-notification-bell'));
-    expect(bell, findsOneWidget);
-    // 外层 SizedBox 强制 36x36，DecoratedBox 提供圆形描边。
-    final Finder bellFrame =
-        find.ancestor(of: bell, matching: find.byType(DecoratedBox)).first;
-    final Size bellSize = tester.getSize(bellFrame);
-    expect(bellSize.width, 36);
-    expect(bellSize.height, 36);
-    final DecoratedBox box = tester.widget<DecoratedBox>(bellFrame);
-    expect((box.decoration as BoxDecoration).shape, BoxShape.circle);
-  });
-
-  testWidgets('搜索按钮位于 tab 行右侧，而非顶栏（#1597 设计稿）',
-      (WidgetTester tester) async {
-    final _FakeTickerRepository repo = _FakeTickerRepository();
-    await _pump(tester, repo);
-
-    // 搜索按钮 X 中心点应在 tab 容器右侧，并且在 QzTopBar 下方。
-    final Offset toggleCenter = tester.getCenter(
-      find.byKey(const Key('market-search-toggle')),
-    );
-    final Offset spotTabCenter = tester.getCenter(_findTab('spot'));
-    final Offset bellCenter = tester.getCenter(
-      find.byKey(const Key('market-notification-bell')),
-    );
-    expect(toggleCenter.dx, greaterThan(spotTabCenter.dx));
-    expect(toggleCenter.dy, greaterThan(bellCenter.dy),
-        reason: '搜索按钮应在 tab 行（顶栏下方），不在顶栏内');
   });
 
   testWidgets('搜索框 placeholder 为「搜索币种 · BTC, ETH, SOL…」（#1597 设计稿）',
@@ -320,7 +284,7 @@ void main() {
     expect(find.text('搜索币种 · BTC, ETH, SOL…'), findsOneWidget);
   });
 
-  testWidgets('MarketHomePage 9 主题循环 pump 不抛异常',
+  testWidgets('行情数据屏 9 主题循环 pump 不抛异常',
       (WidgetTester tester) async {
     for (final QzBg bg in QzBg.values) {
       for (final QzAccent accent in QzAccent.values) {
