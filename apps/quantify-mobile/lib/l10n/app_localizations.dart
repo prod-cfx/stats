@@ -2330,6 +2330,12 @@ abstract class AppLocalizations {
   /// **'需要我开始回测吗?'**
   String get aiStartBacktestPrompt;
 
+  /// 已部署会话参数卡顶部的锁定横幅文案（#1834）
+  ///
+  /// In zh, this message translates to:
+  /// **'策略已部署，参数已锁定'**
+  String get aiParamsLockedBanner;
+
   /// No description provided for @themeToggleAutoFollowSystem.
   ///
   /// In zh, this message translates to:

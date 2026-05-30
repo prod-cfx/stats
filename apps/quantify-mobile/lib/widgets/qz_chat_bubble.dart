@@ -35,6 +35,7 @@ class QzChatBubble extends StatelessWidget {
     this.codeBlock,
     this.params,
     this.onConfirm,
+    this.locked = false,
     this.deployedExchange,
     this.deployedInstanceId,
     this.onViewLive,
@@ -53,6 +54,13 @@ class QzChatBubble extends StatelessWidget {
   /// 为 null 时不显示 CTA（保持与历史调用方兼容）。confirm 屏（#1832）
   /// 就绪前由 `ai_home_page.dart` 注入占位/回测配置入口。
   final VoidCallback? onConfirm;
+
+  /// 会话已部署锁定态（#1834）。由会话 `deployedTo != null` 推导，
+  /// 经 `ai_home_page.dart` 注入。为 true 时参数卡顶部渲染 LockedBanner
+  /// 「策略已部署，参数已锁定」，并隐藏 #1831 的「确认策略」CTA——
+  /// 表达已部署方案参数不可再改、请新建方案。对齐设计稿
+  /// m-screens-1.jsx:403 `locked = !!current.deployedTo`。
+  final bool locked;
 
   /// 部署终态富气泡（#1833）专用字段。三者同时注入时（[onViewLive] 非空），
   /// 气泡渲染对齐设计稿 m-screens-1.jsx:440 的富卡片：✓ 图标 +
@@ -147,6 +155,41 @@ class QzChatBubble extends StatelessWidget {
                     ),
                   ),
                 if (params != null && params!.isNotEmpty) ...<Widget>[
+                  // 已部署锁定态横幅（#1834，设计稿 m-screens-1.jsx:403-414）：
+                  // 参数卡顶部锁图标 +「策略已部署，参数已锁定」，accentSoft 浅底。
+                  if (locked) ...<Widget>[
+                    const SizedBox(height: QzSpacing.sm),
+                    Container(
+                      key: const Key('ai-bubble-locked-banner'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: QzSpacing.sm,
+                        vertical: QzSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.accentSoft,
+                        borderRadius: BorderRadius.circular(QzRadii.input),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(Icons.lock_outline, size: 14, color: c.accent),
+                          const SizedBox(width: QzSpacing.xs),
+                          Flexible(
+                            child: Text(
+                              AppLocalizations.of(context).aiParamsLockedBanner,
+                              style: TextStyle(
+                                color: c.accent,
+                                fontSize: 12,
+                                height: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   // 分类 Chip + 识别话术（设计稿 m-screens-1.jsx:407）：
                   // category 取自 params['category']，话术复用 themePreviewIdentified。
                   if ((params!['category'] ?? '').isNotEmpty) ...<Widget>[
@@ -235,7 +278,8 @@ class QzChatBubble extends StatelessWidget {
                   ),
                   // 「需要我开始回测吗?」+「确认策略」CTA（设计稿 m-screens-1.jsx:417-433）。
                   // 仅 onConfirm 注入时渲染按钮，confirm 屏（#1832）未就绪前指向占位入口。
-                  if (onConfirm != null) ...<Widget>[
+                  // locked（#1834）时隐藏 CTA——已部署方案参数不可再改。
+                  if (onConfirm != null && !locked) ...<Widget>[
                     const SizedBox(height: QzSpacing.sm),
                     Text(
                       AppLocalizations.of(context).aiStartBacktestPrompt,

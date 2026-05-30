@@ -626,6 +626,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 onConfirm: t.kind == ChatTurnKind.params
                                     ? () => _openConfirm(t.params)
                                     : null,
+                                // 已部署锁定态（#1834）：会话 `deployedTo != null`
+                                // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。
+                                locked: current.deployedTo != null,
                                 // 部署终态富气泡（#1833）：传交易所 / 实例 ID +
                                 // 「查看实盘策略」CTA（跳 `/me/live`），气泡内渲染
                                 // ✓ + 运行中状态 + 归档话术。

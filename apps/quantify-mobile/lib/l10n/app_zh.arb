@@ -436,6 +436,10 @@
   "themePreviewStartBacktest": "开始回测",
   "aiConfirmStrategy": "确认策略",
   "aiStartBacktestPrompt": "需要我开始回测吗?",
+  "aiParamsLockedBanner": "策略已部署，参数已锁定",
+  "@aiParamsLockedBanner": {
+    "description": "已部署会话参数卡顶部的锁定横幅文案（#1834）"
+  },
   "themeToggleAutoFollowSystem": "自动跟随系统",
   "themeToggleReduceMotion": "减少动画",
   "strategyHomeTitle": "策略广场",

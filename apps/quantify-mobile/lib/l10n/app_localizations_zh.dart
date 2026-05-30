@@ -1165,6 +1165,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiStartBacktestPrompt => '需要我开始回测吗?';
 
   @override
+  String get aiParamsLockedBanner => '策略已部署，参数已锁定';
+
+  @override
   String get themeToggleAutoFollowSystem => '自动跟随系统';
 
   @override

@@ -167,4 +167,75 @@ void main() {
       },
     );
   });
+
+  // #1834 验收 1：已部署（locked）会话参数卡顶部显示锁定横幅。
+  testWidgets('locked params bubble shows LockedBanner atop the card',
+      (WidgetTester tester) async {
+    await verifyAllThemes(
+      tester,
+      () => QzChatBubble(
+        role: QzChatRole.assistant,
+        content: '参数如下:',
+        params: const <String, String>{'category': '趋势跟踪', 'fast_ma': '5'},
+        onConfirm: () {},
+        locked: true,
+      ),
+      surfaceSize: const Size(360, 360),
+      (WidgetTester t) async {
+        expect(
+          find.byKey(const Key('ai-bubble-locked-banner')),
+          findsOneWidget,
+        );
+        expect(find.text('策略已部署，参数已锁定'), findsOneWidget);
+      },
+    );
+  });
+
+  // #1834 验收 2：锁定态下隐藏「确认策略」CTA（即便 onConfirm 已注入）。
+  testWidgets('locked params bubble hides the confirm CTA',
+      (WidgetTester tester) async {
+    await verifyAllThemes(
+      tester,
+      () => QzChatBubble(
+        role: QzChatRole.assistant,
+        content: '参数如下:',
+        params: const <String, String>{'fast_ma': '5'},
+        onConfirm: () {},
+        locked: true,
+      ),
+      surfaceSize: const Size(360, 360),
+      (WidgetTester t) async {
+        expect(
+          find.byKey(const Key('ai-bubble-confirm-cta')),
+          findsNothing,
+        );
+        expect(find.text('需要我开始回测吗?'), findsNothing);
+      },
+    );
+  });
+
+  // #1834 验收 3：未部署（locked=false，默认）会话行为不变——无横幅、CTA 正常。
+  testWidgets('unlocked params bubble keeps CTA and shows no banner',
+      (WidgetTester tester) async {
+    await verifyAllThemes(
+      tester,
+      () => QzChatBubble(
+        role: QzChatRole.assistant,
+        content: '参数如下:',
+        params: const <String, String>{'fast_ma': '5'},
+        onConfirm: () {},
+      ),
+      surfaceSize: const Size(360, 360),
+      (WidgetTester t) async {
+        expect(
+          find.byKey(const Key('ai-bubble-locked-banner')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('ai-bubble-confirm-cta')),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }

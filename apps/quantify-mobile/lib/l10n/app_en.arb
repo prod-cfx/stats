@@ -433,6 +433,10 @@
   "themePreviewStartBacktest": "Start Backtest",
   "aiConfirmStrategy": "Confirm Strategy",
   "aiStartBacktestPrompt": "Shall I start the backtest?",
+  "aiParamsLockedBanner": "Strategy deployed, parameters locked",
+  "@aiParamsLockedBanner": {
+    "description": "Locked banner shown atop the params card of a deployed session (#1834)"
+  },
   "themeToggleAutoFollowSystem": "Auto Follow System",
   "themeToggleReduceMotion": "Reduce Motion",
   "strategyHomeTitle": "Strategy Plaza",
