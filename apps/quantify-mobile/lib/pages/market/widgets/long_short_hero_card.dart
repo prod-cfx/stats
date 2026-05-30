@@ -162,6 +162,7 @@ class _NotionalLabel extends StatelessWidget {
             color: color,
             fontSize: 16,
             fontWeight: FontWeight.w700,
+            fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),

@@ -70,6 +70,7 @@ class LiveStrategyCard extends StatelessWidget {
                         style: TextStyle(
                           color: c.textDim,
                           fontSize: 11,
+                          fontFamily: QzFont.mono,
                           fontFamilyFallback: QzFont.monoFallback,
                         ),
                       ),
@@ -205,6 +206,7 @@ class _PnlCell extends StatelessWidget {
             color: color,
             fontSize: 13,
             fontWeight: FontWeight.w700,
+            fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),

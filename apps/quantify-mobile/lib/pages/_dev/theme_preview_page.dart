@@ -161,6 +161,7 @@ class _SampleCard extends StatelessWidget {
                 '+2.34%',
                 style: TextStyle(
                   color: c.marketUp,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                   fontWeight: FontWeight.w700,
                 ),
@@ -169,6 +170,7 @@ class _SampleCard extends StatelessWidget {
                 '-1.20%',
                 style: TextStyle(
                   color: c.marketDown,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                   fontWeight: FontWeight.w700,
                 ),

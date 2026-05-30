@@ -140,6 +140,7 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
                     _fmtPrecision(p),
                     style: TextStyle(
                       color: p == _precision ? c.accent : c.text,
+                      fontFamily: QzFont.mono,
                       fontFamilyFallback: QzFont.monoFallback,
                     ),
                   ),
@@ -260,6 +261,7 @@ class _Toolbar extends StatelessWidget {
                   color: c.text,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
@@ -349,6 +351,7 @@ class _OrderbookSide extends StatelessWidget {
                     style: TextStyle(
                       color: color,
                       fontSize: 12,
+                      fontFamily: QzFont.mono,
                       fontFamilyFallback: QzFont.monoFallback,
                     ),
                   ),
@@ -358,6 +361,7 @@ class _OrderbookSide extends StatelessWidget {
                   style: TextStyle(
                     color: c.textMid,
                     fontSize: 12,
+                    fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),

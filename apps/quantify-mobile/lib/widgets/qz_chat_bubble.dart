@@ -148,12 +148,8 @@ class QzChatBubble extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.7,
-                                  fontFamily: 'monospace',
-                                  fontFamilyFallback: const <String>[
-                                    'Menlo',
-                                    'Consolas',
-                                    'Courier New',
-                                  ],
+                                  fontFamily: QzFont.mono,
+                                  fontFamilyFallback: QzFont.monoFallback,
                                 ),
                                 children: <InlineSpan>[
                                   TextSpan(
@@ -187,12 +183,8 @@ class QzChatBubble extends StatelessWidget {
                         color: fg,
                         fontSize: 12,
                         height: 1.4,
-                        fontFamily: 'monospace',
-                        fontFamilyFallback: const <String>[
-                          'Menlo',
-                          'Consolas',
-                          'Courier New',
-                        ],
+                        fontFamily: QzFont.mono,
+                        fontFamilyFallback: QzFont.monoFallback,
                       ),
                     ),
                   ),

@@ -90,6 +90,7 @@ class _TradesPanelState extends State<TradesPanel> {
                   style: TextStyle(
                     color: c.textDim,
                     fontSize: 10,
+                    fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),
@@ -102,6 +103,7 @@ class _TradesPanelState extends State<TradesPanel> {
                   style: TextStyle(
                     color: c.textDim,
                     fontSize: 10,
+                    fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),
@@ -113,6 +115,7 @@ class _TradesPanelState extends State<TradesPanel> {
                   style: TextStyle(
                     color: c.textDim,
                     fontSize: 10,
+                    fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),
@@ -222,6 +225,7 @@ class _TradeRow extends StatelessWidget {
               style: TextStyle(
                 color: c.textMid,
                 fontSize: 12,
+                fontFamily: QzFont.mono,
                 fontFamilyFallback: QzFont.monoFallback,
               ),
             ),
@@ -235,6 +239,7 @@ class _TradeRow extends StatelessWidget {
                 color: priceColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
+                fontFamily: QzFont.mono,
                 fontFamilyFallback: QzFont.monoFallback,
               ),
             ),
@@ -246,6 +251,7 @@ class _TradeRow extends StatelessWidget {
               style: TextStyle(
                 color: c.text,
                 fontSize: 12,
+                fontFamily: QzFont.mono,
                 fontFamilyFallback: QzFont.monoFallback,
               ),
             ),

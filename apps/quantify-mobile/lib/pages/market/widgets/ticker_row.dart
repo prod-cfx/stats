@@ -186,6 +186,7 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                     color: c.text,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
+                    fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),

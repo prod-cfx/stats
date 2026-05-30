@@ -552,7 +552,8 @@ class _NotifRow extends StatelessWidget {
                         style: TextStyle(
                           color: c.textDim,
                           fontSize: 10,
-                          fontFamily: 'monospace',
+                          fontFamily: QzFont.mono,
+                          fontFamilyFallback: QzFont.monoFallback,
                         ),
                       ),
                     ],

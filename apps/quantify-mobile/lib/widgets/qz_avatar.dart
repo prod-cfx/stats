@@ -40,6 +40,7 @@ class QzAvatar extends StatelessWidget {
           color: c.accentOn,
           fontSize: (size * 0.42).roundToDouble(),
           fontWeight: FontWeight.w700,
+          fontFamily: monospace ? QzFont.mono : null,
           fontFamilyFallback:
               monospace ? QzFont.monoFallback : QzFont.sansFallback,
           height: 1.0,

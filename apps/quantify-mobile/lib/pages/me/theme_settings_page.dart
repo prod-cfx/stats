@@ -328,6 +328,7 @@ class _PreviewCard extends StatelessWidget {
                       style: TextStyle(
                         color: scheme.textDim,
                         fontSize: 11,
+                        fontFamily: QzFont.mono,
                         fontFamilyFallback: QzFont.monoFallback,
                       ),
                     ),

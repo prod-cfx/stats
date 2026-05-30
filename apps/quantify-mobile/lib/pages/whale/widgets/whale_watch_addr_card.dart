@@ -4,6 +4,7 @@ import '../../../data/models/whale_watch_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
 
 /// 监控地址卡（issue #1769）。对齐设计稿 `m-screens-4.jsx` `WatchAddrCard`
 /// (`:2100`)：head（地址 + 复制 + live + alias + 趋势/静音/编辑/删除）、
@@ -86,7 +87,8 @@ class WhaleWatchAddrCard extends StatelessWidget {
                 color: c.accent,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
                 letterSpacing: -0.2,
               ),
             ),
@@ -162,7 +164,8 @@ class WhaleWatchAddrCard extends StatelessWidget {
                   color: empty ? c.textDim : c.text,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  fontFamily: 'monospace',
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
                   letterSpacing: -0.3,
                 ),
               ),
@@ -181,7 +184,8 @@ class WhaleWatchAddrCard extends StatelessWidget {
                 color: pnlColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                fontFamily: 'monospace',
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
                 letterSpacing: -0.2,
               ),
             ),
@@ -210,7 +214,8 @@ class WhaleWatchAddrCard extends StatelessWidget {
                   color: empty ? c.textDim : c.text,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  fontFamily: 'monospace',
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
             ],
@@ -234,7 +239,8 @@ class WhaleWatchAddrCard extends StatelessWidget {
                         color: empty ? c.textDim : c.text,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
+                        fontFamily: QzFont.mono,
+                        fontFamilyFallback: QzFont.monoFallback,
                       ),
                     ),
                   ),
@@ -270,7 +276,8 @@ class WhaleWatchAddrCard extends StatelessWidget {
                   color: empty ? c.textDim : c.text,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  fontFamily: 'monospace',
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
             ],

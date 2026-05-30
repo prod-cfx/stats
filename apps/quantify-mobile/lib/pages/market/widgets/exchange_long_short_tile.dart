@@ -99,6 +99,7 @@ class ExchangeLongShortTile extends StatelessWidget {
                   color: c.marketUp,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
@@ -111,6 +112,7 @@ class ExchangeLongShortTile extends StatelessWidget {
                   color: c.marketDown,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
@@ -144,6 +146,7 @@ class ExchangeLongShortTile extends StatelessWidget {
                 style: TextStyle(
                   color: c.textMid,
                   fontSize: 10,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
@@ -152,6 +155,7 @@ class ExchangeLongShortTile extends StatelessWidget {
                 style: TextStyle(
                   color: c.textMid,
                   fontSize: 10,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),

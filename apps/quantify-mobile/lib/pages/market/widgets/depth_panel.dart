@@ -186,6 +186,7 @@ class _DepthChart extends StatelessWidget {
                 style: TextStyle(
                   color: c.textDim,
                   fontSize: 10,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
@@ -196,6 +197,7 @@ class _DepthChart extends StatelessWidget {
                   style: TextStyle(
                     color: c.textMid,
                     fontSize: 10,
+                    fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),
@@ -205,6 +207,7 @@ class _DepthChart extends StatelessWidget {
                 style: TextStyle(
                   color: c.textDim,
                   fontSize: 10,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
@@ -270,6 +273,7 @@ class _Legend extends StatelessWidget {
           style: TextStyle(
             color: c.textDim,
             fontSize: 10,
+            fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),
@@ -280,6 +284,7 @@ class _Legend extends StatelessWidget {
             color: color,
             fontSize: 14,
             fontWeight: FontWeight.w700,
+            fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),

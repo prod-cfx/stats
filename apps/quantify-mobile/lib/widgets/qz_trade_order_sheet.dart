@@ -864,6 +864,7 @@ class _LeverageChip extends StatelessWidget {
               color: active ? Colors.white : c.text,
               fontSize: 12,
               fontWeight: FontWeight.w700,
+              fontFamily: QzFont.mono,
               fontFamilyFallback: QzFont.monoFallback,
             ),
           ),
@@ -983,6 +984,7 @@ class _NumberField extends StatelessWidget {
             color: c.text,
             fontSize: 14,
             fontWeight: FontWeight.w600,
+            fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
           decoration: InputDecoration(
@@ -1060,6 +1062,7 @@ class _PriceFieldWithStepper extends StatelessWidget {
                   color: c.text,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
+                  fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                 ),
                 decoration: InputDecoration(
@@ -1197,6 +1200,7 @@ class _ReferencePriceRow extends StatelessWidget {
                       style: TextStyle(
                         color: c.textMid,
                         fontSize: 11,
+                        fontFamily: QzFont.mono,
                         fontFamilyFallback: QzFont.monoFallback,
                       ),
                     ),
@@ -1243,6 +1247,7 @@ class _MarketHintCard extends StatelessWidget {
                     style: TextStyle(
                       color: c.text,
                       fontWeight: FontWeight.w700,
+                      fontFamily: QzFont.mono,
                       fontFamilyFallback: QzFont.monoFallback,
                     ),
                   ),
@@ -1284,6 +1289,7 @@ class _AmountRow extends StatelessWidget {
               style: TextStyle(
                 color: c.textDim,
                 fontSize: 11,
+                fontFamily: QzFont.mono,
                 fontFamilyFallback: QzFont.monoFallback,
               ),
             ),
@@ -1306,6 +1312,7 @@ class _AmountRow extends StatelessWidget {
               color: c.text,
               fontSize: 14,
               fontWeight: FontWeight.w600,
+              fontFamily: QzFont.mono,
               fontFamilyFallback: QzFont.monoFallback,
             ),
           ),
@@ -1417,6 +1424,7 @@ class _PercentSlider extends StatelessWidget {
                         fontWeight: value.round() == p
                             ? FontWeight.w700
                             : FontWeight.w500,
+                        fontFamily: QzFont.mono,
                         fontFamilyFallback: QzFont.monoFallback,
                       ),
                     ),
@@ -1585,6 +1593,7 @@ class _StatRow extends StatelessWidget {
             color: tone ?? c.text,
             fontSize: 12,
             fontWeight: FontWeight.w600,
+            fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),

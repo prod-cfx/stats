@@ -100,6 +100,7 @@ class QzStatChip extends StatelessWidget {
           color: palette.fg,
           fontSize: solid ? 13 : 11,
           fontWeight: FontWeight.w600,
+          fontFamily: QzFont.mono,
           fontFamilyFallback: QzFont.monoFallback,
           height: 1.0,
         ),

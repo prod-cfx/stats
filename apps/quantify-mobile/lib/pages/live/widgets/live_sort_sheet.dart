@@ -301,6 +301,7 @@ class _DirCell extends StatelessWidget {
                       color: selected ? scheme.accent : scheme.text,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
+                      fontFamily: QzFont.mono,
                       fontFamilyFallback: QzFont.monoFallback,
                     ),
                   ),
