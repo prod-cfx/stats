@@ -504,8 +504,6 @@
   "strategyDetailParamStopLoss": "Stop loss",
   "strategyDetailParamPosition": "Position",
   "strategyDetailParamLeverage": "Leverage",
-  "strategyDetailReviewsTitle": "User reviews",
-  "strategyDetailReviewsEmpty": "No reviews yet",
   "strategyDetailShareButton": "Share",
   "strategyDetailShareToast": "Strategy link copied to clipboard",
   "aiLoadStrategyUserMessage": "Please regenerate based on strategy \"{name}\" ({category}), keeping the same tags: {tags}.",

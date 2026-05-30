@@ -507,8 +507,6 @@
   "strategyDetailParamStopLoss": "止损",
   "strategyDetailParamPosition": "仓位",
   "strategyDetailParamLeverage": "杠杆",
-  "strategyDetailReviewsTitle": "用户评价",
-  "strategyDetailReviewsEmpty": "暂无评价",
   "strategyDetailShareButton": "分享",
   "strategyDetailShareToast": "已复制策略链接到剪贴板",
   "aiLoadStrategyUserMessage": "请基于策略「{name}」（{category}）重新生成，并保留相同标签：{tags}。",

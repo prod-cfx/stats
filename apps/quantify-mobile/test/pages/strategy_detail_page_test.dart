@@ -77,7 +77,7 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
       ),
     ),
   );
-  // 4 个 mock future：detail+signals 200ms / reviews 150ms / equity 120ms
+  // mock future：detail+signals 200ms / equity 120ms
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 250));
@@ -99,9 +99,9 @@ void main() {
     // equity 真实图替代占位文字（#1565）
     expect(find.byType(EquityCurveView), findsOneWidget);
     expect(find.text('曲线占位（接入 K 线后可视化）'), findsNothing);
-    // 策略参数 + 用户评价区块
+    // 策略参数区块（用户评价区块已随设计稿移除，#1799）
     expect(find.text('策略参数'), findsOneWidget);
-    expect(find.text('用户评价'), findsOneWidget);
+    expect(find.text('用户评价'), findsNothing);
   });
 
   testWidgets('equity 时间维度切换：tap 90D tab 不抛异常 (#1565)',

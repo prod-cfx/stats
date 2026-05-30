@@ -29,9 +29,6 @@ abstract class StrategyRepository {
   /// 未命中的 id 应回退到首条 fixture（与 [getStrategyDetail] 保持一致行为）。
   Future<StrategyDetail> getStrategyDetail(String id);
 
-  /// 用户评价（#1565）。当前实现按 id 派生 mock 数据，至少返回 3 条。
-  Future<List<StrategyReview>> listReviews(String id, {int limit = 3});
-
   /// 近 N 条历史信号，默认 20；按时间倒序（最近在前）。
   Future<List<StrategySignal>> listStrategySignals(
     String id, {

@@ -136,9 +136,6 @@ class UnimplementedStrategyRepository implements StrategyRepository {
   Future<StrategyDetail> getStrategyDetail(String id) =>
       _todo('StrategyRepository');
   @override
-  Future<List<StrategyReview>> listReviews(String id, {int limit = 3}) =>
-      _todo('StrategyRepository');
-  @override
   Future<List<StrategySignal>> listStrategySignals(
     String id, {
     int limit = 20,

@@ -36,13 +36,6 @@ final FutureProviderFamily<List<StrategySignal>, String>
   return ref.watch(strategyRepositoryProvider).listStrategySignals(id);
 });
 
-/// 用户评价（#1565）。
-final FutureProviderFamily<List<StrategyReview>, String>
-    strategyReviewsProvider =
-    FutureProvider.family<List<StrategyReview>, String>((Ref ref, String id) {
-  return ref.watch(strategyRepositoryProvider).listReviews(id);
-});
-
 /// equity curve 按 (id, timeframe) 缓存（#1565）。
 final FutureProviderFamily<List<double>, ({String id, EquityTimeframe tf})>
     strategyEquityProvider = FutureProvider.family<List<double>,
@@ -129,8 +122,6 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
         ref.watch(strategyDetailProvider(id));
     final AsyncValue<List<StrategySignal>> signalsAsync =
         ref.watch(strategySignalsProvider(id));
-    final AsyncValue<List<StrategyReview>> reviewsAsync =
-        ref.watch(strategyReviewsProvider(id));
     final Set<String> subscriptions = ref.watch(strategySubscriptionsProvider);
     final bool subscribed = subscriptions.contains(id);
 
@@ -237,17 +228,6 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                 ),
                 const SizedBox(height: QzSpacing.sm),
                 _SignalsSection(async: signalsAsync),
-                const SizedBox(height: QzSpacing.lg),
-                Text(
-                  l10n.strategyDetailReviewsTitle,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: QzSpacing.sm),
-                _ReviewsSection(async: reviewsAsync),
               ],
             ),
           ),
@@ -625,120 +605,3 @@ class _SignalsSection extends StatelessWidget {
   }
 }
 
-/// 用户评价区块（#1565）。
-class _ReviewsSection extends StatelessWidget {
-  const _ReviewsSection({required this.async});
-
-  final AsyncValue<List<StrategyReview>> async;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    return async.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: QzSpacing.md),
-        child: Center(child: QzSpinner()),
-      ),
-      error: (Object e, StackTrace st) {
-        debugPrint('[StrategyDetail] reviews load failed: $e\n$st');
-        return QzEmptyState(
-          title: l10n.commonLoadError,
-          subtitle: l10n.strategyDetailReviewsEmpty,
-        );
-      },
-      data: (List<StrategyReview> list) {
-        if (list.isEmpty) {
-          return QzEmptyState(title: l10n.strategyDetailReviewsEmpty);
-        }
-        return Column(
-          children: <Widget>[
-            for (final StrategyReview r in list) _ReviewTile(review: r),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _ReviewTile extends StatelessWidget {
-  const _ReviewTile({required this.review});
-
-  final StrategyReview review;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: QzSpacing.sm),
-      padding: const EdgeInsets.all(QzSpacing.md),
-      decoration: BoxDecoration(
-        color: c.bgElev,
-        border: Border.all(color: c.border),
-        borderRadius: BorderRadius.circular(QzRadii.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: c.accentSoft,
-                child: Text(
-                  review.user.isEmpty ? '?' : review.user.characters.first,
-                  style: TextStyle(
-                    color: c.accent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: QzSpacing.sm),
-              Text(
-                review.user,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: QzSpacing.sm),
-              _StarsRow(stars: review.stars),
-            ],
-          ),
-          const SizedBox(height: QzSpacing.xs),
-          Text(
-            review.text,
-            style: TextStyle(
-              color: c.textMid,
-              fontSize: 12,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StarsRow extends StatelessWidget {
-  const _StarsRow({required this.stars});
-
-  final int stars;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        for (int i = 1; i <= 5; i++)
-          Icon(
-            i <= stars ? Icons.star_rounded : Icons.star_outline_rounded,
-            size: 12,
-            color: i <= stars ? const Color(0xFFF59E0B) : c.borderStrong,
-          ),
-      ],
-    );
-  }
-}

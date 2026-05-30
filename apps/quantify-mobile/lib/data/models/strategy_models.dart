@@ -117,24 +117,6 @@ class StrategyMarketPage {
 /// equity curve 时间维度（#1565）。
 enum EquityTimeframe { d7, d30, d90, y1 }
 
-/// 用户评价（#1565）。
-class StrategyReview {
-  /// 评价人昵称
-  final String user;
-
-  /// 星评 1..5
-  final int stars;
-
-  /// 文字内容
-  final String text;
-
-  const StrategyReview({
-    required this.user,
-    required this.stars,
-    required this.text,
-  });
-}
-
 /// 策略详情：基础卡片 + 6 项收益指标 + 收益曲线占位序列。
 ///
 /// 6 项指标按 issue #1514 验收对齐：7d / 30d / 全部收益率、最大回撤、夏普、

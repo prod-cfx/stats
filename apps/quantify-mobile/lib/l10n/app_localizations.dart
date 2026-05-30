@@ -2672,18 +2672,6 @@ abstract class AppLocalizations {
   /// **'杠杆'**
   String get strategyDetailParamLeverage;
 
-  /// No description provided for @strategyDetailReviewsTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'用户评价'**
-  String get strategyDetailReviewsTitle;
-
-  /// No description provided for @strategyDetailReviewsEmpty.
-  ///
-  /// In zh, this message translates to:
-  /// **'暂无评价'**
-  String get strategyDetailReviewsEmpty;
-
   /// No description provided for @strategyDetailShareButton.
   ///
   /// In zh, this message translates to:

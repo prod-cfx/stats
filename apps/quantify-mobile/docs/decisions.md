@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-05-30 · 策略详情「用户评价」区块移除：对齐设计稿已删 reviews（Issue #1799）
+
+**背景**：设计稿 `design/project/mobile/m-screens-2.jsx`（`StratDetail`，`:1106` `{/* reviews removed */}`）已移除 reviews（用户评价）区块。Flutter app `apps/quantify-mobile/lib/pages/strategy/strategy_detail_page.dart` 仍保留「用户评价」区块——`strategyReviewsProvider` + section UI（标题 + `_ReviewsSection`/`_ReviewTile`/`_StarsRow`）+ `StrategyReview` 模型 + mock `listReviews`（按 id 派生 3 条 mock 评价）。属设计已删的 app 残留。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 移除（采纳） | 删除 detail page reviews 区块 + 三个私有 widget + `StrategyReview` 模型 + `listReviews` 接口/mock/占位 + 两条文案 | 设计稿已显式删除（`{/* reviews removed */}`），app 残留与设计真源冲突；该评价为纯 mock（`Alice/Bob/...` + `Random` 派生星级），无真实数据通道，无产品价值；对齐 #1750/#1770/#1771/#1791 已确立「设计超前/mock-only 内容按设计基线清理」精神，移除使详情页结构（指标网格 + 收益曲线 + 参数 + 近期信号）与 `StratDetail` 对齐 |
+| B. 保留 | 维持用户评价区块 | 与设计真源冲突；保留纯 mock 评价无产品价值，真实评价数据通道未立项，维持只是技术债 |
+
+**判定**：**采纳方案 A——移除用户评价区块**，使 app 详情页与设计稿 `StratDetail` 一致。
+
+**落地范围**：
+
+- `lib/pages/strategy/strategy_detail_page.dart`：删 `strategyReviewsProvider`、`reviewsAsync` watch、用户评价标题 + section、`_ReviewsSection`/`_ReviewTile`/`_StarsRow` 三个私有 widget。
+- `lib/data/models/strategy_models.dart`：删 `StrategyReview` 模型。
+- `lib/data/repositories/strategy_repository.dart` / `lib/data/mock/mock_strategy_repository.dart` / `lib/data/mock/unimplemented_repositories.dart`：删 `listReviews` 接口 + mock 实现 + 占位 override。
+- `lib/l10n/app_zh.arb` / `app_en.arb`：删 `strategyDetailReviewsTitle` / `strategyDetailReviewsEmpty`，重生成 localizations。
+- `test/pages/strategy_detail_page_test.dart`：去掉 reviews mock 注释（既有断言＝6 指标卡 + 20 信号 + 订阅/分享按钮 + equity，不涉及 reviews，无需改断言）。
+- `README.md`「设计真源」段补 #1799 引用。
+
+**对齐结论（对应 #1799 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品确认移除，结论记入 `docs/decisions.md` | 已满足。结论＝方案 A 移除，记入本节 | 本节 |
+| [2] 删 detail 区块 + 三 widget + `StrategyReview` 模型 + `listReviews` 接口/mock/占位 | 已满足 | 上「落地范围」 |
+| [3] 删两条文案并重生成 localizations | 已满足 | arb + `flutter gen-l10n` |
+| [4] `flutter analyze` 无新增报错，`flutter test` 既有用例通过 | 已满足。既有 14 qz_* golden + whale_home + app_router /me 失败为 #1785 历史基线，非本次引入 | 验证段 |
+
+**不变项**：详情页其余区块（指标网格 / 收益曲线 / 策略参数 / 近期信号）与底栏「分享 / 载入到对话 / 订阅」维持现状（#1666/#1757）。设计稿 `StratDetail` 不回流 reviews。
+
+---
+
 ## 2026-05-30 · 全局视觉精修：打包 Inter/JetBrains Mono、Noto Sans SC 不打包、TabBar saturate 记技术债（Issue #1798）
 
 **背景**：设计稿主字体 Inter / JetBrains Mono / Noto Sans SC，app 此前仅 fallback 不打包；TabBar `saturate(180%)`、Sheet `cubic-bezier(.32,.72,0,1)` 360ms、我的 header 棋盘 logo 未对齐。

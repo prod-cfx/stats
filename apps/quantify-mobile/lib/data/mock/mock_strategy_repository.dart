@@ -147,30 +147,6 @@ class MockStrategyRepository implements StrategyRepository {
   }
 
   @override
-  Future<List<StrategyReview>> listReviews(String id, {int limit = 3}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 150));
-    final List<({String user, String text})> pool =
-        <({String user, String text})>[
-      (user: 'Alice', text: '已经跑了 3 个月，表现稳定，回撤可控。'),
-      (user: 'Bob', text: '参数需要微调，整体不错。'),
-      (user: 'Carol', text: '震荡行情收益还行，趋势行情建议手动止盈。'),
-      (user: 'Dan', text: '小仓位试了一周，胜率比预期高。'),
-      (user: 'Eve', text: '回撤期心态需要稳，止损一定要带。'),
-      (user: 'Frank', text: '官方策略文档比较清楚，新手友好。'),
-    ];
-    final Random rng = Random(id.hashCode ^ 0xCAFE);
-    return List<StrategyReview>.generate(limit, (int i) {
-      final ({String user, String text}) e = pool[(i + rng.nextInt(2)) % pool.length];
-      // 3..5 星
-      return StrategyReview(
-        user: e.user,
-        stars: 3 + rng.nextInt(3),
-        text: e.text,
-      );
-    });
-  }
-
-  @override
   Future<List<StrategySignal>> listStrategySignals(
     String id, {
     int limit = 20,

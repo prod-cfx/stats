@@ -1340,12 +1340,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailParamLeverage => '杠杆';
 
   @override
-  String get strategyDetailReviewsTitle => '用户评价';
-
-  @override
-  String get strategyDetailReviewsEmpty => '暂无评价';
-
-  @override
   String get strategyDetailShareButton => '分享';
 
   @override

@@ -1376,12 +1376,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailParamLeverage => 'Leverage';
 
   @override
-  String get strategyDetailReviewsTitle => 'User reviews';
-
-  @override
-  String get strategyDetailReviewsEmpty => 'No reviews yet';
-
-  @override
   String get strategyDetailShareButton => 'Share';
 
   @override
