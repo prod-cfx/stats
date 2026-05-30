@@ -39,7 +39,7 @@ UI / 交互设计稿位于仓库根 `design/project/mobile/Quantify Mobile App.h
 
 设计 token 真源位于上一层目录 `design/project/tokens.css`（被 `Quantify Mobile App.html` 通过 `../tokens.css` 引用），不在 `design/project/mobile/` 内重复一份。落地时统一引用该路径，避免拷贝漂移。
 
-移动端对齐基线（screen graph、登录态策略、bottom sheet 边界、API 配置入口命名、设计 token 路径）见 `docs/decisions.md` 中「移动端设计对齐基线」（#1662）一节；底部 Tab 顺序、`数据→行情` 命名、冷启动 / 游客 / `/me` 守卫、route↔sheet 边界相对 `proto.jsx` 的差异判定见同文件「移动端设计基线复核」（#1749）一节。行情二级入口（聚合挂单 / 预测市场 / 币股）暂缓、标记 future 的归属结论见同文件「行情二级入口归属」（#1750）一节。API 配置唯一入口（我的页 + 部署引导 → `showApiFormSheet`，无 `/me/api` 列表页）、表单字段 / 授权权限 / 保存反馈以 app 为准、env/wallet/passphrase 标 future 的对齐结论见同文件「API 配置入口与授权表单设计对齐」（#1756）一节。AI 链路「确认策略 / 策略脚本」显式步骤页与 5 步 StepBar、市场类型 / 杠杆选择器采纳方案 B 暂缓、标记 future（维持 AI 对话 → `/ai/backtest-config` → 聊天内回测卡片的隐式覆盖边界）的结论见同文件「AI 链路「确认策略 / 策略脚本」步骤页：方案 B 暂缓」（#1770）一节。后续 PR 基于该基线落地 token / 组件 / 路由，子任务对齐时直接引用，不重复解释同一组差异。
+移动端对齐基线（screen graph、登录态策略、bottom sheet 边界、API 配置入口命名、设计 token 路径）见 `docs/decisions.md` 中「移动端设计对齐基线」（#1662）一节；底部 Tab 顺序、`数据→行情` 命名、冷启动 / 游客 / `/me` 守卫、route↔sheet 边界相对 `proto.jsx` 的差异判定见同文件「移动端设计基线复核」（#1749）一节。行情二级入口（聚合挂单 / 预测市场 / 币股）暂缓、标记 future 的归属结论见同文件「行情二级入口归属」（#1750）一节。API 配置唯一入口（我的页 + 部署引导 → `showApiFormSheet`，无 `/me/api` 列表页）、表单字段 / 授权权限 / 保存反馈以 app 为准、env/wallet/passphrase 标 future 的对齐结论见同文件「API 配置入口与授权表单设计对齐」（#1756）一节。AI 链路「确认策略 / 策略脚本」显式步骤页与 5 步 StepBar、市场类型 / 杠杆选择器采纳方案 B 暂缓、标记 future（维持 AI 对话 → `/ai/backtest-config` → 聊天内回测卡片的隐式覆盖边界）的结论见同文件「AI 链路「确认策略 / 策略脚本」步骤页：方案 B 暂缓」（#1770）一节。回测中 / 回测结果独立页（进度环 / 引擎日志 / 三标签页 / AI 评估 banner）与多维结果指标（CAGR/Calmar/胜率/盈亏比/平均持仓时长）暂缓、标记 future，维持聊天内卡片形态的取舍结论见同文件「回测中 / 回测结果独立页与结果维度补齐」（#1771）一节。后续 PR 基于该基线落地 token / 组件 / 路由，子任务对齐时直接引用，不重复解释同一组差异。
 
 ## 与仓库其他 app 的关系
 

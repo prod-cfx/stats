@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-05-30 · 回测中 / 回测结果独立页与结果维度补齐：标记 future（Issue #1771）
+
+**背景**：设计稿 `design/project/mobile/m-screens-backtest.jsx` 把回测中（`ScreenBacktestRun`，`:43-164`）与回测结果（`ScreenBacktestResult`，`:273-415`）定义为独立 full-screen 页面，含进度环、引擎日志、三标签页（月度回报热力图 `:481-550` / 交易记录 `:553-598` / 风险分析 `:601-637`）、AI 评估 banner、粘底操作等。当前 Flutter app 仅有内联聊天卡 `QzBacktestProgressCard`（`lib/widgets/qz_backtest_progress_card.dart`，进度百分比 + 线性进度条 + 取消入口）/ `QzBacktestResultCard`（`lib/widgets/qz_backtest_result_card.dart`），结果模型 `lib/data/models/backtest_models.dart:29-45` 共 6 字段（`id` + 5 项结果指标 `totalReturnPercent / maxDrawdownPercent / sharpe / trades / equityCurve`）。
+
+**与既定边界的偏离**：#1751（已 close）明确「回测结果走聊天内卡片，不新增独立 route」，其验收 #3（回测中状态有明确 UI 表达）已由 `QzBacktestProgressCard` 满足（#1760 落地）。本 issue 提出的是**设计稿增强**——是否把回测中 / 结果升级为独立页 + 多维度展示，需先对 #1751 既定简化边界做产品取舍。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. mock-first 落地 | 新增回测中 / 结果独立 route + 三标签页 + AI 评估 banner，扩展结果模型补 CAGR/Calmar/胜率/盈亏比/平均持仓时长，全部基于 mock | 三标签页（月度热力图 / 交易记录 / 风险分析）+ 进度环 + 引擎日志合计 ~1100 行设计原型，是重型数据驱动展示；真实回测数据依赖 #1679 / #1682 尚未接入，当前只能堆纯 mock 指标页，维护成本高、产品价值低；且与 #1751 已确立的「聊天内卡片」边界相冲突 |
+| B. 暂缓，标记 future（采纳） | 维持 #1751 既定聊天卡形态，设计稿对应屏与多维指标标记 future，不进入当前 app 信息架构与验收，待真实回测数据接入后单独立 issue | 对齐 #1662/#1663/#1749/#1750 已建立的「未实现入口 / 设计超前能力的设计表达规范」基线；不破坏 #1751 既定简化边界（Never break userspace）；零破坏、KISS/YAGNI |
+
+**判定**：**采纳 B——暂缓，回测中 / 回测结果独立页与多维结果指标统一标记为 future**，不纳入当前 quantify-mobile app 信息架构与验收。
+
+- **回测中独立页 `ScreenBacktestRun`**（进度环 + 实时统计 + 引擎日志 + 净值曲线 + 粘底取消）→ future。当前以聊天内 `QzBacktestProgressCard`（线性进度条 + 百分比 + 取消）为准，已满足 #1751 验收 #3，不升级为独立 route。
+- **回测结果独立页 `ScreenBacktestResult`**（结果 hero + 关键指标网格 + 三标签页 + AI 评估 banner + 粘底两按钮）→ future。当前以聊天内 `QzBacktestResultCard` + 部署按钮为准，不新增独立 route。
+- **三标签页**（月度回报热力图 / 交易记录列表 / 风险分析）→ future。均为依赖真实逐笔交易 / 逐月收益序列的重型数据展示，真实数据通道（#1679 回测引擎 / #1682 数据）未接入前不落 mock 页。
+- **结果模型缺失指标**（CAGR / Calmar / 胜率 / 盈亏比 / 平均持仓时长）→ future。`BacktestResult` 维持现有结果指标字段（`id` 外 5 项），待真实回测引擎产出对应指标后随独立页 issue 一并扩展，不提前为 mock 补字段。
+
+**理由**：
+
+1. 本 issue 目标是「确认升级 OR 暂缓」二选一，暂缓分支同样满足验收（验收标准末条「若暂缓：设计稿对应屏标注 future，差异关闭」）；非「必须实现」。
+2. 真实回测数据依赖 #1679 / #1682，不在当前范围；先实现纯 mock 独立页 + 多维指标违反 YAGNI，且后续接真实引擎数据时大概率重写（指标口径、热力图分桶、交易记录分页均由真实数据形态决定）。
+3. 升级为独立页会直接推翻 #1751「回测走聊天内卡片，不新增独立 route」的既定边界——在真实数据与产品价值尚未明确前回退该简化决策，违反 Never break userspace；保持聊天卡形态对现有 AI 对话流零破坏。
+4. 与 #1662/#1663/#1749/#1750/#1756 处理「未实现入口 / 设计超前能力」一致：设计稿保留高保真表达作为 future 能力，app 侧按真实数据就绪节奏分批落地，文档钉死暂缓结论，避免每个子任务重新论证。
+
+**不变项**：聊天内 `QzBacktestProgressCard` / `QzBacktestResultCard` 形态与 `BacktestResult` 现有字段（`id` + 5 项结果指标）维持现状，不受本决策影响。设计稿 `m-screens-backtest.jsx` 中 `ScreenBacktestRun` / `ScreenBacktestResult` 及三标签页、AI 评估 banner 的表达**保留为 future 能力**，不删除、不回流到 app，也不在后续 PR 里以「对齐缺口」名义复活，直到真实回测数据接入 issue 立项。
+
+**后续触发条件**：当 #1679（回测引擎）/ #1682（数据通道）在 app 侧产出真实回测结果（逐笔交易、逐月收益、风险指标）时，新立「回测中 / 结果独立页实现」issue，引用本节作为暂缓结论的解除依据，届时再统一评估独立 route + 三标签页 + 结果模型扩展，并同步复核是否解除 #1751 的聊天卡边界。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1771 引用。不改 `m-screens-backtest.jsx` / `proto.jsx`、不改 `backtest_models.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · AI 链路「确认策略 / 策略脚本」步骤页：方案 B 暂缓、标 future（Issue #1770）
 
 **背景**：#1770 提出设计稿增强——把 AI 策略生成链路中的「确认策略」（IF/THEN 规则块 + EXECUTE 执行上下文 + AI 提示 banner + 「在对话中修改」编辑链接）与「策略脚本」（terminal 风格代码查看器 + 行号 + copy + 展开/折叠）作为两个显式步骤页落地，并补 5 步 StepBar（确认策略→脚本→设置→回测→部署）与「市场类型（现货/合约）+ 杠杆（1x-100x）」选择器。issue 同时声明这是相对 #1751（已 close，明确「AI 对话直接接 `/ai/backtest-config`，回测走聊天内卡片，不新增独立 route」）既定简化边界的偏离，需先做产品取舍。
