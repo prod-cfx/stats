@@ -3263,7 +3263,7 @@ abstract class AppLocalizations {
   /// No description provided for @whaleDiscoverSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'AI 精选聪明钱排行榜'**
+  /// **'发现最有价值的交易者'**
   String get whaleDiscoverSubtitle;
 
   /// No description provided for @whaleSortLabel.
@@ -3293,19 +3293,19 @@ abstract class AppLocalizations {
   /// No description provided for @whaleLeaderPnlLabel.
   ///
   /// In zh, this message translates to:
-  /// **'已实现盈亏'**
+  /// **'已实现盈亏(1月)'**
   String get whaleLeaderPnlLabel;
 
   /// No description provided for @whaleLeaderPositionsLabel.
   ///
   /// In zh, this message translates to:
-  /// **'持仓'**
+  /// **'当前持仓'**
   String get whaleLeaderPositionsLabel;
 
   /// No description provided for @whaleLeaderWinRateLabel.
   ///
   /// In zh, this message translates to:
-  /// **'胜率'**
+  /// **'胜率(1月)'**
   String get whaleLeaderWinRateLabel;
 
   /// No description provided for @whaleLeaderAiTagsLabel.
@@ -3319,6 +3319,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无'**
   String get whaleLeaderTagsEmpty;
+
+  /// No description provided for @whaleLeaderCopyTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制地址'**
+  String get whaleLeaderCopyTooltip;
+
+  /// No description provided for @whaleLeaderCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址已复制'**
+  String get whaleLeaderCopied;
+
+  /// No description provided for @whaleLeaderTrendTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易统计'**
+  String get whaleLeaderTrendTooltip;
 
   /// No description provided for @whaleFeedEmpty.
   ///

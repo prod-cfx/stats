@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import 'whale_card_controls.dart';
 
 /// AI 标签 chip 配色（对齐设计稿 AI_TAG_COLOR）。
 const Map<String, ({int fg, int bg})> _aiTagColors = <String, ({int fg, int bg})>{
@@ -14,13 +15,24 @@ const Map<String, ({int fg, int bg})> _aiTagColors = <String, ({int fg, int bg})
   '聪明交易者': (fg: 0xFF92400E, bg: 0xFFFEF3C7),
 };
 
-/// 发现 tab 巨鲸列表卡（issue #1789）。地址 + 账户总价值 + 盈亏/持仓/胜率 +
-/// AI 标签 chip 行。
+/// 发现 tab 巨鲸列表卡（issue #1789 / #1860）。地址（复制 / chevron）+ 账户总价值
+/// + 盈亏/持仓/胜率 + AI 标签 chip 行 + 右上趋势按钮。
+///
+/// 双入口（#1860）：点地址 → [onOpen]（详情页）；点卡片或趋势按钮 → [onStats]
+/// （交易统计弹窗）。
 class WhaleLeaderCard extends StatelessWidget {
-  const WhaleLeaderCard({required this.entry, required this.onTap, super.key});
+  const WhaleLeaderCard({
+    required this.entry,
+    required this.onOpen,
+    required this.onStats,
+    required this.onCopy,
+    super.key,
+  });
 
   final WhaleLeaderEntry entry;
-  final VoidCallback onTap;
+  final VoidCallback onOpen;
+  final VoidCallback onStats;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +42,7 @@ class WhaleLeaderCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: onStats,
         child: Container(
           padding: const EdgeInsets.all(QzSpacing.lg),
           decoration: BoxDecoration(
@@ -69,17 +81,13 @@ class WhaleLeaderCard extends StatelessWidget {
   Widget _addressRow(QzColorScheme c) {
     return Row(
       children: <Widget>[
-        Expanded(
-          child: Text(
-            entry.id,
-            style: TextStyle(
-              color: c.accent,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+        Flexible(
+          child: WhaleAddressLink(address: entry.id, onOpen: onOpen),
         ),
-        Icon(Icons.show_chart, size: 16, color: c.accent),
+        const SizedBox(width: QzSpacing.xs),
+        WhaleCopyButton(onCopy: onCopy),
+        const Spacer(),
+        WhaleTrendButton(onStats: onStats),
       ],
     );
   }

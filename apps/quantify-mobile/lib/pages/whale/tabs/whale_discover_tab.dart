@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +12,7 @@ import '../../../theme/tokens.dart';
 import '../widgets/whale_leader_card.dart';
 import '../widgets/whale_sort_bar.dart';
 import '../widgets/whale_top_slideshow.dart';
+import '../widgets/whale_trade_stats_sheet.dart';
 
 /// 巨鲸动向 — 发现 tab（issue #1789）。对齐设计稿 `WhaleDiscoverNew`：
 /// top3 轮播 hero + 排序条（胜率/总值/盈亏）+ 巨鲸列表卡（AI 标签）。
@@ -30,6 +32,29 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
 
   void _openProfile(WhaleLeaderEntry entry) {
     context.push('/whale/profile/${Uri.encodeComponent(entry.id)}');
+  }
+
+  /// 点卡片 / 趋势按钮 → 交易统计弹窗（复用 #1859 的 [WhaleTradeStatsSheet]）。
+  void _openStats(WhaleLeaderEntry entry) {
+    WhaleTradeStatsSheet.show(
+      context,
+      address: entry.id,
+      stats: whaleLeaderTradeStats(entry),
+      avatarGlyph: entry.avatarText,
+      avatarColorHex: entry.avatarBgHex,
+    );
+  }
+
+  Future<void> _copyAddress(WhaleLeaderEntry entry) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    await Clipboard.setData(ClipboardData(text: entry.id));
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(l10n.whaleLeaderCopied),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   @override
@@ -64,7 +89,12 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
                 style: TextStyle(color: c.textMid, fontSize: 12.5),
               ),
             ),
-            WhaleTopSlideshow(top3: top3, onTap: _openProfile),
+            WhaleTopSlideshow(
+              top3: top3,
+              onOpen: _openProfile,
+              onStats: _openStats,
+              onCopy: _copyAddress,
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 QzSpacing.lg,
@@ -88,7 +118,9 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
                 ),
                 child: WhaleLeaderCard(
                   entry: e,
-                  onTap: () => _openProfile(e),
+                  onOpen: () => _openProfile(e),
+                  onStats: () => _openStats(e),
+                  onCopy: () => _copyAddress(e),
                 ),
               ),
           ],

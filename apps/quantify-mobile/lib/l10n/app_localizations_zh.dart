@@ -1660,7 +1660,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleLoadError => '加载失败';
 
   @override
-  String get whaleDiscoverSubtitle => 'AI 精选聪明钱排行榜';
+  String get whaleDiscoverSubtitle => '发现最有价值的交易者';
 
   @override
   String get whaleSortLabel => '排序';
@@ -1675,19 +1675,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleSortPnl => '盈亏';
 
   @override
-  String get whaleLeaderPnlLabel => '已实现盈亏';
+  String get whaleLeaderPnlLabel => '已实现盈亏(1月)';
 
   @override
-  String get whaleLeaderPositionsLabel => '持仓';
+  String get whaleLeaderPositionsLabel => '当前持仓';
 
   @override
-  String get whaleLeaderWinRateLabel => '胜率';
+  String get whaleLeaderWinRateLabel => '胜率(1月)';
 
   @override
   String get whaleLeaderAiTagsLabel => 'AI 标签';
 
   @override
   String get whaleLeaderTagsEmpty => '暂无';
+
+  @override
+  String get whaleLeaderCopyTooltip => '复制地址';
+
+  @override
+  String get whaleLeaderCopied => '地址已复制';
+
+  @override
+  String get whaleLeaderTrendTooltip => '交易统计';
 
   @override
   String get whaleFeedEmpty => '暂无符合条件的巨鲸事件';

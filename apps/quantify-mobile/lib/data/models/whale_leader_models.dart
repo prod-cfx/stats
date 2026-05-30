@@ -5,6 +5,8 @@
 /// （[aumValue]/[pnlValue]/[winRate]）供排序条即时重排。
 library;
 
+import 'whale_profile_models.dart';
+
 /// 排行榜单条。top3（带 [avatarText]）渲染为轮播 hero 卡，其余为列表卡。
 class WhaleLeaderEntry {
   const WhaleLeaderEntry({
@@ -84,6 +86,26 @@ List<WhaleLeaderEntry> sortWhaleLeaders(
   result.sort((WhaleLeaderEntry a, WhaleLeaderEntry b) =>
       mul * value(a).compareTo(value(b)));
   return result;
+}
+
+/// 由排行榜条目派生交易统计入参（issue #1860 卡片「交易统计」入口）。
+///
+/// [WhaleTradeStatsSheet] 已与 `WhaleProfile` 解耦，只需 address + stats。发现卡
+/// 仅持有排行榜聚合指标（盈亏/胜率/交易数），无逐资产/逐仓位明细，故派生一个
+/// 轻量 stats：复用已有展示串，明细列表留空（mock 阶段）。真实读路径（#1682）
+/// 接通后改为按地址拉取完整 stats。
+WhaleTradeStats whaleLeaderTradeStats(WhaleLeaderEntry e) {
+  return WhaleTradeStats(
+    pnlDisplay: e.pnlDisplay,
+    pnlTone: e.pnlPositive ? 'up' : 'dn',
+    winRatePct: e.winRate.round(),
+    realizedDisplay: e.pnlDisplay,
+    unrealizedDisplay: '—',
+    longPct: 50,
+    shortPct: 50,
+    assetPerf: const <WhaleAssetPerf>[],
+    tradesTotal: e.trades,
+  );
 }
 
 /// top3：带 [WhaleLeaderEntry.avatarText] 的条目，渲染为轮播 hero 卡。

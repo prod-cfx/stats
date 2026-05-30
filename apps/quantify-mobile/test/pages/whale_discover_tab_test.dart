@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/mock/fixtures/whale_leaders.dart';
 import 'package:quantify_mobile/data/models/whale_leader_models.dart';
+import 'package:quantify_mobile/data/models/whale_profile_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_leaderboard_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_discover_tab.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_card_controls.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_leader_card.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_top_slideshow.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_trade_stats_sheet.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
@@ -119,6 +123,16 @@ void main() {
       expect(top.length, 3);
       expect(top.every((WhaleLeaderEntry e) => e.avatarText != null), isTrue);
     });
+
+    test('whaleLeaderTradeStats 复用条目展示串派生统计入参', () {
+      final WhaleLeaderEntry e = mockWhaleLeaders.first; // 0x8ba1，盈利 73.81%
+      final WhaleTradeStats s = whaleLeaderTradeStats(e);
+      expect(s.pnlDisplay, e.pnlDisplay);
+      expect(s.pnlTone, 'up');
+      expect(s.winRatePct, 74); // 73.81 四舍五入
+      expect(s.tradesTotal, e.trades);
+      expect(s.assetPerf, isEmpty);
+    });
   });
 
   group('发现 tab 渲染与交互', () {
@@ -156,6 +170,84 @@ void main() {
       // 总值降序后首卡应为 aumValue 最大者（0x8ba1...ba72，1.29 亿）。
       expect(after.first, '0x8ba1...ba72');
       expect(after, isNot(before));
+    });
+
+    testWidgets('卡片控件齐全：复制 / 趋势按钮均渲染', (WidgetTester tester) async {
+      await _pump(tester);
+      expect(find.byType(WhaleCopyButton), findsWidgets);
+      expect(find.byType(WhaleTrendButton), findsWidgets);
+      expect(find.byType(WhaleAddressLink), findsWidgets);
+    });
+
+    testWidgets('hero tier 两段渲染：金额 + 词分离', (WidgetTester tester) async {
+      await _pump(tester);
+      // '$100M+ HYPERUNIT WHALE' → 金额段 '$100M+' + 词段 'HYPERUNIT WHALE'。
+      expect(find.text('\$100M+'), findsOneWidget);
+      expect(find.text('HYPERUNIT WHALE'), findsWidgets);
+    });
+
+    testWidgets('列表卡指标文案含 (1月) 后缀', (WidgetTester tester) async {
+      await _pump(tester);
+      expect(find.text('已实现盈亏(1月)'), findsWidgets);
+      expect(find.text('胜率(1月)'), findsWidgets);
+      expect(find.text('当前持仓'), findsWidgets);
+    });
+
+    testWidgets('副标题对齐设计稿文案', (WidgetTester tester) async {
+      await _pump(tester);
+      expect(find.text('发现最有价值的交易者'), findsOneWidget);
+    });
+
+    testWidgets('入口一：点列表卡地址 → 进详情页', (WidgetTester tester) async {
+      await _pump(tester);
+      final Finder cardLink = find.descendant(
+        of: find.byType(WhaleLeaderCard).first,
+        matching: find.byType(WhaleAddressLink),
+      );
+      await tester.tap(cardLink.first);
+      // 不用 pumpAndSettle：轮播 autoplay 为周期 timer，settle 会超时。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text('PROFILE'), findsOneWidget);
+    });
+
+    testWidgets('入口二：点列表卡卡片本体 → 打开交易统计弹窗',
+        (WidgetTester tester) async {
+      await _pump(tester);
+      // 点卡片本体（InkWell），避开地址 / 复制 / 趋势子控件。
+      await tester.tap(find.text('账户总价值').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byType(WhaleTradeStatsSheet), findsOneWidget);
+    });
+
+    testWidgets('入口二：点趋势按钮 → 打开交易统计弹窗', (WidgetTester tester) async {
+      await _pump(tester);
+      await tester.tap(find.byType(WhaleTrendButton).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byType(WhaleTradeStatsSheet), findsOneWidget);
+    });
+
+    testWidgets('点复制按钮 → 写入剪贴板 + toast', (WidgetTester tester) async {
+      final List<MethodCall> calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') calls.add(call);
+          return null;
+        },
+      );
+      await _pump(tester);
+      await tester.tap(find.byType(WhaleCopyButton).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(calls, isNotEmpty);
+      expect(find.text('地址已复制'), findsOneWidget);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
     });
   });
 }

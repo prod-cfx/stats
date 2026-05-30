@@ -1,31 +1,69 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../data/models/whale_leader_models.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import 'whale_card_controls.dart';
 
-/// 发现 tab top3 轮播（issue #1789）。单卡 PageView + 圆点 pager，可滑动切换。
+/// 发现 tab top3 轮播（issue #1789 / #1860）。单卡 PageView + 圆点 pager，可滑动
+/// 切换，并以 4500ms 间隔自动播放（对齐设计 `WhaleTopSlideshow` autoplay `:179`）。
 class WhaleTopSlideshow extends StatefulWidget {
   const WhaleTopSlideshow({
     required this.top3,
-    required this.onTap,
+    required this.onOpen,
+    required this.onStats,
+    required this.onCopy,
     super.key,
   });
 
   final List<WhaleLeaderEntry> top3;
-  final void Function(WhaleLeaderEntry) onTap;
+
+  /// 点地址 → 详情页。
+  final void Function(WhaleLeaderEntry) onOpen;
+
+  /// 点卡片 / 趋势按钮 → 交易统计弹窗。
+  final void Function(WhaleLeaderEntry) onStats;
+
+  /// 点复制按钮 → 复制地址。
+  final void Function(WhaleLeaderEntry) onCopy;
 
   @override
   State<WhaleTopSlideshow> createState() => _WhaleTopSlideshowState();
 }
 
 class _WhaleTopSlideshowState extends State<WhaleTopSlideshow> {
+  static const Duration _autoplayInterval = Duration(milliseconds: 4500);
+
   final PageController _controller = PageController();
+  Timer? _autoplay;
   int _index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _startAutoplay();
+  }
+
+  void _startAutoplay() {
+    _autoplay?.cancel();
+    if (widget.top3.length < 2) return;
+    _autoplay = Timer.periodic(_autoplayInterval, (_) {
+      if (!mounted || !_controller.hasClients) return;
+      final int next = (_index + 1) % widget.top3.length;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
   void dispose() {
+    _autoplay?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -37,17 +75,20 @@ class _WhaleTopSlideshowState extends State<WhaleTopSlideshow> {
     return Column(
       children: <Widget>[
         SizedBox(
-          height: 156,
+          height: 176,
           child: PageView.builder(
             controller: _controller,
             itemCount: widget.top3.length,
             onPageChanged: (int i) => setState(() => _index = i),
             itemBuilder: (BuildContext context, int i) {
+              final WhaleLeaderEntry e = widget.top3[i];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
                 child: WhaleTopCard(
-                  entry: widget.top3[i],
-                  onTap: () => widget.onTap(widget.top3[i]),
+                  entry: e,
+                  onOpen: () => widget.onOpen(e),
+                  onStats: () => widget.onStats(e),
+                  onCopy: () => widget.onCopy(e),
                 ),
               );
             },
@@ -82,12 +123,23 @@ class _WhaleTopSlideshowState extends State<WhaleTopSlideshow> {
   }
 }
 
-/// top3 hero 卡。渐变背景 + 头像徽章 + 账户总价值 + pnl 药丸 + 三 mini stat。
+/// top3 hero 卡（issue #1789 / #1860）。渐变背景 + 头像徽章 + 地址（复制 / chevron）
+/// + tier 两段（圆点 + 金额 + 词）+ 趋势按钮 + 账户总价值 + pnl 药丸 + 三 mini stat。
+///
+/// 双入口：点地址 → [onOpen]（详情页）；点卡片或趋势按钮 → [onStats]（统计弹窗）。
 class WhaleTopCard extends StatelessWidget {
-  const WhaleTopCard({required this.entry, required this.onTap, super.key});
+  const WhaleTopCard({
+    required this.entry,
+    required this.onOpen,
+    required this.onStats,
+    required this.onCopy,
+    super.key,
+  });
 
   final WhaleLeaderEntry entry;
-  final VoidCallback onTap;
+  final VoidCallback onOpen;
+  final VoidCallback onStats;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +150,7 @@ class WhaleTopCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
+        onTap: onStats,
         child: Container(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
           decoration: BoxDecoration(
@@ -152,32 +204,73 @@ class WhaleTopCard extends StatelessWidget {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text(
-                entry.id,
-                style: TextStyle(
-                  color: c.accent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                children: <Widget>[
+                  Flexible(
+                    child: WhaleAddressLink(
+                      address: entry.id,
+                      onOpen: onOpen,
+                      fontSize: 13,
+                    ),
+                  ),
+                  WhaleCopyButton(onCopy: onCopy),
+                ],
               ),
               if (entry.tier != null) ...<Widget>[
                 const SizedBox(height: 2),
-                Text(
-                  entry.tier!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: tint,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
+                _tierRow(c, tint),
               ],
             ],
           ),
         ),
+        const SizedBox(width: QzSpacing.xs),
+        WhaleTrendButton(onStats: onStats),
+      ],
+    );
+  }
+
+  /// tier 两段渲染：圆点 + 金额（tierAmt）+ 词（tierWord），对齐设计 `:347`。
+  Widget _tierRow(QzColorScheme c, Color tint) {
+    final RegExpMatch? m =
+        RegExp(r'^(\$[\d.]+[A-Z]?\+?)\s+(.+)$').firstMatch(entry.tier!);
+    final String tierAmt = m != null ? m.group(1)! : entry.tier!;
+    final String tierWord = m != null ? m.group(2)! : '';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          tierAmt,
+          style: TextStyle(
+            color: tint,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
+        ),
+        if (tierWord.isNotEmpty) ...<Widget>[
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              tierWord,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: c.textMid,
+                fontSize: 8.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

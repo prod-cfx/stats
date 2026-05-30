@@ -1698,7 +1698,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleLoadError => 'Load failed';
 
   @override
-  String get whaleDiscoverSubtitle => 'AI-curated smart-money leaderboard';
+  String get whaleDiscoverSubtitle => 'Discover the most valuable traders';
 
   @override
   String get whaleSortLabel => 'Sort';
@@ -1713,19 +1713,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleSortPnl => 'PnL';
 
   @override
-  String get whaleLeaderPnlLabel => 'Realized PnL';
+  String get whaleLeaderPnlLabel => 'Realized PnL (1M)';
 
   @override
-  String get whaleLeaderPositionsLabel => 'Positions';
+  String get whaleLeaderPositionsLabel => 'Current positions';
 
   @override
-  String get whaleLeaderWinRateLabel => 'Win rate';
+  String get whaleLeaderWinRateLabel => 'Win rate (1M)';
 
   @override
   String get whaleLeaderAiTagsLabel => 'AI tags';
 
   @override
   String get whaleLeaderTagsEmpty => 'None';
+
+  @override
+  String get whaleLeaderCopyTooltip => 'Copy address';
+
+  @override
+  String get whaleLeaderCopied => 'Address copied';
+
+  @override
+  String get whaleLeaderTrendTooltip => 'Trade stats';
 
   @override
   String get whaleFeedEmpty => 'No whale events matching criteria';
