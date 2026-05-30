@@ -13,6 +13,7 @@ import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/main.dart';
 import 'package:quantify_mobile/pages/_dev/components_preview_page.dart';
 import 'package:quantify_mobile/pages/_dev/theme_preview_page.dart';
+import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/pages/auth/login_page.dart';
@@ -223,6 +224,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(BacktestConfigSheet), findsOneWidget);
+  });
+
+  testWidgets('/ai/confirm resolves to AiConfirmPage（#1832 确认策略屏）', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push('/ai/confirm');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiConfirmPage), findsOneWidget);
+    // 顶栏标题 + 参数确认卡 + 脚本预览 + 下一步 CTA 均渲染。
+    expect(find.text('确认策略'), findsWidgets);
+    expect(find.byKey(const Key('ai-confirm-params')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-copy-script')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
+  });
+
+  testWidgets('/ai/confirm 接收 extra 参数并渲染到参数卡', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push(
+      '/ai/confirm',
+      extra: const <String, String>{
+        'category': '网格',
+        'fast_ma': '7',
+        'slow_ma': '30',
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiConfirmPage), findsOneWidget);
+    // extra 透传的 category 走普通 Text（chip），断言非 mock 兜底值「趋势跟踪」。
+    expect(find.text('网格'), findsWidgets);
+    expect(find.text('趋势跟踪'), findsNothing);
+    // 参数表用 RichText（mono），断言其拼接文本含 extra 透传的 fast_ma=7。
+    final Iterable<RichText> richTexts =
+        tester.widgetList<RichText>(find.byType(RichText));
+    final bool hasFastMa = richTexts.any((RichText rt) {
+      final InlineSpan span = rt.text;
+      return span.toPlainText().contains('fast_ma') &&
+          span.toPlainText().contains('7');
+    });
+    expect(hasFastMa, isTrue,
+        reason: 'extra 透传的 fast_ma=7 应渲染到参数卡 RichText');
   });
 
   test('/me/api 已下线（issue #1648）→ router 不再注册该路径', () {

@@ -285,6 +285,12 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _btProgress = 0;
   }
 
+  /// 进入确认策略屏（#1832）：把参数气泡的当前会话参数经 `extra` 透传，
+  /// 供 `/ai/confirm` 渲染参数确认卡 + 脚本预览。
+  void _openConfirm(Map<String, String>? params) {
+    context.push('/ai/confirm', extra: params);
+  }
+
   Future<void> _openBacktestSheet() async {
     final Object? result = await context.push<Object?>('/ai/backtest-config');
     if (!mounted) return;
@@ -619,10 +625,10 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 content: t.content,
                                 time: role == QzChatRole.system ? null : t.timestamp,
                                 params: t.kind == ChatTurnKind.params ? t.params : null,
-                                // 「确认策略」CTA（#1831）：confirm 屏（#1832）未就绪前
-                                // 先指向回测配置占位入口；最终接线由 #1832 完成。
+                                // 「确认策略」CTA（#1831 接线 → #1832 落地）：
+                                // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
                                 onConfirm: t.kind == ChatTurnKind.params
-                                    ? _openBacktestSheet
+                                    ? () => _openConfirm(t.params)
                                     : null,
                               );
                             }

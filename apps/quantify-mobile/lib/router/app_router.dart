@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../data/models/auth_models.dart';
 import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
+import '../pages/ai/ai_confirm_page.dart';
 import '../pages/ai/ai_home_page.dart';
 import '../pages/ai/backtest_config_sheet.dart';
 import '../pages/auth/login_page.dart';
@@ -173,6 +174,17 @@ GoRouter buildRouter({
         path: '/whale/profile/:address',
         builder: (BuildContext context, GoRouterState s) =>
             WhaleProfilePage(address: s.pathParameters['address']!),
+      ),
+      // 确认策略屏（#1832）：参数气泡「确认策略」CTA 进入；当前会话参数经
+      // `extra`（Map<String, String>）透传。深链直达（无 extra）回退 mock 参数。
+      GoRoute(
+        path: '/ai/confirm',
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return AiConfirmPage(
+            params: extra is Map<String, String> ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/ai/backtest-config',
