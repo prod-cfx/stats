@@ -196,18 +196,6 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState s) =>
             LiveStrategyDetailPage(id: s.pathParameters['id']!),
       ),
-      // 实盘策略（#1752）：列表 + 详情，均落在 `/me` 前缀守卫内（需登录）。
-      // 详情 `:id` 显式注册在列表之后；`live` 字面量不会被静态段吞没。
-      GoRoute(
-        path: '/me/live',
-        builder: (BuildContext context, GoRouterState state) =>
-            const LiveStrategiesPage(),
-      ),
-      GoRoute(
-        path: '/me/live/:id',
-        builder: (BuildContext context, GoRouterState s) =>
-            LiveStrategyDetailPage(id: s.pathParameters['id']!),
-      ),
       if (kDebugMode)
         GoRoute(
           path: '/_dev/theme-preview',
