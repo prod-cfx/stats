@@ -16,6 +16,7 @@ import '../../widgets/qz_spinner.dart';
 import '../live/widgets/live_status_style.dart';
 import 'api_form_sheet.dart';
 import 'widgets/qz_account_header.dart';
+import 'widgets/qz_exchange_logo.dart';
 import 'widgets/qz_section_title.dart';
 import 'widgets/qz_settings_row.dart';
 
@@ -768,23 +769,7 @@ class _ApiExchangeRow extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: c.bgSoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              exchange.substring(0, 1),
-              style: TextStyle(
-                color: c.text,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+          QzExchangeLogo(exchange: exchange, size: 36),
           const SizedBox(width: QzSpacing.md),
           Expanded(
             child: Column(
