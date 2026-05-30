@@ -25,6 +25,7 @@ class StrategyCardTile extends StatelessWidget {
     required this.item,
     required this.onTap,
     this.onLoadConversation,
+    this.onRun,
     this.starred = false,
     this.onToggleStar,
   });
@@ -32,9 +33,14 @@ class StrategyCardTile extends StatelessWidget {
   final StrategyMarketItem item;
   final VoidCallback onTap;
 
-  /// 「载入对话」按钮回调（#1559）。不为 null 时渲染紫色渐变实心按钮；
-  /// 点击不冒泡 QzCard 的 onTap，避免误触详情。
+  /// 「载入对话」按钮回调（#1559）。不为 null 时渲染按钮；点击不冒泡 QzCard
+  /// 的 onTap，避免误触详情。`onRun` 为 null 时此按钮为紫渐变实心（历史形态）；
+  /// 与「运行」并存时降级为 ghost 描边（#1821 对齐设计稿双按钮）。
   final VoidCallback? onLoadConversation;
+
+  /// 「运行」按钮回调（#1821）。不为 null 时在「载入对话」右侧渲染紫渐变实心
+  /// 按钮（播放图标）；点击不冒泡 QzCard 的 onTap。
+  final VoidCallback? onRun;
 
   /// 是否已星标（#1565）。
   final bool starred;
@@ -258,6 +264,15 @@ class StrategyCardTile extends StatelessWidget {
                   _LoadConversationButton(
                     key: Key('strategy-card-load-chat-${card.id}'),
                     onPressed: onLoadConversation!,
+                    // 与「运行」并存时降级为 ghost；单独存在时仍为紫渐变实心。
+                    ghost: onRun != null,
+                  ),
+                ],
+                if (onRun != null) ...<Widget>[
+                  const SizedBox(width: QzSpacing.xs),
+                  _RunButton(
+                    key: Key('strategy-card-run-${card.id}'),
+                    onPressed: onRun!,
                   ),
                 ],
               ],
@@ -445,12 +460,68 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-/// 「载入对话」紫色渐变实心按钮（#1595 对齐设计稿）。
+/// 「载入对话」按钮（#1595 / #1821 对齐设计稿）。
 ///
-/// 设计稿：`background: violetGrad`、圆角 10、bot icon + 文字、白色文字、
-/// boxShadow rgba(124,92,255,0.32)。`accentGrad` 跟随当前 accent 主题切换。
+/// 单独存在时为紫渐变实心（bot icon + 白字 + accentShadow）；与「运行」并存
+/// 时 [ghost] 为 true，降级为描边 ghost（透明底 + border + 主文本色），与设计稿
+/// `StratCard` 双按钮一致。`accentGrad` 跟随当前 accent 主题切换。
 class _LoadConversationButton extends StatelessWidget {
-  const _LoadConversationButton({super.key, required this.onPressed});
+  const _LoadConversationButton({
+    super.key,
+    required this.onPressed,
+    this.ghost = false,
+  });
+
+  final VoidCallback onPressed;
+  final bool ghost;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final Color fg = ghost ? c.text : c.accentOn;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: ghost ? null : c.accentGrad,
+            color: ghost ? c.bgElev : null,
+            border: ghost ? Border.all(color: c.border) : null,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: ghost ? null : <BoxShadow>[c.accentShadow],
+          ),
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.smart_toy_outlined, size: 14, color: fg),
+              const SizedBox(width: 5),
+              Text(
+                l10n.strategyCardLoadConversation,
+                style: TextStyle(
+                  color: fg,
+                  fontSize: 12,
+                  fontWeight: ghost ? FontWeight.w500 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 「运行」紫渐变实心按钮（#1821 对齐设计稿 `StratCard` run 按钮）。
+///
+/// 设计稿：`background: violetGrad`、圆角 10、播放三角图标 + 白字、
+/// boxShadow rgba(124,92,255,0.32)。`accentGrad` 跟随 accent 主题切换。
+class _RunButton extends StatelessWidget {
+  const _RunButton({super.key, required this.onPressed});
 
   final VoidCallback onPressed;
 
@@ -474,14 +545,10 @@ class _LoadConversationButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(
-                Icons.smart_toy_outlined,
-                size: 14,
-                color: c.accentOn,
-              ),
-              const SizedBox(width: 5),
+              Icon(Icons.play_arrow_rounded, size: 16, color: c.accentOn),
+              const SizedBox(width: 4),
               Text(
-                l10n.strategyCardLoadConversation,
+                l10n.strategyCardRun,
                 style: TextStyle(
                   color: c.accentOn,
                   fontSize: 12,

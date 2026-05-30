@@ -454,9 +454,16 @@
   "strategyDetailSubscribed": "Subscribed · Tap to cancel",
   "strategyDetailSubscribersSuffix": " subscribers",
   "strategyCardLoadConversation": "Load chat",
+  "strategyCardRun": "Run",
   "strategyDetailLoadConversation": "Load into chat",
   "strategyHomeLoadedToast": "\"{name}\" loaded into chat",
   "@strategyHomeLoadedToast": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "strategyHomeStartedToast": "\"{name}\" started · opening live monitor",
+  "@strategyHomeStartedToast": {
     "placeholders": {
       "name": {"type": "String"}
     }

@@ -2462,6 +2462,12 @@ abstract class AppLocalizations {
   /// **'载入对话'**
   String get strategyCardLoadConversation;
 
+  /// No description provided for @strategyCardRun.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行'**
+  String get strategyCardRun;
+
   /// No description provided for @strategyDetailLoadConversation.
   ///
   /// In zh, this message translates to:
@@ -2473,6 +2479,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'「{name}」已载入对话'**
   String strategyHomeLoadedToast(String name);
+
+  /// No description provided for @strategyHomeStartedToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」已启动 · 进入实盘监控'**
+  String strategyHomeStartedToast(String name);
 
   /// No description provided for @strategyHomeFeaturedBadge.
   ///

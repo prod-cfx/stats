@@ -1229,11 +1229,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyCardLoadConversation => '载入对话';
 
   @override
+  String get strategyCardRun => '运行';
+
+  @override
   String get strategyDetailLoadConversation => '载入到对话';
 
   @override
   String strategyHomeLoadedToast(String name) {
     return '「$name」已载入对话';
+  }
+
+  @override
+  String strategyHomeStartedToast(String name) {
+    return '「$name」已启动 · 进入实盘监控';
   }
 
   @override

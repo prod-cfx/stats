@@ -43,6 +43,12 @@ Future<void> _pump(WidgetTester tester, {QzTheme? theme}) async {
           body: Center(child: Text('ai-stub')),
         ),
       ),
+      GoRoute(
+        path: '/me/live',
+        builder: (BuildContext context, GoRouterState s) => const Scaffold(
+          body: Center(child: Text('live-stub')),
+        ),
+      ),
     ],
   );
   await tester.pumpWidget(
@@ -157,7 +163,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
     expect(find.byType(StrategyDetailPage), findsOneWidget);
-    expect(find.text('策略详情'), findsOneWidget);
   });
 
   testWidgets('顶部栏：策略广场 + 副标题 + 筛选按钮 + 7 个分类 chip (#1594)',
@@ -279,8 +284,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
     expect(find.byType(StrategyDetailPage), findsOneWidget);
-    // 详情页 AppBar 标题 + 真实策略名同时存在
-    expect(find.text('策略详情'), findsOneWidget);
+    // #1829 详情页重构为 bottom-sheet 后移除「策略详情」AppBar 标题，
+    // 以真实策略名作为导航落地断言。
     expect(find.text(first.name), findsOneWidget);
   });
 
@@ -322,6 +327,46 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
     expect(find.text('ai-stub'), findsOneWidget,
         reason: '700ms 后应跳到 /ai 路由');
+  });
+
+  testWidgets('卡片同时存在「载入对话」「运行」双按钮 (#1821 验收)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final StrategyCard first = mockFeaturedStrategies.first;
+    expect(find.byKey(Key('strategy-card-load-chat-${first.id}')),
+        findsOneWidget);
+    expect(
+        find.byKey(Key('strategy-card-run-${first.id}')), findsOneWidget);
+  });
+
+  testWidgets('点击运行：显示已启动 toast，约 700ms 后跳转 /me/live (#1821 验收)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final StrategyCard first = mockFeaturedStrategies.first;
+    final Finder runBtn = find.byKey(Key('strategy-card-run-${first.id}'));
+    expect(runBtn, findsOneWidget);
+    await tester.tap(runBtn);
+    await tester.pump();
+    expect(find.text('「${first.name}」已启动 · 进入实盘监控'), findsOneWidget,
+        reason: 'toast 应在点击后立即显示');
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(StrategyHomePage), findsOneWidget,
+        reason: '未到 700ms 时不应跳转');
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('live-stub'), findsOneWidget,
+        reason: '700ms 后应跳到实盘监控 /me/live');
+  });
+
+  testWidgets('点击运行不触发卡片整体打开详情（事件不冒泡, #1821 验收）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final StrategyCard first = mockFeaturedStrategies.first;
+    await tester.tap(find.byKey(Key('strategy-card-run-${first.id}')));
+    await tester.pump();
+    expect(find.byType(StrategyDetailPage), findsNothing,
+        reason: '运行按钮点击不应冒泡到卡片 onTap 打开详情');
+    expect(find.text('「${first.name}」已启动 · 进入实盘监控'), findsOneWidget);
   });
 
   testWidgets('载入对话点击后立刻 pop 路由：dispose 不抛 setState after dispose (#1596)',

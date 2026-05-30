@@ -98,6 +98,25 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     });
   }
 
+  /// 点击「运行」（#1821）：toast「『名』已启动 · 进入实盘监控」，~700ms 后跳到
+  /// 实盘监控 `/me/live`。复用 toast/nav timer，与「载入对话」同一取消语义，
+  /// 避免叠加跳转；后端真实启动接口未就绪，此处先按设计稿做交互占位。
+  void _onRun(StrategyMarketItem item) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String msg = l10n.strategyHomeStartedToast(item.card.name);
+    _toastTimer?.cancel();
+    _navTimer?.cancel();
+    setState(() => _toast = msg);
+    _toastTimer = Timer(const Duration(milliseconds: 2400), () {
+      if (!mounted) return;
+      setState(() => _toast = null);
+    });
+    _navTimer = Timer(_kLoadConversationDelay, () {
+      if (!mounted) return;
+      context.go('/me/live');
+    });
+  }
+
   void _onScroll() {
     if (_loadingMore || !_hasMore) return;
     if (!_scrollCtrl.hasClients) return;
@@ -341,6 +360,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                               onTap: () => context.push('/strategy/$id'),
                               onLoadConversation: () =>
                                   _onLoadConversation(item),
+                              onRun: () => _onRun(item),
                             );
                           },
                         );

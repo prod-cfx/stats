@@ -1265,11 +1265,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyCardLoadConversation => 'Load chat';
 
   @override
+  String get strategyCardRun => 'Run';
+
+  @override
   String get strategyDetailLoadConversation => 'Load into chat';
 
   @override
   String strategyHomeLoadedToast(String name) {
     return '\"$name\" loaded into chat';
+  }
+
+  @override
+  String strategyHomeStartedToast(String name) {
+    return '\"$name\" started · opening live monitor';
   }
 
   @override
