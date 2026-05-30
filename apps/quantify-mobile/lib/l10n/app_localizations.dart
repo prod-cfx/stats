@@ -1706,6 +1706,156 @@ abstract class AppLocalizations {
   /// **'CLOSED'**
   String get predMarketStatusClosed;
 
+  /// No description provided for @coinStockTabAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get coinStockTabAll;
+
+  /// No description provided for @coinStockTabOther.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他'**
+  String get coinStockTabOther;
+
+  /// No description provided for @coinStockSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索公司 / 股票代码'**
+  String get coinStockSearchHint;
+
+  /// No description provided for @coinStockSearchHotLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门标的'**
+  String get coinStockSearchHotLabel;
+
+  /// No description provided for @coinStockSearchEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配公司'**
+  String get coinStockSearchEmpty;
+
+  /// No description provided for @coinStockEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无匹配公司'**
+  String get coinStockEmpty;
+
+  /// No description provided for @coinStockStatMnav.
+  ///
+  /// In zh, this message translates to:
+  /// **'MNAV'**
+  String get coinStockStatMnav;
+
+  /// No description provided for @coinStockStatMcap.
+  ///
+  /// In zh, this message translates to:
+  /// **'市值'**
+  String get coinStockStatMcap;
+
+  /// No description provided for @coinStockStatHoldValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'持币价值'**
+  String get coinStockStatHoldValue;
+
+  /// No description provided for @coinStockStatHoldQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'持币量'**
+  String get coinStockStatHoldQty;
+
+  /// No description provided for @coinStockSortPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'股价'**
+  String get coinStockSortPrice;
+
+  /// No description provided for @coinStockSortChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'24h 涨跌'**
+  String get coinStockSortChange;
+
+  /// No description provided for @coinStockSortBy.
+  ///
+  /// In zh, this message translates to:
+  /// **'按'**
+  String get coinStockSortBy;
+
+  /// No description provided for @coinStockSortTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选 & 排序'**
+  String get coinStockSortTitle;
+
+  /// No description provided for @coinStockSortMetricLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'指标'**
+  String get coinStockSortMetricLabel;
+
+  /// No description provided for @coinStockSortDirectionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式'**
+  String get coinStockSortDirectionLabel;
+
+  /// No description provided for @coinStockSortAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'升序'**
+  String get coinStockSortAsc;
+
+  /// No description provided for @coinStockSortDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'降序'**
+  String get coinStockSortDesc;
+
+  /// No description provided for @coinStockSortNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'不排序'**
+  String get coinStockSortNone;
+
+  /// No description provided for @coinStockSortApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看 {count} 个结果'**
+  String coinStockSortApply(int count);
+
+  /// No description provided for @coinStockDetailPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前股价 · USD'**
+  String get coinStockDetailPrice;
+
+  /// No description provided for @coinStockDetailOverview.
+  ///
+  /// In zh, this message translates to:
+  /// **'公司概况'**
+  String get coinStockDetailOverview;
+
+  /// No description provided for @coinStockDetailMetrics.
+  ///
+  /// In zh, this message translates to:
+  /// **'核心指标'**
+  String get coinStockDetailMetrics;
+
+  /// No description provided for @coinStockChipListed.
+  ///
+  /// In zh, this message translates to:
+  /// **'上市'**
+  String get coinStockChipListed;
+
+  /// No description provided for @coinStockChipRelated.
+  ///
+  /// In zh, this message translates to:
+  /// **'关联'**
+  String get coinStockChipRelated;
+
   /// No description provided for @aggModeFutures.
   ///
   /// In zh, this message translates to:

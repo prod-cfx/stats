@@ -838,6 +838,83 @@ class AppLocalizationsZh extends AppLocalizations {
   String get predMarketStatusClosed => 'CLOSED';
 
   @override
+  String get coinStockTabAll => '全部';
+
+  @override
+  String get coinStockTabOther => '其他';
+
+  @override
+  String get coinStockSearchHint => '搜索公司 / 股票代码';
+
+  @override
+  String get coinStockSearchHotLabel => '热门标的';
+
+  @override
+  String get coinStockSearchEmpty => '无匹配公司';
+
+  @override
+  String get coinStockEmpty => '暂无匹配公司';
+
+  @override
+  String get coinStockStatMnav => 'MNAV';
+
+  @override
+  String get coinStockStatMcap => '市值';
+
+  @override
+  String get coinStockStatHoldValue => '持币价值';
+
+  @override
+  String get coinStockStatHoldQty => '持币量';
+
+  @override
+  String get coinStockSortPrice => '股价';
+
+  @override
+  String get coinStockSortChange => '24h 涨跌';
+
+  @override
+  String get coinStockSortBy => '按';
+
+  @override
+  String get coinStockSortTitle => '筛选 & 排序';
+
+  @override
+  String get coinStockSortMetricLabel => '指标';
+
+  @override
+  String get coinStockSortDirectionLabel => '排序方式';
+
+  @override
+  String get coinStockSortAsc => '升序';
+
+  @override
+  String get coinStockSortDesc => '降序';
+
+  @override
+  String get coinStockSortNone => '不排序';
+
+  @override
+  String coinStockSortApply(int count) {
+    return '查看 $count 个结果';
+  }
+
+  @override
+  String get coinStockDetailPrice => '当前股价 · USD';
+
+  @override
+  String get coinStockDetailOverview => '公司概况';
+
+  @override
+  String get coinStockDetailMetrics => '核心指标';
+
+  @override
+  String get coinStockChipListed => '上市';
+
+  @override
+  String get coinStockChipRelated => '关联';
+
+  @override
   String get aggModeFutures => '合约';
 
   @override

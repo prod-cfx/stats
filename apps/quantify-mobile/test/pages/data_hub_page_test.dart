@@ -5,8 +5,8 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/data_hub_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/market_home_page.dart';
+import 'package:quantify_mobile/pages/market/coin_stock_body.dart';
 import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
-import 'package:quantify_mobile/pages/market/widgets/data_hub_placeholder.dart';
 import 'package:quantify_mobile/pages/market/widgets/long_short_bar.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -18,7 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - AC2 hub 顶部横滑 tab 条含 5 项，点击切换 + 选中态
 /// - AC3 通知铃铛存在，未读 > 0 显示红数字 badge
 /// - AC4 行情数据 / 多空比均可从 hub tab 进入（不靠 URL）
-/// - AC5 聚合挂单 / 预测市场 / 币股占位 tab 挂载、切换不崩溃
+/// - AC5 聚合挂单 / 预测市场 / 币股子屏 tab 挂载、切换不崩溃
 Future<void> _pumpHub(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -75,7 +75,7 @@ void main() {
     expect(find.byType(LongShortBar), findsWidgets);
   });
 
-  testWidgets('已落地 tab（聚合挂单/预测）切换不崩溃，币股仍占位（AC5）',
+  testWidgets('已落地 tab（聚合挂单/预测/币股）切换不崩溃（AC5）',
       (WidgetTester tester) async {
     await _pumpHub(tester);
     // 聚合挂单（#1854）/ 预测市场（#1855）已落地 → 不再是占位屏，验证不抛异常。
@@ -90,12 +90,12 @@ void main() {
           reason: '切到 ${screen.name} 不应抛异常');
     }
 
-    // 币股仍是占位屏。
+    // 币股（#1856）已落地 → 渲染 CoinStockBody，不再是占位屏。
     await tester.tap(_hubTab(DataHubScreen.coinStock));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byType(DataHubPlaceholder), findsOneWidget,
-        reason: 'coinStock 应显示占位屏');
+    expect(find.byType(CoinStockBody), findsOneWidget,
+        reason: 'coinStock 应渲染 CoinStockBody');
     expect(tester.takeException(), isNull,
         reason: '切到 coinStock 不应抛异常');
   });

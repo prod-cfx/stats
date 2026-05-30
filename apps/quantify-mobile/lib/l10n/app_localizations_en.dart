@@ -872,6 +872,83 @@ class AppLocalizationsEn extends AppLocalizations {
   String get predMarketStatusClosed => 'CLOSED';
 
   @override
+  String get coinStockTabAll => 'All';
+
+  @override
+  String get coinStockTabOther => 'Other';
+
+  @override
+  String get coinStockSearchHint => 'Search company / ticker';
+
+  @override
+  String get coinStockSearchHotLabel => 'Popular tickers';
+
+  @override
+  String get coinStockSearchEmpty => 'No matching companies';
+
+  @override
+  String get coinStockEmpty => 'No matching companies';
+
+  @override
+  String get coinStockStatMnav => 'MNAV';
+
+  @override
+  String get coinStockStatMcap => 'Market cap';
+
+  @override
+  String get coinStockStatHoldValue => 'Holdings value';
+
+  @override
+  String get coinStockStatHoldQty => 'Holdings';
+
+  @override
+  String get coinStockSortPrice => 'Price';
+
+  @override
+  String get coinStockSortChange => '24h change';
+
+  @override
+  String get coinStockSortBy => 'Sort by';
+
+  @override
+  String get coinStockSortTitle => 'Filter & sort';
+
+  @override
+  String get coinStockSortMetricLabel => 'Metric';
+
+  @override
+  String get coinStockSortDirectionLabel => 'Order';
+
+  @override
+  String get coinStockSortAsc => 'Ascending';
+
+  @override
+  String get coinStockSortDesc => 'Descending';
+
+  @override
+  String get coinStockSortNone => 'Unsorted';
+
+  @override
+  String coinStockSortApply(int count) {
+    return 'View $count results';
+  }
+
+  @override
+  String get coinStockDetailPrice => 'Current price · USD';
+
+  @override
+  String get coinStockDetailOverview => 'Overview';
+
+  @override
+  String get coinStockDetailMetrics => 'Key metrics';
+
+  @override
+  String get coinStockChipListed => 'Listed';
+
+  @override
+  String get coinStockChipRelated => 'Related';
+
+  @override
   String get aggModeFutures => 'Futures';
 
   @override

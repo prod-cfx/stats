@@ -3,16 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/mock/fixtures/whale_extras.dart';
 import '../../data/models/whale_extra_models.dart';
-import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../whale/widgets/whale_notification_sheet.dart';
 import 'agg_orders_body.dart';
+import 'coin_stock_body.dart';
 import 'long_short_page.dart';
 import 'market_home_page.dart';
 import 'pred_market_body.dart';
 import 'widgets/data_hub_header.dart';
-import 'widgets/data_hub_placeholder.dart';
 
 /// 「数据」hub 容器（issue #1851）。
 ///
@@ -24,7 +23,7 @@ import 'widgets/data_hub_placeholder.dart';
 /// - longShort → [LongShortBody]（多空比，hub 内可达，不再依赖手敲 URL）
 /// - aggOrders → [AggOrdersBody]（聚合挂单/持仓量/成交量，#1854）
 /// - predict → [PredMarketBody]（预测市场，#1855）
-/// - coinStock → [DataHubPlaceholder]（占位，后续 issue 填充）
+/// - coinStock → [CoinStockBody]（币股，#1856）
 ///
 /// 通知状态（unread badge 真值来源）由本容器持有，复用 #1560 的
 /// [WhaleNotificationSheet] 数据与弹层；header 铃铛点击打开通知中心。
@@ -69,9 +68,7 @@ class _DataHubPageState extends ConsumerState<DataHubPage> {
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final List<DataHubItem> items = DataHubHeader.items(l10n);
     return Scaffold(
       backgroundColor: c.bg,
       body: Column(
@@ -90,7 +87,7 @@ class _DataHubPageState extends ConsumerState<DataHubPage> {
               // 手写列表的隐式排序耦合（重排枚举不会静默错位）。
               children: <Widget>[
                 for (final DataHubScreen screen in DataHubScreen.values)
-                  _bodyFor(screen, items),
+                  _bodyFor(screen),
               ],
             ),
           ),
@@ -99,7 +96,7 @@ class _DataHubPageState extends ConsumerState<DataHubPage> {
     );
   }
 
-  Widget _bodyFor(DataHubScreen screen, List<DataHubItem> items) {
+  Widget _bodyFor(DataHubScreen screen) {
     switch (screen) {
       case DataHubScreen.market:
         return const MarketHomeBody();
@@ -110,10 +107,7 @@ class _DataHubPageState extends ConsumerState<DataHubPage> {
       case DataHubScreen.predict:
         return const PredMarketBody();
       case DataHubScreen.coinStock:
-        return DataHubPlaceholder(label: _labelFor(items, screen));
+        return const CoinStockBody();
     }
   }
-
-  String _labelFor(List<DataHubItem> items, DataHubScreen screen) =>
-      items.firstWhere((DataHubItem i) => i.screen == screen).label;
 }
