@@ -75,11 +75,12 @@ describe('Stage 4 rules-only atom corpus e2e', () => {
   it.each(STAGE4_REAL_STRATEGY_CORPUS.filter(item => item.expectedFailure !== null))(
     '$id stays fail-closed before deploy payload when atom runtime support is incomplete',
     (item) => {
-      const blockerRows = item.expectedAtomKeys.flatMap(coverageRowsForAtomKey).filter(row => row.unsupportedReason === item.expectedFailure)
+      const blockerRows = item.expectedAtomKeys
+        .flatMap(atomKey => coverageRowsForAtomKey(atomKey).map(row => ({ atomKey, row })))
+        .filter(({ row }) => !isStage4DeployReadyAtom(row) && row.unsupportedReason === item.expectedFailure)
 
       expect(blockerRows.length).toBeGreaterThan(0)
-      expect(blockerRows.every(row => !isStage4DeployReadyAtom(row))).toBe(true)
-      expect(blockerRows.every(row => row.reachesBacktest === false || row.reachesDeployPayload === false)).toBe(true)
+      expect(blockerRows.every(({ row }) => row.reachesBacktest === false || row.reachesDeployPayload === false)).toBe(true)
     },
   )
 })

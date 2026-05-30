@@ -1,6 +1,6 @@
 import { collectAtomLeaves, isRuleEffectsByRole } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../../services/generic-seed-dispatcher.service'
-import { STAGE4_ATOM_COVERAGE_MATRIX } from '../atom-coverage-matrix'
+import { STAGE4_ATOM_COVERAGE_MATRIX, isStage4DeployReadyAtom } from '../atom-coverage-matrix'
 import { STAGE4_REAL_STRATEGY_CORPUS } from '../stage4-real-strategy-corpus'
 
 const expectedCategories = [
@@ -34,6 +34,20 @@ function collectRuleAtomKeys(patch: ReturnType<GenericSeedDispatcher['dispatch']
   })
 }
 
+function collectRuleOrchestrationAtomKeys(patch: ReturnType<GenericSeedDispatcher['dispatch']>): string[] {
+  return (patch.rules ?? []).flatMap((rule) => {
+    if (!isRuleEffectsByRole(rule.effects)) {
+      return []
+    }
+
+    return rule.effects.orchestration.flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key))
+  })
+}
+
+function coverageRowsForAtomKey(atomKey: string) {
+  return STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.atomKey === atomKey || row.coveredAtomKeys.includes(atomKey))
+}
+
 describe('Stage 4 real strategy corpus', () => {
   const dispatcher = new GenericSeedDispatcher()
   const knownStage4AtomKeys = new Set(STAGE4_ATOM_COVERAGE_MATRIX.flatMap(row => [row.atomKey, ...row.coveredAtomKeys]))
@@ -63,6 +77,54 @@ describe('Stage 4 real strategy corpus', () => {
     })
 
     expect(missingByCase).toEqual([])
+  })
+
+  it('routes multi-timeframe and multi-symbol corpus cases to PR5 orchestration effects on attempt-1', () => {
+    const expectedOrchestrationKeysByCase = new Map([
+      ['stage4-multi-timeframe-trend-confirmation', 'scope.timeframe'],
+      ['stage4-multi-symbol-shared-risk', 'scope.symbol'],
+    ])
+
+    const missingByCase = [...expectedOrchestrationKeysByCase].flatMap(([caseId, expectedKey]) => {
+      const item = STAGE4_REAL_STRATEGY_CORPUS.find(entry => entry.id === caseId)
+      expect(item).toBeDefined()
+
+      const patch = dispatcher.dispatch(item!.initialUserMessage)
+      const orchestrationKeys = new Set(collectRuleOrchestrationAtomKeys(patch))
+
+      return orchestrationKeys.has(expectedKey) ? [] : [{ id: caseId, key: expectedKey }]
+    })
+
+    expect(missingByCase).toEqual([])
+  })
+
+  it('keeps corpus expected failures aligned with deploy-ready coverage rows', () => {
+    const invalidCases = STAGE4_REAL_STRATEGY_CORPUS.flatMap((item) => {
+      const rowsByExpectedAtom = item.expectedAtomKeys.map(atomKey => ({ atomKey, rows: coverageRowsForAtomKey(atomKey) }))
+
+      if (item.expectedFailure === null) {
+        return rowsByExpectedAtom
+          .filter(({ rows }) => !rows.some(isStage4DeployReadyAtom))
+          .map(({ atomKey }) => ({ id: item.id, atomKey, issue: 'missing_deploy_ready_row' }))
+      }
+
+      const hasExpectedBlocker = rowsByExpectedAtom.some(({ rows }) =>
+        rows.some(row => !isStage4DeployReadyAtom(row) && row.unsupportedReason === item.expectedFailure),
+      )
+
+      return hasExpectedBlocker ? [] : [{ id: item.id, issue: 'missing_expected_blocker_row' }]
+    })
+
+    expect(invalidCases).toEqual([])
+  })
+
+  it('does not mark PR5 multi-timeframe or multi-symbol corpus cases as null-pass until their atoms are deploy-ready', () => {
+    const invalidCases = STAGE4_REAL_STRATEGY_CORPUS
+      .filter(item => item.id === 'stage4-multi-timeframe-trend-confirmation' || item.id === 'stage4-multi-symbol-shared-risk')
+      .filter(item => item.expectedFailure === null)
+      .map(item => item.id)
+
+    expect(invalidCases).toEqual([])
   })
 
   it('does not create duplicate entry or exit rules for corpus strategies', () => {
