@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-05-30 · 交易详情数据来源切换（聚合/Binance/OKX）：暂缓、标 future（Issue #1794）
+
+**背景**：设计稿 `design/project/mobile/m-screens-3.jsx`（`ScreenTradingDetail`）交易详情头部含数据来源切换——聚合 / Binance / OKX 下拉抽屉，切换驱动行情数据源。Flutter app `apps/quantify-mobile/lib/pages/market/market_detail_page.dart:249` 顶栏副标题固定 `marketDetailSubtitlePerpBinance`（「永续 · Binance」/「Perp · Binance」），无来源切换。#1794 目标是「补来源切换 OR 按聚合数据就绪节奏标 future」二选一，先做产品取舍。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. mock-first 落地切换 | 顶栏副标题改为可点下拉，提供 聚合 / Binance / OKX 三选项，切换驱动 ticker / kline / orderbook / trades 数据源 | 三个数据源中只有 Binance 单源 mock 就绪；「聚合」源依赖跨所聚合订单簿数据（与 #1750 同一数据范畴，#1750 已将聚合挂单等二级入口标 future）；「OKX」源依赖多交易所实时行情，依赖 Socket.IO 实时推流通道（#1683，阶段 D，OPEN）。当前 `MarketDataRepository` / mock fixtures 无多源切换能力，强行落地需为「聚合」「OKX」堆纯 mock 或固定回落 Binance，切换是无意义的空壳；真实多源接入后数据口径 / 聚合算法 / 源标识大概率重写，违反 YAGNI |
+| B. 暂缓，标记 future（采纳） | 维持顶栏固定「永续 · Binance」副标题，数据来源切换标 future，关联数据依赖 #1750（聚合订单簿数据范畴）+ #1683（实时推流通道），待跨所聚合 / 多交易所实时数据就绪后单独立 issue | 对齐 #1750/#1770/#1771/#1791 已建立的「设计超前 / 真实数据通道未就绪 → 标 future」基线；现有单源（Binance）行情链路已走通，零破坏（Never break userspace）；KISS/YAGNI |
+
+**判定**：**采纳方案 B——暂缓，交易详情数据来源切换（聚合/Binance/OKX 下拉）统一标记为 future**，不纳入当前 quantify-mobile app 信息架构与验收。维持 `market_detail_page.dart:249` 顶栏固定 `marketDetailSubtitlePerpBinance`（「永续 · Binance」）副标题。本节仅落文档，不改 app 代码 / 测试、不改设计稿。
+
+**对齐结论（对应 #1794 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品确认落地范围，结论记入 `docs/decisions.md` | 已满足。结论＝方案 B 标 future，记入本节 | 本节 |
+| [2] 若落地：交易详情头部提供 聚合/Binance/OKX 切换并驱动行情数据源 | 不适用。未落地切换；顶栏维持固定「永续 · Binance」副标题现状 | 本节判定 |
+| [3] 若标 future：钉死暂缓结论并关联数据依赖 | 已满足。本节钉死暂缓结论，关联数据依赖 #1750（聚合订单簿数据范畴）+ #1683（实时推流通道），后续触发条件见下 | 本节 + 后续触发条件 |
+
+**理由**：
+
+1. #1794 目标是「补来源切换 / 标 future」二选一，标 future 分支同样满足验收（验收标准末条「若标 future：钉死暂缓结论并关联数据依赖」）；非「必须实现」。
+2. **YAGNI / 依赖未就绪**：「聚合」源依赖跨所聚合订单簿数据（#1750 范畴，#1750 已将聚合挂单二级入口标 future），「OKX」等多交易所实时切换依赖真实推流通道 #1683（阶段 D：Socket.IO 接入，OPEN）。三源中仅 Binance 单源 mock 就绪；先实现纯 mock / 空壳切换违反 YAGNI，真实多源接入后聚合算法 / 数据口径 / 源标识大概率重写。
+3. **Never break userspace**：现有单源（Binance）的 ticker / kline / orderbook / trades 链路是可走通的现役形态；在多源真实数据尚未就绪前强行加切换不带来用户价值，保持现状对现有行情详情链路零破坏。
+4. 与 #1750/#1770/#1771/#1791 处理「设计超前 / 真实数据通道未就绪」一致：设计稿保留高保真表达作为 future 能力，app 按真实数据就绪节奏分批落地，文档钉死暂缓结论，避免每个子任务重新论证。
+
+**后续触发条件**：跨所聚合订单簿数据（#1750 范畴）与多交易所实时推流通道（#1683 阶段 D）任一就绪并明确产品价值后，另行立项评估顶栏数据来源切换；未就绪前不在 app 落 mock / 空壳切换，也不要在后续 PR 以「对齐缺口」名义补。
+
+**不变项**：`market_detail_page.dart:249` 顶栏 `subtitle` 维持 `l10nForBar.marketDetailSubtitlePerpBinance`（zh「永续 · Binance」/ en「Perp · Binance」），不改为可点下拉。本节仅落文档，不改 app 代码 / 测试、不改设计稿。
+
+---
+
 ## 2026-05-30 · 巨鲸地址详情 6 tab 重型详情：方案 B 暂缓、标 future（Issue #1791）
 
 **背景**：设计稿 `design/project/mobile/m-screens-whale-discover.jsx:617`（`WhaleProfileDetail`）为全屏 6 tab 详情——基本信息 / 现货 / 永续 / 挂单 / 成交 / 历史，含 P&L 曲线图（period / scope / metric 三个下拉切换）+ 4 个 stat 卡 + 永续持仓明细（保证金 / 多空占比 / ROI / 未实现盈亏）。Flutter app `apps/quantify-mobile/lib/pages/whale/whale_profile_page.dart` 当前为 hero（地址 + 标签 + 资产摘要 + 总持仓估值）+ 2 segment（概览＝持仓列表 + 近期动作 / 交易统计＝盈亏/胜率/方向偏好/资产表现），信息维度少于设计稿。#1791 目标是「6 tab 全量落地 OR 分批 OR 标 future」三选一，先做产品取舍。
