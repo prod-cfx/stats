@@ -5008,7 +5008,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     clarificationQuestion: (slotKey, _params, _locale) => {
       if (slotKey === 'orchestration.scope.dataSource.role') return '请确认数据源角色（primary/confirmation/event）'
       if (slotKey === 'orchestration.scope.dataSource.feed_id') return '请确认数据源 feedId（如 binance.spot.btcusdt）'
-      if (slotKey === 'orchestration.scope.dataSource.schema_ref') return '请确认数据源 schema（ohlcv/orderbook/liquidation/webhook_event）'
+      if (slotKey === 'orchestration.scope.dataSource.schema_ref') return '请确认数据源 schema（ohlcv/orderbook/funding/open_interest/liquidation/webhook_event）'
       if (slotKey === 'orchestration.scope.dataSource.feed_id_overlap') return '多 scope 间 feedId 不能重复'
       if (slotKey === 'orchestration.scope.dataSource.primary_collision') return 'primary 数据源最多一个'
       if (slotKey === 'orchestration.scope.dataSource.missing_binding') return '请确认该规则绑定到哪个 dataSource scope'
@@ -5051,7 +5051,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       paramSlots: {
         role: { kind: 'enum', required: false, enum: ['primary', 'confirmation', 'event'] },
         feedId: { kind: 'symbol', required: false },
-        schemaRef: { kind: 'enum', required: false, enum: ['ohlcv', 'orderbook', 'liquidation', 'webhook_event'] },
+        schemaRef: { kind: 'enum', required: false, enum: ['ohlcv', 'orderbook', 'funding', 'open_interest', 'liquidation', 'webhook_event'] },
       },
       phaseResolver: 'fixed-gate',
       sideResolver: 'inherit',

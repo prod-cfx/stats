@@ -63,7 +63,7 @@ export interface SemanticFlatAtomProvenance {
 
 // Phase 5 S9 (#1110): scope.dataSource role / schema 枚举
 export type SemanticOrchestrationDataSourceRole = 'primary' | 'confirmation' | 'event'
-export type SemanticOrchestrationDataSourceSchema = 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
+export type SemanticOrchestrationDataSourceSchema = 'ohlcv' | 'orderbook' | 'funding' | 'open_interest' | 'liquidation' | 'webhook_event'
 
 export interface SemanticSeriesReference {
   source: 'price' | 'volume' | 'indicator' | 'memory'

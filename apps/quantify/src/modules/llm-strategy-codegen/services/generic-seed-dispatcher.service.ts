@@ -837,6 +837,22 @@ function tryNormalizeTimeframe(text: string): string | undefined {
   if (!compound) return undefined
   return normalizeCompoundTimeframe(compound[1], compound[2])
 }
+
+function extractExplicitSymbolValues(text: string): string[] {
+  const re = new RegExp(SYMBOL_RE.source, 'gi')
+  const values: string[] = []
+  const seen = new Set<string>()
+  for (const match of text.matchAll(re)) {
+    const base = match[1]?.toUpperCase()
+    const quote = match[2]?.toUpperCase()
+    if (!base || !quote || !looksLikeBaseToken(base)) continue
+    const value = `${base}${quote}`
+    if (seen.has(value)) continue
+    seen.add(value)
+    values.push(value)
+  }
+  return values
+}
 // #1296：加 \b 边界，避免 'perpetual swap' / 'perplexity' 等英文长词被前缀误命中；
 // 中文 '合约' / '永续' 不需要边界（CJK 字符默认无 word char 邻接歧义）。
 // 'spot' 同理避免 'spotlight' 等前缀误命中。
@@ -1432,6 +1448,24 @@ export class GenericSeedDispatcher {
         evidence: { text: userMessage.trim(), source: 'user_explicit' },
       })
     }
+    if (this.hasFundingRateIntent(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key,
+        phase: 'entry',
+        sideScope: 'both',
+        params: {},
+        evidence: { text: this.findEvidenceText(userMessage, '(?:资金费率|funding\s*rate|funding)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    if (this.hasOpenInterestIntent(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['openInterest.condition'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['openInterest.condition'].key,
+        phase: 'entry',
+        sideScope: 'both',
+        params: {},
+        evidence: { text: this.findEvidenceText(userMessage, '(?:未平仓量|持仓量|open\s*interest|\bOI\b)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
     if (out.length === 0 && userMessage.trim().length > 0) {
       out.push({
         key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
@@ -1533,8 +1567,20 @@ export class GenericSeedDispatcher {
     for (const item of flatPatch.risk ?? []) pushAtom(item)
     for (const item of flatPatch.atoms ?? []) pushAtom(item)
     const contextSlots = flatPatch.contextSlots ?? {}
+    const explicitSymbols = extractExplicitSymbolValues(userMessage)
+    if (explicitSymbols.length > 1) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
+        params: {
+          symbolScopeKind: 'symbol',
+          symbols: explicitSymbols,
+          primarySymbol: explicitSymbols[0],
+        },
+        evidence: { text: explicitSymbols.join(' ') },
+      })
+    }
     const symbolEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.symbol))
-    if (typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
+    if (explicitSymbols.length <= 1 && typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
         params: {
@@ -1646,6 +1692,18 @@ export class GenericSeedDispatcher {
         ...(evidence ? { evidence: { text: evidence } } : {}),
       })
     }
+    if (
+      this.hasRegimeGateIntent(userMessage)
+      && !out.some(effect => effect.kind === 'atom' && effect.key === ATOM_CONTRACT_REGISTRY['gate.regime'].key)
+    ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:才允许|只允许|regime|gate|趋势向上|趋势过滤)')
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['gate.regime'].key,
+        phase: 'gate',
+        params: {},
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
     if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'programs')) {
       const atoms = flatPatch.atoms ?? []
       const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
@@ -1700,6 +1758,14 @@ export class GenericSeedDispatcher {
     return /放量|放大量|量能放大|量能放量|成交量放大|倍均量|倍量|volume\s*(?:spike|surge|breakout)/iu.test(userMessage)
   }
 
+  private hasFundingRateIntent(userMessage: string): boolean {
+    return /资金费率|funding\s*rate|\bfunding\b/iu.test(userMessage)
+  }
+
+  private hasOpenInterestIntent(userMessage: string): boolean {
+    return /未平仓量|持仓量|open\s*interest|\bOI\b/iu.test(userMessage)
+  }
+
   // Issue #1691: 与 hasOpenActionIntent 对称的纯出场词法。
   // 「平仓 / 平多 / 平空 / 止盈 / 止损 / 离场 / 卖出 / close / exit / sell / take-profit / stop-loss」
   // 与 generic-seed-dispatcher.helpers.ts 中 EXIT_PHRASES 词法对齐。
@@ -1717,6 +1783,18 @@ export class GenericSeedDispatcher {
 
   private hasTimeframeIntent(userMessage: string): boolean {
     return /(?:\d+\s*(?:m|min|分钟|小时|h|d|天|日线|周线)|K\s*线|周期|timeframe)/iu.test(userMessage)
+  }
+
+  private hasRegimeGateIntent(userMessage: string): boolean {
+    if (/regime|gate|趋势过滤|趋势向上/iu.test(userMessage)) return true
+    if (!/才允许|只允许/iu.test(userMessage)) return false
+    return !this.hasMultiTimeframeGateIntent(userMessage)
+  }
+
+  private hasMultiTimeframeGateIntent(userMessage: string): boolean {
+    if (!/才允许|只允许/iu.test(userMessage)) return false
+    const timeframeMentions = userMessage.match(/(?:\b\d+\s*(?:m|min|h|d)\b|\d+\s*(?:分钟|小时)|日线|周线|K\s*线|周期|timeframe)/giu) ?? []
+    return timeframeMentions.length >= 2
   }
 
   private findTimeframeEvidence(userMessage: string, timeframe?: unknown): string | null {

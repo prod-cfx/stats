@@ -1069,6 +1069,46 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(spec.dataRequirements.requiredTimeframes).toContain('1h')
   })
 
+  it('builds rules-only funding and open-interest data-source scope effects', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-data-source-scopes',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [
+            { kind: 'atom', key: 'scope.dataSource', params: { role: 'confirmation', feedId: 'binance.perp.btcusdt.funding', schemaRef: 'funding' } },
+            { kind: 'atom', key: 'scope.dataSource', params: { role: 'confirmation', feedId: 'binance.perp.btcusdt.open_interest', schemaRef: 'open_interest' } },
+          ],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.orchestration?.scopes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        scopeKind: 'dataSource',
+        role: 'confirmation',
+        feedId: 'binance.perp.btcusdt.funding',
+        schemaRef: 'funding',
+        sourcePath: 'rules[0].effects.orchestration[0]',
+      }),
+      expect.objectContaining({
+        scopeKind: 'dataSource',
+        role: 'confirmation',
+        feedId: 'binance.perp.btcusdt.open_interest',
+        schemaRef: 'open_interest',
+        sourcePath: 'rules[0].effects.orchestration[1]',
+      }),
+    ]))
+  })
+
   it('uses semantic position sizing for rules-only open-position actions when no rule sizing leaf exists', () => {
     const state = baseState({
       position: {

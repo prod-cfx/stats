@@ -76,9 +76,27 @@ const pr4ProgramAtomKeys = [
   'program.iceberg',
 ] as const
 
+const pr5OrchestrationAtomKeys = [
+  'orchestration.multi_timeframe',
+  'orchestration.multi_symbol',
+  'orchestration.multi_leg',
+  'orchestration.portfolio_risk',
+  'orchestration.regime_gate',
+  'orchestration.data_source_binding',
+] as const
+
+const pr2MarketDataPredicateKeys = [
+  'orderbook.imbalance',
+  'fundingRate.condition',
+  'openInterest.condition',
+  'liquidation.condition',
+  'event.externalSignal',
+] as const
+
 describe('Stage 4 atom coverage matrix', () => {
   const pr3Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr3-risk-position')
   const pr4Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr4-action-program')
+  const pr5Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr5-orchestration-data')
 
   it('covers all Stage 4 atom families', () => {
     const families = new Set(STAGE4_ATOM_COVERAGE_MATRIX.map(row => row.family))
@@ -283,5 +301,68 @@ describe('Stage 4 atom coverage matrix', () => {
     expect(isStage4DeployReadyAtom(dcaProgram!)).toBe(false)
     expect(dcaPosition?.family).toBe('position')
     expect(dcaPosition?.rulePath).toBe('rules[].effects.positions')
+  })
+
+  it('contains direct PR5 orchestration atom rows under typed orchestration effects', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+
+    for (const key of pr5OrchestrationAtomKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      expect(row?.family).toBe('orchestration')
+      expect(row?.rulePath).toBe('rules[].effects.orchestration')
+      expect(row?.prBatch).toBe('pr5-orchestration-data')
+      expect(row?.coveredAtomKeys.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('requires deploy-ready PR5 rows to declare full rules pipeline evidence', () => {
+    const invalidRows = pr5Rows.filter(row =>
+      isStage4DeployReadyAtom(row)
+      && (
+        row.utteranceExamples.length < 3
+        || !row.displayShape.includes('source path')
+        || !row.canonicalShape.includes('source path')
+        || !row.irShape.includes('source path')
+        || !row.runtimeRequirement.includes('runtime')
+        || !row.deployPayloadImpact.some(item => item.includes('sourcePath') || item.includes('dataRequirements'))
+        || !row.reachesBacktest
+        || !row.reachesDeployPayload
+        || row.unsupportedReason !== null
+      ),
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('does not let PR5 orchestration rows remain empty planned coverage', () => {
+    expect(pr5Rows.every(row => row.status === 'planned')).toBe(false)
+  })
+
+  it('requires non deploy-ready PR5 rows to carry concrete blockers', () => {
+    const invalidRows = pr5Rows.filter(row =>
+      !isStage4DeployReadyAtom(row)
+      && (
+        row.unsupportedReason === null
+        || (row.reachesBacktest && row.reachesDeployPayload)
+      ),
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('keeps PR2 market-data predicates low unless PR5 data-source binding reaches deploy payload', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+    const bindingRow = rowsByKey.get('orchestration.data_source_binding')
+    const bindingReady = bindingRow ? isStage4DeployReadyAtom(bindingRow) : false
+
+    for (const key of pr2MarketDataPredicateKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      if (isStage4DeployReadyAtom(row!)) {
+        expect(bindingReady).toBe(true)
+        expect(row?.deployPayloadImpact.some(item => item.includes('dataRequirements'))).toBe(true)
+      }
+    }
   })
 })

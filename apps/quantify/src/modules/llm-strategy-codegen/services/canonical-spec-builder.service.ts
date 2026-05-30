@@ -8,6 +8,7 @@ import type {
   SemanticCapabilityShape,
   SemanticExpression,
   SemanticExpressionOperand,
+  SemanticOrchestrationDataSourceSchema,
   SemanticOrchestrationContract,
   SemanticOrchestrationNode,
   SemanticPositionConstraintState,
@@ -1682,6 +1683,15 @@ export class CanonicalSpecBuilderService {
     return scopes.sort((a, b) => a.id.localeCompare(b.id))
   }
 
+  private isSupportedDataSourceSchemaRef(value: unknown): value is SemanticOrchestrationDataSourceSchema {
+    return value === 'ohlcv'
+      || value === 'orderbook'
+      || value === 'funding'
+      || value === 'open_interest'
+      || value === 'liquidation'
+      || value === 'webhook_event'
+  }
+
   private buildCanonicalScopeFromRuleOrchestrationLeaf(
     leaf: RulesMainflowLeaf,
   ): CanonicalOrchestrationScope | null {
@@ -1740,7 +1750,7 @@ export class CanonicalSpecBuilderService {
           (role !== 'primary' && role !== 'confirmation' && role !== 'event')
           || typeof feedIdRaw !== 'string'
           || feedIdRaw.trim() === ''
-          || (schemaRef !== 'ohlcv' && schemaRef !== 'orderbook' && schemaRef !== 'liquidation' && schemaRef !== 'webhook_event')
+          || !this.isSupportedDataSourceSchemaRef(schemaRef)
         ) {
           return null
         }
@@ -2478,7 +2488,7 @@ export class CanonicalSpecBuilderService {
         if (
           (role !== 'primary' && role !== 'confirmation' && role !== 'event')
           || typeof feedIdRaw !== 'string'
-          || (schemaRef !== 'ohlcv' && schemaRef !== 'orderbook' && schemaRef !== 'liquidation' && schemaRef !== 'webhook_event')
+          || !this.isSupportedDataSourceSchemaRef(schemaRef)
         ) {
           continue
         }

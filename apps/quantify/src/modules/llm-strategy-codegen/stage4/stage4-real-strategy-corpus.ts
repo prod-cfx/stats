@@ -9,6 +9,7 @@ export type Stage4RealStrategyCategory =
   | 'portfolio_risk'
   | 'multi_timeframe'
   | 'multi_symbol'
+  | 'data_source_binding'
   | 'action_lifecycle'
   | 'execution_program'
 
@@ -101,6 +102,60 @@ export const STAGE4_REAL_STRATEGY_CORPUS = [
     expectedSemanticIntent: ['shared symbol basket rule', 'fixed ratio sizing', 'fixed stop loss'],
     clarificationTurns: [],
     expectedFailure: null,
+  },
+  {
+    id: 'stage4-regime-gate-trend-filter',
+    category: 'portfolio_risk',
+    initialUserMessage: 'BTCUSDT 15m。价格高于 EMA50 才允许做多，EMA20 上穿 EMA50 开多，单笔 10% 仓位。',
+    expectedAtomKeys: ['gate.regime', 'indicator.cross_over', 'position.sizing'],
+    expectedSemanticIntent: ['regime gate', 'trend entry', 'fixed ratio sizing'],
+    clarificationTurns: [],
+    expectedFailure: 'deploy_payload_missing_binding',
+  },
+  {
+    id: 'stage4-orderbook-data-source-binding',
+    category: 'data_source_binding',
+    initialUserMessage: 'BTCUSDT 15m。EMA20 上穿开多，但需要 Binance orderbook imbalance 大于 60% 确认。',
+    expectedAtomKeys: ['orderbook.imbalance'],
+    expectedSemanticIntent: ['orderbook confirmation source', 'fail closed without data-source binding'],
+    clarificationTurns: [],
+    expectedFailure: 'data_source_missing',
+  },
+  {
+    id: 'stage4-funding-data-source-binding',
+    category: 'data_source_binding',
+    initialUserMessage: 'BTCUSDT 15m。资金费率为正并且 EMA20 上穿时开多。',
+    expectedAtomKeys: ['fundingRate.condition'],
+    expectedSemanticIntent: ['funding rate confirmation source', 'fail closed without data-source binding'],
+    clarificationTurns: [],
+    expectedFailure: 'data_source_missing',
+  },
+  {
+    id: 'stage4-open-interest-data-source-binding',
+    category: 'data_source_binding',
+    initialUserMessage: 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。',
+    expectedAtomKeys: ['openInterest.condition'],
+    expectedSemanticIntent: ['open interest confirmation source', 'fail closed without data-source binding'],
+    clarificationTurns: [],
+    expectedFailure: 'data_source_missing',
+  },
+  {
+    id: 'stage4-liquidation-data-source-binding',
+    category: 'data_source_binding',
+    initialUserMessage: 'BTCUSDT 15m。出现多头清算瀑布后只做空。',
+    expectedAtomKeys: ['liquidation.condition'],
+    expectedSemanticIntent: ['liquidation event source', 'fail closed without data-source binding'],
+    clarificationTurns: [],
+    expectedFailure: 'data_source_missing',
+  },
+  {
+    id: 'stage4-webhook-event-source-binding',
+    category: 'data_source_binding',
+    initialUserMessage: '收到 TradingView webhook buy 信号后开多，单笔 10% 仓位。',
+    expectedAtomKeys: ['external.signal'],
+    expectedSemanticIntent: ['external webhook event source', 'fail closed without data-source binding'],
+    clarificationTurns: [],
+    expectedFailure: 'data_source_missing',
   },
   {
     id: 'stage4-action-reverse-position',

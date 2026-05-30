@@ -12,6 +12,7 @@ const expectedCategories = [
   'portfolio_risk',
   'multi_timeframe',
   'multi_symbol',
+  'data_source_binding',
   'action_lifecycle',
   'execution_program',
 ] as const
