@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
+import 'qz_button.dart';
 
 /// Chat message role. Mirrors the `role` string field on `ChatTurn`
 /// (`user` / `assistant` / `system`) but typed for widget consumption to
@@ -32,6 +34,7 @@ class QzChatBubble extends StatelessWidget {
     this.time,
     this.codeBlock,
     this.params,
+    this.onConfirm,
   });
 
   final QzChatRole role;
@@ -42,6 +45,11 @@ class QzChatBubble extends StatelessWidget {
   /// 当传入时，气泡末尾追加一个等宽字体代码块渲染策略参数（#1557）。
   /// 与 [codeBlock] 互斥：如二者同时存在，[params] 优先。
   final Map<String, String>? params;
+
+  /// 参数气泡「确认策略」CTA 回调（#1831）。仅 [params] 非空时渲染按钮；
+  /// 为 null 时不显示 CTA（保持与历史调用方兼容）。confirm 屏（#1832）
+  /// 就绪前由 `ai_home_page.dart` 注入占位/回测配置入口。
+  final VoidCallback? onConfirm;
 
   /// 设计稿对齐：assistant `4/16/16/16`，user `16/16/4/16`。
   static const BorderRadius _assistantRadius = BorderRadius.only(
@@ -124,6 +132,49 @@ class QzChatBubble extends StatelessWidget {
                     ),
                   ),
                 if (params != null && params!.isNotEmpty) ...<Widget>[
+                  // 分类 Chip + 识别话术（设计稿 m-screens-1.jsx:407）：
+                  // category 取自 params['category']，话术复用 themePreviewIdentified。
+                  if ((params!['category'] ?? '').isNotEmpty) ...<Widget>[
+                    const SizedBox(height: QzSpacing.sm),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Container(
+                          key: const Key('ai-bubble-category-chip'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: QzSpacing.sm,
+                            vertical: QzSpacing.xxs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.accentSoft,
+                            borderRadius:
+                                BorderRadius.circular(QzRadii.pill),
+                          ),
+                          child: Text(
+                            params!['category']!,
+                            style: TextStyle(
+                              color: c.accent,
+                              fontSize: 12,
+                              height: 1.2,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: QzSpacing.xs),
+                        Flexible(
+                          child: Text(
+                            AppLocalizations.of(context)
+                                .themePreviewIdentified,
+                            style: TextStyle(
+                              color: c.textDim,
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: QzSpacing.sm),
                   Container(
                     key: const Key('ai-bubble-params'),
@@ -167,6 +218,23 @@ class QzChatBubble extends StatelessWidget {
                       ],
                     ),
                   ),
+                  // 「需要我开始回测吗?」+「确认策略」CTA（设计稿 m-screens-1.jsx:417-433）。
+                  // 仅 onConfirm 注入时渲染按钮，confirm 屏（#1832）未就绪前指向占位入口。
+                  if (onConfirm != null) ...<Widget>[
+                    const SizedBox(height: QzSpacing.sm),
+                    Text(
+                      AppLocalizations.of(context).aiStartBacktestPrompt,
+                      style: TextStyle(color: fg, fontSize: 13, height: 1.4),
+                    ),
+                    const SizedBox(height: QzSpacing.xs),
+                    QzButton(
+                      key: const Key('ai-bubble-confirm-cta'),
+                      label: AppLocalizations.of(context).aiConfirmStrategy,
+                      variant: QzButtonVariant.accent,
+                      expanded: true,
+                      onPressed: onConfirm,
+                    ),
+                  ],
                 ] else if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: QzSpacing.sm),
                   Container(

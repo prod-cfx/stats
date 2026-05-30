@@ -2306,6 +2306,18 @@ abstract class AppLocalizations {
   /// **'开始回测'**
   String get themePreviewStartBacktest;
 
+  /// No description provided for @aiConfirmStrategy.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认策略'**
+  String get aiConfirmStrategy;
+
+  /// No description provided for @aiStartBacktestPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要我开始回测吗?'**
+  String get aiStartBacktestPrompt;
+
   /// No description provided for @themeToggleAutoFollowSystem.
   ///
   /// In zh, this message translates to:

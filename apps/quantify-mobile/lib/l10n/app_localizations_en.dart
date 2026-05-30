@@ -1186,6 +1186,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themePreviewStartBacktest => 'Start Backtest';
 
   @override
+  String get aiConfirmStrategy => 'Confirm Strategy';
+
+  @override
+  String get aiStartBacktestPrompt => 'Shall I start the backtest?';
+
+  @override
   String get themeToggleAutoFollowSystem => 'Auto Follow System';
 
   @override

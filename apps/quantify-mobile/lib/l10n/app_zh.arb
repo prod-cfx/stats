@@ -431,6 +431,8 @@
   "themePreviewTitle": "预览 · AI 策略助手",
   "themePreviewIdentified": "已识别为「趋势跟踪」策略",
   "themePreviewStartBacktest": "开始回测",
+  "aiConfirmStrategy": "确认策略",
+  "aiStartBacktestPrompt": "需要我开始回测吗?",
   "themeToggleAutoFollowSystem": "自动跟随系统",
   "themeToggleReduceMotion": "减少动画",
   "strategyHomeTitle": "策略广场",

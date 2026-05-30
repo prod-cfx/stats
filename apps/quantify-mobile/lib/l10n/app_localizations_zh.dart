@@ -1151,6 +1151,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themePreviewStartBacktest => '开始回测';
 
   @override
+  String get aiConfirmStrategy => '确认策略';
+
+  @override
+  String get aiStartBacktestPrompt => '需要我开始回测吗?';
+
+  @override
   String get themeToggleAutoFollowSystem => '自动跟随系统';
 
   @override

@@ -428,6 +428,8 @@
   "themePreviewTitle": "Preview · AI Strategy",
   "themePreviewIdentified": "Identified as \"Trend Following\" strategy",
   "themePreviewStartBacktest": "Start Backtest",
+  "aiConfirmStrategy": "Confirm Strategy",
+  "aiStartBacktestPrompt": "Shall I start the backtest?",
   "themeToggleAutoFollowSystem": "Auto Follow System",
   "themeToggleReduceMotion": "Reduce Motion",
   "strategyHomeTitle": "Strategy Plaza",

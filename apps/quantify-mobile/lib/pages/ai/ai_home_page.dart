@@ -619,6 +619,11 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 content: t.content,
                                 time: role == QzChatRole.system ? null : t.timestamp,
                                 params: t.kind == ChatTurnKind.params ? t.params : null,
+                                // 「确认策略」CTA（#1831）：confirm 屏（#1832）未就绪前
+                                // 先指向回测配置占位入口；最终接线由 #1832 完成。
+                                onConfirm: t.kind == ChatTurnKind.params
+                                    ? _openBacktestSheet
+                                    : null,
                               );
                             }
                             if (i < messages.length + extraTyping) {
