@@ -68,6 +68,13 @@ class UnimplementedWhaleFeedRepository implements WhaleFeedRepository {
   Stream<WhaleEvent> watchFeed() => _todo('WhaleFeedRepository');
 }
 
+class UnimplementedWhaleLeaderboardRepository
+    implements WhaleLeaderboardRepository {
+  @override
+  Future<List<WhaleLeaderEntry>> getLeaderboard() =>
+      _todo('WhaleLeaderboardRepository');
+}
+
 class UnimplementedWhaleProfileRepository implements WhaleProfileRepository {
   @override
   Future<WhaleProfile> getProfile(String address) =>

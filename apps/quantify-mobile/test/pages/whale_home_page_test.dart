@@ -89,14 +89,17 @@ void main() {
     expect(find.text('净增持'), findsOneWidget);
   });
 
-  testWidgets('切到「发现」tab → 聪明钱榜 section 出现',
+  testWidgets('切到「发现」tab → WhaleDiscoverNew（轮播+排序条+列表卡）出现',
       (WidgetTester tester) async {
+    // issue #1789：发现 tab 重构为 top3 轮播 + 排序条 + 巨鲸列表卡。
     await _pump(tester);
     await tester.tap(find.text('发现'));
     await tester.pumpAndSettle();
-    expect(find.text('聪明钱榜'), findsOneWidget);
-    expect(find.text('趋势资产'), findsOneWidget);
-    expect(find.text('新晋巨鲸'), findsOneWidget);
+    // 排序条三档药丸。
+    expect(find.text('总值'), findsOneWidget);
+    expect(find.text('盈亏'), findsOneWidget);
+    // 列表卡 AI 标签。
+    expect(find.text('金库管家'), findsWidgets);
   });
 
   testWidgets('切到「持仓」tab → 交易所余额 section 出现',

@@ -1368,6 +1368,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleLoadError => '加载失败';
 
   @override
+  String get whaleDiscoverSubtitle => 'AI 精选聪明钱排行榜';
+
+  @override
+  String get whaleSortLabel => '排序';
+
+  @override
+  String get whaleSortWinRate => '胜率';
+
+  @override
+  String get whaleSortAum => '总值';
+
+  @override
+  String get whaleSortPnl => '盈亏';
+
+  @override
+  String get whaleLeaderPnlLabel => '已实现盈亏';
+
+  @override
+  String get whaleLeaderPositionsLabel => '持仓';
+
+  @override
+  String get whaleLeaderWinRateLabel => '胜率';
+
+  @override
+  String get whaleLeaderAiTagsLabel => 'AI 标签';
+
+  @override
+  String get whaleLeaderTagsEmpty => '暂无';
+
+  @override
   String get whaleFeedEmpty => '暂无符合条件的巨鲸事件';
 
   @override

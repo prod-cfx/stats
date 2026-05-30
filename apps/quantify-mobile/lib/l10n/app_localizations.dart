@@ -2720,6 +2720,66 @@ abstract class AppLocalizations {
   /// **'加载失败'**
   String get whaleLoadError;
 
+  /// No description provided for @whaleDiscoverSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 精选聪明钱排行榜'**
+  String get whaleDiscoverSubtitle;
+
+  /// No description provided for @whaleSortLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序'**
+  String get whaleSortLabel;
+
+  /// No description provided for @whaleSortWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get whaleSortWinRate;
+
+  /// No description provided for @whaleSortAum.
+  ///
+  /// In zh, this message translates to:
+  /// **'总值'**
+  String get whaleSortAum;
+
+  /// No description provided for @whaleSortPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏'**
+  String get whaleSortPnl;
+
+  /// No description provided for @whaleLeaderPnlLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已实现盈亏'**
+  String get whaleLeaderPnlLabel;
+
+  /// No description provided for @whaleLeaderPositionsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get whaleLeaderPositionsLabel;
+
+  /// No description provided for @whaleLeaderWinRateLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get whaleLeaderWinRateLabel;
+
+  /// No description provided for @whaleLeaderAiTagsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 标签'**
+  String get whaleLeaderAiTagsLabel;
+
+  /// No description provided for @whaleLeaderTagsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无'**
+  String get whaleLeaderTagsEmpty;
+
   /// No description provided for @whaleFeedEmpty.
   ///
   /// In zh, this message translates to:

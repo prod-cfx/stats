@@ -1405,6 +1405,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleLoadError => 'Load failed';
 
   @override
+  String get whaleDiscoverSubtitle => 'AI-curated smart-money leaderboard';
+
+  @override
+  String get whaleSortLabel => 'Sort';
+
+  @override
+  String get whaleSortWinRate => 'Win rate';
+
+  @override
+  String get whaleSortAum => 'Total value';
+
+  @override
+  String get whaleSortPnl => 'PnL';
+
+  @override
+  String get whaleLeaderPnlLabel => 'Realized PnL';
+
+  @override
+  String get whaleLeaderPositionsLabel => 'Positions';
+
+  @override
+  String get whaleLeaderWinRateLabel => 'Win rate';
+
+  @override
+  String get whaleLeaderAiTagsLabel => 'AI tags';
+
+  @override
+  String get whaleLeaderTagsEmpty => 'None';
+
+  @override
   String get whaleFeedEmpty => 'No whale events matching criteria';
 
   @override

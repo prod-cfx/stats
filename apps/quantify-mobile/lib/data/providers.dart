@@ -20,9 +20,11 @@ import 'mock/mock_orderbook_repository.dart';
 import 'mock/mock_strategy_repository.dart';
 import 'mock/mock_ticker_repository.dart';
 import 'mock/mock_whale_feed_repository.dart';
+import 'mock/mock_whale_leaderboard_repository.dart';
 import 'mock/mock_whale_profile_repository.dart';
 import 'mock/mock_whale_watch_repository.dart';
 import 'mock/unimplemented_repositories.dart';
+import 'models/whale_leader_models.dart';
 import 'models/whale_profile_models.dart';
 import 'repositories/repositories.dart';
 
@@ -98,6 +100,20 @@ final FutureProviderFamily<WhaleProfile, String> whaleProfileProvider =
       String address,
     ) async {
       return ref.watch(whaleProfileRepositoryProvider).getProfile(address);
+    });
+
+/// 巨鲸「发现」tab 排行榜 repository（#1789）。mock 驱动；真实读路径依赖 #1682。
+final Provider<WhaleLeaderboardRepository> whaleLeaderboardRepositoryProvider =
+    Provider<WhaleLeaderboardRepository>((Ref ref) {
+      return ref.watch(useMockProvider)
+          ? MockWhaleLeaderboardRepository()
+          : UnimplementedWhaleLeaderboardRepository();
+    });
+
+/// 巨鲸排行榜列表（#1789）。发现 tab watch；排序在 tab 本地态完成。
+final FutureProvider<List<WhaleLeaderEntry>> whaleLeaderboardProvider =
+    FutureProvider<List<WhaleLeaderEntry>>((Ref ref) async {
+      return ref.watch(whaleLeaderboardRepositoryProvider).getLeaderboard();
     });
 
 /// 巨鲸搜索与地址监控（#1754）。mock 驱动；真实读写依赖 #1682/#1683。
