@@ -1235,6 +1235,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyHomeFavEmptyCta => 'Browse the plaza';
 
   @override
+  String get strategySearchButton => 'Search';
+
+  @override
+  String get strategySearchTrendingLabel => 'Trending';
+
+  @override
+  String get strategySearchHistoryLabel => 'Recent searches';
+
+  @override
+  String get strategySearchClearHistory => 'Clear search history';
+
+  @override
+  String get strategySearchGuessLabel => 'You may follow';
+
+  @override
+  String get strategySearchTagSection => 'Tags';
+
+  @override
+  String get strategySearchAuthorSection => 'Authors';
+
+  @override
+  String get strategySearchStrategySection => 'Strategies';
+
+  @override
+  String strategySearchTagChip(Object tag) {
+    return '$tag strategies';
+  }
+
+  @override
+  String strategySearchAuthorCount(int count) {
+    return '$count strategies';
+  }
+
+  @override
+  String strategySearchNoResults(Object query) {
+    return 'No results for \"$query\"';
+  }
+
+  @override
   String get strategyCategoryTrend => 'Trend';
 
   @override

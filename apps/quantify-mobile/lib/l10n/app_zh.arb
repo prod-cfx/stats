@@ -450,6 +450,26 @@
   "strategyHomeFavEmptyTitle": "还没有收藏的策略",
   "strategyHomeFavEmptyHint": "点击策略卡右上角的 ☆ 星标，把感兴趣的策略收藏到这里。",
   "strategyHomeFavEmptyCta": "去策略广场看看",
+  "strategySearchButton": "搜索",
+  "strategySearchTrendingLabel": "热门搜索",
+  "strategySearchHistoryLabel": "搜索历史",
+  "strategySearchClearHistory": "清空搜索历史",
+  "strategySearchGuessLabel": "猜你想跟",
+  "strategySearchTagSection": "标签",
+  "strategySearchAuthorSection": "作者",
+  "strategySearchStrategySection": "策略",
+  "strategySearchTagChip": "{tag} 策略",
+  "@strategySearchTagChip": {
+    "placeholders": { "tag": {} }
+  },
+  "strategySearchAuthorCount": "{count} 个策略",
+  "@strategySearchAuthorCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "strategySearchNoResults": "未找到「{query}」相关结果",
+  "@strategySearchNoResults": {
+    "placeholders": { "query": {} }
+  },
   "strategyCategoryTrend": "趋势",
   "strategyCategoryGrid": "网格",
   "strategyCategoryArbitrage": "套利",

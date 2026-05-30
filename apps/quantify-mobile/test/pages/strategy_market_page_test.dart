@@ -79,6 +79,22 @@ Future<void> _pump(
   await tester.pump();
 }
 
+/// 经搜索 overlay 提交一个自由文本查询，回到广场后查询已应用（#1824）。
+///
+/// 流程：tap 顶栏搜索按钮 → overlay 输入框 enterText → 键盘 search 提交 →
+/// overlay pop + `onApplyQuery` 回调 → 广场 `_reload`。
+Future<void> _applySearch(WidgetTester tester, String term) async {
+  await tester.tap(find.byKey(const Key('strategy-search-btn')));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('strategy-search-input')), term);
+  await tester.pump();
+  await tester.testTextInput.receiveAction(TextInputAction.search);
+  await tester.pumpAndSettle();
+  // 广场重新拉取（mock 200ms）
+  await tester.pump(const Duration(milliseconds: 250));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('smoke: 真实 buildRouter() 能解析 /strategy/:id 到 StrategyDetailPage',
       (WidgetTester tester) async {
@@ -133,17 +149,25 @@ void main() {
     expect(find.byType(FeaturedHeroCard), findsOneWidget);
   });
 
-  testWidgets('搜索有关键词时：hero 隐藏 (#1593)',
+  testWidgets('搜索有关键词时：hero 隐藏 (#1593 / #1824)',
       (WidgetTester tester) async {
     await _pump(tester);
     // 先确认默认渲染 hero
     expect(find.byKey(const Key('strategy-featured-hero')), findsOneWidget);
-    // 输入关键词后 hero 应消失
-    await tester.enterText(find.byType(TextField), 'Alpha');
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
+    // 经搜索 overlay 提交关键词后 hero 应消失
+    await _applySearch(tester, 'Alpha');
     expect(find.byKey(const Key('strategy-featured-hero')), findsNothing);
     expect(find.byType(FeaturedHeroCard), findsNothing);
+  });
+
+  testWidgets('顶栏搜索按钮：应用 query 后呈激活态（红点）(#1824)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    // 初始无 query：无红点 badge
+    expect(find.byKey(const Key('strategy-search-btn-dot')), findsNothing);
+    await _applySearch(tester, 'Alpha');
+    // 应用 query 后激活态红点出现
+    expect(find.byKey(const Key('strategy-search-btn-dot')), findsOneWidget);
   });
 
   testWidgets('分类切到 trend：hero 隐藏 (#1593 / #1594)',
@@ -177,10 +201,9 @@ void main() {
     // 标题 + 副标题
     expect(find.text('策略广场'), findsOneWidget);
     expect(find.text('精选策略 · 一键载入对话'), findsOneWidget);
-    // 右上筛选按钮
+    // 右上搜索 + 筛选按钮
+    expect(find.byKey(const Key('strategy-search-btn')), findsOneWidget);
     expect(find.byKey(const Key('strategy-filter-btn')), findsOneWidget);
-    // 搜索占位
-    expect(find.text('搜索策略 · 币对 · 作者'), findsOneWidget);
     // 7 个分类 chip key
     expect(find.byKey(const Key('strategy-chip-all')), findsOneWidget);
     expect(find.byKey(const Key('strategy-chip-trend')), findsOneWidget);
@@ -310,12 +333,11 @@ void main() {
     expect(find.text(trendFirst.name), findsOneWidget);
   });
 
-  testWidgets('搜索：输入作者名子串过滤生效', (WidgetTester tester) async {
+  testWidgets('搜索：经 overlay 提交作者名子串过滤生效 (#1824)',
+      (WidgetTester tester) async {
     await _pump(tester);
     // "Alpha Hunter" 在 fixture 中存在
-    await tester.enterText(find.byType(TextField), 'Alpha');
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
+    await _applySearch(tester, 'Alpha');
     // 至少一条 Alpha Hunter 出品的卡片可见
     expect(find.text('Alpha Hunter'), findsWidgets);
     // 不含 Alpha 的某条应被过滤（"BTC 网格搬砖" 作者是 "量化老王"）

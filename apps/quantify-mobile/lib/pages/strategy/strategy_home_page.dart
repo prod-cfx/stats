@@ -12,7 +12,6 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_empty_state.dart';
-import '../../widgets/qz_search_bar.dart';
 import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
@@ -20,6 +19,7 @@ import 'widgets/category_chip_bar.dart';
 import 'widgets/featured_hero_card.dart';
 import 'widgets/load_conversation_toast.dart';
 import 'widgets/strategy_card_tile.dart';
+import 'widgets/strategy_search_overlay.dart';
 import 'widgets/strategy_sort_sheet.dart';
 
 /// 策略广场（原型 m-screens-2 / issue #1565）。
@@ -37,7 +37,6 @@ class StrategyHomePage extends ConsumerStatefulWidget {
 class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   static const int _kPageSize = 10;
 
-  final TextEditingController _queryCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
   StrategyCategory _category = StrategyCategory.all;
@@ -72,7 +71,6 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
-    _queryCtrl.dispose();
     _toastTimer?.cancel();
     _navTimer?.cancel();
     super.dispose();
@@ -258,6 +256,21 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     }
   }
 
+  /// 打开全屏搜索 overlay（#1824）。overlay 自身负责 pop + 回调：
+  /// 选策略 → push 详情；选标签 → 切分类（退出收藏视图）。
+  Future<void> _openSearchOverlay() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (BuildContext _) => StrategySearchOverlay(
+          onOpenStrat: (String id) => context.push('/strategy/$id'),
+          onPickTag: _onCategoryChanged,
+          onApplyQuery: _onQueryChanged,
+        ),
+      ),
+    );
+  }
+
   /// featured hero 仅在「全部 + 无搜索 + 非收藏视图」时显示（设计稿 line 646）。
   bool get _showFeatured =>
       _featured != null &&
@@ -298,6 +311,11 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         title: l10n.strategyHomeTitle,
         subtitle: l10n.strategyHomeSubtitle,
         actions: <Widget>[
+          _SearchButton(
+            active: _query.isNotEmpty,
+            tooltip: l10n.strategySearchButton,
+            onPressed: _openSearchOverlay,
+          ),
           IconButton(
             key: const Key('strategy-filter-btn'),
             tooltip: l10n.strategyHomeFilterButton,
@@ -310,15 +328,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         children: <Widget>[
           Column(
             children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
-            child: QzSearchBar(
-              controller: _queryCtrl,
-              hint: l10n.strategyHomeSearchHint,
-              onChanged: _onQueryChanged,
-            ),
-          ),
+          const SizedBox(height: QzSpacing.xs),
           CategoryChipBar(
             selected: _category,
             favOnly: _favOnly,
@@ -416,6 +426,63 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         ],
       ),
       backgroundColor: c.bg,
+    );
+  }
+}
+
+/// 顶栏搜索按钮（设计稿 m-screens-2 line 566-577）。
+///
+/// 有 query 时呈激活态：accentSoft 圆底 + 右上红点 badge；否则普通图标按钮。
+class _SearchButton extends StatelessWidget {
+  const _SearchButton({
+    required this.active,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final bool active;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final Widget icon = Icon(
+      Icons.search,
+      color: active ? c.accent : null,
+    );
+    return IconButton(
+      key: const Key('strategy-search-btn'),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: active
+          ? Stack(
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: icon,
+                ),
+                Positioned(
+                  right: -1,
+                  top: -1,
+                  child: Container(
+                    key: const Key('strategy-search-btn-dot'),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: c.statusDanger,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : icon,
     );
   }
 }

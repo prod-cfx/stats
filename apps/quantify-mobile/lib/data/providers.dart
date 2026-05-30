@@ -7,6 +7,7 @@ import 'mock/fixtures/live_strategies.dart' show mockLivePositions;
 import 'models/live_strategy_models.dart';
 import 'storage/market_favorites_persistence.dart';
 import 'storage/strategy_favorites_persistence.dart';
+import 'storage/strategy_search_history_persistence.dart';
 import 'storage/strategy_subscription_persistence.dart';
 import 'mock/mock_account_repository.dart';
 import 'mock/mock_ai_chat_repository.dart';
@@ -275,6 +276,62 @@ final NotifierProvider<StrategyFavoritesNotifier, Set<String>>
 strategyFavoritesProvider =
     NotifierProvider<StrategyFavoritesNotifier, Set<String>>(
       StrategyFavoritesNotifier.new,
+    );
+
+final Provider<StrategySearchHistoryPersistence>
+strategySearchHistoryPersistenceProvider =
+    Provider<StrategySearchHistoryPersistence>((Ref ref) {
+      return StrategySearchHistoryPersistence(
+        ref.watch(sharedPreferencesProvider),
+      );
+    });
+
+/// 策略广场搜索历史（最近在前，去重置顶，cap=[StrategySearchHistoryPersistence.kMax]）。
+///
+/// 与 [StrategyFavoritesNotifier] 同乐观写盘模式：内存先更新，写盘失败回滚。
+class StrategySearchHistoryNotifier extends Notifier<List<String>> {
+  @override
+  List<String> build() {
+    return ref.watch(strategySearchHistoryPersistenceProvider).read();
+  }
+
+  /// 记录一次搜索词：去重后置顶，截断到上限。空白串忽略。
+  Future<void> push(String term) async {
+    final String t = term.trim();
+    if (t.isEmpty) return;
+    final List<String> previous = state;
+    final List<String> next = <String>[
+      t,
+      ...previous.where((String x) => x != t),
+    ].take(StrategySearchHistoryPersistence.kMax).toList(growable: false);
+    state = next;
+    try {
+      await ref.read(strategySearchHistoryPersistenceProvider).write(next);
+    } catch (_) {
+      state = previous;
+      rethrow;
+    }
+  }
+
+  Future<void> clear() async {
+    final List<String> previous = state;
+    if (previous.isEmpty) return;
+    state = const <String>[];
+    try {
+      await ref
+          .read(strategySearchHistoryPersistenceProvider)
+          .write(const <String>[]);
+    } catch (_) {
+      state = previous;
+      rethrow;
+    }
+  }
+}
+
+final NotifierProvider<StrategySearchHistoryNotifier, List<String>>
+strategySearchHistoryProvider =
+    NotifierProvider<StrategySearchHistoryNotifier, List<String>>(
+      StrategySearchHistoryNotifier.new,
     );
 
 final Provider<MarketFavoritesPersistence> marketFavoritesPersistenceProvider =

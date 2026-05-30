@@ -1198,6 +1198,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyHomeFavEmptyCta => '去策略广场看看';
 
   @override
+  String get strategySearchButton => '搜索';
+
+  @override
+  String get strategySearchTrendingLabel => '热门搜索';
+
+  @override
+  String get strategySearchHistoryLabel => '搜索历史';
+
+  @override
+  String get strategySearchClearHistory => '清空搜索历史';
+
+  @override
+  String get strategySearchGuessLabel => '猜你想跟';
+
+  @override
+  String get strategySearchTagSection => '标签';
+
+  @override
+  String get strategySearchAuthorSection => '作者';
+
+  @override
+  String get strategySearchStrategySection => '策略';
+
+  @override
+  String strategySearchTagChip(Object tag) {
+    return '$tag 策略';
+  }
+
+  @override
+  String strategySearchAuthorCount(int count) {
+    return '$count 个策略';
+  }
+
+  @override
+  String strategySearchNoResults(Object query) {
+    return '未找到「$query」相关结果';
+  }
+
+  @override
   String get strategyCategoryTrend => '趋势';
 
   @override

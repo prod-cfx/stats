@@ -2396,6 +2396,72 @@ abstract class AppLocalizations {
   /// **'去策略广场看看'**
   String get strategyHomeFavEmptyCta;
 
+  /// No description provided for @strategySearchButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get strategySearchButton;
+
+  /// No description provided for @strategySearchTrendingLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门搜索'**
+  String get strategySearchTrendingLabel;
+
+  /// No description provided for @strategySearchHistoryLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索历史'**
+  String get strategySearchHistoryLabel;
+
+  /// No description provided for @strategySearchClearHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空搜索历史'**
+  String get strategySearchClearHistory;
+
+  /// No description provided for @strategySearchGuessLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'猜你想跟'**
+  String get strategySearchGuessLabel;
+
+  /// No description provided for @strategySearchTagSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签'**
+  String get strategySearchTagSection;
+
+  /// No description provided for @strategySearchAuthorSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'作者'**
+  String get strategySearchAuthorSection;
+
+  /// No description provided for @strategySearchStrategySection.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略'**
+  String get strategySearchStrategySection;
+
+  /// No description provided for @strategySearchTagChip.
+  ///
+  /// In zh, this message translates to:
+  /// **'{tag} 策略'**
+  String strategySearchTagChip(Object tag);
+
+  /// No description provided for @strategySearchAuthorCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个策略'**
+  String strategySearchAuthorCount(int count);
+
+  /// No description provided for @strategySearchNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到「{query}」相关结果'**
+  String strategySearchNoResults(Object query);
+
   /// No description provided for @strategyCategoryTrend.
   ///
   /// In zh, this message translates to:
