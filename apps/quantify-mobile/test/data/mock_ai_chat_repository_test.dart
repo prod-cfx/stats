@@ -63,5 +63,54 @@ void main() {
       expect(s, isNotNull);
       expect(s!.id, 'bt-mock-1');
     });
+
+    test('markDeployed 回写 deployedTo 为实例 ID', () async {
+      final MockAiChatRepository repo = MockAiChatRepository();
+      final List<AiSession> list = await repo.listSessions();
+      final String id = list.first.id;
+      expect(list.first.deployedTo, isNull);
+      final AiSession? updated = await repo.markDeployed(id, 'inst-42');
+      expect(updated, isNotNull);
+      expect(updated!.deployedTo, 'inst-42');
+      // 列表中的会话同步回写。
+      final List<AiSession> after = await repo.listSessions();
+      expect(
+        after.firstWhere((AiSession s) => s.id == id).deployedTo,
+        'inst-42',
+      );
+    });
+
+    test('markDeployed 对未知 sessionId 返回 null', () async {
+      final MockAiChatRepository repo = MockAiChatRepository();
+      final AiSession? updated = await repo.markDeployed('nope', 'inst-1');
+      expect(updated, isNull);
+    });
+  });
+
+  group('AiSession 模型', () {
+    AiSession base() => AiSession(
+          id: 's',
+          title: 't',
+          category: 'c',
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+          messages: const <ChatTurn>[],
+        );
+
+    test('deployedTo 默认 null；copyWith 可设置', () {
+      final AiSession s = base();
+      expect(s.deployedTo, isNull);
+      expect(s.copyWith(deployedTo: 'inst-9').deployedTo, 'inst-9');
+    });
+
+    test('copyWith 未传 deployedTo 时保留原值', () {
+      final AiSession s = base().copyWith(deployedTo: 'inst-9');
+      expect(s.copyWith(title: 'new').deployedTo, 'inst-9');
+    });
+  });
+
+  group('ChatTurnKind', () {
+    test('含 deployed 值', () {
+      expect(ChatTurnKind.values, contains(ChatTurnKind.deployed));
+    });
   });
 }

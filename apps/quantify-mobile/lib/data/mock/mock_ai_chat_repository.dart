@@ -99,4 +99,17 @@ class MockAiChatRepository implements AiChatRepository {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     return mockLatestBacktestSummary;
   }
+
+  @override
+  Future<AiSession?> markDeployed(String sessionId, String instanceId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final int idx = _sessions.indexWhere((AiSession s) => s.id == sessionId);
+    if (idx < 0) return null;
+    final AiSession updated = _sessions[idx].copyWith(
+      deployedTo: instanceId,
+      updatedAt: DateTime.now(),
+    );
+    _sessions[idx] = updated;
+    return updated;
+  }
 }

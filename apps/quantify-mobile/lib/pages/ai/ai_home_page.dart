@@ -328,11 +328,16 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     if (id == null) return;
     final AiSession? cur = _sessions[id];
     if (cur == null) return;
+    // 回写会话 `deployedTo`（实例 ID），供参数卡锁定态 / 部署终态富气泡读取。
+    final AiChatRepository repo = ref.read(aiChatRepositoryProvider);
+    await repo.markDeployed(id, result.instanceId);
+    if (!mounted) return;
     final String msg =
         '${l10n.deploySystemMessagePrefix}${result.exchange.toUpperCase()}'
         '${l10n.deploySystemMessageInstanceInfix}${result.instanceId}';
     setState(() {
       _sessions[id] = cur.copyWith(
+        deployedTo: result.instanceId,
         messages: <ChatTurn>[
           ...cur.messages,
           ChatTurn(
@@ -340,6 +345,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
             role: 'system',
             content: msg,
             timestamp: result.deployedAt,
+            kind: ChatTurnKind.deployed,
           ),
         ],
       );

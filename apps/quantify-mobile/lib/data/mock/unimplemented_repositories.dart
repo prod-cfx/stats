@@ -160,6 +160,9 @@ class UnimplementedAiChatRepository implements AiChatRepository {
   @override
   Future<BacktestSummary?> latestBacktest(String sessionId) =>
       _todo('AiChatRepository');
+  @override
+  Future<AiSession?> markDeployed(String sessionId, String instanceId) =>
+      _todo('AiChatRepository');
 }
 
 class UnimplementedBacktestRepository implements BacktestRepository {

@@ -6,7 +6,8 @@ library;
 /// - `text` ：普通文本气泡（默认）
 /// - `params`：策略参数代码块（如 `fast_ma=5 / slow_ma=20`）
 /// - `result`：嵌入回测结果卡片（占位，UI 侧组合 `BacktestSummary` 渲染）
-enum ChatTurnKind { text, params, result }
+/// - `deployed`：部署终态富气泡（部署成功后写入；UI 侧渲染实例信息）
+enum ChatTurnKind { text, params, result, deployed }
 
 class ChatTurn {
   final String id;
@@ -56,6 +57,9 @@ class BacktestSummary {
 /// - `cagrLabel`：抽屉右上角的回测年化标签（"+31.6%"）；null 表示未跑回测
 /// - `updatedAt`：用于排序与抽屉副本"刚刚 / 昨天 / 3 天前"
 /// - `messages`：会话内消息序列
+/// - `deployedTo`：已部署到的实例 ID；null 表示未部署。参数卡锁定态与部署终态
+///   富气泡均依赖此字段判断「是否已部署」（对齐原型 m-screens-1.jsx
+///   `locked = !!current.deployedTo`）
 class AiSession {
   final String id;
   final String title;
@@ -65,6 +69,7 @@ class AiSession {
   final String? cagrLabel;
   final DateTime updatedAt;
   final List<ChatTurn> messages;
+  final String? deployedTo;
 
   const AiSession({
     required this.id,
@@ -75,6 +80,7 @@ class AiSession {
     this.pair,
     this.timeframe,
     this.cagrLabel,
+    this.deployedTo,
   });
 
   AiSession copyWith({
@@ -85,6 +91,7 @@ class AiSession {
     String? cagrLabel,
     DateTime? updatedAt,
     List<ChatTurn>? messages,
+    String? deployedTo,
   }) {
     return AiSession(
       id: id,
@@ -95,6 +102,7 @@ class AiSession {
       cagrLabel: cagrLabel ?? this.cagrLabel,
       updatedAt: updatedAt ?? this.updatedAt,
       messages: messages ?? this.messages,
+      deployedTo: deployedTo ?? this.deployedTo,
     );
   }
 }
