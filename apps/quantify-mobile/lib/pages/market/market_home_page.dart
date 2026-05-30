@@ -20,12 +20,15 @@ import 'widgets/ticker_row.dart'
 
 enum _MarketTab { watchlist, spot, perp, gainers, losers }
 
-/// 行情列表首页（issue #1561）。
+/// 行情列表 standalone 页（issue #1561）。
 ///
 /// QzTopBar + 通知铃铛（复用 #1560 的 WhaleNotificationSheet 数据/弹层），
 /// 通知铃铛为 36x36 圆形描边样式（issue #1597 对齐设计稿 ScreenTickers）。
-/// tab 行右侧搜索 IconButton 可展开行内搜索框（push 布局，不遮挡列表）。
-/// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜，默认选中「自选」（#1600）。
+///
+/// issue #1851：列表/搜索/二级 tab 主体抽到 [MarketHomeBody]，供「数据」hub
+/// （`DataHubPage`）内嵌复用；本 wrapper 保留自带 QzTopBar + 铃铛，供既有
+/// standalone 测试使用（router 已全切 `DataHubPage`，本 wrapper 当前无路由入口），
+/// hub 内的通知铃铛由 hub header 统一承担。
 class MarketHomePage extends ConsumerStatefulWidget {
   const MarketHomePage({super.key});
 
@@ -34,6 +37,64 @@ class MarketHomePage extends ConsumerStatefulWidget {
 }
 
 class _MarketHomePageState extends ConsumerState<MarketHomePage> {
+  late List<WhaleNotification> _notifications;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifications = List<WhaleNotification>.of(mockWhaleNotifications);
+  }
+
+  int get _unreadCount =>
+      _notifications.where((WhaleNotification n) => n.unread).length;
+
+  Future<void> _openNotifications() async {
+    final WhaleNotificationSheetResult? result =
+        await WhaleNotificationSheet.show(
+      context,
+      notifications: _notifications,
+    );
+    if (!mounted || result == null) return;
+    setState(() => _notifications = result.notifications);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return Scaffold(
+      backgroundColor: c.bg,
+      appBar: QzTopBar(
+        title: l10n.marketHomeTitle,
+        actions: <Widget>[
+          QzNotificationBell(
+            iconKey: const Key('market-notification-bell'),
+            unread: _unreadCount,
+            onTap: _openNotifications,
+            tooltip: l10n.marketHomeNotificationTooltip,
+            circular: true,
+          ),
+          const SizedBox(width: QzSpacing.md),
+        ],
+      ),
+      body: const MarketHomeBody(),
+    );
+  }
+}
+
+/// 行情列表主体（搜索 + 5 个二级 tab + 列表），无 Scaffold / 顶栏 / 铃铛。
+///
+/// issue #1851：供 [MarketHomePage] standalone wrapper 与「数据」hub
+/// （`DataHubPage`）共用；hub 内不重复渲染铃铛（由 hub header 承担）。
+/// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜，默认选中「自选」（#1600）。
+class MarketHomeBody extends ConsumerStatefulWidget {
+  const MarketHomeBody({super.key});
+
+  @override
+  ConsumerState<MarketHomeBody> createState() => _MarketHomeBodyState();
+}
+
+class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
   // 默认选中「自选」，对齐设计稿 ScreenTickers（issue #1600）。
   _MarketTab _tab = _MarketTab.watchlist;
   List<Ticker> _tickers = <Ticker>[];
@@ -43,12 +104,9 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
   bool _searchOpen = false;
   final TextEditingController _searchCtrl = TextEditingController();
 
-  late List<WhaleNotification> _notifications;
-
   @override
   void initState() {
     super.initState();
-    _notifications = List<WhaleNotification>.of(mockWhaleNotifications);
     _searchCtrl.addListener(_onSearchChanged);
     _load();
   }
@@ -83,19 +141,6 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
         _loading = false;
       });
     }
-  }
-
-  int get _unreadCount =>
-      _notifications.where((WhaleNotification n) => n.unread).length;
-
-  Future<void> _openNotifications() async {
-    final WhaleNotificationSheetResult? result =
-        await WhaleNotificationSheet.show(
-      context,
-      notifications: _notifications,
-    );
-    if (!mounted || result == null) return;
-    setState(() => _notifications = result.notifications);
   }
 
   void _toggleSearch() {
@@ -167,164 +212,146 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
     final Set<String> favorites = ref.watch(marketFavoritesProvider);
     final List<Ticker> visible = _visibleTickers(favorites);
 
-    return Scaffold(
-      backgroundColor: c.bg,
-      appBar: QzTopBar(
-        title: l10n.marketHomeTitle,
-        actions: <Widget>[
-          QzNotificationBell(
-            iconKey: const Key('market-notification-bell'),
-            unread: _unreadCount,
-            onTap: _openNotifications,
-            tooltip: l10n.marketHomeNotificationTooltip,
-            circular: true,
-          ),
-          const SizedBox(width: QzSpacing.md),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          if (_searchOpen)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg,
-                QzSpacing.sm,
-                QzSpacing.lg,
-                QzSpacing.sm,
+    return Column(
+      children: <Widget>[
+        if (_searchOpen)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              QzSpacing.lg,
+              QzSpacing.sm,
+              QzSpacing.lg,
+              QzSpacing.sm,
+            ),
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+              decoration: BoxDecoration(
+                color: c.bgElev,
+                border: Border.all(color: c.border),
+                borderRadius: BorderRadius.circular(QzRadii.input),
               ),
-              child: Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
-                decoration: BoxDecoration(
-                  color: c.bgElev,
-                  border: Border.all(color: c.border),
-                  borderRadius: BorderRadius.circular(QzRadii.input),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.search, size: 16, color: c.textDim),
-                    const SizedBox(width: QzSpacing.sm),
-                    Expanded(
-                      child: Semantics(
-                        label: l10n.marketHomeSearchPlaceholder,
-                        textField: true,
-                        child: TextField(
-                          key: const Key('market-search-field'),
-                          controller: _searchCtrl,
-                          autofocus: true,
-                          textCapitalization: TextCapitalization.characters,
-                          style: TextStyle(color: c.text, fontSize: 13),
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            isCollapsed: true,
-                            hintText: l10n.marketHomeSearchPlaceholder,
-                            hintStyle:
-                                TextStyle(color: c.textDim, fontSize: 13),
-                          ),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.search, size: 16, color: c.textDim),
+                  const SizedBox(width: QzSpacing.sm),
+                  Expanded(
+                    child: Semantics(
+                      label: l10n.marketHomeSearchPlaceholder,
+                      textField: true,
+                      child: TextField(
+                        key: const Key('market-search-field'),
+                        controller: _searchCtrl,
+                        autofocus: true,
+                        textCapitalization: TextCapitalization.characters,
+                        style: TextStyle(color: c.text, fontSize: 13),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          isCollapsed: true,
+                          hintText: l10n.marketHomeSearchPlaceholder,
+                          hintStyle:
+                              TextStyle(color: c.textDim, fontSize: 13),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          Container(
-            decoration: BoxDecoration(
-              color: c.bgElev,
-              border: Border(bottom: BorderSide(color: c.borderSoft)),
-            ),
-            padding:
-                const EdgeInsets.fromLTRB(QzSpacing.lg, 4, QzSpacing.sm, 0),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: <Widget>[
-                        for (final ({_MarketTab tab, String label}) item
-                            in tabs)
-                          _SubTab(
-                            key: Key('market-tab-${item.tab.name}'),
-                            label: item.label,
-                            selected: _tab == item.tab,
-                            onTap: () => setState(() => _tab = item.tab),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                IconButton(
-                  key: const Key('market-search-toggle'),
-                  onPressed: _toggleSearch,
-                  iconSize: 18,
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(QzSpacing.sm),
-                  constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 30,
-                  ),
-                  icon: Icon(
-                    _searchOpen ? Icons.close : Icons.search,
-                    color: _searchOpen ? c.text : c.textMid,
-                  ),
-                  tooltip: _searchOpen
-                      ? l10n.marketHomeSearchClose
-                      : l10n.marketHomeSearchTooltip,
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Container(
-              color: c.bgElev,
-              child: Column(
-                children: <Widget>[
-                  if (!_loading && _error == null)
-                    _ColumnHeader(
-                      name: l10n.marketHomeColumnName,
-                      price: l10n.marketHomeColumnPrice,
-                      change: l10n.marketHomeColumnChange,
-                    ),
-                  Expanded(
-                    child: Builder(
-                      builder: (BuildContext context) {
-                        if (_loading) return const Center(child: QzSpinner());
-                        if (_error != null) {
-                          return QzEmptyState(title: l10n.marketHomeLoadError);
-                        }
-                        if (visible.isEmpty) {
-                          final String title = _searchQuery.isNotEmpty
-                              ? l10n.marketHomeSearchEmpty
-                              : (_tab == _MarketTab.watchlist
-                                  ? l10n.marketHomeWatchlistEmpty
-                                  : l10n.marketHomeEmpty);
-                          return QzEmptyState(title: title);
-                        }
-                        return ListView.separated(
-                          itemCount: visible.length,
-                          separatorBuilder:
-                              (BuildContext context, int index) =>
-                                  Divider(height: 1, color: c.borderSoft),
-                          itemBuilder: (BuildContext context, int index) {
-                            final Ticker ticker = visible[index];
-                            return TickerRow(
-                              key: Key('ticker-row-${ticker.symbol}'),
-                              ticker: ticker,
-                              onTap: () =>
-                                  context.push('/market/${ticker.symbol}'),
-                            );
-                          },
-                        );
-                      },
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        ],
-      ),
+        Container(
+          decoration: BoxDecoration(
+            color: c.bgElev,
+            border: Border(bottom: BorderSide(color: c.borderSoft)),
+          ),
+          padding:
+              const EdgeInsets.fromLTRB(QzSpacing.lg, 4, QzSpacing.sm, 0),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: <Widget>[
+                      for (final ({_MarketTab tab, String label}) item in tabs)
+                        _SubTab(
+                          key: Key('market-tab-${item.tab.name}'),
+                          label: item.label,
+                          selected: _tab == item.tab,
+                          onTap: () => setState(() => _tab = item.tab),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                key: const Key('market-search-toggle'),
+                onPressed: _toggleSearch,
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(QzSpacing.sm),
+                constraints: const BoxConstraints(
+                  minWidth: 30,
+                  minHeight: 30,
+                ),
+                icon: Icon(
+                  _searchOpen ? Icons.close : Icons.search,
+                  color: _searchOpen ? c.text : c.textMid,
+                ),
+                tooltip: _searchOpen
+                    ? l10n.marketHomeSearchClose
+                    : l10n.marketHomeSearchTooltip,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Container(
+            color: c.bgElev,
+            child: Column(
+              children: <Widget>[
+                if (!_loading && _error == null)
+                  _ColumnHeader(
+                    name: l10n.marketHomeColumnName,
+                    price: l10n.marketHomeColumnPrice,
+                    change: l10n.marketHomeColumnChange,
+                  ),
+                Expanded(
+                  child: Builder(
+                    builder: (BuildContext context) {
+                      if (_loading) return const Center(child: QzSpinner());
+                      if (_error != null) {
+                        return QzEmptyState(title: l10n.marketHomeLoadError);
+                      }
+                      if (visible.isEmpty) {
+                        final String title = _searchQuery.isNotEmpty
+                            ? l10n.marketHomeSearchEmpty
+                            : (_tab == _MarketTab.watchlist
+                                ? l10n.marketHomeWatchlistEmpty
+                                : l10n.marketHomeEmpty);
+                        return QzEmptyState(title: title);
+                      }
+                      return ListView.separated(
+                        itemCount: visible.length,
+                        separatorBuilder: (BuildContext context, int index) =>
+                            Divider(height: 1, color: c.borderSoft),
+                        itemBuilder: (BuildContext context, int index) {
+                          final Ticker ticker = visible[index];
+                          return TickerRow(
+                            key: Key('ticker-row-${ticker.symbol}'),
+                            ticker: ticker,
+                            onTap: () =>
+                                context.push('/market/${ticker.symbol}'),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -420,4 +447,3 @@ class _ColumnHeader extends StatelessWidget {
     );
   }
 }
-

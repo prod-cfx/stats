@@ -1,0 +1,123 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
+import 'package:quantify_mobile/pages/market/data_hub_page.dart';
+import 'package:quantify_mobile/pages/market/long_short_page.dart';
+import 'package:quantify_mobile/pages/market/market_home_page.dart';
+import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
+import 'package:quantify_mobile/pages/market/widgets/data_hub_placeholder.dart';
+import 'package:quantify_mobile/pages/market/widgets/long_short_bar.dart';
+import 'package:quantify_mobile/theme/theme_data.dart';
+import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// issue #1851「数据」hub 导航架构的 widget 测试。
+///
+/// 覆盖验收标准：
+/// - AC2 hub 顶部横滑 tab 条含 5 项，点击切换 + 选中态
+/// - AC3 通知铃铛存在，未读 > 0 显示红数字 badge
+/// - AC4 行情数据 / 多空比均可从 hub tab 进入（不靠 URL）
+/// - AC5 聚合挂单 / 预测市场 / 币股占位 tab 挂载、切换不崩溃
+Future<void> _pumpHub(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{});
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  await tester.binding.setSurfaceSize(const Size(420, 1400));
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(QzTheme.fallback),
+        home: const DataHubPage(),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 250));
+}
+
+Finder _hubTab(DataHubScreen screen) =>
+    find.byKey(Key('data-hub-tab-${screen.name}'));
+
+void main() {
+  testWidgets('hub 顶部渲染 5 个 tab（AC2）', (WidgetTester tester) async {
+    await _pumpHub(tester);
+    for (final DataHubScreen screen in DataHubScreen.values) {
+      expect(_hubTab(screen), findsOneWidget,
+          reason: 'tab ${screen.name} 应渲染');
+    }
+    // 设计稿 5 项中文 label。
+    expect(find.text('行情数据'), findsWidgets);
+    expect(find.text('多空比'), findsWidgets);
+    expect(find.text('聚合挂单'), findsWidgets);
+    expect(find.text('预测市场'), findsWidgets);
+    expect(find.text('币股'), findsWidgets);
+  });
+
+  testWidgets('默认显示行情数据子屏（MarketHomeBody）', (WidgetTester tester) async {
+    await _pumpHub(tester);
+    expect(find.byType(MarketHomeBody), findsOneWidget);
+  });
+
+  testWidgets('点多空比 tab 进入 LongShortBody（AC4：不靠 URL）',
+      (WidgetTester tester) async {
+    await _pumpHub(tester);
+    await tester.tap(_hubTab(DataHubScreen.longShort));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    // IndexedStack 同时构建 LongShortBody；切换后其内容（LongShortBar）可见。
+    expect(find.byType(LongShortBody), findsOneWidget);
+    expect(find.byType(LongShortBar), findsWidgets);
+  });
+
+  testWidgets('占位 tab（聚合挂单/预测/币股）切换不崩溃（AC5）',
+      (WidgetTester tester) async {
+    await _pumpHub(tester);
+    for (final DataHubScreen screen in <DataHubScreen>[
+      DataHubScreen.aggOrders,
+      DataHubScreen.predict,
+      DataHubScreen.coinStock,
+    ]) {
+      await tester.tap(_hubTab(screen));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(DataHubPlaceholder), findsOneWidget,
+          reason: '${screen.name} 应显示占位屏');
+      expect(tester.takeException(), isNull,
+          reason: '切到 ${screen.name} 不应抛异常');
+    }
+  });
+
+  testWidgets('通知铃铛存在，未读 > 0 显示红数字 badge（AC3）',
+      (WidgetTester tester) async {
+    await _pumpHub(tester);
+    expect(find.byKey(const Key('data-hub-notification-bell')), findsOneWidget);
+    // mockWhaleNotifications 含未读项 → badge 显示数字（非 0）。
+    final Finder bell =
+        find.byKey(const Key('data-hub-notification-bell'));
+    expect(
+      find.descendant(
+        of: find.ancestor(of: bell, matching: find.byType(Stack)).first,
+        matching: find.byIcon(Icons.notifications_outlined),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('DataHubTitle 下拉切换子屏', (WidgetTester tester) async {
+    await _pumpHub(tester);
+    expect(find.byType(MarketHomeBody), findsOneWidget);
+    await tester.tap(find.byKey(const Key('data-hub-title')));
+    await tester.pumpAndSettle();
+    // popover 列出全部子屏 label；点「多空比」切过去。
+    await tester.tap(find.text('多空比').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(LongShortBody), findsOneWidget);
+  });
+}

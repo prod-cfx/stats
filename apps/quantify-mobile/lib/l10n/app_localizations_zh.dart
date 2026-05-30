@@ -625,6 +625,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketHomeNotificationTooltip => '通知';
 
   @override
+  String get dataHubTabMarket => '行情数据';
+
+  @override
+  String get dataHubTabLongShort => '多空比';
+
+  @override
+  String get dataHubTabAggOrders => '聚合挂单';
+
+  @override
+  String get dataHubTabPredict => '预测市场';
+
+  @override
+  String get dataHubTabCoinStock => '币股';
+
+  @override
+  String get dataHubHintMarket => '自选 · 涨跌榜';
+
+  @override
+  String get dataHubHintLongShort => '永续合约 L/S';
+
+  @override
+  String get dataHubHintAggOrders => '跨所合并深度';
+
+  @override
+  String get dataHubHintPredict => '链上事件概率';
+
+  @override
+  String get dataHubHintCoinStock => '加密相关股票';
+
+  @override
+  String get dataHubNotificationTooltip => '通知';
+
+  @override
+  String get dataHubPlaceholderTitle => '即将上线';
+
+  @override
   String get marketHomeColumnName => '名称 / 24H量';
 
   @override
@@ -1880,7 +1916,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get klineLoadError => 'K 线加载失败';
 
   @override
-  String get tabMarket => '行情';
+  String get tabMarket => '数据';
 
   @override
   String get tabWhale => '巨鲸';

@@ -17,9 +17,9 @@ import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/pages/auth/login_page.dart';
+import 'package:quantify_mobile/pages/market/data_hub_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
-import 'package:quantify_mobile/pages/market/market_home_page.dart';
 import 'package:quantify_mobile/pages/live/live_strategies_page.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
@@ -87,7 +87,7 @@ void main() {
 
     await tester.tap(_tab('market'));
     await tester.pumpAndSettle();
-    expect(find.byType(MarketHomePage), findsOneWidget);
+    expect(find.byType(DataHubPage), findsOneWidget);
 
     await tester.tap(_tab('strategy'));
     await tester.pumpAndSettle();
@@ -118,7 +118,7 @@ void main() {
     ];
     final List<Type> expectedPages = <Type>[
       AiHomePage,
-      MarketHomePage,
+      DataHubPage,
       StrategyHomePage,
       WhaleHomePage,
       MeHomePage,
@@ -150,7 +150,7 @@ void main() {
     // Switch to market and back; input draft should survive.
     await tester.tap(_tab('market'));
     await tester.pumpAndSettle();
-    expect(find.byType(MarketHomePage), findsOneWidget);
+    expect(find.byType(DataHubPage), findsOneWidget);
 
     await tester.tap(_tab('ai'));
     await tester.pumpAndSettle();
@@ -177,7 +177,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(_tab('market')); // tap active tab
     await tester.pumpAndSettle();
-    expect(find.byType(MarketHomePage), findsOneWidget);
+    expect(find.byType(DataHubPage), findsOneWidget);
   });
 
   testWidgets('push /login covers the bottom tab bar', (

@@ -1292,6 +1292,78 @@ abstract class AppLocalizations {
   /// **'通知'**
   String get marketHomeNotificationTooltip;
 
+  /// No description provided for @dataHubTabMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'行情数据'**
+  String get dataHubTabMarket;
+
+  /// No description provided for @dataHubTabLongShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'多空比'**
+  String get dataHubTabLongShort;
+
+  /// No description provided for @dataHubTabAggOrders.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合挂单'**
+  String get dataHubTabAggOrders;
+
+  /// No description provided for @dataHubTabPredict.
+  ///
+  /// In zh, this message translates to:
+  /// **'预测市场'**
+  String get dataHubTabPredict;
+
+  /// No description provided for @dataHubTabCoinStock.
+  ///
+  /// In zh, this message translates to:
+  /// **'币股'**
+  String get dataHubTabCoinStock;
+
+  /// No description provided for @dataHubHintMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'自选 · 涨跌榜'**
+  String get dataHubHintMarket;
+
+  /// No description provided for @dataHubHintLongShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约 L/S'**
+  String get dataHubHintLongShort;
+
+  /// No description provided for @dataHubHintAggOrders.
+  ///
+  /// In zh, this message translates to:
+  /// **'跨所合并深度'**
+  String get dataHubHintAggOrders;
+
+  /// No description provided for @dataHubHintPredict.
+  ///
+  /// In zh, this message translates to:
+  /// **'链上事件概率'**
+  String get dataHubHintPredict;
+
+  /// No description provided for @dataHubHintCoinStock.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密相关股票'**
+  String get dataHubHintCoinStock;
+
+  /// No description provided for @dataHubNotificationTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知'**
+  String get dataHubNotificationTooltip;
+
+  /// No description provided for @dataHubPlaceholderTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'即将上线'**
+  String get dataHubPlaceholderTitle;
+
   /// No description provided for @marketHomeColumnName.
   ///
   /// In zh, this message translates to:
@@ -3701,7 +3773,7 @@ abstract class AppLocalizations {
   /// No description provided for @tabMarket.
   ///
   /// In zh, this message translates to:
-  /// **'行情'**
+  /// **'数据'**
   String get tabMarket;
 
   /// No description provided for @tabWhale.

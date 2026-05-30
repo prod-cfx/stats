@@ -74,7 +74,7 @@ void main() {
     ];
     const List<String> expectedLabels = <String>[
       'AI 量化',
-      '行情',
+      '数据',
       '策略',
       '巨鲸',
       '我的',

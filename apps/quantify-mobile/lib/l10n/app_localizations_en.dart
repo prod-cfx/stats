@@ -658,6 +658,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketHomeNotificationTooltip => 'Notifications';
 
   @override
+  String get dataHubTabMarket => 'Market';
+
+  @override
+  String get dataHubTabLongShort => 'Long/Short';
+
+  @override
+  String get dataHubTabAggOrders => 'Agg. Orders';
+
+  @override
+  String get dataHubTabPredict => 'Prediction';
+
+  @override
+  String get dataHubTabCoinStock => 'Coin Stocks';
+
+  @override
+  String get dataHubHintMarket => 'Watchlist · Movers';
+
+  @override
+  String get dataHubHintLongShort => 'Perps L/S';
+
+  @override
+  String get dataHubHintAggOrders => 'Cross-venue depth';
+
+  @override
+  String get dataHubHintPredict => 'On-chain odds';
+
+  @override
+  String get dataHubHintCoinStock => 'Crypto-linked stocks';
+
+  @override
+  String get dataHubNotificationTooltip => 'Notifications';
+
+  @override
+  String get dataHubPlaceholderTitle => 'Coming soon';
+
+  @override
   String get marketHomeColumnName => 'Name / 24H Vol';
 
   @override
@@ -1921,7 +1957,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get klineLoadError => 'K-line load failed';
 
   @override
-  String get tabMarket => 'Market';
+  String get tabMarket => 'Data';
 
   @override
   String get tabWhale => 'Whale';

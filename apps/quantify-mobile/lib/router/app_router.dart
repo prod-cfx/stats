@@ -11,9 +11,9 @@ import '../pages/ai/backtest_config_sheet.dart';
 import '../pages/auth/login_page.dart';
 import '../pages/live/live_strategies_page.dart';
 import '../pages/live/live_strategy_detail_page.dart';
+import '../pages/market/data_hub_page.dart';
 import '../pages/market/long_short_page.dart';
 import '../pages/market/market_detail_page.dart';
-import '../pages/market/market_home_page.dart';
 import '../pages/me/me_home_page.dart';
 import '../pages/me/theme_settings_page.dart';
 import '../pages/strategy/strategy_detail_page.dart';
@@ -106,7 +106,7 @@ GoRouter buildRouter({
               GoRoute(
                 path: '/market',
                 builder: (BuildContext context, GoRouterState state) =>
-                    const MarketHomePage(),
+                    const DataHubPage(),
               ),
             ],
           ),

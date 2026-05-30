@@ -20,14 +20,37 @@ import 'widgets/exchange_long_short_tile.dart';
 import 'widgets/long_short_bar.dart';
 import 'widgets/long_short_hero_card.dart';
 
-class LongShortPage extends ConsumerStatefulWidget {
+/// 多空比 standalone 页。
+///
+/// issue #1851：主体抽到 [LongShortBody]，供「数据」hub（`DataHubPage`）内嵌
+/// 复用；本 wrapper 保留 QzTopBar（标题 + 副标题），供 `/market/long-short`
+/// 深链与既有 standalone 测试。刷新入口已下放到 [LongShortBody] 顶部。
+class LongShortPage extends ConsumerWidget {
   const LongShortPage({super.key});
 
   @override
-  ConsumerState<LongShortPage> createState() => _LongShortPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: QzTopBar(
+        title: l10n.marketLongShortTitle,
+        subtitle: l10n.marketLongShortSubtitle,
+      ),
+      body: const LongShortBody(),
+    );
+  }
 }
 
-class _LongShortPageState extends ConsumerState<LongShortPage> {
+/// 多空比主体（symbol/interval 选择 + hero 卡 + 交易所榜 + 历史），无 Scaffold /
+/// 顶栏。顶部自带刷新按钮（抽 body 后 QzTopBar 的 refresh action 下放至此）。
+class LongShortBody extends ConsumerStatefulWidget {
+  const LongShortBody({super.key});
+
+  @override
+  ConsumerState<LongShortBody> createState() => _LongShortBodyState();
+}
+
+class _LongShortBodyState extends ConsumerState<LongShortBody> {
   String _symbol = 'BTCUSDT';
   KlineInterval _interval = KlineInterval.h1;
   MarketLongShortSnapshot? _snapshot;
@@ -73,80 +96,76 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
         .map((ticker) => ticker.symbol)
         .take(8)
         .toList();
-    return Scaffold(
-      appBar: QzTopBar(
-        title: l10n.marketLongShortTitle,
-        subtitle: l10n.marketLongShortSubtitle,
-        actions: <Widget>[
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            color: c.text,
-            tooltip: l10n.marketLongShortRefreshTooltip,
-            onPressed: _loading ? null : _load,
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(QzSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: QzSegmentedTabs(
-                options: symbols,
-                value: _symbol,
-                onChanged: (String value) {
-                  setState(() => _symbol = value);
-                  _load();
-                },
-              ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(QzSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              key: const Key('long-short-refresh'),
+              icon: const Icon(Icons.refresh, size: 20),
+              color: c.text,
+              tooltip: l10n.marketLongShortRefreshTooltip,
+              onPressed: _loading ? null : _load,
             ),
-            const SizedBox(height: QzSpacing.md),
-            QzSegmentedTabs(
-              options: const <String>['1m', '5m', '15m', '1h', '4h', '1d'],
-              value: _intervalLabel(_interval),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: QzSegmentedTabs(
+              options: symbols,
+              value: _symbol,
               onChanged: (String value) {
-                setState(() => _interval = _intervalFromLabel(value));
+                setState(() => _symbol = value);
+                _load();
               },
             ),
-            const SizedBox(height: QzSpacing.md),
-            if (_loading)
-              const QzCard(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(child: QzSpinner()),
-              )
-            else if (_error != null || _snapshot == null)
-              QzCard(
-                child: QzEmptyState(
-                  title: l10n.marketLongShortLoadError,
-                ),
-              )
-            else ...<Widget>[
-              LongShortHeroCard(snapshot: _snapshot!),
-              const SizedBox(height: QzSpacing.md),
-              _ExchangeSectionHeader(
-                title: l10n.marketLongShortExchangesTitle,
-                hint: l10n.marketLongShortExchangesSortBy,
+          ),
+          const SizedBox(height: QzSpacing.md),
+          QzSegmentedTabs(
+            options: const <String>['1m', '5m', '15m', '1h', '4h', '1d'],
+            value: _intervalLabel(_interval),
+            onChanged: (String value) {
+              setState(() => _interval = _intervalFromLabel(value));
+            },
+          ),
+          const SizedBox(height: QzSpacing.md),
+          if (_loading)
+            const QzCard(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: QzSpinner()),
+            )
+          else if (_error != null || _snapshot == null)
+            QzCard(
+              child: QzEmptyState(
+                title: l10n.marketLongShortLoadError,
               ),
-              QzCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < _snapshot!.exchanges.length; i++)
-                      ExchangeLongShortTile(
-                        rank: i + 1,
-                        item: _snapshot!.exchanges[i],
-                        showDivider: i < _snapshot!.exchanges.length - 1,
-                      ),
-                  ],
-                ),
-              ),
-            ],
+            )
+          else ...<Widget>[
+            LongShortHeroCard(snapshot: _snapshot!),
             const SizedBox(height: QzSpacing.md),
-            _HistoryCard(symbol: _symbol),
+            _ExchangeSectionHeader(
+              title: l10n.marketLongShortExchangesTitle,
+              hint: l10n.marketLongShortExchangesSortBy,
+            ),
+            QzCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  for (int i = 0; i < _snapshot!.exchanges.length; i++)
+                    ExchangeLongShortTile(
+                      rank: i + 1,
+                      item: _snapshot!.exchanges[i],
+                      showDivider: i < _snapshot!.exchanges.length - 1,
+                    ),
+                ],
+              ),
+            ),
           ],
-        ),
+          const SizedBox(height: QzSpacing.md),
+          _HistoryCard(symbol: _symbol),
+        ],
       ),
     );
   }
