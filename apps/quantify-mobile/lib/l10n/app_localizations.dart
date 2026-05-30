@@ -1634,6 +1634,78 @@ abstract class AppLocalizations {
   /// **'聚合成交量'**
   String get aggSubTabVolume;
 
+  /// No description provided for @predMarketSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'基于链上数据的未来趋势预测'**
+  String get predMarketSubtitle;
+
+  /// No description provided for @predMarketSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索预测市场'**
+  String get predMarketSearchHint;
+
+  /// No description provided for @predMarketSearchHotLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门话题'**
+  String get predMarketSearchHotLabel;
+
+  /// No description provided for @predMarketEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配市场'**
+  String get predMarketEmpty;
+
+  /// No description provided for @predMarketDetailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'市场详情'**
+  String get predMarketDetailTitle;
+
+  /// No description provided for @predMarketRules.
+  ///
+  /// In zh, this message translates to:
+  /// **'规则'**
+  String get predMarketRules;
+
+  /// No description provided for @predMarketResolutionSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'Resolution source'**
+  String get predMarketResolutionSource;
+
+  /// No description provided for @predMarketEventWindow.
+  ///
+  /// In zh, this message translates to:
+  /// **'Event window'**
+  String get predMarketEventWindow;
+
+  /// No description provided for @predMarketCreatedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建时间'**
+  String get predMarketCreatedAt;
+
+  /// No description provided for @predMarketVolumeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易量'**
+  String get predMarketVolumeLabel;
+
+  /// No description provided for @predMarketStatusOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'OPEN'**
+  String get predMarketStatusOpen;
+
+  /// No description provided for @predMarketStatusClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'CLOSED'**
+  String get predMarketStatusClosed;
+
   /// No description provided for @aggModeFutures.
   ///
   /// In zh, this message translates to:

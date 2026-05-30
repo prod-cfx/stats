@@ -10,6 +10,7 @@ import '../whale/widgets/whale_notification_sheet.dart';
 import 'agg_orders_body.dart';
 import 'long_short_page.dart';
 import 'market_home_page.dart';
+import 'pred_market_body.dart';
 import 'widgets/data_hub_header.dart';
 import 'widgets/data_hub_placeholder.dart';
 
@@ -22,7 +23,8 @@ import 'widgets/data_hub_placeholder.dart';
 /// - market → [MarketHomeBody]（行情数据）
 /// - longShort → [LongShortBody]（多空比，hub 内可达，不再依赖手敲 URL）
 /// - aggOrders → [AggOrdersBody]（聚合挂单/持仓量/成交量，#1854）
-/// - predict / coinStock → [DataHubPlaceholder]（占位，后续 issue 填充）
+/// - predict → [PredMarketBody]（预测市场，#1855）
+/// - coinStock → [DataHubPlaceholder]（占位，后续 issue 填充）
 ///
 /// 通知状态（unread badge 真值来源）由本容器持有，复用 #1560 的
 /// [WhaleNotificationSheet] 数据与弹层；header 铃铛点击打开通知中心。
@@ -106,6 +108,7 @@ class _DataHubPageState extends ConsumerState<DataHubPage> {
       case DataHubScreen.aggOrders:
         return const AggOrdersBody();
       case DataHubScreen.predict:
+        return const PredMarketBody();
       case DataHubScreen.coinStock:
         return DataHubPlaceholder(label: _labelFor(items, screen));
     }

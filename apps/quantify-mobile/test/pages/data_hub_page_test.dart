@@ -75,28 +75,29 @@ void main() {
     expect(find.byType(LongShortBar), findsWidgets);
   });
 
-  testWidgets('占位 tab（预测/币股）切换不崩溃（AC5）',
+  testWidgets('已落地 tab（聚合挂单/预测）切换不崩溃，币股仍占位（AC5）',
       (WidgetTester tester) async {
     await _pumpHub(tester);
-    // 聚合挂单已落地（#1854）→ 不再是占位屏，单独验证不抛异常。
-    await tester.tap(_hubTab(DataHubScreen.aggOrders));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(tester.takeException(), isNull,
-        reason: '切到 aggOrders 不应抛异常');
-
+    // 聚合挂单（#1854）/ 预测市场（#1855）已落地 → 不再是占位屏，验证不抛异常。
     for (final DataHubScreen screen in <DataHubScreen>[
+      DataHubScreen.aggOrders,
       DataHubScreen.predict,
-      DataHubScreen.coinStock,
     ]) {
       await tester.tap(_hubTab(screen));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(find.byType(DataHubPlaceholder), findsOneWidget,
-          reason: '${screen.name} 应显示占位屏');
       expect(tester.takeException(), isNull,
           reason: '切到 ${screen.name} 不应抛异常');
     }
+
+    // 币股仍是占位屏。
+    await tester.tap(_hubTab(DataHubScreen.coinStock));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(DataHubPlaceholder), findsOneWidget,
+        reason: 'coinStock 应显示占位屏');
+    expect(tester.takeException(), isNull,
+        reason: '切到 coinStock 不应抛异常');
   });
 
   testWidgets('通知铃铛存在，未读 > 0 显示红数字 badge（AC3）',

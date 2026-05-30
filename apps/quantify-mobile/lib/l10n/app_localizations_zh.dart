@@ -802,6 +802,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aggSubTabVolume => '聚合成交量';
 
   @override
+  String get predMarketSubtitle => '基于链上数据的未来趋势预测';
+
+  @override
+  String get predMarketSearchHint => '搜索预测市场';
+
+  @override
+  String get predMarketSearchHotLabel => '热门话题';
+
+  @override
+  String get predMarketEmpty => '无匹配市场';
+
+  @override
+  String get predMarketDetailTitle => '市场详情';
+
+  @override
+  String get predMarketRules => '规则';
+
+  @override
+  String get predMarketResolutionSource => 'Resolution source';
+
+  @override
+  String get predMarketEventWindow => 'Event window';
+
+  @override
+  String get predMarketCreatedAt => '创建时间';
+
+  @override
+  String get predMarketVolumeLabel => '交易量';
+
+  @override
+  String get predMarketStatusOpen => 'OPEN';
+
+  @override
+  String get predMarketStatusClosed => 'CLOSED';
+
+  @override
   String get aggModeFutures => '合约';
 
   @override

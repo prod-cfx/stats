@@ -835,6 +835,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aggSubTabVolume => 'Volume';
 
   @override
+  String get predMarketSubtitle =>
+      'Future trend forecasts based on on-chain data';
+
+  @override
+  String get predMarketSearchHint => 'Search prediction markets';
+
+  @override
+  String get predMarketSearchHotLabel => 'Hot topics';
+
+  @override
+  String get predMarketEmpty => 'No matching markets';
+
+  @override
+  String get predMarketDetailTitle => 'Market detail';
+
+  @override
+  String get predMarketRules => 'Rules';
+
+  @override
+  String get predMarketResolutionSource => 'Resolution source';
+
+  @override
+  String get predMarketEventWindow => 'Event window';
+
+  @override
+  String get predMarketCreatedAt => 'Created at';
+
+  @override
+  String get predMarketVolumeLabel => 'Volume';
+
+  @override
+  String get predMarketStatusOpen => 'OPEN';
+
+  @override
+  String get predMarketStatusClosed => 'CLOSED';
+
+  @override
   String get aggModeFutures => 'Futures';
 
   @override
