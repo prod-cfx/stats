@@ -1454,6 +1454,64 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleNotifKindSystem => 'System';
 
   @override
+  String get whaleWatchSubTabLive => 'Live Whales';
+
+  @override
+  String get whaleWatchSubTabAddresses => 'Watched';
+
+  @override
+  String get whaleWatchSubTabNotifications => 'Notifications';
+
+  @override
+  String get whaleWatchCreateMonitor => 'New Monitor';
+
+  @override
+  String get whaleWatchAddressesEmpty => 'No watched addresses';
+
+  @override
+  String whaleWatchMarkAllReadCount(int count) {
+    return 'Mark all read ($count)';
+  }
+
+  @override
+  String get whaleWatchPerpValue => 'Perp value';
+
+  @override
+  String get whaleWatchUnrealizedPnl => 'Unrealized PnL';
+
+  @override
+  String get whaleWatchAvailMargin => 'Avail. margin';
+
+  @override
+  String get whaleWatchMarginUsage => 'Margin usage';
+
+  @override
+  String get whaleWatchPositions => 'Positions';
+
+  @override
+  String get whaleRuleAliasLabel => 'Alias';
+
+  @override
+  String get whaleRuleAliasHint => 'Optional';
+
+  @override
+  String get whaleRuleChannelTelegramUnbound =>
+      'Bind Telegram first to enable Telegram push';
+
+  @override
+  String get whaleLiveCoinPush => 'Coin push';
+
+  @override
+  String get whaleLiveCoinPushDone => 'Coin push enabled';
+
+  @override
+  String get whaleLiveWinSort => 'Win rate';
+
+  @override
+  String get whaleLiveWinSortDisabledHint =>
+      'Win-rate sort needs trade-level data; enabled later';
+
+  @override
   String get klineLoadError => 'K-line load failed';
 
   @override
@@ -1747,7 +1805,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleRuleChannelLabel => 'Channels';
 
   @override
-  String get whaleRuleChannelPush => 'Push';
+  String get whaleRuleChannelPush => 'Web';
 
   @override
   String get whaleRuleChannelTelegram => 'Telegram';

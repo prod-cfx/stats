@@ -2,21 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../data/mock/fixtures/whale_extras.dart';
 import '../../../data/models/whale_extra_models.dart';
 import '../../../data/models/whale_watch_models.dart';
 import '../../../data/providers.dart';
+import '../../../data/whale_notifications_notifier.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import '../widgets/whale_watch_addr_card.dart';
 import '../widgets/whale_watch_rule_sheet.dart';
+import 'whale_live_tab.dart';
 
-/// 巨鲸动向 — 监控 tab（issue #1560 / #1754）。我的监控 + 最近告警 + CTA。
+/// 巨鲸动向 — 监控 tab（issue #1560 / #1754 / #1769）。
 ///
-/// #1754：监控规则可新增 / 编辑 / 静音 / 删除。mock 阶段规则为 session 内存
-/// 态——initState 从 repository 载入种子后由本地 [_rules] 作为单一数据源，
-/// 重建 app 回到种子；真实持久化随 #1682/#1683 接入。
+/// #1769：顶部 segmented 三层子 Tab，对齐设计稿 `m-screens-4.jsx` WhaleWatch
+/// `:1545-1760`：
+/// - 实时巨鲸：复用 [WhaleLiveTab]（时间分组 + LIVE pulse + 胜率排序 + 推送）。
+/// - 监控地址：监控规则 CRUD + 永续字段卡（[WhaleWatchAddrCard]）。
+/// - 通知中心：与顶部铃铛共享 [whaleNotificationsProvider] 单一数据源。
+///
+/// 监控规则 mock 阶段为 session 内存态：initState 载入种子后由本地 [_rules]
+/// 作为单一数据源；真实持久化随 #1682/#1683 接入。
 class WhaleWatchTab extends ConsumerStatefulWidget {
   const WhaleWatchTab({super.key});
 
@@ -24,7 +31,10 @@ class WhaleWatchTab extends ConsumerStatefulWidget {
   ConsumerState<WhaleWatchTab> createState() => _WhaleWatchTabState();
 }
 
+enum _SubTab { live, addresses, notifications }
+
 class _WhaleWatchTabState extends ConsumerState<WhaleWatchTab> {
+  _SubTab _sub = _SubTab.live;
   List<WatchRule>? _rules;
 
   @override
@@ -97,138 +107,34 @@ class _WhaleWatchTabState extends ConsumerState<WhaleWatchTab> {
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
-    final List<WatchRule> rules = _rules ?? const <WatchRule>[];
-    return ListView(
-      padding: EdgeInsets.zero,
+    final List<WhaleNotification> notifications =
+        ref.watch(whaleNotificationsProvider);
+    final int unread =
+        notifications.where((WhaleNotification n) => n.unread).length;
+    final int ruleCount = _rules?.length ?? 0;
+
+    return Column(
       children: <Widget>[
-        Container(
-          color: c.bgElev,
-          padding: const EdgeInsets.fromLTRB(
-            QzSpacing.lg,
-            QzSpacing.md,
-            QzSpacing.lg,
-            QzSpacing.xs,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      l10n.whaleSectionMyWatch,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${rules.length}${l10n.whaleSectionMyWatchCountSuffix}',
-                    style: TextStyle(color: c.textDim, fontSize: 11),
-                  ),
-                ],
-              ),
-              const SizedBox(height: QzSpacing.sm),
-              if (rules.isEmpty)
-                _EmptyRules(text: l10n.whaleWatchEmpty)
-              else
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: c.borderSoft),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: <Widget>[
-                      for (int i = 0; i < rules.length; i++)
-                        _WatchRow(
-                          rule: rules[i],
-                          isLast: i == rules.length - 1,
-                          onEdit: () => _editRule(rules[i]),
-                          onToggleMute: () => _toggleMute(rules[i]),
-                          onDelete: () => _deleteRule(rules[i]),
-                        ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: QzSpacing.md),
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                // #1754：能力落地，按钮可点打开规则表单 sheet（解除 #1663
-                // 暂缓的禁用态）。
-                child: OutlinedButton.icon(
-                  onPressed: _addRule,
-                  icon: Icon(Icons.add, size: 18, color: c.accent),
-                  label: Text(
-                    l10n.whaleAddWatchAddress,
-                    style: TextStyle(color: c.accent, fontSize: 13),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    side: BorderSide(color: c.accent),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        _SegmentedSubTabs(
+          selected: _sub,
+          addressCount: ruleCount,
+          notificationCount: notifications.length,
+          notificationDot: unread > 0,
+          onChanged: (_SubTab s) => setState(() => _sub = s),
         ),
-        Container(
-          color: c.bgElev,
-          padding: const EdgeInsets.fromLTRB(
-            QzSpacing.lg,
-            QzSpacing.lg,
-            QzSpacing.lg,
-            QzSpacing.lg,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Expanded(
+          child: IndexedStack(
+            index: _sub.index,
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      l10n.whaleSectionRecentAlerts,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    l10n.whaleSectionRecentAlertsAction,
-                    style: TextStyle(
-                      color: c.accent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              const WhaleLiveTab(),
+              _AddressesBody(
+                rules: _rules,
+                onAdd: _addRule,
+                onEdit: _editRule,
+                onToggleMute: _toggleMute,
+                onDelete: _deleteRule,
               ),
-              const SizedBox(height: QzSpacing.sm),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: c.borderSoft),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < mockWatchAlerts.length; i++)
-                      _AlertRow(
-                        entry: mockWatchAlerts[i],
-                        isLast: i == mockWatchAlerts.length - 1,
-                      ),
-                  ],
-                ),
-              ),
+              _NotificationsBody(notifications: notifications),
             ],
           ),
         ),
@@ -237,170 +143,346 @@ class _WhaleWatchTabState extends ConsumerState<WhaleWatchTab> {
   }
 }
 
-/// 监控规则操作枚举（行尾 overflow 菜单）。
-enum _RuleAction { edit, mute, delete }
-
-class _WatchRow extends StatelessWidget {
-  const _WatchRow({
-    required this.rule,
-    required this.isLast,
-    required this.onEdit,
-    required this.onToggleMute,
-    required this.onDelete,
+/// segmented 三段子 Tab（issue #1769）。对齐设计稿圆角 pill 分段 + 计数 + dot。
+class _SegmentedSubTabs extends StatelessWidget {
+  const _SegmentedSubTabs({
+    required this.selected,
+    required this.addressCount,
+    required this.notificationCount,
+    required this.notificationDot,
+    required this.onChanged,
   });
 
-  final WatchRule rule;
-  final bool isLast;
-  final VoidCallback onEdit;
-  final VoidCallback onToggleMute;
-  final VoidCallback onDelete;
+  final _SubTab selected;
+  final int addressCount;
+  final int notificationCount;
+  final bool notificationDot;
+  final ValueChanged<_SubTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool up = rule.tone == 'up';
-    final Color toneColor = up ? c.marketUp : c.marketDown;
-    final Color toneSoft = toneColor.withValues(alpha: 0.14);
-    final double rowOpacity = rule.muted ? 0.5 : 1.0;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => context.push(
-          '/whale/profile/${Uri.encodeComponent(rule.address)}',
+    final List<({_SubTab tab, String label, int? count, bool dot})> segs =
+        <({_SubTab tab, String label, int? count, bool dot})>[
+      (
+        tab: _SubTab.live,
+        label: l10n.whaleWatchSubTabLive,
+        count: null,
+        dot: false
+      ),
+      (
+        tab: _SubTab.addresses,
+        label: l10n.whaleWatchSubTabAddresses,
+        count: addressCount,
+        dot: false
+      ),
+      (
+        tab: _SubTab.notifications,
+        label: l10n.whaleWatchSubTabNotifications,
+        count: notificationCount,
+        dot: notificationDot
+      ),
+    ];
+    return Container(
+      color: c.bgElev,
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, 4, QzSpacing.lg, QzSpacing.md),
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: c.bgSoft,
+          border: Border.all(color: c.borderSoft),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isLast ? Colors.transparent : c.borderSoft,
-              ),
-            ),
-          ),
-          child: Row(
-            children: <Widget>[
-              Opacity(
-                opacity: rowOpacity,
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: toneSoft,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    up ? Icons.arrow_upward : Icons.arrow_downward,
-                    size: 14,
-                    color: toneColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: QzSpacing.md),
+        child: Row(
+          children: <Widget>[
+            for (final ({_SubTab tab, String label, int? count, bool dot}) s
+                in segs)
               Expanded(
-                child: Opacity(
-                  opacity: rowOpacity,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          Flexible(
-                            child: Text(
-                              rule.name,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: c.text,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          if (rule.muted) ...<Widget>[
-                            const SizedBox(width: 6),
-                            Icon(
-                              Icons.notifications_off,
-                              size: 13,
-                              color: c.textDim,
-                            ),
-                          ] else if (rule.live) ...<Widget>[
-                            const SizedBox(width: 6),
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: c.marketUp,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${rule.address} · ${rule.lastEventDisplay}',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: c.textDim, fontSize: 11),
-                      ),
-                    ],
-                  ),
+                child: _Segment(
+                  label: s.label,
+                  count: s.count,
+                  dot: s.dot,
+                  selected: selected == s.tab,
+                  onTap: () => onChanged(s.tab),
                 ),
               ),
-              Opacity(
-                opacity: rowOpacity,
-                child: Text(
-                  rule.pnlDisplay,
-                  style: TextStyle(
-                    color: toneColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-              PopupMenuButton<_RuleAction>(
-                icon: Icon(Icons.more_vert, size: 18, color: c.textMid),
-                tooltip: l10n.whaleRuleMenuTooltip,
-                onSelected: (_RuleAction a) {
-                  switch (a) {
-                    case _RuleAction.edit:
-                      onEdit();
-                    case _RuleAction.mute:
-                      onToggleMute();
-                    case _RuleAction.delete:
-                      onDelete();
-                  }
-                },
-                itemBuilder: (BuildContext ctx) => <PopupMenuEntry<_RuleAction>>[
-                  PopupMenuItem<_RuleAction>(
-                    value: _RuleAction.edit,
-                    child: Text(l10n.whaleRuleMenuEdit),
-                  ),
-                  PopupMenuItem<_RuleAction>(
-                    value: _RuleAction.mute,
-                    child: Text(
-                      rule.muted
-                          ? l10n.whaleRuleMenuUnmute
-                          : l10n.whaleRuleMenuMute,
-                    ),
-                  ),
-                  PopupMenuItem<_RuleAction>(
-                    value: _RuleAction.delete,
-                    child: Text(l10n.whaleRuleMenuDelete),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _EmptyRules extends StatelessWidget {
-  const _EmptyRules({required this.text});
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.label,
+    required this.count,
+    required this.dot,
+    required this.selected,
+    required this.onTap,
+  });
 
+  final String label;
+  final int? count;
+  final bool dot;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? c.bgElev : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: selected ? Border.all(color: c.borderSoft) : null,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? c.text : c.textMid,
+                    fontSize: 11.5,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+                if (count != null) ...<Widget>[
+                  const SizedBox(width: 3),
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      color: selected ? c.textDim : c.textFaint,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (dot)
+              Positioned(
+                top: -2,
+                right: -8,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: c.marketDown,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 监控地址子 Tab body（issue #1769）：创建监控按钮 + 地址卡列表 / 空态。
+class _AddressesBody extends StatelessWidget {
+  const _AddressesBody({
+    required this.rules,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onToggleMute,
+    required this.onDelete,
+  });
+
+  final List<WatchRule>? rules;
+  final VoidCallback onAdd;
+  final ValueChanged<WatchRule> onEdit;
+  final ValueChanged<WatchRule> onToggleMute;
+  final ValueChanged<WatchRule> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    final List<WatchRule> list = rules ?? const <WatchRule>[];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.lg),
+      children: <Widget>[
+        Align(
+          alignment: Alignment.centerRight,
+          child:
+              _CreateButton(label: l10n.whaleWatchCreateMonitor, onTap: onAdd),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        if (list.isEmpty)
+          _EmptyBox(text: l10n.whaleWatchAddressesEmpty)
+        else
+          for (int i = 0; i < list.length; i++) ...<Widget>[
+            WhaleWatchAddrCard(
+              rule: list[i],
+              onOpen: () => context.push(
+                '/whale/profile/${Uri.encodeComponent(list[i].address)}',
+              ),
+              onToggleMute: () => onToggleMute(list[i]),
+              onEdit: () => onEdit(list[i]),
+              onDelete: () => onDelete(list[i]),
+            ),
+            if (i != list.length - 1) const SizedBox(height: QzSpacing.sm),
+          ],
+        const SizedBox(height: QzSpacing.lg),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: OutlinedButton.icon(
+            onPressed: onAdd,
+            icon: Icon(Icons.add, size: 18, color: c.accent),
+            label: Text(
+              l10n.whaleAddWatchAddress,
+              style: TextStyle(color: c.accent, fontSize: 13),
+            ),
+            style: OutlinedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              side: BorderSide(color: c.accent),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 通知中心子 Tab body（issue #1769）：全部已读 + NotifRow 列表 / 空态。
+/// 与顶部铃铛共享 [whaleNotificationsProvider]。
+class _NotificationsBody extends ConsumerWidget {
+  const _NotificationsBody({required this.notifications});
+
+  final List<WhaleNotification> notifications;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    final int unread =
+        notifications.where((WhaleNotification n) => n.unread).length;
+    final WhaleNotificationsNotifier notifier =
+        ref.read(whaleNotificationsProvider.notifier);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.lg),
+      children: <Widget>[
+        Align(
+          alignment: Alignment.centerRight,
+          child: _MarkAllReadButton(
+            label: unread > 0
+                ? l10n.whaleWatchMarkAllReadCount(unread)
+                : l10n.whaleNotificationMarkAllRead,
+            enabled: unread > 0,
+            onTap: unread > 0 ? notifier.markAllRead : null,
+          ),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        if (notifications.isEmpty)
+          _EmptyBox(text: l10n.whaleNotificationEmpty)
+        else
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: c.borderSoft),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: <Widget>[
+                for (int i = 0; i < notifications.length; i++)
+                  _NotifRow(
+                    item: notifications[i],
+                    isLast: i == notifications.length - 1,
+                    onTap: () {
+                      notifier.markRead(notifications[i].id);
+                      final String? addr = notifications[i].address;
+                      if (addr != null) {
+                        context.push(
+                          '/whale/profile/${Uri.encodeComponent(addr)}',
+                        );
+                      }
+                    },
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CreateButton extends StatelessWidget {
+  const _CreateButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return FilledButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.add, size: 14),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      style: FilledButton.styleFrom(
+        backgroundColor: c.accent,
+        foregroundColor: c.accentOn,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        minimumSize: const Size(0, 28),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkAllReadButton extends StatelessWidget {
+  const _MarkAllReadButton({
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: enabled ? c.text : c.textDim,
+        side: BorderSide(color: enabled ? c.border : c.borderSoft),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        minimumSize: const Size(0, 28),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 12)),
+    );
+  }
+}
+
+class _EmptyBox extends StatelessWidget {
+  const _EmptyBox({required this.text});
   final String text;
 
   @override
@@ -423,73 +505,123 @@ class _EmptyRules extends StatelessWidget {
   }
 }
 
-class _AlertRow extends StatelessWidget {
-  const _AlertRow({required this.entry, required this.isLast});
+/// 通知行（issue #1769）。监控 tab 内嵌版本，复用通知中心 kind 配色与 unread
+/// 底色，点击标记已读 + 跳转地址详情。
+class _NotifRow extends StatelessWidget {
+  const _NotifRow({
+    required this.item,
+    required this.isLast,
+    required this.onTap,
+  });
 
-  final WatchAlertEntry entry;
+  final WhaleNotification item;
   final bool isLast;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    Color fg = c.textMid;
-    Color bg = c.bgSoft;
-    switch (entry.tone) {
-      case 'up':
-        fg = c.marketUp;
-        bg = c.marketUp.withValues(alpha: 0.12);
-      case 'warn':
-        fg = c.statusWarn;
-        bg = c.statusWarn.withValues(alpha: 0.12);
-      case 'info':
-        fg = c.accent;
-        bg = c.accentSoft;
-    }
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: isLast ? Colors.transparent : c.borderSoft),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(4),
+    final _NotifPalette p = _palette(c, item.kind);
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: item.unread ? c.bgElev : Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: isLast ? Colors.transparent : c.borderSoft,
             ),
-            child: Text(
-              entry.type,
-              style: TextStyle(
-                color: fg,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: p.bg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(p.icon, size: 14, color: p.accent),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          item.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (item.unread) ...<Widget>[
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: c.accent,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    item.body,
+                    style:
+                        TextStyle(color: c.textMid, fontSize: 11, height: 1.4),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.meta,
+                    style: TextStyle(color: c.textDim, fontSize: 10),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: QzSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  entry.detail,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.text, fontSize: 12),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  entry.timeDisplay,
-                  style: TextStyle(color: c.textDim, fontSize: 10),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  _NotifPalette _palette(QzColorScheme c, WhaleNotificationKind kind) {
+    switch (kind) {
+      case WhaleNotificationKind.alert:
+        return _NotifPalette(
+          Icons.warning_amber,
+          c.statusWarn,
+          c.statusWarn.withValues(alpha: 0.14),
+        );
+      case WhaleNotificationKind.watch:
+        return _NotifPalette(Icons.visibility, c.accent, c.accentSoft);
+      case WhaleNotificationKind.flow:
+        return _NotifPalette(
+          Icons.trending_up,
+          c.statusInfo,
+          c.statusInfo.withValues(alpha: 0.14),
+        );
+      case WhaleNotificationKind.system:
+        return _NotifPalette(Icons.schedule, c.textMid, c.bgSoft);
+    }
+  }
+}
+
+class _NotifPalette {
+  const _NotifPalette(this.icon, this.accent, this.bg);
+  final IconData icon;
+  final Color accent;
+  final Color bg;
 }

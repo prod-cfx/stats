@@ -559,6 +559,31 @@
   "whaleNotifKindWatch": "Watch hit",
   "whaleNotifKindFlow": "Flow",
   "whaleNotifKindSystem": "System",
+  "whaleWatchSubTabLive": "Live Whales",
+  "whaleWatchSubTabAddresses": "Watched",
+  "whaleWatchSubTabNotifications": "Notifications",
+  "whaleWatchCreateMonitor": "New Monitor",
+  "whaleWatchAddressesEmpty": "No watched addresses",
+  "whaleWatchMarkAllReadCount": "Mark all read ({count})",
+  "@whaleWatchMarkAllReadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "whaleWatchPerpValue": "Perp value",
+  "whaleWatchUnrealizedPnl": "Unrealized PnL",
+  "whaleWatchAvailMargin": "Avail. margin",
+  "whaleWatchMarginUsage": "Margin usage",
+  "whaleWatchPositions": "Positions",
+  "whaleRuleAliasLabel": "Alias",
+  "whaleRuleAliasHint": "Optional",
+  "whaleRuleChannelTelegramUnbound": "Bind Telegram first to enable Telegram push",
+  "whaleLiveCoinPush": "Coin push",
+  "whaleLiveCoinPushDone": "Coin push enabled",
+  "whaleLiveWinSort": "Win rate",
+  "whaleLiveWinSortDisabledHint": "Win-rate sort needs trade-level data; enabled later",
   "klineLoadError": "K-line load failed",
   "tabMarket": "Market",
   "tabWhale": "Whale",
@@ -654,7 +679,7 @@
   "whaleRuleDirectionOutflow": "Outflow",
   "whaleRuleDirectionBoth": "Both",
   "whaleRuleChannelLabel": "Channels",
-  "whaleRuleChannelPush": "Push",
+  "whaleRuleChannelPush": "Web",
   "whaleRuleChannelTelegram": "Telegram",
   "whaleRuleChannelEmail": "Email",
   "whaleRuleChannelRequired": "Select at least one channel",

@@ -109,23 +109,25 @@ void main() {
     expect(find.text('Binance'), findsOneWidget);
   });
 
-  testWidgets('切到「监控」tab → 我的监控 + 添加 CTA + 最近告警',
+  testWidgets('切到「监控」tab → 三层子 Tab 分段（实时巨鲸/监控地址/通知中心）',
+      (WidgetTester tester) async {
+    // issue #1769：监控 tab 改为 segmented 三子 Tab。
+    await _pump(tester);
+    await tester.tap(find.text('监控'));
+    await tester.pumpAndSettle();
+    expect(find.text('实时巨鲸'), findsOneWidget);
+    expect(find.text('监控地址'), findsOneWidget);
+    expect(find.text('通知中心'), findsOneWidget);
+  });
+
+  testWidgets(
+      '监控 tab → 监控地址子 Tab「添加地址监控」按钮可点，打开规则表单 sheet',
       (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.text('监控'));
     await tester.pumpAndSettle();
-    expect(find.text('我的监控'), findsOneWidget);
-    expect(find.text('添加地址监控'), findsOneWidget);
-    expect(find.text('最近告警'), findsOneWidget);
-  });
-
-  testWidgets(
-      '监控 tab「添加地址监控」按钮可点，打开规则表单 sheet',
-      (WidgetTester tester) async {
-    // issue #1754：监控能力落地，按钮可点打开 WhaleWatchRuleSheet（解除
-    // #1663 暂缓的禁用态）。
-    await _pump(tester);
-    await tester.tap(find.text('监控'));
+    // 切到「监控地址」子 Tab。
+    await tester.tap(find.text('监控地址'));
     await tester.pumpAndSettle();
     final Finder ctaButton = find.ancestor(
       of: find.text('添加地址监控'),
@@ -135,7 +137,8 @@ void main() {
     expect(cta.onPressed, isNotNull, reason: '#1754 后添加按钮应可点');
     await tester.tap(ctaButton.first);
     await tester.pumpAndSettle();
-    expect(find.text('创建监控'), findsOneWidget);
+    // 规则表单 sheet 标题为「添加地址监控」。
+    expect(find.text('添加地址监控'), findsWidgets);
   });
 
   testWidgets('默认进入「实时」tab：tab 高亮 + 实时内容可见',

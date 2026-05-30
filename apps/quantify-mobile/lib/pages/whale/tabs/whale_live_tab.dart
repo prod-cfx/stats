@@ -149,6 +149,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
           child: const WhaleNetFlowCard(stat: mockWhaleNetFlowBtc1h),
         ),
         _buildFilterBar(c, l10n),
+        _buildActionRow(c, l10n),
         ..._buildGroupedFeed(visible, l10n, c),
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -208,6 +209,69 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     );
     if (picked == null) return;
     setState(() => _minAmount = picked);
+  }
+
+  /// issue #1769：关注币种推送（可用，mock SnackBar）+ 胜率排序 toggle。
+  /// 胜率排序在实时 feed（[WhaleEvent] 无 winRate 字段）下明确禁用，待
+  /// 交易级数据（#1682）接入后再启用；按设计稿 `m-screens-4.jsx:649` 占位。
+  Widget _buildActionRow(QzColorScheme c, AppLocalizations l10n) {
+    return Container(
+      width: double.infinity,
+      color: c.bgElev,
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, 0, QzSpacing.lg, QzSpacing.sm),
+      child: Row(
+        children: <Widget>[
+          FilledButton.icon(
+            onPressed: () {
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                SnackBar(
+                  content: Text(l10n.whaleLiveCoinPushDone),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+            icon: const Icon(Icons.notifications_active_outlined, size: 14),
+            label: Text(
+              l10n.whaleLiveCoinPush,
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: c.accent,
+              foregroundColor: c.accentOn,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size(0, 30),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+          ),
+          const SizedBox(width: QzSpacing.sm),
+          Tooltip(
+            message: l10n.whaleLiveWinSortDisabledHint,
+            child: OutlinedButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.swap_vert, size: 14),
+              label: Text(
+                l10n.whaleLiveWinSort,
+                style: const TextStyle(fontSize: 12),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: c.textDim,
+                side: BorderSide(color: c.borderSoft),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: const Size(0, 30),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// issue #1604：单行 filter strip = 资产 chips · 阈值 pill · LIVE。

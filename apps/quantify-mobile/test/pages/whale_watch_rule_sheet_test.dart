@@ -64,28 +64,42 @@ void main() {
 
   testWidgets('阈值非正数：报错', (WidgetTester tester) async {
     await _pump(tester);
+    // #1769：表单字段为 地址(0) / 备注(1) / 阈值(2)。
     final List<TextFormField> fields =
         tester.widgetList<TextFormField>(find.byType(TextFormField)).toList();
-    expect(fields.length, 2);
+    expect(fields.length, 3);
     await tester.enterText(find.byType(TextFormField).at(0), '0xabc…1234');
-    await tester.enterText(find.byType(TextFormField).at(1), '-5');
+    await tester.enterText(find.byType(TextFormField).at(2), '-5');
     await tester.tap(find.text('创建监控'));
     await tester.pumpAndSettle();
     expect(find.text('阈值需为大于 0 的数字'), findsOneWidget);
     expect(_returned, isFalse);
   });
 
-  testWidgets('合法提交：返回新建 WatchRule', (WidgetTester tester) async {
+  testWidgets('合法提交：返回新建 WatchRule（含备注）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.enterText(find.byType(TextFormField).at(0), '0xabc…1234');
-    await tester.enterText(find.byType(TextFormField).at(1), '2000000');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Galaxy');
+    await tester.enterText(find.byType(TextFormField).at(2), '2000000');
     await tester.tap(find.text('创建监控'));
     await tester.pumpAndSettle();
     expect(_returned, isTrue);
     expect(_result, isNotNull);
     expect(_result!.address, '0xabc…1234');
+    expect(_result!.alias, 'Galaxy');
     expect(_result!.thresholdUsd, 2000000);
     expect(_result!.channels, isNotEmpty);
+    // Telegram 未绑定（默认 tgBound=false），不应出现在结果渠道。
+    expect(_result!.channels.contains(WatchRuleChannel.telegram), isFalse);
+  });
+
+  testWidgets('Telegram 未绑定：三渠道行 + 禁用提示文案',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.text('网页通知'), findsOneWidget);
+    expect(find.text('邮件'), findsOneWidget);
+    expect(find.text('Telegram'), findsOneWidget);
+    expect(find.textContaining('请先完成 Telegram'), findsOneWidget);
   });
 
   testWidgets('编辑态：预填字段、标题为编辑、保存返回更新规则',
@@ -108,8 +122,8 @@ void main() {
     expect(find.text('保存'), findsOneWidget);
     // 阈值预填
     expect(find.text('5000000'), findsOneWidget);
-    // 改阈值并保存
-    await tester.enterText(find.byType(TextFormField).at(1), '8000000');
+    // 改阈值并保存（字段索引：地址0/备注1/阈值2）
+    await tester.enterText(find.byType(TextFormField).at(2), '8000000');
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(_returned, isTrue);

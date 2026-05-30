@@ -1429,6 +1429,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleNotifKindSystem => '系统消息';
 
   @override
+  String get whaleWatchSubTabLive => '实时巨鲸';
+
+  @override
+  String get whaleWatchSubTabAddresses => '监控地址';
+
+  @override
+  String get whaleWatchSubTabNotifications => '通知中心';
+
+  @override
+  String get whaleWatchCreateMonitor => '创建监控';
+
+  @override
+  String get whaleWatchAddressesEmpty => '暂无监控地址';
+
+  @override
+  String whaleWatchMarkAllReadCount(int count) {
+    return '全部已读 ($count)';
+  }
+
+  @override
+  String get whaleWatchPerpValue => '永续合约总价值';
+
+  @override
+  String get whaleWatchUnrealizedPnl => '未实现盈亏';
+
+  @override
+  String get whaleWatchAvailMargin => '可用保证金';
+
+  @override
+  String get whaleWatchMarginUsage => '保证金使用率';
+
+  @override
+  String get whaleWatchPositions => '持仓';
+
+  @override
+  String get whaleRuleAliasLabel => '地址备注';
+
+  @override
+  String get whaleRuleAliasHint => '可选';
+
+  @override
+  String get whaleRuleChannelTelegramUnbound =>
+      '请先完成 Telegram 登录/绑定后再开启 Telegram 推送';
+
+  @override
+  String get whaleLiveCoinPush => '关注币种推送';
+
+  @override
+  String get whaleLiveCoinPushDone => '已开启关注币种推送';
+
+  @override
+  String get whaleLiveWinSort => '胜率';
+
+  @override
+  String get whaleLiveWinSortDisabledHint => '胜率排序需交易级数据，接入后启用';
+
+  @override
   String get klineLoadError => 'K 线加载失败';
 
   @override
@@ -1716,7 +1773,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleRuleChannelLabel => '推送渠道';
 
   @override
-  String get whaleRuleChannelPush => '应用推送';
+  String get whaleRuleChannelPush => '网页通知';
 
   @override
   String get whaleRuleChannelTelegram => 'Telegram';

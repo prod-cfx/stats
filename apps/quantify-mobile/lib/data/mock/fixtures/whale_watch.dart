@@ -15,6 +15,12 @@ const List<WatchRule> mockWatchRules = <WatchRule>[
     direction: WatchRuleDirection.both,
     channels: <WatchRuleChannel>{WatchRuleChannel.push},
     muted: false,
+    alias: 'Galaxy 主仓',
+    perpValueUsd: 12_480_000,
+    unrealizedPnlUsd: 842_000,
+    availMarginUsd: 3_260_000,
+    marginUsagePct: 42,
+    positions: 6,
   ),
   WatchRule(
     id: 'w2',
@@ -31,6 +37,12 @@ const List<WatchRule> mockWatchRules = <WatchRule>[
       WatchRuleChannel.telegram,
     },
     muted: false,
+    alias: '做市商',
+    perpValueUsd: 28_900_000,
+    unrealizedPnlUsd: -1_240_000,
+    availMarginUsd: 1_180_000,
+    marginUsagePct: 86,
+    positions: 11,
   ),
   WatchRule(
     id: 'w3',
@@ -44,6 +56,7 @@ const List<WatchRule> mockWatchRules = <WatchRule>[
     direction: WatchRuleDirection.inflow,
     channels: <WatchRuleChannel>{WatchRuleChannel.email},
     muted: true,
+    // 空仓地址：永续字段全 null，卡片以灰显 `-` 占位。
   ),
 ];
 

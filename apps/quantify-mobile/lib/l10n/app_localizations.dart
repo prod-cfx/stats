@@ -2858,6 +2858,114 @@ abstract class AppLocalizations {
   /// **'系统消息'**
   String get whaleNotifKindSystem;
 
+  /// No description provided for @whaleWatchSubTabLive.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时巨鲸'**
+  String get whaleWatchSubTabLive;
+
+  /// No description provided for @whaleWatchSubTabAddresses.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控地址'**
+  String get whaleWatchSubTabAddresses;
+
+  /// No description provided for @whaleWatchSubTabNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知中心'**
+  String get whaleWatchSubTabNotifications;
+
+  /// No description provided for @whaleWatchCreateMonitor.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建监控'**
+  String get whaleWatchCreateMonitor;
+
+  /// No description provided for @whaleWatchAddressesEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无监控地址'**
+  String get whaleWatchAddressesEmpty;
+
+  /// No description provided for @whaleWatchMarkAllReadCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部已读 ({count})'**
+  String whaleWatchMarkAllReadCount(int count);
+
+  /// No description provided for @whaleWatchPerpValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约总价值'**
+  String get whaleWatchPerpValue;
+
+  /// No description provided for @whaleWatchUnrealizedPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏'**
+  String get whaleWatchUnrealizedPnl;
+
+  /// No description provided for @whaleWatchAvailMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用保证金'**
+  String get whaleWatchAvailMargin;
+
+  /// No description provided for @whaleWatchMarginUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'保证金使用率'**
+  String get whaleWatchMarginUsage;
+
+  /// No description provided for @whaleWatchPositions.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get whaleWatchPositions;
+
+  /// No description provided for @whaleRuleAliasLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址备注'**
+  String get whaleRuleAliasLabel;
+
+  /// No description provided for @whaleRuleAliasHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选'**
+  String get whaleRuleAliasHint;
+
+  /// No description provided for @whaleRuleChannelTelegramUnbound.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先完成 Telegram 登录/绑定后再开启 Telegram 推送'**
+  String get whaleRuleChannelTelegramUnbound;
+
+  /// No description provided for @whaleLiveCoinPush.
+  ///
+  /// In zh, this message translates to:
+  /// **'关注币种推送'**
+  String get whaleLiveCoinPush;
+
+  /// No description provided for @whaleLiveCoinPushDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启关注币种推送'**
+  String get whaleLiveCoinPushDone;
+
+  /// No description provided for @whaleLiveWinSort.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get whaleLiveWinSort;
+
+  /// No description provided for @whaleLiveWinSortDisabledHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率排序需交易级数据，接入后启用'**
+  String get whaleLiveWinSortDisabledHint;
+
   /// No description provided for @klineLoadError.
   ///
   /// In zh, this message translates to:
@@ -3431,7 +3539,7 @@ abstract class AppLocalizations {
   /// No description provided for @whaleRuleChannelPush.
   ///
   /// In zh, this message translates to:
-  /// **'应用推送'**
+  /// **'网页通知'**
   String get whaleRuleChannelPush;
 
   /// No description provided for @whaleRuleChannelTelegram.

@@ -562,6 +562,31 @@
   "whaleNotifKindWatch": "监控触发",
   "whaleNotifKindFlow": "资金流向",
   "whaleNotifKindSystem": "系统消息",
+  "whaleWatchSubTabLive": "实时巨鲸",
+  "whaleWatchSubTabAddresses": "监控地址",
+  "whaleWatchSubTabNotifications": "通知中心",
+  "whaleWatchCreateMonitor": "创建监控",
+  "whaleWatchAddressesEmpty": "暂无监控地址",
+  "whaleWatchMarkAllReadCount": "全部已读 ({count})",
+  "@whaleWatchMarkAllReadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "whaleWatchPerpValue": "永续合约总价值",
+  "whaleWatchUnrealizedPnl": "未实现盈亏",
+  "whaleWatchAvailMargin": "可用保证金",
+  "whaleWatchMarginUsage": "保证金使用率",
+  "whaleWatchPositions": "持仓",
+  "whaleRuleAliasLabel": "地址备注",
+  "whaleRuleAliasHint": "可选",
+  "whaleRuleChannelTelegramUnbound": "请先完成 Telegram 登录/绑定后再开启 Telegram 推送",
+  "whaleLiveCoinPush": "关注币种推送",
+  "whaleLiveCoinPushDone": "已开启关注币种推送",
+  "whaleLiveWinSort": "胜率",
+  "whaleLiveWinSortDisabledHint": "胜率排序需交易级数据，接入后启用",
   "klineLoadError": "K 线加载失败",
   "tabMarket": "行情",
   "tabWhale": "巨鲸",
@@ -657,7 +682,7 @@
   "whaleRuleDirectionOutflow": "流出",
   "whaleRuleDirectionBoth": "双向",
   "whaleRuleChannelLabel": "推送渠道",
-  "whaleRuleChannelPush": "应用推送",
+  "whaleRuleChannelPush": "网页通知",
   "whaleRuleChannelTelegram": "Telegram",
   "whaleRuleChannelEmail": "邮件",
   "whaleRuleChannelRequired": "至少选择一个推送渠道",

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/mock/fixtures/whale_extras.dart';
 import '../../data/models/whale_extra_models.dart';
+import '../../data/whale_notifications_notifier.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -29,33 +29,31 @@ class WhaleHomePage extends ConsumerStatefulWidget {
 
 class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
   int _tabIndex = 1; // 默认实时 tab
-  late List<WhaleNotification> _notifications;
 
-  @override
-  void initState() {
-    super.initState();
-    _notifications = List<WhaleNotification>.of(mockWhaleNotifications);
-  }
-
-  int get _unreadCount =>
-      _notifications.where((WhaleNotification n) => n.unread).length;
-
+  /// issue #1769：通知中心改为单一数据源 [whaleNotificationsProvider]，
+  /// 铃铛 panel 与监控 Tab「通知中心」子 Tab 共享同一份列表/已读态。
   Future<void> _openNotifications() async {
+    final List<WhaleNotification> current =
+        ref.read(whaleNotificationsProvider);
     final WhaleNotificationSheetResult? result =
         await WhaleNotificationSheet.show(
       context,
-      notifications: _notifications,
+      notifications: current,
     );
     if (!mounted || result == null) return;
-    setState(() {
-      _notifications = result.notifications;
-    });
+    ref
+        .read(whaleNotificationsProvider.notifier)
+        .replaceAll(result.notifications);
   }
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final int unreadCount = ref
+        .watch(whaleNotificationsProvider)
+        .where((WhaleNotification n) => n.unread)
+        .length;
     final List<({String label})> tabs = <({String label})>[
       (label: l10n.whaleTabDiscover),
       (label: l10n.whaleTabLive),
@@ -76,7 +74,7 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
           ),
           const SizedBox(width: QzSpacing.xs),
           QzNotificationBell(
-            unread: _unreadCount,
+            unread: unreadCount,
             onTap: _openNotifications,
             tooltip: l10n.whaleNotificationTooltip,
             circular: true,

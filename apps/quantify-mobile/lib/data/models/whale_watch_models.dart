@@ -28,6 +28,12 @@ class WatchRule {
     required this.direction,
     required this.channels,
     required this.muted,
+    this.alias,
+    this.perpValueUsd,
+    this.unrealizedPnlUsd,
+    this.availMarginUsd,
+    this.marginUsagePct,
+    this.positions,
   });
 
   final String id;
@@ -42,8 +48,20 @@ class WatchRule {
   final Set<WatchRuleChannel> channels;
   final bool muted;
 
+  /// 地址备注（可选）。对齐设计稿 CreateMonitorSheet `地址备注` 字段。
+  final String? alias;
+
+  /// 监控地址卡永续字段（issue #1769）。全部 nullable：null 表示「空仓 /
+  /// 数据未就绪」，卡片以灰显 `-` 占位，接真实数据通道（#1682/#1683）后填充。
+  final double? perpValueUsd; // 永续合约总价值（USD）
+  final double? unrealizedPnlUsd; // 未实现盈亏（USD，可负）
+  final double? availMarginUsd; // 可用保证金（USD）
+  final int? marginUsagePct; // 保证金使用率（0-100）
+  final int? positions; // 持仓数
+
   WatchRule copyWith({
     String? name,
+    String? alias,
     double? thresholdUsd,
     WatchRuleDirection? direction,
     Set<WatchRuleChannel>? channels,
@@ -61,6 +79,12 @@ class WatchRule {
       direction: direction ?? this.direction,
       channels: channels ?? this.channels,
       muted: muted ?? this.muted,
+      alias: alias ?? this.alias,
+      perpValueUsd: perpValueUsd,
+      unrealizedPnlUsd: unrealizedPnlUsd,
+      availMarginUsd: availMarginUsd,
+      marginUsagePct: marginUsagePct,
+      positions: positions,
     );
   }
 }
