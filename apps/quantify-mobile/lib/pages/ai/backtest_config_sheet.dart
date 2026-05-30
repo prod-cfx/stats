@@ -15,12 +15,12 @@ import '../../widgets/qz_button.dart';
 /// Backtest configuration sheet — route `/ai/backtest-config` (#1566).
 ///
 /// 字段对齐原型 `design/project/mobile/m-screens-2.jsx` ScreenAIConfig：
-///   - 历史区间快选 chips（7D / 30D / 90D / 1Y / 自定义）；选「自定义」时
+///   - 历史区间快选 chips（7D / 30D / 90D / 1Y / 3Y / 自定义）；选「自定义」时
 ///     展开 start / end 文本框。
 ///   - 初始资金（USDT）
 ///   - 滑点（bps，默认 5 ≈ 0.05%）
 ///   - 手续费（bps，默认 2 ≈ 0.02%）
-///   - 成交价来源 select：开盘价 / 收盘价 / 逐笔成交价（默认 逐笔成交价）
+///   - 成交价来源 select：开盘价 / 收盘价 / 中间价（默认 收盘价，对齐设计稿）
 ///   - 允许部分覆盖数据 select：是 / 否（默认 是）
 ///   - 底部 shield 风格提示 banner（说明回测仅供参考、策略参数请回对话改）
 ///   - 底部双按钮：「收起」（次要）+「确认并开始回测」（主要）
@@ -46,6 +46,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     (key: '30D', days: 30),
     (key: '90D', days: 90),
     (key: '1Y', days: 365),
+    (key: '3Y', days: 1095),
     (key: 'custom', days: 0),
   ];
 
@@ -54,7 +55,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       TextEditingController(text: '10000');
   final TextEditingController _slippage = TextEditingController(text: '5');
   final TextEditingController _fee = TextEditingController(text: '2');
-  String _fillSource = 'avg';
+  String _fillSource = 'close';
   bool _partialData = true;
 
   /// 仅自定义模式启用。
@@ -367,7 +368,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                         items: <({String key, String label})>[
                           (key: 'open', label: l10n.backtestFillOpen),
                           (key: 'close', label: l10n.backtestFillClose),
-                          (key: 'avg', label: l10n.backtestFillAvg),
+                          (key: 'mid', label: l10n.backtestFillMid),
                         ],
                         onChanged: (String v) =>
                             setState(() => _fillSource = v),

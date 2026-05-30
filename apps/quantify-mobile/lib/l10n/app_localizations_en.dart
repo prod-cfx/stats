@@ -132,7 +132,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestFillClose => 'Close';
 
   @override
-  String get backtestFillAvg => 'Tick Trade Price';
+  String get backtestFillMid => 'Mid Price';
 
   @override
   String get backtestFieldPartialData => 'Allow partial data coverage';

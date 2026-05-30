@@ -129,7 +129,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestFillClose => '收盘价';
 
   @override
-  String get backtestFillAvg => '逐笔成交价';
+  String get backtestFillMid => '中间价';
 
   @override
   String get backtestFieldPartialData => '允许部分覆盖数据继续回测';

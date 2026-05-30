@@ -10,7 +10,8 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 
 /// 覆盖 #1650：
 /// - 默认手续费 = 2 bps
-/// - 默认成交价来源文案 = 逐笔成交价
+/// - 默认成交价来源 = 收盘价 (close)，选项含中间价 (mid)，对齐设计稿 (#1795)
+/// - 历史区间含 3Y (#1795)
 /// - sheet 视觉：顶部圆角 24、固定 top:120 scrim
 /// - footer 贴底（不在滚动内）：滚动后「确认并开始回测」依然可见
 /// - scrim 点击关闭
@@ -63,19 +64,31 @@ void main() {
     expect(fee.controller!.text, '2');
   });
 
-  testWidgets('默认成交价来源 = 逐笔成交价 (avg)', (WidgetTester tester) async {
+  testWidgets('默认成交价来源 = 收盘价 (close)，选项含中间价 (mid)',
+      (WidgetTester tester) async {
     await _pump(tester);
     final DropdownButton<String> dd =
         tester.widget<DropdownButton<String>>(find.descendant(
       of: find.byKey(const Key('backtest-fill-source')),
       matching: find.byType(DropdownButton<String>),
     ));
-    expect(dd.value, 'avg');
-    // items[avg] 的 label 必须 = 逐笔成交价
-    final DropdownMenuItem<String> avg = dd.items!
-        .firstWhere((DropdownMenuItem<String> i) => i.value == 'avg');
-    final Text label = avg.child as Text;
-    expect(label.data, '逐笔成交价');
+    expect(dd.value, 'close');
+    // items[mid] 的 label 必须 = 中间价，对齐设计稿
+    final DropdownMenuItem<String> mid = dd.items!
+        .firstWhere((DropdownMenuItem<String> i) => i.value == 'mid');
+    final Text label = mid.child as Text;
+    expect(label.data, '中间价');
+    // 不应再存在旧 avg 选项
+    expect(
+      dd.items!.where((DropdownMenuItem<String> i) => i.value == 'avg'),
+      isEmpty,
+    );
+  });
+
+  testWidgets('历史区间含 3Y chip', (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('backtest-range-3Y')), findsOneWidget);
+    expect(find.text('3Y'), findsOneWidget);
   });
 
   testWidgets('sheet 顶部约 120px 是 scrim；点击 scrim 关闭', (WidgetTester tester) async {

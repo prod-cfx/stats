@@ -338,11 +338,11 @@ abstract class AppLocalizations {
   /// **'收盘价'**
   String get backtestFillClose;
 
-  /// No description provided for @backtestFillAvg.
+  /// No description provided for @backtestFillMid.
   ///
   /// In zh, this message translates to:
-  /// **'逐笔成交价'**
-  String get backtestFillAvg;
+  /// **'中间价'**
+  String get backtestFillMid;
 
   /// No description provided for @backtestFieldPartialData.
   ///
