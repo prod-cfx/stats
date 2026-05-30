@@ -700,9 +700,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketLongShortTitle => 'Long/Short';
 
   @override
-  String get marketLongShortSubtitle => 'Market perps · 4H';
-
-  @override
   String get marketLongShortLoadError => 'Long/short data load failed';
 
   @override

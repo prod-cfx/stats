@@ -1376,12 +1376,6 @@ abstract class AppLocalizations {
   /// **'多空比'**
   String get marketLongShortTitle;
 
-  /// No description provided for @marketLongShortSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'全市场永续合约 · 4H'**
-  String get marketLongShortSubtitle;
-
   /// No description provided for @marketLongShortLoadError.
   ///
   /// In zh, this message translates to:

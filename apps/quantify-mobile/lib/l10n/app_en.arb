@@ -221,7 +221,6 @@
   "marketHomeColumnPrice": "Last",
   "marketHomeColumnChange": "24H Chg",
   "marketLongShortTitle": "Long/Short",
-  "marketLongShortSubtitle": "Market perps · 4H",
   "marketLongShortLoadError": "Long/short data load failed",
   "marketLongShortHistory": "History",
   "marketLongShortHistorySection": "Historical long/short",

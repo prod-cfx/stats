@@ -12,8 +12,8 @@ import '../pages/auth/login_page.dart';
 import '../pages/live/live_strategies_page.dart';
 import '../pages/live/live_strategy_detail_page.dart';
 import '../pages/market/data_hub_page.dart';
-import '../pages/market/long_short_page.dart';
 import '../pages/market/market_detail_page.dart';
+import '../pages/market/widgets/data_hub_header.dart';
 import '../pages/me/me_home_page.dart';
 import '../pages/me/theme_settings_page.dart';
 import '../pages/strategy/strategy_detail_page.dart';
@@ -145,17 +145,19 @@ GoRouter buildRouter({
       //   1. `long-short` 显式注册在 `:symbol` 之前（声明顺序）
       //   2. `:symbol` 上挂正则 `[A-Z0-9-]{2,}` 限制为大写交易对格式，
       //      `long-short` 字面量（小写）不命中
-      //   3. widget test `/market/long-short resolves to LongShortPage` 守护
+      //   3. widget test `/market/long-short 预选多空比 tab` 守护
       // 这样后续 import 排序工具/代码格式化即便重排路由也不会静默打破。
       GoRoute(
         path: '/login',
         builder: (BuildContext context, GoRouterState state) =>
             const LoginPage(),
       ),
+      // 多空比深链（#1853）：渲染「数据」hub 并预选多空比 tab，顶部统一为
+      // DataHubHeader（去掉旧 QzTopBar 包装层），与底栏入口体验一致。
       GoRoute(
         path: '/market/long-short',
         builder: (BuildContext context, GoRouterState state) =>
-            const LongShortPage(),
+            const DataHubPage(initial: DataHubScreen.longShort),
       ),
       GoRoute(
         path: r'/market/:symbol([A-Z0-9-]{2,})',

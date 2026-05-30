@@ -555,7 +555,7 @@ app 现状核查（**原 issue 描述与代码有出入，以下以代码为准*
 | 路径 | 页面 | 设计稿对应（`proto.jsx` SUB_SCREENS） |
 |------|------|------------------------------------|
 | `/login` | `LoginPage` | `login`（`under: null`） |
-| `/market/long-short` | `LongShortPage` | `ls`（`under: market`） |
+| `/market/long-short` | `DataHubPage(initial: longShort)` | `ls`（`under: market`） |
 | `/market/:symbol`（正则 `[A-Z0-9-]{2,}`） | `MarketDetailPage` | `trade`（`under: market`） |
 | `/strategy/:id` | `StrategyDetailPage` | 设计稿未单列，沿用 strategy tab 内 push |
 | `/me/theme` | `ThemeSettingsPage` | `theme`（`under: me`） |

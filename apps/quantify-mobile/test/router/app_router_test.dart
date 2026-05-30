@@ -18,8 +18,8 @@ import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/pages/auth/login_page.dart';
 import 'package:quantify_mobile/pages/market/data_hub_page.dart';
-import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
+import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
 import 'package:quantify_mobile/pages/live/live_strategies_page.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
@@ -191,15 +191,21 @@ void main() {
     expect(find.byType(QzBottomTabBar), findsNothing);
   });
 
-  testWidgets('/market/long-short resolves to LongShortPage (not :symbol)', (
+  testWidgets('/market/long-short resolves to DataHubPage (not :symbol)', (
     WidgetTester tester,
   ) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).push('/market/long-short');
-    await tester.pumpAndSettle();
+    // 不用 pumpAndSettle：hub 内 MarketHomeBody 的 mock kline 流式 Timer 永不静默。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.byType(LongShortPage), findsOneWidget);
+    expect(find.byType(DataHubPage), findsOneWidget);
     expect(find.byType(MarketDetailPage), findsNothing);
+    // 深链预选多空比 tab（#1853）。
+    final DataHubPage page =
+        tester.widget<DataHubPage>(find.byType(DataHubPage));
+    expect(page.initial, DataHubScreen.longShort);
   });
 
   testWidgets('/market/BTCUSDT resolves to MarketDetailPage', (

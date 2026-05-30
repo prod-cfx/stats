@@ -15,31 +15,9 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_segmented_tabs.dart';
 import '../../widgets/qz_spinner.dart';
-import '../../widgets/qz_top_bar.dart';
 import 'widgets/exchange_long_short_tile.dart';
 import 'widgets/long_short_bar.dart';
 import 'widgets/long_short_hero_card.dart';
-
-/// 多空比 standalone 页。
-///
-/// issue #1851：主体抽到 [LongShortBody]，供「数据」hub（`DataHubPage`）内嵌
-/// 复用；本 wrapper 保留 QzTopBar（标题 + 副标题），供 `/market/long-short`
-/// 深链与既有 standalone 测试。刷新入口已下放到 [LongShortBody] 顶部。
-class LongShortPage extends ConsumerWidget {
-  const LongShortPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    return Scaffold(
-      appBar: QzTopBar(
-        title: l10n.marketLongShortTitle,
-        subtitle: l10n.marketLongShortSubtitle,
-      ),
-      body: const LongShortBody(),
-    );
-  }
-}
 
 /// 多空比主体（symbol/interval 选择 + hero 卡 + 交易所榜 + 历史），无 Scaffold /
 /// 顶栏。顶部自带刷新按钮（抽 body 后 QzTopBar 的 refresh action 下放至此）。

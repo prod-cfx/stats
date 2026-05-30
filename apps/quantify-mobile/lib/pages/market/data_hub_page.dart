@@ -29,19 +29,24 @@ import 'widgets/data_hub_placeholder.dart';
 /// 时即触发各自 mock 仓库加载。mock 数据廉价，接受 eager 构建（KISS），不引入
 /// lazy 缓存复杂度。
 class DataHubPage extends ConsumerStatefulWidget {
-  const DataHubPage({super.key});
+  const DataHubPage({super.key, this.initial = DataHubScreen.market});
+
+  /// 初始选中的子屏。底栏 market tab 默认进 [DataHubScreen.market]；
+  /// `/market/long-short` 深链传 [DataHubScreen.longShort] 预选多空比（#1853）。
+  final DataHubScreen initial;
 
   @override
   ConsumerState<DataHubPage> createState() => _DataHubPageState();
 }
 
 class _DataHubPageState extends ConsumerState<DataHubPage> {
-  DataHubScreen _current = DataHubScreen.market;
+  late DataHubScreen _current;
   late List<WhaleNotification> _notifications;
 
   @override
   void initState() {
     super.initState();
+    _current = widget.initial;
     _notifications = List<WhaleNotification>.of(mockWhaleNotifications);
   }
 

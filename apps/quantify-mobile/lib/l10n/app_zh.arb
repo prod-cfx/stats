@@ -224,7 +224,6 @@
   "marketHomeColumnPrice": "最新价",
   "marketHomeColumnChange": "24H 涨跌",
   "marketLongShortTitle": "多空比",
-  "marketLongShortSubtitle": "全市场永续合约 · 4H",
   "marketLongShortLoadError": "多空比加载失败",
   "marketLongShortHistory": "历史",
   "marketLongShortHistorySection": "历史多空比",

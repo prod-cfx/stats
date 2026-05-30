@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:quantify_mobile/pages/market/data_hub_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
+import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
 import 'package:quantify_mobile/pages/market/widgets/long_short_bar.dart';
 import 'package:quantify_mobile/router/app_router.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> _pumpPage(
+/// 多空比深链与主体测试（#1853）。
+///
+/// #1853 后多空比不再有独立 QzTopBar 包装层：`/market/long-short` 渲染
+/// 「数据」hub 并预选多空比 tab，顶部统一为 DataHubHeader。
+Future<void> _pumpBody(
   WidgetTester tester, {
   QzTheme theme = QzTheme.fallback,
 }) async {
@@ -22,7 +29,7 @@ Future<void> _pumpPage(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(theme),
-        home: const LongShortPage(),
+        home: const Scaffold(body: LongShortBody()),
       ),
     ),
   );
@@ -31,11 +38,17 @@ Future<void> _pumpPage(
 }
 
 void main() {
-  testWidgets('/market/long-short 真实路由可达', (WidgetTester tester) async {
+  testWidgets('/market/long-short 深链预选多空比 tab（顶部为 hub header）',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
     await tester.binding.setSurfaceSize(const Size(420, 1200));
     final GoRouter router = buildRouter();
     await tester.pumpWidget(
       ProviderScope(
+        overrides: <Override>[
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
         child: MaterialApp.router(
           locale: const Locale('zh'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -50,16 +63,20 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.byType(LongShortPage), findsOneWidget);
+    // 渲染 hub（含统一 header）而非旧 standalone 标题栏，多空比 tab 选中。
+    expect(find.byType(DataHubPage), findsOneWidget);
+    expect(find.byKey(const Key('data-hub-notification-bell')), findsOneWidget);
+    expect(find.byType(LongShortBody), findsOneWidget);
     expect(find.byType(LongShortBar), findsWidgets);
-    // 顶栏 subtitle 对齐设计稿（issue #1667）。
-    expect(find.text('全市场永续合约 · 4H'), findsOneWidget);
+    final DataHubPage page =
+        tester.widget<DataHubPage>(find.byType(DataHubPage));
+    expect(page.initial, DataHubScreen.longShort);
   });
 
-  testWidgets('LongShortPage 9 主题循环 pump 不抛异常', (WidgetTester tester) async {
+  testWidgets('LongShortBody 9 主题循环 pump 不抛异常', (WidgetTester tester) async {
     for (final QzBg bg in QzBg.values) {
       for (final QzAccent accent in QzAccent.values) {
-        await _pumpPage(
+        await _pumpBody(
           tester,
           theme: QzTheme(bg: bg, accent: accent),
         );
