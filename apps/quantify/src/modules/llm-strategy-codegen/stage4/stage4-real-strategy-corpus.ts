@@ -17,6 +17,8 @@ export interface Stage4ClarificationTurn {
   readonly userAnswer: string
 }
 
+type Stage4RealStrategyExpectedFailure = Stage4BlockerKind | 'program_deploy_payload_binding_missing'
+
 export interface Stage4RealStrategyCase {
   readonly id: string
   readonly category: Stage4RealStrategyCategory
@@ -24,7 +26,7 @@ export interface Stage4RealStrategyCase {
   readonly expectedAtomKeys: readonly string[]
   readonly expectedSemanticIntent: readonly string[]
   readonly clarificationTurns: readonly Stage4ClarificationTurn[]
-  readonly expectedFailure: Stage4BlockerKind | null
+  readonly expectedFailure: Stage4RealStrategyExpectedFailure | null
 }
 
 export const STAGE4_REAL_STRATEGY_CORPUS = [
@@ -103,7 +105,7 @@ export const STAGE4_REAL_STRATEGY_CORPUS = [
   {
     id: 'stage4-action-reverse-position',
     category: 'action_lifecycle',
-    initialUserMessage: 'EMA20 下穿 EMA50 时从多头反手做空。',
+    initialUserMessage: 'binance 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。',
     expectedAtomKeys: ['indicator.cross_under', 'action.reverse_position'],
     expectedSemanticIntent: ['trend reversal trigger', 'reverse from long to short'],
     clarificationTurns: [],
@@ -116,6 +118,6 @@ export const STAGE4_REAL_STRATEGY_CORPUS = [
     expectedAtomKeys: ['program.fixed_grid_gated'],
     expectedSemanticIntent: ['fixed grid program enters rules effects programs', 'deploy payload binding still missing'],
     clarificationTurns: [],
-    expectedFailure: 'deploy_payload_missing_binding',
+    expectedFailure: 'program_deploy_payload_binding_missing',
   },
 ] as const satisfies readonly Stage4RealStrategyCase[]
