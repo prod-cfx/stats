@@ -1344,6 +1344,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailSubscribersSuffix => ' subscribers';
 
   @override
+  String get strategyDetailProfitLossRatio => 'Profit/Loss Ratio';
+
+  @override
+  String get strategyDetailTradeCount => 'Trades';
+
+  @override
+  String get strategyDetailUsers => 'Users';
+
+  @override
+  String get strategyDetailDescriptionTitle => 'Strategy Notes';
+
+  @override
+  String strategyDetailDescriptionBody(String desc, String tag) {
+    return '${desc}Based on the $tag framework, validated via historical backtesting. Get familiar with the risk parameters before committing funds.';
+  }
+
+  @override
+  String strategyDetailCumulativeReturn(String period) {
+    return '$period cumulative return';
+  }
+
+  @override
+  String get strategyDetailRunButton => 'Run';
+
+  @override
   String get strategyCardLoadConversation => 'Load chat';
 
   @override

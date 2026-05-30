@@ -1306,6 +1306,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailSubscribersSuffix => ' 订阅';
 
   @override
+  String get strategyDetailProfitLossRatio => '盈亏比';
+
+  @override
+  String get strategyDetailTradeCount => '交易次数';
+
+  @override
+  String get strategyDetailUsers => '使用人数';
+
+  @override
+  String get strategyDetailDescriptionTitle => '策略说明';
+
+  @override
+  String strategyDetailDescriptionBody(String desc, String tag) {
+    return '$desc策略基于$tag框架，使用历史数据回测验证。建议在熟悉风险参数后再投入资金。';
+  }
+
+  @override
+  String strategyDetailCumulativeReturn(String period) {
+    return '$period 累计收益';
+  }
+
+  @override
+  String get strategyDetailRunButton => '运行';
+
+  @override
   String get strategyCardLoadConversation => '载入对话';
 
   @override

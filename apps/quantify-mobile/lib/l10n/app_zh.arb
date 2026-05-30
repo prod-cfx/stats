@@ -493,6 +493,24 @@
   "strategyDetailSubscribe": "订阅策略",
   "strategyDetailSubscribed": "已订阅 · 点击取消",
   "strategyDetailSubscribersSuffix": " 订阅",
+  "strategyDetailProfitLossRatio": "盈亏比",
+  "strategyDetailTradeCount": "交易次数",
+  "strategyDetailUsers": "使用人数",
+  "strategyDetailDescriptionTitle": "策略说明",
+  "strategyDetailDescriptionBody": "{desc}策略基于{tag}框架，使用历史数据回测验证。建议在熟悉风险参数后再投入资金。",
+  "@strategyDetailDescriptionBody": {
+    "placeholders": {
+      "desc": {"type": "String"},
+      "tag": {"type": "String"}
+    }
+  },
+  "strategyDetailCumulativeReturn": "{period} 累计收益",
+  "@strategyDetailCumulativeReturn": {
+    "placeholders": {
+      "period": {"type": "String"}
+    }
+  },
+  "strategyDetailRunButton": "运行",
   "strategyCardLoadConversation": "载入对话",
   "strategyCardRun": "运行",
   "strategyDetailLoadConversation": "载入到对话",

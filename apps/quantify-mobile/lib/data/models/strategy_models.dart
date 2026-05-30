@@ -117,11 +117,13 @@ class StrategyMarketPage {
 /// equity curve 时间维度（#1565）。
 enum EquityTimeframe { d7, d30, d90, y1 }
 
-/// 策略详情：基础卡片 + 6 项收益指标 + 收益曲线占位序列。
+/// 策略详情：基础卡片 + 收益指标 + 收益曲线占位序列。
 ///
-/// 6 项指标按 issue #1514 验收对齐：7d / 30d / 全部收益率、最大回撤、夏普、
-/// 胜率。所有数值由 mock 基于 `Random(id.hashCode)` 派生，**确定性**——
-/// 保证 widget test 多次 pump 同一 id 结果一致。
+/// 指标对齐设计稿 `StratDetail`（#1825）：累计收益 [cagr]、夏普、最大回撤、
+/// 胜率、盈亏比 [profitLossRatio]、交易次数 [tradeCount]、使用人数 [users]。
+/// 7d/30d/全部收益率保留供其他消费方使用。所有数值由 mock 基于
+/// `Random(id.hashCode)` 派生，**确定性**——保证 widget test 多次 pump 同一
+/// id 结果一致。
 class StrategyDetail {
   final StrategyCard card;
   final double return7d;
@@ -130,6 +132,18 @@ class StrategyDetail {
   final double maxDrawdown;
   final double sharpe;
   final double winRate;
+
+  /// 累计收益率（百分数，如 32.4 表示 +32.4%），equity 卡左上大号展示（#1825）。
+  final double cagr;
+
+  /// 盈亏比（avg win / avg loss）。后端 StrategyDetail 暂未提供，mock 派生（#1825）。
+  final double profitLossRatio;
+
+  /// 历史交易次数。后端暂未提供，mock 派生（#1825）。
+  final int tradeCount;
+
+  /// 使用人数（订阅者数）。来自 [StrategyCard.subscribers]（#1825）。
+  final int users;
 
   /// 收益曲线占位采样点（0..1 归一化），与 sparkline 等价但更长。
   /// 真正的 K 线接入留给后续 issue；当前页仅渲染"占位"提示。
@@ -143,6 +157,10 @@ class StrategyDetail {
     required this.maxDrawdown,
     required this.sharpe,
     required this.winRate,
+    required this.cagr,
+    required this.profitLossRatio,
+    required this.tradeCount,
+    required this.users,
     required this.equityCurve,
   });
 }

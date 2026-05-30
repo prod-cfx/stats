@@ -142,6 +142,12 @@ class MockStrategyRepository implements StrategyRepository {
       maxDrawdown: -pickReturn(2, 50),
       sharpe: 0.3 + rng.nextDouble() * 2.5,
       winRate: 0.35 + rng.nextDouble() * 0.5,
+      // 累计收益跟随卡片 pnlPercent 量级，保持与广场卡一致的读数直觉。
+      cagr: card.pnlPercent,
+      // 盈亏比 1.0..2.5、交易次数 80..480：后端字段未就绪前的 mock 派生（#1825）。
+      profitLossRatio: 1.0 + rng.nextDouble() * 1.5,
+      tradeCount: 80 + rng.nextInt(400),
+      users: card.subscribers,
       equityCurve: curve,
     );
   }

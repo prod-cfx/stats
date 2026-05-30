@@ -2600,6 +2600,48 @@ abstract class AppLocalizations {
   /// **' 订阅'**
   String get strategyDetailSubscribersSuffix;
 
+  /// No description provided for @strategyDetailProfitLossRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏比'**
+  String get strategyDetailProfitLossRatio;
+
+  /// No description provided for @strategyDetailTradeCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易次数'**
+  String get strategyDetailTradeCount;
+
+  /// No description provided for @strategyDetailUsers.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用人数'**
+  String get strategyDetailUsers;
+
+  /// No description provided for @strategyDetailDescriptionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略说明'**
+  String get strategyDetailDescriptionTitle;
+
+  /// No description provided for @strategyDetailDescriptionBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'{desc}策略基于{tag}框架，使用历史数据回测验证。建议在熟悉风险参数后再投入资金。'**
+  String strategyDetailDescriptionBody(String desc, String tag);
+
+  /// No description provided for @strategyDetailCumulativeReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'{period} 累计收益'**
+  String strategyDetailCumulativeReturn(String period);
+
+  /// No description provided for @strategyDetailRunButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行'**
+  String get strategyDetailRunButton;
+
   /// No description provided for @strategyCardLoadConversation.
   ///
   /// In zh, this message translates to:

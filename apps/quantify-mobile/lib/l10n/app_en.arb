@@ -481,6 +481,24 @@
   "strategyDetailSubscribe": "Subscribe",
   "strategyDetailSubscribed": "Subscribed · Tap to cancel",
   "strategyDetailSubscribersSuffix": " subscribers",
+  "strategyDetailProfitLossRatio": "Profit/Loss Ratio",
+  "strategyDetailTradeCount": "Trades",
+  "strategyDetailUsers": "Users",
+  "strategyDetailDescriptionTitle": "Strategy Notes",
+  "strategyDetailDescriptionBody": "{desc}Based on the {tag} framework, validated via historical backtesting. Get familiar with the risk parameters before committing funds.",
+  "@strategyDetailDescriptionBody": {
+    "placeholders": {
+      "desc": {"type": "String"},
+      "tag": {"type": "String"}
+    }
+  },
+  "strategyDetailCumulativeReturn": "{period} cumulative return",
+  "@strategyDetailCumulativeReturn": {
+    "placeholders": {
+      "period": {"type": "String"}
+    }
+  },
+  "strategyDetailRunButton": "Run",
   "strategyCardLoadConversation": "Load chat",
   "strategyCardRun": "Run",
   "strategyDetailLoadConversation": "Load into chat",

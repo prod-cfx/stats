@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/providers.dart';
-import 'package:quantify_mobile/data/storage/strategy_subscription_persistence.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/equity_curve_view.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/load_conversation_toast.dart';
@@ -32,6 +31,13 @@ GoRouter _buildTestRouter() {
       GoRoute(
         path: '/ai',
         builder: (BuildContext _, GoRouterState state) => const _AiStub(),
+      ),
+      GoRoute(
+        path: '/me/live',
+        builder: (BuildContext _, GoRouterState state) => const Scaffold(
+          key: Key('live-stub'),
+          body: Center(child: Text('live stub')),
+        ),
       ),
     ],
   );
@@ -88,14 +94,27 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
 }
 
 void main() {
-  testWidgets('渲染：6 张指标卡 + 20 条信号 + 订阅 / 分享按钮 + equity 真实图（#1565）',
+  testWidgets(
+      '渲染：6 张指标卡 + 运行 / 分享 / 载入对话 + 策略说明 + equity 真实图，无信号段（#1825）',
       (WidgetTester tester) async {
     await _pumpDetail(tester);
     expect(find.byType(StrategyMetricCard), findsNWidgets(6));
-    expect(find.byType(StrategySignalTile), findsNWidgets(20));
-    expect(find.byKey(const Key('strategy-detail-subscribe-btn')),
-        findsOneWidget);
+    // 底栏：分享 + 载入对话 + 运行（订阅按钮已移除，#1825）
     expect(find.byKey(const Key('strategy-detail-share-btn')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-detail-load-chat-btn')),
+        findsOneWidget);
+    expect(find.byKey(const Key('strategy-detail-run-btn')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-detail-subscribe-btn')),
+        findsNothing);
+    // 6 格指标含设计稿新增项；equity 累计收益段含「累计收益」文案
+    expect(find.text('盈亏比'), findsOneWidget);
+    expect(find.text('交易次数'), findsOneWidget);
+    expect(find.text('使用人数'), findsOneWidget);
+    expect(find.textContaining('累计收益'), findsOneWidget);
+    // 策略说明段加入；最近信号段移除（#1825）
+    expect(find.text('策略说明'), findsOneWidget);
+    expect(find.text('近期信号'), findsNothing);
+    expect(find.byType(StrategySignalTile), findsNothing);
     // equity 真实图替代占位文字（#1565）
     expect(find.byType(EquityCurveView), findsOneWidget);
     expect(find.text('曲线占位（接入 K 线后可视化）'), findsNothing);
@@ -115,51 +134,31 @@ void main() {
     expect(find.byType(EquityCurveView), findsOneWidget);
   });
 
-  testWidgets('订阅按钮：未订阅 → 点击 → 已订阅 → 再次点击 → 取消',
+  testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘监控 /me/live（#1825）',
       (WidgetTester tester) async {
-    final ProviderContainer c = (await _pumpDetail(tester)).container;
-    expect(find.text('订阅策略'), findsOneWidget);
-    expect(c.read(strategySubscriptionsProvider).contains(_kId), isFalse);
+    final ({ProviderContainer container, GoRouter router}) ctx =
+        await _pumpDetail(tester);
 
-    await tester.tap(
-        find.byKey(const Key('strategy-detail-subscribe-btn')));
+    await tester.tap(find.byKey(const Key('strategy-detail-run-btn')));
     await tester.pump();
-    await tester.pump();
-    expect(c.read(strategySubscriptionsProvider).contains(_kId), isTrue);
-    expect(find.text('已订阅 · 点击取消'), findsOneWidget);
 
-    await tester.tap(
-        find.byKey(const Key('strategy-detail-subscribe-btn')));
-    await tester.pump();
-    await tester.pump();
-    expect(c.read(strategySubscriptionsProvider).contains(_kId), isFalse);
-  });
+    // toast 立即出现
+    expect(find.byKey(const Key('strategy-load-conversation-toast')),
+        findsOneWidget);
 
-  testWidgets('订阅持久化：toggle 后写入 SharedPreferences，第二次启动读到状态',
-      (WidgetTester tester) async {
-    // 第一次进入：订阅
-    final ProviderContainer c1 = (await _pumpDetail(tester)).container;
-    await tester.tap(
-        find.byKey(const Key('strategy-detail-subscribe-btn')));
-    await tester.pump();
-    await tester.pump();
-    expect(c1.read(strategySubscriptionsProvider).contains(_kId), isTrue);
-    c1.dispose();
+    // 未到 700ms 仍在 detail 路由
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(ctx.router.routerDelegate.currentConfiguration.uri.toString(),
+        contains('/strategy/'));
 
-    // 模拟第二次启动：用相同的 mock prefs 实例验证读路径
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      StrategySubscriptionPersistence.kKey: <String>[_kId],
-    });
-    final SharedPreferences prefs2 = await SharedPreferences.getInstance();
-    final ProviderContainer c2 = ProviderContainer(
-      overrides: <Override>[
-        sharedPreferencesProvider.overrideWithValue(prefs2),
-      ],
-    );
-    addTearDown(c2.dispose);
-    final Set<String> initial = c2.read(strategySubscriptionsProvider);
-    expect(initial.contains(_kId), isTrue,
-        reason: '第二次启动应从 SharedPreferences 恢复订阅集合');
+    // 到 700ms 跳实盘监控
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(ctx.router.routerDelegate.currentConfiguration.uri.toString(),
+        contains('/me/live'));
+
+    // 让 toast 自然消失
+    await tester.pump(const Duration(milliseconds: 2000));
   });
 
   testWidgets('9 主题循环 pump 不抛异常', (WidgetTester tester) async {
