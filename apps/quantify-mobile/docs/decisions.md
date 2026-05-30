@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-05-30 · 搜索体验基线：维持现状（market 内联 / long-short 无 / whale-live chip filter + WhaleSearchSheet），全屏 overlay（热门+历史 chips）标 future（Issue #1797）
+
+**背景**：设计稿三屏均含全屏 search overlay（热门 + 历史 chips）——行情列表 `m-screens-2.jsx ScreenTickers`（`:1197`，`openSearch` 全屏覆盖层）、多空比 `m-screens-3.jsx`（`LSCoinTabs` 的 `SearchOverlay`，`hotLabel="热门币种"`）、巨鲸实时 `m-screens-4.jsx WhaleLive`（`WhaleCoinTabs`，`:514` `searching` 币种搜索覆盖层）。`StratSearchOverlay`（`m-screens-2.jsx:243`）给出 overlay 模板：顶部输入框 + 「热门搜索」chips（`STRAT_TRENDING` 静态常量）+ 「搜索历史」chips（`history` useState 种子 + 清空按钮）+ 结果列表。
+
+app 现状核查（**原 issue 描述与代码有出入，以下以代码为准**）：
+
+| 屏 | app 现状 | 设计稿 overlay | 差异性质 |
+|----|---------|---------------|---------|
+| 行情列表 `market_home_page.dart` | 内联展开搜索框（`market-search-toggle` 切 `market-search-field`，`:101` `_toggleSearch`），symbol 前缀过滤（`:148`），**无热门/历史 chips** | 全屏 overlay + 热门 + 历史 + rich 结果行 | 形态差异（内联 vs 全屏）+ 缺热门/历史 |
+| 多空比 `long_short_page.dart` | **无任何搜索/过滤输入**（整文件无 search/filter/TextField） | `LSCoinTabs` 币种搜索 overlay | 完全未落地 |
+| 巨鲸实时 `whale_live_tab.dart` | 仅**资产 chip filter strip**（`_symbolFilterKeys=['',BTC,ETH,SOL]`，`:279` `_buildFilterBar`）+ 阈值 pill，**无搜索输入** | `WhaleCoinTabs` 币种搜索 overlay | 币种搜索未落地（但见下「不变项」：巨鲸搜索已由 #1754 `WhaleSearchSheet` 承载） |
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 对齐：抽象统一全屏 overlay 组件，三处接入 | 新建 `QzSearchOverlay`（输入框 + 热门 chips + 历史 chips + 清空 + 结果列表），替换 market 内联框、给 long-short / whale-live 补币种搜索 overlay；热门=静态种子，历史=session 内存 | 三屏搜索语义**不同**：market 是 symbol 列表过滤，long-short / whale-live 是币种选择（驱动图表/feed 的 coin 维度），whale 另有 `WhaleSearchSheet`（#1754，多类目：地址/标签/资产/交易所/事件）。强抽象一个「统一 overlay」覆盖三种不同语义是过度设计（违反 KISS）；market 现有内联框 + symbol 过滤是已走通可用形态，替换为全屏 overlay 会破坏既有 `market-search-field`/`market-search-toggle` widget keys 与测试（Never break userspace）；热门/历史 chips 的产品价值相对现有可用过滤边际有限，long-short / whale-live 的币种维度已分别由 chip filter / 图表币种参数覆盖核心场景 |
+| B. 维持现状 + 全屏 overlay 标 future（采纳） | market 维持内联搜索框 + symbol 过滤；long-short 维持无独立搜索（币种切换走图表参数）；whale-live 维持资产 chip filter + 阈值 pill，巨鲸搜索维持 `WhaleSearchSheet`（#1754）入口；设计稿三屏全屏 overlay + 热门/历史 chips 统一标 future，差异关闭 | 对齐 #1749/#1750/#1756/#1788/#1791/#1794 已建立的「设计超前形态 → 标 future、以 app 现状为基线」规范；零破坏（market 内联搜索、whale chip filter、`WhaleSearchSheet` 均维持现状）；KISS/YAGNI——不为三种不同语义强造一个统一抽象；热门/历史 chips 待真实搜索热度 / 历史持久化通道（#1682 数据范畴）就绪后随币种搜索能力一并评估 |
+
+**判定**：**采纳方案 B——维持现状，全屏 search overlay（热门+历史 chips）统一标记为 future**，不纳入当前 quantify-mobile app 信息架构与验收。
+
+- **行情列表 `market_home_page.dart`** → 维持内联展开搜索框（`market-search-toggle`/`market-search-field`）+ symbol 前缀过滤现状。全屏 overlay + 热门/历史 chips 标 future。
+- **多空比 `long_short_page.dart`** → 维持无独立搜索现状（币种维度由图表参数承载）。`LSCoinTabs` 币种搜索 overlay 标 future。
+- **巨鲸实时 `whale_live_tab.dart`** → 维持资产 chip filter strip + 阈值 pill 现状。`WhaleCoinTabs` 币种搜索 overlay 标 future；巨鲸搜索能力以既有 `WhaleSearchSheet`（#1754，入口在 `whale_home_page.dart` 顶栏）为唯一基线，不在实时页另开第二条搜索入口（避免 route/sheet/overlay 多入口冲突，见 #1749 §3 边界精神）。
+- **热门搜索 / 搜索历史 chips** → future。热门依赖真实搜索热度统计，历史依赖跨会话持久化通道；当前设计稿 overlay 的热门=静态常量、历史=session 种子，落地为纯 mock 无产品价值，真实接入后口径（热度排序、历史去重/上限/清空持久化）大概率重写。
+
+**对齐结论（对应 #1797 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品确认搜索基线，结论记入 `docs/decisions.md` | 已满足。基线＝方案 B 维持现状，记入本节 | 本节 |
+| [2] 三处搜索现状逐条对照设计稿 overlay，明确对齐 OR future | 已满足。market 内联（维持）/ long-short 无（维持）/ whale-live chip filter + WhaleSearchSheet（维持）；三屏全屏 overlay 均 future | 本节「判定」表 |
+| [3] 若标 future：钉死暂缓结论，关联数据依赖与既有 #1754 边界 | 已满足。本节钉死暂缓，热门/历史关联真实搜索热度/历史持久化（#1682 数据范畴），巨鲸搜索以 #1754 `WhaleSearchSheet` 为唯一基线 | 本节 + 后续触发条件 |
+| [4] `README.md` 设计真源段补 #1797 引用 | 已满足 | `README.md` 设计真源段 |
+
+**理由**：
+
+1. #1797 目标是「对齐 OR 确认简化标 future」二选一，标 future 分支同样满足验收（验收标准含「若标 future」分支）；非「必须实现」。
+2. **KISS / 语义不一致**：三屏搜索语义不同（symbol 列表过滤 vs 币种选择 vs 多类目实体搜索），强抽象一个「统一全屏 overlay」覆盖三者是过度设计；market 内联过滤、whale chip filter、`WhaleSearchSheet` 各自匹配本屏语义且已可用。
+3. **YAGNI / 依赖未就绪**：热门 chips 依赖真实搜索热度统计、历史 chips 依赖跨会话持久化，均不在当前范围；设计稿 overlay 的热门=静态种子、历史=session 种子，落地为纯 mock 后真实接入大概率重写。
+4. **Never break userspace**：market 现有 `market-search-field`/`market-search-toggle` 内联搜索 + symbol 过滤是可走通的现役形态，配套 widget 测试（`market_home_page_test.dart`）守护；替换为全屏 overlay 会破坏既有 keys 与测试。whale 巨鲸搜索已由 #1754 `WhaleSearchSheet` 承载，在实时页另开搜索入口违反 #1749 §3「同一交互不允许多入口」精神。
+5. 与 #1749/#1750/#1756/#1788/#1791/#1794 处理「设计超前 / 真实数据通道未就绪」一致：设计稿保留高保真表达作为 future，app 按真实数据就绪节奏分批落地，文档钉死暂缓结论，避免每个子任务重新论证。
+
+**设计超前 / future 项（不算对齐缺口）**：行情列表 / 多空比 / 巨鲸实时三屏的全屏 search overlay（含「热门搜索」/「搜索历史」chips + rich 结果行）、多空比 `LSCoinTabs` 与巨鲸实时 `WhaleCoinTabs` 的币种搜索 overlay——均待真实搜索热度 / 历史持久化 / 币种搜索数据通道（#1682 数据范畴）就绪后另行立项评估，未就绪前不在 app 落 mock，也不要在后续 PR 以「对齐缺口」名义补。
+
+**不变项**：`market_home_page.dart` 维持内联搜索框（`market-search-toggle`/`market-search-field`）+ symbol 过滤；`long_short_page.dart` 维持无独立搜索；`whale_live_tab.dart` 维持资产 chip filter strip + 阈值 pill；`whale_search_sheet.dart`（#1754 `WhaleSearchSheet`）维持为巨鲸搜索唯一基线，入口在 `whale_home_page.dart` 顶栏。设计稿 `m-screens-2/3/4.jsx` 的全屏 overlay + 热门/历史 chips 表达**保留为 future 能力**，不删除、不回流 app，直到真实搜索数据接入 issue 立项解除。
+
+**后续触发条件**：当真实搜索热度统计 / 跨会话历史持久化 / 币种搜索数据通道（#1682 数据范畴）在 app 侧就绪时，新立「移动端全屏 search overlay 实现」issue，引用本节作为暂缓结论的解除依据，届时统一评估三屏 overlay + 热门/历史 chips 落地，并复核是否与 #1754 `WhaleSearchSheet` 合流。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1797 引用。不改 `design/project/mobile/m-screens-2/3/4.jsx`、不改 `market_home_page.dart` / `long_short_page.dart` / `whale_live_tab.dart` / `whale_search_sheet.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · 部署资金配置控件形态：对齐设计稿（滑块 + 3 分渠道通知开关）（Issue #1796）
 
 **背景**：设计稿 `design/project/mobile/m-screens-deploy.jsx`（`DpAllocate:759-931`）资金配置为：投入金额 + 25/50/75/MAX 快捷比例 + 单笔仓位上限**滑块**（DpSlider，10-100 step5，刻度 10/50/100）+ 日内最大亏损**滑块**（1-15 step1，danger 色，刻度 -1/-8/-15）+ **3 个分渠道通知开关**（开仓/平仓/触发止损）。#1772 落地的 `apps/quantify-mobile/lib/widgets/qz_deploy_sheet.dart` `_AllocatePane` 用 stepper（±按钮）替代滑块，3 个通知合并为单一 Switch。#1796 目标：控件形态与设计稿对齐 OR 确认简化并记录。
