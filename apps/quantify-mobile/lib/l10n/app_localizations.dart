@@ -668,6 +668,342 @@ abstract class AppLocalizations {
   /// **' · 实例 ID '**
   String get deploySystemMessageInstanceInfix;
 
+  /// No description provided for @deploySheetTitleAllocate.
+  ///
+  /// In zh, this message translates to:
+  /// **'资金配置'**
+  String get deploySheetTitleAllocate;
+
+  /// No description provided for @deploySheetTitlePreflight.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署前检查'**
+  String get deploySheetTitlePreflight;
+
+  /// No description provided for @deployStepIndicator.
+  ///
+  /// In zh, this message translates to:
+  /// **'{current}/{total}'**
+  String deployStepIndicator(Object current, Object total);
+
+  /// No description provided for @deployAllocateAmountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'投入金额'**
+  String get deployAllocateAmountLabel;
+
+  /// No description provided for @deployAllocateAmountHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'建议：首次部署不超过总资金的 30%'**
+  String get deployAllocateAmountHint;
+
+  /// No description provided for @deployAllocatePerTradeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'单笔仓位上限'**
+  String get deployAllocatePerTradeLabel;
+
+  /// No description provided for @deployAllocatePerTradeCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'每笔最多占用'**
+  String get deployAllocatePerTradeCaption;
+
+  /// No description provided for @deployAllocateMaxDailyLossLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'日内最大亏损'**
+  String get deployAllocateMaxDailyLossLabel;
+
+  /// No description provided for @deployAllocateMaxDailyLossCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发后自动暂停当日交易'**
+  String get deployAllocateMaxDailyLossCaption;
+
+  /// No description provided for @deployAllocateNotifyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署与信号通知'**
+  String get deployAllocateNotifyLabel;
+
+  /// No description provided for @deployAllocateNotifyCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交、止损与异常时推送提醒'**
+  String get deployAllocateNotifyCaption;
+
+  /// No description provided for @deployAllocateNextButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一步'**
+  String get deployAllocateNextButton;
+
+  /// No description provided for @deployPreflightStrategyName.
+  ///
+  /// In zh, this message translates to:
+  /// **'BTC 趋势 · 双均线'**
+  String get deployPreflightStrategyName;
+
+  /// No description provided for @deployPreflightStrategyMeta.
+  ///
+  /// In zh, this message translates to:
+  /// **'BTC/USDT · 15m · 永续 · 5x'**
+  String get deployPreflightStrategyMeta;
+
+  /// No description provided for @deployPreflightScanning.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测中 {done}/{total}'**
+  String deployPreflightScanning(Object done, Object total);
+
+  /// No description provided for @deployPreflightPassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{pass}/{total} 通过'**
+  String deployPreflightPassed(Object pass, Object total);
+
+  /// No description provided for @deployPreflightFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{fail}/{total} 未通过'**
+  String deployPreflightFailed(Object fail, Object total);
+
+  /// No description provided for @deployPreflightRecheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新检测'**
+  String get deployPreflightRecheck;
+
+  /// No description provided for @deployPreflightRechecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测中…'**
+  String get deployPreflightRechecking;
+
+  /// No description provided for @deployPreflightApiOkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{exchange} API 已绑定'**
+  String deployPreflightApiOkTitle(Object exchange);
+
+  /// No description provided for @deployPreflightApiOkSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取 + 现货 + 永续 · 未启用提币（安全）'**
+  String get deployPreflightApiOkSub;
+
+  /// No description provided for @deployPreflightBalanceOkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户余额充足'**
+  String get deployPreflightBalanceOkTitle;
+
+  /// No description provided for @deployPreflightBalanceOkSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用资金满足部署所需，留有余裕'**
+  String get deployPreflightBalanceOkSub;
+
+  /// No description provided for @deployPreflightLatencyOkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络与交易所时延正常'**
+  String get deployPreflightLatencyOkTitle;
+
+  /// No description provided for @deployPreflightLatencyOkSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'下单延时 < 200ms · 数据流稳定'**
+  String get deployPreflightLatencyOkSub;
+
+  /// No description provided for @deployPreflightBackButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回'**
+  String get deployPreflightBackButton;
+
+  /// No description provided for @deployPreflightConfirmButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认无误，立即部署'**
+  String get deployPreflightConfirmButton;
+
+  /// No description provided for @deployingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在部署到 {exchange}'**
+  String deployingTitle(Object exchange);
+
+  /// No description provided for @deployingCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'请勿关闭页面，通常需要 3-5 秒'**
+  String get deployingCaption;
+
+  /// No description provided for @deployingStepAuthTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'校验 API 权限'**
+  String get deployingStepAuthTitle;
+
+  /// No description provided for @deployingStepAuthSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认未开启提币 · 已启用现货+合约下单'**
+  String get deployingStepAuthSub;
+
+  /// No description provided for @deployingStepPushTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'推送策略到云端'**
+  String get deployingStepPushTitle;
+
+  /// No description provided for @deployingStepPushSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'加密上传策略参数与风控规则'**
+  String get deployingStepPushSub;
+
+  /// No description provided for @deployingStepNodeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动执行节点'**
+  String get deployingStepNodeTitle;
+
+  /// No description provided for @deployingStepNodeSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'分配独立节点 · 同步交易所时间'**
+  String get deployingStepNodeSub;
+
+  /// No description provided for @deployingStepFeedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅实时行情'**
+  String get deployingStepFeedTitle;
+
+  /// No description provided for @deployingStepFeedSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'BTC/USDT 15m · WebSocket 已连接'**
+  String get deployingStepFeedSub;
+
+  /// No description provided for @deployingStepReadyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'就绪'**
+  String get deployingStepReadyTitle;
+
+  /// No description provided for @deployingStepReadySub.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待首个信号触发'**
+  String get deployingStepReadySub;
+
+  /// No description provided for @deployDoneTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署成功'**
+  String get deployDoneTitle;
+
+  /// No description provided for @deployDoneSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略已在 {exchange} 实盘运行，首个信号触发后会推送提醒你'**
+  String deployDoneSubtitle(Object exchange);
+
+  /// No description provided for @deployDoneDetailStrategyId.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略 ID'**
+  String get deployDoneDetailStrategyId;
+
+  /// No description provided for @deployDoneDetailExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所'**
+  String get deployDoneDetailExchange;
+
+  /// No description provided for @deployDoneDetailSymbol.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易对'**
+  String get deployDoneDetailSymbol;
+
+  /// No description provided for @deployDoneDetailAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'初始资金'**
+  String get deployDoneDetailAmount;
+
+  /// No description provided for @deployDoneDetailLeverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'杠杆'**
+  String get deployDoneDetailLeverage;
+
+  /// No description provided for @deployDoneDetailStartedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动时间'**
+  String get deployDoneDetailStartedAt;
+
+  /// No description provided for @deployDoneDetailStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get deployDoneDetailStatus;
+
+  /// No description provided for @deployDoneStatusRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行中'**
+  String get deployDoneStatusRunning;
+
+  /// No description provided for @deployDoneNextStepsLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'接下来你可以'**
+  String get deployDoneNextStepsLabel;
+
+  /// No description provided for @deployDoneNextLiveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看实盘策略'**
+  String get deployDoneNextLiveTitle;
+
+  /// No description provided for @deployDoneNextLiveSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'在「我的 → 实盘策略」追踪持仓和收益'**
+  String get deployDoneNextLiveSub;
+
+  /// No description provided for @deployDoneNextNotifyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启价格通知'**
+  String get deployDoneNextNotifyTitle;
+
+  /// No description provided for @deployDoneNextNotifySub.
+  ///
+  /// In zh, this message translates to:
+  /// **'BTC 突破关键位时第一时间收到推送'**
+  String get deployDoneNextNotifySub;
+
+  /// No description provided for @deployDoneNextTuneTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续在 AI 中调优'**
+  String get deployDoneNextTuneTitle;
+
+  /// No description provided for @deployDoneNextTuneSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'随时回到对话调整止损或参数'**
+  String get deployDoneNextTuneSub;
+
   /// No description provided for @authLoginTitle.
   ///
   /// In zh, this message translates to:

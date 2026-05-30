@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-05-30 · 一键部署补齐资金配置/预检查/部署步骤详情：方案 A 落地（Issue #1772，偏离 #1751 既定边界）
+
+**背景**：设计稿 `design/project/mobile/m-screens-deploy.jsx` 的部署流程为多页结构：选交易所（DpSelect）→ 资金配置（DpAllocate，`:759-931`）→ 部署中（DpDeploying，`:977-1084`）→ 成功（DpSuccess，`:1131-1198`），含部署前预检查（PreflightChecks，`:425-585`）。#1751（已 close）确立「部署走 `QzDeploySheet`（单 sheet 内状态机 `pickExchange → authorize → deploying → done`）」并通过验收，**跳过了资金配置页 / 预检查 / 部署步骤详情**。#1772 提出设计稿增强，需先对「落地 / 暂缓」做产品取舍。
+
+**候选**：
+
+| 方案 | 描述 | 取舍 |
+|------|------|------|
+| A. mock-first 落地（采纳） | 在同一 `QzDeploySheet` 状态机内补齐资金配置页 + 预检查 + 部署分步任务 + 成功详情卡/下一步入口；全部 mock 计时驱动 | 与 #1751/#1752/#1753 已确立的 mock-first 路线一致；运行期不依赖任何写入方先产生数据（不触发数据流跨越）；真实部署接入（#1679/#1682）时仅替换数据来源，UI/状态机/测试不变 |
+| B. 暂缓 | 维持 #1751 单 sheet 简化形态，设计稿对应屏标注 future，关闭本 issue | 与同期 #1754（解除 #1651/#1663 暂缓）、#1752/#1753 的 mock-first 落地节奏不一致；这些屏是自包含客户端流，无需真实数据即可落地体验 |
+
+**判定**：**采纳方案 A**。在既有 `QzDeploySheet` 内把状态机扩展为 `pickExchange → authorize → allocate → preflight → deploying → done`，补齐资金配置 / 预检查 / 分步部署 / 成功详情卡 + 下一步入口。
+
+**理由**：
+
+1. 资金配置 / 预检查 / 步骤详情均为自包含客户端体验，mock repository / 计时即可驱动，运行期不依赖后端先产生数据——不构成数据流跨越，零破坏。
+2. 对齐 #1751/#1752/#1753 已确立的 mock-first 分批落地路线；真实部署 #1679/#1682 接入时仅替换数据来源。
+3. `DeploymentResult` 仅追加 nullable 字段（strategyId/symbol/amount/leverage），现有调用方 `ai_home_page.dart` 零破坏（Never break userspace）。
+
+**边界偏离说明（相对 #1751）**：#1751 既定边界为「单 sheet 简化形态、跳过资金配置/预检查/步骤详情」。本次解除该简化，**但不偏离 #1749 的 sheet/page 形态边界**——仍是单 sheet 内状态机，不新增 page route、不拆多页。设计稿的整页 5 步 StepBar 以 sheet 顶部轻量步骤指示替代（KISS）。
+
+**落地范围**：
+
+- 状态机：`DeployStep` 枚举新增 `allocate` / `preflight`（`deploy_models.dart`）。
+- 模型：`DeploymentResult` 追加可选 `strategyId` / `symbol` / `amount` / `leverage`；新增 `DeployAllocation` / `PreflightCheck` / `DeployingStep` 轻量模型。
+- UI（`qz_deploy_sheet.dart`）：`_AllocatePane`（投入金额 + 快捷比例 + 单笔仓位上限 + 日内最大亏损 + 通知渠道）、`_PreflightPane`（API/余额/网络逐项扫描 + 失败态重新检测 + 全通过才可部署）、`_DeployingPane`（5 步任务列表逐步动画）、`_DonePane`（完整详情卡 + 查看实盘策略/开启通知/继续调优 三个下一步入口）。
+- l10n：`app_zh.arb`（template）+ `app_en.arb` 新增对应 key。
+- 测试：`qz_deploy_sheet_test.dart` 覆盖全链路 + 预检查失败态 + 下一步入口 + 未授权流程回归。
+
+**不变项**：未授权交易所流程（`_UnauthorizedPane` → consent → `showApiFormSheet`）维持现状，不进入资金配置（无凭据无法配置）；`/me/live` 入口仍由调用方 `ai_home_page.dart` 在成功后通过 snackbar action 跳转（#1752 联动），成功页「查看实盘策略」入口 pop 返回 result 由调用方处理。真实部署接入前所有数据为 mock。
+
+---
+
 ## 2026-05-30 · 回测中 / 回测结果独立页与结果维度补齐：标记 future（Issue #1771）
 
 **背景**：设计稿 `design/project/mobile/m-screens-backtest.jsx` 把回测中（`ScreenBacktestRun`，`:43-164`）与回测结果（`ScreenBacktestResult`，`:273-415`）定义为独立 full-screen 页面，含进度环、引擎日志、三标签页（月度回报热力图 `:481-550` / 交易记录 `:553-598` / 风险分析 `:601-637`）、AI 评估 banner、粘底操作等。当前 Flutter app 仅有内联聊天卡 `QzBacktestProgressCard`（`lib/widgets/qz_backtest_progress_card.dart`，进度百分比 + 线性进度条 + 取消入口）/ `QzBacktestResultCard`（`lib/widgets/qz_backtest_result_card.dart`），结果模型 `lib/data/models/backtest_models.dart:29-45` 共 6 字段（`id` + 5 项结果指标 `totalReturnPercent / maxDrawdownPercent / sharpe / trades / equityCurve`）。

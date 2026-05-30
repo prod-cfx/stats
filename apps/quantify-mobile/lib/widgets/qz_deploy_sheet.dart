@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,11 +16,13 @@ import 'qz_sheet.dart';
 
 /// 「一键部署」底部弹层。
 ///
-/// 单 widget 内承载 4 步状态机（`pickExchange → authorize → deploying → done`）。
-/// 拆成 4 个 Widget 反而要把 step 状态外挂或层层 callback，按 KISS 内聚在一处。
+/// 单 widget 内承载 6 步状态机
+/// （`pickExchange → authorize → allocate → preflight → deploying → done`，
+/// #1772 在 #1653 的 4 步上补齐资金配置 / 预检查）。
+/// 拆成多个 Widget 反而要把 step 状态外挂或层层 callback，按 KISS 内聚在一处。
 ///
-/// 真后端尚未接入：交易所列表读 `apiKeysProvider`；「同意并部署」用
-/// `Future.delayed` 模拟 1.8s 进度反馈；成功后生成本地实例 ID 并 `Navigator.pop`
+/// 真后端尚未接入：交易所列表读 `apiKeysProvider`；部署进度用一次性链式
+/// `Timer` 模拟分步推进；成功后生成本地实例 ID 并 `Navigator.pop`
 /// 把 `DeploymentResult` 返回给调用方（`AiHomePage` 据此在对话流追加系统消息 +
 /// 弹出 toast）。
 ///
@@ -92,16 +96,24 @@ class _DeployTarget {
 }
 
 class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
-  /// 部署进度可视化时长。验收 ≥1.5s；取 1.8s 留 buffer。
-  static const Duration _deployDuration = Duration(milliseconds: 1800);
+  /// 资金配置默认值（mock）。
+  static const double _defaultAmount = 5000;
+  static const int _defaultPerTradePct = 20;
+  static const int _defaultMaxDailyLossPct = 10;
 
   DeployStep _step = DeployStep.pickExchange;
   _DeployTarget? _selected;
   DeploymentResult? _result;
   bool _consent = false;
 
-  /// 已授权交易所走原权限授权流。
-  void _pickAuthorized(_DeployTarget t) {
+  // #1772 资金配置状态。
+  double _amount = _defaultAmount;
+  int _perTradePct = _defaultPerTradePct;
+  int _maxDailyLossPct = _defaultMaxDailyLossPct;
+  bool _notify = true;
+
+  /// 选中交易所 → 授权步；授权/未授权变体由 `_buildBody` 按 `authorized` 分流。
+  void _pickTarget(_DeployTarget t) {
     setState(() {
       _selected = t;
       _consent = false;
@@ -109,24 +121,34 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     });
   }
 
-  /// 未授权交易所走 3 步引导流。
-  void _pickUnauthorized(_DeployTarget t) {
-    setState(() {
-      _selected = t;
-      _consent = false;
-      _step = DeployStep.authorize;
-    });
-  }
-
-  Future<void> _confirmAuthorize() async {
+  /// authorize「同意并部署」→ 进入资金配置（#1772）。
+  void _confirmAuthorize() {
     if (_selected?.apiKey == null) return;
-    setState(() => _step = DeployStep.deploying);
-    await Future<void>.delayed(_deployDuration);
-    if (!mounted) return;
+    setState(() => _step = DeployStep.allocate);
+  }
+
+  /// 资金配置「下一步」→ 部署前预检查（#1772）。
+  void _goPreflight() => setState(() => _step = DeployStep.preflight);
+
+  void _backToAllocate() => setState(() => _step = DeployStep.allocate);
+
+  /// 预检查通过「确认部署」→ 部署中（#1772）。
+  /// 实际部署结果在分步动画跑完后由 `_onDeployingDone` 回填。
+  void _confirmDeploy() => setState(() => _step = DeployStep.deploying);
+
+  /// 部署分步动画跑完 → 用资金配置快照回填 `DeploymentResult` → done。
+  void _onDeployingDone() {
+    if (!mounted || _selected?.apiKey == null) return;
+    final DateTime now = DateTime.now();
     final DeploymentResult result = DeploymentResult(
       exchange: _selected!.apiKey!.exchange,
-      instanceId: 'inst-${DateTime.now().microsecondsSinceEpoch}',
-      deployedAt: DateTime.now(),
+      instanceId: 'inst-${now.microsecondsSinceEpoch}',
+      deployedAt: now,
+      strategyId:
+          'QF-${now.millisecondsSinceEpoch.toRadixString(36).toUpperCase().substring(0, 6)}',
+      symbol: 'BTC/USDT · 15m',
+      amount: _amount,
+      leverage: '5x · 全仓',
     );
     setState(() {
       _result = result;
@@ -179,6 +201,8 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     final String title = switch (_step) {
       DeployStep.pickExchange => l10n.deploySheetTitleExchange,
       DeployStep.authorize => l10n.deploySheetTitleAuthorize,
+      DeployStep.allocate => l10n.deploySheetTitleAllocate,
+      DeployStep.preflight => l10n.deploySheetTitlePreflight,
       DeployStep.deploying => l10n.deploySheetTitleDeploying,
       DeployStep.done => l10n.deploySheetTitleDone,
     };
@@ -193,13 +217,20 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            title,
-            style: TextStyle(
-              color: c.text,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              _StepIndicator(step: _step, scheme: c, l10n: l10n),
+            ],
           ),
           const SizedBox(height: QzSpacing.md),
           _buildBody(c, l10n),
@@ -212,8 +243,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     switch (_step) {
       case DeployStep.pickExchange:
         return _ExchangePicker(
-          onPickAuthorized: _pickAuthorized,
-          onPickUnauthorized: _pickUnauthorized,
+          onPick: _pickTarget,
           onGoConfigure: _goConfigureApi,
         );
       case DeployStep.authorize:
@@ -231,8 +261,33 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           onCancel: _backToPick,
           onOpenApiForm: _openApiForm,
         );
+      case DeployStep.allocate:
+        return _AllocatePane(
+          target: _selected!,
+          amount: _amount,
+          perTradePct: _perTradePct,
+          maxDailyLossPct: _maxDailyLossPct,
+          notify: _notify,
+          onAmountChanged: (double v) => setState(() => _amount = v),
+          onPerTradeChanged: (int v) => setState(() => _perTradePct = v),
+          onMaxDailyLossChanged: (int v) =>
+              setState(() => _maxDailyLossPct = v),
+          onNotifyChanged: (bool v) => setState(() => _notify = v),
+          onNext: _goPreflight,
+        );
+      case DeployStep.preflight:
+        return _PreflightPane(
+          target: _selected!,
+          amount: _amount,
+          onBack: _backToAllocate,
+          onConfirm: _confirmDeploy,
+        );
       case DeployStep.deploying:
-        return _DeployingPane(scheme: c);
+        return _DeployingPane(
+          scheme: c,
+          exchangeName: _selected!.catalog.name,
+          onDone: _onDeployingDone,
+        );
       case DeployStep.done:
         return _DonePane(
           result: _result!,
@@ -242,15 +297,58 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   }
 }
 
+/// sheet 顶部轻量步骤指示（替代设计稿整页 5 步 StepBar，KISS）。
+/// pickExchange 不计步；authorize/allocate/preflight/deploying/done = 1..5。
+class _StepIndicator extends StatelessWidget {
+  const _StepIndicator({
+    required this.step,
+    required this.scheme,
+    required this.l10n,
+  });
+
+  final DeployStep step;
+  final QzColorScheme scheme;
+  final AppLocalizations l10n;
+
+  static const int _total = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final int current = switch (step) {
+      DeployStep.pickExchange => 0,
+      DeployStep.authorize => 1,
+      DeployStep.allocate => 2,
+      DeployStep.preflight => 3,
+      DeployStep.deploying => 4,
+      DeployStep.done => 5,
+    };
+    if (current == 0) return const SizedBox.shrink();
+    return Container(
+      key: const Key('deploy-step-indicator'),
+      padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(QzRadii.pill),
+      ),
+      child: Text(
+        l10n.deployStepIndicator(current, _total),
+        style: TextStyle(
+          color: scheme.accent,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 class _ExchangePicker extends ConsumerWidget {
   const _ExchangePicker({
-    required this.onPickAuthorized,
-    required this.onPickUnauthorized,
+    required this.onPick,
     required this.onGoConfigure,
   });
 
-  final void Function(_DeployTarget) onPickAuthorized;
-  final void Function(_DeployTarget) onPickUnauthorized;
+  final void Function(_DeployTarget) onPick;
   final VoidCallback onGoConfigure;
 
   @override
@@ -295,9 +393,7 @@ class _ExchangePicker extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: QzSpacing.sm),
                 child: _ExchangeRow(
                   target: t,
-                  onTap: () => t.authorized
-                      ? onPickAuthorized(t)
-                      : onPickUnauthorized(t),
+                  onTap: () => onPick(t),
                 ),
               ),
             const SizedBox(height: QzSpacing.sm),
@@ -805,18 +901,216 @@ class _Step extends StatelessWidget {
   }
 }
 
-class _DeployingPane extends StatelessWidget {
-  const _DeployingPane({required this.scheme});
+/// 部署中分步任务列表（#1772 DpDeploying）。
+///
+/// 圆形进度 + 5 步任务，逐步用一次性 `Future.delayed` 推进 `_idx`；跑到末尾
+/// 调 `onDone`。刻意用「跑到尽头即停」的有限链式延时（非无限循环动画），
+/// 让 widget test 可用显式 `pump(Duration)` 步进、避免 `pumpAndSettle` 挂在
+/// 周期动画上（与历史 `_deployDuration` 计时模式一致）。
+class _DeployingPane extends StatefulWidget {
+  const _DeployingPane({
+    required this.scheme,
+    required this.exchangeName,
+    required this.onDone,
+  });
 
+  final QzColorScheme scheme;
+  final String exchangeName;
+  final VoidCallback onDone;
+
+  static const int _stepCount = 5;
+
+  static List<DeployingStep> _steps(AppLocalizations l10n) => <DeployingStep>[
+        DeployingStep(
+          label: l10n.deployingStepAuthTitle,
+          sub: l10n.deployingStepAuthSub,
+        ),
+        DeployingStep(
+          label: l10n.deployingStepPushTitle,
+          sub: l10n.deployingStepPushSub,
+        ),
+        DeployingStep(
+          label: l10n.deployingStepNodeTitle,
+          sub: l10n.deployingStepNodeSub,
+        ),
+        DeployingStep(
+          label: l10n.deployingStepFeedTitle,
+          sub: l10n.deployingStepFeedSub,
+        ),
+        DeployingStep(
+          label: l10n.deployingStepReadyTitle,
+          sub: l10n.deployingStepReadySub,
+        ),
+      ];
+
+  @override
+  State<_DeployingPane> createState() => _DeployingPaneState();
+}
+
+class _DeployingPaneState extends State<_DeployingPane> {
+  /// 每步推进间隔。5 步 × 0.36s ≈ 1.8s，对齐历史部署可视化时长。
+  static const Duration _stepInterval = Duration(milliseconds: 360);
+
+  int _idx = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleNext();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleNext() {
+    _timer = Timer(_stepInterval, () {
+      if (!mounted) return;
+      final int next = _idx + 1;
+      if (next > _DeployingPane._stepCount) {
+        widget.onDone();
+        return;
+      }
+      setState(() => _idx = next);
+      _scheduleNext();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = widget.scheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<DeployingStep> steps = _DeployingPane._steps(l10n);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: QzSpacing.md),
+          child: Center(
+            child: CircularProgressIndicator(
+              key: const Key('deploy-progress'),
+              color: c.accent,
+            ),
+          ),
+        ),
+        Text(
+          l10n.deployingTitle(widget.exchangeName),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: c.text,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          l10n.deployingCaption,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: c.textDim, fontSize: 12),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        for (int i = 0; i < steps.length; i++)
+          _DeployingStepRow(
+            index: i,
+            step: steps[i],
+            done: i < _idx,
+            active: i == _idx,
+            scheme: c,
+          ),
+      ],
+    );
+  }
+}
+
+class _DeployingStepRow extends StatelessWidget {
+  const _DeployingStepRow({
+    required this.index,
+    required this.step,
+    required this.done,
+    required this.active,
+    required this.scheme,
+  });
+
+  final int index;
+  final DeployingStep step;
+  final bool done;
+  final bool active;
   final QzColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: QzSpacing.xl),
-      child: Center(
-        key: const Key('deploy-progress'),
-        child: CircularProgressIndicator(color: scheme.text),
+    final QzColorScheme c = scheme;
+    return Opacity(
+      opacity: !done && !active ? 0.5 : 1,
+      child: Padding(
+        key: Key('deploy-step-$index'),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: done
+                    ? c.marketUp
+                    : (active ? c.accent.withValues(alpha: 0.15) : c.bgSoft),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: done
+                  ? const Icon(Icons.check, size: 13, color: Colors.white)
+                  : (active
+                      ? SizedBox(
+                          width: 11,
+                          height: 11,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: c.accent,
+                          ),
+                        )
+                      : null),
+            ),
+            const SizedBox(width: QzSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    step.label,
+                    style: TextStyle(
+                      color: active ? c.text : c.textDim,
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    step.sub,
+                    style: TextStyle(
+                      color: c.textDim,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (done)
+              Text(
+                'OK',
+                style: TextStyle(
+                  color: c.marketUp,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -832,24 +1126,112 @@ class _DonePane extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<List<String>> rows = <List<String>>[
+      <String>[
+        l10n.deployDoneDetailStrategyId,
+        result.strategyId ?? result.instanceId,
+      ],
+      <String>[l10n.deployDoneDetailExchange, result.exchange.toUpperCase()],
+      if (result.symbol != null)
+        <String>[l10n.deployDoneDetailSymbol, result.symbol!],
+      if (result.amount != null)
+        <String>[
+          l10n.deployDoneDetailAmount,
+          '${result.amount!.toStringAsFixed(0)} USDT',
+        ],
+      if (result.leverage != null)
+        <String>[l10n.deployDoneDetailLeverage, result.leverage!],
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Icon(Icons.check_circle, size: 18, color: c.marketUp),
-            const SizedBox(width: QzSpacing.xs),
-            Expanded(
-              child: Text(
-                '${result.exchange.toUpperCase()} · ${result.instanceId}',
-                style: TextStyle(color: c.text, fontSize: 14),
-                overflow: TextOverflow.ellipsis,
+        // hero
+        Center(
+          child: Column(
+            children: <Widget>[
+              Icon(Icons.check_circle, size: 48, color: c.marketUp),
+              const SizedBox(height: QzSpacing.sm),
+              Text(
+                l10n.deployDoneTitle,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                l10n.deployDoneSubtitle(result.exchange.toUpperCase()),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.textDim, fontSize: 12, height: 1.5),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: QzSpacing.lg),
+        const SizedBox(height: QzSpacing.md),
+        // detail card
+        Container(
+          key: const Key('deploy-done-detail'),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: QzSpacing.md,
+            vertical: QzSpacing.sm,
+          ),
+          child: Column(
+            children: <Widget>[
+              for (final List<String> r in rows)
+                _DetailRow(label: r[0], value: r[1], scheme: c),
+              _DetailRow(
+                label: l10n.deployDoneDetailStatus,
+                value: l10n.deployDoneStatusRunning,
+                scheme: c,
+                valueColor: c.marketUp,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        // next steps
+        Text(
+          l10n.deployDoneNextStepsLabel,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: QzSpacing.sm),
+        _NextStepRow(
+          stepKey: const Key('deploy-next-live'),
+          icon: Icons.show_chart,
+          title: l10n.deployDoneNextLiveTitle,
+          sub: l10n.deployDoneNextLiveSub,
+          scheme: c,
+          // pop 返回 result：调用方据此跳 /me/live（#1752 联动）。
+          onTap: onFinish,
+        ),
+        _NextStepRow(
+          stepKey: const Key('deploy-next-notify'),
+          icon: Icons.notifications_none,
+          title: l10n.deployDoneNextNotifyTitle,
+          sub: l10n.deployDoneNextNotifySub,
+          scheme: c,
+          onTap: onFinish,
+        ),
+        _NextStepRow(
+          stepKey: const Key('deploy-next-tune'),
+          icon: Icons.auto_awesome,
+          title: l10n.deployDoneNextTuneTitle,
+          sub: l10n.deployDoneNextTuneSub,
+          scheme: c,
+          onTap: onFinish,
+        ),
+        const SizedBox(height: QzSpacing.md),
         QzButton(
           key: const Key('deploy-finish'),
           label: l10n.deployDoneCloseButton,
@@ -857,6 +1239,699 @@ class _DonePane extends StatelessWidget {
           onPressed: onFinish,
         ),
       ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    required this.scheme,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final QzColorScheme scheme;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: scheme.textDim, fontSize: 12),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? scheme.text,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NextStepRow extends StatelessWidget {
+  const _NextStepRow({
+    required this.stepKey,
+    required this.icon,
+    required this.title,
+    required this.sub,
+    required this.scheme,
+    required this.onTap,
+  });
+
+  final Key stepKey;
+  final IconData icon;
+  final String title;
+  final String sub;
+  final QzColorScheme scheme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: QzSpacing.sm),
+      child: InkWell(
+        key: stepKey,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(QzRadii.card),
+        child: Container(
+          padding: const EdgeInsets.all(QzSpacing.md),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: c.accent),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      style: TextStyle(color: c.textDim, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 16, color: c.textDim),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 资金配置（#1772 DpAllocate）。
+///
+/// 投入金额 + 25/50/75/MAX 快捷比例（基于固定 mock 可用额度 10000 USDT）+
+/// 单笔仓位上限 / 日内最大亏损 stepper + 通知渠道开关。全部前端 mock 输入。
+class _AllocatePane extends StatelessWidget {
+  const _AllocatePane({
+    required this.target,
+    required this.amount,
+    required this.perTradePct,
+    required this.maxDailyLossPct,
+    required this.notify,
+    required this.onAmountChanged,
+    required this.onPerTradeChanged,
+    required this.onMaxDailyLossChanged,
+    required this.onNotifyChanged,
+    required this.onNext,
+  });
+
+  /// mock 可用额度，快捷比例据此换算。
+  static const double _available = 10000;
+
+  final _DeployTarget target;
+  final double amount;
+  final int perTradePct;
+  final int maxDailyLossPct;
+  final bool notify;
+  final ValueChanged<double> onAmountChanged;
+  final ValueChanged<int> onPerTradeChanged;
+  final ValueChanged<int> onMaxDailyLossChanged;
+  final ValueChanged<bool> onNotifyChanged;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        // 投入金额
+        Text(
+          l10n.deployAllocateAmountLabel,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: QzSpacing.xs),
+        Container(
+          key: const Key('deploy-allocate-amount'),
+          padding: const EdgeInsets.all(QzSpacing.md),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                '\$${amount.toStringAsFixed(0)} USDT',
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: QzSpacing.sm),
+              Row(
+                children: <Widget>[
+                  for (final int pct in <int>[25, 50, 75, 100])
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: InkWell(
+                          key: Key('deploy-allocate-pct-$pct'),
+                          onTap: () =>
+                              onAmountChanged(_available * pct / 100),
+                          borderRadius: BorderRadius.circular(QzRadii.card),
+                          child: Container(
+                            height: 30,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: c.border.withValues(alpha: 0.3),
+                              borderRadius:
+                                  BorderRadius.circular(QzRadii.card),
+                            ),
+                            child: Text(
+                              pct == 100 ? 'MAX' : '$pct%',
+                              style: TextStyle(
+                                color: c.textDim,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          l10n.deployAllocateAmountHint,
+          style: TextStyle(color: c.textDim, fontSize: 11),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        // 单笔仓位上限
+        _StepperRow(
+          fieldKey: const Key('deploy-allocate-per-trade'),
+          label: l10n.deployAllocatePerTradeLabel,
+          caption: l10n.deployAllocatePerTradeCaption,
+          value: perTradePct,
+          suffix: '%',
+          min: 5,
+          max: 100,
+          step: 5,
+          onChanged: onPerTradeChanged,
+          scheme: c,
+        ),
+        const SizedBox(height: QzSpacing.sm),
+        // 日内最大亏损
+        _StepperRow(
+          fieldKey: const Key('deploy-allocate-max-loss'),
+          label: l10n.deployAllocateMaxDailyLossLabel,
+          caption: l10n.deployAllocateMaxDailyLossCaption,
+          value: maxDailyLossPct,
+          suffix: '%',
+          min: 1,
+          max: 50,
+          step: 1,
+          onChanged: onMaxDailyLossChanged,
+          scheme: c,
+        ),
+        const SizedBox(height: QzSpacing.sm),
+        // 通知渠道
+        Container(
+          key: const Key('deploy-allocate-notify'),
+          padding: const EdgeInsets.symmetric(
+            horizontal: QzSpacing.md,
+            vertical: QzSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.deployAllocateNotifyLabel,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      l10n.deployAllocateNotifyCaption,
+                      style: TextStyle(color: c.textDim, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(value: notify, onChanged: onNotifyChanged),
+            ],
+          ),
+        ),
+        const SizedBox(height: QzSpacing.lg),
+        QzButton(
+          key: const Key('deploy-allocate-next'),
+          label: l10n.deployAllocateNextButton,
+          variant: QzButtonVariant.accent,
+          onPressed: onNext,
+        ),
+      ],
+    );
+  }
+}
+
+/// 资金配置内的「label + caption + 减/值/加」stepper 行。
+class _StepperRow extends StatelessWidget {
+  const _StepperRow({
+    required this.fieldKey,
+    required this.label,
+    required this.caption,
+    required this.value,
+    required this.suffix,
+    required this.min,
+    required this.max,
+    required this.step,
+    required this.onChanged,
+    required this.scheme,
+  });
+
+  final Key fieldKey;
+  final String label;
+  final String caption;
+  final int value;
+  final String suffix;
+  final int min;
+  final int max;
+  final int step;
+  final ValueChanged<int> onChanged;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
+    return Container(
+      key: fieldKey,
+      padding: const EdgeInsets.all(QzSpacing.md),
+      decoration: BoxDecoration(
+        color: c.bgSoft,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  caption,
+                  style: TextStyle(color: c.textDim, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          _StepperButton(
+            icon: Icons.remove,
+            enabled: value > min,
+            onTap: () => onChanged((value - step).clamp(min, max)),
+            scheme: c,
+          ),
+          SizedBox(
+            width: 56,
+            child: Text(
+              '$value$suffix',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          _StepperButton(
+            icon: Icons.add,
+            enabled: value < max,
+            onTap: () => onChanged((value + step).clamp(min, max)),
+            scheme: c,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperButton extends StatelessWidget {
+  const _StepperButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+    required this.scheme,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: c.border.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? c.text : c.textDim,
+        ),
+      ),
+    );
+  }
+}
+
+/// 部署前预检查（#1772 PreflightChecks）。
+///
+/// 策略 recap + 3 项检查（API/余额/网络）逐项扫描。原型默认全通过；
+/// `_PreflightPaneState` 用一次性链式延时驱动逐项揭示，扫完即停（非循环），
+/// 测试可显式 `pump(Duration)` 步进。失败态保留「重新检测」交互入口；
+/// 当前 mock 三项均通过，全部通过才允许「确认部署」。
+class _PreflightPane extends StatefulWidget {
+  const _PreflightPane({
+    required this.target,
+    required this.amount,
+    required this.onBack,
+    required this.onConfirm,
+  });
+
+  final _DeployTarget target;
+  final double amount;
+  final VoidCallback onBack;
+  final VoidCallback onConfirm;
+
+  @override
+  State<_PreflightPane> createState() => _PreflightPaneState();
+}
+
+class _PreflightPaneState extends State<_PreflightPane> {
+  static const Duration _scanInterval = Duration(milliseconds: 360);
+
+  int _scanned = 0;
+  bool _rechecking = false;
+  Timer? _timer;
+
+  List<PreflightCheck> _checks(AppLocalizations l10n) => <PreflightCheck>[
+        PreflightCheck(
+          ok: true,
+          title: l10n.deployPreflightApiOkTitle(widget.target.catalog.name),
+          sub: l10n.deployPreflightApiOkSub,
+        ),
+        PreflightCheck(
+          ok: true,
+          title: l10n.deployPreflightBalanceOkTitle,
+          sub: l10n.deployPreflightBalanceOkSub,
+        ),
+        PreflightCheck(
+          ok: true,
+          title: l10n.deployPreflightLatencyOkTitle,
+          sub: l10n.deployPreflightLatencyOkSub,
+        ),
+      ];
+
+  @override
+  void initState() {
+    super.initState();
+    _startScan();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startScan() {
+    _timer = Timer(_scanInterval, () {
+      if (!mounted) return;
+      setState(() => _scanned += 1);
+      if (_scanned < 3) {
+        _startScan();
+      } else if (_rechecking) {
+        setState(() => _rechecking = false);
+      }
+    });
+  }
+
+  void _recheck() {
+    setState(() {
+      _rechecking = true;
+      _scanned = 0;
+    });
+    _startScan();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<PreflightCheck> checks = _checks(l10n);
+    final bool scanning = _scanned < checks.length;
+    final int pass = checks.where((PreflightCheck c) => c.ok).length;
+    final int fail = checks.length - pass;
+    final bool allPass = fail == 0;
+    final bool canDeploy = !scanning && allPass;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        // strategy recap
+        Container(
+          padding: const EdgeInsets.all(QzSpacing.md),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                l10n.deployPreflightStrategyName,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                l10n.deployPreflightStrategyMeta,
+                style: TextStyle(color: c.textDim, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        // checks header
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                l10n.deploySheetTitlePreflight,
+                style: TextStyle(
+                  color: c.textDim,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (!allPass && !scanning)
+              QzButton(
+                key: const Key('deploy-preflight-recheck'),
+                label: _rechecking
+                    ? l10n.deployPreflightRechecking
+                    : l10n.deployPreflightRecheck,
+                variant: QzButtonVariant.ghost,
+                onPressed: _rechecking ? null : _recheck,
+              ),
+            Container(
+              key: const Key('deploy-preflight-status'),
+              padding: const EdgeInsets.symmetric(
+                horizontal: QzSpacing.sm,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: allPass
+                    ? c.marketUp.withValues(alpha: 0.15)
+                    : c.marketDown.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(QzRadii.pill),
+              ),
+              child: Text(
+                scanning
+                    ? l10n.deployPreflightScanning(_scanned, checks.length)
+                    : (allPass
+                        ? l10n.deployPreflightPassed(pass, checks.length)
+                        : l10n.deployPreflightFailed(fail, checks.length)),
+                style: TextStyle(
+                  color: allPass ? c.marketUp : c.marketDown,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: QzSpacing.sm),
+        for (int i = 0; i < checks.length; i++)
+          _PreflightRow(
+            index: i,
+            check: checks[i],
+            checking: i >= _scanned,
+            scheme: c,
+          ),
+        const SizedBox(height: QzSpacing.lg),
+        Row(
+          children: <Widget>[
+            QzButton(
+              key: const Key('deploy-preflight-back'),
+              label: l10n.deployPreflightBackButton,
+              variant: QzButtonVariant.ghost,
+              onPressed: widget.onBack,
+            ),
+            const SizedBox(width: QzSpacing.sm),
+            Expanded(
+              child: QzButton(
+                key: const Key('deploy-preflight-confirm'),
+                label: l10n.deployPreflightConfirmButton,
+                variant: QzButtonVariant.accent,
+                onPressed: canDeploy ? widget.onConfirm : null,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PreflightRow extends StatelessWidget {
+  const _PreflightRow({
+    required this.index,
+    required this.check,
+    required this.checking,
+    required this.scheme,
+  });
+
+  final int index;
+  final PreflightCheck check;
+  final bool checking;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
+    final Color statusColor = check.ok ? c.marketUp : c.marketDown;
+    return Padding(
+      key: Key('deploy-preflight-row-$index'),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: checking
+                ? CircularProgressIndicator(strokeWidth: 2, color: c.textDim)
+                : Icon(
+                    check.ok ? Icons.check_circle : Icons.cancel,
+                    size: 18,
+                    color: statusColor,
+                  ),
+          ),
+          const SizedBox(width: QzSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  check.title,
+                  style: TextStyle(
+                    color: checking ? c.textDim : (check.ok ? c.text : statusColor),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  check.sub,
+                  style: TextStyle(color: c.textDim, fontSize: 11, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

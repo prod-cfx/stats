@@ -9,6 +9,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:quantify_mobile/widgets/qz_button.dart';
 import 'package:quantify_mobile/widgets/qz_deploy_sheet.dart';
 
 /// 无 `Future.delayed` 的 fake repository，配合 widget test 避免 200ms timer
@@ -77,8 +78,10 @@ Future<DeploymentResult?> _pumpSheet(
 }
 
 void main() {
-  testWidgets('QzDeploySheet: 已配置交易所 pickExchange → authorize → '
-      'deploying → done 步骤切换可见', (WidgetTester tester) async {
+  testWidgets(
+      'QzDeploySheet: 已配置交易所 pickExchange → authorize → allocate → '
+      'preflight → deploying(分步) → done(详情卡) 全链路可见（#1772）',
+      (WidgetTester tester) async {
     final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
       ExchangeApiKey(
         id: 'k1',
@@ -97,33 +100,104 @@ void main() {
     expect(find.text('OKX'), findsOneWidget);
     expect(find.text('BYBIT'), findsOneWidget);
     expect(find.text('HYPERLIQUID'), findsOneWidget);
-    // 已配置 / 未配置 状态徽章并存
     expect(find.text('已配置'), findsOneWidget);
     expect(find.text('未配置'), findsNWidgets(3));
-    // 标签：推荐 / 链上
     expect(find.text('推荐'), findsOneWidget);
     expect(find.text('链上'), findsOneWidget);
 
-    // 点 binance（已授权）→ 进入授权步（权限授权变体）
+    // 点 binance（已授权）→ 进入授权步
     await tester.tap(find.byKey(const Key('deploy-exchange-binance')));
     await tester.pumpAndSettle();
     expect(find.text('授权部署'), findsOneWidget);
     expect(find.text('现货下单'), findsOneWidget);
-    expect(find.text('合约下单'), findsOneWidget);
-    expect(find.text('读取余额'), findsOneWidget);
 
-    // 点「同意并部署」→ 进入 deploying
+    // 点「同意并部署」→ 进入资金配置（#1772）
     await tester.tap(find.byKey(const Key('deploy-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('资金配置'), findsOneWidget);
+    expect(find.byKey(const Key('deploy-allocate-amount')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-allocate-per-trade')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-allocate-max-loss')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-allocate-notify')), findsOneWidget);
+    // 步骤指示可见（authorize=1/5 起）
+    expect(find.byKey(const Key('deploy-step-indicator')), findsOneWidget);
+
+    // MAX 快捷比例 → 10000 USDT
+    await tester.tap(find.byKey(const Key('deploy-allocate-pct-100')));
+    await tester.pumpAndSettle();
+    expect(find.text('\$10000 USDT'), findsOneWidget);
+
+    // 「下一步」→ 预检查
+    await tester.tap(find.byKey(const Key('deploy-allocate-next')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('deploy-preflight-confirm')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-preflight-row-0')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-preflight-row-2')), findsOneWidget);
+
+    // 等扫描跑完（3 × 360ms）→ 全通过状态
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    expect(find.text('3/3 通过'), findsOneWidget);
+
+    // 「确认无误，立即部署」→ deploying 分步
+    await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
     await tester.pump();
     expect(find.text('正在部署…'), findsOneWidget);
     expect(find.byKey(const Key('deploy-progress')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-step-0')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-step-4')), findsOneWidget);
 
-    // 拨过 1.8s 部署时长 + 一帧 setState
-    await tester.pump(const Duration(milliseconds: 1800));
+    // 拨过 5 步 × 360ms + buffer → done
+    await tester.pump(const Duration(milliseconds: 2200));
     await tester.pump();
-    expect(find.text('部署成功'), findsOneWidget);
-    expect(find.textContaining('BINANCE · inst-'), findsOneWidget);
+    // sheet 标题与 hero 同文「部署成功」→ 2 处
+    expect(find.text('部署成功'), findsNWidgets(2));
+    // 完整详情卡 + 下一步入口
+    expect(find.byKey(const Key('deploy-done-detail')), findsOneWidget);
+    expect(find.text('10000 USDT'), findsOneWidget);
+    expect(find.text('运行中'), findsOneWidget);
+    expect(find.byKey(const Key('deploy-next-live')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-next-notify')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-next-tune')), findsOneWidget);
     expect(find.byKey(const Key('deploy-finish')), findsOneWidget);
+  });
+
+  testWidgets(
+      'QzDeploySheet: 预检查扫描期间「确认部署」disabled，扫完全通过后可点（#1772）',
+      (WidgetTester tester) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    await _pumpSheet(tester, repo: repo);
+
+    await tester.tap(find.byKey(const Key('deploy-exchange-binance')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('deploy-confirm')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('deploy-allocate-next')));
+    await tester.pump(); // 进入 preflight，扫描开始
+
+    // 扫描中：确认按钮 disabled
+    final QzButton confirmScanning = tester.widget<QzButton>(
+      find.byKey(const Key('deploy-preflight-confirm')),
+    );
+    expect(confirmScanning.onPressed, isNull,
+        reason: '扫描进行中不应允许部署');
+
+    // 扫完
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    final QzButton confirmDone = tester.widget<QzButton>(
+      find.byKey(const Key('deploy-preflight-confirm')),
+    );
+    expect(confirmDone.onPressed, isNotNull,
+        reason: '三项全通过后应允许部署');
   });
 
   testWidgets('QzDeploySheet: 未配置 API → 引导按钮可见且可点',

@@ -297,6 +297,188 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deploySystemMessageInstanceInfix => ' · 实例 ID ';
 
   @override
+  String get deploySheetTitleAllocate => '资金配置';
+
+  @override
+  String get deploySheetTitlePreflight => '部署前检查';
+
+  @override
+  String deployStepIndicator(Object current, Object total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get deployAllocateAmountLabel => '投入金额';
+
+  @override
+  String get deployAllocateAmountHint => '建议：首次部署不超过总资金的 30%';
+
+  @override
+  String get deployAllocatePerTradeLabel => '单笔仓位上限';
+
+  @override
+  String get deployAllocatePerTradeCaption => '每笔最多占用';
+
+  @override
+  String get deployAllocateMaxDailyLossLabel => '日内最大亏损';
+
+  @override
+  String get deployAllocateMaxDailyLossCaption => '触发后自动暂停当日交易';
+
+  @override
+  String get deployAllocateNotifyLabel => '部署与信号通知';
+
+  @override
+  String get deployAllocateNotifyCaption => '成交、止损与异常时推送提醒';
+
+  @override
+  String get deployAllocateNextButton => '下一步';
+
+  @override
+  String get deployPreflightStrategyName => 'BTC 趋势 · 双均线';
+
+  @override
+  String get deployPreflightStrategyMeta => 'BTC/USDT · 15m · 永续 · 5x';
+
+  @override
+  String deployPreflightScanning(Object done, Object total) {
+    return '检测中 $done/$total';
+  }
+
+  @override
+  String deployPreflightPassed(Object pass, Object total) {
+    return '$pass/$total 通过';
+  }
+
+  @override
+  String deployPreflightFailed(Object fail, Object total) {
+    return '$fail/$total 未通过';
+  }
+
+  @override
+  String get deployPreflightRecheck => '重新检测';
+
+  @override
+  String get deployPreflightRechecking => '检测中…';
+
+  @override
+  String deployPreflightApiOkTitle(Object exchange) {
+    return '$exchange API 已绑定';
+  }
+
+  @override
+  String get deployPreflightApiOkSub => '读取 + 现货 + 永续 · 未启用提币（安全）';
+
+  @override
+  String get deployPreflightBalanceOkTitle => '账户余额充足';
+
+  @override
+  String get deployPreflightBalanceOkSub => '可用资金满足部署所需，留有余裕';
+
+  @override
+  String get deployPreflightLatencyOkTitle => '网络与交易所时延正常';
+
+  @override
+  String get deployPreflightLatencyOkSub => '下单延时 < 200ms · 数据流稳定';
+
+  @override
+  String get deployPreflightBackButton => '返回';
+
+  @override
+  String get deployPreflightConfirmButton => '确认无误，立即部署';
+
+  @override
+  String deployingTitle(Object exchange) {
+    return '正在部署到 $exchange';
+  }
+
+  @override
+  String get deployingCaption => '请勿关闭页面，通常需要 3-5 秒';
+
+  @override
+  String get deployingStepAuthTitle => '校验 API 权限';
+
+  @override
+  String get deployingStepAuthSub => '确认未开启提币 · 已启用现货+合约下单';
+
+  @override
+  String get deployingStepPushTitle => '推送策略到云端';
+
+  @override
+  String get deployingStepPushSub => '加密上传策略参数与风控规则';
+
+  @override
+  String get deployingStepNodeTitle => '启动执行节点';
+
+  @override
+  String get deployingStepNodeSub => '分配独立节点 · 同步交易所时间';
+
+  @override
+  String get deployingStepFeedTitle => '订阅实时行情';
+
+  @override
+  String get deployingStepFeedSub => 'BTC/USDT 15m · WebSocket 已连接';
+
+  @override
+  String get deployingStepReadyTitle => '就绪';
+
+  @override
+  String get deployingStepReadySub => '等待首个信号触发';
+
+  @override
+  String get deployDoneTitle => '部署成功';
+
+  @override
+  String deployDoneSubtitle(Object exchange) {
+    return '策略已在 $exchange 实盘运行，首个信号触发后会推送提醒你';
+  }
+
+  @override
+  String get deployDoneDetailStrategyId => '策略 ID';
+
+  @override
+  String get deployDoneDetailExchange => '交易所';
+
+  @override
+  String get deployDoneDetailSymbol => '交易对';
+
+  @override
+  String get deployDoneDetailAmount => '初始资金';
+
+  @override
+  String get deployDoneDetailLeverage => '杠杆';
+
+  @override
+  String get deployDoneDetailStartedAt => '启动时间';
+
+  @override
+  String get deployDoneDetailStatus => '状态';
+
+  @override
+  String get deployDoneStatusRunning => '运行中';
+
+  @override
+  String get deployDoneNextStepsLabel => '接下来你可以';
+
+  @override
+  String get deployDoneNextLiveTitle => '查看实盘策略';
+
+  @override
+  String get deployDoneNextLiveSub => '在「我的 → 实盘策略」追踪持仓和收益';
+
+  @override
+  String get deployDoneNextNotifyTitle => '开启价格通知';
+
+  @override
+  String get deployDoneNextNotifySub => 'BTC 突破关键位时第一时间收到推送';
+
+  @override
+  String get deployDoneNextTuneTitle => '继续在 AI 中调优';
+
+  @override
+  String get deployDoneNextTuneSub => '随时回到对话调整止损或参数';
+
+  @override
   String get authLoginTitle => '登录';
 
   @override

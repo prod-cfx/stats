@@ -315,6 +315,202 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deploySystemMessageInstanceInfix => ' · instance ID ';
 
   @override
+  String get deploySheetTitleAllocate => 'Allocate Funds';
+
+  @override
+  String get deploySheetTitlePreflight => 'Preflight Checks';
+
+  @override
+  String deployStepIndicator(Object current, Object total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get deployAllocateAmountLabel => 'Investment amount';
+
+  @override
+  String get deployAllocateAmountHint =>
+      'Tip: keep your first deployment under 30% of total funds';
+
+  @override
+  String get deployAllocatePerTradeLabel => 'Max position per trade';
+
+  @override
+  String get deployAllocatePerTradeCaption => 'Max share per trade';
+
+  @override
+  String get deployAllocateMaxDailyLossLabel => 'Max daily loss';
+
+  @override
+  String get deployAllocateMaxDailyLossCaption =>
+      'Pauses today\'s trading once hit';
+
+  @override
+  String get deployAllocateNotifyLabel => 'Deployment & signal alerts';
+
+  @override
+  String get deployAllocateNotifyCaption =>
+      'Push on fills, stop-loss and anomalies';
+
+  @override
+  String get deployAllocateNextButton => 'Next';
+
+  @override
+  String get deployPreflightStrategyName => 'BTC Trend · Dual MA';
+
+  @override
+  String get deployPreflightStrategyMeta => 'BTC/USDT · 15m · Perp · 5x';
+
+  @override
+  String deployPreflightScanning(Object done, Object total) {
+    return 'Checking $done/$total';
+  }
+
+  @override
+  String deployPreflightPassed(Object pass, Object total) {
+    return '$pass/$total passed';
+  }
+
+  @override
+  String deployPreflightFailed(Object fail, Object total) {
+    return '$fail/$total failed';
+  }
+
+  @override
+  String get deployPreflightRecheck => 'Re-check';
+
+  @override
+  String get deployPreflightRechecking => 'Checking…';
+
+  @override
+  String deployPreflightApiOkTitle(Object exchange) {
+    return '$exchange API connected';
+  }
+
+  @override
+  String get deployPreflightApiOkSub =>
+      'Read + spot + perp · withdraw disabled (safe)';
+
+  @override
+  String get deployPreflightBalanceOkTitle => 'Sufficient balance';
+
+  @override
+  String get deployPreflightBalanceOkSub =>
+      'Available funds cover the deployment with headroom';
+
+  @override
+  String get deployPreflightLatencyOkTitle =>
+      'Network & exchange latency normal';
+
+  @override
+  String get deployPreflightLatencyOkSub =>
+      'Order latency < 200ms · stable data feed';
+
+  @override
+  String get deployPreflightBackButton => 'Back';
+
+  @override
+  String get deployPreflightConfirmButton => 'Confirmed, deploy now';
+
+  @override
+  String deployingTitle(Object exchange) {
+    return 'Deploying to $exchange';
+  }
+
+  @override
+  String get deployingCaption =>
+      'Please keep this page open, usually 3-5 seconds';
+
+  @override
+  String get deployingStepAuthTitle => 'Verify API permissions';
+
+  @override
+  String get deployingStepAuthSub =>
+      'Confirm withdraw off · spot + futures trading on';
+
+  @override
+  String get deployingStepPushTitle => 'Push strategy to cloud';
+
+  @override
+  String get deployingStepPushSub =>
+      'Encrypted upload of strategy params and risk rules';
+
+  @override
+  String get deployingStepNodeTitle => 'Start execution node';
+
+  @override
+  String get deployingStepNodeSub =>
+      'Allocate dedicated node · sync exchange time';
+
+  @override
+  String get deployingStepFeedTitle => 'Subscribe to live market';
+
+  @override
+  String get deployingStepFeedSub => 'BTC/USDT 15m · WebSocket connected';
+
+  @override
+  String get deployingStepReadyTitle => 'Ready';
+
+  @override
+  String get deployingStepReadySub => 'Waiting for the first signal';
+
+  @override
+  String get deployDoneTitle => 'Deployed';
+
+  @override
+  String deployDoneSubtitle(Object exchange) {
+    return 'Your strategy is live on $exchange; we\'ll push you when the first signal fires';
+  }
+
+  @override
+  String get deployDoneDetailStrategyId => 'Strategy ID';
+
+  @override
+  String get deployDoneDetailExchange => 'Exchange';
+
+  @override
+  String get deployDoneDetailSymbol => 'Pair';
+
+  @override
+  String get deployDoneDetailAmount => 'Initial funds';
+
+  @override
+  String get deployDoneDetailLeverage => 'Leverage';
+
+  @override
+  String get deployDoneDetailStartedAt => 'Started at';
+
+  @override
+  String get deployDoneDetailStatus => 'Status';
+
+  @override
+  String get deployDoneStatusRunning => 'Running';
+
+  @override
+  String get deployDoneNextStepsLabel => 'Next you can';
+
+  @override
+  String get deployDoneNextLiveTitle => 'View live strategy';
+
+  @override
+  String get deployDoneNextLiveSub =>
+      'Track positions and PnL in My → Live Strategies';
+
+  @override
+  String get deployDoneNextNotifyTitle => 'Enable price alerts';
+
+  @override
+  String get deployDoneNextNotifySub =>
+      'Get notified the moment BTC breaks key levels';
+
+  @override
+  String get deployDoneNextTuneTitle => 'Keep tuning in AI';
+
+  @override
+  String get deployDoneNextTuneSub =>
+      'Return to the chat anytime to adjust stops or params';
+
+  @override
   String get authLoginTitle => 'Login';
 
   @override
