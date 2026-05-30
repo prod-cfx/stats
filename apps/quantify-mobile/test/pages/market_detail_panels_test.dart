@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
 import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
@@ -93,6 +94,8 @@ class _StubLongShortRepository implements LongShortRepository {
 }
 
 Future<void> _pump(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{});
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
   await tester.binding.setSurfaceSize(const Size(420, 1800));
   final GoRouter router = GoRouter(
     initialLocation: '/market/BTCUSDT',
@@ -115,6 +118,7 @@ Future<void> _pump(WidgetTester tester) async {
           _StubLongShortRepository(),
         ),
         klineRepositoryProvider.overrideWithValue(_StubKlineRepository()),
+        sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: MaterialApp.router(
         locale: const Locale('zh'),

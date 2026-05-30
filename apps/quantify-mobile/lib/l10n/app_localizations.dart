@@ -1148,6 +1148,60 @@ abstract class AppLocalizations {
   /// **'ASK'**
   String get marketDetailDepthAsk;
 
+  /// No description provided for @orderbookViewBoth.
+  ///
+  /// In zh, this message translates to:
+  /// **'双向'**
+  String get orderbookViewBoth;
+
+  /// No description provided for @orderbookViewAsks.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖单'**
+  String get orderbookViewAsks;
+
+  /// No description provided for @orderbookViewBids.
+  ///
+  /// In zh, this message translates to:
+  /// **'买单'**
+  String get orderbookViewBids;
+
+  /// No description provided for @orderbookPrecisionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格精度'**
+  String get orderbookPrecisionTitle;
+
+  /// No description provided for @orderbookRefreshFuture.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新（即将上线）'**
+  String get orderbookRefreshFuture;
+
+  /// No description provided for @orderbookSortFuture.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序（即将上线）'**
+  String get orderbookSortFuture;
+
+  /// No description provided for @tradesTabLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最新成交'**
+  String get tradesTabLatest;
+
+  /// No description provided for @tradesTabBig.
+  ///
+  /// In zh, this message translates to:
+  /// **'大额成交'**
+  String get tradesTabBig;
+
+  /// No description provided for @tradesSortTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序'**
+  String get tradesSortTooltip;
+
   /// No description provided for @marketDetailStarTooltip.
   ///
   /// In zh, this message translates to:

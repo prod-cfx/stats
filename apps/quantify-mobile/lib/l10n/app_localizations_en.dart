@@ -562,6 +562,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailDepthAsk => 'ASK';
 
   @override
+  String get orderbookViewBoth => 'Both';
+
+  @override
+  String get orderbookViewAsks => 'Asks';
+
+  @override
+  String get orderbookViewBids => 'Bids';
+
+  @override
+  String get orderbookPrecisionTitle => 'Price precision';
+
+  @override
+  String get orderbookRefreshFuture => 'Refresh (coming soon)';
+
+  @override
+  String get orderbookSortFuture => 'Sort (coming soon)';
+
+  @override
+  String get tradesTabLatest => 'Latest';
+
+  @override
+  String get tradesTabBig => 'Big trades';
+
+  @override
+  String get tradesSortTooltip => 'Sort';
+
+  @override
   String get marketDetailStarTooltip => 'Favorite';
 
   @override

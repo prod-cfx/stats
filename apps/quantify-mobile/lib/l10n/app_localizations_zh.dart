@@ -543,6 +543,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailDepthAsk => 'ASK';
 
   @override
+  String get orderbookViewBoth => '双向';
+
+  @override
+  String get orderbookViewAsks => '卖单';
+
+  @override
+  String get orderbookViewBids => '买单';
+
+  @override
+  String get orderbookPrecisionTitle => '价格精度';
+
+  @override
+  String get orderbookRefreshFuture => '刷新（即将上线）';
+
+  @override
+  String get orderbookSortFuture => '排序（即将上线）';
+
+  @override
+  String get tradesTabLatest => '最新成交';
+
+  @override
+  String get tradesTabBig => '大额成交';
+
+  @override
+  String get tradesSortTooltip => '排序';
+
+  @override
   String get marketDetailStarTooltip => '收藏';
 
   @override
