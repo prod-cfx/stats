@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/mock/fixtures/long_short.dart';
 import '../../data/mock/fixtures/tickers.dart';
 import '../../data/models/exchange_long_short_models.dart';
-import '../../data/models/kline_models.dart';
 import '../../data/models/long_short_models.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
@@ -19,7 +18,7 @@ import 'widgets/exchange_long_short_tile.dart';
 import 'widgets/long_short_bar.dart';
 import 'widgets/long_short_hero_card.dart';
 
-/// 多空比主体（symbol/interval 选择 + hero 卡 + 交易所榜 + 历史），无 Scaffold /
+/// 多空比主体（symbol 选择 + hero 卡 + 交易所榜 + 历史），无 Scaffold /
 /// 顶栏。顶部自带刷新按钮（抽 body 后 QzTopBar 的 refresh action 下放至此）。
 class LongShortBody extends ConsumerStatefulWidget {
   const LongShortBody({super.key});
@@ -30,7 +29,6 @@ class LongShortBody extends ConsumerStatefulWidget {
 
 class _LongShortBodyState extends ConsumerState<LongShortBody> {
   String _symbol = 'BTCUSDT';
-  KlineInterval _interval = KlineInterval.h1;
   MarketLongShortSnapshot? _snapshot;
   bool _loading = true;
   Object? _error;
@@ -99,14 +97,6 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
                 _load();
               },
             ),
-          ),
-          const SizedBox(height: QzSpacing.md),
-          QzSegmentedTabs(
-            options: const <String>['1m', '5m', '15m', '1h', '4h', '1d'],
-            value: _intervalLabel(_interval),
-            onChanged: (String value) {
-              setState(() => _interval = _intervalFromLabel(value));
-            },
           ),
           const SizedBox(height: QzSpacing.md),
           if (_loading)
@@ -241,40 +231,5 @@ class _HistoryCard extends StatelessWidget {
     final String hour = timestamp.hour.toString().padLeft(2, '0');
     final String minute = timestamp.minute.toString().padLeft(2, '0');
     return '$month-$day $hour:$minute';
-  }
-}
-
-String _intervalLabel(KlineInterval interval) {
-  switch (interval) {
-    case KlineInterval.m1:
-      return '1m';
-    case KlineInterval.m5:
-      return '5m';
-    case KlineInterval.m15:
-      return '15m';
-    case KlineInterval.h1:
-      return '1h';
-    case KlineInterval.h4:
-      return '4h';
-    case KlineInterval.d1:
-      return '1d';
-  }
-}
-
-KlineInterval _intervalFromLabel(String label) {
-  switch (label) {
-    case '1m':
-      return KlineInterval.m1;
-    case '5m':
-      return KlineInterval.m5;
-    case '15m':
-      return KlineInterval.m15;
-    case '4h':
-      return KlineInterval.h4;
-    case '1d':
-      return KlineInterval.d1;
-    case '1h':
-    default:
-      return KlineInterval.h1;
   }
 }
