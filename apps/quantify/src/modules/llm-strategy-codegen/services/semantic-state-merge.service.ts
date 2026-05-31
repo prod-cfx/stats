@@ -74,7 +74,106 @@ export class SemanticStateMergeService {
   }
 
   private reprojectWhenRulesPresent(state: SemanticState): SemanticState {
+    if (state.rules?.length) {
+      const rulesWithContext = this.ensureRuleTimeframeScopeFromContext(state.rules, state)
+      const finalizedRules = this.finalizeLifecycleRules(rulesWithContext) as SemanticState['rules']
+      return {
+        ...state,
+        position: this.repairPositionFromRuleSizing(state.position, finalizedRules),
+        rules: finalizedRules,
+      }
+    }
     return state
+  }
+
+  private ensureRuleTimeframeScopeFromContext(
+    rules: readonly SemanticRule[],
+    state: SemanticState,
+  ): readonly SemanticRule[] {
+    const timeframe = this.readContextSlotString(state.contextSlots.timeframe)
+    if (!timeframe) return rules
+    const hasScope = rules.some(rule => listRuleEffects(rule.effects).some(effect =>
+      collectAtomLeaves(effect).some(leaf => leaf.key === 'scope.timeframe'),
+    ))
+    if (hasScope) return rules
+
+    const scopeAtom: AtomExpr = {
+      kind: 'atom',
+      key: 'scope.timeframe',
+      params: {
+        timeframeScopeKind: 'timeframe',
+        primaryTimeframe: timeframe,
+        requiredTimeframes: [timeframe],
+        alignmentPolicy: 'tolerant',
+      },
+    }
+    return rules.map((rule) => {
+      if (rule.phase !== 'entry' && rule.phase !== 'exit' && rule.phase !== 'gate') return rule
+      const typed = this.normalizeRuleEffectsToTyped(rule.effects)
+      return {
+        ...rule,
+        effects: {
+          ...typed,
+          orchestration: this.mergeRuleEffectRole(typed.orchestration, [scopeAtom]),
+        },
+      }
+    })
+  }
+
+  private readContextSlotString(slot: SemanticSlotState | null | undefined): string | null {
+    const value = slot?.value
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private repairPositionFromRuleSizing(
+    position: SemanticPositionState | null,
+    rules: readonly SemanticRule[],
+  ): SemanticPositionState | null {
+    const sizing = this.readPreferredRuleSizing(rules)
+    if (!sizing || sizing.kind !== 'ratio') return position
+    const value = typeof sizing.value === 'number' && Number.isFinite(sizing.value) ? sizing.value : null
+    if (value === null || value <= 0) return position
+    const normalizedValue = value <= 1 ? value : value / 100
+    const inferredPositionMode = this.inferPositionModeFromRules(rules) ?? position?.positionMode ?? 'long_only'
+    if (
+      position?.sizing?.kind === 'ratio'
+      && Math.abs(position.sizing.value - normalizedValue) <= 1e-9
+      && position.positionMode === inferredPositionMode
+    ) return position
+    return {
+      ...(position ?? {
+        mode: 'fixed_ratio' as const,
+        source: 'derived' as const,
+        status: 'locked' as const,
+        openSlots: [],
+        positionMode: 'long_only' as const,
+      }),
+      mode: 'fixed_ratio',
+      value: normalizedValue,
+      sizing: { kind: 'ratio', unit: 'ratio', value: normalizedValue },
+      positionMode: inferredPositionMode,
+    }
+  }
+
+  private inferPositionModeFromRules(rules: readonly SemanticRule[]): string | null {
+    const actionKeys = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key)))
+    const reverseLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))).filter(leaf => leaf.key === 'action.reverse_position')
+    if (reverseLeaves.length > 0) return 'long_short'
+    const hasLong = actionKeys.some(key => key === 'action.open_long' || key === 'action.close_long')
+    const hasShort = actionKeys.some(key => key === 'action.open_short' || key === 'action.close_short')
+    if (hasLong && hasShort) return 'long_short'
+    if (hasShort) return 'short_only'
+    if (hasLong) return 'long_only'
+    return null
+  }
+
+  private readPreferredRuleSizing(rules: readonly SemanticRule[]): { kind?: unknown, value?: unknown } | null {
+    const candidates = rules.flatMap(rule => listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .filter(leaf => leaf.key === 'position.sizing')
+      .map(leaf => leaf.params?.sizing)
+      .filter((value): value is { kind?: unknown, value?: unknown } => Boolean(value) && typeof value === 'object' && !Array.isArray(value)))
+    return candidates.find(candidate => candidate.kind === 'ratio') ?? candidates[0] ?? null
   }
 
   private mergePosition(
@@ -520,7 +619,7 @@ export class SemanticStateMergeService {
    */
   private atomLeafSemanticSignature(atom: AtomExpr & { kind: 'atom' }): string {
     const cleaned = this.cleanParamsForSignature(atom.params ?? {})
-    return `${atom.key}|${this.stableParamsHash(cleaned)}|${atom.sideScope ?? ''}`
+    return `${atom.key}|${this.stableParamsHash(cleaned)}`
   }
 
   /**
@@ -587,16 +686,33 @@ export class SemanticStateMergeService {
    *   恢复方式：derived.condition 为 and → 追加；否则包一层 and。
    */
   private restoreLostEventAtoms(persisted: SemanticRule, derived: SemanticRule): SemanticRule {
+    const persistedLeaves = collectAtomLeaves(persisted.condition)
+    const derivedLeaves = collectAtomLeaves(derived.condition)
+    const derivedIsPersistedSubset = derivedLeaves.length > 0
+      && persistedLeaves.length > derivedLeaves.length
+      && derivedLeaves.every(derivedLeaf =>
+        persistedLeaves.some(persistedLeaf => this.conditionLeafCovers(persistedLeaf, derivedLeaf)),
+      )
+    const monotonicMissingLeaves: Array<AtomExpr & { kind: 'atom' }> = derivedIsPersistedSubset
+      ? persistedLeaves.filter(persistedLeaf =>
+          !derivedLeaves.some(derivedLeaf => this.conditionLeafCovers(derivedLeaf, persistedLeaf)),
+        )
+      : []
+
     const persistedEventSigs = this.collectEventClassLeafSigs(persisted.condition)
     const persistedHasSeq = this.hasSequenceNode(persisted.condition)
-    if (persistedEventSigs.size === 0 && !persistedHasSeq) return derived
+    if (persistedEventSigs.size === 0 && !persistedHasSeq && monotonicMissingLeaves.length === 0) return derived
 
     const derivedEventSigs = this.collectEventClassLeafSigs(derived.condition)
     const derivedHasSeq = this.hasSequenceNode(derived.condition)
 
-    const missingLeaves: Array<AtomExpr & { kind: 'atom' }> = []
+    const missingLeaves: Array<AtomExpr & { kind: 'atom' }> = [...monotonicMissingLeaves]
     if (derivedEventSigs.size === 0) {
-      for (const leaf of persistedEventSigs.values()) missingLeaves.push(leaf)
+      for (const leaf of persistedEventSigs.values()) {
+        if (!missingLeaves.some(existing => this.atomLeafSemanticSignature(existing) === this.atomLeafSemanticSignature(leaf))) {
+          missingLeaves.push(leaf)
+        }
+      }
     }
 
     const missingSeqNodes: AtomExpr[] = []
@@ -636,6 +752,9 @@ export class SemanticStateMergeService {
     const out: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(params)) {
       if (SemanticStateMergeService.NOISE_PARAM_KEYS.has(key)) continue
+      if (key === 'bufferPct' && value === 0) continue
+      if (key === 'signalPeriod' && value === 0) continue
+      if (key === 'activationPct' && value === 0) continue
       const canonicalKey = SemanticStateMergeService.ALIAS_PARAM_KEYS[key] ?? key
       // canonical 已存在（atom 同时带 canonical + alias）→ 保留 canonical，跳过 alias
       if (canonicalKey !== key && canonicalKey in out) continue
@@ -835,8 +954,596 @@ export class SemanticStateMergeService {
     // 保持原顺序：风控 rule 在出现位置插入归一化后的代表（按 riskOrder 一致取首次出现位置）。
     // 实际渲染顺序对 UI 影响有限（rules 层会按 phase 重排），这里简化为「先非风控，
     // 后归一化风控」——既往 Pass 2 输出顺序也不保证严格稳定。
-    if (riskOrder.length === 0) return afterShapePass
-    return [...nonRiskRules, ...riskOrder.map(s => byRiskSig.get(s)!)]
+    if (riskOrder.length === 0) return this.finalizeLifecycleRules(afterShapePass)
+    return this.finalizeLifecycleRules([...nonRiskRules, ...riskOrder.map(s => byRiskSig.get(s)!)] )
+  }
+
+  private finalizeLifecycleRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const repaired = rules.map(rule => this.normalizeRuleEffectsForRule({
+      ...this.repairLifecycleActionsForRuleSide(this.repairLifecyclePhaseFromEvidence(rule)),
+      condition: this.dropRedundantPriceChangeWhenRiskGuardExists(rule.condition),
+    }))
+    const withPositionOnlyMerged = this.mergePositionOnlyEntryRulesIntoActionEntries(repaired)
+    const folded = this.foldDuplicateLifecycleRules(withPositionOnlyMerged)
+    const foldedSubsets = this.foldCoveredLifecycleSubsetRules(folded)
+    const withoutCoveredTakeProfitExits = this.dropTakeProfitExitRulesCoveredByEntryRisk(foldedSubsets)
+    const withoutRiskOpenNoise = this.dropRiskOnlyOpenEntryRules(withoutCoveredTakeProfitExits)
+    const withoutPositionOpenNoise = this.dropPositionPresenceOpenEntryRules(withoutRiskOpenNoise)
+    const withoutAlwaysOnOpenNoise = this.dropAlwaysOnOpenEntryRules(withoutPositionOpenNoise)
+    const withoutOrphans = this.dropCoveredActionlessLifecycleRules(withoutAlwaysOnOpenNoise)
+    const withoutFallbackEntries = this.dropFallbackNoPositionEntries(withoutOrphans)
+    return this.dropEntriesDuplicatingSameSideExitConditions(withoutFallbackEntries)
+  }
+
+  private dropRedundantPriceChangeWhenRiskGuardExists(condition: AtomExpr): AtomExpr {
+    if (condition.kind !== 'and') return condition
+    const leaves = condition.children.flatMap(child => collectAtomLeaves(child))
+    const hasRiskStop = leaves.some(leaf => leaf.key === 'risk.stop_loss_pct')
+    if (!hasRiskStop) return condition
+    const children = condition.children.filter(child =>
+      !collectAtomLeaves(child).some(leaf => leaf.key === 'price.percent_change'),
+    )
+    if (children.length === condition.children.length) return condition
+    if (children.length === 1) return children[0]!
+    return { ...condition, children }
+  }
+
+  private mergePositionOnlyEntryRulesIntoActionEntries(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const next = [...rules]
+    const drop = new Set<number>()
+    for (let i = 0; i < next.length; i++) {
+      const rule = next[i]!
+      if (rule.phase !== 'entry' || this.lifecycleActionSignature(rule)) continue
+      const typed = this.normalizeRuleEffectsToTyped(rule.effects)
+      const hasOnlyPositions = typed.positions.length > 0
+        && typed.actions.length === 0
+        && typed.risks.length === 0
+        && typed.orchestration.length === 0
+        && typed.programs.length === 0
+      if (!hasOnlyPositions) continue
+      const targetIndex = next.findIndex((candidate, index) =>
+        index !== i
+        && candidate.phase === 'entry'
+        && Boolean(this.lifecycleActionSignature(candidate))
+        && this.sideScopesCompatibleForLifecycle(candidate.sideScope, rule.sideScope),
+      )
+      if (targetIndex < 0) continue
+      const target = next[targetIndex]!
+      next[targetIndex] = {
+        ...target,
+        effects: this.normalizeRuleEffectsSizingPriority(this.mergeRuleEffects(target.effects, rule.effects)),
+      }
+      drop.add(i)
+    }
+    return next.filter((_, index) => !drop.has(index))
+  }
+
+  private dropTakeProfitExitRulesCoveredByEntryRisk(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const entryTakeProfitKeys = new Set<string>()
+    for (const rule of rules) {
+      if (rule.phase !== 'entry') continue
+      const typed = this.normalizeRuleEffectsToTyped(rule.effects)
+      for (const risk of typed.risks) {
+        for (const leaf of collectAtomLeaves(risk)) {
+          if (leaf.key === 'risk.take_profit_pct' || leaf.key === 'risk.partial_take_profit') {
+            entryTakeProfitKeys.add(leaf.key)
+          }
+        }
+      }
+    }
+    if (entryTakeProfitKeys.size === 0) return rules
+
+    return rules.filter((rule) => {
+      if (rule.phase !== 'exit') return true
+      const conditionKeys = collectAtomLeaves(rule.condition).map(leaf => leaf.key)
+      if (!conditionKeys.every(key => key === 'risk.take_profit_pct' || key === 'risk.partial_take_profit')) return true
+      return !this.closeActionKeys(rule).size
+    })
+  }
+
+  private normalizeRuleEffectsForRule(rule: SemanticRule): SemanticRule {
+    return {
+      ...rule,
+      effects: this.normalizeRuleEffectsSizingPriority(this.normalizeRiskEffectValues(rule.effects)),
+    }
+  }
+
+  private normalizeRiskEffectValues(effects: RuleEffects): RuleEffects {
+    const normalize = (expr: AtomExpr): AtomExpr => {
+      if (expr.kind === 'atom') {
+        if ((expr.key === 'risk.max_drawdown_pct' || expr.key === 'portfolioRisk.drawdown_block') && typeof (expr.params?.valuePct ?? expr.params?.thresholdPct) === 'number') {
+          const valueKey = typeof expr.params?.valuePct === 'number' ? 'valuePct' : 'thresholdPct'
+          const raw = expr.params?.[valueKey]
+          const value = typeof raw === 'number' ? Math.abs(raw) : raw
+          return { ...expr, params: { ...(expr.params ?? {}), [valueKey]: value } }
+        }
+        return expr
+      }
+      if (expr.kind === 'and') return { ...expr, children: expr.children.map(normalize) }
+      if (expr.kind === 'or') return { ...expr, children: expr.children.map(normalize) }
+      if (expr.kind === 'not') return { ...expr, child: normalize(expr.child) }
+      if (expr.kind === 'sequence') return { ...expr, steps: expr.steps.map(normalize) }
+      return expr
+    }
+    if (!isRuleEffectsByRole(effects)) return effects.map(normalize)
+    return {
+      actions: effects.actions.map(normalize),
+      risks: effects.risks.map(normalize).filter(effect => !this.isZeroRiskEffect(effect)),
+      positions: effects.positions.map(normalize),
+      orchestration: effects.orchestration.map(normalize).filter(effect => !this.isZeroRiskEffect(effect)),
+      programs: effects.programs.map(normalize),
+    }
+  }
+
+  private isZeroRiskEffect(effect: AtomExpr): boolean {
+    return effect.kind === 'atom'
+      && (effect.key === 'risk.max_drawdown_pct' || effect.key === 'portfolioRisk.drawdown_block')
+      && (effect.params?.valuePct === 0 || effect.params?.thresholdPct === 0)
+  }
+
+  private foldDuplicateLifecycleRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const bySignature = new Map<string, SemanticRule>()
+    const order: string[] = []
+    const passthrough: SemanticRule[] = []
+
+    for (const rule of rules) {
+      const actionSig = this.lifecycleActionSignature(rule)
+      if (!actionSig) {
+        passthrough.push(rule)
+        continue
+      }
+      const sig = `${rule.phase}|${rule.sideScope}|${this.atomExprSemanticSignature(rule.condition)}|${actionSig}`
+      const existing = bySignature.get(sig)
+      if (!existing) {
+        order.push(sig)
+        bySignature.set(sig, rule)
+        continue
+      }
+      bySignature.set(sig, {
+        ...existing,
+        effects: this.normalizeRuleEffectsSizingPriority(this.mergeRuleEffects(existing.effects, rule.effects)),
+      })
+    }
+
+    return [...order.map(sig => bySignature.get(sig)!), ...passthrough]
+  }
+
+  private foldCoveredLifecycleSubsetRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const out: SemanticRule[] = []
+    for (const rule of rules) {
+      const actionSig = this.lifecycleActionSignature(rule)
+      if (!actionSig) {
+        out.push(rule)
+        continue
+      }
+      const existingIndex = out.findIndex(existing => this.lifecycleRuleCovers(existing, rule, actionSig))
+      if (existingIndex >= 0) {
+        const existing = out[existingIndex]!
+        out[existingIndex] = {
+          ...this.preferRicherConditionRule(existing, rule),
+          effects: this.normalizeRuleEffectsSizingPriority(this.mergeRuleEffects(existing.effects, rule.effects)),
+        }
+        continue
+      }
+      const coveredIndex = out.findIndex(existing => this.lifecycleRuleCovers(rule, existing, this.lifecycleActionSignature(existing)))
+      if (coveredIndex >= 0) {
+        const existing = out[coveredIndex]!
+        out[coveredIndex] = {
+          ...this.preferRicherConditionRule(rule, existing),
+          effects: this.normalizeRuleEffectsSizingPriority(this.mergeRuleEffects(existing.effects, rule.effects)),
+        }
+        continue
+      }
+      out.push(rule)
+    }
+    return out
+  }
+
+  private lifecycleRuleCovers(candidate: SemanticRule, covered: SemanticRule, actionSig: string | null): boolean {
+    if (!actionSig) return false
+    if (candidate.phase !== covered.phase) return false
+    if (candidate.sideScope !== covered.sideScope && (this.hasMixedRiskCondition(candidate.condition) || this.hasMixedRiskCondition(covered.condition))) return false
+    if (!this.sideScopesCompatibleForLifecycle(candidate.sideScope, covered.sideScope)) return false
+    if (this.lifecycleActionSignature(candidate) !== actionSig) return false
+    const candidateLeaves = collectAtomLeaves(candidate.condition)
+    const coveredLeaves = collectAtomLeaves(covered.condition)
+    if (candidateLeaves.length === 0 || coveredLeaves.length === 0) return false
+    return coveredLeaves.every(leaf => candidateLeaves.some(candidateLeaf => this.conditionLeafCovers(candidateLeaf, leaf)))
+  }
+
+  private preferRicherConditionRule(left: SemanticRule, right: SemanticRule): SemanticRule {
+    const leftScore = this.conditionRichnessScore(left.condition)
+    const rightScore = this.conditionRichnessScore(right.condition)
+    return rightScore > leftScore ? right : left
+  }
+
+  private hasMixedRiskCondition(condition: AtomExpr): boolean {
+    const leaves = collectAtomLeaves(condition)
+    if (leaves.length < 2) return false
+    const hasRisk = leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.'))
+    const hasNonRisk = leaves.some(leaf => !(this.resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.')))
+    return hasRisk && hasNonRisk
+  }
+
+  private conditionRichnessScore(condition: AtomExpr): number {
+    return collectAtomLeaves(condition).reduce((sum, leaf) => sum + 10 + Object.keys(this.cleanParamsForSignature(leaf.params ?? {})).length, 0)
+  }
+
+  private conditionLeafCovers(candidate: AtomExpr & { kind: 'atom' }, covered: AtomExpr & { kind: 'atom' }): boolean {
+    if (this.sameMovingAverageCrossConditionKey(candidate, covered)) return true
+    if (candidate.key === covered.key) {
+      if (this.sameMovingAverageThresholdCondition(candidate, covered)) return true
+      return this.paramsCover(candidate.params, covered.params) || this.paramsCover(covered.params, candidate.params)
+    }
+    if (this.movingAverageExitLeavesEquivalent(candidate, covered)) return true
+    return false
+  }
+
+  private sameMovingAverageCrossConditionKey(left: AtomExpr & { kind: 'atom' }, right: AtomExpr & { kind: 'atom' }): boolean {
+    if (left.key !== right.key) return false
+    if (left.key !== 'indicator.cross_over' && left.key !== 'indicator.cross_under') return false
+    const leftIndicator = typeof left.params?.indicator === 'string' ? left.params.indicator : null
+    const rightIndicator = typeof right.params?.indicator === 'string' ? right.params.indicator : null
+    return Boolean(
+      leftIndicator
+      && rightIndicator
+      && this.isMovingAverageIndicatorName(leftIndicator)
+      && this.isMovingAverageIndicatorName(rightIndicator),
+    )
+  }
+
+  private sameMovingAverageThresholdCondition(left: AtomExpr & { kind: 'atom' }, right: AtomExpr & { kind: 'atom' }): boolean {
+    if (left.key !== right.key) return false
+    if (left.key !== 'indicator.above' && left.key !== 'indicator.below') return false
+    const leftIndicator = typeof left.params?.indicator === 'string' ? left.params.indicator : null
+    const rightIndicator = typeof right.params?.indicator === 'string' ? right.params.indicator : null
+    if (leftIndicator && rightIndicator && (!this.isMovingAverageIndicatorName(leftIndicator) || !this.isMovingAverageIndicatorName(rightIndicator))) return false
+    if (leftIndicator && rightIndicator && leftIndicator !== rightIndicator && !this.isMovingAverageIndicatorName(leftIndicator) && !this.isMovingAverageIndicatorName(rightIndicator)) return false
+    const leftPeriod = this.readIndicatorPeriod(left.params)
+    const rightPeriod = this.readIndicatorPeriod(right.params)
+    return leftPeriod !== null && rightPeriod !== null && Math.abs(leftPeriod - rightPeriod) <= 1e-9
+  }
+
+  private isMovingAverageIndicatorName(value: string): boolean {
+    return /^(?:ma|sma|ema|wma|hma|moving_average)$/iu.test(value.trim())
+  }
+
+  private movingAverageParamsCompatible(
+    candidate: Record<string, unknown> | undefined,
+    covered: Record<string, unknown> | undefined,
+  ): boolean {
+    const candidateIndicator = typeof candidate?.indicator === 'string' ? candidate.indicator : null
+    const coveredIndicator = typeof covered?.indicator === 'string' ? covered.indicator : null
+    if (candidateIndicator && coveredIndicator && candidateIndicator !== coveredIndicator) return false
+
+    const candidateFast = this.readNumberParam(candidate, 'fastPeriod')
+    const coveredFast = this.readNumberParam(covered, 'fastPeriod')
+    const candidateSlow = this.readNumberParam(candidate, 'slowPeriod')
+    const coveredSlow = this.readNumberParam(covered, 'slowPeriod')
+
+    return this.numberParamsCompatible(candidateFast, coveredFast)
+      && this.numberParamsCompatible(candidateSlow, coveredSlow)
+  }
+
+  private readNumberParam(params: Record<string, unknown> | undefined, key: string): number | null {
+    const value = params?.[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private numberParamsCompatible(left: number | null, right: number | null): boolean {
+    if (left === null || left === 0 || right === null || right === 0) return true
+    return Math.abs(left - right) <= 1e-9
+  }
+
+  private paramsCover(candidate: Record<string, unknown> | undefined, covered: Record<string, unknown> | undefined): boolean {
+    const left = this.cleanParamsForSignature(candidate ?? {})
+    const right = this.cleanParamsForSignature(covered ?? {})
+    return Object.entries(right).every(([key, value]) => JSON.stringify(this.stableValue(left[key])) === JSON.stringify(this.stableValue(value)))
+  }
+
+  private movingAverageExitLeavesEquivalent(left: AtomExpr & { kind: 'atom' }, right: AtomExpr & { kind: 'atom' }): boolean {
+    const keys = new Set([left.key, right.key])
+    if (!keys.has('indicator.cross_under') || !keys.has('indicator.below')) return false
+    const leftIndicator = typeof left.params?.indicator === 'string' ? left.params.indicator : null
+    const rightIndicator = typeof right.params?.indicator === 'string' ? right.params.indicator : null
+    if (leftIndicator && rightIndicator && leftIndicator !== rightIndicator) return false
+    const leftPeriod = this.readIndicatorPeriod(left.params)
+    const rightPeriod = this.readIndicatorPeriod(right.params)
+    return leftPeriod !== null && rightPeriod !== null && Math.abs(leftPeriod - rightPeriod) <= 1e-9
+  }
+
+  private readIndicatorPeriod(params: Record<string, unknown> | undefined): number | null {
+    const direct = params?.['reference.period'] ?? (params?.reference && typeof params.reference === 'object' && !Array.isArray(params.reference) ? (params.reference as { period?: unknown }).period : undefined) ?? params?.period ?? params?.fastPeriod
+    return typeof direct === 'number' && Number.isFinite(direct) ? direct : null
+  }
+
+  private lifecycleActionSignature(rule: SemanticRule): string | null {
+    const keys = rule.phase === 'entry' ? this.openActionKeys(rule) : rule.phase === 'exit' ? this.closeActionKeys(rule) : new Set<string>()
+    if (keys.size === 0) return null
+    return [...keys].sort().join('|')
+  }
+
+  private repairLifecyclePhaseFromEvidence(rule: SemanticRule): SemanticRule {
+    if (rule.phase !== 'entry' && rule.phase !== 'exit') return rule
+    const evidenceText = this.collectLifecycleEvidenceText(rule)
+    if (!evidenceText) return rule
+
+    const desired = this.inferLifecycleIntentFromEvidence(evidenceText)
+      ?? this.inferMissingEntryLifecycleIntent(rule, evidenceText)
+    if (!desired) return rule
+    if (!this.sideScopesCompatibleForLifecycle(rule.sideScope, desired.sideScope)) return rule
+
+    const typed = this.normalizeRuleEffectsToTyped(rule.effects)
+    const hasOppositeClose = desired.phase === 'entry'
+      && typed.actions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === (desired.sideScope === 'short' ? 'action.close_short' : 'action.close_long')))
+    const hasOppositeOpen = desired.phase === 'exit'
+      && typed.actions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === (desired.sideScope === 'short' ? 'action.open_short' : 'action.open_long')))
+    if (!hasOppositeClose && !hasOppositeOpen && rule.phase === desired.phase) return rule
+
+    return {
+      ...rule,
+      phase: desired.phase,
+      sideScope: desired.sideScope,
+      effects: {
+        ...typed,
+        actions: [{ kind: 'atom', key: desired.actionKey, params: {} }],
+      },
+    }
+  }
+
+  private collectLifecycleEvidenceText(rule: SemanticRule): string {
+    const parts: string[] = []
+    const pushEvidence = (value: unknown): void => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return
+      const text = (value as { text?: unknown }).text
+      if (typeof text === 'string' && text.trim().length > 0) parts.push(text)
+    }
+    pushEvidence((rule as { evidence?: unknown }).evidence)
+    for (const leaf of collectAtomLeaves(rule.condition)) pushEvidence(leaf.evidence)
+    for (const effect of listRuleEffects(rule.effects)) {
+      for (const leaf of collectAtomLeaves(effect)) pushEvidence(leaf.evidence)
+    }
+    return parts.join(' ')
+  }
+
+  private inferLifecycleIntentFromEvidence(text: string): { phase: 'entry' | 'exit', sideScope: 'long' | 'short', actionKey: string } | null {
+    const normalized = text.trim()
+    if (!normalized) return null
+    const hasOpenLong = /(?:开多|做多|买入开多|open\s+long)/iu.test(normalized)
+    const hasOpenShort = /(?:开空|做空|卖出开空|open\s+short)/iu.test(normalized)
+    const hasCloseLong = /(?:平多|卖出平多|平仓|平一半|平剩余|止盈|止损|close\s+long)/iu.test(normalized)
+    const hasCloseShort = /(?:平空|买入平空|平仓|平一半|平剩余|止盈|止损|close\s+short)/iu.test(normalized)
+    const hasOpen = hasOpenLong || hasOpenShort
+    const hasClose = hasCloseLong || hasCloseShort
+    if (hasOpen && hasClose) return null
+    if (hasOpenLong) {
+      return { phase: 'entry', sideScope: 'long', actionKey: 'action.open_long' }
+    }
+    if (hasOpenShort) {
+      return { phase: 'entry', sideScope: 'short', actionKey: 'action.open_short' }
+    }
+    if (hasCloseLong) {
+      return { phase: 'exit', sideScope: 'long', actionKey: 'action.close_long' }
+    }
+    if (hasCloseShort) {
+      return { phase: 'exit', sideScope: 'short', actionKey: 'action.close_short' }
+    }
+    return null
+  }
+
+  private inferMissingEntryLifecycleIntent(
+    rule: SemanticRule,
+    text: string,
+  ): { phase: 'entry', sideScope: 'long' | 'short', actionKey: string } | null {
+    if (rule.phase !== 'exit') return null
+    if (!/rulesMainflow\.missing_entry_rules/iu.test(text)) return null
+    if (this.conditionAllRiskBucket(rule.condition) || this.conditionOnlyHasPositionPresence(rule.condition)) return null
+    if (/(?:开多|做多|买入开多|open\s+long)/iu.test(text)) {
+      return { phase: 'entry', sideScope: 'long', actionKey: 'action.open_long' }
+    }
+    if (/(?:开空|做空|卖出开空|open\s+short)/iu.test(text)) {
+      return { phase: 'entry', sideScope: 'short', actionKey: 'action.open_short' }
+    }
+    return null
+  }
+
+  private repairLifecycleActionsForRuleSide(rule: SemanticRule): SemanticRule {
+    if (rule.phase !== 'entry' && rule.phase !== 'exit') return rule
+    if (rule.sideScope === 'both') return rule
+
+    const typed = this.normalizeRuleEffectsToTyped(rule.effects)
+    const lifecycleKeys = rule.phase === 'entry'
+      ? new Set(['action.open_long', 'action.open_short'])
+      : new Set(['action.close_long', 'action.close_short'])
+    const expectedKey = rule.phase === 'entry'
+      ? (rule.sideScope === 'short' ? 'action.open_short' : 'action.open_long')
+      : (rule.sideScope === 'short' ? 'action.close_short' : 'action.close_long')
+    const hasLifecycleAction = typed.actions.some(effect => collectAtomLeaves(effect).some(leaf => lifecycleKeys.has(leaf.key)))
+    const hasPyramidingAdd = rule.phase === 'entry'
+      && typed.actions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === 'action.add_position'))
+      && typed.positions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === 'position.pyramiding_limit'))
+    if (!hasLifecycleAction && !hasPyramidingAdd) return { ...rule, effects: typed }
+
+    const nonLifecycleActions = typed.actions.filter(effect =>
+      !collectAtomLeaves(effect).some(leaf => lifecycleKeys.has(leaf.key)),
+    ).map(effect => this.repairStructuralActionSide(effect, rule.sideScope))
+    return {
+      ...rule,
+      effects: {
+        ...typed,
+        actions: [
+          ...nonLifecycleActions,
+          { kind: 'atom', key: expectedKey, params: {} },
+        ],
+      },
+    }
+  }
+
+  private repairStructuralActionSide(effect: AtomExpr, sideScope: SemanticRule['sideScope']): AtomExpr {
+    if (sideScope === 'both') return effect
+    if (effect.kind === 'atom') {
+      if (effect.key !== 'action.add_position') return effect
+      return {
+        ...effect,
+        sideScope,
+        params: {
+          ...(effect.params ?? {}),
+          sideScope,
+        },
+      }
+    }
+    if (effect.kind === 'and') return { ...effect, children: effect.children.map(child => this.repairStructuralActionSide(child, sideScope)) }
+    if (effect.kind === 'or') return { ...effect, children: effect.children.map(child => this.repairStructuralActionSide(child, sideScope)) }
+    if (effect.kind === 'not') return { ...effect, child: this.repairStructuralActionSide(effect.child, sideScope) }
+    if (effect.kind === 'sequence') return { ...effect, steps: effect.steps.map(step => this.repairStructuralActionSide(step, sideScope)) }
+    return effect
+  }
+
+  private dropCoveredActionlessLifecycleRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const coveredEffectKeys = new Set<string>()
+    for (const rule of rules) {
+      if (this.lifecycleActionSignature(rule)) {
+        for (const effect of listRuleEffects(rule.effects)) {
+          for (const leaf of collectAtomLeaves(effect)) coveredEffectKeys.add(leaf.key)
+        }
+      }
+    }
+    if (coveredEffectKeys.size === 0) return rules
+    return rules.filter((rule) => {
+      if (rule.phase !== 'entry' && rule.phase !== 'exit') return true
+      if (this.lifecycleActionSignature(rule)) return true
+      const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+      if (effectLeaves.length === 0) return false
+      return !effectLeaves.every(leaf => coveredEffectKeys.has(leaf.key))
+    })
+  }
+
+  private dropRiskOnlyOpenEntryRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const realEntryRules = rules.filter(rule =>
+      rule.phase === 'entry'
+      && this.openActionKeys(rule).size > 0
+      && !this.conditionAllRiskBucket(rule.condition),
+    )
+    if (realEntryRules.length === 0) return rules
+    const entryRiskKeys = new Set(realEntryRules.flatMap(rule =>
+      this.normalizeRuleEffectsToTyped(rule.effects).risks.flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key)),
+    ))
+    return rules.filter((rule) => {
+      if (rule.phase !== 'entry' || this.openActionKeys(rule).size === 0) return true
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      if (conditionLeaves.length === 0 || !this.conditionAllRiskBucket(rule.condition)) return true
+      if (entryRiskKeys.size === 0) return false
+      return !conditionLeaves.every(leaf => entryRiskKeys.has(leaf.key))
+    })
+  }
+
+  private dropPositionPresenceOpenEntryRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const hasRealEntry = rules.some(rule =>
+      rule.phase === 'entry'
+      && this.openActionKeys(rule).size > 0
+      && !this.conditionOnlyHasPositionPresence(rule.condition),
+    )
+    if (!hasRealEntry) return rules
+    return rules.filter(rule =>
+      rule.phase !== 'entry'
+      || this.openActionKeys(rule).size === 0
+      || !this.conditionOnlyHasPositionPresence(rule.condition),
+    )
+  }
+
+  private dropAlwaysOnOpenEntryRules(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const hasRealEntry = rules.some(rule =>
+      rule.phase === 'entry'
+      && this.openActionKeys(rule).size > 0
+      && !this.conditionOnlyHasAlwaysOn(rule.condition),
+    )
+    if (!hasRealEntry) return rules
+    return rules.filter(rule =>
+      rule.phase !== 'entry'
+      || this.openActionKeys(rule).size === 0
+      || !this.conditionOnlyHasAlwaysOn(rule.condition),
+    )
+  }
+
+  private conditionOnlyHasAlwaysOn(condition: AtomExpr): boolean {
+    const leaves = collectAtomLeaves(condition)
+    return leaves.length > 0 && leaves.every(leaf => leaf.key === 'execution.on_start')
+  }
+
+  private conditionOnlyHasPositionPresence(condition: AtomExpr): boolean {
+    const leaves = collectAtomLeaves(condition)
+    return leaves.length > 0 && leaves.every(leaf => leaf.key === 'position.has_position')
+  }
+
+  private conditionAllRiskBucket(condition: AtomExpr): boolean {
+    const leaves = collectAtomLeaves(condition)
+    return leaves.length > 0 && leaves.every(leaf => this.resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.'))
+  }
+
+  private dropEntriesDuplicatingSameSideExitConditions(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const exitRules = rules.filter(rule => rule.phase === 'exit' && this.closeActionKeys(rule).size > 0)
+    if (exitRules.length === 0) return rules
+    return rules.filter((rule) => {
+      if (rule.phase !== 'entry') return true
+      const openActions = this.openActionKeys(rule)
+      if (openActions.size === 0) return true
+      return !exitRules.some(exitRule =>
+        this.sideScopesCompatibleForLifecycle(rule.sideScope, exitRule.sideScope)
+        && this.sameSideOpenCloseActions(openActions, this.closeActionKeys(exitRule))
+        && (
+          this.atomExprSemanticSignature(rule.condition) === this.atomExprSemanticSignature(exitRule.condition)
+          || this.conditionLeavesCover(exitRule.condition, rule.condition)
+        ),
+      )
+    })
+  }
+
+  private conditionLeavesCover(covering: AtomExpr, covered: AtomExpr): boolean {
+    const coveringLeaves = collectAtomLeaves(covering)
+    const coveredLeaves = collectAtomLeaves(covered)
+    if (coveringLeaves.length === 0 || coveredLeaves.length === 0) return false
+    return coveredLeaves.every(leaf => coveringLeaves.some(candidate => this.conditionLeafCovers(candidate, leaf)))
+  }
+
+  private dropFallbackNoPositionEntries(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const hasSpecificEntryBySide = new Set<SemanticRule['sideScope']>()
+    for (const rule of rules) {
+      if (rule.phase !== 'entry' || this.openActionKeys(rule).size === 0) continue
+      const leaves = collectAtomLeaves(rule.condition)
+      if (leaves.length === 1 && leaves[0]?.key === 'position.no_position') continue
+      hasSpecificEntryBySide.add(rule.sideScope)
+    }
+    if (hasSpecificEntryBySide.size === 0) return rules
+    return rules.filter((rule) => {
+      if (rule.phase !== 'entry' || this.openActionKeys(rule).size === 0) return true
+      const leaves = collectAtomLeaves(rule.condition)
+      if (!(leaves.length === 1 && leaves[0]?.key === 'position.no_position')) return true
+      return !hasSpecificEntryBySide.has(rule.sideScope)
+    })
+  }
+
+  private openActionKeys(rule: SemanticRule): Set<string> {
+    return this.lifecycleActionKeys(rule, new Set(['action.open_long', 'action.open_short']))
+  }
+
+  private closeActionKeys(rule: SemanticRule): Set<string> {
+    return this.lifecycleActionKeys(rule, new Set(['action.close_long', 'action.close_short']))
+  }
+
+  private lifecycleActionKeys(rule: SemanticRule, allowed: ReadonlySet<string>): Set<string> {
+    return new Set(listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .map(leaf => leaf.key)
+      .filter(key => allowed.has(key)))
+  }
+
+  private sideScopesCompatibleForLifecycle(left: SemanticRule['sideScope'], right: SemanticRule['sideScope']): boolean {
+    return left === right || left === 'both' || right === 'both'
+  }
+
+  private sameSideOpenCloseActions(openActions: ReadonlySet<string>, closeActions: ReadonlySet<string>): boolean {
+    return (openActions.has('action.open_long') && closeActions.has('action.close_long'))
+      || (openActions.has('action.open_short') && closeActions.has('action.close_short'))
   }
 
   private mergeRuleEffects(
@@ -858,6 +1565,69 @@ export class SemanticStateMergeService {
     } satisfies RuleEffectsByRole
   }
 
+  private normalizeRuleEffectsSizingPriority(effects: RuleEffects): RuleEffectsByRole {
+    const typed = this.normalizeRuleEffectsToTyped(effects)
+    return {
+      actions: this.dedupeActionEffectsBySemanticSignature(typed.actions),
+      risks: this.dedupeRuleEffectRoleBySemanticSignature(typed.risks),
+      positions: this.dedupeSizingEffectsByPriority(typed.positions),
+      orchestration: this.dedupeRuleEffectRoleBySemanticSignature(typed.orchestration),
+      programs: this.dedupeRuleEffectRoleBySemanticSignature(typed.programs),
+    }
+  }
+
+  private dedupeRuleEffectRoleBySemanticSignature(effects: ReadonlyArray<AtomExpr>): AtomExpr[] {
+    const bySignature = new Map<string, AtomExpr>()
+    const order: string[] = []
+    for (const effect of effects) {
+      const signature = this.atomExprSemanticSignature(effect)
+      if (!bySignature.has(signature)) order.push(signature)
+      bySignature.set(signature, effect)
+    }
+    return order.map(signature => this.cloneAtomExpr(bySignature.get(signature)!))
+  }
+
+  private dedupeActionEffectsBySemanticSignature(effects: ReadonlyArray<AtomExpr>): AtomExpr[] {
+    const withoutReverse = effects.filter(effect => !collectAtomLeaves(effect).some(leaf => leaf.key === 'action.reverse_position'))
+    const reverseEffects = effects.filter(effect => collectAtomLeaves(effect).some(leaf => leaf.key === 'action.reverse_position'))
+    if (reverseEffects.length === 0) return this.dedupeRuleEffectRoleBySemanticSignature(effects)
+    const bestReverse = [...reverseEffects]
+      .sort((left, right) => this.reversePositionEffectScore(right) - this.reversePositionEffectScore(left))[0]!
+    return this.dedupeRuleEffectRoleBySemanticSignature([...withoutReverse, bestReverse])
+  }
+
+  private reversePositionEffectScore(effect: AtomExpr): number {
+    const leaf = collectAtomLeaves(effect).find(item => item.key === 'action.reverse_position')
+    if (!leaf) return 0
+    return [leaf.params?.fromSide, leaf.params?.toSide, leaf.params?.sameBarPolicy, leaf.params?.sizingSource]
+      .filter(value => typeof value === 'string' && value.trim() !== '')
+      .length
+  }
+
+  private dedupeSizingEffectsByPriority(effects: ReadonlyArray<AtomExpr>): AtomExpr[] {
+    const sizingEffects = effects.filter(effect =>
+      collectAtomLeaves(effect).some(leaf => leaf.key === 'position.sizing'),
+    )
+    if (sizingEffects.length <= 1) return effects.map(effect => this.cloneAtomExpr(effect))
+
+    const nonSizing = effects.filter(effect =>
+      !collectAtomLeaves(effect).some(leaf => leaf.key === 'position.sizing'),
+    )
+    const best = [...sizingEffects].sort((left, right) => this.sizingEffectPriority(right) - this.sizingEffectPriority(left))[0]!
+    return [...nonSizing.map(effect => this.cloneAtomExpr(effect)), this.cloneAtomExpr(best)]
+  }
+
+  private sizingEffectPriority(effect: AtomExpr): number {
+    const leaf = collectAtomLeaves(effect).find(item => item.key === 'position.sizing')
+    const sizing = leaf?.params?.sizing
+    if (sizing && typeof sizing === 'object' && !Array.isArray(sizing)) {
+      const kind = (sizing as { kind?: unknown }).kind
+      if (kind === 'ratio') return 3
+      if (kind === 'quote') return 2
+    }
+    return 1
+  }
+
   private mergeRuleEffectRole(
     persisted: ReadonlyArray<AtomExpr>,
     derived: ReadonlyArray<AtomExpr>,
@@ -868,7 +1638,7 @@ export class SemanticStateMergeService {
     const byShape = new Map<string, AtomExpr>()
     const order: string[] = []
     for (const effect of [...persisted, ...derived]) {
-      const shape = this.stableParamsHash(effect as unknown as Record<string, unknown>)
+      const shape = this.atomExprSemanticSignature(effect)
       if (!byShape.has(shape)) order.push(shape)
       byShape.set(shape, effect)
     }

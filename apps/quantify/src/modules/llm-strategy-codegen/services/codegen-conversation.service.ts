@@ -2032,7 +2032,10 @@ export class CodegenConversationService {
     guideConfig?: CodegenGuideConfigDto
   }): Promise<CodegenSessionResponseDto> {
     const responseLocale = args.constraintPack.locale ?? 'zh'
-    const reconciledSemanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
+    const reconciledSemanticState = this.semanticStateMerge.merge({
+      persisted: null,
+      derived: this.reconcileSemanticMissingPlaceholders(args.semanticState),
+    })
     const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       args.message,
@@ -6086,8 +6089,7 @@ export class CodegenConversationService {
     ).length
 
     const exitRuleCount = spec.rules.filter(rule =>
-      (rule.phase === 'exit' || rule.phase === 'risk')
-      && rule.actions.some(action => (
+      rule.actions.some(action => (
         action.type === 'CLOSE_LONG'
         || action.type === 'CLOSE_SHORT'
         || action.type === 'FORCE_EXIT'
@@ -6229,7 +6231,10 @@ export class CodegenConversationService {
     state: SemanticState,
     strategyVersion?: StrategyVersionInfo,
   ): SemanticState {
-    return this.semanticContractReadiness.normalize(state, strategyVersion).state
+    return this.semanticStateMerge.merge({
+      persisted: null,
+      derived: this.semanticContractReadiness.normalize(state, strategyVersion).state,
+    })
   }
 
   private currentStrategyVersion(): StrategyVersionInfo {

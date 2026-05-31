@@ -58,6 +58,19 @@ describe('codegen-conversation — evaluateCanonicalCompileability 入场动作�
     expect(report.canCompile).toBe(true)
   })
 
+  it('entry rule 内 CLOSE+OPEN 反手动作视为入场和出场闭环', () => {
+    const report = anySvc.evaluateCanonicalCompileability({
+      rules: [
+        { phase: 'entry', actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }] },
+      ],
+    })
+
+    expect(report.canCompile).toBe(true)
+    expect(report.entryRuleCount).toBe(1)
+    expect(report.exitRuleCount).toBe(1)
+    expect(report.reasons).not.toContain('canonical_projection_missing_exit_program')
+  })
+
   it('完全无入场动作（CLOSE_LONG only）→ 报 missing entry program', () => {
     const report = anySvc.evaluateCanonicalCompileability(buildSpec(['CLOSE_LONG']))
     expect(report.canCompile).toBe(false)
@@ -77,4 +90,3 @@ describe('codegen-conversation — evaluateCanonicalCompileability 入场动作�
     expect(report.reasons).toContain('canonical_projection_missing_exit_program')
   })
 })
-

@@ -34,6 +34,7 @@ const drawdownBlockOrchestrationShape: OrchestrationPortfolioRiskShape = (riskIn
   if (risk.scope === 'portfolio') {
     out = {
       id: risk.id,
+      ...(risk.sourcePath ? { sourcePath: risk.sourcePath } : {}),
       scope: 'portfolio',
       mode: risk.mode,
       thresholdPct: risk.thresholdPct,
@@ -43,6 +44,7 @@ const drawdownBlockOrchestrationShape: OrchestrationPortfolioRiskShape = (riskIn
   else if (risk.scope === 'symbol') {
     out = {
       id: risk.id,
+      ...(risk.sourcePath ? { sourcePath: risk.sourcePath } : {}),
       scope: 'symbol',
       mode: risk.mode,
       notionalCapPct: risk.notionalCapPct,
@@ -54,6 +56,7 @@ const drawdownBlockOrchestrationShape: OrchestrationPortfolioRiskShape = (riskIn
     // scope === 'subStrategy'
     out = {
       id: risk.id,
+      ...(risk.sourcePath ? { sourcePath: risk.sourcePath } : {}),
       scope: 'subStrategy',
       mode: risk.mode,
       notionalCapPct: risk.notionalCapPct,

@@ -898,6 +898,7 @@ export class SemanticContractReadinessService {
       && (
         (leaf.role === 'action' && leaf.key.startsWith('action.open_'))
         || (leaf.role === 'action' && leaf.key === 'action.add_position')
+        || (leaf.role === 'action' && leaf.key === 'action.reverse_position')
         || (leaf.role === 'position' && leaf.key === 'position.dca_schedule')
         || leaf.role === 'program'
         || gridRuleIndexes.has(leaf.ruleIndex)
@@ -906,6 +907,8 @@ export class SemanticContractReadinessService {
     const hasExit = read.leaves.some(leaf =>
       leaf.phase === 'exit'
       || (leaf.role === 'risk' && leaf.key.includes('stop'))
+      || (leaf.role === 'risk' && leaf.key === 'risk.max_loss_per_trade')
+      || (leaf.role === 'action' && leaf.key === 'action.reverse_position')
       || gridRuleIndexes.has(leaf.ruleIndex),
     )
 

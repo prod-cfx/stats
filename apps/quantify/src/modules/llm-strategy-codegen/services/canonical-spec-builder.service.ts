@@ -387,7 +387,7 @@ export class CanonicalSpecBuilderService {
     if (stopLossPct !== null) {
       const stopLossRule = this.buildPercentRiskCanonicalRule({
         id: 'risk-stop-loss',
-        sideScope: 'both',
+        sideScope: dominantEntrySideScope,
         priority: 120,
         riskKey: 'risk.stop_loss_pct',
         valuePct: stopLossPct,
@@ -628,9 +628,9 @@ export class CanonicalSpecBuilderService {
     const orchestrationGates = this.buildOrchestrationGatesFromSemanticRulesMainflow(mainflow, orchestrationPrograms)
     const orchestrationScopes = [
       ...this.buildProgramScopesFromSemanticRulesMainflow(orchestrationPrograms),
-      ...this.buildOrchestrationScopesFromSemanticRulesMainflow(mainflow),
+      ...this.buildOrchestrationScopesFromSemanticRulesMainflow(mainflow, market),
     ]
-    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisksFromSemanticRulesMainflow(mainflow)
+    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisksFromSemanticRulesMainflow(mainflow, orchestrationScopes)
     // Task C: contextSlots.timeframe 缺省但 effects-orchestration scope.timeframe 声明了 primaryTimeframe 时，
     // 通用提升首个 timeframe scope 的 primaryTimeframe 到 market.defaultTimeframe，
     // 避免下游 IR 回退到 compile-time baseTimeframe 而丢失编排声明的主周期。
@@ -1164,7 +1164,7 @@ export class CanonicalSpecBuilderService {
       return {
         id: `semantic-risk-${input.rule.id}-${input.priority}`,
         phase: 'risk',
-        sideScope: input.rule.sideScope,
+        sideScope: 'both',
         priority: input.priority,
         condition: {
           kind: 'atom',
@@ -1291,7 +1291,7 @@ export class CanonicalSpecBuilderService {
       return {
         id: `semantic-risk-${input.rule.id}-${input.priority}`,
         phase: 'risk',
-        sideScope: input.rule.sideScope,
+        sideScope: 'both',
         priority: input.priority,
         condition: {
           kind: 'atom',
@@ -1668,6 +1668,7 @@ export class CanonicalSpecBuilderService {
 
   private buildOrchestrationScopesFromSemanticRulesMainflow(
     mainflow: RulesMainflowView,
+    market?: CanonicalStrategySpecV2['market'],
   ): CanonicalOrchestrationScope[] {
     const scopes: CanonicalOrchestrationScope[] = []
     for (const leaf of mainflow.byRole.orchestration) {
@@ -1681,7 +1682,28 @@ export class CanonicalSpecBuilderService {
         throw new Error(`${knownScopeKeys.has(leaf.key) ? 'Invalid' : 'Unsupported'}SemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
       }
     }
+    const marketSymbol = typeof market?.symbol === 'string' ? market.symbol.trim() : ''
+    if (marketSymbol !== '') {
+      for (const leaf of mainflow.byRole.orchestration) {
+        if (leaf.key !== FIELD_KEY.PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP) continue
+        const boundRef = typeof leaf.params.boundSymbolScopeRef === 'string' ? leaf.params.boundSymbolScopeRef.trim() : ''
+        if (boundRef !== '') continue
+        const id = this.implicitSymbolScopeIdForRuleOrchestrationLeaf(leaf)
+        if (scopes.some(scope => scope.id === id)) continue
+        scopes.push({
+          id,
+          scopeKind: 'symbol',
+          symbols: [marketSymbol],
+          primarySymbol: marketSymbol,
+          sourcePath: leaf.path,
+        })
+      }
+    }
     return scopes.sort((a, b) => a.id.localeCompare(b.id))
+  }
+
+  private implicitSymbolScopeIdForRuleOrchestrationLeaf(leaf: RulesMainflowLeaf): string {
+    return `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}-implicit-symbol-scope`
   }
 
   private isSupportedDataSourceSchemaRef(value: unknown): value is SemanticOrchestrationDataSourceSchema {
@@ -1789,6 +1811,7 @@ export class CanonicalSpecBuilderService {
 
   private buildOrchestrationPortfolioRisksFromSemanticRulesMainflow(
     mainflow: RulesMainflowView,
+    scopes: readonly CanonicalOrchestrationScope[] = [],
   ): CanonicalOrchestrationPortfolioRisk[] {
     const risks: CanonicalOrchestrationPortfolioRisk[] = []
     for (const leaf of mainflow.byRole.orchestration) {
@@ -1809,16 +1832,23 @@ export class CanonicalSpecBuilderService {
       }
       if (leaf.key === FIELD_KEY.PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP) {
         const notionalCapPct = this.readFiniteNumber(leaf.params.notionalCapPct)
-        const symbolScopeRef = typeof leaf.params.boundSymbolScopeRef === 'string'
+        const explicitSymbolScopeRef = typeof leaf.params.boundSymbolScopeRef === 'string'
           ? leaf.params.boundSymbolScopeRef.trim()
           : ''
-        const effectWhenTriggered = leaf.params.effectWhenTriggered
+        const implicitSymbolScopeRef = this.implicitSymbolScopeIdForRuleOrchestrationLeaf(leaf)
+        const symbolScopeRef = explicitSymbolScopeRef !== ''
+          ? explicitSymbolScopeRef
+          : scopes.some(scope => scope.id === implicitSymbolScopeRef && scope.scopeKind === 'symbol')
+            ? implicitSymbolScopeRef
+            : ''
+        const effectWhenTriggered = leaf.params.effectWhenTriggered === 'reduce_exposure'
+          ? 'reduce_exposure'
+          : 'block_new_entries'
         if (
           notionalCapPct === null
           || notionalCapPct <= 0
           || notionalCapPct > 100
           || symbolScopeRef === ''
-          || (effectWhenTriggered !== 'block_new_entries' && effectWhenTriggered !== 'reduce_exposure')
         ) {
           throw new Error(`InvalidSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
         }

@@ -111,6 +111,7 @@ const RunBacktestDto = z
     dataRange: BacktestDataRangeDto,
     requestedRangeInput: BacktestRequestedRangeInputDto.optional(),
     bars: z.array(BacktestBarDto).optional(),
+    eventStreams: z.record(z.array(z.object({}).partial().passthrough())).optional(),
   })
   .passthrough()
 const BacktestJobSummaryDto = z

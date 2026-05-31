@@ -410,7 +410,7 @@ export class SemanticStateProjectionService {
     const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
     // rules-only mainflow 渲染时，单笔仓位（10 USDT / 10% 等）未携带在 effects 中，
     // 单独追加到 summary 末尾，避免 token 一致性校验丢失。
-    const rulesOnlySizing = rulesSummary.length > 0
+    const rulesOnlySizing = rulesSummary.length > 0 && !/单笔仓位\s*[^；,，。]*/u.test(rulesSummary)
       ? this.buildDisplayPositionSizingValue(state.position)
       : null
     const baseSummary = rulesSummary.length > 0
@@ -798,7 +798,7 @@ export class SemanticStateProjectionService {
 
     const nextSlot = this.findNextOpenSlot(state)
 
-    const rulesOnlySizing = rulesSummary.length > 0
+    const rulesOnlySizing = rulesSummary.length > 0 && !/单笔仓位\s*[^；,，。]*/u.test(rulesSummary)
       ? this.buildDisplayPositionSizingValue(state.position)
       : null
     return {

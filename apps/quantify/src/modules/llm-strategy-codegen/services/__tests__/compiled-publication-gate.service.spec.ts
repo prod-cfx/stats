@@ -1191,6 +1191,26 @@ describe('compiledPublicationGateService', () => {
     expect(publishedSnapshotsRepo.create).toHaveBeenCalled()
   })
 
+  it('infers long_short for reverse-position canonical rules with CLOSE_LONG and OPEN_SHORT', () => {
+    const gate = new CompiledPublicationGateService({ create: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never) as unknown as {
+      readCanonicalPositionMode(snapshot: Record<string, unknown>): string | null
+    }
+
+    const mode = gate.readCanonicalPositionMode({
+      version: 2,
+      rules: [{
+        id: 'reverse-long-to-short',
+        phase: 'entry',
+        actions: [
+          { type: 'CLOSE_LONG', atomKey: 'action.reverse_position' },
+          { type: 'OPEN_SHORT', atomKey: 'action.reverse_position' },
+        ],
+      }],
+    })
+
+    expect(mode).toBe('long_short')
+  })
+
   it('rejects publish when early-stop reduce rule is absent from compiled artifact', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn(),

@@ -4804,6 +4804,7 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
           mode: 'observe',
           thresholdPct: 10,
           effectWhenTriggered: 'block_new_entries',
+          sourcePath: 'rules[2].effects.orchestration[0]',
         },
       ],
     }
@@ -4817,6 +4818,7 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
       mode: 'observe',
       thresholdPct: 10,
       effectWhenTriggered: 'block_new_entries',
+      sourcePath: 'rules[2].effects.orchestration[0]',
     })
   })
 
@@ -6181,6 +6183,17 @@ describe('canonicalSpecV2IrCompilerService action.reverse_position', () => {
     const kinds = reverseBlock!.actions.map(a => a.kind)
     expect(kinds).toContain('CLOSE_LONG')
     expect(kinds).toContain('OPEN_SHORT')
+    expect(result.ir.portfolio.positionMode).toBe('long_short')
+  })
+
+  it('pure reverse long→short rule sets IR positionMode to long_short', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    spec.rules = spec.rules.filter(rule => rule.id === 'exit-reverse-long-short')
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+
+    expect(result.ir.portfolio.positionMode).toBe('long_short')
   })
 
   it('compile() happy path: short→long produces CLOSE_SHORT + OPEN_LONG in ruleBlocks', () => {

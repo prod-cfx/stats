@@ -703,6 +703,16 @@ function normalizeDcaScheduleParams(
     const tail = clause.slice(drawdownSplitMatch.index)
     const tailRole = extractSizingRoleFromText(tail)
     const primary = next.perOrderSizing as { kind?: string; value?: number; asset?: string } | undefined
+    if (tailRole) {
+      const dropPct = typeof next.dropPct === 'number' ? Math.abs(next.dropPct) : null
+      const priceIntervalPct = typeof next.priceIntervalPct === 'number' ? Math.abs(next.priceIntervalPct) : null
+      const primaryLooksLikeTriggerPct = primary?.kind === 'quote'
+        && typeof primary.value === 'number'
+        && (primary.value === dropPct || primary.value === priceIntervalPct)
+      if (!primary || primaryLooksLikeTriggerPct) {
+        next.perOrderSizing = toPerOrderSizingShape(tailRole.sizing)
+      }
+    }
     if (
       tailRole
       && tailRole.sizing.kind === 'quote'
@@ -1402,6 +1412,7 @@ export class GenericSeedDispatcher {
   ): PatchAtomNode[] {
     const out: PatchAtomNode[] = []
     const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
+      if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
       const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
       if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) return
       out.push({
@@ -1414,6 +1425,15 @@ export class GenericSeedDispatcher {
     }
     for (const trigger of flatPatch.triggers ?? []) push(trigger)
     for (const atom of flatPatch.atoms ?? []) push(atom)
+    if (/震荡区间|区间震荡|盘整|range[- ]?bound/iu.test(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['pattern.range'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['pattern.range'].key,
+        phase: 'entry',
+        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        params: { mode: 'inside_range', lowerRole: 'range_low', upperRole: 'range_high' },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:震荡区间|区间震荡|盘整|range[- ]?bound)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
     this.pushTypedLifecyclePredicates(out, flatPatch)
     // #1633 staging30 s18：用户说 "放量反弹 / 量能放大 / volume spike" 但未给出
     //   数值时，surface.intent.verbs (gte) 不命中 → volume.threshold 不被
@@ -1551,6 +1571,7 @@ export class GenericSeedDispatcher {
   private collectTypedRuleGlobalEffects(flatPatch: InternalSeedDraft, userMessage: string): AtomExpr[] {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
+      if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
       const effect: AtomExpr = {
         kind: 'atom',
         key: item.key,
@@ -1605,6 +1626,10 @@ export class GenericSeedDispatcher {
       })
     }
     if (flatPatch.position?.sizing) {
+      for (let i = out.length - 1; i >= 0; i -= 1) {
+        const effect = out[i]
+        if (effect?.kind === 'atom' && effect.key === 'position.sizing') out.splice(i, 1)
+      }
       out.push({
         kind: 'atom',
         key: 'position.sizing',
@@ -1706,7 +1731,7 @@ export class GenericSeedDispatcher {
     }
     if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'programs')) {
       const atoms = flatPatch.atoms ?? []
-      const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+      const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) && /网格|grid/iu.test(userMessage)
       const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
       const explicitProgramEvidence = this.findEvidenceText(
         userMessage,

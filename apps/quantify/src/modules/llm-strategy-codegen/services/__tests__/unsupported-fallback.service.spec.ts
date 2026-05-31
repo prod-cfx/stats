@@ -20,7 +20,11 @@ describe('UnsupportedFallbackService', () => {
     expect(fallback).not.toBeNull()
     expect(fallback!.prompt).toContain('我听懂了，你要的是 成交量放大')
     expect(fallback!.prompt).toContain('是否改用这个策略继续')
-    expect(fallback!.recommendedStrategy.patch.risk).toEqual(expect.arrayContaining([
+    const riskEffects = (fallback!.recommendedStrategy.patch.rules ?? [])
+      .flatMap(rule => Array.isArray(rule.effects)
+        ? rule.effects
+        : [...(rule.effects.risks ?? [])])
+    expect(riskEffects).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.stop_loss_pct' }),
       expect.objectContaining({ key: 'risk.take_profit_pct' }),
     ]))
@@ -127,6 +131,23 @@ describe('UnsupportedFallbackService', () => {
 
     expect(fallback).not.toBeNull()
     expect(fallback!.prompt.match(/成交量放大/gu)).toHaveLength(1)
+  })
+
+  it.each([
+    'data_source_missing',
+    'runtime_missing_data',
+    'ir_compile_missing_branch',
+  ])('does not replace recognized fail-closed atom with generic fallback: %s', (reasonCode) => {
+    const fallback = service.buildPendingFallback([
+      {
+        key: 'orderbook.imbalance',
+        displayName: '盘口失衡',
+        reasonCode,
+        publicReason: '识别到原子，但当前执行层缺少绑定。',
+      },
+    ])
+
+    expect(fallback).toBeNull()
   })
 
   it('returns unclear for empty or ambiguous message', () => {

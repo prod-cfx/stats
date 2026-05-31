@@ -4517,11 +4517,13 @@ export class CanonicalSpecV2IrCompilerService {
       action.type === 'OPEN_LONG'
       || action.type === 'REDUCE_LONG'
       || action.type === 'ADD_LONG'
+      || action.type === 'CLOSE_LONG'
     )))
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
       || action.type === 'REDUCE_SHORT'
       || action.type === 'ADD_SHORT'
+      || action.type === 'CLOSE_SHORT'
     )))
 
     if (hasLong && hasShort) return 'long_short'

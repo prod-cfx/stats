@@ -1985,6 +1985,250 @@ describe('PlannerDispatcherMergeService — positions bucket append-when-missing
   })
 })
 
+describe('PlannerDispatcherMergeService — explicit user risk percentage wins', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  it('overrides planner default stop-loss percent from “亏损 3% 止损” evidence', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 0, slowPeriod: 0, period: 0, value: 0 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 10 } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergeDeterministicExecutionSlots(
+      planner,
+      {},
+      'OKX 永续 BTCUSDT 15m。EMA20 上穿 EMA50 开多，亏损 3% 止损，单笔使用 10% 仓位。',
+    )
+    const entryRule = merged?.rules?.find(rule => rule.phase === 'entry')
+    const risks = (entryRule?.effects as { risks?: Array<{ key: string, params?: Record<string, unknown> }> } | undefined)?.risks ?? []
+    expect(risks.filter(risk => risk.key === 'risk.stop_loss_pct')).toHaveLength(1)
+    expect(risks.find(risk => risk.key === 'risk.stop_loss_pct')?.params?.valuePct).toBe(3)
+  })
+})
+
+describe('PlannerDispatcherMergeService — preserves explicit dispatcher semantics in planner spine', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  const atomKeys = (patch: CodegenSemanticPatch | null | undefined): string[] => [
+    ...new Set((patch?.rules ?? []).flatMap(rule => [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ].map(leaf => leaf.key))),
+  ].sort()
+
+  it('adds explicit condition leaves from matching dispatcher entry rule', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 20 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch('OKX 合约 BTCUSDT 15m，突破 20 根高点后回踩不破再开多，单笔 10%。') as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, 'OKX 合约 BTCUSDT 15m，突破 20 根高点后回踩不破再开多，单笔 10%。')
+
+    expect(atomKeys(merged)).toEqual(expect.arrayContaining(['price.breakout_up', 'price.previous_extrema_retest', 'pattern.pullback']))
+    expect(merged?.rules?.filter(rule => rule.phase === 'entry')).toHaveLength(1)
+  })
+
+  it('adds explicit risk and orchestration effects from matching dispatcher entry rule', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 20 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = 'OKX 合约 BTCUSDT 15m，突破过去 20 根 K 线高点并且成交量超过 20 根均量 1.5 倍时开多，单笔 10%，单笔最多亏 2%。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+
+    expect(atomKeys(merged)).toEqual(expect.arrayContaining(['volume.threshold', 'risk.max_loss_per_trade', 'position.sizing', 'scope.timeframe']))
+    expect(merged?.rules?.filter(rule => rule.phase === 'entry')).toHaveLength(1)
+  })
+
+  it('preserves explicit gate rule without replacing strategy with fallback recommendation', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_short', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = 'OKX 合约 ETHUSDT 15m，MA20 下穿 MA50 开空，亏损 3% 止损，止损后冷却 5 根 K 线再开仓，单笔 10%。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+
+    expect(atomKeys(merged)).toEqual(expect.arrayContaining(['action.open_short', 'risk.stop_loss_pct', 'risk.cooldown', 'time.cooldown_window']))
+    expect(merged?.rules?.some(rule => rule.phase === 'gate')).toBe(true)
+  })
+
+  it('repairs wrong exit action side when dispatcher evidence says close short', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry-short',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'price.breakout_down', params: { period: 20 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_short', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'planner-exit-wrong-side',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 20 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = 'OKX 合约 ETHUSDT 15m，跌破过去 20 根 K 线低点开空，价格重新站上 EMA20 平空，单笔 10%，亏损 3% 止损。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitActions = (merged?.rules ?? [])
+      .filter(rule => rule.phase === 'exit')
+      .flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key))
+
+    expect(exitActions).toContain('action.close_short')
+    expect(exitActions).not.toContain('action.close_long')
+  })
+
+  it('drops duplicate entry whose condition is already the same-side exit condition', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'entry-short-cross-under',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_short', params: {} }], risks: [{ kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } }], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'duplicate-entry-on-exit-condition',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_short', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'exit-short-cross-over',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_short', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, {}, 'EMA20 下穿 EMA50 开空，EMA20 上穿 EMA50 平空，开仓后用 3% 移动止损。')
+
+    expect(merged?.rules?.filter(rule => rule.phase === 'entry')).toHaveLength(1)
+    expect(merged?.rules?.map(rule => rule.id)).not.toContain('duplicate-entry-on-exit-condition')
+  })
+
+  it('preserves explicit dispatcher exit when planner already has a risk-only exit phase', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry-short',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }, {
+        id: 'planner-risk-exit-only',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } },
+        effects: { actions: [], risks: [{ kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } }], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = 'OKX 合约 ETHUSDT 15m，EMA20 下穿 EMA50 开空，EMA20 上穿 EMA50 平空，单笔 10%，开仓后用 3% 移动止损。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+    const exitConditionKeys = exitRules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))
+    const exitActionKeys = exitRules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key))
+
+    expect(exitConditionKeys).toContain('indicator.cross_over')
+    expect(exitActionKeys).toContain('action.close_short')
+  })
+
+  it('merges dispatcher multi-timeframe gate into same lifecycle planner entry despite MA param drift', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry-long',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = 'BTC 15m EMA20 上穿 EMA50 开多，1h MA50 上方才允许入场，单笔 10% 仓位。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryConditionKeys = (merged?.rules ?? [])
+      .filter(rule => rule.phase === 'entry')
+      .flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))
+
+    expect(entryConditionKeys).toContain('indicator.cross_over')
+    expect(entryConditionKeys).toContain('indicator.above')
+  })
+
+  it('drops actionless lifecycle noise rules after preserving explicit exit semantics', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry-short',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }, {
+        id: 'planner-empty-trend-exit',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'trend.direction', params: { value: 'down' } },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = 'OKX 合约 ETHUSDT 15m，EMA20 下穿 EMA50 开空，EMA20 上穿 EMA50 平空，单笔 10%，开仓后用 3% 移动止损。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+
+    expect(exitRules).toHaveLength(1)
+    expect(exitRules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))).not.toContain('trend.direction')
+    expect(exitRules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key))).toContain('action.close_short')
+  })
+})
+
 // =========================================================================
 // Issue #1707 iter4 — lift dispatcher position.sizing across mismatched rule
 // =========================================================================
@@ -2508,5 +2752,29 @@ describe('PlannerDispatcherMergeService — plaza range and RSI regressions', ()
     const allLeaves = (merged?.rules ?? []).flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
 
     expect(allLeaves.some(leaf => leaf.key === 'risk.take_profit_pct')).toBe(false)
+  })
+})
+
+describe('PlannerDispatcherMergeService — structural action preservation', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  it('preserves dispatcher action.add_position when planner spine has matching entry lifecycle action', () => {
+    const text = 'OKX BTCUSDT 永续 15m。EMA20 上穿 EMA50 开多，盈利 2% 后加仓 10%，最多加仓 2 层，跌破 EMA20 平多，单笔 10%。'
+    const planner = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const effectKeys = (merged?.rules ?? []).flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))).map(leaf => leaf.key)
+
+    expect(effectKeys).toContain('action.add_position')
+    expect(effectKeys).toContain('position.pyramiding_limit')
   })
 })

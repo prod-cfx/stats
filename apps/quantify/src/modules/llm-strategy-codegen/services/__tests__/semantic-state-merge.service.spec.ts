@@ -1,4 +1,5 @@
 import type { SemanticState } from '../../types/semantic-state'
+import { collectAtomLeaves } from '../../types/atom-expr'
 import { SemanticStateMergeService } from '../semantic-state-merge.service'
 
 describe('SemanticStateMergeService', () => {
@@ -2226,6 +2227,36 @@ describe('SemanticStateMergeService', () => {
         }
       })
 
+      it('restores lost state gate leaf when context-slot clarification simplifies same id entry', () => {
+        const persistedRule = {
+          id: 'entry-15m-ema20-cross-ema50-long',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: {
+            kind: 'and' as const,
+            children: [
+              { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+              { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 50, timeframe: '1h' } },
+            ],
+          },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        const derivedRule = {
+          id: 'entry-15m-ema20-cross-ema50-long',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const keys = collectAtomLeaves((merged.rules ?? [])[0]!.condition).map(leaf => leaf.key)
+
+        expect(keys).toEqual(expect.arrayContaining(['indicator.cross_over', 'indicator.above']))
+      })
+
       it('does NOT restore when derived replaces event-class leaf with a different event leaf', () => {
         // 合法替换 cross_over → cross_under：用户主动改方向，不应再注入旧 cross_over
         const persistedRule = {
@@ -2284,6 +2315,533 @@ describe('SemanticStateMergeService', () => {
           expect(cond.key).toBe('risk.stop_loss_pct')
           expect(cond.params).toEqual({ pct: 3 })
         }
+      })
+
+      it('repairs short exit action side during cross-turn merge', () => {
+        const persistedRule = {
+          id: 'rule-exit-short',
+          phase: 'exit' as const,
+          sideScope: 'short' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+          effects: [{ kind: 'atom' as const, key: 'action.close_short', params: {} }],
+        }
+        const derivedRule = {
+          ...persistedRule,
+          effects: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const text = JSON.stringify(merged.rules)
+
+        expect(text).toContain('action.close_short')
+        expect(text).not.toContain('action.close_long')
+      })
+
+      it('drops same-side entry whose condition duplicates an exit after clarification merge', () => {
+        const exitRule = {
+          id: 'rule-exit-short',
+          phase: 'exit' as const,
+          sideScope: 'short' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+          effects: [{ kind: 'atom' as const, key: 'action.close_short', params: {} }],
+        }
+        const duplicateEntry = {
+          id: 'rule-entry-short-duplicate-exit',
+          phase: 'entry' as const,
+          sideScope: 'short' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_short', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [exitRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [duplicateEntry], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const rules = merged.rules ?? []
+
+        expect(rules).toHaveLength(1)
+        expect(rules[0]!.phase).toBe('exit')
+        expect(JSON.stringify(rules)).not.toContain('action.open_short')
+      })
+
+      it('drops same-side entry when its condition is covered by a richer exit condition with placeholder MA params', () => {
+        const exitRule = {
+          id: 'rule-exit-short-trailing',
+          phase: 'exit' as const,
+          sideScope: 'short' as const,
+          condition: {
+            kind: 'and' as const,
+            children: [
+              { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+              { kind: 'atom' as const, key: 'risk.trailing_stop_pct', params: { valuePct: 3 } },
+            ],
+          },
+          effects: {
+            actions: [{ kind: 'atom' as const, key: 'action.close_short', params: {} }],
+            risks: [
+              { kind: 'atom' as const, key: 'risk.trailing_stop_pct', params: { valuePct: 3, activationPct: 0 } },
+              { kind: 'atom' as const, key: 'risk.trailing_stop_pct', params: { valuePct: 3 } },
+            ],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        }
+        const duplicateEntry = {
+          id: 'rule-entry-short-duplicate-exit',
+          phase: 'entry' as const,
+          sideScope: 'short' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 0 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_short', params: {} }],
+        }
+        const derived: SemanticState = { ...emptyBase(), rules: [duplicateEntry, exitRule] }
+
+        const merged = service.merge({ persisted: null, derived })
+        const text = JSON.stringify(merged.rules)
+
+        expect(merged.rules).toHaveLength(1)
+        expect(merged.rules?.[0]?.phase).toBe('exit')
+        expect(text).not.toContain('action.open_short')
+        const effects = merged.rules?.[0]?.effects
+        expect(!Array.isArray(effects) && effects?.risks).toHaveLength(1)
+      })
+
+      it('folds duplicated lifecycle rules with the same condition and prefers ratio sizing', () => {
+        const condition = { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 15, slowPeriod: 20 } }
+        const persistedRule = {
+          id: 'rule-entry-ratio',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition,
+          effects: {
+            actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } } }],
+            orchestration: [],
+            programs: [],
+          },
+        }
+        const derivedRule = {
+          id: 'rule-entry-quote-duplicate',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition,
+          effects: {
+            actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' } } }],
+            orchestration: [],
+            programs: [],
+          },
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const text = JSON.stringify(merged.rules)
+
+        expect(merged.rules).toHaveLength(1)
+        expect(text).toContain('"kind":"ratio"')
+        expect(text).not.toContain('"kind":"quote"')
+      })
+
+      it('applies lifecycle finalize to initial derived state without persisted state', () => {
+        const condition = { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 15, slowPeriod: 20 } }
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'entry-ratio',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition,
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+              risks: [],
+              positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } } }],
+              orchestration: [],
+              programs: [],
+            },
+          }, {
+            id: 'entry-quote',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition,
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+              risks: [],
+              positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' } } }],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const text = JSON.stringify(merged.rules)
+
+        expect(merged.rules).toHaveLength(1)
+        expect(text).toContain('"kind":"ratio"')
+        expect(text).not.toContain('"kind":"quote"')
+      })
+
+      it('dedupes duplicate sizing and cooldown effects inside one lifecycle rule', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'entry-with-duplicate-effects',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 } },
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+              risks: [
+                { kind: 'atom' as const, key: 'risk.cooldown', params: { durationBars: 5 } },
+                { kind: 'atom' as const, key: 'risk.cooldown', params: { durationBars: 5 }, evidence: { text: '冷却 5 根 K 线' } },
+              ],
+              positions: [
+                { kind: 'atom' as const, key: 'position.sizing', params: { mode: 'fixed_pct', value: 10 } },
+                { kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } } },
+              ],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const text = JSON.stringify(merged.rules)
+
+        expect(text.match(/risk\.cooldown/gu)).toHaveLength(1)
+        expect(text.match(/position\.sizing/gu)).toHaveLength(1)
+        expect(text).toContain('"kind":"ratio"')
+      })
+
+      it('drops actionless lifecycle noise instead of counting it as duplicate exit', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'exit-rsi-close-short',
+            phase: 'exit' as const,
+            sideScope: 'short' as const,
+            condition: { kind: 'atom' as const, key: 'oscillator.rsi_lte', params: { period: 14, value: 30 } },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.close_short', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }, {
+            id: 'exit-actionless-stoploss-noise',
+            phase: 'exit' as const,
+            sideScope: 'short' as const,
+            condition: { kind: 'atom' as const, key: 'position.has_position', params: { sideScope: 'short' } },
+            effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+
+        expect(merged.rules?.map(rule => rule.id)).toEqual(['exit-rsi-close-short'])
+      })
+
+      it('folds dispatcher entry with noisy MA periods into planner entry', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'planner-entry-ema20-ema50',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: {
+              kind: 'and' as const,
+              children: [
+                { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+                { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 50 } },
+              ],
+            },
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+              risks: [{ kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 3 } }],
+              positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } } }],
+              orchestration: [],
+              programs: [],
+            },
+          }, {
+            id: 'dispatcher-entry-noisy-ema15-ema20',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: {
+              kind: 'and' as const,
+              children: [
+                { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 15, slowPeriod: 20, signalPeriod: 50 } },
+                { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 50 } },
+              ],
+            },
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+              risks: [],
+              positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } } }],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const entryRules = merged.rules?.filter(rule => rule.phase === 'entry') ?? []
+        const text = JSON.stringify(entryRules)
+
+        expect(entryRules).toHaveLength(1)
+        expect(text.match(/position\.sizing/gu)).toHaveLength(1)
+        expect(text).toContain('risk.stop_loss_pct')
+      })
+
+      it('repairs lifecycle phase and action when condition evidence says open long', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'wrong-exit-from-open-intent',
+            phase: 'exit' as const,
+            sideScope: 'long' as const,
+            condition: {
+              kind: 'atom' as const,
+              key: 'oscillator.rsi_lte',
+              params: { period: 14, value: 30 },
+              evidence: { text: 'RSI14 低于 30 做多' },
+            },
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }],
+              risks: [{ kind: 'atom' as const, key: 'risk.partial_take_profit', params: { profitPct: 5, ratio: 0.5 } }],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const [rule] = merged.rules ?? []
+        const actionKeys = rule?.effects && 'actions' in rule.effects
+          ? rule.effects.actions.flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key))
+          : []
+
+        expect(rule?.phase).toBe('entry')
+        expect(actionKeys).toEqual(['action.open_long'])
+        expect(JSON.stringify(rule)).toContain('risk.partial_take_profit')
+      })
+
+      it('repairs missing_entry_rules evidence even when full utterance also mentions exits', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'wrong-exit-from-missing-entry-path',
+            phase: 'exit' as const,
+            sideScope: 'long' as const,
+            condition: {
+              kind: 'atom' as const,
+              key: 'oscillator.rsi_lte',
+              params: { period: 14, value: 30 },
+              evidence: { text: 'rulesMainflow.missing_entry_rules: RSI14 低于 30 做多，盈利 5% 平一半' },
+            },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const [rule] = merged.rules ?? []
+
+        expect(rule?.phase).toBe('entry')
+        expect(JSON.stringify(rule)).toContain('action.open_long')
+      })
+
+      it('drops risk-only open entries when risk semantics already live on the real entry', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'entry-rsi-with-tp',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'oscillator.rsi_lte', params: { period: 14, value: 30 } },
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+              risks: [{ kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          }, {
+            id: 'risk-tp-open-noise',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+
+        expect(merged.rules?.map(rule => rule.id)).toEqual(['entry-rsi-with-tp'])
+      })
+
+      it('drops position-presence open entries when a real entry exists', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'entry-breakout',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'price.breakout_up', params: { period: 20 } },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }, {
+            id: 'position-presence-open-noise',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'position.has_position', params: { sideScope: 'long' } },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+
+        expect(merged.rules?.map(rule => rule.id)).toEqual(['entry-breakout'])
+      })
+
+      it('drops always-on open entries when a real entry exists', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'entry-breakout',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'price.breakout_up', params: { period: 20 } },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }, {
+            id: 'always-on-open-noise',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'execution.on_start', params: { occurrence: 'once' } },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+
+        expect(merged.rules?.map(rule => rule.id)).toEqual(['entry-breakout'])
+      })
+
+      it('treats zero breakout buffer as semantic noise when folding duplicate exits', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'exit-breakout-no-buffer',
+            phase: 'exit' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'price.breakout_up', params: { period: 20, reference: 'channel_high' } },
+            effects: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }],
+          }, {
+            id: 'exit-breakout-zero-buffer',
+            phase: 'exit' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'price.breakout_up', params: { period: 20, reference: 'channel_high', bufferPct: 0 } },
+            effects: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }],
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+
+        expect(merged.rules).toHaveLength(1)
+      })
+
+      it('adds scope.timeframe from context when rules lost timeframe effects', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          contextSlots: {
+            ...emptyBase().contextSlots,
+            timeframe: { value: '15m', status: 'locked', source: 'user_explicit', openSlots: [] },
+          },
+          rules: [{
+            id: 'entry-no-scope',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+            effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const text = JSON.stringify(merged.rules)
+
+        expect(text).toContain('scope.timeframe')
+        expect(text).toContain('15m')
+      })
+
+      it('repairs top-level ratio position from rule sizing when clarification captured another percentage', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.02,
+            sizing: { kind: 'ratio', unit: 'ratio', value: 0.02 },
+            source: 'user_explicit',
+            status: 'locked',
+            openSlots: [],
+            positionMode: 'short_only',
+          },
+          rules: [{
+            id: 'entry-sizing-truth',
+            phase: 'entry' as const,
+            sideScope: 'short' as const,
+            condition: { kind: 'atom' as const, key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+            effects: {
+              actions: [{ kind: 'atom' as const, key: 'action.open_short', params: {} }],
+              risks: [],
+              positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+
+        expect(merged.position?.value).toBe(0.1)
+        expect(merged.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.1 })
+      })
+
+      it('dedupes reverse_position actions by keeping the side-complete action and repairs position mode', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+            source: 'derived',
+            status: 'locked',
+            openSlots: [],
+            positionMode: 'long_only',
+          },
+          rules: [{
+            id: 'entry-reverse-short',
+            phase: 'entry' as const,
+            sideScope: 'short' as const,
+            condition: { kind: 'atom' as const, key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+            effects: {
+              actions: [
+                { kind: 'atom' as const, key: 'action.reverse_position', params: { toSide: 'short', fromSide: 'long', sizingSource: 'fixed', sameBarPolicy: 'next_bar_only' } },
+                { kind: 'atom' as const, key: 'action.reverse_position', params: { sizingSource: 'fixed', sameBarPolicy: 'next_bar_only' } },
+              ],
+              risks: [],
+              positions: [{ kind: 'atom' as const, key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const actions = !Array.isArray(merged.rules?.[0]?.effects) ? merged.rules?.[0]?.effects.actions ?? [] : []
+
+        expect(actions).toHaveLength(1)
+        expect(actions[0]).toEqual(expect.objectContaining({
+          key: 'action.reverse_position',
+          params: expect.objectContaining({ fromSide: 'long', toSide: 'short' }),
+        }))
+        expect(merged.position?.positionMode).toBe('long_short')
       })
     })
   })

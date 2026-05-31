@@ -1,5 +1,7 @@
 import { collectAtomLeaves, isRuleEffectsByRole } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../../services/generic-seed-dispatcher.service'
+import { SemanticSeedStateBuilderService } from '../../services/semantic-seed-state-builder.service'
+import { SemanticStateProjectionService } from '../../services/semantic-state-projection.service'
 
 type DispatchPatch = ReturnType<GenericSeedDispatcher['dispatch']>
 
@@ -55,5 +57,21 @@ describe('Stage 4 PR3 risk and position dialogue entrance', () => {
     expect(collectEffectKeys(patch, 'risks').filter(key => key === 'risk.stop_loss_pct')).toHaveLength(1)
     expect(collectEffectKeys(patch, 'positions').filter(key => key === 'position.sizing')).toHaveLength(1)
     expect((patch.rules ?? []).filter(rule => rule.phase === 'entry')).toHaveLength(1)
+  })
+
+  it('keeps user-facing summary aligned for explicit percent sizing and stop loss', () => {
+    const utterance = 'OKX 永续 BTCUSDT 15m。EMA20 上穿 EMA50 开多，亏损 3% 止损，单笔使用 10% 仓位。'
+    const patch = dispatcher.dispatch(utterance)
+    const state = new SemanticSeedStateBuilderService().build(patch, utterance)
+
+    expect(collectEffectKeys(patch, 'positions').filter(key => key === 'position.sizing')).toHaveLength(1)
+    expect(state).not.toBeNull()
+
+    const summary = new SemanticStateProjectionService().buildConversationView(state!).summary
+    expect(summary).toContain('下跌3%')
+    expect(summary).toContain('单笔仓位 10%')
+    expect(summary).not.toContain('下跌10%')
+    expect(summary).not.toContain('10 USDT')
+    expect(summary.match(/单笔仓位 10%/gu)).toHaveLength(1)
   })
 })

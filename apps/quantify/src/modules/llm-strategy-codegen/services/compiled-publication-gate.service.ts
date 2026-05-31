@@ -619,6 +619,10 @@ export class CompiledPublicationGateService {
     programs.forEach((program, index) => {
       this.collectExecutableSourcePath(program, `orchestration.programs[${index}]`, sourcePaths, missing)
     })
+    const portfolioRisks = Array.isArray(orchestration?.portfolioRisks) ? orchestration.portfolioRisks : []
+    portfolioRisks.forEach((risk, index) => {
+      this.collectExecutableSourcePath(risk, `orchestration.portfolioRisks[${index}]`, sourcePaths, missing)
+    })
     return { sourcePaths: Array.from(sourcePaths).sort(), missing }
   }
 
@@ -1124,7 +1128,7 @@ export class CompiledPublicationGateService {
       return actions.some((action) => {
         if (!action || typeof action !== 'object' || Array.isArray(action)) return false
         const type = (action as Record<string, unknown>).type
-        return type === 'OPEN_LONG' || type === 'REDUCE_LONG'
+        return type === 'OPEN_LONG' || type === 'REDUCE_LONG' || type === 'CLOSE_LONG'
       })
     })
     const hasShortExposure = rules.some((rule) => {
@@ -1135,7 +1139,7 @@ export class CompiledPublicationGateService {
       return actions.some((action) => {
         if (!action || typeof action !== 'object' || Array.isArray(action)) return false
         const type = (action as Record<string, unknown>).type
-        return type === 'OPEN_SHORT' || type === 'REDUCE_SHORT'
+        return type === 'OPEN_SHORT' || type === 'REDUCE_SHORT' || type === 'CLOSE_SHORT'
       })
     })
 

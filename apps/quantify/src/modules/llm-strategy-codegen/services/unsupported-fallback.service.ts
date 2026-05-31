@@ -27,6 +27,12 @@ const UNSUPPORTED_COVERED_BY_SUPPORTED: Record<string, readonly string[]> = {
   'price.pattern': ['price.candle_pattern', 'price.chart_pattern', 'liquidity.sweep'],
 }
 
+const FAIL_CLOSED_REASON_CODES: ReadonlySet<string> = new Set([
+  'data_source_missing',
+  'runtime_missing_data',
+  'ir_compile_missing_branch',
+])
+
 const CHINESE_NEGATIVE_TERMS = ['不要', '算了', '等支持再说', '不改', '先不', '取消', '不可以', '不确认', '不好']
 const CHINESE_ACCEPT_TERMS = ['确认', '可以', '好', '就这个', '继续', '先测试这个', '用这个']
 const CHINESE_MODIFY_TERMS = ['改成', '换成', '不过', '但是', '但', '仓位', '周期', '标的', '交易所']
@@ -64,6 +70,7 @@ export class UnsupportedFallbackService {
     locale: UnsupportedFallbackLocale = 'zh',
   ): UnsupportedFallbackState | null {
     const filtered = this.filterUnsupportedAtomsCoveredBySupported(unsupportedAtoms, supportedTriggers)
+      .filter(atom => !FAIL_CLOSED_REASON_CODES.has(atom.reasonCode))
 
     if (filtered.length === 0) {
       return null

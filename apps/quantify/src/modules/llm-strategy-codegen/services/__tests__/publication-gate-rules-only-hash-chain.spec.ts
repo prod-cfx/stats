@@ -535,6 +535,66 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('passes when canonical orchestration portfolio risks are traced through IR and AST portfolio risks', () => {
+    const input = fixture()
+    input.rules.push({
+      id: 'rule-portfolio-drawdown',
+      phase: 'gate',
+      condition: { kind: 'atom', key: 'context.always' },
+      effects: {
+        orchestration: [{ kind: 'atom', key: 'portfolioRisk.drawdown_block', params: { thresholdPct: 8 } }],
+      },
+    })
+    input.canonicalSpec.orchestration = {
+      portfolioRisks: [{
+        id: 'portfolio-drawdown-risk',
+        scope: 'portfolio',
+        mode: 'enforce',
+        thresholdPct: 8,
+        effectWhenTriggered: 'block_new_entries',
+        sourcePath: 'rules[1].effects.orchestration[0]',
+      }],
+    }
+    input.ir.orchestrationPortfolioRisks = [{
+      id: 'portfolio-drawdown-risk',
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct: 8,
+      effectWhenTriggered: 'block_new_entries',
+      sourcePath: 'rules[1].effects.orchestration[0]',
+    }]
+    input.ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'trace.canonical',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.orchestration[0]']),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'trace.ir',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.orchestration[0]']),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'trace.ast',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.orchestration[0]']),
+        }),
+      }),
+    ]))
+  })
+
   it('passes when canonical guard rules are traced through IR and AST guards', () => {
     const input = fixture()
     const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>

@@ -1794,6 +1794,55 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     ])
   })
 
+  it('binds rules-only symbol exposure cap to the primary market symbol when no explicit symbol scope exists', () => {
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perpetual'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      rules: [{
+        id: 'rule-symbol-exposure-cap',
+        phase: 'gate',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'context.always', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [{
+            kind: 'atom',
+            key: 'portfolioRisk.symbol_exposure_cap',
+            params: {
+              mode: 'enforce',
+              notionalCapPct: 30,
+            },
+          }],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const symbolScope = spec.orchestration?.scopes?.find(scope => scope.scopeKind === 'symbol')
+    const cap = spec.orchestration?.portfolioRisks?.find(risk => risk.scope === 'symbol')
+
+    expect(symbolScope).toEqual(expect.objectContaining({
+      scopeKind: 'symbol',
+      symbols: ['BTCUSDT'],
+      primarySymbol: 'BTCUSDT',
+      sourcePath: 'rules[0].effects.orchestration[0]',
+    }))
+    expect(cap).toEqual(expect.objectContaining({
+      scope: 'symbol',
+      notionalCapPct: 30,
+      symbolScopeRef: symbolScope?.id,
+      effectWhenTriggered: 'block_new_entries',
+      sourcePath: 'rules[0].effects.orchestration[0]',
+    }))
+  })
+
   it('throws fail-closed for unsupported rules orchestration effects with source path', () => {
     const state = baseState({
       rules: [{

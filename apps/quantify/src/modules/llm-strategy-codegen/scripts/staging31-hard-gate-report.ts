@@ -11,9 +11,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { Module } from '@nestjs/common'
-import { ConfigModule } from '@nestjs/config'
+import { ConfigModule, ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { config as loadDotenv } from 'dotenv'
 import { Pool } from 'pg'
 import { AiService } from '../../../modules/ai/ai.service'
@@ -101,18 +102,42 @@ const RUNNER_USER_ID = 'staging31-hard-gate-runner'
     PrismaModule,
   ],
   providers: [
-    AiService,
-    AiQuantConversationsRepository,
-    CodegenSessionsRepository,
-    PublishedStrategySnapshotsRepository,
+    {
+      provide: AiService,
+      useFactory: (configService: ConfigService) => new AiService(configService),
+      inject: [ConfigService],
+    },
+    {
+      provide: AiQuantConversationsRepository,
+      useFactory: txHost => new AiQuantConversationsRepository(txHost),
+      inject: [TransactionHost],
+    },
+    {
+      provide: CodegenSessionsRepository,
+      useFactory: txHost => new CodegenSessionsRepository(txHost),
+      inject: [TransactionHost],
+    },
+    {
+      provide: PublishedStrategySnapshotsRepository,
+      useFactory: txHost => new PublishedStrategySnapshotsRepository(txHost),
+      inject: [TransactionHost],
+    },
     StaticGuardrailService,
     RuntimeGuardrailService,
     GenericSeedDispatcher,
     PlannerDispatcherMergeService,
     SemanticEventFrameParserService,
     SemanticEventFrameProjectorService,
-    SemanticSeedStateBuilderService,
     { provide: SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE, useValue: 'drop' },
+    {
+      provide: SemanticSeedStateBuilderService,
+      useFactory: (
+        symbolResolver: MarketInstrumentSymbolResolverService,
+        semanticAtomRegistry: SemanticAtomRegistryService,
+        sizingResolver: PerTradeSizingResolver,
+      ) => new SemanticSeedStateBuilderService(symbolResolver, semanticAtomRegistry, sizingResolver, 'drop'),
+      inject: [MarketInstrumentSymbolResolverService, SemanticAtomRegistryService, PerTradeSizingResolver],
+    },
     SemanticStateMergeService,
     SemanticStateReducerService,
     SemanticStateProjectionService,
@@ -130,7 +155,15 @@ const RUNNER_USER_ID = 'staging31-hard-gate-runner'
     CompiledScriptParserService,
     CompiledScriptEmitterService,
     CompiledScriptExecutionEnvelopeService,
-    CompiledPublicationGateService,
+    {
+      provide: CompiledPublicationGateService,
+      useFactory: (
+        publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
+        txHost: TransactionHost,
+        scriptParser: CompiledScriptParserService,
+      ) => new CompiledPublicationGateService(publishedSnapshotsRepo, txHost, scriptParser),
+      inject: [PublishedStrategySnapshotsRepository, TransactionHost, CompiledScriptParserService],
+    },
     ScriptProfileExtractorService,
     StrategyConsistencyService,
     StrategyExecutionContextService,
@@ -142,9 +175,143 @@ const RUNNER_USER_ID = 'staging31-hard-gate-runner'
     StrategyClarificationRulesService,
     StrategyClarificationQuestionService,
     RecommendationIndexService,
-    CodegenSessionPublicationPipelineService,
+    {
+      provide: CodegenSessionPublicationPipelineService,
+      useFactory: (
+        sessionsRepo: CodegenSessionsRepository,
+        recommendationIndex: RecommendationIndexService,
+        canonicalSpecBuilder: CanonicalSpecBuilderService,
+        specDescBuilder: SpecDescBuilderService,
+        strategyConsistencyService: StrategyConsistencyService,
+        strategySummaryBuilder: StrategySummaryBuilderService,
+        canonicalSpecV2IrCompiler: CanonicalSpecV2IrCompilerService,
+        canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService,
+        compiledScriptEmitter: CompiledScriptEmitterService,
+        compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
+        compiledScriptParser: CompiledScriptParserService,
+        strategySummaryObservation: StrategySummaryObservationService,
+        compiledPublicationGate: CompiledPublicationGateService,
+      ) => new CodegenSessionPublicationPipelineService(
+        sessionsRepo,
+        recommendationIndex,
+        canonicalSpecBuilder,
+        specDescBuilder,
+        strategyConsistencyService,
+        strategySummaryBuilder,
+        canonicalSpecV2IrCompiler,
+        canonicalStrategyAstCompiler,
+        compiledScriptEmitter,
+        compiledScriptExecutionEnvelope,
+        compiledScriptParser,
+        strategySummaryObservation,
+        compiledPublicationGate,
+      ),
+      inject: [
+        CodegenSessionsRepository,
+        RecommendationIndexService,
+        CanonicalSpecBuilderService,
+        SpecDescBuilderService,
+        StrategyConsistencyService,
+        StrategySummaryBuilderService,
+        CanonicalSpecV2IrCompilerService,
+        CanonicalStrategyAstCompilerService,
+        CompiledScriptEmitterService,
+        CompiledScriptExecutionEnvelopeService,
+        CompiledScriptParserService,
+        StrategySummaryObservationService,
+        CompiledPublicationGateService,
+      ],
+    },
     ConversationSemanticEditService,
-    CodegenConversationService,
+    {
+      provide: CodegenConversationService,
+      useFactory: (
+        aiService: AiService,
+        sessionsRepo: CodegenSessionsRepository,
+        publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
+        conversationsRepo: AiQuantConversationsRepository,
+        staticGuardrail: StaticGuardrailService,
+        runtimeGuardrail: RuntimeGuardrailService,
+        specDescBuilder: SpecDescBuilderService,
+        canonicalSpecBuilder: CanonicalSpecBuilderService,
+        uniquenessDecision: StrategyCompileabilityDecisionService,
+        clarificationRules: StrategyClarificationRulesService,
+        clarificationQuestion: StrategyClarificationQuestionService,
+        publicationPipeline: CodegenSessionPublicationPipelineService,
+        conversationSemanticEdit: ConversationSemanticEditService,
+        executionContext: StrategyExecutionContextService,
+        semanticStateReducer: SemanticStateReducerService,
+        semanticStateProjection: SemanticStateProjectionService,
+        semanticStateMerge: SemanticStateMergeService,
+        plannerDispatcherMerge: PlannerDispatcherMergeService,
+        semanticSeedStateBuilder: SemanticSeedStateBuilderService,
+        sizingResolver: PerTradeSizingResolver,
+        semanticSupportClassifier: SemanticSupportClassifierService,
+        unsupportedFallback: UnsupportedFallbackService,
+        semanticContractReadiness: SemanticContractReadinessService,
+        semanticQuestionRenderer: SemanticClarificationQuestionRendererService,
+        genericSeedDispatcher: GenericSeedDispatcher,
+        executableSemantics: SemanticExecutableSemanticsService,
+        semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService,
+      ) => new CodegenConversationService(
+        aiService,
+        sessionsRepo,
+        publishedSnapshotsRepo,
+        conversationsRepo,
+        staticGuardrail,
+        runtimeGuardrail,
+        specDescBuilder,
+        canonicalSpecBuilder,
+        uniquenessDecision,
+        clarificationRules,
+        clarificationQuestion,
+        publicationPipeline,
+        conversationSemanticEdit,
+        executionContext,
+        semanticStateReducer,
+        semanticStateProjection,
+        semanticStateMerge,
+        plannerDispatcherMerge,
+        semanticSeedStateBuilder,
+        sizingResolver,
+        semanticSupportClassifier,
+        unsupportedFallback,
+        semanticContractReadiness,
+        semanticQuestionRenderer,
+        genericSeedDispatcher,
+        executableSemantics,
+        semanticOpenSlotAnswerResolver,
+      ),
+      inject: [
+        AiService,
+        CodegenSessionsRepository,
+        PublishedStrategySnapshotsRepository,
+        AiQuantConversationsRepository,
+        StaticGuardrailService,
+        RuntimeGuardrailService,
+        SpecDescBuilderService,
+        CanonicalSpecBuilderService,
+        StrategyCompileabilityDecisionService,
+        StrategyClarificationRulesService,
+        StrategyClarificationQuestionService,
+        CodegenSessionPublicationPipelineService,
+        ConversationSemanticEditService,
+        StrategyExecutionContextService,
+        SemanticStateReducerService,
+        SemanticStateProjectionService,
+        SemanticStateMergeService,
+        PlannerDispatcherMergeService,
+        SemanticSeedStateBuilderService,
+        PerTradeSizingResolver,
+        SemanticSupportClassifierService,
+        UnsupportedFallbackService,
+        SemanticContractReadinessService,
+        SemanticClarificationQuestionRendererService,
+        GenericSeedDispatcher,
+        SemanticExecutableSemanticsService,
+        SemanticOpenSlotAnswerResolverService,
+      ],
+    },
     PositionSizingContractService,
     SemanticAtomContractService,
     SemanticAtomRegistryService,
@@ -155,7 +322,15 @@ const RUNNER_USER_ID = 'staging31-hard-gate-runner'
     SemanticExecutableSemanticsService,
     MarketInstrumentSymbolResolverService,
     SemanticOpenSlotAnswerResolverService,
-    SemanticSupportClassifierService,
+    {
+      provide: SemanticSupportClassifierService,
+      useFactory: (
+        semanticAtomRegistry: SemanticAtomRegistryService,
+        orchestrationRegistry: SemanticOrchestrationRegistryService,
+        rulesMainflowReader: RulesMainflowReaderService,
+      ) => new SemanticSupportClassifierService(semanticAtomRegistry, orchestrationRegistry, rulesMainflowReader),
+      inject: [SemanticAtomRegistryService, SemanticOrchestrationRegistryService, RulesMainflowReaderService],
+    },
     NaturalLanguageGatewayService,
     SemanticFrameNormalizerService,
     UnsupportedFallbackService,
@@ -298,7 +473,7 @@ function parseCaseIndices(value: string): number[] {
   return [...new Set(indices)]
 }
 
-function loadEnv(env: string, options: { preserveExistingEnv: boolean } = { preserveExistingEnv: false }): void {
+export function loadEnv(env: string, options: { preserveExistingEnv: boolean } = { preserveExistingEnv: false }): void {
   const root = findEnvRoot(env)
   const base = resolve(root, `.env.${env}`)
   const local = resolve(root, `.env.${env}.local`)
@@ -325,7 +500,7 @@ function findEnvRoot(env: string): string {
   throw new Error(`missing_env_files:${env}`)
 }
 
-async function createApp(): Promise<INestApplicationContext> {
+export async function createApp(): Promise<INestApplicationContext> {
   return NestFactory.createApplicationContext(Staging31RunnerModule, { abortOnError: false, logger: ['error', 'warn'] })
 }
 
@@ -345,7 +520,7 @@ function createPublicationStage(): CodegenPublicationGenerationStage {
   )
 }
 
-async function fetchSession(client: PoolClient, sessionId: string): Promise<SessionRow | null> {
+export async function fetchSession(client: PoolClient, sessionId: string): Promise<SessionRow | null> {
   const result = await client.query<SessionRow>(`
     SELECT
       s.id,
@@ -379,7 +554,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function readPendingItems(response: CodegenSessionResponseDto): StrategyClarificationItem[] {
+export function readPendingItems(response: CodegenSessionResponseDto): StrategyClarificationItem[] {
   const gateItems = response.clarificationGate?.pendingItems
   if (Array.isArray(gateItems) && gateItems.length > 0) return gateItems
   const items = response.clarificationState?.items
