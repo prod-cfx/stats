@@ -6,8 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
+import 'package:quantify_mobile/data/mock/fixtures/account.dart';
+import 'package:quantify_mobile/data/mock/fixtures/api_key.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
+import 'package:quantify_mobile/data/models/live_strategy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/main.dart';
@@ -43,6 +47,26 @@ Future<BuildContext> _pumpApp(
       sharedPreferencesProvider.overrideWithValue(prefs),
       tokenStorageProvider.overrideWithValue(s),
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      // `/me` 落地 MeHomePage 会 watch account/apiKeys/liveStrategySummary，
+      // 其 mock repo 各启 200ms `Future.delayed` 计时器；widget dispose 时
+      // 该 timer 未排空 → "A Timer is still pending"（#1838）。路由测试只关心
+      // 落地页类型，把这三个 future provider 覆盖为同步 fixture，消除挂起计时器。
+      accountInfoProvider.overrideWith((Ref ref) async => mockAccountInfo),
+      apiKeysProvider.overrideWith(
+        (Ref ref) async => List<ExchangeApiKey>.unmodifiable(mockApiKeys),
+      ),
+      liveStrategySummaryProvider.overrideWith(
+        (Ref ref) async => const LiveStrategySummary(
+          totalAssets: 0,
+          totalCapital: 0,
+          todayPnl: 0,
+          totalPnl: 0,
+          runningCount: 0,
+          warningCount: 0,
+          pausedCount: 0,
+          stoppedCount: 0,
+        ),
+      ),
     ],
   );
   await container.read(sessionControllerProvider.future);

@@ -102,14 +102,21 @@ void main() {
     expect(find.text('金库管家'), findsWidgets);
   });
 
-  testWidgets('切到「持仓」tab → 交易所余额 section 出现',
+  testWidgets('切到「持仓」tab → 巨鲸持仓明细（币种 chip + 筛选 + 列表）出现',
       (WidgetTester tester) async {
+    // issue #1790：持仓 tab 重构为 币种 chip + 方向/盈亏筛选 + 排序 +
+    // 持仓明细卡列表（WhaleHoldingsTab），废弃旧的「交易所余额/头部地址持仓」
+    // section。断言同步到现行 WhaleHoldingsTab 可见结构。
     await _pump(tester);
     await tester.tap(find.text('持仓'));
     await tester.pumpAndSettle();
-    expect(find.text('交易所 BTC 余额'), findsOneWidget);
-    expect(find.text('头部地址持仓'), findsOneWidget);
-    expect(find.text('Binance'), findsOneWidget);
+    // 区段标题（whaleHoldingsSectionTitle）。
+    expect(find.text('巨鲸持仓'), findsOneWidget);
+    // 币种 chip 首项「全部」（whaleHoldingsCoinAll）。
+    expect(find.text('全部'), findsWidgets);
+    // 方向 / 盈亏 筛选药丸（whaleHoldingsFilterDir / FilterPnl）。
+    expect(find.byKey(const Key('whaleHoldingsDirFilter')), findsOneWidget);
+    expect(find.byKey(const Key('whaleHoldingsPnlFilter')), findsOneWidget);
   });
 
   testWidgets('切到「监控」tab → 三层子 Tab 分段（实时巨鲸/监控地址/通知中心）',
