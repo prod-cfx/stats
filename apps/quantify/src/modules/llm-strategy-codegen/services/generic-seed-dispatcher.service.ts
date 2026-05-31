@@ -499,7 +499,16 @@ function splitClauseByEventBoundary(clause: string): string[] {
 
   const tail = normalized.slice(start).trim()
   if (tail) parts.push(tail)
-  return parts.length > 0 ? parts : [normalized]
+  const eventParts = parts.length > 0 ? parts : [normalized]
+  return eventParts.flatMap(splitClauseByLogicalBoundary)
+}
+
+function splitClauseByLogicalBoundary(clause: string): string[] {
+  const parts = clause
+    .split(/(?:且|并且|同时|以及)/u)
+    .map(part => part.trim())
+    .filter(Boolean)
+  return parts.length > 0 ? parts : [clause]
 }
 
 type ExtractedSizingRole = {
@@ -600,6 +609,37 @@ function extractSizingRoleFromText(text: string): ExtractedSizingRole | null {
   return null
 }
 
+function extractDcaPerOrderSizingRole(clause: string): ExtractedSizingRole | null {
+  const normalized = clause.trim().replace(/\s+/gu, ' ').replace(/％/gu, '%')
+  if (!normalized) return null
+
+  const quotePattern = /(?:每次|每笔|每单|单次|一次|一笔)\s*(?:使用|用|投入|买入|补仓|加投|下单)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu
+  const quoteMatch = normalized.match(quotePattern)
+  if (quoteMatch?.[1] && quoteMatch[2]) {
+    const value = Number(quoteMatch[1])
+    if (Number.isFinite(value) && value > 0) {
+      return {
+        sizing: { kind: 'quote', value, asset: normalizeQuoteAsset(quoteMatch[2]) },
+        evidenceText: quoteMatch[0],
+      }
+    }
+  }
+
+  const percentPattern = /(?:每次|每笔|每单|单次|一次|一笔)\s*(?:使用|用|投入|买入|补仓|加投|下单)?\s*(?:仓位|资金)?\s*(?:百分之?\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)|(\d+(?:\.\d+)?)\s*%)\s*(?:仓位|资金)?/iu
+  const percentMatch = normalized.match(percentPattern)
+  if (percentMatch) {
+    const percent = parseSizingPercentNumber(percentMatch[1] ?? percentMatch[2])
+    if (Number.isFinite(percent) && percent > 0 && percent <= 100) {
+      return {
+        sizing: { kind: 'ratio', value: percent / 100, unit: 'ratio' },
+        evidenceText: percentMatch[0],
+      }
+    }
+  }
+
+  return null
+}
+
 function extractTopLevelPositionSizingRole(clauses: readonly string[], fullText: string): ExtractedSizingRole | null {
   const isLifecycleClause = (clause: string): boolean =>
     /(?:DCA|dca|定投|加投|加仓|补仓|回撤)/u.test(clause)
@@ -683,7 +723,8 @@ function normalizeDcaScheduleParams(
   params: Record<string, unknown>,
 ): Record<string, unknown> {
   const next: Record<string, unknown> = { ...params }
-  const sizingRole = extractSizingRoleFromText(clause)
+  const explicitPerOrderSizingRole = extractDcaPerOrderSizingRole(clause)
+  const sizingRole = explicitPerOrderSizingRole ?? extractSizingRoleFromText(clause)
   const perOrderBudget = typeof params.perOrderBudget === 'number' && Number.isFinite(params.perOrderBudget)
     ? params.perOrderBudget
     : null
@@ -701,7 +742,7 @@ function normalizeDcaScheduleParams(
   const drawdownSplitMatch = clause.match(/(回撤|加投|补仓)/u)
   if (drawdownSplitMatch && drawdownSplitMatch.index !== undefined) {
     const tail = clause.slice(drawdownSplitMatch.index)
-    const tailRole = extractSizingRoleFromText(tail)
+    const tailRole = extractDcaPerOrderSizingRole(tail) ?? extractSizingRoleFromText(tail)
     const primary = next.perOrderSizing as { kind?: string; value?: number; asset?: string } | undefined
     if (tailRole) {
       const dropPct = typeof next.dropPct === 'number' ? Math.abs(next.dropPct) : null
@@ -731,9 +772,16 @@ function normalizeDcaScheduleParams(
   if (explicitMaxCount) {
     next.maxCount = Number(explicitMaxCount[1])
   }
+  else {
+    const explicitChineseMaxCount = clause.match(/最多\s*(?:补|加|买|下单)?\s*([一二三四五六七八九十]+)\s*(?:次|笔|单)/u)
+    if (explicitChineseMaxCount?.[1]) {
+      const maxCount = parseSizingPercentNumber(explicitChineseMaxCount[1])
+      if (Number.isFinite(maxCount) && maxCount > 0) next.maxCount = maxCount
+    }
+  }
   delete next.maxOrders
 
-  const capitalCap = clause.match(/(?:总(?:投入|资金|预算|金额)|上限|不超过)\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
+  const capitalCap = clause.match(/(?:总(?:投入|资金|预算|金额)|上限|不超过)\s*(?:最多|最大|不超过|为|是)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
   if (capitalCap) {
     next.capitalCap = {
       kind: 'quote',
@@ -1288,22 +1336,27 @@ export class GenericSeedDispatcher {
     const rules: SemanticRule[] = []
     for (const phase of phases) {
       const phasePredicates = predicates.filter(item => this.normalizeTypedRulePhase(item.phase) === phase)
-      const predicate = phasePredicates[0] ?? this.selectTypedRuleFallbackPredicate(
+      const fallbackPredicate = this.selectTypedRuleFallbackPredicate(
         predicates,
         phase,
         hasProgramStrategySignal,
       )
+      const predicateGroups = this.buildTypedRulePredicateGroups(phase, phasePredicates, fallbackPredicate)
+      for (const group of predicateGroups) {
+      const conditionPredicates = this.selectTypedRuleConditionPredicates(group.predicates)
+      const predicate = conditionPredicates[0] ?? group.predicates[0] ?? fallbackPredicate
       if (!predicate) continue
-      const sideScope = predicate.sideScope ?? 'both'
+      const sideScope = group.sideScope
       const typedEffects = EMPTY_RULE_EFFECTS()
       for (const effect of effects) {
         if (!this.typedEffectAppliesToPhase(effect, phase)) continue
+        if (!this.typedEffectAppliesToSide(effect, sideScope)) continue
         this.appendTypedEffect(typedEffects, effect)
       }
-      const condition = phasePredicates.length > 1
+      const condition = conditionPredicates.length > 1
         ? {
             kind: 'and' as const,
-            children: phasePredicates.map(item => ({
+            children: conditionPredicates.map(item => ({
               kind: 'atom' as const,
               key: item.key,
               params: item.params ?? {},
@@ -1326,8 +1379,66 @@ export class GenericSeedDispatcher {
         effects: typedEffects,
         ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
       })
+      }
     }
     return rules
+  }
+
+  private buildTypedRulePredicateGroups(
+    phase: SemanticRule['phase'],
+    phasePredicates: readonly PatchAtomNode[],
+    fallbackPredicate: PatchAtomNode | null,
+  ): Array<{ sideScope: 'long' | 'short' | 'both', predicates: PatchAtomNode[] }> {
+    if (phase !== 'entry') {
+      const sideScope = phasePredicates[0]?.sideScope ?? fallbackPredicate?.sideScope ?? 'both'
+      return [{ sideScope, predicates: [...phasePredicates] }]
+    }
+
+    const concreteSides = Array.from(new Set(
+      phasePredicates
+        .map(item => item.sideScope)
+        .filter((side): side is 'long' | 'short' => side === 'long' || side === 'short'),
+    ))
+    if (concreteSides.length <= 1) {
+      const sideScope = concreteSides[0] ?? phasePredicates[0]?.sideScope ?? fallbackPredicate?.sideScope ?? 'both'
+      return [{ sideScope, predicates: [...phasePredicates] }]
+    }
+
+    return concreteSides.map(sideScope => ({
+      sideScope,
+      predicates: phasePredicates.filter(item => item.sideScope === sideScope || item.sideScope === 'both'),
+    }))
+  }
+
+  private selectTypedRuleConditionPredicates(phasePredicates: readonly PatchAtomNode[]): PatchAtomNode[] {
+    const displayPredicates = this.removeDominatedBoundaryPredicates(phasePredicates)
+    const nonRiskPredicates = displayPredicates.filter(item => !this.isRiskEffectPredicate(item))
+    return nonRiskPredicates.length > 0 ? nonRiskPredicates : [...phasePredicates]
+  }
+
+  private removeDominatedBoundaryPredicates(predicates: readonly PatchAtomNode[]): PatchAtomNode[] {
+    const genericBoundaryKey = ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key
+    const specificBoundaryKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key,
+      ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key,
+      ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key,
+    ])
+    const specificSignatures = new Set(
+      predicates
+        .filter(item => specificBoundaryKeys.has(item.key))
+        .map(item => `${item.sideScope ?? 'both'}:${String(item.params?.band ?? '')}`),
+    )
+    if (specificSignatures.size === 0) return [...predicates]
+    return predicates.filter((item) => {
+      if (item.key !== genericBoundaryKey) return true
+      const boundaryRole = typeof item.params?.boundaryRole === 'string' ? item.params.boundaryRole : ''
+      return !specificSignatures.has(`${item.sideScope ?? 'both'}:${boundaryRole}`)
+    })
+  }
+
+  private isRiskEffectPredicate(item: PatchAtomNode): boolean {
+    const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
+    return contract?.bucket === 'risk' && contract.roles.includes('effect')
   }
 
   private selectTypedRuleFallbackPredicate(
@@ -1374,6 +1485,14 @@ export class GenericSeedDispatcher {
     return effectPhase === phase
   }
 
+  private typedEffectAppliesToSide(effect: AtomExpr, sideScope: SemanticRule['sideScope']): boolean {
+    if (effect.kind !== 'atom') return false
+    const effectSide = effect.sideScope
+    if (effectSide === undefined || effectSide === null || effectSide === 'both') return true
+    if (sideScope === 'both') return true
+    return effectSide === sideScope
+  }
+
   private hasProgramStrategySignal(userMessage: string): boolean {
     // Only gates phase fallback for texts with program-shaped workflows; atom roles still come from registry.
     return /网格|webhook|自适应|grid/iu.test(userMessage)
@@ -1414,7 +1533,8 @@ export class GenericSeedDispatcher {
     const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
       if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
       const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
-      if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) return
+      const fixedGateEffect = contract?.surface?.phaseResolver === 'fixed-gate' && contract.roles.includes('effect')
+      if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !fixedGateEffect) return
       out.push({
         key: item.key,
         phase: this.resolveTypedRulePhaseForAtom(item.key, item.phase),
@@ -1822,7 +1942,18 @@ export class GenericSeedDispatcher {
   }
 
   private hasPercentStopRiskIntent(userMessage: string): boolean {
-    return /止损|止盈|stop\s*loss|take\s*profit/iu.test(userMessage)
+    return /(?:止损|止盈|stop\s*loss|take\s*profit)[^，,。；;\n]*(?:\d+(?:\.\d+)?\s*%|百分)/iu.test(userMessage)
+  }
+
+  private hasCrossClauseTargetKeyword(
+    clause: string,
+    targetSurface: AtomContractSurface,
+    sourceSurface: AtomContractSurface | null,
+  ): boolean {
+    const sourceKeywords = new Set((sourceSurface?.intent.keywords ?? []).map(keyword => keyword.toLowerCase()))
+    const targetOnlyKeywords = targetSurface.intent.keywords.filter(keyword => !sourceKeywords.has(keyword.toLowerCase()))
+    if (targetOnlyKeywords.length === 0) return true
+    return matchKeyword(clause, targetOnlyKeywords) !== null
   }
 
   private hasTimeframeIntent(userMessage: string): boolean {
@@ -1865,6 +1996,21 @@ export class GenericSeedDispatcher {
   ): void {
     const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
     const takeProfitKey = ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+    const drawdownBlockKey = ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key
+    const maxDrawdownKey = ATOM_CONTRACT_REGISTRY['risk.max_drawdown_pct'].key
+    const symbolExposureCapKey = ATOM_CONTRACT_REGISTRY['portfolioRisk.symbol_exposure_cap'].key
+    const maxExposureKey = 'position.max_exposure_pct'
+
+    const hasPortfolioRiskBundle = atomItems.some(item => item.key === drawdownBlockKey)
+      && atomItems.some(item => item.key === symbolExposureCapKey)
+
+    if (hasPortfolioRiskBundle) {
+      removeInPlace(atomItems, item => item.key === maxDrawdownKey)
+      removeInPlace(slotItems.risk, item => item.key === maxDrawdownKey)
+    }
+
+    void maxExposureKey
+
     const addPositionClauses = new Set(
       atomItems
         .filter(item => item.key === addPositionKey)
@@ -1909,24 +2055,50 @@ export class GenericSeedDispatcher {
     const splitMatch = text.match(/(回撤|加投|补仓)/u)
     if (!splitMatch || splitMatch.index === undefined) return
     const tail = text.slice(splitMatch.index)
-    const tailRole = extractSizingRoleFromText(tail)
-    if (!tailRole || tailRole.sizing.kind !== 'quote') return
+    const tailRole = extractDcaPerOrderSizingRole(tail) ?? extractSizingRoleFromText(tail)
+    if (!tailRole) return
 
     const tailDropPctMatch = tail.match(/(\d+(?:\.\d+)?)\s*%/u)
     const tailDropPct = tailDropPctMatch ? Number(tailDropPctMatch[1]) : null
+    const explicitMaxCount = text.match(/最多\s*(\d{1,4})\s*(?:次|笔|单)/u)
+    const explicitChineseMaxCount = explicitMaxCount ? null : text.match(/最多\s*(?:补|加|买|下单)?\s*([一二三四五六七八九十]+)\s*(?:次|笔|单)/u)
+    const maxCount = explicitMaxCount?.[1]
+      ? Number(explicitMaxCount[1])
+      : explicitChineseMaxCount?.[1]
+        ? parseSizingPercentNumber(explicitChineseMaxCount[1])
+        : null
+    const capitalCap = text.match(/(?:总(?:投入|资金|预算|金额)|上限|不超过)\s*(?:最多|最大|不超过|为|是)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
 
     for (const node of dcaNodes) {
       const params = node.params as Record<string, unknown>
       const primary = params.perOrderSizing as { kind?: string; value?: number; asset?: string } | undefined
+      const dropPct = typeof params.dropPct === 'number' ? Math.abs(params.dropPct) : null
+      const priceIntervalPct = typeof params.priceIntervalPct === 'number' ? Math.abs(params.priceIntervalPct) : null
+      const primaryLooksLikeTriggerPct = primary?.kind === 'quote'
+        && typeof primary.value === 'number'
+        && (primary.value === dropPct || primary.value === priceIntervalPct)
       const sameAsPrimary = primary
         && primary.kind === tailRole.sizing.kind
         && primary.value === tailRole.sizing.value
-        && primary.asset === tailRole.sizing.asset
+        && primary.asset === ('asset' in tailRole.sizing ? tailRole.sizing.asset : undefined)
+      if (!primary || primaryLooksLikeTriggerPct) {
+        params.perOrderSizing = toPerOrderSizingShape(tailRole.sizing)
+      }
       if (!sameAsPrimary && params.drawdownPerOrderSizing === undefined) {
         params.drawdownPerOrderSizing = toPerOrderSizingShape(tailRole.sizing)
       }
       if (tailDropPct !== null && Number.isFinite(tailDropPct) && tailDropPct > 0 && params.dropPct === undefined) {
         params.dropPct = tailDropPct
+      }
+      if (maxCount !== null && Number.isFinite(maxCount) && maxCount > 0 && params.maxCount === undefined) {
+        params.maxCount = maxCount
+      }
+      if (capitalCap?.[1] && capitalCap[2] && params.capitalCap === undefined) {
+        params.capitalCap = {
+          kind: 'quote',
+          value: Number(capitalCap[1]),
+          asset: normalizeQuoteAsset(capitalCap[2]),
+        }
       }
     }
   }
@@ -2021,6 +2193,7 @@ export class GenericSeedDispatcher {
       const sourceKey = inheritFromDecl === 'self' ? atomKey : inheritFromDecl
       const sourceSiblings = siblingsByKey.get(sourceKey)
       if (!sourceSiblings || sourceSiblings.length === 0) continue
+      const sourceSurface = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[sourceKey]?.surface ?? null
 
       const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
 
@@ -2042,6 +2215,9 @@ export class GenericSeedDispatcher {
             return ev?.text === clause
           })
           if (selfMirrorAlreadyCovered) continue
+        }
+        else if (!this.hasCrossClauseTargetKeyword(clause, surface, sourceSurface)) {
+          continue
         }
 
         // 子句必须命中本 atom 的 verb；keyword 此处不要求（这才是"跨子句继承"的意义）

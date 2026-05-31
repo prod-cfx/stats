@@ -233,7 +233,7 @@ export const STAGE4_REAL_STRATEGY_CORPUS = [
     id: 'stage4-portfolio-risk-drawdown-exposure',
     category: 'portfolio_risk',
     initialUserMessage: 'OKX 合约 BTCUSDT 15m，EMA20 上穿 EMA50 开多，最大回撤超过 8% 停止开仓，最大敞口不超过账户 30%。',
-    expectedAtomKeys: ['indicator.cross_over', 'risk.max_drawdown_pct', 'portfolioRisk.drawdown_block', 'position.max_exposure_pct'],
+    expectedAtomKeys: ['indicator.cross_over', 'portfolioRisk.drawdown_block', 'portfolioRisk.symbol_exposure_cap', 'position.max_exposure_pct'],
     expectedSemanticIntent: ['trend entry', 'portfolio drawdown guard', 'exposure cap'],
     clarificationTurns: [{ assistantSlotPath: 'exit_rule', userAnswer: '跌破 EMA20 时平多。' }],
     expectedFailure: null,

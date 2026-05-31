@@ -4269,8 +4269,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['标的敞口', 'symbol exposure cap', 'per-symbol cap', '单标的仓位限制', '单标的敞口'] as const,
+        keywords: ['标的敞口', '最大敞口', 'symbol exposure cap', 'per-symbol cap', '单标的仓位限制', '单标的敞口'] as const,
         verbs: {
+          fixed: ['不超过', '最多', '限制', '上限', 'cap', 'limit'] as const,
           gte: ['超过', '超', 'exceeds'] as const,
         },
       },

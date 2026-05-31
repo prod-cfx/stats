@@ -977,6 +977,7 @@ export class CanonicalSpecBuilderService {
               params: this.atomLeafFromMainflowLeaf(leaf).params,
               status: 'locked',
               source: 'user_explicit',
+              ...(leaf.evidenceText ? { evidence: { text: leaf.evidenceText, source: 'user_explicit' as const } } : {}),
               openSlots: [],
             },
             rule.sideScope,
@@ -996,6 +997,10 @@ export class CanonicalSpecBuilderService {
           riskPriority -= partialTakeProfitRules.length
           continue
         }
+        if (leaf.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+          && this.ruleHasPartialTakeProfitAtThreshold(mainflow.byRole.risk, rule.id, leaf)) {
+          continue
+        }
         const riskRule = this.buildCanonicalRiskRuleFromRuleEffectLeaf({
           leaf: this.atomLeafFromMainflowLeaf(leaf),
           rule,
@@ -1013,11 +1018,13 @@ export class CanonicalSpecBuilderService {
       }
 
       for (const leaf of mainflow.byRole.position.filter(leaf => leaf.ruleId === rule.id && leaf.key === 'position.dca_schedule')) {
+        const sameRulePositionLeaves = mainflow.byRole.position.filter(positionLeaf => positionLeaf.ruleId === rule.id)
         canonicalRules.push(this.buildCanonicalDcaRuleFromRuleEffectLeaf({
           leaf: this.atomLeafFromMainflowLeaf(leaf),
           rule,
           sourcePath: leaf.path,
           priority: this.resolveSemanticRulePriority('entry', ruleIndex + 1),
+          sameRulePositionLeaves,
         }))
       }
     }
@@ -1061,14 +1068,15 @@ export class CanonicalSpecBuilderService {
     rule: SemanticRule
     sourcePath: string
     priority: number
+    sameRulePositionLeaves?: readonly RulesMainflowLeaf[]
   }): CanonicalRuleV2 {
     if (input.rule.phase !== 'entry' && input.rule.phase !== 'program') {
       throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
     }
 
     const condition = this.buildConditionFromSemanticRuleExpr(input.rule.condition, 'entry', input.rule.sideScope, null)
-    const sizing = this.resolveDcaScheduleSizing(input.leaf)
-    const metadata = this.buildDcaScheduleMetadataFromRuleEffectLeaf(input.leaf, input.sourcePath)
+    const sizing = this.resolveDcaScheduleSizing(input.leaf, input.sameRulePositionLeaves ?? [])
+    const metadata = this.buildDcaScheduleMetadataFromRuleEffectLeaf(input.leaf, input.sourcePath, input.sameRulePositionLeaves ?? [], sizing)
     if (!condition || !sizing || !metadata) {
       throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
     }
@@ -1093,10 +1101,23 @@ export class CanonicalSpecBuilderService {
     }
   }
 
-  private resolveDcaScheduleSizing(leaf: AtomExprAtom): CanonicalStrategySpecV2['sizing'] {
+  private resolveDcaScheduleSizing(
+    leaf: AtomExprAtom,
+    sameRulePositionLeaves: readonly RulesMainflowLeaf[] = [],
+  ): CanonicalStrategySpecV2['sizing'] {
     const perOrderSizing = this.resolveSemanticActionSizing(leaf.params.perOrderSizing)
-    if (perOrderSizing) {
+    if (perOrderSizing && !this.isDcaSizingLikelyTriggerPollution(leaf, perOrderSizing)) {
       return perOrderSizing
+    }
+    const drawdownPerOrderSizing = this.resolveSemanticActionSizing(leaf.params.drawdownPerOrderSizing)
+    if (drawdownPerOrderSizing) {
+      return drawdownPerOrderSizing
+    }
+    const siblingSizing = this.resolveSizingFromSemanticRulePositionLeaves(
+      sameRulePositionLeaves.filter(positionLeaf => positionLeaf.key !== 'position.dca_schedule'),
+    )
+    if (siblingSizing) {
+      return siblingSizing
     }
     const value = this.readFiniteNumber(leaf.params.perOrderBudget)
     if (value !== null && value > 0) {
@@ -1108,15 +1129,22 @@ export class CanonicalSpecBuilderService {
   private buildDcaScheduleMetadataFromRuleEffectLeaf(
     leaf: AtomExprAtom,
     sourcePath: string,
+    sameRulePositionLeaves: readonly RulesMainflowLeaf[] = [],
+    resolvedSizing: CanonicalStrategySpecV2['sizing'] = null,
   ): NonNullable<NonNullable<CanonicalRuleV2['metadata']>['dcaSchedule']> | null {
     const configuredMaxCount = this.readFiniteNumber(leaf.params.maxCount)
       ?? this.readFiniteNumber(leaf.params.maxOrders)
     const perOrderBudget = this.readFiniteNumber(leaf.params.perOrderBudget)
+      ?? this.readFiniteNumber((resolvedSizing as { value?: unknown } | undefined)?.value)
       ?? this.readFiniteNumber((leaf.params.perOrderSizing as { value?: unknown } | undefined)?.value)
     const maxCount = configuredMaxCount ?? (perOrderBudget !== null ? 1 : null)
-    const capitalCap = this.readDcaCapitalCapValue(leaf.params.capitalCap)
+    const derivedCapitalCap = maxCount !== null && perOrderBudget !== null
+      ? Math.round(maxCount * perOrderBudget * 1_000_000_000_000) / 1_000_000_000_000
+      : null
+    const capitalCap = this.readSameRuleBudgetCapValue(sameRulePositionLeaves)
+      ?? this.readDcaCapitalCapValue(leaf.params.capitalCap)
       ?? this.readDcaCapitalCapValue(leaf.params.maxTotalQuote)
-      ?? (maxCount !== null && perOrderBudget !== null ? maxCount * perOrderBudget : null)
+      ?? derivedCapitalCap
     if (maxCount === null || capitalCap === null) {
       return null
     }
@@ -1150,6 +1178,27 @@ export class CanonicalSpecBuilderService {
     if (value === null || value <= 0) return {}
     const asset = typeof rec.asset === 'string' ? rec.asset : undefined
     return { drawdownPerOrderSizing: { kind: rec.kind, value, ...(asset !== undefined ? { asset } : {}) } }
+  }
+
+  private isDcaSizingLikelyTriggerPollution(
+    leaf: AtomExprAtom,
+    sizing: NonNullable<CanonicalStrategySpecV2['sizing']>,
+  ): boolean {
+    if (sizing.mode !== 'QUOTE') return false
+    const triggerPct = this.readFiniteNumber(leaf.params.priceIntervalPct)
+      ?? this.readFiniteNumber(leaf.params.dropPct)
+    return triggerPct !== null && Math.abs(triggerPct) === sizing.value
+  }
+
+  private readSameRuleBudgetCapValue(positionLeaves: readonly RulesMainflowLeaf[]): number | null {
+    for (const leaf of positionLeaves) {
+      if (leaf.key !== FIELD_KEY.POSITION_BUDGET_CAP) continue
+      const value = this.readFiniteNumber(leaf.params.valueQuote)
+        ?? this.readFiniteNumber(leaf.params.value)
+        ?? this.readDcaCapitalCapValue(leaf.params.capitalCap)
+      if (value !== null && value > 0) return value
+    }
+    return null
   }
 
   private buildCanonicalRiskRuleFromRuleEffectLeaf(input: {
@@ -5340,7 +5389,7 @@ export class CanonicalSpecBuilderService {
       ? risk.params.memoryKey.trim()
       : null
     const memoryKey = explicitMemoryKey ?? `ptp-${this.stableRulesPathId(risk.id)}`
-    const rawTiers = Array.isArray(risk.params.tiers) ? risk.params.tiers : this.derivePartialTakeProfitTiersFromFlatParams(risk.params)
+    const rawTiers = Array.isArray(risk.params.tiers) ? risk.params.tiers : this.derivePartialTakeProfitTiersFromFlatParams(risk.params, risk.evidence?.text)
     if (!memoryKey || !rawTiers || rawTiers.length === 0) {
       // TODO(#984): when tiers/memoryKey are missing surface an open_slot
       // (risk.partial_take_profit.tiers / .memoryKey) instead of silently
@@ -5429,7 +5478,7 @@ export class CanonicalSpecBuilderService {
     return rules
   }
 
-  private derivePartialTakeProfitTiersFromFlatParams(params: SemanticRiskState['params']): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
+  private derivePartialTakeProfitTiersFromFlatParams(params: SemanticRiskState['params'], evidenceText?: string): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
     const threshold = this.readFiniteNumber(params.profitPct)
       ?? this.readFiniteNumber(params.pct)
       ?? this.readFiniteNumber(params.valuePct)
@@ -5437,7 +5486,9 @@ export class CanonicalSpecBuilderService {
       return null
     }
 
-    const rawRatio = this.readFiniteNumber(params.reduceRatio)
+    const evidenceRatio = this.extractPartialTakeProfitReduceRatioFromEvidence(evidenceText)
+    const rawRatio = evidenceRatio
+      ?? this.readFiniteNumber(params.reduceRatio)
       ?? this.readFiniteNumber(params.ratio)
       ?? this.readFiniteNumber(params.sizePct)
     const reduceRatio = rawRatio === null
@@ -5451,6 +5502,42 @@ export class CanonicalSpecBuilderService {
     }
 
     return [{ trigger: { kind: 'pnl_pct', threshold }, reduceRatio }]
+  }
+
+  private extractPartialTakeProfitReduceRatioFromEvidence(evidenceText?: string): number | null {
+    if (!evidenceText) return null
+    if (/(?:[平减卖]|reduce|close)[^，。,.；;]{0,8}(?:一半|半仓|half)/iu.test(evidenceText)
+      || /(?:一半|半仓|half)[^，。,.；;]{0,8}(?:[平减卖]|reduce|close)/iu.test(evidenceText)) {
+      return 0.5
+    }
+    return null
+  }
+
+  private ruleHasPartialTakeProfitAtThreshold(
+    riskLeaves: readonly RulesMainflowLeaf[],
+    ruleId: string,
+    takeProfitLeaf: RulesMainflowLeaf,
+  ): boolean {
+    const takeProfitThreshold = this.readFiniteNumber(takeProfitLeaf.params.valuePct)
+      ?? this.readFiniteNumber(takeProfitLeaf.params.pct)
+    if (takeProfitThreshold === null) return false
+    return riskLeaves.some(leaf => leaf.ruleId === ruleId
+      && leaf.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key
+      && this.partialTakeProfitThresholds(leaf.params).includes(takeProfitThreshold))
+  }
+
+  private partialTakeProfitThresholds(params: Record<string, unknown>): number[] {
+    if (Array.isArray(params.tiers)) {
+      return params.tiers.flatMap((raw) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+        const threshold = this.readFiniteNumber((raw as { trigger?: { threshold?: unknown } }).trigger?.threshold)
+        return threshold === null ? [] : [threshold]
+      })
+    }
+    const threshold = this.readFiniteNumber(params.profitPct)
+      ?? this.readFiniteNumber(params.pct)
+      ?? this.readFiniteNumber(params.valuePct)
+    return threshold === null ? [] : [threshold]
   }
 
   private deriveCumulativeReduceRatios(originalRatios: number[]): number[] {

@@ -231,6 +231,64 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(spec.metadata?.rulesHash).toBe(hashCanonical(state.rules))
   })
 
+  it('keeps partial take profit half semantics when LLM flat ratio echoes the profit threshold', () => {
+    const evidence = 'OKX 永续 BTCUSDT 15m。RSI14 低于 30 做多，盈利 5% 平一半，盈利 10% 平剩余。'
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+        source: 'user_explicit',
+        status: 'locked',
+        openSlots: [],
+        positionMode: 'long_only',
+      },
+      rules: [{
+        id: 'entry-long-rsi14-lt-30',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'oscillator.rsi_lte',
+          params: { period: 14, value: 30, thresholdRole: 'lower_threshold' },
+          evidence: { text: evidence },
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [
+            { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 5, basis: 'entry_avg_price', direction: 'profit', effect: 'close_position', scope: 'current_position' } },
+            { kind: 'atom', key: 'risk.partial_take_profit', params: { profitPct: 5, ratio: 5, memoryKey: 'partial_tp_half' }, evidence: { text: evidence } },
+            { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price', direction: 'profit', effect: 'close_position', scope: 'current_position' } },
+          ],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec: spec,
+      fallback: compileFallback,
+    })
+
+    const partialBlock = compiled.ir.ruleBlocks.find(block => block.id.includes('partial_tp_half'))
+    const takeProfitGuardValues = compiled.ir.riskPolicy.guards
+      .filter(guard => guard.kind === 'TAKE_PROFIT_PCT')
+      .map(guard => guard.value)
+
+    expect(partialBlock?.actions).toContainEqual({ kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 50 } })
+    expect(partialBlock?.metadata?.partialTakeProfit).toEqual(expect.objectContaining({ cumulativeReduceRatio: 0.5 }))
+    expect(takeProfitGuardValues).toEqual([10])
+  })
+
   it('projects grid.range_rebalance condition into canonical order program', () => {
     const state = baseState({
       contextSlots: {
@@ -2063,6 +2121,94 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
         }),
       }),
     ]))
+  })
+
+  it('uses same-rule DCA quote sizing and budget cap instead of trigger percent pollution', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-dca-drawdown-quote',
+        phase: 'program',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [
+            {
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: {
+                triggerMode: 'price_interval',
+                dropPct: 3,
+                priceIntervalPct: -3,
+                maxCount: 3,
+                perOrderSizing: { kind: 'quote', asset: 'USDT', value: 3 },
+                drawdownPerOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+              },
+            },
+            { kind: 'atom', key: 'position.budget_cap', params: { valueQuote: 1000, asset: 'USDT' } },
+          ],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const dcaRule = spec.rules.find(rule => rule.id === 'semantic-dca-rule-dca-drawdown-quote')
+
+    expect(dcaRule?.actions).toEqual([expect.objectContaining({
+      type: 'ADD_LONG',
+      sizing: { mode: 'QUOTE', asset: 'USDT', value: 100 },
+    })])
+    expect(dcaRule?.metadata?.dcaSchedule).toEqual(expect.objectContaining({
+      maxCount: 3,
+      capitalCap: 1000,
+      drawdownPerOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+    }))
+  })
+
+  it('uses same-rule position sizing for DCA ratio sizing instead of price interval pollution', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-dca-drawdown-ratio',
+        phase: 'program',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [
+            {
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: {
+                triggerMode: 'price_interval',
+                dropPct: -5,
+                priceIntervalPct: -5,
+                maxCount: 3,
+                perOrderSizing: { kind: 'quote', asset: 'USDT', value: 5 },
+              },
+            },
+            { kind: 'atom', key: 'position.sizing', params: { kind: 'ratio', unit: 'ratio', value: 0.1 } },
+          ],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const dcaRule = spec.rules.find(rule => rule.id === 'semantic-dca-rule-dca-drawdown-ratio')
+
+    expect(dcaRule?.actions).toEqual([expect.objectContaining({
+      type: 'ADD_LONG',
+      sizing: { mode: 'RATIO', value: 0.1 },
+    })])
+    expect(dcaRule?.metadata?.dcaSchedule).toEqual(expect.objectContaining({
+      maxCount: 3,
+      capitalCap: 0.3,
+    }))
   })
 
   it('throws fail-closed for legacy rules array effects instead of using flat buckets', () => {

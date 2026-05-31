@@ -562,14 +562,82 @@ export class SemanticStateProjectionService {
    *   防 merge 阶段 filter 未生效或下游写入绕过。
    */
   private sanitizeProjectionRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const projectionDuplicateEffectKeys = this.collectProjectionDuplicateEffectKeys(rules)
     return rules.flatMap((rule) => {
-      if (!this.isAlwaysOnCondition(rule)) return [rule]
-      if (this.isExplicitOnStartEntryRule(rule)) return [rule]
-      if (!listRuleEffects(rule.effects).some(effect => this.effectHasAction(effect))) return [rule]
+      const ruleWithDisplayDedupe = projectionDuplicateEffectKeys.size > 0
+        ? this.removeProjectionDuplicateEffects(rule, projectionDuplicateEffectKeys)
+        : rule
+      if (!this.isAlwaysOnCondition(ruleWithDisplayDedupe)) return [ruleWithDisplayDedupe]
+      if (this.isExplicitOnStartEntryRule(ruleWithDisplayDedupe)) return [ruleWithDisplayDedupe]
+      if (!listRuleEffects(ruleWithDisplayDedupe.effects).some(effect => this.effectHasAction(effect))) return [ruleWithDisplayDedupe]
 
-      const effects = this.removeActionEffects(rule.effects)
-      return listRuleEffects(effects).length > 0 ? [{ ...rule, effects }] : []
+      const effects = this.removeActionEffects(ruleWithDisplayDedupe.effects)
+      return listRuleEffects(effects).length > 0 ? [{ ...ruleWithDisplayDedupe, effects }] : []
     })
+  }
+
+  private collectProjectionDuplicateEffectKeys(rules: readonly SemanticRule[]): Set<string> {
+    const allLeaves = rules.flatMap(rule => [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ])
+    const duplicateEffectKeys = new Set<string>()
+    if (allLeaves.some(leaf => leaf.key === 'portfolioRisk.drawdown_block')) {
+      duplicateEffectKeys.add('risk.max_drawdown_pct')
+    }
+    if (allLeaves.some(leaf => leaf.key === 'portfolioRisk.symbol_exposure_cap')) {
+      duplicateEffectKeys.add('position.max_exposure_pct')
+    }
+    return duplicateEffectKeys
+  }
+
+  private removeProjectionDuplicateEffects(rule: SemanticRule, duplicateEffectKeys: ReadonlySet<string>): SemanticRule {
+    const effects = this.removeEffectAtomsByKey(rule.effects, duplicateEffectKeys)
+    return effects === rule.effects ? rule : { ...rule, effects }
+  }
+
+  private removeEffectAtomsByKey(effects: RuleEffects, keys: ReadonlySet<string>): RuleEffects {
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: this.removeAtomExprListByKey(effects.actions, keys),
+        risks: this.removeAtomExprListByKey(effects.risks, keys),
+        positions: this.removeAtomExprListByKey(effects.positions, keys),
+        orchestration: this.removeAtomExprListByKey(effects.orchestration, keys),
+        programs: this.removeAtomExprListByKey(effects.programs, keys),
+      } satisfies RuleEffectsByRole
+    }
+    return this.removeAtomExprListByKey(effects, keys)
+  }
+
+  private removeAtomExprListByKey(effects: readonly AtomExpr[], keys: ReadonlySet<string>): AtomExpr[] {
+    return effects
+      .map(effect => this.removeAtomExprByKey(effect, keys))
+      .filter((effect): effect is AtomExpr => effect !== null)
+  }
+
+  private removeAtomExprByKey(expr: AtomExpr, keys: ReadonlySet<string>): AtomExpr | null {
+    if (expr.kind === 'atom') return keys.has(expr.key) ? null : expr
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      const children = expr.children
+        .map(child => this.removeAtomExprByKey(child, keys))
+        .filter((child): child is AtomExpr => child !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0] ?? null
+      return { ...expr, children }
+    }
+    if (expr.kind === 'not') {
+      const child = this.removeAtomExprByKey(expr.child, keys)
+      return child ? { ...expr, child } : null
+    }
+    if (expr.kind === 'sequence') {
+      const steps = expr.steps
+        .map(step => this.removeAtomExprByKey(step, keys))
+        .filter((step): step is AtomExpr => step !== null)
+      if (steps.length === 0) return null
+      if (steps.length === 1) return steps[0] ?? null
+      return { ...expr, steps }
+    }
+    return expr
   }
 
   private isExplicitOnStartEntryRule(rule: SemanticRule): boolean {
