@@ -1995,6 +1995,7 @@ export class PlannerDispatcherMergeService {
       if (
         hasRsiComposite
         && rule.phase === 'entry'
+        && !conditionLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
         && conditionLeaves.some(leaf =>
           leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key
           || leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key
@@ -3412,11 +3413,21 @@ export class PlannerDispatcherMergeService {
 
   private shouldAppendDeterministicCoreTradeRule(rule: SemanticRule): boolean {
     const leaves = collectAtomLeaves(rule.condition)
-    if (leaves.length !== 1) return false
-    const conditionKey = leaves[0]?.key
-    const evidence = this.readEvidenceText(rule) ?? this.readEvidenceText(leaves[0] ?? {}) ?? ''
     const effectKeys = listRuleEffects(rule.effects)
       .flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key))
+    const allowedActionKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+      ADD_POSITION_ATOM_KEY,
+    ])
+    const hasTradeAction = effectKeys.some(key => allowedActionKeys.has(key))
+    if (leaves.length !== 1) {
+      return hasTradeAction && leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
+    }
+    const conditionKey = leaves[0]?.key
+    const evidence = this.readEvidenceText(rule) ?? this.readEvidenceText(leaves[0] ?? {}) ?? ''
     if (
       conditionKey === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
       && effectKeys.includes(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
@@ -3459,16 +3470,7 @@ export class PlannerDispatcherMergeService {
     if (!conditionKey || !allowedConditionKeys.has(conditionKey)) return false
     if (conditionKey === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key && rule.phase !== 'exit') return false
 
-    const allowedActionKeys = new Set<string>([
-      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
-      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
-      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
-      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
-      ADD_POSITION_ATOM_KEY,
-    ])
-    return listRuleEffects(rule.effects).some(effect =>
-      collectAtomLeaves(effect).some(leaf => allowedActionKeys.has(leaf.key)),
-    )
+    return hasTradeAction
   }
 
   private dropPlannerRulesReplacedByDeterministicLifecycle(

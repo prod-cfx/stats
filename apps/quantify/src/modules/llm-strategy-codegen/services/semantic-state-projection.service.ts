@@ -362,11 +362,23 @@ export class SemanticStateProjectionService {
   }
 
   buildConversationView(state: SemanticState): SemanticConversationView {
-    const hasRulesOnlyMainflow = Array.isArray(state.rules)
+    const hasRulesOnlyMainflow = Array.isArray(state.rules) && state.rules.length > 0
     const facts = this.rulesMainflowReader.readFacts(state)
-    const deterministicTriggers = hasRulesOnlyMainflow ? [] : this.filterDeterministicTriggers(this.factsToTriggers(facts))
-    const deterministicRisk = hasRulesOnlyMainflow ? [] : this.filterDeterministicRisk(this.factsToRisks(facts))
-    const deterministicActions = hasRulesOnlyMainflow ? [] : this.filterDeterministicActions(this.factsToActions(facts))
+    const legacyState = state as SemanticState & {
+      trigger?: SemanticTriggerState[]
+      action?: SemanticActionState[]
+      risk?: SemanticRiskState[]
+      positionConstraint?: SemanticPositionConstraintState[]
+      orchestration?: SemanticOrchestrationNode[]
+    }
+    const factTriggers = this.factsToTriggers(facts)
+    const factRisk = this.factsToRisks(facts)
+    const factActions = this.factsToActions(facts)
+    const factPositionConstraints = this.factsToPositionConstraints(facts)
+    const factOrchestrationNodes = this.factsToOrchestrationNodes(facts)
+    const deterministicTriggers = hasRulesOnlyMainflow ? [] : this.filterDeterministicTriggers(factTriggers.length > 0 ? factTriggers : legacyState.trigger ?? [])
+    const deterministicRisk = hasRulesOnlyMainflow ? [] : this.filterDeterministicRisk(factRisk.length > 0 ? factRisk : legacyState.risk ?? [])
+    const deterministicActions = hasRulesOnlyMainflow ? [] : this.filterDeterministicActions(factActions.length > 0 ? factActions : legacyState.action ?? [])
     const ruleAtomKeysForSignals = this.collectRuleAtomKeys(state.rules ?? [])
     const deterministicSignals = this.buildRecommendationSignals({
       actions: deterministicActions,
@@ -378,10 +390,11 @@ export class SemanticStateProjectionService {
     const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
     const ruleAtomKeys = ruleAtomKeysForSignals
-    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, this.factsToPositionConstraints(facts), ruleAtomKeys)
+    const positionConstraints = factPositionConstraints.length > 0 ? factPositionConstraints : legacyState.positionConstraint ?? []
+    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, positionConstraints, ruleAtomKeys)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
-    const orchestrationNodes = hasRulesOnlyMainflow ? [] : this.factsToOrchestrationNodes(facts)
+    const orchestrationNodes = hasRulesOnlyMainflow ? [] : (factOrchestrationNodes.length > 0 ? factOrchestrationNodes : legacyState.orchestration ?? [])
     const lockedOrchestrationNodes = orchestrationNodes
       .filter(node => node.status === 'locked')
     const recognizedOrchestrationNodes = orchestrationNodes
@@ -3940,6 +3953,14 @@ export class SemanticStateProjectionService {
       const sizing = this.readUnknownShape(params.sizing) ?? params
       const value = this.readFiniteNumber(sizing.value)
       if (value === null) return '单笔仓位待补充'
+      const mode = this.readString(sizing.mode)
+      if (mode === 'fixed_pct') {
+        return `单笔仓位 ${this.formatPercent(value)}%`
+      }
+      if (mode === 'fixed_ratio') {
+        const pct = value <= 1 ? value * 100 : value
+        return `单笔仓位 ${this.formatPercent(pct)}%`
+      }
       const kind = this.readString(sizing.kind)
       const unit = this.readString(sizing.unit)
       if (kind === 'ratio') {

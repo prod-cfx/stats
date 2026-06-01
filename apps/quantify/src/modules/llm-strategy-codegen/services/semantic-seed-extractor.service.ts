@@ -5785,7 +5785,7 @@ export class SemanticSeedExtractorService {
   }
 
   private hasBollingerBandAction(segment: string): boolean {
-    return /(触及|突破|回到|回归|跌破|上穿|下穿|站上|失守|高于|低于)/u.test(segment)
+    return /(触及|触碰|碰到|到达|突破|回到|回归|跌破|上穿|下穿|站上|失守|高于|低于|买入|买|卖出|卖|开多|做多|平多|平仓|出场|离场)/u.test(segment)
   }
 
   private hasExecutableConditionOperator(segment: string): boolean {
@@ -6424,11 +6424,13 @@ export class SemanticSeedExtractorService {
 
     for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b(?:\s*(?:level|tf|timeframe))?/giu)) {
       if (!match[1] || !match[2]) continue
+      if (this.isRollingWindowTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
       push(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`)
     }
 
     for (const match of text.matchAll(/((?:\d{1,2})|[一二三四五六七八九十]+)\s*(分钟|分|小时|时|天|日)(?:线|级别|周期)?/gu)) {
       if (!match[1] || !match[2]) continue
+      if (this.isRollingWindowTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
       if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
       const value = this.parseTimeframeNumber(match[1])
       if (value === null) continue

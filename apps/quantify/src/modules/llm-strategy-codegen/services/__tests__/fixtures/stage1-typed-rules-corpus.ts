@@ -136,7 +136,7 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
     id: 'stage1-022-breakout-retest',
     text: 'BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。',
     expectedPhases: ['entry', 'exit'],
-    expectedEffectRoles: ['actions', 'risks', 'orchestration'],
+    expectedEffectRoles: ['actions', 'risks'],
   },
   {
     id: 'stage1-023-ma-atr-risk-reward',

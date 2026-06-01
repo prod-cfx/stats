@@ -597,6 +597,8 @@ function extractSizingRoleFromText(text: string): ExtractedSizingRole | null {
   const bareNumberPattern = /(?<![\d.])(\d+(?:\.\d+)?)(?![\d.]|\s*(?:%|％))/gu
   for (const match of normalized.matchAll(bareNumberPattern)) {
     if (match.index === undefined || !match[1]) continue
+    const suffix = normalized.slice(match.index + match[0].length, match.index + match[0].length + 8)
+    if (/^\s*(?:m|min|mins|minute|minutes|h|hour|hours|d|day|days|分钟|分|小时|时|天|日|倍|x\b)/iu.test(suffix)) continue
     if (!hasSizingRoleContext(normalized, match.index, match[0].length)) continue
     const value = Number(match[1])
     if (!Number.isFinite(value) || value <= 0) continue
@@ -683,11 +685,84 @@ function extractParamsWithSizingRoles(
   return params
 }
 
+function hasPartialTakeProfitTierContext(text: string): boolean {
+  return /(?:分批止盈|部分止盈|多档止盈|分.{1,3}档止盈|平一半|平半|(?:平|减|止盈)\s*半仓|平剩余|平剩下|scale\s*out|take\s*profit\s+half|盈利\s*\d+(?:\.\d+)?\s*%\s*(?:平|减|止盈)\s*(?:\d+\s*%|一半|半|半仓|剩余|剩下|全部|全平))/iu.test(text)
+}
+
+function normalizePartialTakeProfitRatioToken(token: string | undefined): number | null {
+  if (!token) return null
+  if (/^(?:一半|半|半仓)$/u.test(token)) return 0.5
+  if (/^(?:剩余|剩下|全部|全平)$/u.test(token)) return 1
+  const value = Number(token)
+  if (!Number.isFinite(value) || value <= 0 || value > 100) return null
+  return value / 100
+}
+
+function normalizePartialTakeProfitTiers(
+  tiers: Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }>,
+): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
+  const sorted = [...tiers].sort((a, b) => a.trigger.threshold - b.trigger.threshold)
+  for (let i = 0; i < sorted.length; i += 1) {
+    const tier = sorted[i]
+    if (!tier) return null
+    if (!Number.isFinite(tier.trigger.threshold) || tier.trigger.threshold <= 0 || tier.trigger.threshold > 100) return null
+    if (!Number.isFinite(tier.reduceRatio) || tier.reduceRatio <= 0 || tier.reduceRatio > 1) return null
+    if (i > 0 && tier.trigger.threshold <= sorted[i - 1]!.trigger.threshold) return null
+  }
+  const hasCloseAllRemaining = sorted.some(tier => tier.reduceRatio >= 0.999999)
+  if (!hasCloseAllRemaining) {
+    const sum = sorted.reduce((acc, tier) => acc + tier.reduceRatio, 0)
+    if (sum > 1.000001) return null
+  }
+  return sorted
+}
+
+function extractPartialTakeProfitTiersFromText(text: string): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
+  const tiers: Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> = []
+  const patterns = [
+    /(?:盈利|获利|收益|赚)\s*\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:时|就|则)?\s*(?:平|减|止盈)\s*(\d+(?:\.\d+)?|一半|半|半仓|剩余|剩下|全部|全平)\s*%?/giu,
+    /\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:时|就|则)?\s*(?:平|减|止盈)\s*(\d+(?:\.\d+)?|一半|半|半仓|剩余|剩下|全部|全平)\s*%?/giu,
+  ]
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const threshold = Number(match[1])
+      const reduceRatio = normalizePartialTakeProfitRatioToken(match[2])
+      if (reduceRatio === null) continue
+      tiers.push({ trigger: { kind: 'pnl_pct', threshold }, reduceRatio })
+    }
+    if (tiers.length > 0) break
+  }
+
+  if (tiers.length === 0) return null
+  return normalizePartialTakeProfitTiers(tiers)
+}
+
+function normalizePartialTakeProfitParams(clause: string, params: Record<string, unknown>): Record<string, unknown> {
+  const tiers = extractPartialTakeProfitTiersFromText(clause)
+  if (tiers && tiers.length > 0) {
+    return { tiers }
+  }
+
+  if (/平\s*(?:一半|半|半仓)/u.test(clause) && typeof params.profitPct === 'number') {
+    return { profitPct: params.profitPct, ratio: 0.5 }
+  }
+  if (/平\s*(?:剩余|剩下|全部|全平)/u.test(clause) && typeof params.profitPct === 'number') {
+    return { profitPct: params.profitPct, ratio: 1 }
+  }
+
+  return params
+}
+
 function normalizeLifecycleParams(
   atomKey: string,
   clause: string,
   params: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (atomKey === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
+    return normalizePartialTakeProfitParams(clause, params)
+  }
+
   if (atomKey === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key) {
     return normalizeDcaScheduleParams(clause, params)
   }
@@ -872,10 +947,21 @@ function normalizeCompoundTimeframe(valueRaw: string | undefined, unitRaw: strin
   if (!unit) return undefined
   return `${value}${unit}`
 }
+function isRollingWindowTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {
+  if (matchIndex < 0) return false
+
+  const prefix = text.slice(Math.max(0, matchIndex - 24), matchIndex)
+  const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 32)
+  const hasWindowPrefix = /(?:过去|最近|近|前|last|past|previous|prior|lookback)\s*$/iu.test(prefix)
+  const hasReferenceSuffix = /^\s*(?:的)?\s*(?:最高价|最低价|高点|低点|最高|最低|区间|范围|突破位|breakout|high|low|range)/iu.test(suffix)
+
+  return hasWindowPrefix && hasReferenceSuffix
+}
 function tryNormalizeTimeframes(text: string): string[] {
   const values: string[] = []
   const seen = new Set<string>()
   for (const match of text.matchAll(TIMEFRAME_TOKEN_RE)) {
+    if (isRollingWindowTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
     const timeframe = typeof match[1] === 'string' && match[1].length > 0
       ? match[1].toLowerCase()
       : typeof match[4] === 'string' && match[4].length > 0
@@ -893,6 +979,7 @@ function tryNormalizeTimeframe(text: string): string | undefined {
   if (TIMEFRAME_DAILY_RE.test(text)) return '1d'
   const compound = text.match(TIMEFRAME_COMPOUND_RE)
   if (!compound) return undefined
+  if (isRollingWindowTimeframeCandidate(text, compound.index ?? -1, compound[0].length)) return undefined
   return normalizeCompoundTimeframe(compound[1], compound[2])
 }
 
@@ -1202,6 +1289,12 @@ export class GenericSeedDispatcher {
       const matches = this.matchClauseAgainstRegistry(clause)
       const clauseTimeframes = tryNormalizeTimeframes(clause)
       for (const m of matches) {
+        if (
+          m.atomKey === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+          && hasPartialTakeProfitTierContext(text)
+        ) {
+          continue
+        }
         const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)[m.atomKey]
         if (!contract) continue
         const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
@@ -1283,6 +1376,8 @@ export class GenericSeedDispatcher {
     //   profitThreshold 抽不到。此处在 dispatcher 末段扫描全文回填，让下游 token 检查
     //   能配对 take_profit + N% + M% pair（staging30 #1633 s29 修复）。
     this.applyPyramidingProfitTriggerBackfill(text, atomItems, slotItems)
+
+    this.applyPartialTakeProfitTierBackfill(text, atomItems, slotItems)
 
     this.applySemanticConflictResolution(atomItems, slotItems)
 
@@ -1437,7 +1532,8 @@ export class GenericSeedDispatcher {
     const lte = predicates.find(item => this.isRsiLtePredicate(item) && this.isSameOrUnspecifiedThreshold(item, threshold))
     if (!lte) return [...predicates]
 
-    const period = this.readRsiPeriod(cross) ?? this.readRsiPeriod(lte) ?? 14
+    const rawPeriod = this.readRsiPeriod(cross) ?? this.readRsiPeriod(lte)
+    const period = rawPeriod !== null && Math.abs(rawPeriod - threshold) <= 1e-9 ? 14 : rawPeriod ?? 14
     const sequence: PatchAtomNode = {
       key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
       phase: 'entry',
@@ -1915,6 +2011,8 @@ export class GenericSeedDispatcher {
     }
     if (
       !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'orchestration')
+      && typeof contextSlots.timeframe === 'string'
+      && contextSlots.timeframe.trim().length > 0
       && this.hasTimeframeIntent(userMessage)
     ) {
       const evidence = this.findTimeframeEvidence(userMessage)
@@ -1922,12 +2020,8 @@ export class GenericSeedDispatcher {
         key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
         params: {
           timeframeScopeKind: 'timeframe',
-          ...(typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0
-            ? {
-                primaryTimeframe: contextSlots.timeframe,
-                requiredTimeframes: [contextSlots.timeframe],
-              }
-            : {}),
+          primaryTimeframe: contextSlots.timeframe,
+          requiredTimeframes: [contextSlots.timeframe],
           alignmentPolicy: 'tolerant',
         },
         ...(evidence ? { evidence: { text: evidence } } : {}),
@@ -2197,6 +2291,35 @@ export class GenericSeedDispatcher {
         }
       }
     }
+  }
+
+  private applyPartialTakeProfitTierBackfill(
+    text: string,
+    atomItems: PatchAtomNode[],
+    slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
+  ): void {
+    if (!hasPartialTakeProfitTierContext(text)) return
+    const tiers = extractPartialTakeProfitTiersFromText(text)
+    if (!tiers || tiers.length === 0) return
+
+    const partialTakeProfitKey = ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key
+    const takeProfitKey = ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+    const isPartialTakeProfitNoise = (item: PatchAtomNode) => item.key === partialTakeProfitKey || item.key === takeProfitKey
+
+    removeInPlace(atomItems, isPartialTakeProfitNoise)
+    removeInPlace(slotItems.risk, isPartialTakeProfitNoise)
+
+    const evidence = this.findEvidenceText(text, '(?:盈利|获利|收益|赚).*(?:平一半|平半|半仓|平剩余|平剩下|全平|全部)') ?? text
+    const node: PatchAtomNode = {
+      key: partialTakeProfitKey,
+      phase: 'exit',
+      sideScope: 'both',
+      params: { tiers },
+      evidence: { text: evidence, source: 'user_explicit' },
+    }
+
+    atomItems.push(node)
+    slotItems.risk.push(node)
   }
 
   /**

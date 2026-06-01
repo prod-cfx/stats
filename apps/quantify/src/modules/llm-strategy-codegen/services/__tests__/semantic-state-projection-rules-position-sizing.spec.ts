@@ -48,4 +48,25 @@ describe('semanticStateProjectionService rules position sizing rendering', () =>
       warnSpy.mockRestore()
     }
   })
+
+  it('renders legacy fixed_pct position.sizing as percent instead of quote amount', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-position-sizing-fixed-pct',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd' } },
+      effects: {
+        actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        risks: [],
+        positions: [{ kind: 'atom', key: 'position.sizing', params: { mode: 'fixed_pct', value: 10 } }],
+        orchestration: [],
+        programs: [],
+      },
+    }]
+
+    const view = new SemanticStateProjectionService().buildConversationView(baseState(rules))
+
+    expect(view.summary).toContain('单笔仓位 10%')
+    expect(view.summary).not.toContain('单笔仓位 10 USDT')
+  })
 })

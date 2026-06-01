@@ -169,6 +169,31 @@ describe('stage1 typed rules corpus fixture', () => {
     }))
   })
 
+  it('parses colloquial half and remaining partial take-profit tiers without treating trigger pct as close pct', () => {
+    const patch = new GenericSeedDispatcher().dispatch('OKX 永续 BTCUSDT 15m。RSI14 低于 30 做多，盈利 5% 平一半，盈利 10% 平剩余。')
+    const effects = allEffectLeaves(patch)
+    const partialTakeProfit = effects.find(effect => effect.key === 'risk.partial_take_profit')
+
+    expect(effects.map(effect => effect.key)).not.toContain('risk.take_profit_pct')
+    expect(partialTakeProfit).toEqual(expect.objectContaining({
+      key: 'risk.partial_take_profit',
+      params: expect.objectContaining({
+        tiers: [
+          { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+          { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 1 },
+        ],
+      }),
+    }))
+  })
+
+  it('does not treat half-position entry wording as partial take-profit context', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 15m 半仓买入，止盈 10%。')
+    const effects = allEffectLeaves(patch)
+
+    expect(effects.map(effect => effect.key)).toContain('risk.take_profit_pct')
+    expect(effects.map(effect => effect.key)).not.toContain('risk.partial_take_profit')
+  })
+
   it('infers webhook sizing only from explicit amount evidence', () => {
     const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-025-webhook-event')!.text
     const patch = new GenericSeedDispatcher().dispatch(text)

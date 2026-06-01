@@ -2087,6 +2087,83 @@ describe('PlannerDispatcherMergeService — preserves explicit dispatcher semant
     expect(merged?.rules?.filter(rule => rule.phase === 'entry')).toHaveLength(1)
   })
 
+  it('restores RSI reclaim entry when planner only keeps RSI exit', () => {
+    const text = 'BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。'
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'exit-rsi-over-65',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, value: 65 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const serialized = JSON.stringify(merged?.rules ?? [])
+
+    expect(merged?.rules?.some(rule => rule.phase === 'entry')).toBe(true)
+    expect(serialized).toContain('condition.sequence')
+    expect(serialized).toContain('rsi_reclaim')
+    expect(serialized).toContain('indicator.above')
+    expect(serialized).toContain('action.open_long')
+    expect(serialized).toContain('oscillator.rsi_gte')
+    expect(serialized).toContain('action.close_long')
+  })
+
+  it('restores BOLL upper-band exit when planner keeps compound lower-band volume entry', () => {
+    const text = 'ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。'
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'entry-boll-lower-vol-1p5',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2 } },
+            { kind: 'atom', key: 'volume.threshold', params: { mode: 'relative_to_sma', refWindow: 20, multiplier: 1.5 } },
+          ],
+        },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitRule = merged?.rules?.find(rule => rule.phase === 'exit' && JSON.stringify(rule.condition).includes('bollinger.touch_upper'))
+
+    expect(exitRule).toBeDefined()
+    expect(listRuleEffects(exitRule?.effects)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.close_long' }),
+    ]))
+  })
+
+  it('does not treat timeframe number as quote sizing when later account-equity percent exists', () => {
+    const text = '创建一个 OKX BTCUSDT 永续合约策略，使用 15 分钟 K 线。 当 EMA7 上穿 EMA21 时开多；当 EMA7 下穿 EMA21 时平多。 每次使用账户权益的 10% 开仓，杠杆 1 倍，逐仓不要使用，使用全仓 cross。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const serialized = JSON.stringify(dispatcher)
+
+    expect(serialized).toContain('position.sizing')
+    expect(serialized).toContain('"kind":"ratio"')
+    expect(serialized).toContain('"value":0.1')
+    expect(serialized).not.toContain('"kind":"quote","value":15')
+  })
+
+  it('does not promote 24-hour breakout lookback into execution timeframe', () => {
+    const text = 'BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const serialized = JSON.stringify(fallback)
+
+    expect(serialized).toContain('price.breakout_up')
+    expect(serialized).toContain('price.previous_extrema_retest')
+    expect(serialized).toContain('risk.remembered_level_stop')
+    expect(serialized).not.toContain('"key":"scope.timeframe"')
+    expect(serialized).not.toContain('"primaryTimeframe":"24h"')
+  })
+
   it('adds explicit risk and orchestration effects from matching dispatcher entry rule', () => {
     const planner: CodegenSemanticPatch = {
       rules: [{
@@ -2260,6 +2337,28 @@ describe('PlannerDispatcherMergeService — preserves explicit dispatcher semant
 
     expect(exitConditionKeys).toContain('indicator.cross_over')
     expect(exitActionKeys).toContain('action.close_short')
+  })
+
+  it('restores plain BOLL upper-band sell exit when planner only keeps lower-band buy entry', () => {
+    const text = '15min 布林带下轨买入 上轨卖出'
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry-boll-lower',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2, confirmationMode: 'touch' } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+    const exitConditionKeys = exitRules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))
+    const exitActionKeys = exitRules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key))
+
+    expect(exitConditionKeys).toContain('bollinger.touch_upper')
+    expect(exitActionKeys).toContain('action.close_long')
   })
 
   it('merges dispatcher multi-timeframe gate into same lifecycle planner entry despite MA param drift', () => {

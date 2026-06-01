@@ -1331,7 +1331,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     surface: {
       intent: {
         // 'boll' 短形式 alias 接住用户简写（如 "boll 上轨开空"）
-        keywords: ['布林带', '布林线', 'bollinger', 'boll', '上轨'] as const,
+        keywords: ['上轨', 'upper'] as const,
         verbs: {
           // touch verb 兼收 "做空/开空"——"上轨开空"等价"触及上轨开空"
           //   action verb 自带方向；sideResolver:inherit + explicitActionSide 会派生正确 side
@@ -1409,10 +1409,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['布林带', '布林线', 'bollinger', 'boll', '下轨'] as const,
+        keywords: ['下轨', 'lower'] as const,
         verbs: {
           // touch verb 兼收 "做多/开多"——"下轨开多"等价"触及下轨开多"
-          touch_lower: ['触及', '碰到', '到达', 'touch', 'reaches', '做多', '开多'] as const,
+          touch_lower: ['触及', '触碰', '碰到', '到达', 'touch', 'reaches', '做多', '开多', '买入', '买'] as const,
           breakout_down: ['跌破', '下破', 'breakdown'] as const,
         },
       },
