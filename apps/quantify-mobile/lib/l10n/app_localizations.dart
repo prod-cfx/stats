@@ -4656,6 +4656,90 @@ abstract class AppLocalizations {
   /// **'创建时间'**
   String get whaleHoldingsSortTime;
 
+  /// No description provided for @whaleHoldingsDirAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有方向'**
+  String get whaleHoldingsDirAll;
+
+  /// No description provided for @whaleHoldingsPnlAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'所有未实现盈亏'**
+  String get whaleHoldingsPnlAll;
+
+  /// No description provided for @whaleHoldingsFilterDirTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓方向'**
+  String get whaleHoldingsFilterDirTitle;
+
+  /// No description provided for @whaleHoldingsFilterPnlTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏'**
+  String get whaleHoldingsFilterPnlTitle;
+
+  /// No description provided for @whaleHoldingsMoreSort.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多排序'**
+  String get whaleHoldingsMoreSort;
+
+  /// No description provided for @whaleHoldingsSortSectionMetric.
+  ///
+  /// In zh, this message translates to:
+  /// **'指标'**
+  String get whaleHoldingsSortSectionMetric;
+
+  /// No description provided for @whaleHoldingsSortSectionDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式'**
+  String get whaleHoldingsSortSectionDir;
+
+  /// No description provided for @whaleHoldingsSortDirAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'升序'**
+  String get whaleHoldingsSortDirAsc;
+
+  /// No description provided for @whaleHoldingsSortDirDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'降序'**
+  String get whaleHoldingsSortDirDesc;
+
+  /// No description provided for @whaleHoldingsSortDirNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'不排序'**
+  String get whaleHoldingsSortDirNone;
+
+  /// No description provided for @whaleHoldingsSortDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get whaleHoldingsSortDone;
+
+  /// No description provided for @whaleHoldingsCoinSearchTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索币种'**
+  String get whaleHoldingsCoinSearchTooltip;
+
+  /// No description provided for @whaleHoldingsCoinSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索币种'**
+  String get whaleHoldingsCoinSearchHint;
+
+  /// No description provided for @whaleHoldingsCoinSearchEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配币种'**
+  String get whaleHoldingsCoinSearchEmpty;
+
   /// No description provided for @whaleHoldingsColValue.
   ///
   /// In zh, this message translates to:

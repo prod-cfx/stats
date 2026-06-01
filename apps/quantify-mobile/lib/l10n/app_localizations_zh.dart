@@ -2392,6 +2392,48 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleHoldingsSortTime => '创建时间';
 
   @override
+  String get whaleHoldingsDirAll => '所有方向';
+
+  @override
+  String get whaleHoldingsPnlAll => '所有未实现盈亏';
+
+  @override
+  String get whaleHoldingsFilterDirTitle => '持仓方向';
+
+  @override
+  String get whaleHoldingsFilterPnlTitle => '未实现盈亏';
+
+  @override
+  String get whaleHoldingsMoreSort => '更多排序';
+
+  @override
+  String get whaleHoldingsSortSectionMetric => '指标';
+
+  @override
+  String get whaleHoldingsSortSectionDir => '排序方式';
+
+  @override
+  String get whaleHoldingsSortDirAsc => '升序';
+
+  @override
+  String get whaleHoldingsSortDirDesc => '降序';
+
+  @override
+  String get whaleHoldingsSortDirNone => '不排序';
+
+  @override
+  String get whaleHoldingsSortDone => '完成';
+
+  @override
+  String get whaleHoldingsCoinSearchTooltip => '搜索币种';
+
+  @override
+  String get whaleHoldingsCoinSearchHint => '搜索币种';
+
+  @override
+  String get whaleHoldingsCoinSearchEmpty => '无匹配币种';
+
+  @override
   String get whaleHoldingsColValue => '持仓价值';
 
   @override

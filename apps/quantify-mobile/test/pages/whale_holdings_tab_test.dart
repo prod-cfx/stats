@@ -197,15 +197,13 @@ void main() {
       expect(btcOnly.length, lessThan(total));
     });
 
-    testWidgets('方向筛选 chip 循环过滤为做空', (WidgetTester tester) async {
+    testWidgets('方向下拉抽屉选择「做空」过滤列表', (WidgetTester tester) async {
       await _pump(tester);
-      final Finder dirPill = find.byKey(const Key('whaleHoldingsDirFilter'));
-      // 点一次：全部 → 做多。
-      await tester.tap(dirPill);
-      await tester.pump();
-      // 再点一次：做多 → 做空。
-      await tester.tap(dirPill);
-      await tester.pump();
+      await tester.tap(find.byKey(const Key('whaleHoldingsDirFilter')));
+      await tester.pumpAndSettle();
+      expect(find.text('所有方向'), findsOneWidget);
+      await tester.tap(find.text('做空').last);
+      await tester.pumpAndSettle();
 
       expect(find.text('做空'), findsWidgets);
       final List<String> shortAddrs = _cardAddresses(tester);
@@ -216,19 +214,83 @@ void main() {
       expect(shortAddrs.toSet(), shortSet);
     });
 
-    testWidgets('选择「持仓价值」排序即时重排列表', (WidgetTester tester) async {
+    testWidgets('盈亏下拉抽屉选择「亏损」过滤列表', (WidgetTester tester) async {
       await _pump(tester);
-      final List<String> before = _cardAddresses(tester);
-      expect(before, isNotEmpty);
-
-      await tester.tap(find.text('排序'));
+      await tester.tap(find.byKey(const Key('whaleHoldingsPnlFilter')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('持仓价值').last);
+      expect(find.text('所有未实现盈亏'), findsOneWidget);
+      await tester.tap(find.text('亏损').last);
       await tester.pumpAndSettle();
 
-      final List<String> after = _cardAddresses(tester);
+      final Set<String> lossSet = mockWhaleHoldings
+          .where((WhaleHoldingPosition e) => e.pnl < 0)
+          .map((WhaleHoldingPosition e) => e.address)
+          .toSet();
+      expect(_cardAddresses(tester).toSet(), lossSet);
+    });
+
+    testWidgets('更多排序抽屉：持仓价值 + 降序即时重排', (WidgetTester tester) async {
+      await _pump(tester);
+      expect(_cardAddresses(tester), isNotEmpty);
+
+      await tester.tap(find.byKey(const Key('whaleHoldingsMoreSort')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortKey_value')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortDirDesc')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortDone')));
+      await tester.pumpAndSettle();
+
       // 持仓价值降序首卡应为最大 value 持仓（0xa5b0…1d41，1.55 亿）。
-      expect(after.first, '0xa5b0…1d41');
+      expect(_cardAddresses(tester).first, '0xa5b0…1d41');
+    });
+
+    testWidgets('更多排序抽屉：不排序回到原序', (WidgetTester tester) async {
+      await _pump(tester);
+      final List<String> original = _cardAddresses(tester);
+
+      // 先按保证金升序扰动顺序（mock 默认序非保证金升序）。
+      await tester.tap(find.byKey(const Key('whaleHoldingsMoreSort')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortKey_margin')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortDirAsc')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortDone')));
+      await tester.pumpAndSettle();
+      expect(_cardAddresses(tester), isNot(original));
+
+      await tester.tap(find.byKey(const Key('whaleHoldingsMoreSort')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortDirNone')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsSortDone')));
+      await tester.pumpAndSettle();
+      expect(_cardAddresses(tester), original);
+    });
+
+    testWidgets('币种搜索抽屉按币种检索并过滤', (WidgetTester tester) async {
+      await _pump(tester);
+      final int total = _cardAddresses(tester).length;
+
+      await tester.tap(find.byKey(const Key('whaleHoldingsCoinSearch')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('whaleHoldingsCoinSearchInput')),
+        'btc',
+      );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const Key('whaleHoldingsCoinSearchResult_BTC')));
+      await tester.pumpAndSettle();
+
+      final List<String> btcOnly = _cardAddresses(tester);
+      final int btcCount = mockWhaleHoldings
+          .where((WhaleHoldingPosition e) => e.symbol == 'BTC')
+          .length;
+      expect(btcOnly.length, btcCount);
+      expect(btcOnly.length, lessThan(total));
     });
 
     testWidgets('Row1 渲染地址链接 / 复制按钮 / 「巨鲸」徽标 / 趋势按钮',

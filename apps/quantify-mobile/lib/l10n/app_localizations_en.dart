@@ -2446,6 +2446,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleHoldingsSortTime => 'Opened';
 
   @override
+  String get whaleHoldingsDirAll => 'All directions';
+
+  @override
+  String get whaleHoldingsPnlAll => 'All unrealized PnL';
+
+  @override
+  String get whaleHoldingsFilterDirTitle => 'Direction';
+
+  @override
+  String get whaleHoldingsFilterPnlTitle => 'Unrealized PnL';
+
+  @override
+  String get whaleHoldingsMoreSort => 'More sort';
+
+  @override
+  String get whaleHoldingsSortSectionMetric => 'Metric';
+
+  @override
+  String get whaleHoldingsSortSectionDir => 'Order';
+
+  @override
+  String get whaleHoldingsSortDirAsc => 'Ascending';
+
+  @override
+  String get whaleHoldingsSortDirDesc => 'Descending';
+
+  @override
+  String get whaleHoldingsSortDirNone => 'None';
+
+  @override
+  String get whaleHoldingsSortDone => 'Done';
+
+  @override
+  String get whaleHoldingsCoinSearchTooltip => 'Search coins';
+
+  @override
+  String get whaleHoldingsCoinSearchHint => 'Search coins';
+
+  @override
+  String get whaleHoldingsCoinSearchEmpty => 'No matching coins';
+
+  @override
   String get whaleHoldingsColValue => 'Position Value';
 
   @override
