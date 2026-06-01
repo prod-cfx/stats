@@ -506,4 +506,74 @@ describe('user reported five strategies: entry -> middle -> publication generati
     expect(serializedScript).not.toContain('const_70')
     expect(serializedScript).not.toContain('semantic_entry_dispatcher_typed_rule_1_2_rsi_threshold_gte')
   })
+
+  it('用户复杂策略：多头清算阈值开空编译为 liquidation feed predicate', async () => {
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，出现多头清算超过 100 万 USDT 后开空，单笔 10% 仓位。价格重新站上 EMA20 时平空。')
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const liquidationExpr = artifacts.ast.exprPool.find(expr => expr.payload.kind === 'liquidationCondition')
+
+    expect(liquidationExpr?.payload.params).toEqual(expect.objectContaining({
+      schemaRef: 'liquidation',
+      sourceFeedId: 'liquidation.events',
+      operator: 'GT',
+      side: 'long',
+      value: 1_000_000,
+    }))
+    expect(artifacts.compiledScript).toContain('liquidationCondition')
+    expect(artifacts.compiledScript).toContain('liquidation.events')
+  })
+
+  it('用户复杂策略：资金费率为正 + 价格上穿 EMA20 不退化为 EMA7/EMA21', async () => {
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m。资金费率为正并且价格上穿 EMA20 时开多，单笔 10% 仓位。跌破 EMA20 时平多。')
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const fundingExpr = artifacts.ast.exprPool.find(expr => expr.payload.kind === 'fundingRateCondition')
+    const crossExprs = artifacts.ast.exprPool.filter(expr => expr.payload.kind === 'CROSS_OVER' || expr.payload.kind === 'CROSS_UNDER')
+    const serialized = JSON.stringify(crossExprs)
+
+    expect(fundingExpr?.payload.params).toEqual(expect.objectContaining({
+      schemaRef: 'funding',
+      sourceFeedId: 'funding.rate',
+      operator: 'GT',
+      value: 0,
+    }))
+    expect(serialized).toContain('close_15m')
+    expect(serialized).toContain('ema_20_15m')
+    expect(serialized).not.toContain('ema_7_15m')
+    expect(serialized).not.toContain('ema_21_15m')
+  })
+
+  it('用户复杂策略：固定网格只生成 orchestration program，不重复生成 legacy order programs', async () => {
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用。')
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+
+    expect(artifacts.ast.orchestrationPrograms).toHaveLength(1)
+    expect(artifacts.ast.orchestrationPrograms[0]).toEqual(expect.objectContaining({
+      programKind: 'fixed_grid_gated',
+      onDeactivate: 'cancel',
+    }))
+    expect(artifacts.ast.orderPrograms).toHaveLength(0)
+  })
+
+  it('用户复杂策略：反手做空保留 reversePosition metadata', async () => {
+    const state = buildStateFromUserMessage('OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。')
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const reverseDecision = artifacts.ast.decisionPrograms.find(program => program.actions.some(action => action.kind === 'OPEN_SHORT'))
+
+    expect(reverseDecision?.actions.map(action => action.kind)).toEqual(['CLOSE_LONG', 'OPEN_SHORT'])
+    expect(reverseDecision?.metadata).toEqual(expect.objectContaining({
+      reversePosition: expect.objectContaining({ fromSide: 'long', toSide: 'short' }),
+    }))
+  })
+
+  it('用户复杂策略：TradingView webhook buy 不生成 REQUIRED_SIGNAL_ID 占位和重复开仓', async () => {
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，收到 TradingView webhook buy 信号 signalId 为 tv_buy 后开多，单笔 10% 仓位。跌破 EMA20 时平多。')
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const openLongDecisions = artifacts.ast.decisionPrograms.filter(program => program.actions.some(action => action.kind === 'OPEN_LONG'))
+    const script = artifacts.compiledScript
+
+    expect(openLongDecisions).toHaveLength(1)
+    expect(script).toContain('externalSignal')
+    expect(script).toContain('tv_buy')
+    expect(script).not.toContain('REQUIRED_SIGNAL_ID')
+  })
 })

@@ -515,7 +515,24 @@ export const CONDITION_ATOM_EMITS = {
     capabilityStatus: 'pr3a-condition',
     // mirror legacy `case 'ma.golden_cross'` body @ 1416-1427（MA 选择经
     // resolveMovingAverageAtomConfig 处理 atom.params.indicator = 'ma' | 'ema'）
-    irShape: (atom, { compileContext: c, helpers, seed }) => {
+    irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
+      const period = helpers.readNumber([
+        atom.params?.['reference.period'],
+        atom.params?.period,
+      ], NaN)
+      const fastPeriod = helpers.readNumber([atom.params?.fastPeriod], NaN)
+      const slowPeriod = helpers.readNumber([atom.params?.slowPeriod], NaN)
+      if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+        const referencePeriod = Number.isFinite(period) ? period : fastPeriod
+        const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'ema' ? 'EMA' : 'SMA'
+        const ref = helpers.ensureIndicatorSeries(c, kind, referencePeriod, c.timeframe)
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_price_${referencePeriod}`,
+          'CROSS_OVER',
+          [closeRef, ref],
+        )
+      }
       const movingAverage = helpers.resolveMovingAverageAtomConfig(atom, c.movingAverage)
       const fastRef = helpers.ensureMovingAverageSeries(c, movingAverage.kind, movingAverage.fast)
       const slowRef = helpers.ensureMovingAverageSeries(c, movingAverage.kind, movingAverage.slow)
@@ -530,7 +547,24 @@ export const CONDITION_ATOM_EMITS = {
 
   'indicator.cross_under': {
     capabilityStatus: 'pr3a-condition',
-    irShape: (atom, { compileContext: c, helpers, seed }) => {
+    irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
+      const period = helpers.readNumber([
+        atom.params?.['reference.period'],
+        atom.params?.period,
+      ], NaN)
+      const fastPeriod = helpers.readNumber([atom.params?.fastPeriod], NaN)
+      const slowPeriod = helpers.readNumber([atom.params?.slowPeriod], NaN)
+      if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+        const referencePeriod = Number.isFinite(period) ? period : fastPeriod
+        const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'ema' ? 'EMA' : 'SMA'
+        const ref = helpers.ensureIndicatorSeries(c, kind, referencePeriod, c.timeframe)
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_price_${referencePeriod}`,
+          'CROSS_UNDER',
+          [closeRef, ref],
+        )
+      }
       const movingAverage = helpers.resolveMovingAverageAtomConfig(atom, c.movingAverage)
       const fastRef = helpers.ensureMovingAverageSeries(c, movingAverage.kind, movingAverage.fast)
       const slowRef = helpers.ensureMovingAverageSeries(c, movingAverage.kind, movingAverage.slow)

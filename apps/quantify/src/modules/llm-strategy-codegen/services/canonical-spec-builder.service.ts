@@ -946,6 +946,9 @@ export class CanonicalSpecBuilderService {
           const pyramidingHint = phase === 'entry' && hasOpenAction
             ? this.extractPyramidingHintFromSemanticRules(mainflow.rules, profitThresholdFallback)
             : undefined
+          const reversePosition = phase === 'entry'
+            ? this.buildReversePositionMetadataFromMainflowActionLeaves(mainflow.byRole.action.filter(leaf => leaf.ruleId === rule.id))
+            : undefined
           canonicalRules.push({
             id: `semantic-${phase}-${rule.id}`,
             phase,
@@ -962,6 +965,7 @@ export class CanonicalSpecBuilderService {
               },
               sourcePath: `rules[${ruleIndex}]`,
               ...(pyramidingHint ? { pyramidingHint } : {}),
+              ...(reversePosition ? { reversePosition } : {}),
             },
           })
         }
@@ -1030,6 +1034,21 @@ export class CanonicalSpecBuilderService {
     }
 
     return canonicalRules
+  }
+
+  private buildReversePositionMetadataFromMainflowActionLeaves(
+    leaves: readonly RulesMainflowLeaf[],
+  ): NonNullable<CanonicalRuleV2['metadata']>['reversePosition'] | undefined {
+    const leaf = leaves.find(item => item.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key)
+    if (!leaf) return undefined
+    const fromSide = this.readSideParam(leaf.params.fromSide) ?? 'long'
+    const toSide = this.readSideParam(leaf.params.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
+    return {
+      fromSide,
+      toSide,
+      sameBarPolicy: this.readSameBarPolicy(leaf.params.sameBarPolicy),
+      sizingSource: this.readReverseSizingSource(leaf.params.sizingSource),
+    }
   }
 
   private isRulesMainflowExitRiskConditionAtom(key: string): boolean {
@@ -1466,6 +1485,12 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
   ): CanonicalOrderProgramIntent[] {
     const orderPrograms: CanonicalOrderProgramIntent[] = []
+    const hasFixedGridOrchestrationProgram = mainflow.byRole.program.some(
+      leaf => leaf.key === 'program.fixed_grid_gated',
+    )
+    if (hasFixedGridOrchestrationProgram) {
+      return orderPrograms
+    }
     const primary = [
       ...mainflow.byRole.program.filter(leaf => leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated'),
       ...mainflow.byRole.condition.filter(leaf => leaf.key === 'grid.range_rebalance'),
@@ -3461,6 +3486,20 @@ export class CanonicalSpecBuilderService {
     return this.readNumberParam(reference?.period)
   }
 
+  private readPriceCrossReferencePeriod(trigger: unknown): number | null {
+    const evidenceRecord = trigger && typeof trigger === 'object' && !Array.isArray(trigger)
+      ? (trigger as { evidence?: unknown }).evidence
+      : null
+    const evidence = evidenceRecord && typeof evidenceRecord === 'object' && !Array.isArray(evidenceRecord)
+      ? (evidenceRecord as { text?: unknown }).text
+      : null
+    if (typeof evidence !== 'string' || !/价格|price|close/iu.test(evidence)) return null
+    const periodMatches = [...evidence.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
+    if (periodMatches.length !== 1) return null
+    const period = Number(periodMatches[0]?.[1])
+    return Number.isFinite(period) && period > 0 ? period : null
+  }
+
   private readShapeBoolean(shape: SemanticCapabilityShape, key: string): boolean | null {
     const value = shape[key]
     return typeof value === 'boolean' ? value : null
@@ -4753,6 +4792,7 @@ export class CanonicalSpecBuilderService {
       params: atom.params ?? {},
       status: 'locked',
       source: 'user_explicit',
+      ...(atom.evidence?.text ? { evidence: { text: atom.evidence.text, source: 'user_explicit' as const } } : {}),
       openSlots: [],
     } as SemanticTriggerState, defaultTimeframe)
   }
@@ -7482,6 +7522,19 @@ export class CanonicalSpecBuilderService {
         const movingAverageIndicator = indicator === 'ema'
           ? 'ema'
           : (indicator === 'ma' || indicator === 'sma' || indicator.length === 0 ? 'sma' : indicator)
+        const priceCrossReferencePeriod = this.readPriceCrossReferencePeriod(trigger)
+        if (priceCrossReferencePeriod !== null) {
+          return {
+            kind: 'atom',
+            key: trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? CANONICAL_RULE_KEYS.movingAverageGoldenCross : CANONICAL_RULE_KEYS.movingAverageDeathCross,
+            semanticScope: 'market',
+            op: operator,
+            params: {
+              indicator: movingAverageIndicator,
+              period: priceCrossReferencePeriod,
+            },
+          }
+        }
         return {
           kind: 'atom',
           key: trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? CANONICAL_RULE_KEYS.movingAverageGoldenCross : CANONICAL_RULE_KEYS.movingAverageDeathCross,
@@ -7489,6 +7542,8 @@ export class CanonicalSpecBuilderService {
           op: operator,
           params: {
             indicator: movingAverageIndicator,
+            ...(trigger.params.priceCross === true ? { priceCross: true } : {}),
+            ...(typeof trigger.params.period === 'number' ? { period: trigger.params.period } : {}),
             ...(typeof trigger.params.fastPeriod === 'number' ? { fastPeriod: trigger.params.fastPeriod } : {}),
             ...(typeof trigger.params.slowPeriod === 'number' ? { slowPeriod: trigger.params.slowPeriod } : {}),
           },
@@ -7766,7 +7821,7 @@ export class CanonicalSpecBuilderService {
         const secret = typeof trigger.params.secret === 'string'
           ? trigger.params.secret.trim()
           : 'configured'
-        if (provider !== 'webhook' || !signalId || secret !== 'configured') return null
+        if (provider !== 'webhook' || !signalId || signalId === 'REQUIRED_SIGNAL_ID' || secret !== 'configured') return null
         return {
           kind: 'atom',
           key: 'external.signal',

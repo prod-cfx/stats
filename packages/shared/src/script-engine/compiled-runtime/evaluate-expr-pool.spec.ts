@@ -135,6 +135,59 @@ describe('evaluateExprPool', () => {
     expect(values.external_signal_whale_buy).toBe(false)
   })
 
+  it('evaluates fundingRateCondition predicates from event inbox feed values', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'funding.rate': [
+            { id: 'funding-1', ts: 9_000, payload: { fundingRate: 0.0001 } },
+          ],
+        },
+      },
+      [{
+        id: 'funding_positive',
+        nodeType: 'predicate',
+        sourceRef: 'fundingRate.condition',
+        payload: {
+          kind: 'fundingRateCondition',
+          params: { sourceFeedId: 'funding.rate', operator: 'GT', value: 0 },
+        },
+        deps: [],
+      }],
+      ['funding_positive'],
+    )
+
+    expect(values.funding_positive).toBe(true)
+  })
+
+  it('evaluates liquidationCondition predicates from event inbox side and notional', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'liquidation.events': [
+            { id: 'liq-small', ts: 9_000, payload: { side: 'long', notionalUsd: 500_000 } },
+            { id: 'liq-hit', ts: 9_500, payload: { side: 'long', notionalUsd: 1_500_000 } },
+          ],
+        },
+      },
+      [{
+        id: 'long_liquidation_gt_1m',
+        nodeType: 'predicate',
+        sourceRef: 'liquidation.condition',
+        payload: {
+          kind: 'liquidationCondition',
+          params: { sourceFeedId: 'liquidation.events', operator: 'GT', side: 'long', value: 1_000_000 },
+        },
+        deps: [],
+      }],
+      ['long_liquidation_gt_1m'],
+    )
+
+    expect(values.long_liquidation_gt_1m).toBe(true)
+  })
+
   it('evaluates CANDLE_PATTERN series and predicate from runtime bars', () => {
     const exprPool: Array<{
       id: string

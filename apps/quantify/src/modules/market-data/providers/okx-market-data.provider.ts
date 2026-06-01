@@ -46,6 +46,45 @@ interface OkxCandlesResponse {
   data: string[][]
 }
 
+interface OkxFundingRateRow {
+  fundingRate?: string
+  realizedRate?: string
+  fundingTime?: string
+  ts?: string
+  instId?: string
+}
+
+interface OkxFundingRateResponse {
+  code: string
+  msg: string
+  data: OkxFundingRateRow[]
+}
+
+interface OkxLiquidationDetailRow {
+  bkPx?: string
+  posSide?: string
+  side?: string
+  sz?: string
+  time?: number
+  ts?: string
+}
+
+interface OkxLiquidationOrdersResponse {
+  code: string
+  msg: string
+  data: Array<{
+    instId?: string
+    uly?: string
+    details?: OkxLiquidationDetailRow[]
+  }>
+}
+
+export interface OkxRuntimeEvent {
+  id: string
+  ts: number
+  payload: Record<string, unknown>
+}
+
 interface OkxRestRequestConfig {
   params?: Record<string, string>
   timeout?: number
@@ -150,6 +189,84 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         isFinal: true,
       }))
       .sort((a, b) => a.timestamp - b.timestamp)
+  }
+
+  async fetchFundingRateEvents(input: { symbol: string; startMs: number; endMs: number; limit?: number }): Promise<OkxRuntimeEvent[]> {
+    const raw = extractRawSymbol(input.symbol)
+    const instId = this.toInstId(raw, 'PERP')
+    const limit = String(Math.min(Math.max(input.limit ?? 100, 1), 100))
+    const [current, history] = await Promise.all([
+      this.requestRest<OkxFundingRateResponse>(new URL('/api/v5/public/funding-rate', this.restBaseUrl).toString(), {
+        params: { instId },
+        timeout: this.restTimeoutMs,
+      }).catch((): OkxFundingRateResponse => ({ code: '0', msg: '', data: [] })),
+      this.requestRest<OkxFundingRateResponse>(new URL('/api/v5/public/funding-rate-history', this.restBaseUrl).toString(), {
+        params: { instId, limit },
+        timeout: this.restTimeoutMs,
+      }).catch((): OkxFundingRateResponse => ({ code: '0', msg: '', data: [] })),
+    ])
+
+    return [...(current.data ?? []), ...(history.data ?? [])]
+      .map((row): OkxRuntimeEvent | null => {
+        const ts = this.readFiniteNumber(row.fundingTime ?? row.ts)
+        const fundingRate = this.readFiniteNumber(row.fundingRate ?? row.realizedRate)
+        if (ts === null || fundingRate === null) return null
+        return {
+          id: `okx-funding:${instId}:${ts}`,
+          ts,
+          payload: { instId: row.instId ?? instId, fundingRate, rate: fundingRate },
+        }
+      })
+      .filter((event): event is OkxRuntimeEvent => event !== null)
+      .filter(event => event.ts >= input.startMs && event.ts <= input.endMs)
+      .sort((left, right) => left.ts - right.ts)
+  }
+
+  async fetchLiquidationEvents(input: { symbol: string; startMs: number; endMs: number; limit?: number }): Promise<OkxRuntimeEvent[]> {
+    const raw = extractRawSymbol(input.symbol)
+    const instId = this.toInstId(raw, 'PERP')
+    const [base, quote] = this.splitRawSymbol(raw.toUpperCase())
+    const uly = `${base}-${quote}`
+    const url = new URL('/api/v5/public/liquidation-orders', this.restBaseUrl)
+    const data = await this.requestRest<OkxLiquidationOrdersResponse>(url.toString(), {
+      params: {
+        instType: 'SWAP',
+        mgnMode: 'cross',
+        uly,
+        state: 'filled',
+        limit: String(Math.min(Math.max(input.limit ?? 100, 1), 100)),
+      },
+      timeout: this.restTimeoutMs,
+    }).catch((): OkxLiquidationOrdersResponse => ({ code: '0', msg: '', data: [] }))
+
+    const events: OkxRuntimeEvent[] = []
+    for (const group of data.data ?? []) {
+      for (const [index, detail] of (group.details ?? []).entries()) {
+        const ts = this.readFiniteNumber(detail.ts ?? detail.time)
+        const price = this.readFiniteNumber(detail.bkPx)
+        const size = this.readFiniteNumber(detail.sz)
+        if (ts === null || price === null || size === null) continue
+        const side = detail.posSide?.trim().toLowerCase() || 'both'
+        events.push({
+          id: `okx-liquidation:${group.instId ?? instId}:${ts}:${side}:${index}`,
+          ts,
+          payload: {
+            instId: group.instId ?? instId,
+            side,
+            positionSide: side,
+            liquidationSide: side,
+            orderSide: detail.side,
+            price,
+            size,
+            notionalUsd: price * size,
+          },
+        })
+      }
+    }
+
+    return events
+      .filter(event => event.ts >= input.startMs && event.ts <= input.endMs)
+      .sort((left, right) => left.ts - right.ts)
   }
 
   async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
@@ -299,6 +416,15 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
   private async sleep(ms: number): Promise<void> {
     if (ms <= 0) return
     await new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    const numeric = typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : NaN
+    return Number.isFinite(numeric) ? numeric : null
   }
 
   private fromInstId(instId: string): string {

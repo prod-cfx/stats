@@ -68,4 +68,27 @@ describe('buildRuntimeMarketContext', () => {
       ],
     })
   })
+
+  it('marks funding and liquidation event feeds as live data source feeds', () => {
+    const context = buildRuntimeMarketContext({
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      primaryCloseTs: 5_400_000,
+      params: { marketType: 'perp' },
+      barsByTimeframe: {
+        '15m': [
+          { symbol: 'BTCUSDT', timeframe: '15m', openTime: 4_500_000, closeTime: 5_400_000, open: 100, high: 111, low: 99, close: 110, volume: 1 },
+        ],
+      },
+      eventStreams: {
+        'funding.rate': [{ id: 'funding-1', ts: 5_399_000, payload: { fundingRate: 0.0001 } }],
+        'liquidation.events': [{ id: 'liq-1', ts: 5_399_000, payload: { side: 'long', notionalUsd: 1_500_000 } }],
+      },
+    })
+
+    expect(context.dataSourceFeeds).toEqual({
+      'funding.rate': { schema: 'funding', permissionGranted: true, hasData: true },
+      'liquidation.events': { schema: 'liquidation', permissionGranted: true, hasData: true },
+    })
+  })
 })

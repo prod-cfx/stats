@@ -57,11 +57,31 @@ export function readEventStreamsFromExprPool(exprPool: unknown): RuntimeEventStr
     const payload = (node as Record<string, unknown>).payload
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
     const payloadRecord = payload as Record<string, unknown>
-    if (payloadRecord.kind !== 'externalSignal') return []
-
     const params = payloadRecord.params
     if (!params || typeof params !== 'object' || Array.isArray(params)) return []
     const paramsRecord = params as Record<string, unknown>
+
+    if (payloadRecord.kind === 'fundingRateCondition' || payloadRecord.kind === 'liquidationCondition') {
+      const fallback = payloadRecord.kind === 'fundingRateCondition'
+        ? { sourceFeedId: 'funding.rate', schemaRef: 'funding' as const }
+        : { sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' as const }
+      const sourceFeedId = typeof paramsRecord.sourceFeedId === 'string' && paramsRecord.sourceFeedId.trim()
+        ? paramsRecord.sourceFeedId.trim()
+        : fallback.sourceFeedId
+      const schemaRef = paramsRecord.schemaRef === 'funding' || paramsRecord.schemaRef === 'liquidation'
+        ? paramsRecord.schemaRef
+        : fallback.schemaRef
+
+      return [{
+        provider: 'external_feed',
+        signalId: sourceFeedId,
+        sourceFeedId,
+        schemaRef,
+      }]
+    }
+
+    if (payloadRecord.kind !== 'externalSignal') return []
+
     const provider = typeof paramsRecord.provider === 'string' && paramsRecord.provider.trim()
       ? paramsRecord.provider.trim()
       : 'webhook'

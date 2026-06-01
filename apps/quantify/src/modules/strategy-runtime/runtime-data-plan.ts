@@ -27,11 +27,11 @@ export interface RuntimeExternalDataSourceRequirement {
 }
 
 export interface RuntimeEventStreamRequirement {
-  provider: 'webhook'
+  provider: 'webhook' | 'external_feed'
   signalId: string
   sourceFeedId: string
   ttlMs?: number
-  schemaRef: 'webhook_event'
+  schemaRef: 'webhook_event' | 'funding' | 'liquidation'
 }
 
 export interface RuntimeDataPlan {

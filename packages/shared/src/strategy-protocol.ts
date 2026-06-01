@@ -76,7 +76,7 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
    * 注入路径由 follow-up issue 跟踪
    */
   dataSourceFeeds?: Readonly<Record<string, {
-    schema: 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
+    schema: 'ohlcv' | 'orderbook' | 'funding' | 'open_interest' | 'liquidation' | 'webhook_event'
     permissionGranted: boolean
     hasData: boolean
   }>>

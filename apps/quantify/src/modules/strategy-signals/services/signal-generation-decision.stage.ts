@@ -739,6 +739,7 @@ export class SignalGenerationDecisionStage {
           }),
           ...legacyContext,
           ...(runtimeMarketContext.eventInbox ? { eventInbox: runtimeMarketContext.eventInbox } : {}),
+          ...(runtimeMarketContext.dataSourceFeeds ? { dataSourceFeeds: runtimeMarketContext.dataSourceFeeds } : {}),
         }
       : legacyContext
 

@@ -1722,6 +1722,21 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'ma.golden_cross':
       case 'ma.death_cross': {
+        const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], NaN)
+        const fastPeriod = this.readNumber([atom.params?.fastPeriod], NaN)
+        const slowPeriod = this.readNumber([atom.params?.slowPeriod], NaN)
+        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+          const referencePeriod = Number.isFinite(period) ? period : fastPeriod
+          const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'sma' ? 'SMA' : 'EMA'
+          const closeRef = this.ensurePriceSeries(context, 'close')
+          const ref = this.ensureIndicatorSeries(context, kind, referencePeriod, context.timeframe)
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_price_${referencePeriod}`,
+            atom.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER',
+            [closeRef, ref],
+          )
+        }
         const movingAverage = this.resolveMovingAverageAtomConfig(atom, context.movingAverage)
         const fastRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.fast)
         const slowRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.slow)
@@ -1916,7 +1931,7 @@ export class CanonicalSpecV2IrCompilerService {
         const secret = typeof atom.params?.secret === 'string'
           ? atom.params.secret.trim()
           : 'configured'
-        if (provider !== 'webhook' || !signalId || secret !== 'configured') {
+        if (provider !== 'webhook' || !signalId || signalId === 'REQUIRED_SIGNAL_ID' || secret !== 'configured') {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
         }
         return this.upsertPredicate(

@@ -1131,6 +1131,7 @@ export class BacktestRunnerService {
 
     const runtimeContext = buildMultiLegStrategyContext(multiLegContext)
     const eventInbox = (multiLegContext as { eventInbox?: unknown }).eventInbox
+    const dataSourceFeeds = (multiLegContext as { dataSourceFeeds?: unknown }).dataSourceFeeds
     return {
       ts: bar.closeTime,
       symbol: bar.symbol,
@@ -1147,6 +1148,7 @@ export class BacktestRunnerService {
       portfolio,
       params: input.input.strategy.params,
       ...(eventInbox ? { eventInbox } : {}),
+      ...(dataSourceFeeds ? { dataSourceFeeds } : {}),
       ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
       __compiledDecisionState: input.compiledDecisionState,
       ...runtimeContext,

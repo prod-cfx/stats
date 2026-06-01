@@ -790,7 +790,24 @@ function normalizeLifecycleParams(
     return next
   }
 
+  if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key) {
+    const referencePeriod = extractSinglePriceCrossReferencePeriod(clause)
+    if (referencePeriod !== null) {
+      const next: Record<string, unknown> = { ...params, priceCross: true, period: referencePeriod, fastPeriod: referencePeriod }
+      delete next.slowPeriod
+      return next
+    }
+  }
+
   return params
+}
+
+function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
+  if (!/价格|price|close/iu.test(clause)) return null
+  const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
+  if (periodMatches.length !== 1) return null
+  const period = Number(periodMatches[0]?.[1])
+  return Number.isFinite(period) && period > 0 ? period : null
 }
 
 function normalizeDcaScheduleParams(
@@ -1446,7 +1463,7 @@ export class GenericSeedDispatcher {
       for (const effect of effects) {
         if (!this.typedEffectAppliesToPhase(effect, phase)) continue
         if (!this.typedEffectAppliesToSide(effect, sideScope)) continue
-        this.appendTypedEffect(typedEffects, effect)
+        this.appendTypedEffect(typedEffects, this.alignTypedLifecycleEffectToRuleSide(effect, sideScope))
       }
       const condition = conditionPredicates.length > 1
         ? {
@@ -1662,6 +1679,32 @@ export class GenericSeedDispatcher {
     effects[role].push(effect)
   }
 
+  private alignTypedLifecycleEffectToRuleSide(
+    effect: AtomExpr,
+    sideScope: SemanticRule['sideScope'],
+  ): AtomExpr {
+    if (
+      effect.kind !== 'atom'
+      || effect.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key
+      || sideScope === 'both'
+    ) {
+      return effect
+    }
+
+    const effectSide = effect.sideScope
+    const paramSide = typeof effect.params.sideScope === 'string' ? effect.params.sideScope : null
+    if (effectSide === sideScope && paramSide === sideScope) return effect
+
+    return {
+      ...effect,
+      sideScope,
+      params: {
+        ...effect.params,
+        sideScope,
+      },
+    }
+  }
+
   private semanticEffectSignature(effect: AtomExpr): string {
     if (effect.kind !== 'atom') return JSON.stringify(effect)
     return JSON.stringify({ kind: effect.kind, key: effect.key, params: effect.params, sideScope: effect.sideScope })
@@ -1785,9 +1828,26 @@ export class GenericSeedDispatcher {
         key: ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key,
         phase: 'entry',
         sideScope: 'both',
-        params: {},
+        params: this.extractFundingRateParams(userMessage),
         evidence: { text: this.findEvidenceText(userMessage, '(?:资金费率|funding\s*rate|funding)') ?? userMessage.trim(), source: 'user_explicit' },
       })
+    }
+    if (this.hasLiquidationIntent(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['liquidation.condition'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['liquidation.condition'].key,
+        phase: 'entry',
+        sideScope: 'both',
+        params: this.extractLiquidationParams(userMessage),
+        evidence: { text: this.findEvidenceText(userMessage, '(?:清算|liquidation)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    for (const item of out) {
+      if (item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
+        item.params = { ...this.extractFundingRateParams(userMessage), ...item.params }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['liquidation.condition'].key) {
+        item.params = { ...this.extractLiquidationParams(userMessage), ...item.params }
+      }
     }
     if (this.hasOpenInterestIntent(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['openInterest.condition'].key)) {
       out.push({
@@ -1812,9 +1872,7 @@ export class GenericSeedDispatcher {
 
   private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: InternalSeedDraft): void {
     const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
-    const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
     const onStartKey = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
-    const percentChangeKey = ATOM_CONTRACT_REGISTRY['price.percent_change'].key
 
     const dcaAtom = (flatPatch.atoms ?? []).find(atom => atom.key === dcaKey)
     if (dcaAtom) {
@@ -1825,42 +1883,6 @@ export class GenericSeedDispatcher {
         params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
         evidence: dcaAtom.evidence,
       })
-    }
-
-    const addAtoms = [
-      ...(flatPatch.actions ?? []).filter(atom => atom.key === addPositionKey),
-      ...(flatPatch.atoms ?? []).filter(atom => atom.key === addPositionKey),
-    ]
-    for (const atom of addAtoms) {
-      const params = atom.params ?? {}
-      const addMode = typeof params.addMode === 'string' ? params.addMode : null
-      const sideScope = atom.sideScope ?? 'long'
-      if (addMode === 'profit_pct' && typeof params.profitThreshold === 'number') {
-        out.push({
-          key: percentChangeKey,
-          phase: 'entry',
-          sideScope,
-          params: {
-            basis: 'entry_avg_price',
-            direction: 'up',
-            valuePct: Math.abs(params.profitThreshold),
-          },
-          evidence: atom.evidence,
-        })
-      }
-      if (addMode === 'drawdown_pct' && typeof params.drawdownThreshold === 'number') {
-        out.push({
-          key: percentChangeKey,
-          phase: 'entry',
-          sideScope,
-          params: {
-            basis: 'entry_avg_price',
-            direction: 'down',
-            valuePct: Math.abs(params.drawdownThreshold),
-          },
-          evidence: atom.evidence,
-        })
-      }
     }
   }
 
@@ -2114,6 +2136,39 @@ export class GenericSeedDispatcher {
 
   private hasFundingRateIntent(userMessage: string): boolean {
     return /资金费率|funding\s*rate|\bfunding\b/iu.test(userMessage)
+  }
+
+  private hasLiquidationIntent(userMessage: string): boolean {
+    return /清算|liquidation/iu.test(userMessage)
+  }
+
+  private extractFundingRateParams(userMessage: string): Record<string, unknown> {
+    if (/为正|正|positive|>\s*0|大于\s*0/iu.test(userMessage)) return { operator: 'GT', value: 0 }
+    if (/为负|负|negative|<\s*0|小于\s*0/iu.test(userMessage)) return { operator: 'LT', value: 0 }
+    return {}
+  }
+
+  private extractLiquidationParams(userMessage: string): Record<string, unknown> {
+    return {
+      operator: 'GT',
+      side: /多头|long/iu.test(userMessage)
+        ? 'long'
+        : /空头|short/iu.test(userMessage)
+          ? 'short'
+          : 'both',
+      ...this.extractLiquidationNotionalUsd(userMessage),
+    }
+  }
+
+  private extractLiquidationNotionalUsd(userMessage: string): Record<string, unknown> {
+    const normalized = userMessage.replace(/,/gu, '')
+    const wan = normalized.match(/(\d+(?:\.\d+)?)\s*万\s*(?:U|USDT|美元)?/iu)
+    if (wan?.[1]) return { notionalUsd: Number(wan[1]) * 10_000 }
+    const millionZh = normalized.match(/(\d+(?:\.\d+)?)\s*(?:百万|m)\s*(?:U|USDT|美元)?/iu)
+    if (millionZh?.[1]) return { notionalUsd: Number(millionZh[1]) * 1_000_000 }
+    const usd = normalized.match(/(?:超过|大于|above|over|>)\s*(\d+(?:\.\d+)?)\s*(?:U|USDT|美元)?/iu)
+    if (usd?.[1]) return { notionalUsd: Number(usd[1]) }
+    return {}
   }
 
   private hasOpenInterestIntent(userMessage: string): boolean {

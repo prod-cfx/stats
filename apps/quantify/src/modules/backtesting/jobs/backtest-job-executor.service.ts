@@ -2,10 +2,12 @@ import type { BacktestReport, BacktestRunInput } from '../types/backtesting.type
 import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
+import { OkxMarketDataProvider } from '@/modules/market-data/providers/okx-market-data.provider'
+import { readEventStreamsFromExprPool } from '@/modules/strategy-runtime/runtime-data-plan.resolver'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -67,6 +69,7 @@ export class BacktestJobExecutorService {
     private readonly marketDataService: BacktestMarketDataService,
     private readonly conversationsRepo: AiQuantConversationsRepository,
     private readonly jobsRepository: BacktestJobRepository,
+    @Optional() private readonly okxMarketDataProvider?: OkxMarketDataProvider,
   ) {}
 
   async execute(
@@ -150,8 +153,59 @@ export class BacktestJobExecutorService {
         args: { symbols: input.symbols, fromTs: coverage.appliedRange.fromTs, toTs: coverage.appliedRange.toTs },
       })
     }
-    const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars })
+    const eventStreams = await this.resolveBacktestEventStreams({ ...input, dataRange: coverage.appliedRange })
+    const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars, eventStreams })
     return { resolvedSummary, result }
+  }
+
+  private async resolveBacktestEventStreams(input: BacktestRunInput): Promise<BacktestRunInput['eventStreams']> {
+    const existing = input.eventStreams ?? {}
+    const streams = this.resolveRequiredEventStreams(input.strategy)
+    const output: NonNullable<BacktestRunInput['eventStreams']> = { ...existing }
+
+    for (const stream of streams) {
+      if (Array.isArray(output[stream.sourceFeedId])) continue
+      if (stream.provider !== 'external_feed') continue
+      if (!this.okxMarketDataProvider) continue
+
+      const symbol = input.symbols[0]
+      if (!symbol) continue
+      if (stream.schemaRef === 'funding') {
+        output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchFundingRateEvents({
+          symbol,
+          startMs: input.dataRange.fromTs,
+          endMs: input.dataRange.toTs,
+        })
+      } else if (stream.schemaRef === 'liquidation') {
+        output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchLiquidationEvents({
+          symbol,
+          startMs: input.dataRange.fromTs,
+          endMs: input.dataRange.toTs,
+        })
+      }
+    }
+
+    return Object.keys(output).length > 0 ? output : undefined
+  }
+
+  private resolveRequiredEventStreams(strategy: BacktestRunInput['strategy']): ReturnType<typeof readEventStreamsFromExprPool> {
+    const candidates = [
+      this.readRecord(strategy.astSnapshot)?.exprPool,
+      this.readRecord(strategy.irSnapshot)?.exprPool,
+      this.readRecord(strategy.specSnapshot)?.exprPool,
+    ]
+    const streams = candidates.flatMap(candidate => readEventStreamsFromExprPool(candidate))
+    const byFeedId = new Map<string, (typeof streams)[number]>()
+    streams.forEach((stream) => {
+      if (!byFeedId.has(stream.sourceFeedId)) byFeedId.set(stream.sourceFeedId, stream)
+    })
+    return [...byFeedId.values()]
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   }
 
   private enrichResultWithDiagnosticReason(result: BacktestReport): BacktestReport {

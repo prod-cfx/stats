@@ -462,6 +462,56 @@ describe('backtestRunnerService', () => {
     ])
   })
 
+  it('exposes external feed readiness metadata to compiled strategy context', async () => {
+    const runner = createRunner()
+    const feeds: unknown[] = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      eventStreams: {
+        'funding.rate': [
+          { id: 'funding-1', ts: 899_000, payload: { fundingRate: 0.0001 } },
+        ],
+      },
+      strategy: {
+        id: 'funding-feed-readiness',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'r1' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_funding_positive',
+              nodeType: 'predicate',
+              payload: {
+                kind: 'fundingRateCondition',
+                params: { schemaRef: 'funding', sourceFeedId: 'funding.rate', operator: 'GT', value: 0 },
+              },
+            },
+          ],
+        },
+        fn: (ctx) => {
+          feeds.push((ctx as { dataSourceFeeds?: unknown }).dataSourceFeeds)
+          return { type: 'NOOP', reason: 'funding.observed' }
+        },
+      },
+      dataRange: { fromTs: 900_000, toTs: 900_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 0, closeTime: 900_000, close: 100 }),
+      ],
+    })
+
+    expect(feeds).toEqual([
+      {
+        'funding.rate': { schema: 'funding', permissionGranted: true, hasData: true },
+      },
+    ])
+  })
+
   it('opens from webhook event fixture and exits on stop loss', async () => {
     const runner = createRunner()
 

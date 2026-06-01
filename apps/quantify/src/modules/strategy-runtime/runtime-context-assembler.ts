@@ -34,6 +34,7 @@ export function buildRuntimeMarketContext(input: BuildRuntimeMarketContextInput)
   }
 
   const eventInbox = buildEventInboxAsOf(input.eventStreams, input.primaryCloseTs)
+  const dataSourceFeeds = buildDataSourceFeeds(input.eventStreams, eventInbox)
 
   return {
     data: { [primaryLegId]: dataForPrimary },
@@ -43,7 +44,37 @@ export function buildRuntimeMarketContext(input: BuildRuntimeMarketContextInput)
     timestamp: input.primaryCloseTs,
     params: input.params,
     ...(eventInbox ? { eventInbox } : {}),
+    ...(dataSourceFeeds ? { dataSourceFeeds } : {}),
   }
+}
+
+function buildDataSourceFeeds(
+  eventStreams: Record<string, RuntimeEvent[]> | undefined,
+  eventInbox: Record<string, RuntimeEvent[]> | undefined,
+) {
+  if (!eventStreams) return undefined
+
+  const feeds: Record<string, {
+    schema: 'funding' | 'liquidation' | 'webhook_event'
+    permissionGranted: boolean
+    hasData: boolean
+  }> = {}
+
+  for (const feedId of Object.keys(eventStreams)) {
+    feeds[feedId] = {
+      schema: inferEventFeedSchema(feedId),
+      permissionGranted: true,
+      hasData: Boolean(eventInbox?.[feedId]?.length),
+    }
+  }
+
+  return Object.keys(feeds).length > 0 ? feeds : undefined
+}
+
+function inferEventFeedSchema(feedId: string): 'funding' | 'liquidation' | 'webhook_event' {
+  if (/funding/iu.test(feedId)) return 'funding'
+  if (/liquidation|liq/iu.test(feedId)) return 'liquidation'
+  return 'webhook_event'
 }
 
 function buildEventInboxAsOf(

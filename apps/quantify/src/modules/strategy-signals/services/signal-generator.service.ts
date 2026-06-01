@@ -66,6 +66,8 @@ import { normalizeGatewayBars } from '@/modules/market-data/services/market-data
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { OkxMarketDataProvider } from '@/modules/market-data/providers/okx-market-data.provider'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { WorkloadShardingService } from '@/modules/sharding/services/workload-sharding.service'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 import {
@@ -229,6 +231,7 @@ export class SignalGeneratorService {
     @Optional() private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
     @Optional() private readonly runtimeExecutionStateRepository?: StrategyRuntimeExecutionStateRepository,
     @Optional() private readonly workloadSharding?: WorkloadShardingService,
+    @Optional() private readonly okxMarketDataProvider?: OkxMarketDataProvider,
   ) {
     this.schedulerStage = new SignalGenerationSchedulerStage(
       this.schedulerRegistry,
@@ -971,6 +974,7 @@ export class SignalGeneratorService {
     strategyInstanceId: string,
     requiredEventStreams: readonly RuntimeEventStreamRequirement[],
     primaryCloseTs: number,
+    symbolCode: string,
   ): Promise<
     | { available: true; eventStreams?: Record<string, RuntimeEvent[]>; missingSignalIds: [] }
     | { available: false; eventStreams?: undefined; missingSignalIds: string[] }
@@ -979,7 +983,13 @@ export class SignalGeneratorService {
       return { available: true, missingSignalIds: [] }
     }
 
-    const signalIds = [...new Set(requiredEventStreams.map(stream => stream.signalId))]
+    const webhookStreams = requiredEventStreams.filter(stream => stream.provider === 'webhook')
+    const externalFeedStreams = requiredEventStreams.filter(stream => stream.provider === 'external_feed')
+    const signalIds = [...new Set(webhookStreams.map(stream => stream.signalId))]
+    if (signalIds.length === 0) {
+      const eventStreams = await this.loadPublishedExternalFeedStreams(externalFeedStreams, primaryCloseTs, symbolCode)
+      return { available: true, eventStreams, missingSignalIds: [] }
+    }
     const subscriptions = await this.generatorRepository.findActiveWebhookSignalSubscriptions({
       strategyInstanceId,
       signalIds,
@@ -1001,7 +1011,7 @@ export class SignalGeneratorService {
       until: new Date(primaryCloseTs),
     })
     const eventStreams: Record<string, RuntimeEvent[]> = {}
-    for (const stream of requiredEventStreams) {
+    for (const stream of webhookStreams) {
       const streamEvents = events
         .filter(event => event.signalId === stream.signalId)
         .map((event): RuntimeEvent => ({
@@ -1011,8 +1021,36 @@ export class SignalGeneratorService {
         }))
       eventStreams[stream.sourceFeedId] = streamEvents
     }
+    Object.assign(eventStreams, await this.loadPublishedExternalFeedStreams(externalFeedStreams, primaryCloseTs, symbolCode))
 
     return { available: true, eventStreams, missingSignalIds: [] }
+  }
+
+  private async loadPublishedExternalFeedStreams(
+    externalFeedStreams: readonly RuntimeEventStreamRequirement[],
+    primaryCloseTs: number,
+    symbolCode: string,
+  ): Promise<Record<string, RuntimeEvent[]>> {
+    const eventStreams: Record<string, RuntimeEvent[]> = {}
+    for (const stream of externalFeedStreams) {
+      const since = primaryCloseTs - (stream.ttlMs ?? 60_000)
+      if (stream.schemaRef === 'funding' && this.okxMarketDataProvider) {
+        eventStreams[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchFundingRateEvents({
+          symbol: symbolCode,
+          startMs: since,
+          endMs: primaryCloseTs,
+        })
+      } else if (stream.schemaRef === 'liquidation' && this.okxMarketDataProvider) {
+        eventStreams[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchLiquidationEvents({
+          symbol: symbolCode,
+          startMs: since,
+          endMs: primaryCloseTs,
+        })
+      } else {
+        eventStreams[stream.sourceFeedId] = []
+      }
+    }
+    return eventStreams
   }
 
   private normalizeRuntimeEventPayload(payload: Prisma.JsonValue, signalId: string): Record<string, unknown> {
@@ -1073,6 +1111,7 @@ export class SignalGeneratorService {
         instance.id,
         requiredEventStreams,
         currentPrimaryCloseTs,
+        symbol.code,
       )
       if (!eventStreams.available) {
         return {

@@ -187,6 +187,10 @@ function evaluatePredicate(
       return evaluateGenericCross(node, ctx, executionModel, exprIndex, seriesMemo)
     case 'externalSignal':
       return evaluateExternalSignal(node, ctx)
+    case 'fundingRateCondition':
+      return evaluateFundingRateCondition(node, ctx)
+    case 'liquidationCondition':
+      return evaluateLiquidationCondition(node, ctx)
     case 'sequence':
       return evaluateGenericSequence(node, values, ctx)
     case 'TOUCH_LEVEL_DOWN':
@@ -251,6 +255,106 @@ function evaluateExternalSignal(
       || payload.signal_id === signalId
       || payload.id === signalId
   })
+}
+
+function evaluateFundingRateCondition(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const sourceFeedId = readStringParam(node.payload.params, 'sourceFeedId') ?? 'funding.rate'
+  const threshold = readNumberParam(node.payload.params, 'value') ?? 0
+  const operator = readStringParam(node.payload.params, 'operator') ?? 'GT'
+  const events = readVisibleFeedEvents(ctx, sourceFeedId)
+
+  return events.some((event) => {
+    const payload = readPayloadRecord(event.payload)
+    if (!payload) return false
+    const rate = readFirstNumber(payload, ['fundingRate', 'funding_rate', 'rate', 'value'])
+    return rate !== null && compareByOperator(rate, threshold, operator)
+  })
+}
+
+function evaluateLiquidationCondition(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const sourceFeedId = readStringParam(node.payload.params, 'sourceFeedId') ?? 'liquidation.events'
+  const threshold = readNumberParam(node.payload.params, 'value') ?? 0
+  const operator = readStringParam(node.payload.params, 'operator') ?? 'GT'
+  const side = readStringParam(node.payload.params, 'side')?.toLowerCase() ?? 'both'
+  const events = readVisibleFeedEvents(ctx, sourceFeedId)
+
+  return events.some((event) => {
+    const payload = readPayloadRecord(event.payload)
+    if (!payload) return false
+    const eventSide = readFirstString(payload, ['side', 'liquidationSide', 'positionSide', 'direction'])?.toLowerCase() ?? 'both'
+    if (side !== 'both' && eventSide !== side) return false
+    const notional = readFirstNumber(payload, ['notionalUsd', 'notionalUSDT', 'notional_usd', 'notional', 'value'])
+    return notional !== null && compareByOperator(notional, threshold, operator)
+  })
+}
+
+function readVisibleFeedEvents(
+  ctx: StrategyExecutionContextV1,
+  sourceFeedId: string,
+): ReadonlyArray<{ id?: unknown; ts?: unknown; payload?: unknown }> {
+  const inbox = ctx.eventInbox?.[sourceFeedId]
+  if (!Array.isArray(inbox)) return []
+  const now = resolveRuntimeTimestamp(ctx)
+  return inbox.filter(event => {
+    if (!event || typeof event !== 'object') return false
+    const ts = (event as { ts?: unknown }).ts
+    return now === null || (typeof ts === 'number' && Number.isFinite(ts) && ts <= now)
+  })
+}
+
+function readPayloadRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readFirstNumber(record: Record<string, unknown>, keys: readonly string[]): number | null {
+  for (const key of keys) {
+    const raw = record[key]
+    const value = typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && raw.trim() !== ''
+        ? Number(raw)
+        : NaN
+    if (Number.isFinite(value)) return value
+  }
+  return null
+}
+
+function readFirstString(record: Record<string, unknown>, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const raw = record[key]
+    if (typeof raw === 'string' && raw.trim() !== '') return raw.trim()
+  }
+  return null
+}
+
+function compareByOperator(left: number, right: number, operator: string): boolean {
+  switch (operator.toUpperCase()) {
+    case 'GTE':
+    case '>=':
+      return left >= right
+    case 'LT':
+    case '<':
+      return left < right
+    case 'LTE':
+    case '<=':
+      return left <= right
+    case 'EQ':
+    case '=':
+    case '==':
+      return left === right
+    case 'GT':
+    case '>':
+    default:
+      return left > right
+  }
 }
 
 function resolveRuntimeTimestamp(ctx: StrategyExecutionContextV1): number | null {
@@ -1220,6 +1324,19 @@ function readStringParam(
 ): string | null {
   const raw = params?.[key]
   return typeof raw === 'string' && raw.length > 0 ? raw : null
+}
+
+function readNumberParam(
+  params: Record<string, number | string | boolean> | undefined,
+  key: string,
+): number | null {
+  const raw = params?.[key]
+  const value = typeof raw === 'number'
+    ? raw
+    : typeof raw === 'string' && raw.trim() !== ''
+      ? Number(raw)
+      : NaN
+  return Number.isFinite(value) ? value : null
 }
 
 function readStringValue(value: unknown): string | null {

@@ -99,4 +99,41 @@ describe('resolveRuntimeDataPlan', () => {
       },
     ])
   })
+
+  it('derives funding and liquidation event stream requirements from market data predicates', () => {
+    const plan = resolveRuntimeDataPlan({
+      strictParams: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+      },
+      stateTimeframes: [],
+      scriptMetadata: {},
+      orchestrationScopes: [],
+      exprPool: [
+        {
+          id: 'expr_funding_positive',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'fundingRateCondition',
+            params: { schemaRef: 'funding', sourceFeedId: 'funding.rate', operator: 'GT', value: 0 },
+          },
+        },
+        {
+          id: 'expr_long_liq_gt_1m',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'liquidationCondition',
+            params: { schemaRef: 'liquidation', sourceFeedId: 'liquidation.events', operator: 'GT', side: 'long', value: 1_000_000 },
+          },
+        },
+      ],
+    })
+
+    expect(plan.eventStreams).toEqual(expect.arrayContaining([
+      { provider: 'external_feed', signalId: 'funding.rate', sourceFeedId: 'funding.rate', schemaRef: 'funding' },
+      { provider: 'external_feed', signalId: 'liquidation.events', sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' },
+    ]))
+  })
 })
