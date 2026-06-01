@@ -157,13 +157,9 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    // 设计稿 jsx:2216 header padding 14px 16px 12px（上 14 / 左右 16 / 下 12）。
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        QzSpacing.lg,
-        0,
-        QzSpacing.sm,
-        QzSpacing.sm,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Row(
         children: <Widget>[
           Text(
@@ -673,7 +669,11 @@ class _PerfList extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool empty = (stats.tradesTotal ?? 0) == 0;
+    // 设计稿 jsx:2334：tradesTotal==0 || winRate<0.01（winRate 为分数 0..1，
+    // 对应此处 winRatePct 为整数百分比 0..100，winRate<0.01 即 winRatePct<1）
+    // → 视为无有效成交，展示空态。
+    final bool empty =
+        (stats.tradesTotal ?? 0) == 0 || stats.winRatePct < 1;
     if (empty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -698,7 +698,7 @@ class _PerfList extends StatelessWidget {
         QzSpacing.lg,
       ),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         decoration: BoxDecoration(
           color: c.bgElev,
           border: Border.all(color: c.borderSoft),

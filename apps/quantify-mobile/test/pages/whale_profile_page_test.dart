@@ -111,19 +111,19 @@ void main() {
     );
     final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
 
-    await _openTab(tester, '现货持仓 ${p.spotHoldings.length}');
+    await _openTab(tester, '现货持仓');
     expect(find.text(p.spotHoldings.first.sym), findsWidgets);
 
-    await _openTab(tester, '永续合约持仓 ${p.perpHoldings.length}');
+    await _openTab(tester, '永续合约持仓');
     expect(find.text(p.perpHoldings.first.pnlDisplay), findsOneWidget);
 
-    await _openTab(tester, '挂单 ${p.openOrders.length}');
+    await _openTab(tester, '挂单');
     expect(find.text(p.openOrders.first.id), findsOneWidget);
 
-    await _openTab(tester, '最近成交 ${p.recentTrades.length}');
+    await _openTab(tester, '最近成交');
     expect(find.text(p.recentTrades.first.feeDisplay), findsOneWidget);
 
-    await _openTab(tester, '历史委托 ${p.histOrders.length}');
+    await _openTab(tester, '历史委托');
     expect(find.text(p.histOrders.first.id), findsOneWidget);
   });
 
@@ -263,5 +263,29 @@ void main() {
     expect(find.text(unknown), findsWidgets);
     // tab 骨架：基本信息 tab 默认渲染 P&L 图。
     expect(find.byType(WhalePnlChart), findsOneWidget);
+  });
+
+  testWidgets('Tab 计数：拆为独立 chip（label 与数字为分离 Text）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
+    // 计数不再拼接进 label：组合文本「现货持仓 N」不应存在。
+    expect(find.text('现货持仓 ${p.spotHoldings.length}'), findsNothing);
+    // label 与计数为独立 Text widget。
+    expect(find.text('现货持仓'), findsOneWidget);
+    expect(find.text('${p.spotHoldings.length}'), findsWidgets);
+  });
+
+  testWidgets('最近成交行：补分享 icon 按钮', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    await _openTab(tester, '最近成交');
+    expect(find.byIcon(Icons.ios_share), findsWidgets);
   });
 }

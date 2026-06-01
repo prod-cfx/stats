@@ -116,6 +116,30 @@ void main() {
     expect(find.text('0.00%'), findsOneWidget);
   });
 
+  testWidgets('空态：胜率 < 1% 即便有成交也判定为空（对齐 jsx:2334）', (
+    WidgetTester tester,
+  ) async {
+    // tradesTotal > 0 但 winRatePct < 1 → 视为无有效成交。
+    await _open(
+      tester,
+      stats: const WhaleTradeStats(
+        pnlDisplay: r'$0',
+        pnlTone: 'flat',
+        winRatePct: 0,
+        realizedDisplay: r'$0',
+        unrealizedDisplay: r'$0',
+        longPct: 0,
+        shortPct: 0,
+        assetPerf: <WhaleAssetPerf>[],
+        tradesTotal: 5,
+        wins: 0,
+        losses: 5,
+      ),
+    );
+
+    expect(find.text('暂无成交记录'), findsOneWidget);
+  });
+
   testWidgets('金额正负色：正盈亏 up 色 / 负盈亏 dn 色', (WidgetTester tester) async {
     final WhaleTradeStats s = mockWhaleProfiles[_knownAddress]!.stats;
     await _open(tester, stats: s);

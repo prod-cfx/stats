@@ -3932,6 +3932,12 @@ abstract class AppLocalizations {
   /// **'复制地址'**
   String get whaleProfileCopyTooltip;
 
+  /// No description provided for @whaleProfileShareTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get whaleProfileShareTooltip;
+
   /// No description provided for @whaleProfileCopied.
   ///
   /// In zh, this message translates to:

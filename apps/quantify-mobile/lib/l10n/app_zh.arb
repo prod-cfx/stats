@@ -774,6 +774,7 @@
   "whaleProfileTabOverview": "概览",
   "whaleProfileTabStats": "交易统计",
   "whaleProfileCopyTooltip": "复制地址",
+  "whaleProfileShareTooltip": "分享",
   "whaleProfileCopied": "地址已复制",
   "whaleProfileAssetSummaryPrefix": "主要持仓 · ",
   "whaleProfileHoldingsValueLabel": "总持仓估值",

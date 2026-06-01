@@ -483,6 +483,16 @@ class WhaleTradeRow extends StatelessWidget {
               Text(t.kind, style: TextStyle(color: c.textMid)),
             ],
           ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.ios_share, size: 17),
+            color: c.textDim,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            tooltip: l10n.whaleProfileShareTooltip,
+            onPressed: () {},
+          ),
         ],
       ),
       grid: _Grid(

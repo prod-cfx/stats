@@ -2041,6 +2041,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileCopyTooltip => 'Copy address';
 
   @override
+  String get whaleProfileShareTooltip => 'Share';
+
+  @override
   String get whaleProfileCopied => 'Address copied';
 
   @override

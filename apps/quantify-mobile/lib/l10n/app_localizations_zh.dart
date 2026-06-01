@@ -2000,6 +2000,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileCopyTooltip => '复制地址';
 
   @override
+  String get whaleProfileShareTooltip => '分享';
+
+  @override
   String get whaleProfileCopied => '地址已复制';
 
   @override

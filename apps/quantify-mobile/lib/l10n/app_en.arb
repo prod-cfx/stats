@@ -762,6 +762,7 @@
   "whaleProfileTabOverview": "Overview",
   "whaleProfileTabStats": "Trade stats",
   "whaleProfileCopyTooltip": "Copy address",
+  "whaleProfileShareTooltip": "Share",
   "whaleProfileCopied": "Address copied",
   "whaleProfileAssetSummaryPrefix": "Holdings · ",
   "whaleProfileHoldingsValueLabel": "Total holdings value",

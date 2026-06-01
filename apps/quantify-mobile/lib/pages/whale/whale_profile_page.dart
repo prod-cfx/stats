@@ -239,18 +239,58 @@ class _TabBar extends StatelessWidget {
         unselectedLabelStyle:
             const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
         tabs: <Widget>[
-          Tab(text: l10n.whaleProfileTabBasic),
-          Tab(text: _withCount(l10n.whaleProfileTabSpot, profile.spotHoldings.length)),
-          Tab(text: _withCount(l10n.whaleProfileTabPerp, profile.perpHoldings.length)),
-          Tab(text: _withCount(l10n.whaleProfileTabOrders, profile.openOrders.length)),
-          Tab(text: _withCount(l10n.whaleProfileTabTrades, profile.recentTrades.length)),
-          Tab(text: _withCount(l10n.whaleProfileTabHistory, profile.histOrders.length)),
+          _CountTab(index: 0, label: l10n.whaleProfileTabBasic),
+          _CountTab(index: 1, label: l10n.whaleProfileTabSpot, count: profile.spotHoldings.length),
+          _CountTab(index: 2, label: l10n.whaleProfileTabPerp, count: profile.perpHoldings.length),
+          _CountTab(index: 3, label: l10n.whaleProfileTabOrders, count: profile.openOrders.length),
+          _CountTab(index: 4, label: l10n.whaleProfileTabTrades, count: profile.recentTrades.length),
+          _CountTab(index: 5, label: l10n.whaleProfileTabHistory, count: profile.histOrders.length),
         ],
       ),
     );
   }
+}
 
-  String _withCount(String label, int n) => n > 0 ? '$label $n' : label;
+/// Tab label + 独立计数 chip（设计稿 jsx:745-750）：计数为单独 mono 小字，
+/// inactive 灰、active 紫；count 为 0 时不渲染。
+class _CountTab extends StatelessWidget {
+  const _CountTab({required this.index, required this.label, this.count = 0});
+  final int index;
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final TabController controller = DefaultTabController.of(context);
+    return Tab(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(label),
+          if (count > 0) ...<Widget>[
+            const SizedBox(width: 4),
+            AnimatedBuilder(
+              animation: controller.animation!,
+              builder: (BuildContext context, Widget? _) {
+                final bool active = controller.index == index;
+                return Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: active ? c.accent : c.textFaint,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// 基本信息 tab：P&L 图（顶部金额 + 可交互 pill 行 + 底部抽屉）
