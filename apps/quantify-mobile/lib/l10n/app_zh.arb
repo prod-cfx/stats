@@ -614,6 +614,14 @@
   "@strategySearchNoResults": {
     "placeholders": { "query": {} }
   },
+  "strategySearchStratWinRate": "胜率 {win}%",
+  "@strategySearchStratWinRate": {
+    "placeholders": { "win": { "type": "int" } }
+  },
+  "strategySearchStratFollow": "{users} 跟单",
+  "@strategySearchStratFollow": {
+    "placeholders": { "users": { "type": "int" } }
+  },
   "strategyCategoryTrend": "趋势",
   "strategyCategoryGrid": "网格",
   "strategyCategoryArbitrage": "套利",

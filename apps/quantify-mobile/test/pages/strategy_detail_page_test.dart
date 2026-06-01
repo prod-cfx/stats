@@ -60,7 +60,6 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   QzTheme? theme,
   String id = _kId,
   Map<String, Object> initialPrefs = const <String, Object>{},
-  String id = _kId,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   SharedPreferences.setMockInitialValues(initialPrefs);
@@ -177,7 +176,7 @@ void main() {
   });
 
   // 选中 tab 的 period 文本 fontWeight=w600（见 _EquityTimeframeTabs build）。
-  bool _tfSelected(WidgetTester tester, String tfName) {
+  bool tfSelected(WidgetTester tester, String tfName) {
     final Text label = tester.widget<Text>(
       find.descendant(
         of: find.byKey(Key('strategy-detail-tf-$tfName')),
@@ -190,27 +189,27 @@ void main() {
   testWidgets('equity 默认 tab：period=30D 的策略默认选中 d30（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-grid-btc');
-    expect(_tfSelected(tester, 'd30'), isTrue);
-    expect(_tfSelected(tester, 'd90'), isFalse);
+    expect(tfSelected(tester, 'd30'), isTrue);
+    expect(tfSelected(tester, 'd90'), isFalse);
   });
 
   testWidgets('equity 默认 tab：period=90D 的策略默认选中 d90（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-dca-sol');
-    expect(_tfSelected(tester, 'd90'), isTrue);
-    expect(_tfSelected(tester, 'd30'), isFalse);
+    expect(tfSelected(tester, 'd90'), isTrue);
+    expect(tfSelected(tester, 'd30'), isFalse);
   });
 
   testWidgets('equity 默认 tab：period=7D 的策略默认选中 d7（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-mom-doge');
-    expect(_tfSelected(tester, 'd7'), isTrue);
+    expect(tfSelected(tester, 'd7'), isTrue);
   });
 
   testWidgets('equity 默认 tab：不可映射 period=14D 回退 d30（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-grid-stable');
-    expect(_tfSelected(tester, 'd30'), isTrue);
+    expect(tfSelected(tester, 'd30'), isTrue);
   });
 
   testWidgets('equity 默认 tab：手动切换后不再被 period 覆盖（#1888）',
@@ -221,8 +220,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
-    expect(_tfSelected(tester, 'd7'), isTrue);
-    expect(_tfSelected(tester, 'd90'), isFalse);
+    expect(tfSelected(tester, 'd7'), isTrue);
+    expect(tfSelected(tester, 'd90'), isFalse);
   });
 
   testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘监控 /me/live（#1825）',

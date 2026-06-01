@@ -1673,6 +1673,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String strategySearchStratWinRate(int win) {
+    return 'Win $win%';
+  }
+
+  @override
+  String strategySearchStratFollow(int users) {
+    return '$users followers';
+  }
+
+  @override
   String get strategyCategoryTrend => 'Trend';
 
   @override

@@ -24,9 +24,11 @@ const List<String> _kTrending = <String>[
 
 /// 单次联合搜索结果：作者聚合需要从策略命中里派生。
 class _AuthorHit {
-  const _AuthorHit({required this.name, required this.count});
+  const _AuthorHit(
+      {required this.name, required this.count, required this.verified});
   final String name;
   final int count;
+  final bool verified;
 }
 
 /// 策略广场全屏联合搜索 overlay（设计稿 `StratSearchOverlay` line 243-421）。
@@ -143,16 +145,21 @@ class _StrategySearchOverlayState
         await repo.listMarket(query: q, pageSize: 50);
     if (!mounted || seq != _reqSeq) return;
 
+    // 作者聚合：count 计数 + verified 取该作者任一策略的认证态（设计稿 `a.verified`）。
     final Map<String, int> authorCount = <String, int>{};
+    final Map<String, bool> authorVerified = <String, bool>{};
     for (final StrategyMarketItem it in page.items) {
       final String a = it.card.author;
       authorCount[a] = (authorCount[a] ?? 0) + 1;
+      authorVerified[a] = (authorVerified[a] ?? false) || it.card.verified;
     }
     final List<_AuthorHit> authors = authorCount.entries
         .where((MapEntry<String, int> e) =>
             e.key.toLowerCase().contains(lower))
-        .map((MapEntry<String, int> e) =>
-            _AuthorHit(name: e.key, count: e.value))
+        .map((MapEntry<String, int> e) => _AuthorHit(
+            name: e.key,
+            count: e.value,
+            verified: authorVerified[e.key] ?? false))
         .toList(growable: false);
 
     setState(() {
@@ -325,7 +332,7 @@ class _StrategySearchOverlayState
           ),
         ],
         _sectionLabel(l10n.strategySearchGuessLabel, c),
-        for (final StrategyMarketItem it in _guess) _stratRow(it, c),
+        for (final StrategyMarketItem it in _guess) _stratRow(it, l10n, c),
       ],
     );
   }
@@ -375,7 +382,7 @@ class _StrategySearchOverlayState
             '${l10n.strategySearchStrategySection} · ${_stratHits.length}',
             c,
           ),
-          for (final StrategyMarketItem it in _stratHits) _stratRow(it, c),
+          for (final StrategyMarketItem it in _stratHits) _stratRow(it, l10n, c),
         ],
       ],
     );
@@ -419,16 +426,19 @@ class _StrategySearchOverlayState
     );
   }
 
+  String _categoryLabel(StrategyCategory cat, AppLocalizations l10n) =>
+      switch (cat) {
+        StrategyCategory.trend => l10n.strategyCategoryTrend,
+        StrategyCategory.grid => l10n.strategyCategoryGrid,
+        StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
+        StrategyCategory.reversal => l10n.strategyCategoryReversal,
+        StrategyCategory.hedge => l10n.strategyCategoryHedge,
+        StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
+        StrategyCategory.all => l10n.commonAll,
+      };
+
   Widget _tagChip(StrategyCategory cat, AppLocalizations l10n, QzColorScheme c) {
-    final String label = switch (cat) {
-      StrategyCategory.trend => l10n.strategyCategoryTrend,
-      StrategyCategory.grid => l10n.strategyCategoryGrid,
-      StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
-      StrategyCategory.reversal => l10n.strategyCategoryReversal,
-      StrategyCategory.hedge => l10n.strategyCategoryHedge,
-      StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
-      StrategyCategory.all => l10n.commonAll,
-    };
+    final String label = _categoryLabel(cat, l10n);
     return GestureDetector(
       key: Key('strategy-search-tag-${cat.name}'),
       onTap: () => _pickTag(cat, label),
@@ -464,11 +474,26 @@ class _StrategySearchOverlayState
             QzAvatar(label: initial, size: 32),
             const SizedBox(width: QzSpacing.sm),
             Expanded(
-              child: Text(a.name,
-                  style: TextStyle(
-                      color: c.text,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
+              child: Row(
+                children: <Widget>[
+                  Flexible(
+                    child: Text(a.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: c.text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  if (a.verified) ...<Widget>[
+                    const SizedBox(width: 5),
+                    Icon(Icons.verified,
+                        key: Key('strategy-search-author-verified-${a.name}'),
+                        size: 13,
+                        color: c.accent),
+                  ],
+                ],
+              ),
             ),
             Text(
               l10n.strategySearchAuthorCount(a.count),
@@ -480,9 +505,11 @@ class _StrategySearchOverlayState
     );
   }
 
-  Widget _stratRow(StrategyMarketItem item, QzColorScheme c) {
+  Widget _stratRow(
+      StrategyMarketItem item, AppLocalizations l10n, QzColorScheme c) {
     final StrategyCard card = item.card;
-    final bool up = card.pnlPercent >= 0;
+    final bool up = item.stats.cagr >= 0;
+    final int winPct = (item.stats.winRate * 100).round();
     return GestureDetector(
       key: Key('strategy-search-strat-${card.id}'),
       behavior: HitTestBehavior.opaque,
@@ -500,13 +527,21 @@ class _StrategySearchOverlayState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(card.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: c.text,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(card.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: c.text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 6),
+                      _stratTagChip(card.category, l10n, c),
+                    ],
+                  ),
                   const SizedBox(height: 3),
                   Row(
                     children: <Widget>[
@@ -519,7 +554,11 @@ class _StrategySearchOverlayState
                             fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(width: QzSpacing.md),
-                      Text('${item.stats.users}',
+                      Text(l10n.strategySearchStratWinRate(winPct),
+                          style:
+                              TextStyle(color: c.textDim, fontSize: 11)),
+                      const SizedBox(width: QzSpacing.md),
+                      Text(l10n.strategySearchStratFollow(item.stats.users),
                           style:
                               TextStyle(color: c.textDim, fontSize: 11)),
                     ],
@@ -529,6 +568,24 @@ class _StrategySearchOverlayState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 策略行名字旁的类型标签 chip（设计稿 `StratRow` 紫 pill）。
+  Widget _stratTagChip(
+      StrategyCategory cat, AppLocalizations l10n, QzColorScheme c) {
+    return Container(
+      key: Key('strategy-search-strat-tag-${cat.name}'),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        _categoryLabel(cat, l10n),
+        style: TextStyle(
+            color: c.accent, fontSize: 10, fontWeight: FontWeight.w600),
       ),
     );
   }

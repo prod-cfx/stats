@@ -118,6 +118,36 @@ void main() {
         findsWidgets);
   });
 
+  testWidgets('策略行：名字旁有类型标签 chip + 底行胜率/跟单 (#1887)',
+      (WidgetTester tester) async {
+    await _pumpOverlay(tester);
+    await _enter(tester, 'Alpha');
+    // 至少一条策略命中行带类型标签 chip（trend 分类 fixture）
+    expect(
+        find.byKey(const Key('strategy-search-strat-tag-trend')),
+        findsWidgets);
+    // 底行「胜率 x%」「x 跟单」文案出现（中文 locale）
+    expect(
+        find.byWidgetPredicate((Widget w) =>
+            w is Text && (w.data?.startsWith('胜率 ') ?? false)),
+        findsWidgets);
+    expect(
+        find.byWidgetPredicate((Widget w) =>
+            w is Text && (w.data?.endsWith(' 跟单') ?? false)),
+        findsWidgets);
+  });
+
+  testWidgets('作者行：verified 作者显示认证标 (#1887)',
+      (WidgetTester tester) async {
+    await _pumpOverlay(tester);
+    await _enter(tester, 'Alpha');
+    // 'Alpha Hunter' fixture verified:true → 认证标存在
+    expect(
+        find.byKey(
+            const Key('strategy-search-author-verified-Alpha Hunter')),
+        findsOneWidget);
+  });
+
   testWidgets('有查询：命中分类标签段 (#1824)',
       (WidgetTester tester) async {
     final result = await _pumpOverlay(tester);

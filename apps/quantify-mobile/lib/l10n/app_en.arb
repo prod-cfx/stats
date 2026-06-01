@@ -602,6 +602,8 @@
   "strategySearchTagChip": "{tag} strategies",
   "strategySearchAuthorCount": "{count} strategies",
   "strategySearchNoResults": "No results for \"{query}\"",
+  "strategySearchStratWinRate": "Win {win}%",
+  "strategySearchStratFollow": "{users} followers",
   "strategyCategoryTrend": "Trend",
   "strategyCategoryGrid": "Grid",
   "strategyCategoryArbitrage": "Arbitrage",

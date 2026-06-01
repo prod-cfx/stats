@@ -1632,6 +1632,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String strategySearchStratWinRate(int win) {
+    return '胜率 $win%';
+  }
+
+  @override
+  String strategySearchStratFollow(int users) {
+    return '$users 跟单';
+  }
+
+  @override
   String get strategyCategoryTrend => '趋势';
 
   @override

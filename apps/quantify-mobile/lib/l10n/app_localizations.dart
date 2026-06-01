@@ -3224,6 +3224,18 @@ abstract class AppLocalizations {
   /// **'未找到「{query}」相关结果'**
   String strategySearchNoResults(Object query);
 
+  /// No description provided for @strategySearchStratWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率 {win}%'**
+  String strategySearchStratWinRate(int win);
+
+  /// No description provided for @strategySearchStratFollow.
+  ///
+  /// In zh, this message translates to:
+  /// **'{users} 跟单'**
+  String strategySearchStratFollow(int users);
+
   /// No description provided for @strategyCategoryTrend.
   ///
   /// In zh, this message translates to:
