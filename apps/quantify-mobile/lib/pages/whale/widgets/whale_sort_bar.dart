@@ -117,11 +117,9 @@ class _SortPill extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Icon(Icons.arrow_drop_up, size: 12, color: upColor),
-                Transform.translate(
-                  offset: const Offset(0, -6),
-                  child: Icon(Icons.arrow_drop_down, size: 12, color: downColor),
-                ),
+                _TriangleIcon(color: upColor, up: true),
+                const SizedBox(height: 2),
+                _TriangleIcon(color: downColor, up: false),
               ],
             ),
           ],
@@ -129,4 +127,54 @@ class _SortPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 自绘升/降序三角，对齐设计稿 7×4 SVG 三角（jsx:520-525）。
+class _TriangleIcon extends StatelessWidget {
+  const _TriangleIcon({required this.color, required this.up});
+
+  final Color color;
+  final bool up;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(7, 4),
+      painter: _TrianglePainter(color: color, up: up),
+    );
+  }
+}
+
+class _TrianglePainter extends CustomPainter {
+  _TrianglePainter({required this.color, required this.up});
+
+  final Color color;
+  final bool up;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final Path path = Path();
+    if (up) {
+      path
+        ..moveTo(size.width / 2, 0)
+        ..lineTo(size.width, size.height)
+        ..lineTo(0, size.height)
+        ..close();
+    } else {
+      path
+        ..moveTo(size.width / 2, size.height)
+        ..lineTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..close();
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_TrianglePainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.up != up;
 }
