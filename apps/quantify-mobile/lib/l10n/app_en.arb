@@ -1126,6 +1126,17 @@
   "whaleRuleChannelTelegramUnbound": "Bind Telegram first to enable Telegram push",
   "whaleLiveCoinPush": "Coin push",
   "whaleLiveCoinPushDone": "Coin push enabled",
+  "whaleLiveCreateMonitor": "New Monitor",
+  "whaleLiveThresholdPrefix": "≥ $",
+  "whaleLiveFeedEmpty": "No matching alerts",
+  "whaleLiveSecondsUntilUpdate": "Updates in {seconds}s",
+  "@whaleLiveSecondsUntilUpdate": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "whaleLiveWinSort": "Win rate",
   "whaleLiveWinSortNone": "Win rate: unsorted",
   "whaleLiveWinSortDesc": "Win rate: descending",

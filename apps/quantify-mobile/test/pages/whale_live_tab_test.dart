@@ -11,6 +11,7 @@ import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_live_tab.dart';
 import 'package:quantify_mobile/pages/whale/widgets/qz_whale_row.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_net_flow_card.dart';
 import 'package:quantify_mobile/widgets/qz_chip.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -100,7 +101,7 @@ void main() {
     expect(mockWhaleEvents.length, greaterThanOrEqualTo(30));
   });
 
-  testWidgets('默认筛选条对齐设计稿：BTC chip 选中 + ≥\$5M pill 选中 + LIVE 可见 (issue #1604)',
+  testWidgets('默认顶部交互区对齐设计稿：BTC chip 选中 + 阈值输入框默认 500000 + 创建监控 + 倒计时 + LIVE (issue #1986)',
       (WidgetTester tester) async {
     final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
     await _pump(tester, repo);
@@ -110,13 +111,87 @@ void main() {
         tester.widget<QzChip>(find.widgetWithText(QzChip, 'BTC'));
     expect(btcChip.tone, QzChipTone.accent, reason: '默认必须选中 BTC');
 
-    expect(find.widgetWithText(QzChip, '≥ \$5M'), findsOneWidget,
-        reason: '默认阈值显示为 ≥ \$5M pill');
-    final QzChip amountChip =
-        tester.widget<QzChip>(find.widgetWithText(QzChip, '≥ \$5M'));
-    expect(amountChip.tone, QzChipTone.accent, reason: '阈值 pill 应为选中态');
+    // 阈值改为自由文本输入框，默认 500000（验收标准 [1]）。
+    final Finder thresholdField = find.byType(TextField);
+    expect(thresholdField, findsOneWidget, reason: '阈值应为自由文本输入框');
+    final TextField field = tester.widget<TextField>(thresholdField);
+    expect(field.controller?.text, '500000', reason: '默认阈值 500000');
+    expect(find.text('≥ \$'), findsOneWidget, reason: '输入框前缀 ≥ \$');
+
+    // 旧预设档位 pill 不应再存在。
+    expect(find.widgetWithText(QzChip, '≥ \$5M'), findsNothing);
+
+    // 「创建监控」按钮替换「关注币种推送」（验收标准 [2]）。
+    expect(find.text('创建监控'), findsOneWidget);
+    expect(find.text('关注币种推送'), findsNothing);
+
+    // 「{n} 秒后更新」倒计时（验收标准 [3]）。
+    expect(find.textContaining('秒后更新'), findsOneWidget);
 
     expect(find.text('LIVE'), findsOneWidget);
+  });
+
+  testWidgets('阈值输入框改值后过滤生效：输入 9000000 过滤掉低于该值的事件 (issue #1986)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    final int before =
+        tester.widgetList<QzWhaleRow>(find.byType(QzWhaleRow)).length;
+    await tester.enterText(find.byType(TextField), '9000000');
+    await tester.pump();
+    final int after =
+        tester.widgetList<QzWhaleRow>(find.byType(QzWhaleRow)).length;
+    expect(after, lessThanOrEqualTo(before),
+        reason: '提高阈值后可见行数不应增加');
+    for (final QzWhaleRow row
+        in tester.widgetList<QzWhaleRow>(find.byType(QzWhaleRow))) {
+      expect(row.event.amountUsd, greaterThanOrEqualTo(9000000));
+    }
+  });
+
+  testWidgets('feed 空态展示「无匹配推送」(issue #1986)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    // 设极高阈值清空 feed。
+    await tester.enterText(find.byType(TextField), '999999999999');
+    await tester.pump();
+    expect(find.byType(QzWhaleRow), findsNothing);
+    expect(find.text('无匹配推送'), findsOneWidget);
+  });
+
+  testWidgets('点击「创建监控」打开监控规则弹窗并 prefill 阈值 (issue #1986)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    await tester.enterText(find.byType(TextField), '750000');
+    await tester.pump();
+    await tester.tap(find.text('创建监控'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 弹窗标题（新增态）可见，且阈值字段被 prefill 为输入值。
+    final Iterable<TextField> fields =
+        tester.widgetList<TextField>(find.byType(TextField));
+    final bool hasPrefilled =
+        fields.any((TextField f) => f.controller?.text == '750000');
+    expect(hasPrefilled, isTrue, reason: '监控弹窗应 prefill 阈值 750000');
+  });
+
+  testWidgets('WhaleNetFlowCard 从实时巨鲸顶部移除 (issue #1986)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    expect(find.byType(WhaleNetFlowCard), findsNothing,
+        reason: '实时巨鲸段不再渲染净流入 hero 卡');
   });
 
   testWidgets('默认 BTC chip 下所有 row 都是 BTC', (WidgetTester tester) async {
@@ -220,7 +295,12 @@ void main() {
     expect(repo.hasListener, isTrue, reason: 'tab mount 后应订阅 stream');
 
     router.go('/elsewhere');
-    await tester.pumpAndSettle();
+    // 倒计时 Timer.periodic 使 pumpAndSettle 无法收敛，改用有界 pump 循环推进
+    // 路由转场直至旧页卸载（issue #1986）。
+    await tester.pump();
+    for (int i = 0; i < 20 && find.byType(WhaleLiveTab).evaluate().isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.byType(WhaleLiveTab), findsNothing);
     expect(repo.hasListener, isFalse,

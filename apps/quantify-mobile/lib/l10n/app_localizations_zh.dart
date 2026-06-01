@@ -2961,6 +2961,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleLiveCoinPushDone => '已开启关注币种推送';
 
   @override
+  String get whaleLiveCreateMonitor => '创建监控';
+
+  @override
+  String get whaleLiveThresholdPrefix => '≥ \$';
+
+  @override
+  String get whaleLiveFeedEmpty => '无匹配推送';
+
+  @override
+  String whaleLiveSecondsUntilUpdate(int seconds) {
+    return '$seconds 秒后更新';
+  }
+
+  @override
   String get whaleLiveWinSort => '胜率';
 
   @override

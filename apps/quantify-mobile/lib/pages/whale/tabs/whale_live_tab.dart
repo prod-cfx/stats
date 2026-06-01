@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/mock/fixtures/whale_extras.dart';
 import '../../../data/models/whale_models.dart';
+import '../../../data/models/whale_watch_models.dart';
 import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
@@ -14,7 +14,7 @@ import '../../../widgets/qz_chip.dart';
 import '../../../widgets/qz_empty_state.dart';
 import '../../../widgets/qz_spinner.dart';
 import '../widgets/qz_whale_row.dart';
-import '../widgets/whale_net_flow_card.dart';
+import '../widgets/whale_watch_rule_sheet.dart';
 
 /// 巨鲸动向 — 实时 tab body（issue #1560，原 [`WhaleFeedPage`] 拆分而来）。
 ///
@@ -54,9 +54,16 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   /// 状态不一致。
   String _symbolFilter = 'BTC';
 
-  /// issue #1604：默认阈值 ≥ $5M，对齐设计稿 `m-screens-4.jsx` 的 `WhaleLive`
-  /// filter strip。
-  double _minAmount = 5_000_000;
+  /// issue #1986：阈值改为自由文本输入，默认 500000（对齐设计稿
+  /// `m-screens-4.jsx:1596-1665` 的 threshold 输入框）。`_minAmount` 由输入框
+  /// 解析得到，供 feed 过滤复用。
+  double _minAmount = 500_000;
+  late final TextEditingController _thresholdCtrl;
+
+  /// issue #1986：顶部「{n} 秒后更新」倒计时。固定 15s 周期循环递减，纯展示态。
+  static const int _countdownStart = 15;
+  int _tick = _countdownStart;
+  Timer? _countdownTimer;
 
   /// issue #1983：胜率排序状态，默认不排序（按时间分组）。
   _WinSort _winSort = _WinSort.none;
@@ -74,14 +81,50 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   @override
   void initState() {
     super.initState();
+    _thresholdCtrl = TextEditingController(text: _minAmount.toStringAsFixed(0));
+    _startCountdown();
     _load();
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _thresholdCtrl.dispose();
     _sub?.cancel();
     _sub = null;
     super.dispose();
+  }
+
+  /// issue #1986：每秒递减倒计时，归零后回到 [_countdownStart] 循环；纯展示。
+  void _startCountdown() {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _tick = _tick <= 1 ? _countdownStart : _tick - 1);
+    });
+  }
+
+  /// issue #1986：输入框文本解析为阈值。空 / 非法 → 0（不过滤）。
+  void _onThresholdChanged(String raw) {
+    final double parsed =
+        double.tryParse(raw.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0;
+    setState(() => _minAmount = parsed);
+  }
+
+  /// issue #1986：打开监控规则弹窗，prefill 当前阈值 + 选中币种（备注）。
+  Future<void> _openCreateMonitor() async {
+    final WatchRule? rule = await WhaleWatchRuleSheet.show(
+      context,
+      prefillThreshold: _minAmount > 0 ? _minAmount : 500_000,
+      prefillAlias: _symbolFilter.isEmpty ? null : _symbolFilter,
+    );
+    if (rule == null || !mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context).whaleLiveCoinPushDone),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -160,12 +203,9 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     return ListView(
       padding: EdgeInsets.zero,
       children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.sm),
-          child: const WhaleNetFlowCard(stat: mockWhaleNetFlowBtc1h),
-        ),
         _buildFilterBar(c, l10n),
+        _buildThresholdRow(c, l10n),
+        _buildCountdownRow(c, l10n),
         _buildActionRow(c, l10n),
         if (_winSort == _WinSort.none)
           ..._buildGroupedFeed(visible, l10n, c)
@@ -180,59 +220,117 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     );
   }
 
-  /// 阈值候选项（issue #1604）。集中定义供 filter pill 标签和 picker sheet 共用。
-  List<({String label, double value})> _amountChoices(AppLocalizations l10n) {
-    return <({String label, double value})>[
-      (label: l10n.whaleFilterAll, value: 0),
-      (label: '≥ \$1M', value: 1_000_000),
-      (label: '≥ \$5M', value: 5_000_000),
-      (label: '≥ \$10M', value: 10_000_000),
-    ];
-  }
-
-  String _amountPillLabel(AppLocalizations l10n) {
-    for (final ({String label, double value}) c in _amountChoices(l10n)) {
-      if (c.value == _minAmount) return c.label;
-    }
-    return l10n.whaleFilterAll;
-  }
-
-  Future<void> _openAmountPicker(
-      BuildContext context, AppLocalizations l10n, QzColorScheme c) async {
-    final List<({String label, double value})> choices = _amountChoices(l10n);
-    final double? picked = await showModalBottomSheet<double>(
-      context: context,
-      backgroundColor: c.bgElev,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (BuildContext ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              for (final ({String label, double value}) choice in choices)
-                ListTile(
-                  title: Text(
-                    choice.label,
-                    style: TextStyle(color: c.text, fontSize: 14),
+  /// issue #1986：阈值自由文本输入框 `≥ $___`（mono）+ 「创建监控」按钮。
+  /// 对齐设计稿 `m-screens-4.jsx:1596-1640`：左输入右按钮的 1fr/auto 栅格。
+  Widget _buildThresholdRow(QzColorScheme c, AppLocalizations l10n) {
+    return Container(
+      width: double.infinity,
+      color: c.bgElev,
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, 10),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: c.bgElev,
+                border: Border.all(color: c.border),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Text(
+                    l10n.whaleLiveThresholdPrefix,
+                    style: TextStyle(color: c.textDim, fontSize: 12),
                   ),
-                  trailing: choice.value == _minAmount
-                      ? Icon(Icons.check, size: 18, color: c.marketUp)
-                      : null,
-                  onTap: () => Navigator.of(ctx).pop(choice.value),
-                ),
-            ],
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: TextField(
+                      controller: _thresholdCtrl,
+                      onChanged: _onThresholdChanged,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: QzFont.mono,
+                        fontFamilyFallback: QzFont.monoFallback,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        );
-      },
+          const SizedBox(width: QzSpacing.sm),
+          SizedBox(
+            height: 36,
+            child: FilledButton(
+              onPressed: _openCreateMonitor,
+              style: FilledButton.styleFrom(
+                backgroundColor: c.accent,
+                foregroundColor: c.accentOn,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                l10n.whaleLiveCreateMonitor,
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
-    if (picked == null) return;
-    setState(() => _minAmount = picked);
   }
 
-  /// issue #1769 / #1983：关注币种推送（可用，mock SnackBar）+ 胜率排序 toggle。
-  /// 胜率排序循环 none → desc → asc → none，对齐设计稿 `m-screens-4.jsx:595`。
+  /// issue #1986：右对齐「{n} 秒后更新」倒计时 + pulse 点，对齐设计稿
+  /// `m-screens-4.jsx:1642-1665`。
+  Widget _buildCountdownRow(QzColorScheme c, AppLocalizations l10n) {
+    return Container(
+      width: double.infinity,
+      color: c.bgElev,
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, 0, QzSpacing.lg, QzSpacing.md),
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: c.marketUp,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            l10n.whaleLiveSecondsUntilUpdate(_tick),
+            style: TextStyle(
+              color: c.textMid,
+              fontSize: 11,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// issue #1983：胜率排序 toggle，循环 none → desc → asc → none，
+  /// 对齐设计稿 `m-screens-4.jsx:595`。
   Widget _buildActionRow(QzColorScheme c, AppLocalizations l10n) {
     return Container(
       width: double.infinity,
@@ -241,32 +339,6 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
           QzSpacing.lg, 0, QzSpacing.lg, QzSpacing.sm),
       child: Row(
         children: <Widget>[
-          FilledButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                SnackBar(
-                  content: Text(l10n.whaleLiveCoinPushDone),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            },
-            icon: const Icon(Icons.notifications_active_outlined, size: 14),
-            label: Text(
-              l10n.whaleLiveCoinPush,
-              style: const TextStyle(fontSize: 12),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: c.accent,
-              foregroundColor: c.accentOn,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(0, 30),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-            ),
-          ),
-          const SizedBox(width: QzSpacing.sm),
           _buildWinSortButton(c, l10n),
         ],
       ),
@@ -318,7 +390,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
       return <Widget>[
         Padding(
           padding: const EdgeInsets.symmetric(vertical: QzSpacing.xl),
-          child: QzEmptyState(title: l10n.whaleFeedEmpty),
+          child: QzEmptyState(title: l10n.whaleLiveFeedEmpty),
         ),
       ];
     }
@@ -344,8 +416,8 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     ];
   }
 
-  /// issue #1604：单行 filter strip = 资产 chips · 阈值 pill · LIVE。
-  /// 资产 chips 用横向滚动避免窄屏溢出；阈值 pill 点击打开 sheet 替代裸 dropdown。
+  /// 单行 filter strip = 资产 chips · LIVE。阈值已迁出为独立输入行（issue #1986），
+  /// 故此处仅保留币种 chips + LIVE pulse；资产 chips 横向滚动避免窄屏溢出。
   Widget _buildFilterBar(QzColorScheme c, AppLocalizations l10n) {
     return Container(
       width: double.infinity,
@@ -379,16 +451,6 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
                     ),
                     const SizedBox(width: QzSpacing.sm),
                   ],
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _openAmountPicker(context, l10n, c),
-                    child: QzChip(
-                      label: _amountPillLabel(l10n),
-                      tone: _minAmount > 0
-                          ? QzChipTone.accent
-                          : QzChipTone.neutral,
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -406,7 +468,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
       return <Widget>[
         Padding(
           padding: const EdgeInsets.symmetric(vertical: QzSpacing.xl),
-          child: QzEmptyState(title: l10n.whaleFeedEmpty),
+          child: QzEmptyState(title: l10n.whaleLiveFeedEmpty),
         ),
       ];
     }

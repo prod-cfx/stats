@@ -75,10 +75,13 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('默认在「实时巨鲸」子 Tab：含关注币种推送 + 胜率排序（可用）',
+  testWidgets('默认在「实时巨鲸」子 Tab：含创建监控 + 阈值输入 + 倒计时 + 胜率排序（可用）',
       (WidgetTester tester) async {
     await _pump(tester);
-    expect(find.text('关注币种推送'), findsOneWidget);
+    // issue #1986：顶部交互区为创建监控 + 自由阈值输入 + 倒计时，取代关注币种推送。
+    expect(find.text('创建监控'), findsOneWidget);
+    expect(find.text('关注币种推送'), findsNothing);
+    expect(find.textContaining('秒后更新'), findsOneWidget);
     // issue #1983：胜率排序 toggle 已启用（不再禁用）。
     final Finder winSort = find.ancestor(
       of: find.text('胜率'),
@@ -94,8 +97,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('永续合约总价值'), findsWidgets);
     expect(find.text('保证金使用率'), findsWidgets);
-    // 创建监控按钮存在。
-    expect(find.text('创建监控'), findsOneWidget);
+    // 创建监控按钮存在（issue #1986：实时巨鲸子 Tab 也有同名按钮，IndexedStack
+    // 保活下两处共存，故用 findsWidgets）。
+    expect(find.text('创建监控'), findsWidgets);
   });
 
   testWidgets('切到「通知中心」：渲染通知行 + 全部已读，点击后未读清零',

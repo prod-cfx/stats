@@ -20,20 +20,38 @@ class WhaleWatchRuleSheet {
     BuildContext context, {
     WatchRule? initial,
     bool tgBound = false,
+    double? prefillThreshold,
+    String? prefillAlias,
   }) {
     return QzSheet.show<WatchRule>(
       context: context,
-      builder: (BuildContext ctx) =>
-          _RuleForm(initial: initial, tgBound: tgBound),
+      builder: (BuildContext ctx) => _RuleForm(
+        initial: initial,
+        tgBound: tgBound,
+        prefillThreshold: prefillThreshold,
+        prefillAlias: prefillAlias,
+      ),
     );
   }
 }
 
 class _RuleForm extends StatefulWidget {
-  const _RuleForm({this.initial, this.tgBound = false});
+  const _RuleForm({
+    this.initial,
+    this.tgBound = false,
+    this.prefillThreshold,
+    this.prefillAlias,
+  });
 
   final WatchRule? initial;
   final bool tgBound;
+
+  /// 新增态预填阈值（来自实时巨鲸顶部输入框，issue #1986）。仅 [initial] 为 null
+  /// 时生效；编辑态以既有规则字段为准。
+  final double? prefillThreshold;
+
+  /// 新增态预填备注（来自实时巨鲸选中币种，issue #1986）。同样仅新增态生效。
+  final String? prefillAlias;
 
   @override
   State<_RuleForm> createState() => _RuleFormState();
@@ -54,10 +72,16 @@ class _RuleFormState extends State<_RuleForm> {
     super.initState();
     final WatchRule? r = widget.initial;
     _addressCtrl = TextEditingController(text: r?.address ?? '');
-    _aliasCtrl = TextEditingController(text: r?.alias ?? '');
+    _aliasCtrl = TextEditingController(
+      // 编辑态以既有 alias 为准；新增态可经 prefillAlias 预填（issue #1986）。
+      text: r != null ? (r.alias ?? '') : (widget.prefillAlias ?? ''),
+    );
     _thresholdCtrl = TextEditingController(
-      // 新增态阈值默认 500000，对齐设计稿 CreateMonitorSheet。
-      text: r == null ? '500000' : r.thresholdUsd.toStringAsFixed(0),
+      // 新增态阈值默认 500000，对齐设计稿 CreateMonitorSheet；调用方可经
+      // prefillThreshold 覆盖（issue #1986：实时巨鲸顶部输入框直达）。
+      text: r == null
+          ? (widget.prefillThreshold ?? 500000).toStringAsFixed(0)
+          : r.thresholdUsd.toStringAsFixed(0),
     );
     _channels = <WatchRuleChannel>{
       ...?r?.channels,

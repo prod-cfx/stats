@@ -5772,6 +5772,30 @@ abstract class AppLocalizations {
   /// **'已开启关注币种推送'**
   String get whaleLiveCoinPushDone;
 
+  /// No description provided for @whaleLiveCreateMonitor.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建监控'**
+  String get whaleLiveCreateMonitor;
+
+  /// No description provided for @whaleLiveThresholdPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'≥ \$'**
+  String get whaleLiveThresholdPrefix;
+
+  /// No description provided for @whaleLiveFeedEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配推送'**
+  String get whaleLiveFeedEmpty;
+
+  /// No description provided for @whaleLiveSecondsUntilUpdate.
+  ///
+  /// In zh, this message translates to:
+  /// **'{seconds} 秒后更新'**
+  String whaleLiveSecondsUntilUpdate(int seconds);
+
   /// No description provided for @whaleLiveWinSort.
   ///
   /// In zh, this message translates to:

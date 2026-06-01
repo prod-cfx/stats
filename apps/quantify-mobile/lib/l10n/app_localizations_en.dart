@@ -3015,6 +3015,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleLiveCoinPushDone => 'Coin push enabled';
 
   @override
+  String get whaleLiveCreateMonitor => 'New Monitor';
+
+  @override
+  String get whaleLiveThresholdPrefix => '≥ \$';
+
+  @override
+  String get whaleLiveFeedEmpty => 'No matching alerts';
+
+  @override
+  String whaleLiveSecondsUntilUpdate(int seconds) {
+    return 'Updates in ${seconds}s';
+  }
+
+  @override
   String get whaleLiveWinSort => 'Win rate';
 
   @override
