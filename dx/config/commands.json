@@ -567,7 +567,7 @@
         },
         "startup": {
           "mode": "pm2",
-          "serviceName": "quantify"
+          "serviceName": "quantify-api"
         },
         "deploy": {
           "keepReleases": 5,

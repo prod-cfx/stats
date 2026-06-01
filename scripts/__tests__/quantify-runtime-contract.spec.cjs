@@ -61,10 +61,17 @@ test('quantify declares runtime deps needed by bundled workspace config code', (
 
 test('quantify pm2 ecosystem runs API and backtest worker as separate processes', () => {
   const ecosystem = require(path.join(repoRoot, 'dx/deploy/ecosystem.quantify.config.cjs'))
+  const commands = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'dx/config/commands.json'), 'utf8'),
+  )
 
   assert.deepEqual(
     ecosystem.apps.map(app => app.name),
     ['quantify-api', 'quantify-backtest-worker'],
+  )
+  assert.equal(
+    commands.deploy.quantify.backendDeploy.startup.serviceName,
+    'quantify-api',
   )
 
   const api = ecosystem.apps.find(app => app.name === 'quantify-api')
@@ -74,4 +81,12 @@ test('quantify pm2 ecosystem runs API and backtest worker as separate processes'
   assert.equal(worker.args, 'apps/quantify/src/worker.backtest.js')
   assert.equal(api.env.PORT, 3010)
   assert.equal(worker.env.PORT, undefined)
+})
+
+test('quantify ci deploy starts backtest worker after dx api deploy', () => {
+  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+
+  assert.match(workflow, /npx -y @ranger1\/dx@\$\{\{ env\.DX_VERSION \}\} --config-dir \.\/\.tmp\/dx-config deploy quantify/)
+  assert.match(workflow, /pm2 startOrReload \.\/ecosystem\.quantify\.config\.cjs --only quantify-backtest-worker --update-env/)
+  assert.match(workflow, /quantify-backtest-worker pm2 process missing/)
 })
