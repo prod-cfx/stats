@@ -2197,6 +2197,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileTradeCount => '交易次数';
 
   @override
+  String get whaleProfileMaxDrawdown => '最大回撤';
+
+  @override
+  String get whaleProfileFilledOrders => '已成交订单';
+
+  @override
+  String get whaleProfileClosedCount => '平仓次数';
+
+  @override
   String get whaleProfilePeriodWeek => '1周';
 
   @override

@@ -58,6 +58,10 @@ const Map<String, WhaleProfile> mockWhaleProfiles = <String, WhaleProfile>{
       tradesTotal: 42,
       wins: 33,
       losses: 9,
+      // 占位值对齐设计稿 PerfCard :1050；真值接入由 #1682 承接。
+      maxDrawdownDisplay: '8202846.96%',
+      filledOrders: 2000,
+      closedCount: 1025,
       // 资产表现 6 条（设计稿 ASSET_PERF :2362）。保留旧 symbol/pctDisplay/tone
       // 向后兼容既有详情页 `_AssetPerfRow`，并补统计弹窗设计字段。
       assetPerf: <WhaleAssetPerf>[
@@ -472,6 +476,9 @@ const Map<String, WhaleProfile> mockWhaleProfiles = <String, WhaleProfile>{
       tradesTotal: 28,
       wins: 20,
       losses: 8,
+      maxDrawdownDisplay: '312.45%',
+      filledOrders: 1340,
+      closedCount: 688,
       assetPerf: <WhaleAssetPerf>[
         WhaleAssetPerf(
             symbol: 'SOL',
@@ -671,6 +678,9 @@ WhaleProfile buildFallbackWhaleProfile(String address) {
       tradesTotal: 16,
       wins: 10,
       losses: 6,
+      maxDrawdownDisplay: '87.30%',
+      filledOrders: 560,
+      closedCount: 274,
       assetPerf: <WhaleAssetPerf>[
         WhaleAssetPerf(
             symbol: 'BTC',

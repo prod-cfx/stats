@@ -2238,6 +2238,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileTradeCount => 'Trade count';
 
   @override
+  String get whaleProfileMaxDrawdown => 'Max drawdown';
+
+  @override
+  String get whaleProfileFilledOrders => 'Filled orders';
+
+  @override
+  String get whaleProfileClosedCount => 'Closed count';
+
+  @override
   String get whaleProfilePeriodWeek => '1W';
 
   @override

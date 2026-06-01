@@ -11,9 +11,10 @@ import '../../../theme/tokens.dart';
 /// 基本信息 tab 的 2×2 stat 卡（设计稿 `WhaleProfileDetail` `:816`）。
 ///
 /// 前 3 张消费 [WhaleProfileStatCards]（账户总价值 / 可用保证金 / 总持仓价值，
-/// 含 donut + extras 行）；第 4 张交易表现卡只用 model 有的字段
-/// （胜率 [WhaleTradeStats.winRatePct] + 交易次数 [WhaleTradeStats.tradesTotal]），
-/// 不引入无 model 来源的占位数据。
+/// 含 donut + extras 行）；第 4 张交易表现卡渲染 4 指标（设计稿 `PerfCard` `:1050`）：
+/// 胜率 [WhaleTradeStats.winRatePct] / 最大回撤 [WhaleTradeStats.maxDrawdownDisplay]
+/// / 已成交订单 [WhaleTradeStats.filledOrders] / 平仓次数 [WhaleTradeStats.closedCount]。
+/// 后 3 项当前由 fixtures 占位，真值依赖读路径 #1682。
 class WhaleStatCards extends StatelessWidget {
   const WhaleStatCards({super.key, required this.cards, required this.stats});
 
@@ -174,7 +175,9 @@ class _ExtraRow extends StatelessWidget {
   }
 }
 
-/// 第 4 张交易表现卡——仅胜率 + 交易次数（model-backed）。
+/// 第 4 张交易表现卡——4 指标（设计稿 `PerfCard` `:1050`）：
+/// 胜率 + 最大回撤为主组，已成交订单 + 平仓次数为 extras 行。
+/// 最大回撤 / 已成交订单 / 平仓次数当前由 fixtures 占位，真值依赖 #1682。
 class _PerfCard extends StatelessWidget {
   const _PerfCard({required this.stats});
   final WhaleTradeStats stats;
@@ -198,8 +201,18 @@ class _PerfCard extends StatelessWidget {
           ),
           const SizedBox(height: QzSpacing.xs),
           _Metric(
-            label: l10n.whaleProfileTradeCount,
-            value: '${stats.tradesTotal ?? 0}',
+            label: l10n.whaleProfileMaxDrawdown,
+            value: stats.maxDrawdownDisplay ?? '-',
+          ),
+          const SizedBox(height: QzSpacing.xs),
+          _Metric(
+            label: l10n.whaleProfileFilledOrders,
+            value: '${stats.filledOrders ?? 0}',
+          ),
+          const SizedBox(height: QzSpacing.xs),
+          _Metric(
+            label: l10n.whaleProfileClosedCount,
+            value: '${stats.closedCount ?? 0}',
           ),
         ],
       ),

@@ -116,6 +116,9 @@ class WhaleTradeStats {
     this.tradesTotal,
     this.wins,
     this.losses,
+    this.maxDrawdownDisplay,
+    this.filledOrders,
+    this.closedCount,
     this.positionPerf = const <WhalePositionPerf>[],
   });
 
@@ -137,6 +140,12 @@ class WhaleTradeStats {
   final int? tradesTotal; // 交易次数
   final int? wins; // 盈利笔数
   final int? losses; // 亏损笔数
+
+  /// 交易表现卡补充指标（设计稿 `PerfCard` `:1050`）。真值依赖读路径 #1682，
+  /// 当前由 fixtures 占位。
+  final String? maxDrawdownDisplay; // 最大回撤，例如 '8202846.96%'
+  final int? filledOrders; // 已成交订单
+  final int? closedCount; // 平仓次数
 
   /// 按仓位的表现（统计弹窗子 tab）。
   final List<WhalePositionPerf> positionPerf;

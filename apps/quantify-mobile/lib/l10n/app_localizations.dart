@@ -4322,6 +4322,24 @@ abstract class AppLocalizations {
   /// **'交易次数'**
   String get whaleProfileTradeCount;
 
+  /// No description provided for @whaleProfileMaxDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'最大回撤'**
+  String get whaleProfileMaxDrawdown;
+
+  /// No description provided for @whaleProfileFilledOrders.
+  ///
+  /// In zh, this message translates to:
+  /// **'已成交订单'**
+  String get whaleProfileFilledOrders;
+
+  /// No description provided for @whaleProfileClosedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'平仓次数'**
+  String get whaleProfileClosedCount;
+
   /// No description provided for @whaleProfilePeriodWeek.
   ///
   /// In zh, this message translates to:

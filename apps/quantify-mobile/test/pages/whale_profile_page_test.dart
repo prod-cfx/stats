@@ -93,6 +93,11 @@ void main() {
     // 4 stat 卡：账户总价值标签 + 交易表现标签。
     expect(find.text('账户总价值'), findsOneWidget);
     expect(find.text('交易表现'), findsOneWidget);
+    // 交易表现卡 4 指标标签（#1907，设计稿 PerfCard :1050）。
+    expect(find.text('胜率'), findsWidgets);
+    expect(find.text('最大回撤'), findsOneWidget);
+    expect(find.text('已成交订单'), findsOneWidget);
+    expect(find.text('平仓次数'), findsOneWidget);
     // 永续总价值卡标签。
     expect(find.text('永续合约总价值'), findsOneWidget);
   });

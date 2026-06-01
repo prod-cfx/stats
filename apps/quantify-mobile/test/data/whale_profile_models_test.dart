@@ -37,6 +37,13 @@ void main() {
       expect(p.stats.feeAdjustedPnlDisplay, isNotNull);
     });
 
+    test('交易表现卡补充 3 指标 fixtures 有值（#1907）', () {
+      // 占位值对齐设计稿 PerfCard :1050；真值接入由 #1682 承接。
+      expect(p.stats.maxDrawdownDisplay, '8202846.96%');
+      expect(p.stats.filledOrders, 2000);
+      expect(p.stats.closedCount, 1025);
+    });
+
     test('永续持仓数值与展示串符号一致（pnlN<0 → display 带 -）', () {
       for (final WhalePerpHolding h in p.perpHoldings) {
         if (h.pnlN < 0) {
