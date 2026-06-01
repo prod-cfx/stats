@@ -225,6 +225,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
                   upColor: c.marketUp,
                   downColor: c.marketDown,
                   gridColor: c.borderSoft,
+                  labelColor: c.textFaint,
                 ),
                 const SizedBox(height: QzSpacing.xs),
                 _DepthLegend(coin: _coin),
