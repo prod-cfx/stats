@@ -292,6 +292,87 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestResultTradesSuffix => '';
 
   @override
+  String get backtestResultStatusDone => 'Backtest Complete';
+
+  @override
+  String get backtestResultStatusDeployable => 'Deployable';
+
+  @override
+  String get backtestResultCumulativeNetValue => 'Cumulative Return';
+
+  @override
+  String get backtestResultCagrInline => 'CAGR';
+
+  @override
+  String get backtestResultDownloadLabel => 'Download backtest report';
+
+  @override
+  String get backtestResultMetricCagr => 'CAGR';
+
+  @override
+  String get backtestResultMetricCagrSub => 'Annualized compound return';
+
+  @override
+  String get backtestResultMetricSharpeSub => 'Risk-adjusted return';
+
+  @override
+  String get backtestResultMetricMaxDrawdownSub => 'Peak-to-trough drop';
+
+  @override
+  String get backtestResultMetricCalmar => 'Calmar';
+
+  @override
+  String get backtestResultMetricCalmarSub => 'CAGR / |MDD|';
+
+  @override
+  String get backtestResultMetricWinRate => 'Win Rate';
+
+  @override
+  String get backtestResultMetricWinRateSub => 'Share of winning trades';
+
+  @override
+  String get backtestResultMetricProfitLoss => 'Profit/Loss';
+
+  @override
+  String get backtestResultMetricProfitLossSub => 'Avg win / avg loss';
+
+  @override
+  String get backtestResultMetricTotalTrades => 'Total Trades';
+
+  @override
+  String get backtestResultMetricTotalTradesSub => 'Entries over 5 years';
+
+  @override
+  String get backtestResultMetricAvgHold => 'Avg Hold';
+
+  @override
+  String get backtestResultMetricAvgHoldSub => 'Duration per trade';
+
+  @override
+  String get backtestResultTabMonthly => 'Monthly Return';
+
+  @override
+  String get backtestResultTabTrades => 'Trades';
+
+  @override
+  String get backtestResultTabRisk => 'Risk';
+
+  @override
+  String get backtestResultMonthlyLegendLabel => 'Monthly % return';
+
+  @override
+  String get backtestResultTradeSideLong => 'L';
+
+  @override
+  String get backtestResultTradeSideShort => 'S';
+
+  @override
+  String get backtestResultTradeHoldPrefix => 'Hold';
+
+  @override
+  String get backtestResultAiPrefix => 'AI assessment: ';
+
+  @override
   String get backtestProgressTitle => 'Backtesting in Progress';
 
   @override

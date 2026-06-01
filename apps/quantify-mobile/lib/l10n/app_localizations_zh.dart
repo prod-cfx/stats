@@ -282,6 +282,87 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestResultTradesSuffix => ' 笔';
 
   @override
+  String get backtestResultStatusDone => '回测完成';
+
+  @override
+  String get backtestResultStatusDeployable => '可部署';
+
+  @override
+  String get backtestResultCumulativeNetValue => '累计净值';
+
+  @override
+  String get backtestResultCagrInline => 'CAGR';
+
+  @override
+  String get backtestResultDownloadLabel => '下载回测报告';
+
+  @override
+  String get backtestResultMetricCagr => 'CAGR';
+
+  @override
+  String get backtestResultMetricCagrSub => '年化复合收益';
+
+  @override
+  String get backtestResultMetricSharpeSub => '风险调整后收益';
+
+  @override
+  String get backtestResultMetricMaxDrawdownSub => '峰谷最大跌幅';
+
+  @override
+  String get backtestResultMetricCalmar => 'Calmar';
+
+  @override
+  String get backtestResultMetricCalmarSub => 'CAGR / |MDD|';
+
+  @override
+  String get backtestResultMetricWinRate => '胜率';
+
+  @override
+  String get backtestResultMetricWinRateSub => '盈利交易占比';
+
+  @override
+  String get backtestResultMetricProfitLoss => '盈亏比';
+
+  @override
+  String get backtestResultMetricProfitLossSub => '平均盈/平均亏';
+
+  @override
+  String get backtestResultMetricTotalTrades => '总交易';
+
+  @override
+  String get backtestResultMetricTotalTradesSub => '5 年内开仓次数';
+
+  @override
+  String get backtestResultMetricAvgHold => '平均持仓';
+
+  @override
+  String get backtestResultMetricAvgHoldSub => '单笔交易时长';
+
+  @override
+  String get backtestResultTabMonthly => '月度回报';
+
+  @override
+  String get backtestResultTabTrades => '交易记录';
+
+  @override
+  String get backtestResultTabRisk => '风险分析';
+
+  @override
+  String get backtestResultMonthlyLegendLabel => '月度 % 收益';
+
+  @override
+  String get backtestResultTradeSideLong => '多';
+
+  @override
+  String get backtestResultTradeSideShort => '空';
+
+  @override
+  String get backtestResultTradeHoldPrefix => '持仓';
+
+  @override
+  String get backtestResultAiPrefix => 'AI 评估：';
+
+  @override
   String get backtestProgressTitle => '回测进行中';
 
   @override

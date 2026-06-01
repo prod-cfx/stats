@@ -618,6 +618,168 @@ abstract class AppLocalizations {
   /// **' 笔'**
   String get backtestResultTradesSuffix;
 
+  /// No description provided for @backtestResultStatusDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测完成'**
+  String get backtestResultStatusDone;
+
+  /// No description provided for @backtestResultStatusDeployable.
+  ///
+  /// In zh, this message translates to:
+  /// **'可部署'**
+  String get backtestResultStatusDeployable;
+
+  /// No description provided for @backtestResultCumulativeNetValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计净值'**
+  String get backtestResultCumulativeNetValue;
+
+  /// No description provided for @backtestResultCagrInline.
+  ///
+  /// In zh, this message translates to:
+  /// **'CAGR'**
+  String get backtestResultCagrInline;
+
+  /// No description provided for @backtestResultDownloadLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载回测报告'**
+  String get backtestResultDownloadLabel;
+
+  /// No description provided for @backtestResultMetricCagr.
+  ///
+  /// In zh, this message translates to:
+  /// **'CAGR'**
+  String get backtestResultMetricCagr;
+
+  /// No description provided for @backtestResultMetricCagrSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'年化复合收益'**
+  String get backtestResultMetricCagrSub;
+
+  /// No description provided for @backtestResultMetricSharpeSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'风险调整后收益'**
+  String get backtestResultMetricSharpeSub;
+
+  /// No description provided for @backtestResultMetricMaxDrawdownSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'峰谷最大跌幅'**
+  String get backtestResultMetricMaxDrawdownSub;
+
+  /// No description provided for @backtestResultMetricCalmar.
+  ///
+  /// In zh, this message translates to:
+  /// **'Calmar'**
+  String get backtestResultMetricCalmar;
+
+  /// No description provided for @backtestResultMetricCalmarSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'CAGR / |MDD|'**
+  String get backtestResultMetricCalmarSub;
+
+  /// No description provided for @backtestResultMetricWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get backtestResultMetricWinRate;
+
+  /// No description provided for @backtestResultMetricWinRateSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈利交易占比'**
+  String get backtestResultMetricWinRateSub;
+
+  /// No description provided for @backtestResultMetricProfitLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏比'**
+  String get backtestResultMetricProfitLoss;
+
+  /// No description provided for @backtestResultMetricProfitLossSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'平均盈/平均亏'**
+  String get backtestResultMetricProfitLossSub;
+
+  /// No description provided for @backtestResultMetricTotalTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'总交易'**
+  String get backtestResultMetricTotalTrades;
+
+  /// No description provided for @backtestResultMetricTotalTradesSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'5 年内开仓次数'**
+  String get backtestResultMetricTotalTradesSub;
+
+  /// No description provided for @backtestResultMetricAvgHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'平均持仓'**
+  String get backtestResultMetricAvgHold;
+
+  /// No description provided for @backtestResultMetricAvgHoldSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'单笔交易时长'**
+  String get backtestResultMetricAvgHoldSub;
+
+  /// No description provided for @backtestResultTabMonthly.
+  ///
+  /// In zh, this message translates to:
+  /// **'月度回报'**
+  String get backtestResultTabMonthly;
+
+  /// No description provided for @backtestResultTabTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易记录'**
+  String get backtestResultTabTrades;
+
+  /// No description provided for @backtestResultTabRisk.
+  ///
+  /// In zh, this message translates to:
+  /// **'风险分析'**
+  String get backtestResultTabRisk;
+
+  /// No description provided for @backtestResultMonthlyLegendLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'月度 % 收益'**
+  String get backtestResultMonthlyLegendLabel;
+
+  /// No description provided for @backtestResultTradeSideLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'多'**
+  String get backtestResultTradeSideLong;
+
+  /// No description provided for @backtestResultTradeSideShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'空'**
+  String get backtestResultTradeSideShort;
+
+  /// No description provided for @backtestResultTradeHoldPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get backtestResultTradeHoldPrefix;
+
+  /// No description provided for @backtestResultAiPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 评估：'**
+  String get backtestResultAiPrefix;
+
   /// No description provided for @backtestProgressTitle.
   ///
   /// In zh, this message translates to:

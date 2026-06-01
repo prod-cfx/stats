@@ -85,16 +85,17 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('backtest-progress-card')), findsOneWidget);
     expect(find.text('回测进行中'), findsOneWidget);
-    // 结果卡此时尚未出现
-    expect(find.text('回测结果'), findsNothing);
+    // 结果卡此时尚未出现（结果卡状态行含「回测完成」chip）
+    expect(find.text('回测完成'), findsNothing);
 
     // 推进进度计时器（120ms × ~25 tick）直到完成
     for (int i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 120));
     }
     expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
-    expect(find.text('回测结果'), findsOneWidget);
-    expect(find.text('+18.20%'), findsOneWidget);
+    // 富结果卡（#1895）：状态行「回测完成」+ Hero 累计净值 +312.4%
+    expect(find.text('回测完成'), findsOneWidget);
+    expect(find.text('+312.4%'), findsOneWidget);
     expect(find.byKey(const Key('ai-deploy-button')), findsOneWidget);
   });
 
@@ -119,7 +120,7 @@ void main() {
     await tester.tap(find.byKey(const Key('backtest-progress-cancel')));
     await tester.pump();
     expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
-    expect(find.text('回测结果'), findsNothing);
+    expect(find.text('回测完成'), findsNothing);
   });
 
   testWidgets('回测抽屉：自定义区间留空起止时间 → 显示校验错误，不 pop',
