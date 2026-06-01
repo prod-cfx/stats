@@ -105,10 +105,11 @@ void main() {
   testWidgets('点击「减少动画」开关 → state.reduceMotion 翻转',
       (WidgetTester tester) async {
     final ProviderContainer container = await _pumpTheme(tester);
-    expect(container.read(themeProvider).reduceMotion, isFalse);
+    // Design default is reduceMotion=true; one tap flips it off.
+    expect(container.read(themeProvider).reduceMotion, isTrue);
     await tester
         .tap(find.byKey(const ValueKey<String>('themeToggleReduceMotion')));
     await tester.pumpAndSettle();
-    expect(container.read(themeProvider).reduceMotion, isTrue);
+    expect(container.read(themeProvider).reduceMotion, isFalse);
   });
 }

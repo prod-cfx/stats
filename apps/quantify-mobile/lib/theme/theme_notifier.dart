@@ -12,7 +12,7 @@ class QzTheme {
     required this.bg,
     required this.accent,
     this.autoFollowSystem = false,
-    this.reduceMotion = false,
+    this.reduceMotion = true,
   });
   final QzBg bg;
   final QzAccent accent;

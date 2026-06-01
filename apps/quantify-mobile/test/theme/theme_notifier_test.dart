@@ -66,6 +66,29 @@ void main() {
     expect(container.read(themeProvider), QzTheme.fallback);
   });
 
+  // Pins the prototype default for the two preference toggles
+  // (design `m-screens-5.jsx:105-118`): 自动跟随系统=关闭 (false),
+  // 减少动画=开启 (true). Guards against silent drift.
+  test('default toggles match design prototype', () async {
+    // Constructor defaults.
+    const QzTheme defaults =
+        QzTheme(bg: QzBg.light, accent: QzAccent.violet);
+    expect(defaults.autoFollowSystem, isFalse);
+    expect(defaults.reduceMotion, isTrue);
+
+    // Shared fallback constant carries the same defaults.
+    expect(QzTheme.fallback.autoFollowSystem, isFalse);
+    expect(QzTheme.fallback.reduceMotion, isTrue);
+
+    // Notifier hydration with empty prefs yields the design defaults.
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer container = _container(prefs);
+    addTearDown(container.dispose);
+    final QzTheme t = container.read(themeProvider);
+    expect(t.autoFollowSystem, isFalse);
+    expect(t.reduceMotion, isTrue);
+  });
+
   test('hydrates from prefs when keys present', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       ThemePersistence.kBg: QzBg.dark.name,
@@ -133,20 +156,22 @@ void main() {
     final ProviderContainer container = _container(prefs);
     addTearDown(container.dispose);
 
+    // Design defaults: autoFollow=false, reduceMotion=true. Flip both to
+    // exercise persistence in the opposite direction of their defaults.
     expect(container.read(themeProvider).autoFollowSystem, isFalse);
-    expect(container.read(themeProvider).reduceMotion, isFalse);
+    expect(container.read(themeProvider).reduceMotion, isTrue);
 
     await container.read(themeProvider.notifier).setAutoFollowSystem(true);
-    await container.read(themeProvider.notifier).setReduceMotion(true);
+    await container.read(themeProvider.notifier).setReduceMotion(false);
     expect(container.read(themeProvider).autoFollowSystem, isTrue);
-    expect(container.read(themeProvider).reduceMotion, isTrue);
+    expect(container.read(themeProvider).reduceMotion, isFalse);
 
     // Round-trip new container reading the same prefs.
     final SharedPreferences prefs2 = await SharedPreferences.getInstance();
     final ProviderContainer container2 = _container(prefs2);
     addTearDown(container2.dispose);
     expect(container2.read(themeProvider).autoFollowSystem, isTrue);
-    expect(container2.read(themeProvider).reduceMotion, isTrue);
+    expect(container2.read(themeProvider).reduceMotion, isFalse);
   });
 
   test('corrupted prefs entries are ignored (fallback applies)', () async {
