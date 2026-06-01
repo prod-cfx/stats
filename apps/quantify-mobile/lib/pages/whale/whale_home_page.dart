@@ -6,20 +6,18 @@ import '../../data/whale_notifications_notifier.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
-import '../../theme/tokens.dart';
 import '../../widgets/qz_notification_bell.dart';
-import '../../widgets/qz_top_bar.dart';
 import 'tabs/whale_discover_tab.dart';
 import 'tabs/whale_holdings_tab.dart';
 import 'tabs/whale_live_tab.dart';
 import 'tabs/whale_watch_tab.dart';
 import 'widgets/whale_notification_sheet.dart';
-import 'widgets/whale_search_sheet.dart';
 
 /// 巨鲸动向首页（issue #1560）。
 ///
-/// QzTopBar + 通知中心入口（铃铛 + 未读 badge），下方 4 个二级 tab：
-/// 发现 / 实时 / 持仓 / 监控（IndexedStack 保留各 tab 滚动/订阅状态）。
+/// 单行合并 header（issue #2012）：左侧 4 个二级 tab strip + 右侧通知铃铛，
+/// 对齐设计稿 `m-screens-4.jsx` ScreenWhale header（无标题/副标题/搜索）。
+/// tab 切换走 IndexedStack 保留各 tab 滚动/订阅状态。
 class WhaleHomePage extends ConsumerStatefulWidget {
   const WhaleHomePage({super.key});
 
@@ -33,13 +31,11 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
   /// issue #1769：通知中心改为单一数据源 [whaleNotificationsProvider]，
   /// 铃铛 panel 与监控 Tab「通知中心」子 Tab 共享同一份列表/已读态。
   Future<void> _openNotifications() async {
-    final List<WhaleNotification> current =
-        ref.read(whaleNotificationsProvider);
-    final WhaleNotificationSheetResult? result =
-        await WhaleNotificationSheet.show(
-      context,
-      notifications: current,
+    final List<WhaleNotification> current = ref.read(
+      whaleNotificationsProvider,
     );
+    final WhaleNotificationSheetResult? result =
+        await WhaleNotificationSheet.show(context, notifications: current);
     if (!mounted || result == null) return;
     ref
         .read(whaleNotificationsProvider.notifier)
@@ -62,47 +58,51 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
     ];
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: QzTopBar(
-        title: l10n.whaleFeedTitle,
-        subtitle: l10n.whaleTopBarSubtitle,
-        actions: <Widget>[
-          _CircularIconAction(
-            icon: Icons.search,
-            tooltip: l10n.whaleSearchTooltip,
-            // #1754：搜索能力落地，点击打开搜索 sheet（解除 #1651 暂缓）。
-            onTap: () => WhaleSearchSheet.show(context),
-          ),
-          const SizedBox(width: QzSpacing.xs),
-          QzNotificationBell(
-            unread: unreadCount,
-            onTap: _openNotifications,
-            tooltip: l10n.whaleNotificationTooltip,
-            circular: true,
-          ),
-          const SizedBox(width: QzSpacing.md),
-        ],
-      ),
       body: Column(
         children: <Widget>[
-          Container(
+          // 单行合并 header：tab strip（flex:1）+ 右侧铃铛，对齐设计稿
+          // m-screens-4.jsx:393-454。bg=elev、底边 1px border、顶部避让状态栏。
+          DecoratedBox(
             decoration: BoxDecoration(
               color: c.bgElev,
-              border: Border(
-                bottom: BorderSide(color: c.borderSoft),
-              ),
+              border: Border(bottom: BorderSide(color: c.border)),
             ),
-            padding:
-                const EdgeInsets.fromLTRB(QzSpacing.lg, 4, QzSpacing.lg, 0),
-            child: Row(
-              children: <Widget>[
-                for (int i = 0; i < tabs.length; i++)
-                  _SubTab(
-                    key: Key('whaleSubTab_$i'),
-                    label: tabs[i].label,
-                    selected: _tabIndex == i,
-                    onTap: () => setState(() => _tabIndex = i),
+            child: SafeArea(
+              bottom: false,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: <Widget>[
+                          for (int i = 0; i < tabs.length; i++) ...<Widget>[
+                            _SubTab(
+                              key: Key('whaleSubTab_$i'),
+                              label: tabs[i].label,
+                              selected: _tabIndex == i,
+                              onTap: () => setState(() => _tabIndex = i),
+                            ),
+                            if (i < tabs.length - 1) const SizedBox(width: 20),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 0, 14, 4),
+                    child: QzNotificationBell(
+                      unread: unreadCount,
+                      onTap: _openNotifications,
+                      tooltip: l10n.whaleNotificationTooltip,
+                      circular: true,
+                      bordered: false,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -117,50 +117,6 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 36x36 soft/elevated 圆形按钮，对齐设计稿 `iconBtn`
-/// (`design/project/mobile/m-screens-3.jsx:277`)。
-class _CircularIconAction extends StatelessWidget {
-  const _CircularIconAction({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: c.bgElev,
-          shape: BoxShape.circle,
-          border: Border.all(color: c.border),
-        ),
-        child: IconButton(
-          onPressed: onTap,
-          padding: EdgeInsets.zero,
-          iconSize: 18,
-          splashRadius: 18,
-          tooltip: tooltip,
-          constraints: const BoxConstraints(
-            minWidth: 36,
-            minHeight: 36,
-            maxWidth: 36,
-            maxHeight: 36,
-          ),
-          icon: Icon(icon, color: c.textMid),
-        ),
       ),
     );
   }
@@ -181,30 +137,39 @@ class _SubTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    // 设计稿 m-screens-4.jsx:406-420：tab 上内边距 12、文字下方 10px 处为
+    // 2px 下划线（选中 violet，未选透明）；选中 w600/text，未选 w400/textMid。
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        margin: const EdgeInsets.only(right: 20),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? c.accent : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? c.text : c.textMid,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                textAlign: TextAlign.center,
+                label,
+                style: TextStyle(
+                  color: selected ? c.text : c.textMid,
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                height: 2,
+                decoration: BoxDecoration(
+                  color: selected ? c.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 }
-

@@ -206,14 +206,14 @@ void main() {
     );
     expect(discoverTabText, findsOneWidget);
     final Text discoverText = tester.widget<Text>(discoverTabText);
-    expect(discoverText.style?.fontWeight, FontWeight.w700,
-        reason: '默认 tab 应为「发现」，文案应高亮 w700');
-    // 「实时」未选中应为 w500
+    expect(discoverText.style?.fontWeight, FontWeight.w600,
+        reason: '默认 tab 应为「发现」，文案应高亮 w600（#2012 对齐设计稿）');
+    // 「实时」未选中应为 w400
     final Text liveText = tester.widget<Text>(find.descendant(
       of: find.byKey(const Key('whaleSubTab_1')),
       matching: find.text('实时'),
     ));
-    expect(liveText.style?.fontWeight, FontWeight.w500);
+    expect(liveText.style?.fontWeight, FontWeight.w400);
   });
 
   testWidgets('右上铃铛存在且显示初始未读数 badge',
@@ -236,34 +236,46 @@ void main() {
   });
 
   testWidgets(
-      '顶部 action 含搜索 icon + 36x36 圆形铃铛（对齐设计稿 iconBtn）',
+      '单行合并 header：移除标题/副标题/搜索圆钮（对齐设计稿 #2012）',
       (WidgetTester tester) async {
     await _pump(tester);
 
-    // 搜索 icon 渲染（设计稿 iconBtn 风格）。
-    expect(find.byIcon(Icons.search), findsOneWidget);
+    // 标题「巨鲸动向」、副标题「链上 + 交易所」已移除。
+    expect(find.text('巨鲸动向'), findsNothing);
+    expect(find.text('链上 + 交易所'), findsNothing);
+    // 顶栏搜索圆钮已移除。
+    expect(find.byIcon(Icons.search), findsNothing);
+  });
 
-    // issue #1754：搜索能力落地，按钮可点（解除 #1651 暂缓的禁用态）。
-    final Finder searchIcon = find.byIcon(Icons.search);
-    final IconButton searchButton = tester.widget<IconButton>(
-      find.ancestor(of: searchIcon, matching: find.byType(IconButton)).first,
-    );
-    expect(searchButton.onPressed, isNotNull,
-        reason: '#1754 后搜索按钮应可点');
+  testWidgets(
+      '铃铛为无边框 36x36 变体（circular+bordered=false）位于右侧',
+      (WidgetTester tester) async {
+    await _pump(tester);
 
-    // 铃铛使用 36x36 SizedBox（QzNotificationBell circular=true 路径）。
+    // 铃铛渲染（QzNotificationBell circular 路径用 SizedBox 36x36）。
     final Finder bellIcon = find.byIcon(Icons.notifications_outlined);
     expect(bellIcon, findsOneWidget);
     final SizedBox bellBox = tester.widget<SizedBox>(
-      find
-          .ancestor(of: bellIcon, matching: find.byType(SizedBox))
-          .first,
+      find.ancestor(of: bellIcon, matching: find.byType(SizedBox)).first,
     );
     expect(bellBox.width, 36);
     expect(bellBox.height, 36);
+
+    // 无边框变体：铃铛圆容器背景透明、无 border（#2011 变体）。
+    final DecoratedBox circle = tester.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byType(QzNotificationBell),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    final BoxDecoration deco = circle.decoration as BoxDecoration;
+    expect(deco.color, Colors.transparent, reason: '#2011 无边框变体背景透明');
+    expect(deco.border, isNull, reason: '#2011 无边框变体无 border');
   });
 
-  testWidgets('QzTopBar 应用 SafeArea 顶部 inset，标题不与状态栏重叠',
+  testWidgets('header 顶部避让状态栏：tab 位于状态栏下方',
       (WidgetTester tester) async {
     // 模拟带刘海的设备：top padding = 44。
     await tester.binding.setSurfaceSize(const Size(420, 3000));
@@ -274,10 +286,15 @@ void main() {
 
     await _pump(tester);
 
-    // 标题位置 y >= 44（status bar 高度），证明 SafeArea 顶部 padding 生效。
-    final Offset titlePos = tester.getTopLeft(find.text('巨鲸动向'));
-    expect(titlePos.dy, greaterThanOrEqualTo(44),
-        reason: '标题应位于状态栏下方');
+    // 首个 tab 文案位置 y >= 44（status bar 高度），证明 SafeArea 顶部 inset 生效。
+    final Offset tabPos = tester.getTopLeft(
+      find.descendant(
+        of: find.byKey(const Key('whaleSubTab_0')),
+        matching: find.text('发现'),
+      ),
+    );
+    expect(tabPos.dy, greaterThanOrEqualTo(44),
+        reason: 'tab 应位于状态栏下方');
   });
 
   testWidgets('点击铃铛弹出通知中心 sheet，含 4 个 tab',
