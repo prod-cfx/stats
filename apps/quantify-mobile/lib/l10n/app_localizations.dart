@@ -404,6 +404,184 @@ abstract class AppLocalizations {
   /// **'回测失败：'**
   String get backtestErrorFailedPrefix;
 
+  /// No description provided for @backtestRecap.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在为「{strategy}」配置回测参数'**
+  String backtestRecap(Object strategy);
+
+  /// No description provided for @backtestRangeDataLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据范围: {start} → {end}'**
+  String backtestRangeDataLabel(Object start, Object end);
+
+  /// No description provided for @backtestRangeCustomSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'共 {days} 天 · 覆盖 {bars} 根 15m K 线'**
+  String backtestRangeCustomSummary(Object days, Object bars);
+
+  /// No description provided for @backtestCapitalPresetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟资金，仅用于本次回测，不影响实盘'**
+  String get backtestCapitalPresetHint;
+
+  /// No description provided for @backtestFieldMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易市场'**
+  String get backtestFieldMarket;
+
+  /// No description provided for @backtestMarketSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货'**
+  String get backtestMarketSpot;
+
+  /// No description provided for @backtestMarketFutures.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约'**
+  String get backtestMarketFutures;
+
+  /// No description provided for @backtestFieldLeverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'杠杆倍数'**
+  String get backtestFieldLeverage;
+
+  /// No description provided for @backtestLeverageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测会同步放大盈亏与资金占用'**
+  String get backtestLeverageHint;
+
+  /// No description provided for @backtestLeverageWarn.
+  ///
+  /// In zh, this message translates to:
+  /// **'高杠杆会显著放大爆仓风险，请确认风险承受能力'**
+  String get backtestLeverageWarn;
+
+  /// No description provided for @backtestSectionMatching.
+  ///
+  /// In zh, this message translates to:
+  /// **'撮合参数'**
+  String get backtestSectionMatching;
+
+  /// No description provided for @backtestSectionMatchingRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'影响成交模拟'**
+  String get backtestSectionMatchingRight;
+
+  /// No description provided for @backtestHintSlippage.
+  ///
+  /// In zh, this message translates to:
+  /// **'按 bps 模拟下单偏离'**
+  String get backtestHintSlippage;
+
+  /// No description provided for @backtestHintFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'单边费率（taker）'**
+  String get backtestHintFee;
+
+  /// No description provided for @backtestHintFillSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'K 线内成交价取值'**
+  String get backtestHintFillSource;
+
+  /// No description provided for @backtestHintPartialData.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史数据有缺口时怎么处理'**
+  String get backtestHintPartialData;
+
+  /// No description provided for @backtestPartialAllow.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许'**
+  String get backtestPartialAllow;
+
+  /// No description provided for @backtestPartialDisallow.
+  ///
+  /// In zh, this message translates to:
+  /// **'不允许'**
+  String get backtestPartialDisallow;
+
+  /// No description provided for @backtestSummaryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次回测设定'**
+  String get backtestSummaryTitle;
+
+  /// No description provided for @backtestSummaryRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'区间'**
+  String get backtestSummaryRange;
+
+  /// No description provided for @backtestSummaryCapital.
+  ///
+  /// In zh, this message translates to:
+  /// **'资金'**
+  String get backtestSummaryCapital;
+
+  /// No description provided for @backtestSummaryMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'市场'**
+  String get backtestSummaryMarket;
+
+  /// No description provided for @backtestSummaryMatching.
+  ///
+  /// In zh, this message translates to:
+  /// **'撮合'**
+  String get backtestSummaryMatching;
+
+  /// No description provided for @backtestSummaryData.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据'**
+  String get backtestSummaryData;
+
+  /// No description provided for @backtestSummaryMarketSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货'**
+  String get backtestSummaryMarketSpot;
+
+  /// No description provided for @backtestSummaryMarketFutures.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约 · {leverage}'**
+  String backtestSummaryMarketFutures(Object leverage);
+
+  /// No description provided for @backtestSummaryMatchingValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{slippage}/{fee} bps · {fillSource}'**
+  String backtestSummaryMatchingValue(
+    Object slippage,
+    Object fee,
+    Object fillSource,
+  );
+
+  /// No description provided for @backtestSummaryDataAllow.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许缺口续跑'**
+  String get backtestSummaryDataAllow;
+
+  /// No description provided for @backtestSummaryDataStrict.
+  ///
+  /// In zh, this message translates to:
+  /// **'严格要求完整'**
+  String get backtestSummaryDataStrict;
+
   /// No description provided for @backtestResultTitle.
   ///
   /// In zh, this message translates to:

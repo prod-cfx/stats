@@ -170,6 +170,110 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestErrorFailedPrefix => 'Backtest failed: ';
 
   @override
+  String backtestRecap(Object strategy) {
+    return 'Configuring backtest parameters for \"$strategy\"';
+  }
+
+  @override
+  String backtestRangeDataLabel(Object start, Object end) {
+    return 'Data range: $start → $end';
+  }
+
+  @override
+  String backtestRangeCustomSummary(Object days, Object bars) {
+    return '$days days · $bars 15m candles';
+  }
+
+  @override
+  String get backtestCapitalPresetHint =>
+      'Simulated capital, used only for this backtest, does not affect live trading';
+
+  @override
+  String get backtestFieldMarket => 'Market';
+
+  @override
+  String get backtestMarketSpot => 'Spot';
+
+  @override
+  String get backtestMarketFutures => 'Futures';
+
+  @override
+  String get backtestFieldLeverage => 'Leverage';
+
+  @override
+  String get backtestLeverageHint =>
+      'Backtest amplifies P&L and margin usage accordingly';
+
+  @override
+  String get backtestLeverageWarn =>
+      'High leverage greatly amplifies liquidation risk; confirm your risk tolerance';
+
+  @override
+  String get backtestSectionMatching => 'Matching Parameters';
+
+  @override
+  String get backtestSectionMatchingRight => 'Affects fill simulation';
+
+  @override
+  String get backtestHintSlippage => 'Simulate order deviation in bps';
+
+  @override
+  String get backtestHintFee => 'One-way rate (taker)';
+
+  @override
+  String get backtestHintFillSource => 'Fill price within the candle';
+
+  @override
+  String get backtestHintPartialData => 'How to handle gaps in historical data';
+
+  @override
+  String get backtestPartialAllow => 'Allow';
+
+  @override
+  String get backtestPartialDisallow => 'Disallow';
+
+  @override
+  String get backtestSummaryTitle => 'This Backtest Setup';
+
+  @override
+  String get backtestSummaryRange => 'Range';
+
+  @override
+  String get backtestSummaryCapital => 'Capital';
+
+  @override
+  String get backtestSummaryMarket => 'Market';
+
+  @override
+  String get backtestSummaryMatching => 'Matching';
+
+  @override
+  String get backtestSummaryData => 'Data';
+
+  @override
+  String get backtestSummaryMarketSpot => 'Spot';
+
+  @override
+  String backtestSummaryMarketFutures(Object leverage) {
+    return 'Futures · $leverage';
+  }
+
+  @override
+  String backtestSummaryMatchingValue(
+    Object slippage,
+    Object fee,
+    Object fillSource,
+  ) {
+    return '$slippage/$fee bps · $fillSource';
+  }
+
+  @override
+  String get backtestSummaryDataAllow => 'Allow gaps, keep running';
+
+  @override
+  String get backtestSummaryDataStrict => 'Require complete data';
+
+  @override
   String get backtestResultTitle => 'Backtest Result';
 
   @override

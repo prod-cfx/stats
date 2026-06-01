@@ -163,6 +163,107 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestErrorFailedPrefix => '回测失败：';
 
   @override
+  String backtestRecap(Object strategy) {
+    return '正在为「$strategy」配置回测参数';
+  }
+
+  @override
+  String backtestRangeDataLabel(Object start, Object end) {
+    return '数据范围: $start → $end';
+  }
+
+  @override
+  String backtestRangeCustomSummary(Object days, Object bars) {
+    return '共 $days 天 · 覆盖 $bars 根 15m K 线';
+  }
+
+  @override
+  String get backtestCapitalPresetHint => '模拟资金，仅用于本次回测，不影响实盘';
+
+  @override
+  String get backtestFieldMarket => '交易市场';
+
+  @override
+  String get backtestMarketSpot => '现货';
+
+  @override
+  String get backtestMarketFutures => '合约';
+
+  @override
+  String get backtestFieldLeverage => '杠杆倍数';
+
+  @override
+  String get backtestLeverageHint => '回测会同步放大盈亏与资金占用';
+
+  @override
+  String get backtestLeverageWarn => '高杠杆会显著放大爆仓风险，请确认风险承受能力';
+
+  @override
+  String get backtestSectionMatching => '撮合参数';
+
+  @override
+  String get backtestSectionMatchingRight => '影响成交模拟';
+
+  @override
+  String get backtestHintSlippage => '按 bps 模拟下单偏离';
+
+  @override
+  String get backtestHintFee => '单边费率（taker）';
+
+  @override
+  String get backtestHintFillSource => 'K 线内成交价取值';
+
+  @override
+  String get backtestHintPartialData => '历史数据有缺口时怎么处理';
+
+  @override
+  String get backtestPartialAllow => '允许';
+
+  @override
+  String get backtestPartialDisallow => '不允许';
+
+  @override
+  String get backtestSummaryTitle => '本次回测设定';
+
+  @override
+  String get backtestSummaryRange => '区间';
+
+  @override
+  String get backtestSummaryCapital => '资金';
+
+  @override
+  String get backtestSummaryMarket => '市场';
+
+  @override
+  String get backtestSummaryMatching => '撮合';
+
+  @override
+  String get backtestSummaryData => '数据';
+
+  @override
+  String get backtestSummaryMarketSpot => '现货';
+
+  @override
+  String backtestSummaryMarketFutures(Object leverage) {
+    return '合约 · $leverage';
+  }
+
+  @override
+  String backtestSummaryMatchingValue(
+    Object slippage,
+    Object fee,
+    Object fillSource,
+  ) {
+    return '$slippage/$fee bps · $fillSource';
+  }
+
+  @override
+  String get backtestSummaryDataAllow => '允许缺口续跑';
+
+  @override
+  String get backtestSummaryDataStrict => '严格要求完整';
+
+  @override
   String get backtestResultTitle => '回测结果';
 
   @override
