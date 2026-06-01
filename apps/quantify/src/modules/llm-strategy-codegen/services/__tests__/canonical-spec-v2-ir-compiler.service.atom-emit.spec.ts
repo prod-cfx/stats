@@ -353,3 +353,24 @@ describe('Issue #1403 子故障 C — volume.threshold IR emit', () => {
     expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(/condition_unsupported:volume\.threshold:value/)
   })
 })
+
+describe('Bollinger atom parameter projection', () => {
+  const compiler = new CanonicalSpecV2IrCompilerService()
+
+  it('uses atom period/stdDev params for touch_lower series instead of global defaults', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'bollinger.touch_lower',
+        params: { period: 30, stdDev: 0.9, confirmationMode: 'touch' },
+      }),
+    ])
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const lowerBand = result.ir.signalCatalog.series.find(series => series.kind === 'LOWER_BAND')
+    const predicate = result.ir.signalCatalog.predicates.find(item => item.id.includes('bollinger_touch_lower'))
+
+    expect(lowerBand?.params).toEqual(expect.objectContaining({ period: 30, stdDev: 0.9 }))
+    expect(predicate?.args).toEqual(expect.arrayContaining(['low_1m', lowerBand?.id]))
+  })
+})

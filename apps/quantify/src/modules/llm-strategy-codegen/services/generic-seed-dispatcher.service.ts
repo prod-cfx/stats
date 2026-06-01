@@ -1343,7 +1343,7 @@ export class GenericSeedDispatcher {
       )
       const predicateGroups = this.buildTypedRulePredicateGroups(phase, phasePredicates, fallbackPredicate)
       for (const group of predicateGroups) {
-      const conditionPredicates = this.selectTypedRuleConditionPredicates(group.predicates)
+      const conditionPredicates = this.selectTypedRuleConditionPredicates(group.predicates, phase, userMessage)
       const predicate = conditionPredicates[0] ?? group.predicates[0] ?? fallbackPredicate
       if (!predicate) continue
       const sideScope = group.sideScope
@@ -1410,10 +1410,106 @@ export class GenericSeedDispatcher {
     }))
   }
 
-  private selectTypedRuleConditionPredicates(phasePredicates: readonly PatchAtomNode[]): PatchAtomNode[] {
+  private selectTypedRuleConditionPredicates(
+    phasePredicates: readonly PatchAtomNode[],
+    phase: SemanticRule['phase'],
+    userMessage: string,
+  ): PatchAtomNode[] {
     const displayPredicates = this.removeDominatedBoundaryPredicates(phasePredicates)
-    const nonRiskPredicates = displayPredicates.filter(item => !this.isRiskEffectPredicate(item))
+    const normalizedPredicates = this.normalizeTypedRsiReclaimPredicates(displayPredicates, phase, userMessage)
+    const nonRiskPredicates = normalizedPredicates.filter(item => !this.isRiskEffectPredicate(item))
     return nonRiskPredicates.length > 0 ? nonRiskPredicates : [...phasePredicates]
+  }
+
+  private normalizeTypedRsiReclaimPredicates(
+    predicates: readonly PatchAtomNode[],
+    phase: SemanticRule['phase'],
+    userMessage: string,
+  ): PatchAtomNode[] {
+    if (phase !== 'entry' || !this.hasRsiReclaimIntent(userMessage)) return [...predicates]
+
+    const cross = predicates.find(item => this.isRsiCrossOverPredicate(item))
+    if (!cross) return [...predicates]
+
+    const threshold = this.readRsiThreshold(cross)
+    if (!Number.isFinite(threshold)) return [...predicates]
+
+    const lte = predicates.find(item => this.isRsiLtePredicate(item) && this.isSameOrUnspecifiedThreshold(item, threshold))
+    if (!lte) return [...predicates]
+
+    const period = this.readRsiPeriod(cross) ?? this.readRsiPeriod(lte) ?? 14
+    const sequence: PatchAtomNode = {
+      key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+      phase: 'entry',
+      sideScope: cross.sideScope ?? lte.sideScope ?? 'long',
+      params: {
+        sequenceKind: 'rsi_reclaim',
+        indicator: 'rsi',
+        period,
+        threshold,
+        value: threshold,
+      },
+      evidence: cross.evidence ?? lte.evidence,
+    }
+
+    const out = predicates.filter((item) => {
+      if (this.isRsiCrossOverPredicate(item) && this.sameNumericThreshold(this.readRsiThreshold(item), threshold)) return false
+      if (this.isRsiLtePredicate(item) && this.isSameOrUnspecifiedThreshold(item, threshold)) return false
+      return !this.isEntryRsiGteReclaimNoise(item, threshold)
+    })
+
+    return [sequence, ...out]
+  }
+
+  private hasRsiReclaimIntent(userMessage: string): boolean {
+    return /rsi\s*\(?\s*\d*\s*\)?[\s\S]{0,40}(?:下方|低于|跌破|below|under)[\s\S]{0,40}(?:上穿|穿回|回穿|重新上穿|cross(?:es)?\s*(?:back\s*)?(?:over|above))/iu.test(userMessage)
+  }
+
+  private isRsiCrossOverPredicate(item: PatchAtomNode): boolean {
+    return item.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+      && this.readIndicatorParam(item) === 'rsi'
+  }
+
+  private isRsiLtePredicate(item: PatchAtomNode): boolean {
+    if (item.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key) return true
+    return item.key === 'indicator.threshold_lte' && this.readIndicatorParam(item) === 'rsi'
+  }
+
+  private isEntryRsiGteReclaimNoise(item: PatchAtomNode, reclaimThreshold: number): boolean {
+    if (item.key !== ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key && item.key !== 'indicator.threshold_gte') return false
+    if (item.key === 'indicator.threshold_gte' && this.readIndicatorParam(item) !== 'rsi') return false
+    const threshold = this.readRsiThreshold(item)
+    return !Number.isFinite(threshold) || threshold > reclaimThreshold
+  }
+
+  private readIndicatorParam(item: PatchAtomNode): string | null {
+    const raw = item.params?.indicator
+    return typeof raw === 'string' ? raw.trim().toLowerCase() : null
+  }
+
+  private readRsiPeriod(item: PatchAtomNode): number | null {
+    const raw = item.params?.period
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+  }
+
+  private readRsiThreshold(item: PatchAtomNode): number {
+    for (const raw of [item.params?.value, item.params?.threshold, item.params?.level]) {
+      if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+      if (typeof raw === 'string' && raw.trim().length > 0) {
+        const parsed = Number(raw)
+        if (Number.isFinite(parsed)) return parsed
+      }
+    }
+    return Number.NaN
+  }
+
+  private sameNumericThreshold(left: number, right: number): boolean {
+    return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= 1e-9
+  }
+
+  private isSameOrUnspecifiedThreshold(item: PatchAtomNode, threshold: number): boolean {
+    const value = this.readRsiThreshold(item)
+    return !Number.isFinite(value) || this.sameNumericThreshold(value, threshold)
   }
 
   private removeDominatedBoundaryPredicates(predicates: readonly PatchAtomNode[]): PatchAtomNode[] {

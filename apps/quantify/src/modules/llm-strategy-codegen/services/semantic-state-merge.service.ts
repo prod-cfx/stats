@@ -1268,7 +1268,7 @@ export class SemanticStateMergeService {
     const evidenceText = this.collectLifecycleEvidenceText(rule)
     if (!evidenceText) return rule
 
-    const desired = this.inferLifecycleIntentFromEvidence(evidenceText)
+    const desired = this.inferLifecycleIntentFromEvidence(evidenceText, rule.condition)
       ?? this.inferMissingEntryLifecycleIntent(rule, evidenceText)
     if (!desired) return rule
     if (!this.sideScopesCompatibleForLifecycle(rule.sideScope, desired.sideScope)) return rule
@@ -1306,13 +1306,16 @@ export class SemanticStateMergeService {
     return parts.join(' ')
   }
 
-  private inferLifecycleIntentFromEvidence(text: string): { phase: 'entry' | 'exit', sideScope: 'long' | 'short', actionKey: string } | null {
+  private inferLifecycleIntentFromEvidence(text: string, condition: AtomExpr): { phase: 'entry' | 'exit', sideScope: 'long' | 'short', actionKey: string } | null {
     const normalized = text.trim()
     if (!normalized) return null
-    const hasOpenLong = /(?:开多|做多|买入开多|open\s+long)/iu.test(normalized)
-    const hasOpenShort = /(?:开空|做空|卖出开空|open\s+short)/iu.test(normalized)
-    const hasCloseLong = /(?:平多|卖出平多|平仓|平一半|平剩余|止盈|止损|close\s+long)/iu.test(normalized)
-    const hasCloseShort = /(?:平空|买入平空|平仓|平一半|平剩余|止盈|止损|close\s+short)/iu.test(normalized)
+    const scoped = this.inferLifecycleIntentFromScopedEvidence(normalized, condition)
+    if (scoped) return scoped
+
+    const hasOpenLong = this.hasOpenLongIntent(normalized)
+    const hasOpenShort = this.hasOpenShortIntent(normalized)
+    const hasCloseLong = this.hasCloseLongIntent(normalized)
+    const hasCloseShort = this.hasCloseShortIntent(normalized)
     const hasOpen = hasOpenLong || hasOpenShort
     const hasClose = hasCloseLong || hasCloseShort
     if (hasOpen && hasClose) return null
@@ -1331,6 +1334,96 @@ export class SemanticStateMergeService {
     return null
   }
 
+  private inferLifecycleIntentFromScopedEvidence(text: string, condition: AtomExpr): { phase: 'entry' | 'exit', sideScope: 'long' | 'short', actionKey: string } | null {
+    const clauses = this.extractLifecycleEvidenceClauses(text)
+    if (clauses.length === 0) return null
+    const scored = clauses.map(clause => ({
+      clause,
+      intent: this.inferLifecycleIntentFromClause(clause.phase, clause.text),
+      score: this.scoreLifecycleClauseAgainstCondition(clause.text, condition),
+    })).filter(item => item.intent !== null)
+    const bestScore = Math.max(0, ...scored.map(item => item.score))
+    const best = scored.filter(item => item.score === bestScore)
+    if (bestScore > 0 && best.length === 1) return best[0]!.intent!
+
+    const intents = scored
+      .map(item => item.intent)
+      .filter((intent): intent is { phase: 'entry' | 'exit', sideScope: 'long' | 'short', actionKey: string } => intent !== null)
+    const unique = new Map(intents.map(intent => [`${intent.phase}:${intent.sideScope}:${intent.actionKey}`, intent]))
+    return unique.size === 1 ? [...unique.values()][0]! : null
+  }
+
+  private extractLifecycleEvidenceClauses(text: string): Array<{ phase: 'entry' | 'exit', text: string }> {
+    const clauses: Array<{ phase: 'entry' | 'exit', text: string }> = []
+    const pattern = /(入场规则|出场规则|entry\s+rules?|exit\s+rules?)\s*[：:]\s*/giu
+    const matches = [...text.matchAll(pattern)]
+    for (let index = 0; index < matches.length; index += 1) {
+      const match = matches[index]!
+      const start = (match.index ?? 0) + match[0].length
+      const end = index + 1 < matches.length ? matches[index + 1]!.index ?? text.length : text.length
+      const clauseText = text.slice(start, end).replace(/[；;。.]\s*$/u, '').trim()
+      if (!clauseText) continue
+      clauses.push({
+        phase: /^(?:入场规则|entry)/iu.test(match[1]!) ? 'entry' : 'exit',
+        text: clauseText,
+      })
+    }
+    return clauses
+  }
+
+  private inferLifecycleIntentFromClause(
+    phase: 'entry' | 'exit',
+    text: string,
+  ): { phase: 'entry' | 'exit', sideScope: 'long' | 'short', actionKey: string } | null {
+    if (phase === 'entry') {
+      if (this.hasOpenLongIntent(text)) return { phase: 'entry', sideScope: 'long', actionKey: 'action.open_long' }
+      if (this.hasOpenShortIntent(text)) return { phase: 'entry', sideScope: 'short', actionKey: 'action.open_short' }
+      return null
+    }
+    if (this.hasCloseLongIntent(text)) return { phase: 'exit', sideScope: 'long', actionKey: 'action.close_long' }
+    if (this.hasCloseShortIntent(text)) return { phase: 'exit', sideScope: 'short', actionKey: 'action.close_short' }
+    return null
+  }
+
+  private scoreLifecycleClauseAgainstCondition(text: string, condition: AtomExpr): number {
+    const normalized = text.replace(/\s+/gu, '')
+    let score = 0
+    for (const leaf of collectAtomLeaves(condition)) {
+      for (const value of this.collectNumericConditionParams(leaf.params)) {
+        if (normalized.includes(this.formatConditionNumber(value))) score += 1
+      }
+    }
+    return score
+  }
+
+  private collectNumericConditionParams(value: unknown): number[] {
+    if (typeof value === 'number' && Number.isFinite(value)) return [value]
+    if (!value || typeof value !== 'object') return []
+    if (Array.isArray(value)) return value.flatMap(item => this.collectNumericConditionParams(item))
+    return Object.values(value).flatMap(item => this.collectNumericConditionParams(item))
+  }
+
+  private formatConditionNumber(value: number): string {
+    return Number.isInteger(value) ? String(value) : String(value).replace(/0+$/u, '').replace(/\.$/u, '')
+  }
+
+  private hasOpenLongIntent(text: string): boolean {
+    return /(?:开多|做多|买入(?:开多|开仓)?|\bbuy\b|open\s+long)/iu.test(text)
+      && !/(?:买入平空|buy\s+to\s+cover|close\s+short)/iu.test(text)
+  }
+
+  private hasOpenShortIntent(text: string): boolean {
+    return /(?:开空|做空|卖出开空|open\s+short)/iu.test(text)
+  }
+
+  private hasCloseLongIntent(text: string): boolean {
+    return /(?:平多|卖出平多|卖出平仓|平仓|平一半|平剩余|止盈|止损|close\s+long|sell\s+to\s+close)/iu.test(text)
+  }
+
+  private hasCloseShortIntent(text: string): boolean {
+    return /(?:平空|买入平空|平仓|平一半|平剩余|止盈|止损|close\s+short|buy\s+to\s+cover)/iu.test(text)
+  }
+
   private inferMissingEntryLifecycleIntent(
     rule: SemanticRule,
     text: string,
@@ -1338,10 +1431,10 @@ export class SemanticStateMergeService {
     if (rule.phase !== 'exit') return null
     if (!/rulesMainflow\.missing_entry_rules/iu.test(text)) return null
     if (this.conditionAllRiskBucket(rule.condition) || this.conditionOnlyHasPositionPresence(rule.condition)) return null
-    if (/(?:开多|做多|买入开多|open\s+long)/iu.test(text)) {
+    if (this.hasOpenLongIntent(text)) {
       return { phase: 'entry', sideScope: 'long', actionKey: 'action.open_long' }
     }
-    if (/(?:开空|做空|卖出开空|open\s+short)/iu.test(text)) {
+    if (this.hasOpenShortIntent(text)) {
       return { phase: 'entry', sideScope: 'short', actionKey: 'action.open_short' }
     }
     return null

@@ -6597,6 +6597,44 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
     return spec
   }
 
+  it('normalizes RSI reclaim entry by dropping contradictory threshold and cross siblings before IR compile', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules[0] = {
+      ...spec.rules[0]!,
+      id: 'entry-rsi-reclaim-noisy',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'AND',
+        children: [
+          {
+            kind: 'AND',
+            children: [
+              { kind: 'atom', key: 'indicator.threshold_lte', value: 38, params: { indicator: 'rsi', period: 14 } },
+              { kind: 'atom', key: 'indicator.cross_over', value: 38, params: { indicator: 'rsi', period: 14 } },
+            ],
+          },
+          { kind: 'atom', key: 'indicator.threshold_gte', value: 70, params: { indicator: 'rsi', period: 14 } },
+          { kind: 'atom', key: 'indicator.cross_over', value: 38, params: { indicator: 'rsi', period: 14 } },
+          { kind: 'atom', key: 'condition.sequence', params: { sequenceKind: 'rsi_reclaim', indicator: 'rsi', period: 14, threshold: 38 } },
+        ],
+      },
+      actions: [{ type: 'OPEN_LONG' }],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const entry = result.ir.ruleBlocks.find(item => item.id === 'entry-rsi-reclaim-noisy')
+    const when = result.ir.signalCatalog.predicates.find(item => item.id === entry?.when)
+
+    expect(when).toEqual(expect.objectContaining({
+      kind: 'cross',
+      params: expect.objectContaining({ sequenceKind: 'rsi_reclaim', threshold: 38 }),
+    }))
+    expect(result.ir.signalCatalog.series.some(series => series.kind === 'CONST' && (series as { value?: number }).value === 70)).toBe(false)
+    expect(result.ir.signalCatalog.predicates.some(predicate => predicate.kind === 'allOf' || predicate.kind === 'AND')).toBe(false)
+  })
+
   function expectGuardBreachWrapsCross(
     result: { ir: CanonicalStrategyIrV1 },
     guardId: string,

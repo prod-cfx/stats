@@ -108,6 +108,7 @@ export interface IrCompileHelpers {
   ensureBollingerSeries: (
     ctx: IrCompileContext,
     band: 'UPPER_BAND' | 'LOWER_BAND' | 'MID_BAND',
+    params?: Record<string, unknown>,
   ) => string
   ensureChannelSeries: (
     ctx: IrCompileContext,

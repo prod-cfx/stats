@@ -958,6 +958,11 @@ export class CanonicalSpecV2IrCompilerService {
     context: CompileContext,
     seed: string,
   ): string {
+    const normalizedCondition = this.normalizeRsiReclaimConditionForCompile(condition)
+    if (normalizedCondition !== condition) {
+      return this.compileCondition(normalizedCondition, context, seed)
+    }
+
     if (condition.kind === 'AND' || condition.kind === 'OR') {
       const childRefs = condition.children.map((child, index) => this.compileCondition(child, context, `${seed}_${index + 1}`))
       return this.upsertPredicate(
@@ -987,6 +992,76 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
+  }
+
+  private normalizeRsiReclaimConditionForCompile(condition: CanonicalConditionNode): CanonicalConditionNode {
+    if (condition.kind !== 'AND' && condition.kind !== 'OR' && condition.kind !== 'NOT') return condition
+
+    const normalizedChildren = condition.children.map(child => this.normalizeRsiReclaimConditionForCompile(child))
+    const normalizedGroup = normalizedChildren.every((child, index) => child === condition.children[index])
+      ? condition
+      : { ...condition, children: normalizedChildren }
+
+    if (normalizedGroup.kind !== 'AND') return normalizedGroup
+
+    const reclaim = this.findRsiReclaimSequence(normalizedGroup)
+    if (!reclaim) return normalizedGroup
+
+    const threshold = this.readNumber([reclaim.params?.threshold, reclaim.params?.value, reclaim.value], Number.NaN)
+    if (!Number.isFinite(threshold)) return normalizedGroup
+
+    const children = normalizedGroup.children.filter(child => !this.isRsiReclaimCompileNoise(child, threshold))
+    if (children.length === normalizedGroup.children.length) return normalizedGroup
+    if (children.length === 1) return children[0]!
+    return { ...normalizedGroup, children }
+  }
+
+  private findRsiReclaimSequence(condition: CanonicalConditionNode): CanonicalConditionAtom | null {
+    if (this.isRsiReclaimSequenceAtom(condition)) return condition
+    if (condition.kind !== 'AND' && condition.kind !== 'OR' && condition.kind !== 'NOT') return null
+    for (const child of condition.children) {
+      const found = this.findRsiReclaimSequence(child)
+      if (found) return found
+    }
+    return null
+  }
+
+  private isRsiReclaimSequenceAtom(condition: CanonicalConditionNode): condition is CanonicalConditionAtom {
+    return this.isConditionAtom(condition)
+      && condition.key === 'condition.sequence'
+      && condition.params?.sequenceKind === 'rsi_reclaim'
+  }
+
+  private isRsiReclaimCompileNoise(condition: CanonicalConditionNode, reclaimThreshold: number): boolean {
+    if (this.isRsiReclaimSequenceAtom(condition)) return false
+    if (condition.kind === 'AND') {
+      const leaves = this.collectCanonicalConditionLeaves(condition)
+      return leaves.length > 0 && leaves.every(leaf => this.isRsiReclaimCompileNoiseLeaf(leaf, reclaimThreshold))
+    }
+    if (!this.isConditionAtom(condition)) return false
+    return this.isRsiReclaimCompileNoiseLeaf(condition, reclaimThreshold)
+  }
+
+  private collectCanonicalConditionLeaves(condition: CanonicalConditionNode): CanonicalConditionAtom[] {
+    if (this.isConditionAtom(condition)) return [condition]
+    if (condition.kind !== 'AND' && condition.kind !== 'OR' && condition.kind !== 'NOT') return []
+    return condition.children.flatMap(child => this.collectCanonicalConditionLeaves(child))
+  }
+
+  private isRsiReclaimCompileNoiseLeaf(condition: CanonicalConditionAtom, reclaimThreshold: number): boolean {
+    if (condition.key === 'indicator.cross_over' && condition.params?.indicator === 'rsi') {
+      const value = this.readNumber([condition.value, condition.params?.value, condition.params?.threshold], Number.NaN)
+      return Number.isFinite(value) && Math.abs(value - reclaimThreshold) <= 1e-9
+    }
+    if (condition.key === 'indicator.threshold_lte' && condition.params?.indicator === 'rsi') {
+      const value = this.readNumber([condition.value, condition.params?.value, condition.params?.threshold], Number.NaN)
+      return Number.isFinite(value) && Math.abs(value - reclaimThreshold) <= 1e-9
+    }
+    if (condition.key === 'indicator.threshold_gte' && condition.params?.indicator === 'rsi') {
+      const value = this.readNumber([condition.value, condition.params?.value, condition.params?.threshold], Number.NaN)
+      return Number.isFinite(value) && Math.abs(value - 70) <= 1e-9 && Math.abs(value - reclaimThreshold) > 1e-9
+    }
+    return false
   }
 
   // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope substrate IR compile
@@ -1990,8 +2065,8 @@ export class CanonicalSpecV2IrCompilerService {
         const direction: BandTouchDirection =
           atom.key === 'bollinger.upper_break' || atom.key === 'bollinger.touch_upper' ? 'upper' : 'lower'
         const bandRef = direction === 'upper'
-          ? this.ensureBollingerSeries(context, 'UPPER_BAND')
-          : this.ensureBollingerSeries(context, 'LOWER_BAND')
+          ? this.ensureBollingerSeries(context, 'UPPER_BAND', atom.params)
+          : this.ensureBollingerSeries(context, 'LOWER_BAND', atom.params)
         const isTouchKey = atom.key === 'bollinger.touch_upper' || atom.key === 'bollinger.touch_lower'
         // touch_* 系 key 在 confirmationMode 缺省 且未显式传 atom.op 时默认 'touch'，与
         // #1444 引入 touch_* 时的 happy path 语义保持一致；upper_break / lower_break 维持
@@ -2021,7 +2096,7 @@ export class CanonicalSpecV2IrCompilerService {
       case 'bollinger.middle_revert':
       case 'bollinger.touch_middle': {
         context.runtimeRequirements.helpers.add('bollinger')
-        const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
+        const midRef = this.ensureBollingerSeries(context, 'MID_BAND', atom.params)
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
         const under = this.upsertPredicate(context.predicateMap, `${seed}_middle_under`, 'CROSS_UNDER', [closeRef, midRef])
         return this.upsertPredicate(context.predicateMap, `${seed}_middle_revert`, 'OR', [over, under])
@@ -2864,17 +2939,20 @@ export class CanonicalSpecV2IrCompilerService {
   private ensureBollingerSeries(
     context: CompileContext,
     kind: Extract<SeriesDef['kind'], 'UPPER_BAND' | 'MID_BAND' | 'LOWER_BAND'>,
+    params?: Record<string, unknown>,
   ): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
-    const id = `${kind.toLowerCase()}_${context.bollinger.period}_${this.normalizeNumberToken(context.bollinger.stdDev)}_${context.timeframe}`
+    const period = this.readNumber([params?.period], context.bollinger.period)
+    const stdDev = this.readNumber([params?.stdDev, params?.multiplier], context.bollinger.stdDev)
+    const id = `${kind.toLowerCase()}_${period}_${this.normalizeNumberToken(stdDev)}_${context.timeframe}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
         kind,
         inputs: [closeRef],
         params: {
-          period: context.bollinger.period,
-          stdDev: context.bollinger.stdDev,
+          period,
+          stdDev,
         },
       })
     }

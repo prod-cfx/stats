@@ -2649,6 +2649,56 @@ describe('SemanticStateMergeService', () => {
         expect(JSON.stringify(rule)).toContain('action.open_long')
       })
 
+      it('repairs spot buy entry evidence even when full prompt also mentions exits', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'wrong-exit-from-spot-buy-entry-clause',
+            phase: 'exit' as const,
+            sideScope: 'long' as const,
+            condition: {
+              kind: 'atom' as const,
+              key: 'price.range_position_lte',
+              params: { lookbackBars: 36, thresholdPct: 20 },
+              evidence: { text: '入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓' },
+            },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const [rule] = merged.rules ?? []
+
+        expect(rule?.phase).toBe('entry')
+        expect(rule?.effects && 'actions' in rule.effects ? rule.effects.actions : []).toEqual([
+          expect.objectContaining({ key: 'action.open_long' }),
+        ])
+      })
+
+      it('repairs RSI reclaim buy entry evidence before readiness asks for missing entry', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'wrong-exit-from-rsi-reclaim-buy-entry-clause',
+            phase: 'exit' as const,
+            sideScope: 'long' as const,
+            condition: {
+              kind: 'atom' as const,
+              key: 'condition.sequence',
+              params: { sequenceKind: 'rsi_reclaim', indicator: 'rsi', period: 14, threshold: 38, value: 38 },
+              evidence: { text: '入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓' },
+            },
+            effects: { actions: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        }
+
+        const merged = service.merge({ persisted: null, derived })
+        const [rule] = merged.rules ?? []
+
+        expect(rule?.phase).toBe('entry')
+        expect(JSON.stringify(rule)).toContain('action.open_long')
+      })
+
       it('drops risk-only open entries when risk semantics already live on the real entry', () => {
         const derived: SemanticState = {
           ...emptyBase(),

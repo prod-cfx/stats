@@ -1768,6 +1768,7 @@ export class PlannerDispatcherMergeService {
     if (dispatcher) {
       this.appendDispatcherRulesForMissingLifecyclePhases(merged, dispatcher)
       this.preserveExplicitDispatcherSemanticsInPlannerSpine(merged, dispatcher)
+      this.pruneRulesConflictingWithExplicitDispatcherLifecycle(merged, dispatcher)
     }
     if (userMessage.trim().length > 0) {
       try {
@@ -2507,7 +2508,7 @@ export class PlannerDispatcherMergeService {
     condition: AtomExpr,
     userMessage: string,
   ): AtomExpr {
-    return this.mapAtomExpr(condition, (atom) => {
+    const normalized = this.mapAtomExpr(condition, (atom) => {
       atom = this.normalizeAtomNoise(atom)
       if (atom.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key) {
         const basis = this.readStringParam(atom.params, 'basis')
@@ -2543,6 +2544,34 @@ export class PlannerDispatcherMergeService {
       }
       return atom
     })
+    return this.removeContradictoryBollingerBandNoise(normalized, userMessage)
+  }
+
+  private removeContradictoryBollingerBandNoise(condition: AtomExpr, userMessage: string): AtomExpr {
+    if (condition.kind !== 'and') return condition
+    const children = condition.children.filter(child => !this.isNoisyBollingerSiblingInAnd(child, condition.children, userMessage))
+    if (children.length === condition.children.length) return condition
+    if (children.length === 1) return children[0]!
+    return { ...condition, children }
+  }
+
+  private isNoisyBollingerSiblingInAnd(candidate: AtomExpr, siblings: readonly AtomExpr[], userMessage: string): boolean {
+    if (candidate.kind !== 'atom') return false
+    const isUpper = candidate.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+    const isLower = candidate.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+    if (!isUpper && !isLower) return false
+    const hasOppositeSibling = siblings.some(sibling =>
+      sibling.kind === 'atom'
+      && sibling.key === (isUpper ? ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key : ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key),
+    )
+    if (!hasOppositeSibling) return false
+
+    const evidence = `${this.readEvidenceText(candidate) ?? ''} ${userMessage}`
+    const mentionsLower = /下轨|lower/iu.test(evidence)
+    const mentionsUpper = /上轨|upper/iu.test(evidence)
+    if (isUpper && mentionsLower && !mentionsUpper) return true
+    if (isLower && mentionsUpper && !mentionsLower) return true
+    return false
   }
 
   private normalizeRuleEffectsNoise(
@@ -3015,6 +3044,45 @@ export class PlannerDispatcherMergeService {
     merged.rules = rules.filter(rule => !shouldDrop(rule))
   }
 
+  private pruneRulesConflictingWithExplicitDispatcherLifecycle(
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
+  ): void {
+    const rules = merged.rules
+    const dispatcherRules = dispatcher.rules?.filter(rule => this.explicitLifecycleRule(rule)) ?? []
+    if (!rules?.length || dispatcherRules.length === 0) return
+
+    merged.rules = rules.filter(rule => {
+      if (!this.explicitLifecycleRule(rule)) return true
+      return !dispatcherRules.some(dispatcherRule => {
+        if (this.lifecycleRuleAlreadyCovers(rule, dispatcherRule)) return false
+        if (!this.sideScopesCompatible(rule.sideScope, dispatcherRule.sideScope)) return false
+        if (!this.lifecycleActionsConflict(rule, dispatcherRule)) return false
+        return this.conditionsOverlap(rule.condition, dispatcherRule.condition)
+      })
+    })
+  }
+
+  private explicitLifecycleRule(rule: SemanticRule): boolean {
+    return collectAtomLeaves(rule.condition).length > 0 && this.lifecycleActionKeys(rule).size > 0
+  }
+
+  private lifecycleActionsConflict(left: SemanticRule, right: SemanticRule): boolean {
+    const leftActions = this.lifecycleActionKeys(left)
+    const rightActions = this.lifecycleActionKeys(right)
+    return (leftActions.has(ATOM_CONTRACT_REGISTRY['action.open_long'].key) && rightActions.has(ATOM_CONTRACT_REGISTRY['action.close_long'].key))
+      || (leftActions.has(ATOM_CONTRACT_REGISTRY['action.close_long'].key) && rightActions.has(ATOM_CONTRACT_REGISTRY['action.open_long'].key))
+      || (leftActions.has(ATOM_CONTRACT_REGISTRY['action.open_short'].key) && rightActions.has(ATOM_CONTRACT_REGISTRY['action.close_short'].key))
+      || (leftActions.has(ATOM_CONTRACT_REGISTRY['action.close_short'].key) && rightActions.has(ATOM_CONTRACT_REGISTRY['action.open_short'].key))
+  }
+
+  private conditionsOverlap(left: AtomExpr, right: AtomExpr): boolean {
+    const leftLeaves = collectAtomLeaves(left)
+    const rightLeaves = collectAtomLeaves(right)
+    if (leftLeaves.length === 0 || rightLeaves.length === 0) return false
+    return leftLeaves.some(leftLeaf => rightLeaves.some(rightLeaf => this.conditionLeafRepresents(leftLeaf, rightLeaf)))
+  }
+
   private openActionSet(rule: SemanticRule): Set<string> {
     return new Set(listRuleEffects(rule.effects)
       .flatMap(effect => collectAtomLeaves(effect))
@@ -3099,16 +3167,7 @@ export class PlannerDispatcherMergeService {
     const plannerLeaves = collectAtomLeaves(plannerRule.condition)
     const dispatcherLeaves = collectAtomLeaves(dispatcherRule.condition)
     if (plannerLeaves.length === 0 || dispatcherLeaves.length === 0) return false
-    if (this.lifecycleActionsIntersect(plannerRule, dispatcherRule)) return true
     return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf)))
-  }
-
-  private lifecycleActionsIntersect(left: SemanticRule, right: SemanticRule): boolean {
-    const leftActions = this.lifecycleActionKeys(left)
-    const rightActions = this.lifecycleActionKeys(right)
-    if (leftActions.size === 0 || rightActions.size === 0) return false
-    for (const key of rightActions) if (leftActions.has(key)) return true
-    return false
   }
 
   private lifecycleActionsCompatible(plannerRule: SemanticRule, dispatcherRule: SemanticRule): boolean {

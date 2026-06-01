@@ -122,6 +122,9 @@ function findSemanticFact(state: SemanticState, key: string): RulesMainflowAtomF
 }
 
 describe('user reported five strategies: entry -> middle -> publication generation', () => {
+  const plazaMaCrossTrendMessage = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。'
+  const plazaRsiReversalMessage = '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。'
+
   const strategies = [
     {
       name: '策略1 网格 order_program',
@@ -383,5 +386,48 @@ describe('user reported five strategies: entry -> middle -> publication generati
     expect(allKeys).toContain('risk.partial_take_profit')
     expect(allKeys).toContain('portfolioRisk.drawdown_block')
     expect(prompt).not.toContain('请补充入场触发条件')
+  })
+
+  it('策略广场 MA 趋势跟随：上穿做多开仓保持 entry/open_long，下穿平多保持 exit/close_long', () => {
+    const state = buildStateFromUserMessage(plazaMaCrossTrendMessage)
+    const conversation = createConversationService()
+    const clarificationState = conversation.buildClarificationFromSemanticState(state)
+    const prompt = new StrategyClarificationQuestionService().build(clarificationState)
+    const entryFacts = factsByRole(state, 'condition').filter(fact => fact.phase === 'entry')
+    const exitFacts = factsByRole(state, 'condition').filter(fact => fact.phase === 'exit')
+    const actionFacts = factsByRole(state, 'action')
+
+    expect(entryFacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over' }),
+    ]))
+    expect(exitFacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_under' }),
+    ]))
+    expect(actionFacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.open_long', phase: 'entry' }),
+      expect.objectContaining({ key: 'action.close_long', phase: 'exit' }),
+    ]))
+    expect(prompt).not.toContain('请补充入场条件')
+    expect(prompt).not.toContain('请补充入场触发条件')
+  })
+
+  it('策略广场 RSI 反转：publication 脚本入场只编译 rsi_reclaim，不保留 impossible threshold 噪声', async () => {
+    const state = buildStateFromUserMessage(plazaRsiReversalMessage)
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const entryDecision = artifacts.ast.decisionPrograms.find(program => program.phase === 'entry')
+    const entryExpr = artifacts.ast.exprPool.find(expr => expr.id === entryDecision?.when)
+    const serializedEntry = JSON.stringify(entryExpr)
+    const serializedScript = artifacts.compiledScript
+    expect(entryExpr).toEqual(expect.objectContaining({
+      nodeType: 'predicate',
+      payload: expect.objectContaining({
+        kind: 'cross',
+        params: expect.objectContaining({ sequenceKind: 'rsi_reclaim', threshold: 38 }),
+      }),
+    }))
+    expect(serializedEntry).not.toContain('threshold_gte')
+    expect(serializedEntry).not.toContain('const_70')
+    expect(serializedScript).not.toContain('const_70')
+    expect(serializedScript).not.toContain('semantic_entry_dispatcher_typed_rule_1_2_rsi_threshold_gte')
   })
 })

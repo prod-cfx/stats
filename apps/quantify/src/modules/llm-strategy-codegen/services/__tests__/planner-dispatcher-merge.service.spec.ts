@@ -2110,6 +2110,52 @@ describe('PlannerDispatcherMergeService — preserves explicit dispatcher semant
     expect(exitActions).not.toContain('action.close_long')
   })
 
+  it('keeps dispatcher MA cross-over entry when planner misclassifies same condition as exit', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-wrong-exit-cross-over',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'planner-exit-cross-under',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-entry-cross-over',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'dispatcher-exit-cross-under',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const text = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。'
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+    const entryKeys = entryRules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))
+    const entryActions = entryRules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key))
+    const wrongExit = exitRules.find(rule => collectAtomLeaves(rule.condition).some(leaf => leaf.key === 'indicator.cross_over'))
+
+    expect(entryKeys).toContain('indicator.cross_over')
+    expect(entryActions).toContain('action.open_long')
+    expect(wrongExit).toBeUndefined()
+    expect(exitRules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))).toContain('indicator.cross_under')
+  })
+
   it('drops duplicate entry whose condition is already the same-side exit condition', () => {
     const planner: CodegenSemanticPatch = {
       rules: [{
@@ -2728,6 +2774,40 @@ describe('PlannerDispatcherMergeService — plaza range and RSI regressions', ()
       expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.45 }) }),
       expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 3 }) }),
     ]))
+  })
+
+  it('drops impossible BOLL upper-band noise from long lower-band mean-reversion entry', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。'
+    const svc = new PlannerDispatcherMergeService()
+    const planner = {
+      rules: [{
+        id: 'entry-boll-touch-lower-long',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 30, stdDev: 0.9 }, evidence: { text: '价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓' } },
+            { kind: 'atom', key: 'bollinger.touch_upper', params: { period: 30, stdDev: 0.9 }, evidence: { text: '价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓' } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entry = merged?.rules?.find(rule => rule.id === 'entry-boll-touch-lower-long')
+    const leaves = collectAtomLeaves(entry?.condition as never)
+
+    expect(leaves.map(leaf => leaf.key)).toEqual(['bollinger.touch_lower'])
+    expect(leaves[0]?.params).toEqual(expect.objectContaining({ period: 30, stdDev: 0.9 }))
   })
 
   it('does NOT misread "盈利 3% 后加仓" (pyramiding) as a take-profit risk', () => {

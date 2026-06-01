@@ -183,17 +183,18 @@ export const CONDITION_ATOM_EMITS = {
     // mirror legacy `case 'bollinger.touch_upper'` body @ 1624-1650
     irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
       c.runtimeRequirements.helpers.add('bollinger')
-      const bandRef = helpers.ensureBollingerSeries(c, 'UPPER_BAND')
+      const bandRef = helpers.ensureBollingerSeries(c, 'UPPER_BAND', atom.params)
       const confirmationMode = typeof atom.params?.confirmationMode === 'string'
         ? atom.params.confirmationMode
         : undefined
       const usesTouchSemantics = confirmationMode === undefined || confirmationMode === 'touch'
       const defaultOp = usesTouchSemantics ? 'GTE' : 'CROSS_OVER'
+      const priceRef = usesTouchSemantics ? helpers.ensurePriceSeries(c, 'high') : closeRef
       return helpers.upsertPredicate(
         c.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}`,
         'compare',
-        [closeRef, bandRef],
+        [priceRef, bandRef],
         { op: atom.op ?? defaultOp },
       )
     },
@@ -203,17 +204,18 @@ export const CONDITION_ATOM_EMITS = {
     capabilityStatus: 'pr3a-condition',
     irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
       c.runtimeRequirements.helpers.add('bollinger')
-      const bandRef = helpers.ensureBollingerSeries(c, 'LOWER_BAND')
+      const bandRef = helpers.ensureBollingerSeries(c, 'LOWER_BAND', atom.params)
       const confirmationMode = typeof atom.params?.confirmationMode === 'string'
         ? atom.params.confirmationMode
         : undefined
       const usesTouchSemantics = confirmationMode === undefined || confirmationMode === 'touch'
       const defaultOp = usesTouchSemantics ? 'LTE' : 'CROSS_UNDER'
+      const priceRef = usesTouchSemantics ? helpers.ensurePriceSeries(c, 'low') : closeRef
       return helpers.upsertPredicate(
         c.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}`,
         'compare',
-        [closeRef, bandRef],
+        [priceRef, bandRef],
         { op: atom.op ?? defaultOp },
       )
     },
@@ -222,9 +224,9 @@ export const CONDITION_ATOM_EMITS = {
   'bollinger.touch_middle': {
     capabilityStatus: 'pr3a-condition',
     // mirror legacy `case 'bollinger.touch_middle'` body @ 1652-1659
-    irShape: (_atom, { compileContext: c, helpers, seed, closeRef }) => {
+    irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
       c.runtimeRequirements.helpers.add('bollinger')
-      const midRef = helpers.ensureBollingerSeries(c, 'MID_BAND')
+      const midRef = helpers.ensureBollingerSeries(c, 'MID_BAND', atom.params)
       const over = helpers.upsertPredicate(c.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
       const under = helpers.upsertPredicate(c.predicateMap, `${seed}_middle_under`, 'CROSS_UNDER', [closeRef, midRef])
       return helpers.upsertPredicate(c.predicateMap, `${seed}_middle_revert`, 'OR', [over, under])
