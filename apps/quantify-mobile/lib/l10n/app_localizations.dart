@@ -1656,6 +1656,18 @@ abstract class AppLocalizations {
   /// **'{secs}s 后重发'**
   String authLoginCountdown(Object secs);
 
+  /// No description provided for @authLoginCodeRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入验证码'**
+  String get authLoginCodeRequired;
+
+  /// No description provided for @authLoginCodeInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证码必须为 6 位'**
+  String get authLoginCodeInvalid;
+
   /// No description provided for @authLoginButton.
   ///
   /// In zh, this message translates to:

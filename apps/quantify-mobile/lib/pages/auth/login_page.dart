@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/auth/session_controller.dart';
+import '../../data/models/auth_models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -33,15 +36,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _email = TextEditingController();
-  final TextEditingController _password = TextEditingController();
+  final TextEditingController _code = TextEditingController();
 
   bool _emailLoading = false;
+  bool _codeLoading = false;
   bool _telegramLoading = false;
+  bool _codeSent = false;
+  int _codeCountdown = 0;
+  Timer? _codeTimer;
 
   @override
   void dispose() {
     _email.dispose();
-    _password.dispose();
+    _code.dispose();
+    _codeTimer?.cancel();
     super.dispose();
   }
 
@@ -52,11 +60,56 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return null;
   }
 
-  String? _validatePassword(String? v) {
+  String? _validateCode(String? v) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    if (v == null || v.isEmpty) return l10n.authLoginPasswordRequired;
-    if (v.length < 6) return l10n.authLoginPasswordTooShort;
+    if (v == null || v.isEmpty) return l10n.authLoginCodeRequired;
+    if (!RegExp(r'^\d{6}$').hasMatch(v)) return l10n.authLoginCodeInvalid;
     return null;
+  }
+
+  Future<void> _sendLoginCode() async {
+    final String? emailError = _validateEmail(_email.text.trim());
+    if (emailError != null) {
+      _formKey.currentState?.validate();
+      return;
+    }
+    setState(() => _codeLoading = true);
+    try {
+      await ref
+          .read(sessionControllerProvider.notifier)
+          .sendLoginCode(email: _email.text.trim());
+      if (!mounted) return;
+      _codeTimer?.cancel();
+      setState(() {
+        _codeSent = true;
+        _codeCountdown = 60;
+      });
+      _codeTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          if (_codeCountdown <= 1) {
+            _codeCountdown = 0;
+            timer.cancel();
+            return;
+          }
+          _codeCountdown -= 1;
+        });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppLocalizations.of(context).authLoginFailedPrefix}$e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _codeLoading = false);
+    }
   }
 
   Future<void> _submitEmail() async {
@@ -65,8 +118,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       await ref
           .read(sessionControllerProvider.notifier)
-          .loginEmail(email: _email.text.trim(), password: _password.text);
+          .loginEmailCode(email: _email.text.trim(), code: _code.text.trim());
       if (!mounted) return;
+      final AsyncValue<AuthSession?> s = ref.read(sessionControllerProvider);
+      if (s.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppLocalizations.of(context).authLoginFailedPrefix}${s.error}',
+            ),
+          ),
+        );
+        return;
+      }
       context.go('/ai');
     } catch (e) {
       if (!mounted) return;
@@ -120,7 +184,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool busy = _emailLoading || _telegramLoading;
+    final bool busy = _emailLoading || _codeLoading || _telegramLoading;
+    final String sendCodeLabel = _codeCountdown > 0
+        ? l10n.authLoginCountdown(_codeCountdown)
+        : (_codeSent ? l10n.authLoginResend : l10n.authLoginSendCode);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       // hero 永远是深色，statusBar 文字反白；底部跟随主题。
@@ -160,13 +227,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             child: _LoginForm(
                               formKey: _formKey,
                               email: _email,
-                              password: _password,
+                              code: _code,
                               busy: busy,
                               emailLoading: _emailLoading,
+                              sendCodeLoading: _codeLoading,
+                              sendCodeEnabled: !busy && _codeCountdown == 0,
+                              sendCodeLabel: sendCodeLabel,
                               telegramLoading: _telegramLoading,
                               validateEmail: _validateEmail,
-                              validatePassword: _validatePassword,
+                              validateCode: _validateCode,
                               onSubmitEmail: _submitEmail,
+                              onSendCode: _sendLoginCode,
                               onSubmitTelegram: _submitTelegram,
                               onTermsTap: _onTermsTap,
                               onPrivacyTap: _onPrivacyTap,
@@ -416,13 +487,17 @@ class _LoginForm extends StatelessWidget {
   const _LoginForm({
     required this.formKey,
     required this.email,
-    required this.password,
+    required this.code,
     required this.busy,
     required this.emailLoading,
+    required this.sendCodeLoading,
+    required this.sendCodeEnabled,
+    required this.sendCodeLabel,
     required this.telegramLoading,
     required this.validateEmail,
-    required this.validatePassword,
+    required this.validateCode,
     required this.onSubmitEmail,
+    required this.onSendCode,
     required this.onSubmitTelegram,
     required this.onTermsTap,
     required this.onPrivacyTap,
@@ -432,13 +507,17 @@ class _LoginForm extends StatelessWidget {
 
   final GlobalKey<FormState> formKey;
   final TextEditingController email;
-  final TextEditingController password;
+  final TextEditingController code;
   final bool busy;
   final bool emailLoading;
+  final bool sendCodeLoading;
+  final bool sendCodeEnabled;
+  final String sendCodeLabel;
   final bool telegramLoading;
   final FormFieldValidator<String> validateEmail;
-  final FormFieldValidator<String> validatePassword;
+  final FormFieldValidator<String> validateCode;
   final VoidCallback onSubmitEmail;
+  final VoidCallback onSendCode;
   final VoidCallback onSubmitTelegram;
   final VoidCallback onTermsTap;
   final VoidCallback onPrivacyTap;
@@ -486,16 +565,24 @@ class _LoginForm extends StatelessWidget {
           ),
           const SizedBox(height: QzSpacing.md),
           _LoginTextField(
-            fieldKey: const ValueKey<String>('login-password-field'),
-            shellKey: const ValueKey<String>('login-password-field-shell'),
-            labelKey: const ValueKey<String>('login-password-label'),
-            controller: password,
+            fieldKey: const ValueKey<String>('login-code-field'),
+            shellKey: const ValueKey<String>('login-code-field-shell'),
+            labelKey: const ValueKey<String>('login-code-label'),
+            controller: code,
             enabled: !busy,
-            label: l10n.authLoginPasswordLabel,
-            hintText: l10n.authLoginPasswordHint,
-            obscureText: true,
-            validator: validatePassword,
+            label: l10n.authLoginCodeLabel,
+            hintText: l10n.authLoginCodeHint,
+            keyboardType: TextInputType.number,
+            validator: validateCode,
             colors: c,
+            suffix: _SendCodeButton(
+              key: const ValueKey<String>('login-send-code'),
+              label: sendCodeLabel,
+              loading: sendCodeLoading,
+              enabled: sendCodeEnabled,
+              onPressed: onSendCode,
+              colors: c,
+            ),
           ),
           const Spacer(),
           const SizedBox(height: 16),
@@ -574,7 +661,7 @@ class _LoginTextField extends StatelessWidget {
     required this.validator,
     required this.colors,
     this.keyboardType,
-    this.obscureText = false,
+    this.suffix,
   });
 
   final Key fieldKey;
@@ -587,7 +674,7 @@ class _LoginTextField extends StatelessWidget {
   final FormFieldValidator<String> validator;
   final QzColorScheme colors;
   final TextInputType? keyboardType;
-  final bool obscureText;
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -614,30 +701,96 @@ class _LoginTextField extends StatelessWidget {
             border: Border.all(color: colors.borderSoft),
           ),
           alignment: Alignment.center,
-          child: TextFormField(
-            key: fieldKey,
-            controller: controller,
-            enabled: enabled,
-            keyboardType: keyboardType,
-            obscureText: obscureText,
-            autocorrect: false,
-            style: TextStyle(color: colors.text, fontSize: 14),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.zero,
-              hintText: hintText,
-              hintStyle: TextStyle(color: colors.textFaint, fontSize: 14),
-            ),
-            validator: validator,
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: TextFormField(
+                  key: fieldKey,
+                  controller: controller,
+                  enabled: enabled,
+                  keyboardType: keyboardType,
+                  autocorrect: false,
+                  style: TextStyle(color: colors.text, fontSize: 14),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: hintText,
+                    hintStyle: TextStyle(color: colors.textFaint, fontSize: 14),
+                  ),
+                  validator: validator,
+                ),
+              ),
+              if (suffix != null) ...<Widget>[
+                const SizedBox(width: 10),
+                suffix!,
+              ],
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SendCodeButton extends StatelessWidget {
+  const _SendCodeButton({
+    super.key,
+    required this.label,
+    required this.loading,
+    required this.enabled,
+    required this.onPressed,
+    required this.colors,
+  });
+
+  final String label;
+  final bool loading;
+  final bool enabled;
+  final VoidCallback onPressed;
+  final QzColorScheme colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool disabled = !enabled || loading;
+    return SizedBox(
+      height: 32,
+      child: OutlinedButton(
+        onPressed: disabled ? null : onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: disabled ? Colors.transparent : colors.bgElev,
+          foregroundColor: disabled ? colors.textFaint : colors.accent,
+          side: BorderSide(color: colors.borderSoft),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: loading
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+                ),
+              )
+            : Text(
+                label,
+                style: TextStyle(
+                  color: disabled ? colors.textFaint : colors.accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: QzFont.mono,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+              ),
+      ),
     );
   }
 }

@@ -829,6 +829,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get authLoginCodeRequired => '请输入验证码';
+
+  @override
+  String get authLoginCodeInvalid => '验证码必须为 6 位';
+
+  @override
   String get authLoginButton => '登录';
 
   @override

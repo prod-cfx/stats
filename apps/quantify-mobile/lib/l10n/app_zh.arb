@@ -280,6 +280,8 @@
   "authLoginResend": "重新发送",
   "authLoginCountdown": "{secs}s 后重发",
   "@authLoginCountdown": { "placeholders": { "secs": {} } },
+  "authLoginCodeRequired": "请输入验证码",
+  "authLoginCodeInvalid": "验证码必须为 6 位",
   "authLoginButton": "登录",
   "authLoginTelegramButton": "通过 Telegram 登录",
   "authLoginEmailRequired": "请输入邮箱",

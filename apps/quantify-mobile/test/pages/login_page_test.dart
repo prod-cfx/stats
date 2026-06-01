@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/auth_repository.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
+import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/pages/auth/login_page.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -21,8 +23,22 @@ class _AiPlaceholder extends StatelessWidget {
       const Scaffold(body: Center(child: Text('AI_HOME_PLACEHOLDER')));
 }
 
+class _FailingCodeAuthRepository extends MockAuthRepository {
+  @override
+  Future<AuthSession> loginWithCode({
+    required String email,
+    required String code,
+  }) async {
+    throw StateError('mock code rejected');
+  }
+}
+
 Future<({ProviderContainer container, InMemoryTokenStorage storage})>
-_pumpLogin(WidgetTester tester, {InMemoryTokenStorage? storage}) async {
+_pumpLogin(
+  WidgetTester tester, {
+  InMemoryTokenStorage? storage,
+  AuthRepository? authRepository,
+}) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
@@ -47,7 +63,9 @@ _pumpLogin(WidgetTester tester, {InMemoryTokenStorage? storage}) async {
     overrides: <Override>[
       sharedPreferencesProvider.overrideWithValue(prefs),
       tokenStorageProvider.overrideWithValue(s),
-      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      authRepositoryProvider.overrideWithValue(
+        authRepository ?? MockAuthRepository(),
+      ),
     ],
   );
   await container.read(sessionControllerProvider.future);
@@ -69,7 +87,9 @@ _pumpLogin(WidgetTester tester, {InMemoryTokenStorage? storage}) async {
 }
 
 void main() {
-  testWidgets('LoginPage 渲染品牌占位 + 邮箱/密码字段 + 两个按钮', (WidgetTester tester) async {
+  testWidgets('LoginPage 渲染品牌占位 + 邮箱/验证码字段 + 两个按钮', (
+    WidgetTester tester,
+  ) async {
     await _pumpLogin(tester);
     expect(find.byKey(const ValueKey<String>('login-brand')), findsOneWidget);
     expect(
@@ -77,7 +97,11 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('login-password-field')),
+      find.byKey(const ValueKey<String>('login-code-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-send-code')),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey<String>('login-submit')), findsOneWidget);
@@ -94,8 +118,8 @@ void main() {
       'not-an-email',
     );
     await tester.enterText(
-      find.byKey(const ValueKey<String>('login-password-field')),
-      'pwpwpw',
+      find.byKey(const ValueKey<String>('login-code-field')),
+      '123456',
     );
     await tester.tap(find.byKey(const ValueKey<String>('login-submit')));
     await tester.pumpAndSettle();
@@ -104,21 +128,53 @@ void main() {
     expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
   });
 
-  testWidgets('密码不足 6 位 → 显示错误', (WidgetTester tester) async {
+  testWidgets('验证码不足 6 位 → 显示错误', (WidgetTester tester) async {
     await _pumpLogin(tester);
     await tester.enterText(
       find.byKey(const ValueKey<String>('login-email-field')),
       'a@b.com',
     );
     await tester.enterText(
-      find.byKey(const ValueKey<String>('login-password-field')),
+      find.byKey(const ValueKey<String>('login-code-field')),
       '123',
     );
     await tester.tap(find.byKey(const ValueKey<String>('login-submit')));
     await tester.pumpAndSettle();
 
-    expect(find.text('密码至少 6 位'), findsOneWidget);
+    expect(find.text('验证码必须为 6 位'), findsOneWidget);
     expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+  });
+
+  testWidgets('空验证码 → 显示错误', (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('login-email-field')),
+      'a@b.com',
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('login-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入验证码'), findsOneWidget);
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+  });
+
+  testWidgets('发送验证码按钮进入倒计时并结束后可重发', (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('login-email-field')),
+      'me@quantify.dev',
+    );
+
+    final Finder send = find.byKey(const ValueKey<String>('login-send-code'));
+    await tester.tap(send);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('60s 后重发'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('59s 后重发'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 59));
+    expect(find.text('重新发送'), findsOneWidget);
   });
 
   testWidgets('合法表单 → mock 登录成功 → 跳 /ai + token 写盘', (
@@ -132,9 +188,11 @@ void main() {
       'me@quantify.dev',
     );
     await tester.enterText(
-      find.byKey(const ValueKey<String>('login-password-field')),
-      'pwpwpw',
+      find.byKey(const ValueKey<String>('login-code-field')),
+      '123456',
     );
+    await tester.tap(find.byKey(const ValueKey<String>('login-send-code')));
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const ValueKey<String>('login-submit')));
     await tester.pumpAndSettle();
 
@@ -144,6 +202,26 @@ void main() {
       container.read(sessionControllerProvider).valueOrNull?.email,
       'me@quantify.dev',
     );
+  });
+
+  testWidgets('验证码登录失败 → 弹 SnackBar，不跳转', (WidgetTester tester) async {
+    await _pumpLogin(tester, authRepository: _FailingCodeAuthRepository());
+
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('login-email-field')),
+      'me@quantify.dev',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('login-code-field')),
+      '123456',
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('login-send-code')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const ValueKey<String>('login-submit')));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('登录失败：'), findsOneWidget);
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
   });
 
   testWidgets('Telegram 按钮 → mock 登录 → 跳 /ai', (WidgetTester tester) async {
@@ -226,7 +304,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('login-password-label')),
+      find.byKey(const ValueKey<String>('login-code-label')),
       findsOneWidget,
     );
     expect(
@@ -234,7 +312,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('login-password-field-shell')),
+      find.byKey(const ValueKey<String>('login-code-field-shell')),
       findsOneWidget,
     );
   });

@@ -871,6 +871,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get authLoginCodeRequired => 'Please enter the verification code';
+
+  @override
+  String get authLoginCodeInvalid => 'Verification code must be 6 digits';
+
+  @override
   String get authLoginButton => 'Log In';
 
   @override
