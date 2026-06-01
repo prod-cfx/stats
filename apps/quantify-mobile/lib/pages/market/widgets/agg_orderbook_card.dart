@@ -551,11 +551,10 @@ class _ViewToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<(AggView, IconData, String)> items =
-        <(AggView, IconData, String)>[
-      (AggView.both, Icons.view_agenda_outlined, l10n.aggViewBoth),
-      (AggView.asks, Icons.trending_down, l10n.aggViewAsks),
-      (AggView.bids, Icons.trending_up, l10n.aggViewBids),
+    final List<(AggView, String)> items = <(AggView, String)>[
+      (AggView.both, l10n.aggViewBoth),
+      (AggView.asks, l10n.aggViewAsks),
+      (AggView.bids, l10n.aggViewBids),
     ];
     return Container(
       padding: const EdgeInsets.all(2),
@@ -565,12 +564,12 @@ class _ViewToggle extends StatelessWidget {
         border: Border.all(color: c.borderSoft),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-        for (final (AggView, IconData, String) item in items)
+        for (final (AggView, String) item in items)
           GestureDetector(
             key: Key('agg-view-${item.$1.name}'),
             onTap: () => onChanged(item.$1),
             child: Semantics(
-              label: item.$3,
+              label: item.$2,
               selected: view == item.$1,
               button: true,
               child: Container(
@@ -581,15 +580,71 @@ class _ViewToggle extends StatelessWidget {
                   color: view == item.$1 ? c.bgElev : Colors.transparent,
                   borderRadius: BorderRadius.circular(5),
                 ),
-                child: Icon(item.$2,
-                    size: 13,
-                    color: view == item.$1 ? c.accent : c.textMid),
+                child: _ViewModeIcon(
+                  view: item.$1,
+                  color: view == item.$1 ? c.accent : c.textMid,
+                ),
               ),
             ),
           ),
       ]),
     );
   }
+}
+
+/// 视图模式条形语义图标（对齐设计稿 `ViewModeIcon`）。
+///
+/// 用堆叠横条区分三态：双向上下对称、卖单上密、买单下密。
+class _ViewModeIcon extends StatelessWidget {
+  const _ViewModeIcon({required this.view, required this.color});
+
+  final AggView view;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 13,
+      height: 13,
+      child: CustomPaint(painter: _ViewModeIconPainter(view, color)),
+    );
+  }
+}
+
+class _ViewModeIconPainter extends CustomPainter {
+  const _ViewModeIconPainter(this.view, this.color);
+
+  final AggView view;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    const double barHeight = 2;
+    const Radius radius = Radius.circular(1);
+    // 每条横条的中心 y（以 13 逻辑单位为基准）。
+    final List<double> centers = switch (view) {
+      // 双向：上下两组对称分布。
+      AggView.both => <double>[2.5, 5, 8, 10.5],
+      // 卖单：顶部三条密集。
+      AggView.asks => <double>[2, 4.5, 7],
+      // 买单：底部三条密集。
+      AggView.bids => <double>[6, 8.5, 11],
+    };
+    for (final double cy in centers) {
+      final RRect bar = RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, cy - barHeight / 2, size.width, barHeight),
+        radius,
+      );
+      canvas.drawRRect(bar, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ViewModeIconPainter old) =>
+      old.view != view || old.color != color;
 }
 
 const List<int> _bookFlex = <int>[16, 34, 24, 26];
