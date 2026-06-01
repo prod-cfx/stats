@@ -68,7 +68,7 @@ class WhalePerpSummaryCard extends StatelessWidget {
             value: '${summary.marginUsagePct.toStringAsFixed(2)} %',
           ),
           const SizedBox(height: QzSpacing.xs),
-          _Progress(pct: summary.marginUsagePct, color: c.statusInfo),
+          _Progress(pct: summary.marginUsagePct, color: QzStatus.cyan),
           const _Divider(),
           _LabeledValue(
             label: l10n.whaleProfileDirectionBias2,
@@ -108,6 +108,14 @@ class WhalePerpSummaryCard extends StatelessWidget {
                 align: CrossAxisAlignment.end,
               ),
             ],
+          ),
+          const SizedBox(height: QzSpacing.sm),
+          Container(
+            height: 3,
+            decoration: BoxDecoration(
+              color: c.marketDown,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
           const _Divider(),
           _LabeledValue(

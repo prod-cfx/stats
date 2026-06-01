@@ -35,6 +35,8 @@ class QzStatus {
   static const Color infoSoft = Color(0xFFE7EFFB);
   static const Color marketUp = Color(0xFF16A36B);
   static const Color marketDown = Color(0xFFE5484D);
+  /// Fixed cyan accent for perp margin-rate bar (design spec).
+  static const Color cyan = Color(0xFF22D3EE);
 }
 
 /// Status colors for dark theme.
