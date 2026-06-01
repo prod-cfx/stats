@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
+import 'package:quantify_mobile/theme/theme_context.dart';
+import 'package:quantify_mobile/widgets/qz_glyph_icon.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
@@ -170,6 +172,98 @@ void main() {
     expect(find.byKey(const Key('ai-appbar-new-session')), findsOneWidget);
     expect(find.byKey(const Key('ai-backtest-button')), findsNothing);
     expect(find.text('参数'), findsNothing);
+  });
+
+  testWidgets('顶栏左/右按钮：32×32 bgSoft 软背景容器 + 设计 glyph，方钮/圆钮圆角各异（#2015）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    // 从实际渲染上下文取软背景色，与页面（`c.bgSoft`）共享单一事实源，
+    // 主题色调整时测试自动同步，避免硬编码字面值静默失真。
+    final BuildContext ctx = tester.element(find.byType(AiHomePage));
+    final Color bgSoft = ctx.qzScheme.bgSoft;
+
+    // 校验软背景按钮：背景与圆角由 Material（ink 表面）承载，水波纹才不被遮挡；
+    // 内层 32×32 固定尺寸承载 glyph。按钮 Key 在 InkWell 上，向上找最近 Material。
+    void expectSoftButton(Key key, double radius) {
+      final Finder btn = find.byKey(key);
+      expect(btn, findsOneWidget);
+      final Material mat = tester.widget<Material>(
+        find.ancestor(of: btn, matching: find.byType(Material)).first,
+      );
+      expect(mat.color, bgSoft);
+      expect(mat.borderRadius, BorderRadius.circular(radius));
+      // InkWell 内层固定 32×32 视觉尺寸。
+      final SizedBox inner = tester.widget<SizedBox>(
+        find.descendant(of: btn, matching: find.byType(SizedBox)).first,
+      );
+      expect(inner.width, 32);
+      expect(inner.height, 32);
+      // 命中区 48×48 由 _TopBarButton 最外层 SizedBox 提供，且不被 leading 槽 /
+      // actions 裁切（回归：leadingWidth 须容纳 padding + 48，否则左钮被裁回 ~32）。
+      final Size hit = tester.getSize(
+        find.ancestor(of: btn, matching: find.byType(SizedBox)).first,
+      );
+      expect(hit.width, greaterThanOrEqualTo(48));
+      expect(hit.height, greaterThanOrEqualTo(48));
+      expect(
+        find.descendant(of: btn, matching: find.byType(QzGlyphIcon)),
+        findsOneWidget,
+      );
+    }
+
+    // 左·历史方钮 borderRadius 9；右·新建会话圆钮 borderRadius 999。
+    expectSoftButton(const Key('ai-appbar-history'), 9);
+    expectSoftButton(const Key('ai-appbar-new-session'), 999);
+  });
+
+  testWidgets('顶栏标题字重：fontSize 14 / w700 / letterSpacing -0.2（#2015）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    final Text title = tester.widget<Text>(find.text('BTC 趋势 · 双均线'));
+    expect(title.style?.fontSize, 14);
+    expect(title.style?.fontWeight, FontWeight.w700);
+    expect(title.style?.letterSpacing, -0.2);
+  });
+
+  testWidgets('顶栏占位标题「AI」字重：fontSize 14 / w700 / letterSpacing -0.2（#2015）',
+      (WidgetTester tester) async {
+    // 占位标题仅在会话加载完成前（current == null）出现，故只 pump 首帧、
+    // 不等 loadSessions 解析，覆盖与会话标题独立硬编码的占位样式分支。
+    await tester.binding.setSurfaceSize(const Size(400, 1200));
+    final GoRouter router = GoRouter(
+      initialLocation: '/ai',
+      routes: <RouteBase>[
+        GoRoute(
+          path: '/ai',
+          builder: (BuildContext context, GoRouterState state) =>
+              const AiHomePage(),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final Text placeholder = tester.widget<Text>(find.text('AI'));
+    expect(placeholder.style?.fontSize, 14);
+    expect(placeholder.style?.fontWeight, FontWeight.w700);
+    expect(placeholder.style?.letterSpacing, -0.2);
+
+    // 排空 postFrame loadSessions（50ms）定时器，避免 dispose 时残留 pending timer。
+    await tester.pump(const Duration(milliseconds: 100));
   });
 
   testWidgets('草稿不串台：在 s1 输入后切到 s2 输入框为空，再切回 s1 草稿仍在',

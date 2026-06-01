@@ -95,10 +95,9 @@ class _TabIconPainter extends CustomPainter {
       old.strokeWidth != strokeWidth;
 }
 
-/// Minimal SVG path-data parser covering the command subset used by the tab
-/// glyphs: `M/m L/l H/h V/v C/c S/s A/a Z/z`. Sufficient for `ICONS.strat/ai/
-/// market/whale/me`; intentionally not a general-purpose parser.
-@visibleForTesting
+/// Minimal SVG path-data parser covering the command subset used by the design
+/// glyphs: `M/m L/l H/h V/v C/c S/s A/a Z/z`. Shared by [QzTabIcon] and
+/// `QzGlyphIcon`; intentionally not a general-purpose parser.
 Path parseSvgPath(String d) {
   final Path path = Path();
   final List<_Token> tokens = _tokenize(d);
