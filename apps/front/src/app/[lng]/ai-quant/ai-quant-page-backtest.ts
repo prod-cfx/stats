@@ -1,6 +1,7 @@
 import type { MutableRefObject } from 'react'
 
 import type { ConversationState } from './ai-quant-page-conversation'
+import type { BacktestJob } from '@/components/ai-quant/backtest-job-client'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
   buildLocalizedBacktestErrorMessage,
@@ -148,6 +149,32 @@ function buildBacktestTimeoutMessage(args: { createdJobId: string; t: Translate 
   return args.t('aiQuant.messages.backtestTimeout', {
     jobId: args.createdJobId,
   })
+}
+
+function buildBacktestJobFailureMessage(
+  job: Pick<BacktestJob, 'error' | 'errorDetails'>,
+  lng: 'zh' | 'en',
+  t: Translate,
+): string {
+  const code = job.errorDetails?.code
+
+  if (code === 'BACKTEST_JOB_TIMEOUT' || code === 'BACKTEST_JOB_STALLED') {
+    return t('aiQuant.messages.backtestTimeout', {
+      defaultValue: '回测执行超时，任务已终止，可稍后重试。',
+    })
+  }
+
+  if (
+    code === 'BACKTEST_QUEUE_UNAVAILABLE'
+    || code === 'BACKTEST_WORKER_UNAVAILABLE'
+    || code === 'BACKTEST_QUEUE_TIMEOUT'
+  ) {
+    return t('aiQuant.messages.backtestQueueUnavailable', {
+      defaultValue: '回测队列暂不可用，请稍后重试。',
+    })
+  }
+
+  return formatBacktestJobFailure(job, lng)
 }
 
 function buildDynamicBacktestAvailabilityMessage(
@@ -540,7 +567,7 @@ export async function runAiQuantBacktest(args: {
     }
     if (latestJob.status === 'failed') {
       setConversationBacktestExecutionState(conversationId, 'failed')
-      updateBacktestMessage(formatBacktestJobFailure(latestJob, lng))
+      updateBacktestMessage(buildBacktestJobFailureMessage(latestJob, lng, t))
       return
     }
 

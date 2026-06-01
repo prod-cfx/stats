@@ -41,6 +41,8 @@ interface AccountAiQuantListQuery {
   excludeDraft?: boolean
 }
 
+const AI_QUANT_CONVERSATION_LIST_TIMEOUT_MS = 12_000
+
 function buildMockAccountAiQuantListResponse(
   query: AccountAiQuantListQuery,
 ): PaginatedResponse<AccountAiQuantStrategyListItem> {
@@ -377,9 +379,14 @@ export async function startLlmCodegenSession(
 
 export async function listAiQuantConversations(): Promise<AiQuantConversationResponse[]> {
   const authHeaders = requireAuthHeaders()
+  const controller = new AbortController()
+  const timeout = globalThis.setTimeout(() => controller.abort(), AI_QUANT_CONVERSATION_LIST_TIMEOUT_MS)
   const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations`, {
     method: 'GET',
     headers: authHeaders,
+    signal: controller.signal,
+  }).finally(() => {
+    globalThis.clearTimeout(timeout)
   })
   let json: unknown = null
   try {

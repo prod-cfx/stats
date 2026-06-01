@@ -58,3 +58,20 @@ test('quantify declares runtime deps needed by bundled workspace config code', (
 
   assert.equal(pkg.dependencies.zod, '^3.24.2')
 })
+
+test('quantify pm2 ecosystem runs API and backtest worker as separate processes', () => {
+  const ecosystem = require(path.join(repoRoot, 'dx/deploy/ecosystem.quantify.config.cjs'))
+
+  assert.deepEqual(
+    ecosystem.apps.map(app => app.name),
+    ['quantify-api', 'quantify-backtest-worker'],
+  )
+
+  const api = ecosystem.apps.find(app => app.name === 'quantify-api')
+  const worker = ecosystem.apps.find(app => app.name === 'quantify-backtest-worker')
+
+  assert.equal(api.args, 'apps/quantify/src/main.js')
+  assert.equal(worker.args, 'apps/quantify/src/worker.backtest.js')
+  assert.equal(api.env.PORT, 3010)
+  assert.equal(worker.env.PORT, undefined)
+})

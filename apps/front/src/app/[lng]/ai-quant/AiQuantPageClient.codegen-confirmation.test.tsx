@@ -1970,6 +1970,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
   })
 
   it('disables graph confirmation and shows validation errors when semantic graph is not executable', async () => {
+    process.env.NEXT_PUBLIC_APP_ENV = 'development'
     localStorage.clear()
     seedDraftConversation(Date.now(), {
       semanticGraph: validSemanticGraph,
@@ -2263,6 +2264,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
   })
 
   it('blocks chat-based confirmation when semantic graph validation is not ok', async () => {
+    process.env.NEXT_PUBLIC_APP_ENV = 'development'
     localStorage.clear()
     seedDraftConversation(Date.now(), {
       semanticGraph: validSemanticGraph,

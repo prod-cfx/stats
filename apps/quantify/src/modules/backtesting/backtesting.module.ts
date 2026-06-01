@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { BullModule } from '@nestjs/bull'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { EnvModule } from '@/common/modules/env.module'
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
@@ -8,7 +9,12 @@ import { PrismaModule } from '@/prisma/prisma.module'
 import { BacktestingController } from './backtesting.controller'
 import { BacktestRunnerService } from './core/backtest-runner.service'
 import { TheoreticalExecutionModel } from './execution/theoretical-execution.model'
+import { BacktestJobExecutorService } from './jobs/backtest-job-executor.service'
+import { BacktestJobRepository } from './jobs/backtest-job.repository'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
+import { BACKTEST_QUEUE } from './jobs/backtest-queue.constants'
+import { BacktestQueueProducer } from './jobs/backtest-queue.producer'
+import { BacktestRecoveryService } from './jobs/backtest-recovery.service'
 import { PortfolioLedgerServiceFactory } from './portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from './report/backtest-reporter.service'
 import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
@@ -25,11 +31,15 @@ import { BacktestSymbolSupportService } from './services/backtest-symbol-support
 import { StateEngineService } from './state/state-engine.service'
 
 @Module({
-  imports: [EnvModule, PrismaModule, MarketDataModule, ThrottlerModule.forRoot()],
+  imports: [EnvModule, PrismaModule, MarketDataModule, ThrottlerModule.forRoot(), BullModule.registerQueue({ name: BACKTEST_QUEUE })],
   controllers: [BacktestingController],
   providers: [
     BacktestRunnerService,
+    BacktestJobExecutorService,
+    BacktestJobRepository,
     BacktestJobsService,
+    BacktestQueueProducer,
+    BacktestRecoveryService,
     BacktestMarketDataService,
     TheoreticalExecutionModel,
     PortfolioLedgerServiceFactory,

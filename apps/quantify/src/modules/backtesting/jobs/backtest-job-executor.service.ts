@@ -1,0 +1,316 @@
+import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
+import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
+import type { Prisma } from '@/prisma/prisma.types'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestRunnerService } from '../core/backtest-runner.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestMarketDataService } from '../services/backtest-market-data.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestJobRepository } from './backtest-job.repository'
+
+interface LastBacktestRangeConfig {
+  preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+  startAt?: string
+  endAt?: string
+}
+
+interface LastBacktestExecutionConfig {
+  initialCash: number
+  leverage: number | null
+  slippageBps: number
+  feeBps: number
+  priceSource: 'open' | 'close' | 'mid'
+  allowPartial: boolean
+}
+
+export interface BacktestJobInputSummary {
+  symbols: string[]
+  baseTimeframe: BacktestRunInput['baseTimeframe']
+  stateTimeframes: BacktestRunInput['stateTimeframes']
+  initialCash: number
+  leverage?: number | null
+  marketType: 'spot' | 'perp'
+  dataRange: BacktestRunInput['dataRange']
+  requestedRange: BacktestRunInput['dataRange']
+  appliedRange?: BacktestRunInput['dataRange']
+  allowPartial: boolean
+  isPartial: boolean
+  strategyId: string
+  strategyInstanceId?: string
+  strategyTemplateId?: string
+  conversationId?: string
+  sessionId?: string
+  publishedSnapshotId?: string
+  snapshotId?: string
+  snapshotHash?: string
+  scriptHash?: string
+  specHash?: string
+}
+
+interface BacktestJobErrorDetails {
+  code?: string
+  message: string
+  args?: Record<string, unknown>
+}
+
+@Injectable()
+export class BacktestJobExecutorService {
+  private readonly logger = new Logger(BacktestJobExecutorService.name)
+
+  constructor(
+    private readonly runner: BacktestRunnerService,
+    private readonly marketDataService: BacktestMarketDataService,
+    private readonly conversationsRepo: AiQuantConversationsRepository,
+    private readonly jobsRepository: BacktestJobRepository,
+  ) {}
+
+  async execute(
+    id: string,
+    input: BacktestRunInput,
+    initialSummary: BacktestJobInputSummary,
+  ): Promise<void> {
+    const job = await this.jobsRepository.markRunning(id, new Date())
+    if (!job) {
+      this.logger.warn(`event=backtest_job_already_consumed jobId=${id}`)
+      return
+    }
+
+    try {
+      const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
+      const enrichedResult = this.enrichResultWithDiagnosticReason(result)
+      const completedAt = new Date()
+      await this.jobsRepository.markSucceeded(id, {
+        inputSummary: resolvedSummary as unknown as Prisma.InputJsonValue,
+        result: enrichedResult as unknown as Prisma.InputJsonValue,
+        finishedAt: completedAt,
+      })
+
+      await this.writeLastBacktestRefIfEligible({
+        id,
+        input,
+        ownerUserId: job.ownerUserId,
+        conversationId: job.conversationId,
+        snapshotId: resolvedSummary.snapshotId,
+        marketType: resolvedSummary.marketType,
+        result: enrichedResult,
+        completedAt,
+      })
+    } catch (error) {
+      const details = this.extractErrorDetails(error)
+      await this.jobsRepository.markFailed(id, {
+        code: details?.code,
+        message: details?.message ?? this.describeError(error),
+        args: details?.args,
+        finishedAt: new Date(),
+      })
+    }
+  }
+
+  private async runBacktestJob(
+    input: BacktestRunInput,
+    initialSummary: BacktestJobInputSummary,
+  ): Promise<{ resolvedSummary: BacktestJobInputSummary; result: BacktestReport }> {
+    await this.marketDataService.prepareData(input)
+    const coverage = await this.marketDataService.resolveCoverage(input)
+    if (coverage.kind === 'empty' || !coverage.appliedRange) {
+      throw new DomainException('backtest.market_data_empty', {
+        code: ErrorCode.BACKTEST_JOB_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { symbols: input.symbols, fromTs: input.dataRange.fromTs, toTs: input.dataRange.toTs },
+      })
+    }
+    if (coverage.kind === 'partial' && input.allowPartial !== true) {
+      throw new DomainException('backtest.data_range_out_of_coverage', {
+        code: ErrorCode.BACKTEST_JOB_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: {
+          requestedRange: input.dataRange,
+          availableRange: coverage.availableRange,
+          suggestedRange: coverage.appliedRange,
+        },
+      })
+    }
+
+    const resolvedSummary: BacktestJobInputSummary = {
+      ...initialSummary,
+      appliedRange: coverage.appliedRange,
+      isPartial: coverage.kind === 'partial',
+    }
+
+    const bars = await this.marketDataService.loadBars({ ...input, dataRange: coverage.appliedRange })
+    if (bars.length === 0) {
+      throw new DomainException('backtest.market_data_empty', {
+        code: ErrorCode.BACKTEST_JOB_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { symbols: input.symbols, fromTs: coverage.appliedRange.fromTs, toTs: coverage.appliedRange.toTs },
+      })
+    }
+    const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars })
+    return { resolvedSummary, result }
+  }
+
+  private enrichResultWithDiagnosticReason(result: BacktestReport): BacktestReport {
+    if (result.summary.totalTrades > 0 || result.summary.diagnosticReason || !result.diagnostics) {
+      return result
+    }
+    const { compiledRulesCount, signalTriggerCount, fillCount, dataRequirementMissingCount, eventStreamMissingCount } = result.diagnostics
+    let diagnosticReason: BacktestReport['summary']['diagnosticReason']
+    if (compiledRulesCount === 0) {
+      diagnosticReason = ErrorCode.BACKTEST_NO_RULES_COMPILED as BacktestReport['summary']['diagnosticReason']
+    } else if (dataRequirementMissingCount && dataRequirementMissingCount > 0) {
+      diagnosticReason = ErrorCode.BACKTEST_DATA_REQUIREMENT_UNAVAILABLE as BacktestReport['summary']['diagnosticReason']
+    } else if (eventStreamMissingCount && eventStreamMissingCount > 0) {
+      diagnosticReason = ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE as BacktestReport['summary']['diagnosticReason']
+    } else if (signalTriggerCount === 0) {
+      diagnosticReason = ErrorCode.BACKTEST_NO_SIGNAL_FIRED_IN_RANGE as BacktestReport['summary']['diagnosticReason']
+    } else if (fillCount === 0) {
+      diagnosticReason = ErrorCode.BACKTEST_SIGNAL_FIRED_BUT_NO_FILL as BacktestReport['summary']['diagnosticReason']
+    }
+    if (!diagnosticReason) return result
+    return {
+      ...result,
+      summary: {
+        ...result.summary,
+        diagnosticReason,
+      },
+    }
+  }
+
+  private async writeLastBacktestRefIfEligible(params: {
+    id: string
+    input: BacktestRunInput
+    ownerUserId: string
+    conversationId: string | null | undefined
+    snapshotId: string | undefined
+    marketType: 'spot' | 'perp'
+    result: BacktestReport
+    completedAt: Date
+  }): Promise<void> {
+    const { id, input, ownerUserId, conversationId, snapshotId, marketType, result, completedAt } = params
+    if (!this.shouldWriteLastBacktestRef(input, conversationId, snapshotId)) {
+      return
+    }
+
+    try {
+      await this.conversationsRepo.updateLastBacktestRef({
+        conversationId,
+        userId: ownerUserId,
+        lastBacktestRef: {
+          jobId: id,
+          publishedSnapshotId: snapshotId,
+          config: this.buildLastBacktestConfig(input),
+          summary: {
+            maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
+            totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
+            winRatePct: Number(
+              (
+                result.summary.winRate <= 1
+                  ? result.summary.winRate * 100
+                  : result.summary.winRate
+              ).toFixed(2),
+            ),
+            tradeCount: result.summary.totalTrades,
+            ...(typeof result.summary.totalOpenTrades === 'number'
+              ? { openTradeCount: result.summary.totalOpenTrades }
+              : {}),
+            ...(typeof result.summary.openPnl === 'number'
+              ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
+              : {}),
+            marketType,
+          },
+          completedAt,
+        },
+      })
+    } catch (error) {
+      this.logger.warn(
+        `event=backtest_last_backtest_ref_write_failed jobId=${id} conversationId=${conversationId} reason=${this.describeError(error)}`,
+      )
+    }
+  }
+
+  private shouldWriteLastBacktestRef(
+    input: BacktestRunInput,
+    conversationId: string | null | undefined,
+    snapshotId: string | undefined,
+  ): conversationId is string {
+    return (
+      input.strategy.bindingSource === 'PUBLISHED_SNAPSHOT_STRICT'
+      && typeof conversationId === 'string'
+      && conversationId.length > 0
+      && typeof snapshotId === 'string'
+      && snapshotId.length > 0
+    )
+  }
+
+  private buildLastBacktestConfig(input: BacktestRunInput): {
+    range: LastBacktestRangeConfig
+    execution: LastBacktestExecutionConfig
+  } {
+    return this.buildBacktestDraftConfig(input)
+  }
+
+  private buildBacktestDraftConfig(
+    input: BacktestRunInput,
+  ): AiQuantConversationBacktestDraftConfigRecord {
+    return {
+      range: this.buildLastBacktestRangeConfig(input),
+      execution: {
+        initialCash: input.initialCash,
+        leverage: typeof input.leverage === 'number' && Number.isFinite(input.leverage) ? input.leverage : null,
+        slippageBps: input.execution.slippageBps,
+        feeBps: input.execution.feeBps,
+        priceSource: input.execution.priceSource,
+        allowPartial: input.allowPartial === true,
+      },
+    }
+  }
+
+  private buildLastBacktestRangeConfig(input: BacktestRunInput): LastBacktestRangeConfig {
+    const requestedRangeInput = input.requestedRangeInput
+    if (requestedRangeInput) {
+      const base = { preset: requestedRangeInput.preset } as LastBacktestRangeConfig
+      if (requestedRangeInput.preset === 'CUSTOM') {
+        return {
+          ...base,
+          ...(typeof requestedRangeInput.startAt === 'string' ? { startAt: requestedRangeInput.startAt } : {}),
+          ...(typeof requestedRangeInput.endAt === 'string' ? { endAt: requestedRangeInput.endAt } : {}),
+        }
+      }
+      return base
+    }
+
+    return {
+      preset: 'CUSTOM',
+      startAt: new Date(input.dataRange.fromTs).toISOString(),
+      endAt: new Date(input.dataRange.toTs).toISOString(),
+    }
+  }
+
+  private extractErrorDetails(error: unknown): BacktestJobErrorDetails | undefined {
+    if (error instanceof DomainException) {
+      return {
+        code: error.message,
+        message: error.message,
+        args: error.args,
+      }
+    }
+
+    if (error instanceof Error && error.message.trim()) {
+      return { message: error.message }
+    }
+
+    return undefined
+  }
+
+  private describeError(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message
+    }
+    return String(error)
+  }
+}

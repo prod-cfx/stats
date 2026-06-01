@@ -152,7 +152,7 @@ describe('deleteAccountAiQuantStrategy', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const calledUrl = fetchMock.mock.calls[0][0] as string
-    expect(calledUrl).toContain('userId=user-x')
+    expect(calledUrl).not.toContain('userId=')
     expect(calledUrl).toContain('deleteStoppedStrategy=true')
   })
 
@@ -172,7 +172,7 @@ describe('deleteAccountAiQuantStrategy', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const calledUrl = fetchMock.mock.calls[0][0] as string
-    expect(calledUrl).toContain('userId=user-y')
+    expect(calledUrl).not.toContain('userId=')
     expect(calledUrl).not.toContain('deleteStoppedStrategy')
   })
 

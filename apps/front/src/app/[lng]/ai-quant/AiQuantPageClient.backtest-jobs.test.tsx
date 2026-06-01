@@ -802,6 +802,46 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockGetBacktestJobResult).not.toHaveBeenCalled()
   })
 
+  it('maps worker timeout failures to timeout feedback and stops polling', async () => {
+    mockGetBacktestJob.mockResolvedValue({
+      id: 'job-1',
+      status: 'failed',
+      createdAt: '2026-03-24T12:00:01.000Z',
+      errorDetails: {
+        code: 'BACKTEST_JOB_TIMEOUT',
+        message: 'Backtest job timed out',
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await showBacktestResultTab()
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
+      'aiQuant.messages.backtestTimeout',
+    )
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain(
+      'Backtest job timed out',
+    )
+    expect(mockGetBacktestJobResult).not.toHaveBeenCalled()
+  })
+
   it('retries transient backtest job polling failure and still completes successfully', async () => {
     mockGetBacktestJob
       .mockRejectedValueOnce(

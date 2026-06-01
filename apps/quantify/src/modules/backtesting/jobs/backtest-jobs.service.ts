@@ -3,33 +3,24 @@ import type { BacktestReport, BacktestRunInput } from '../types/backtesting.type
 import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
-import { Injectable, HttpStatus, Logger } from '@nestjs/common'
+import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { BacktestRunnerService } from '../core/backtest-runner.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { BacktestMarketDataService } from '../services/backtest-market-data.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestSnapshotLoaderService } from '../services/backtest-snapshot-loader.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestJobRepository } from './backtest-job.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestQueueProducer } from './backtest-queue.producer'
 
 interface LastBacktestRangeConfig {
   preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
   startAt?: string
   endAt?: string
-}
-
-interface LastBacktestExecutionConfig {
-  initialCash: number
-  leverage: number | null
-  slippageBps: number
-  feeBps: number
-  priceSource: 'open' | 'close' | 'mid'
-  allowPartial: boolean
 }
 
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
@@ -72,9 +63,11 @@ interface BacktestJobRecord {
     marketType: 'spot' | 'perp'
     dataRange: BacktestRunInput['dataRange']
     requestedRange: BacktestRunInput['dataRange']
+    requestedRangeInput?: BacktestRunInput['requestedRangeInput']
     appliedRange?: BacktestRunInput['dataRange']
     allowPartial: boolean
     isPartial: boolean
+    execution: BacktestRunInput['execution']
     strategyId: string
     strategyInstanceId?: string
     strategyTemplateId?: string
@@ -101,15 +94,12 @@ type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'> & {
 
 @Injectable()
 export class BacktestJobsService {
-  private readonly logger = new Logger(BacktestJobsService.name)
-  private readonly fallbackJobs = new Map<string, BacktestJobRecord>()
-
   constructor(
-    private readonly runner: BacktestRunnerService,
-    private readonly marketDataService: BacktestMarketDataService,
     private readonly symbolAvailabilityService: BacktestSymbolAvailabilityService,
     private readonly conversationsRepo: AiQuantConversationsRepository,
-    private readonly prisma: PrismaService,
+    private readonly jobsRepository: BacktestJobRepository,
+    private readonly queueProducer: BacktestQueueProducer,
+    private readonly snapshotLoader: BacktestSnapshotLoaderService,
   ) {}
 
   async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
@@ -124,45 +114,36 @@ export class BacktestJobsService {
     })
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const inputSummary = this.createInputSummary(resolvedInput)
-    try {
-      const job = await this.prisma.backtestJob.create({
-        data: {
-          id,
-          ownerUserId,
-          conversationId,
-          status: 'queued',
-          snapshotId: inputSummary.snapshotId ?? null,
-          snapshotHash: inputSummary.snapshotHash ?? null,
-          scriptHash: inputSummary.scriptHash ?? null,
-          specHash: inputSummary.specHash ?? null,
-          inputSummary: inputSummary as Prisma.InputJsonValue,
-        },
-      })
-      queueMicrotask(() => {
-        void this.executePersistedJob(id, resolvedInput, inputSummary)
-      })
-      return this.toView(job)
-    } catch (error) {
-      if (!this.isBacktestJobPersistenceUnavailable(error)) {
-        throw error
-      }
+    const job = await this.jobsRepository.create({
+      id,
+      ownerUserId,
+      conversationId,
+      status: 'queued',
+      snapshotId: inputSummary.snapshotId ?? null,
+      snapshotHash: inputSummary.snapshotHash ?? null,
+      scriptHash: inputSummary.scriptHash ?? null,
+      specHash: inputSummary.specHash ?? null,
+      inputSummary: inputSummary as unknown as Prisma.InputJsonValue,
+    })
 
-      this.logger.warn(
-        `event=backtest_job_persistence_unavailable mode=fallback_memory reason=${this.describeError(error)} jobId=${id}`,
-      )
-      const fallbackJob: BacktestJobRecord = {
-        id,
-        ownerUserId,
-        status: 'queued',
-        createdAt: new Date().toISOString(),
-        inputSummary,
-      }
-      this.fallbackJobs.set(id, fallbackJob)
-      queueMicrotask(() => {
-        void this.executeFallbackJob(id, resolvedInput, inputSummary)
+    try {
+      await this.queueProducer.enqueue(job.id)
+    } catch (error) {
+      const reasonMessage = this.describeError(error)
+      await this.jobsRepository.markFailed(job.id, {
+        code: ErrorCode.BACKTEST_QUEUE_UNAVAILABLE,
+        message: 'Backtest queue unavailable',
+        args: { reasonMessage },
+        finishedAt: new Date(),
       })
-      return this.toFallbackView(fallbackJob)
+      throw new DomainException('backtest.queue_unavailable', {
+        code: ErrorCode.BACKTEST_QUEUE_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: { reasonMessage },
+      })
     }
+
+    return this.toView(job)
   }
 
   private resolveRequestedPresetRange(input: BacktestRunInput): BacktestRunInput {
@@ -263,35 +244,11 @@ export class BacktestJobsService {
   }
 
   async getJob(id: string, ownerUserId: string): Promise<BacktestJobView> {
-    const fallbackJob = this.fallbackJobs.get(id)
-    if (fallbackJob) {
-      if (fallbackJob.ownerUserId !== ownerUserId) {
-        throw new DomainException('backtest.job_not_found', {
-          code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,
-          status: HttpStatus.NOT_FOUND,
-          args: { id },
-        })
-      }
-      return this.toFallbackView(fallbackJob)
-    }
     const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
     return this.toView(job)
   }
 
   async getJobResult(id: string, ownerUserId: string): Promise<BacktestReport> {
-    const fallbackJob = this.fallbackJobs.get(id)
-    if (fallbackJob) {
-      if (fallbackJob.ownerUserId !== ownerUserId) {
-        throw new DomainException('backtest.job_not_found', {
-          code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,
-          status: HttpStatus.NOT_FOUND,
-          args: { id },
-        })
-      }
-      if (fallbackJob.status === 'failed') throw new DomainException('backtest.job_failed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, error: fallbackJob.error } })
-      if (fallbackJob.status !== 'succeeded' || !fallbackJob.result) throw new DomainException('backtest.job_not_completed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, status: fallbackJob.status } })
-      return fallbackJob.result
-    }
     const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
     const status = this.normalizePersistedStatus(job.status, job.id)
     if (status === 'failed')
@@ -309,8 +266,58 @@ export class BacktestJobsService {
     return job.result as unknown as BacktestReport
   }
 
+  async getExecutionInput(id: string): Promise<{
+    input: BacktestRunInput
+    inputSummary: BacktestJobRecord['inputSummary']
+  }> {
+    const job = await this.jobsRepository.findById(id)
+    if (!job) {
+      throw new DomainException('backtest.job_not_found', {
+        code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { id },
+      })
+    }
+
+    const inputSummary = job.inputSummary as unknown as BacktestJobRecord['inputSummary']
+    const publishedSnapshotId = inputSummary.publishedSnapshotId ?? inputSummary.snapshotId
+    if (!publishedSnapshotId) {
+      throw new DomainException('backtest.snapshot_required', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { id },
+      })
+    }
+
+    const strategy = await this.snapshotLoader.load({
+      id: inputSummary.strategyId,
+      protocolVersion: 'v1',
+      publishedSnapshotId,
+      userId: job.ownerUserId,
+    })
+
+    return {
+      inputSummary,
+      input: {
+        symbols: inputSummary.symbols,
+        baseTimeframe: inputSummary.baseTimeframe,
+        stateTimeframes: inputSummary.stateTimeframes,
+        conversationId: inputSummary.conversationId,
+        sessionId: inputSummary.sessionId,
+        allowPartial: inputSummary.allowPartial,
+        initialCash: inputSummary.initialCash,
+        leverage: inputSummary.leverage,
+        execution: inputSummary.execution,
+        strategy,
+        requestedRangeInput: inputSummary.requestedRangeInput,
+        dataRange: inputSummary.dataRange,
+        bars: [],
+      },
+    }
+  }
+
   private async getOwnedJobOrThrowNotFound(id: string, ownerUserId: string) {
-    const job = await this.prisma.backtestJob.findUnique({ where: { id } })
+    const job = await this.jobsRepository.findById(id)
     if (!job || job.ownerUserId !== ownerUserId) {
       throw new DomainException('backtest.job_not_found', {
         code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,
@@ -319,173 +326,6 @@ export class BacktestJobsService {
       })
     }
     return job
-  }
-
-  private async executePersistedJob(
-    id: string,
-    input: BacktestRunInput,
-    initialSummary: BacktestJobRecord['inputSummary'],
-  ) {
-    const job = await this.prisma.backtestJob.findUnique({ where: { id } })
-    if (!job) return
-
-    await this.prisma.backtestJob.update({
-      where: { id },
-      data: {
-        status: 'running',
-        startedAt: new Date(),
-      },
-    })
-
-    try {
-      const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
-      const enrichedResult = this.enrichResultWithDiagnosticReason(result)
-      const completedAt = new Date()
-      await this.prisma.backtestJob.update({
-        where: { id },
-        data: {
-          status: 'succeeded',
-          inputSummary: resolvedSummary as Prisma.InputJsonValue,
-          result: enrichedResult as unknown as Prisma.InputJsonValue,
-          error: null,
-          finishedAt: completedAt,
-        },
-      })
-
-      await this.writeLastBacktestRefIfEligible({
-        id,
-        input,
-        ownerUserId: job.ownerUserId,
-        conversationId: job.conversationId,
-        snapshotId: resolvedSummary.snapshotId,
-        marketType: resolvedSummary.marketType,
-        result: enrichedResult,
-        completedAt,
-      })
-    } catch (error) {
-      await this.prisma.backtestJob.update({
-        where: { id },
-        data: {
-          status: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-          result: this.buildFailureResult(error),
-          finishedAt: new Date(),
-        },
-      })
-    }
-  }
-
-  private async executeFallbackJob(id: string, input: BacktestRunInput, initialSummary: BacktestJobRecord['inputSummary']) {
-    const job = this.fallbackJobs.get(id)
-    if (!job) return
-
-    job.status = 'running'
-    job.startedAt = new Date().toISOString()
-
-    try {
-      const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
-      const completedAt = new Date()
-      job.status = 'succeeded'
-      job.inputSummary = resolvedSummary
-      job.result = result
-      job.error = undefined
-      job.finishedAt = completedAt.toISOString()
-    } catch (error) {
-      job.status = 'failed'
-      job.error = error instanceof Error ? error.message : String(error)
-      job.errorDetails = this.extractErrorDetails(error)
-      job.finishedAt = new Date().toISOString()
-    }
-  }
-
-  /**
-   * Issue #1699 P2a：按 BacktestDiagnostics 派发三类「未产生有效成交」的诊断错误码，
-   * 落到 result.summary.diagnosticReason，让前端/调用方能区分根因（规则没编译 /
-   * 信号没触发 / 信号触发了但没成交）而不是统一报「未产生有效成交」。
-   *
-   * - compiledRulesCount === 0 → NO_RULES_COMPILED（spec.rules 编译丢失，常因 codegen
-   *   解析 bug，如 #1700）
-   * - signalTriggerCount === 0 → NO_SIGNAL_FIRED_IN_RANGE（rules 有但区间内未触发任一信号）
-   * - signalTriggerCount > 0 && fillCount === 0 → SIGNAL_FIRED_BUT_NO_FILL（信号有但风控
-   *   / 资金 / next-bar gap 阻断撮合）
-   * - totalTrades > 0：不附诊断
-   */
-  private enrichResultWithDiagnosticReason(result: BacktestReport): BacktestReport {
-    if (result.summary.totalTrades > 0) {
-      return result
-    }
-    if (result.summary.diagnosticReason) {
-      return result
-    }
-    if (!result.diagnostics) {
-      return result
-    }
-    const { compiledRulesCount, signalTriggerCount, fillCount, dataRequirementMissingCount, eventStreamMissingCount } = result.diagnostics
-    let diagnosticReason: BacktestReport['summary']['diagnosticReason']
-    if (compiledRulesCount === 0) {
-      diagnosticReason = ErrorCode.BACKTEST_NO_RULES_COMPILED as BacktestReport['summary']['diagnosticReason']
-    } else if (dataRequirementMissingCount > 0) {
-      diagnosticReason = ErrorCode.BACKTEST_DATA_REQUIREMENT_UNAVAILABLE as BacktestReport['summary']['diagnosticReason']
-    } else if (eventStreamMissingCount > 0) {
-      diagnosticReason = ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE as BacktestReport['summary']['diagnosticReason']
-    } else if (signalTriggerCount === 0) {
-      diagnosticReason = ErrorCode.BACKTEST_NO_SIGNAL_FIRED_IN_RANGE as BacktestReport['summary']['diagnosticReason']
-    } else if (fillCount === 0) {
-      diagnosticReason = ErrorCode.BACKTEST_SIGNAL_FIRED_BUT_NO_FILL as BacktestReport['summary']['diagnosticReason']
-    }
-    if (!diagnosticReason) {
-      return result
-    }
-    return {
-      ...result,
-      summary: {
-        ...result.summary,
-        diagnosticReason,
-      },
-    }
-  }
-
-  private async runBacktestJob(
-    input: BacktestRunInput,
-    initialSummary: BacktestJobRecord['inputSummary'],
-  ): Promise<{ resolvedSummary: BacktestJobRecord['inputSummary']; result: BacktestReport }> {
-    await this.marketDataService.prepareData(input)
-    const coverage = await this.marketDataService.resolveCoverage(input)
-    if (coverage.kind === 'empty' || !coverage.appliedRange) {
-      throw new DomainException('backtest.market_data_empty', {
-        code: ErrorCode.BACKTEST_JOB_CONFLICT,
-        status: HttpStatus.CONFLICT,
-        args: { symbols: input.symbols, fromTs: input.dataRange.fromTs, toTs: input.dataRange.toTs },
-      })
-    }
-    if (coverage.kind === 'partial' && input.allowPartial !== true) {
-      throw new DomainException('backtest.data_range_out_of_coverage', {
-        code: ErrorCode.BACKTEST_JOB_CONFLICT,
-        status: HttpStatus.CONFLICT,
-        args: {
-          requestedRange: input.dataRange,
-          availableRange: coverage.availableRange,
-          suggestedRange: coverage.appliedRange,
-        },
-      })
-    }
-
-    const resolvedSummary: BacktestJobRecord['inputSummary'] = {
-      ...initialSummary,
-      appliedRange: coverage.appliedRange,
-      isPartial: coverage.kind === 'partial',
-    }
-
-    const bars = await this.marketDataService.loadBars({ ...input, dataRange: coverage.appliedRange })
-    if (bars.length === 0) {
-      throw new DomainException('backtest.market_data_empty', {
-        code: ErrorCode.BACKTEST_JOB_CONFLICT,
-        status: HttpStatus.CONFLICT,
-        args: { symbols: input.symbols, fromTs: coverage.appliedRange.fromTs, toTs: coverage.appliedRange.toTs },
-      })
-    }
-    const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars })
-    return { resolvedSummary, result }
   }
 
   private toView(job: {
@@ -540,8 +380,10 @@ export class BacktestJobsService {
       marketType,
       dataRange: input.dataRange,
       requestedRange: input.dataRange,
+      requestedRangeInput: input.requestedRangeInput,
       allowPartial: input.allowPartial === true,
       isPartial: false,
+      execution: input.execution,
       strategyId: input.strategy.id,
       strategyInstanceId: this.readStrategyIdentity(input.strategy, 'strategyInstanceId'),
       strategyTemplateId: this.readStrategyIdentity(input.strategy, 'strategyTemplateId'),
@@ -593,20 +435,6 @@ export class BacktestJobsService {
     return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
   }
 
-  private shouldWriteLastBacktestRef(
-    input: BacktestRunInput,
-    conversationId: string | null | undefined,
-    snapshotId: string | undefined,
-  ): conversationId is string {
-    return (
-      input.strategy.bindingSource === 'PUBLISHED_SNAPSHOT_STRICT'
-      && typeof conversationId === 'string'
-      && conversationId.length > 0
-      && typeof snapshotId === 'string'
-      && snapshotId.length > 0
-    )
-  }
-
   private async writeBacktestDraftConfigIfEligible(params: {
     input: BacktestRunInput
     ownerUserId: string
@@ -622,65 +450,6 @@ export class BacktestJobsService {
       userId: ownerUserId,
       backtestDraftConfig: this.buildBacktestDraftConfig(input),
     })
-  }
-
-  private async writeLastBacktestRefIfEligible(params: {
-    id: string
-    input: BacktestRunInput
-    ownerUserId: string
-    conversationId: string | null | undefined
-    snapshotId: string | undefined
-    marketType: 'spot' | 'perp'
-    result: BacktestReport
-    completedAt: Date
-  }): Promise<void> {
-    const { id, input, ownerUserId, conversationId, snapshotId, marketType, result, completedAt } = params
-    if (!this.shouldWriteLastBacktestRef(input, conversationId, snapshotId)) {
-      return
-    }
-
-    try {
-      await this.conversationsRepo.updateLastBacktestRef({
-        conversationId,
-        userId: ownerUserId,
-        lastBacktestRef: {
-          jobId: id,
-          publishedSnapshotId: snapshotId,
-          config: this.buildLastBacktestConfig(input),
-          summary: {
-            maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
-            totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
-            winRatePct: Number(
-              (
-                result.summary.winRate <= 1
-                  ? result.summary.winRate * 100
-                  : result.summary.winRate
-              ).toFixed(2),
-            ),
-            tradeCount: result.summary.totalTrades,
-            ...(typeof result.summary.totalOpenTrades === 'number'
-              ? { openTradeCount: result.summary.totalOpenTrades }
-              : {}),
-            ...(typeof result.summary.openPnl === 'number'
-              ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
-              : {}),
-            marketType,
-          },
-          completedAt,
-        },
-      })
-    } catch (error) {
-      this.logger.warn(
-        `event=backtest_last_backtest_ref_write_failed jobId=${id} conversationId=${conversationId} reason=${this.describeError(error)}`,
-      )
-    }
-  }
-
-  private buildLastBacktestConfig(input: BacktestRunInput): {
-    range: LastBacktestRangeConfig
-    execution: LastBacktestExecutionConfig
-  } {
-    return this.buildBacktestDraftConfig(input)
   }
 
   private buildBacktestDraftConfig(
@@ -734,19 +503,6 @@ export class BacktestJobsService {
     })
   }
 
-  private isBacktestJobPersistenceUnavailable(error: unknown): boolean {
-    const code = typeof error === 'object' && error !== null && 'code' in error
-      ? (error as { code?: unknown }).code
-      : undefined
-    if (code === 'P2021' || code === 'P1001' || code === 'P1008' || code === 'P1017') {
-      return true
-    }
-
-    const message = this.describeError(error).toLowerCase()
-    return message.includes('backtest_jobs')
-      && (message.includes('does not exist') || message.includes('relation') || message.includes('table'))
-  }
-
   private describeError(error: unknown): string {
     if (error instanceof Error && error.message.trim()) {
       return error.message
@@ -783,17 +539,6 @@ export class BacktestJobsService {
     }
   }
 
-  private buildFailureResult(error: unknown): Prisma.InputJsonValue | null {
-    const details = this.extractErrorDetails(error)
-    if (!details) {
-      return null
-    }
-
-    return JSON.parse(JSON.stringify({
-      failure: details,
-    })) as Prisma.InputJsonValue
-  }
-
   private extractStoredFailureDetails(
     result: Prisma.JsonValue | null | undefined,
   ): BacktestJobErrorDetails | undefined {
@@ -820,21 +565,4 @@ export class BacktestJobsService {
     }
   }
 
-  private extractErrorDetails(error: unknown): BacktestJobErrorDetails | undefined {
-    if (error instanceof DomainException) {
-      return {
-        code: error.message,
-        message: error.message,
-        args: error.args,
-      }
-    }
-
-    if (error instanceof Error && error.message.trim()) {
-      return {
-        message: error.message,
-      }
-    }
-
-    return undefined
-  }
 }

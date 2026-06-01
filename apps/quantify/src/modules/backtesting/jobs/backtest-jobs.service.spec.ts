@@ -123,6 +123,40 @@ function createPrismaMock(backtestJob = createPrismaBacktestJobMock()) {
   }
 }
 
+function createRepositoryMock(prisma = createPrismaMock()) {
+  return {
+    create: jest.fn().mockImplementation((data: Record<string, any>) => prisma.backtestJob.create({ data })),
+    findById: jest.fn().mockImplementation((id: string) => prisma.backtestJob.findUnique({ where: { id } })),
+    markFailed: jest.fn().mockImplementation((id: string, input: { code?: string; message: string; args?: Record<string, unknown>; finishedAt: Date }) => prisma.backtestJob.update({
+      where: { id },
+      data: {
+        status: 'failed',
+        error: input.message,
+        result: {
+          failure: {
+            ...(input.code ? { code: input.code } : {}),
+            message: input.message,
+            ...(input.args ? { args: input.args } : {}),
+          },
+        },
+        finishedAt: input.finishedAt,
+      },
+    })),
+  }
+}
+
+function createQueueMock() {
+  return {
+    enqueue: jest.fn().mockResolvedValue('btjob-queued'),
+  }
+}
+
+function createSnapshotLoaderMock() {
+  return {
+    load: jest.fn().mockResolvedValue(createInput().strategy),
+  }
+}
+
 function createAvailabilityMock(
   result: { supported: true } | { supported: false; reasonCode: string; args?: Record<string, unknown> } = { supported: true },
 ) {
@@ -173,12 +207,18 @@ function createService(args?: {
   availability?: ReturnType<typeof createAvailabilityMock>
   conversations?: ReturnType<typeof createConversationsMock>
   prisma?: ReturnType<typeof createPrismaMock>
+  repository?: ReturnType<typeof createRepositoryMock>
+  queue?: ReturnType<typeof createQueueMock>
+  snapshotLoader?: ReturnType<typeof createSnapshotLoaderMock>
 }) {
   const runner = args?.runner ?? { run: jest.fn().mockImplementation(() => new Promise(() => {})) }
   const marketData = args?.marketData ?? createMarketDataMock()
   const availability = args?.availability ?? createAvailabilityMock()
   const conversations = args?.conversations ?? createConversationsMock()
   const prisma = args?.prisma ?? createPrismaMock()
+  const repository = args?.repository ?? createRepositoryMock(prisma)
+  const queue = args?.queue ?? createQueueMock()
+  const snapshotLoader = args?.snapshotLoader ?? createSnapshotLoaderMock()
 
   return {
     runner,
@@ -186,12 +226,15 @@ function createService(args?: {
     availability,
     conversations,
     prisma,
+    repository,
+    queue,
+    snapshotLoader,
     service: new BacktestJobsService(
-      runner as never,
-      marketData as never,
       availability as never,
       conversations as never,
-      prisma as never,
+      repository as never,
+      queue as never,
+      snapshotLoader as never,
     ),
   }
 }
@@ -202,7 +245,7 @@ describe('backtestJobsService', () => {
   })
 
   it('persists created jobs with queued status and owner identity', async () => {
-    const { service, marketData, prisma, availability } = createService()
+    const { service, prisma, availability, queue } = createService()
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
@@ -216,7 +259,69 @@ describe('backtestJobsService', () => {
       }),
     )
     expect(availability.check).not.toHaveBeenCalled()
+    expect(queue.enqueue).toHaveBeenCalledWith(created.id)
     expect(created.status).toBe('queued')
+  })
+
+  it('enqueues created jobs instead of executing them in the API process', async () => {
+    const queue = createQueueMock()
+    const { service, marketData } = createService({ queue })
+
+    const created = await service.createJob(createInput(), OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(created.status).toBe('queued')
+    expect(queue.enqueue).toHaveBeenCalledWith(created.id)
+    expect(marketData.prepareData).not.toHaveBeenCalled()
+  })
+
+  it('marks job failed when enqueue fails after persistence', async () => {
+    const queue = { enqueue: jest.fn().mockRejectedValue(new Error('redis down')) }
+    const { service, prisma, repository } = createService({ queue })
+
+    await expect(service.createJob(createInput(), OWNER_USER_ID)).rejects.toMatchObject({
+      code: ErrorCode.BACKTEST_QUEUE_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    })
+
+    const createdId = [...prisma.backtestJob.store.keys()][0]
+    expect(repository.markFailed).toHaveBeenCalledWith(createdId, expect.objectContaining({
+      code: ErrorCode.BACKTEST_QUEUE_UNAVAILABLE,
+      message: 'Backtest queue unavailable',
+    }))
+    expect(prisma.backtestJob.store.get(createdId)).toMatchObject({
+      status: 'failed',
+      error: 'Backtest queue unavailable',
+    })
+  })
+
+  it('rebuilds worker execution input from persisted summary and published snapshot', async () => {
+    const snapshotLoader = createSnapshotLoaderMock()
+    const { service } = createService({ snapshotLoader })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.requestedRangeInput = { preset: '7D' }
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    const execution = await service.getExecutionInput(created.id)
+
+    expect(snapshotLoader.load).toHaveBeenCalledWith({
+      id: 's1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-1',
+      userId: OWNER_USER_ID,
+    })
+    expect(execution.input).toMatchObject({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      requestedRangeInput: { preset: '7D' },
+      execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
+      strategy: expect.any(Object),
+    })
+    expect(execution.inputSummary).toMatchObject({ snapshotId: 'snapshot-1' })
   })
 
   it('creates a job when conversationId belongs to the owner user', async () => {
@@ -303,20 +408,16 @@ describe('backtestJobsService', () => {
   })
 
   it('checks snapshot-bound symbol availability before creating a backtest job', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
     const prisma = createPrismaMock()
     const availability = {
       check: jest.fn().mockResolvedValue({ supported: true }),
     }
     const service = new BacktestJobsService(
-      runner as never,
-      marketData as never,
       availability as never,
       createConversationsMock() as never,
-      prisma as never,
+      createRepositoryMock(prisma as never) as never,
+      createQueueMock() as never,
+      createSnapshotLoaderMock() as never,
     )
     const input = createInput()
     input.symbols = ['BTCUSDT']
@@ -343,10 +444,6 @@ describe('backtestJobsService', () => {
   })
 
   it('rejects create-job with a structured business error when snapshot-bound symbol is unavailable', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
     const prisma = createPrismaMock()
     const availability = {
       check: jest.fn().mockResolvedValue({
@@ -361,11 +458,11 @@ describe('backtestJobsService', () => {
       }),
     }
     const service = new BacktestJobsService(
-      runner as never,
-      marketData as never,
       availability as never,
       createConversationsMock() as never,
-      prisma as never,
+      createRepositoryMock(prisma as never) as never,
+      createQueueMock() as never,
+      createSnapshotLoaderMock() as never,
     )
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
@@ -395,146 +492,6 @@ describe('backtestJobsService', () => {
     expect(prisma.backtestJob.create).not.toHaveBeenCalled()
   })
 
-  it('stores succeeded result in prisma and returns it from getJobResult', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: { totalTrades: 0 },
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const { service, marketData, prisma, availability } = createService({ runner })
-
-    const created = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-
-    expect(marketData.prepareData).toHaveBeenCalledWith(
-      expect.objectContaining({
-        symbols: ['BTCUSDT'],
-      }),
-    )
-
-    expect(prisma.backtestJob.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: created.id },
-        data: expect.objectContaining({
-          status: 'succeeded',
-          result: expect.objectContaining({
-            summary: { totalTrades: 0 },
-          }),
-        }),
-      }),
-    )
-
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        summary: { totalTrades: 0 },
-      }),
-    )
-  })
-
-  it('includes resultSummary in getJob without leaking full report payload', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: {
-          netProfit: 1200,
-          netProfitPct: 12,
-          maxDrawdownPct: 8,
-          winRate: 0.6,
-          profitFactor: 1.7,
-          totalTrades: 6,
-        },
-        equityCurve: [{ ts: 1, equity: 10000 }],
-        trades: [{ id: 'trade-1', symbol: 'BTCUSDT' }],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const marketData = createMarketDataMock()
-    const { service, prisma, availability } = createService({ runner, marketData })
-
-    const created = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toMatchObject({
-      id: created.id,
-      status: 'succeeded',
-      resultSummary: {
-        netProfit: 1200,
-        netProfitPct: 12,
-        maxDrawdownPct: 8,
-        winRate: 0.6,
-        profitFactor: 1.7,
-        totalTrades: 6,
-      },
-    })
-  })
-
-  it('includes open-trade summary when the backtest ends with open positions', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: {
-          netProfit: 0,
-          netProfitPct: 0,
-          maxDrawdownPct: 3.2,
-          winRate: 0,
-          profitFactor: 0,
-          totalTrades: 0,
-        },
-        equityCurve: [{ ts: 1, equity: 10000 }],
-        trades: [],
-        markers: [{ id: 'm1', symbol: 'BTCUSDT', ts: 1, price: 100, kind: 'entry_long', tradeId: 't1' }],
-        bySymbol: [],
-        openPositions: [
-          {
-            symbol: 'BTCUSDT',
-            qty: 1,
-            avgEntryPrice: 100,
-            unrealizedPnl: 12.34,
-          },
-        ],
-      }),
-    }
-    const marketData = createMarketDataMock()
-    const { service, prisma, availability } = createService({ runner, marketData })
-
-    const created = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toMatchObject({
-      id: created.id,
-      status: 'succeeded',
-      resultSummary: {
-        totalTrades: 0,
-        totalOpenTrades: 1,
-        openPnl: 12.34,
-      },
-    })
-  })
-
-  it('stores failed result state in prisma when runner throws', async () => {
-    const runner = {
-      run: jest.fn().mockRejectedValue(new Error('boom')),
-    }
-    const marketData = createMarketDataMock()
-    const { service, prisma, availability } = createService({ runner, marketData })
-
-    const created = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-
-    expect(prisma.backtestJob.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: created.id },
-        data: expect.objectContaining({
-          status: 'failed',
-          error: 'boom',
-        }),
-      }),
-    )
-  })
-
   it('rejects result query when job is not completed', async () => {
     const { service, marketData, prisma, availability } = createService()
     const created = await service.createJob(createInput(), OWNER_USER_ID)
@@ -555,10 +512,6 @@ describe('backtestJobsService', () => {
   })
 
   it('rejects persisted jobs with unexpected status values', async () => {
-    const runner = {
-      run: jest.fn(),
-    }
-    const marketData = createMarketDataMock()
     const availability = createAvailabilityMock()
     const prisma = {
       backtestJob: {
@@ -576,11 +529,11 @@ describe('backtestJobsService', () => {
       },
     }
     const service = new BacktestJobsService(
-      runner as never,
-      marketData as never,
       availability as never,
       createConversationsMock() as never,
-      prisma as never,
+      createRepositoryMock(prisma as never) as never,
+      createQueueMock() as never,
+      createSnapshotLoaderMock() as never,
     )
 
     await expect(service.getJob('job-invalid', OWNER_USER_ID)).rejects.toThrow(
@@ -589,10 +542,6 @@ describe('backtestJobsService', () => {
   })
 
   it('rejects persisted job results with unexpected status values', async () => {
-    const runner = {
-      run: jest.fn(),
-    }
-    const marketData = createMarketDataMock()
     const availability = createAvailabilityMock()
     const prisma = {
       backtestJob: {
@@ -612,203 +561,16 @@ describe('backtestJobsService', () => {
       },
     }
     const service = new BacktestJobsService(
-      runner as never,
-      marketData as never,
       availability as never,
       createConversationsMock() as never,
-      prisma as never,
+      createRepositoryMock(prisma as never) as never,
+      createQueueMock() as never,
+      createSnapshotLoaderMock() as never,
     )
 
     await expect(service.getJobResult('job-invalid-result', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
     )
-  })
-
-  it('persists applied range when coverage is partial and allowPartial is true', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: { totalTrades: 1 },
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const input = createInput()
-    input.allowPartial = true
-    const marketData = createMarketDataMock({
-      coverage: createCoverage({
-        kind: 'partial',
-        availableRange: { fromTs: 2, toTs: 3 },
-        appliedRange: { fromTs: 2, toTs: 3 },
-      }),
-    })
-    const { service, prisma, availability } = createService({ runner, marketData })
-    const created = await service.createJob(input, OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        status: 'succeeded',
-        inputSummary: expect.objectContaining({
-          appliedRange: { fromTs: 2, toTs: 3 },
-          isPartial: true,
-        }),
-      }),
-    )
-  })
-
-  it('fails partial coverage when allowPartial is omitted', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: { totalTrades: 1 },
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const input = createInput()
-    delete input.allowPartial
-    const marketData = createMarketDataMock({
-      coverage: createCoverage({
-        kind: 'partial',
-        availableRange: { fromTs: 2, toTs: 3 },
-        appliedRange: { fromTs: 2, toTs: 3 },
-      }),
-    })
-    const { service, prisma, availability } = createService({ runner, marketData })
-
-    const created = await service.createJob(input, OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        status: 'failed',
-        errorDetails: {
-          code: 'backtest.data_range_out_of_coverage',
-          message: 'backtest.data_range_out_of_coverage',
-          args: {
-            requestedRange: { fromTs: 1, toTs: 2 },
-            availableRange: { fromTs: 2, toTs: 3 },
-            suggestedRange: { fromTs: 2, toTs: 3 },
-          },
-        },
-        inputSummary: expect.objectContaining({
-          allowPartial: false,
-        }),
-      }),
-    )
-    expect(runner.run).not.toHaveBeenCalled()
-  })
-
-  it('does not evict finished jobs when more jobs are created', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: { totalTrades: 0 },
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const { service, marketData, prisma, availability } = createService({ runner })
-
-    const first = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-    const second = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(first.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        id: first.id,
-        status: 'succeeded',
-      }),
-    )
-    await expect(service.getJob(second.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        id: second.id,
-        status: 'succeeded',
-      }),
-    )
-    expect(prisma.backtestJob.deleteMany).not.toHaveBeenCalled()
-  })
-
-  it('writes a lightweight lastBacktestRef to the owning conversation after a successful snapshot-bound backtest', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: {
-          netProfit: 120,
-          netProfitPct: 12,
-          maxDrawdownPct: 8,
-          winRate: 0.6,
-          profitFactor: 1.8,
-          totalTrades: 5,
-        },
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const conversations = createConversationsMock()
-    const { service } = createService({ runner, conversations })
-    const input = createInput()
-    Object.assign(input.strategy as Record<string, unknown>, {
-      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      snapshotId: 'snapshot-1',
-    })
-    Object.assign(input as unknown as Record<string, unknown>, {
-      requestedRangeInput: {
-        preset: 'CUSTOM',
-        startAt: '2026-03-01T00:00:00.000Z',
-        endAt: '2026-03-24T00:00:00.000Z',
-      },
-    })
-    input.allowPartial = false
-    input.conversationId = 'conv-1'
-
-    const created = await service.createJob(input, OWNER_USER_ID)
-    await flushMicrotasks()
-
-    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
-    const payload = conversations.updateLastBacktestRef.mock.calls[0][0]
-    expect(payload).toEqual({
-      conversationId: 'conv-1',
-      userId: OWNER_USER_ID,
-      lastBacktestRef: {
-        jobId: created.id,
-        publishedSnapshotId: 'snapshot-1',
-        config: {
-          range: {
-            preset: 'CUSTOM',
-            startAt: '2026-03-01T00:00:00.000Z',
-            endAt: '2026-03-24T00:00:00.000Z',
-          },
-          execution: {
-            initialCash: 10000,
-            leverage: 2,
-            slippageBps: 5,
-            feeBps: 4,
-            priceSource: 'mid',
-            allowPartial: false,
-          },
-        },
-        summary: {
-          maxDrawdownPct: 8,
-          totalReturnPct: 12,
-          winRatePct: 60,
-          tradeCount: 5,
-          marketType: 'spot',
-        },
-        completedAt: expect.any(Date),
-      },
-    })
-    expect(payload.lastBacktestRef).not.toHaveProperty('equityCurve')
-    expect(payload.lastBacktestRef).not.toHaveProperty('trades')
-    expect(payload.lastBacktestRef).not.toHaveProperty('markers')
-    expect(payload.lastBacktestRef).not.toHaveProperty('bySymbol')
-    expect(payload.lastBacktestRef).not.toHaveProperty('result')
   })
 
   it('persists the exact backtest draft config used by a snapshot-bound run before waiting for result writeback', async () => {
@@ -965,144 +727,6 @@ describe('backtestJobsService', () => {
     expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
   })
 
-  it('keeps a persisted job succeeded when conversation lastBacktestRef writeback fails', async () => {
-    const result = {
-      summary: {
-        netProfit: 120,
-        netProfitPct: 12,
-        maxDrawdownPct: 8,
-        winRate: 0.6,
-        profitFactor: 1.8,
-        totalTrades: 5,
-      },
-      equityCurve: [],
-      trades: [],
-      markers: [],
-      bySymbol: [],
-    }
-    const runner = {
-      run: jest.fn().mockResolvedValue(result),
-    }
-    const conversations = createConversationsMock()
-    conversations.updateLastBacktestRef.mockRejectedValue(new Error('writeback failed'))
-    const { service } = createService({ runner, conversations })
-    const input = createInput()
-    Object.assign(input.strategy as Record<string, unknown>, {
-      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      snapshotId: 'snapshot-1',
-    })
-    input.conversationId = 'conv-1'
-
-    const created = await service.createJob(input, OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        id: created.id,
-        status: 'succeeded',
-        resultSummary: expect.objectContaining(result.summary),
-      }),
-    )
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
-    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not write lastBacktestRef after a successful snapshot-bound fallback job', async () => {
-    const result = {
-      summary: {
-        netProfit: 120,
-        netProfitPct: 12,
-        maxDrawdownPct: 8,
-        winRate: 0.6,
-        profitFactor: 1.8,
-        totalTrades: 5,
-      },
-      equityCurve: [],
-      trades: [],
-      markers: [],
-      bySymbol: [],
-    }
-    const runner = {
-      run: jest.fn().mockResolvedValue(result),
-    }
-    const conversations = createConversationsMock()
-    const prisma = createPrismaMock()
-    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
-      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
-      { code: 'P2021' },
-    ))
-    const { service } = createService({ runner, conversations, prisma })
-    const input = createInput()
-    Object.assign(input.strategy as Record<string, unknown>, {
-      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      snapshotId: 'snapshot-1',
-    })
-    input.conversationId = 'conv-1'
-
-    const created = await service.createJob(input, OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        id: created.id,
-        status: 'succeeded',
-        resultSummary: expect.objectContaining(result.summary),
-      }),
-    )
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
-    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
-  })
-
-  it('keeps a fallback job succeeded without attempting lastBacktestRef writeback', async () => {
-    const result = {
-      summary: {
-        netProfit: 120,
-        netProfitPct: 12,
-        maxDrawdownPct: 8,
-        winRate: 0.6,
-        profitFactor: 1.8,
-        totalTrades: 5,
-      },
-      equityCurve: [],
-      trades: [],
-      markers: [],
-      bySymbol: [],
-    }
-    const runner = {
-      run: jest.fn().mockResolvedValue(result),
-    }
-    const conversations = createConversationsMock()
-    const prisma = createPrismaMock()
-    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
-      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
-      { code: 'P2021' },
-    ))
-    const { service } = createService({ runner, conversations, prisma })
-    const warnSpy = jest.spyOn((service as any).logger, 'warn')
-    const input = createInput()
-    Object.assign(input.strategy as Record<string, unknown>, {
-      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      snapshotId: 'snapshot-1',
-    })
-    input.conversationId = 'conv-1'
-
-    const created = await service.createJob(input, OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        id: created.id,
-        status: 'succeeded',
-        resultSummary: expect.objectContaining(result.summary),
-      }),
-    )
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
-    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('event=backtest_job_persistence_unavailable'),
-    )
-  })
-
   it('throws not found when prisma cannot find the job', async () => {
     const { service, marketData, prisma, availability } = createService()
 
@@ -1110,105 +734,18 @@ describe('backtestJobsService', () => {
     await expect(service.getJob('missing', OWNER_USER_ID)).rejects.toThrow('backtest.job_not_found')
   })
 
-  // Issue #1699 P2a：runner 完成回测后，jobs service 按 BacktestDiagnostics 派发
-  //   summary.diagnosticReason，让 trades=0 的根因可被前端区分
-  describe('Issue #1699: diagnosticReason 派发', () => {
-    const buildRunner = (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number; dataRequirementMissingCount?: number; eventStreamMissingCount?: number }) => ({
-      run: jest.fn().mockResolvedValue({
-        summary: { netProfit: 0, netProfitPct: 0, maxDrawdownPct: 0, winRate: 0, profitFactor: 0, totalTrades: 0 },
-        diagnostics,
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    })
-
-    const runAndReadResult = async (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number; dataRequirementMissingCount?: number; eventStreamMissingCount?: number }) => {
-      const runner = buildRunner(diagnostics)
-      const marketData = createMarketDataMock()
-      const availability = createAvailabilityMock()
-      const prisma = createPrismaMock()
-      const service = new BacktestJobsService(
-        runner as never,
-        marketData as never,
-        availability as never,
-        createConversationsMock() as never,
-        prisma as never,
-      )
-      const created = await service.createJob(createInput(), OWNER_USER_ID)
-      await flushMicrotasks()
-      const updateCall = prisma.backtestJob.update.mock.calls.find(
-        ([arg]) => (arg as { data?: { status?: string } }).data?.status === 'succeeded',
-      )
-      expect(updateCall).toBeDefined()
-      const persistedResult = (updateCall![0] as { data: { result: unknown } }).data.result as { summary: { diagnosticReason?: string } }
-      return { created, persistedResult }
-    }
-
-    it('compiledRulesCount=0 派发 BACKTEST_NO_RULES_COMPILED', async () => {
-      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 0, signalTriggerCount: 0, fillCount: 0 })
-      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_NO_RULES_COMPILED')
-    })
-
-    it('规则编译但信号未触发 → BACKTEST_NO_SIGNAL_FIRED_IN_RANGE', async () => {
-      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 2, signalTriggerCount: 0, fillCount: 0 })
-      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_NO_SIGNAL_FIRED_IN_RANGE')
-    })
-
-    it('规则需要事件流但未提供 → BACKTEST_EVENT_STREAM_UNAVAILABLE', async () => {
-      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 2, signalTriggerCount: 0, fillCount: 0, eventStreamMissingCount: 1 })
-      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
-    })
-
-    it('信号触发但未撮合 → BACKTEST_SIGNAL_FIRED_BUT_NO_FILL', async () => {
-      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 1, signalTriggerCount: 5, fillCount: 0 })
-      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_SIGNAL_FIRED_BUT_NO_FILL')
-    })
-  })
-
-  it('falls back to in-memory jobs when backtest job persistence table is unavailable', async () => {
-    const runner = {
-      run: jest.fn().mockResolvedValue({
-        summary: { totalTrades: 0 },
-        equityCurve: [],
-        trades: [],
-        markers: [],
-        bySymbol: [],
-      }),
-    }
-    const marketData = createMarketDataMock()
-    const availability = createAvailabilityMock()
+  it('propagates persistence failures instead of falling back to API-process execution', async () => {
     const prisma = createPrismaMock()
-    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
+    const error = Object.assign(
       new Error('The table `public.backtest_jobs` does not exist in the current database.'),
       { code: 'P2021' },
-    ))
-    const service = new BacktestJobsService(
-      runner as never,
-      marketData as never,
-      availability as never,
-      createConversationsMock() as never,
-      prisma as never,
     )
+    prisma.backtestJob.create.mockRejectedValueOnce(error)
+    const { service, marketData, queue } = createService({ prisma })
 
-    const created = await service.createJob(createInput(), OWNER_USER_ID)
-    await flushMicrotasks()
-
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        id: created.id,
-        status: 'succeeded',
-        resultSummary: { totalTrades: 0 },
-      }),
-    )
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(
-      expect.objectContaining({
-        summary: { totalTrades: 0 },
-      }),
-    )
-    expect(prisma.backtestJob.create).toHaveBeenCalledTimes(1)
-    expect(prisma.backtestJob.update).not.toHaveBeenCalled()
+    await expect(service.createJob(createInput(), OWNER_USER_ID)).rejects.toBe(error)
+    expect(queue.enqueue).not.toHaveBeenCalled()
+    expect(marketData.prepareData).not.toHaveBeenCalled()
   })
 })
 

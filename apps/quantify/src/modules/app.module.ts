@@ -1,7 +1,5 @@
 import type { MiddlewareConsumer, NestModule } from '@nestjs/common'
-import { ErrorCode } from '@ai/shared'
-import { BullModule } from '@nestjs/bull'
-import { HttpStatus, Module } from '@nestjs/common'
+import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
@@ -10,12 +8,12 @@ import { WinstonModule } from 'nest-winston'
 import { ClsMiddleware } from 'nestjs-cls'
 
 import { defaultEnvAccessor } from '../common/env/env.accessor'
-import { DomainException } from '../common/exceptions/domain.exception'
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter'
 import { AfterCommitInterceptor } from '../common/interceptors/after-commit.interceptor'
 import { LoggerInterceptor } from '../common/interceptors/logger.interceptor'
 import { RequestContextInterceptor } from '../common/interceptors/request-context.interceptor'
 import { TransformInterceptor } from '../common/interceptors/transform.interceptor'
+import { BullRootModule } from '../common/modules/bull-root.module'
 import { CacheModule } from '../common/modules/cache.module'
 import { ClsConfigModule } from '../common/modules/cls.module'
 import { EnvModule } from '../common/modules/env.module'
@@ -48,27 +46,6 @@ import { TradingModule } from './trading/trading.module'
 
 // 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
 const currentEnv = defaultEnvAccessor.appEnv()
-const bullImports = isMessageBusRuntimeEnabled()
-  ? [
-      BullModule.forRootAsync({
-        // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix -- NestJS API requires the `useFactory` key name.
-        useFactory: (env: EnvService) => {
-          const url = env.getString('REDIS_URL')
-          if (!url) {
-            throw new DomainException('redis.missing_url_for_bull', {
-              code: ErrorCode.REDIS_CONNECTION_ERROR,
-              status: HttpStatus.INTERNAL_SERVER_ERROR,
-              args: { key: 'REDIS_URL' },
-            })
-          }
-
-          return { url }
-        },
-        inject: [EnvService],
-      }),
-    ]
-  : []
-
 const infrastructureImports = isMessageBusRuntimeEnabled()
   ? [MessageBusModule]
   : []
@@ -102,7 +79,7 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
       },
       inject: [EnvService],
     }),
-    ...bullImports,
+    BullRootModule,
     CacheModule, // 必须在 WinstonModule 之后，因为 RedisService 依赖 WINSTON_MODULE_NEST_PROVIDER
     PrismaModule, // Global 模块，需要在其他模块之前导入
     ScheduleModule.forRoot(),

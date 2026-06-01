@@ -899,6 +899,24 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).not.toContain('persisted-message')
   })
 
+  it('leaves server-owned conversation loading state when sync fails', async () => {
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    listAiQuantConversations.mockRejectedValue(new Error('gateway'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForCondition(() => {
+      expect(container.textContent).not.toContain('aiQuant.messages.loadingConversations')
+    })
+    expect(container.textContent).toContain('aiQuant.messages.conversationSyncFailed')
+  })
+
   it('semantic edit clears published/backtest artifacts and refreshes graph state from CONFIRM_GATE response', async () => {
     localStorage.clear()
     localStorage.setItem(
