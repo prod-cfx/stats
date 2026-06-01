@@ -7,6 +7,7 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_button.dart';
+import 'widgets/qz_exchange_logo.dart';
 
 /// 交易所认证形态（对齐设计稿 `m-screens-4.jsx:2825-2831` 的 `API_META`）。
 enum _ApiMode { key, wallet }
@@ -216,7 +217,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
                 child: Row(
                   children: <Widget>[
-                    _ExchangeBadge(exchange: widget.exchange),
+                    QzExchangeLogo(exchange: widget.exchange, size: 42),
                     const SizedBox(width: QzSpacing.md),
                     Expanded(
                       child: Column(
@@ -507,46 +508,6 @@ class _Label extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _ExchangeBadge extends StatelessWidget {
-  const _ExchangeBadge({required this.exchange});
-  final String exchange;
-
-  Color _color() {
-    switch (exchange.toLowerCase()) {
-      case 'binance':
-        return const Color(0xFFF0B90B);
-      case 'okx':
-        return const Color(0xFF22272F);
-      case 'hyperliquid':
-        return const Color(0xFF13ABA1);
-      default:
-        return const Color(0xFF7C5CFF);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final Color bg = _color();
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(11),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        exchange.isEmpty ? '?' : exchange.substring(0, 1).toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 18,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
     );
   }
 }

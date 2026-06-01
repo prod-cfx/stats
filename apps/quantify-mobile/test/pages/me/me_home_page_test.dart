@@ -262,7 +262,7 @@ void main() {
     // Hyperliquid 默认未配置 → 行尾按钮为「连接」
     await tester.tap(find.text('连接'));
     await tester.pumpAndSettle();
-    // sheet 标题里包含「Hyperliquid API」（_ExchangeBadge 旁标题文案）
+    // sheet 标题里包含「Hyperliquid API」（QzExchangeLogo 旁标题文案）
     expect(find.text('Hyperliquid API'), findsOneWidget);
   });
 
