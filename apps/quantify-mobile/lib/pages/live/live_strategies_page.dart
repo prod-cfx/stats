@@ -13,6 +13,9 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/live_close_with_position_sheet.dart';
+import 'widgets/live_delete_sheet.dart';
+import 'widgets/live_need_pause_sheet.dart';
 import 'widgets/live_sort_sheet.dart';
 import 'widgets/live_strategy_card.dart';
 
@@ -69,6 +72,57 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
       _sortMetric = result.metric;
       _sortDir = result.direction;
     });
+  }
+
+  /// footer 主操作：running → 暂停（有持仓先弹处理对话框）；其余 → 开启/恢复。
+  /// 复用详情页 `_StickyAction` 同款 store + sheet 链路（#1773），口径保持一致。
+  Future<void> _onToggle(LiveStrategy s) async {
+    final LiveStrategyStore store =
+        ref.read(liveStrategyStoreProvider.notifier);
+    if (s.status == LiveStrategyStatus.running) {
+      await _pauseRunning(s, store);
+      return;
+    }
+    store.resume(s.id);
+  }
+
+  Future<void> _pauseRunning(LiveStrategy s, LiveStrategyStore store) async {
+    final LiveStrategyPosition? position =
+        await ref.read(liveStrategyPositionProvider(s.id).future);
+    if (!mounted) return;
+    if (position == null) {
+      store.pause(s.id);
+      return;
+    }
+    final LivePauseMode? mode = await LiveCloseWithPositionSheet.show(
+      context,
+      strategy: s,
+      position: position,
+    );
+    if (mode == null) return;
+    store.pause(s.id);
+  }
+
+  /// footer 菜单：当前唯一写操作为删除，复用详情页删除守卫链路。
+  Future<void> _onOpenMenu(LiveStrategy s) async {
+    final LiveStrategyStore store =
+        ref.read(liveStrategyStoreProvider.notifier);
+    if (s.status == LiveStrategyStatus.running) {
+      final bool? goPause =
+          await LiveNeedPauseSheet.show(context, name: s.name);
+      if (goPause != true || !mounted) return;
+      await _pauseRunning(s, store);
+      return;
+    }
+    final bool stopped = s.status == LiveStrategyStatus.stopped;
+    final bool? permanent =
+        await LiveDeleteSheet.show(context, name: s.name, stopped: stopped);
+    if (permanent == null || !mounted) return;
+    if (permanent) {
+      store.permanentDelete(s.id);
+    } else {
+      store.softDelete(s.id);
+    }
   }
 
   @override
@@ -153,6 +207,8 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
               key: Key('live-card-${s.id}'),
               strategy: s,
               onTap: () => context.push('/me/live/${s.id}'),
+              onToggle: () => _onToggle(s),
+              onOpenMenu: () => _onOpenMenu(s),
             ),
           ),
       ],

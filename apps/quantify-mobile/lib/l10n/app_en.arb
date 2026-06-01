@@ -1268,6 +1268,25 @@
     }
   },
   "liveNeedPausePrimary": "Pause strategy",
+  "liveCardRunFor": "Running {runFor}",
+  "@liveCardRunFor": {
+    "placeholders": {
+      "runFor": {"type": "String"}
+    }
+  },
+  "liveCardTrades": "{trades} trades",
+  "@liveCardTrades": {
+    "placeholders": {
+      "trades": {"type": "int"}
+    }
+  },
+  "liveCardWinRate": "Win {winRate}%",
+  "@liveCardWinRate": {
+    "placeholders": {
+      "winRate": {"type": "String"}
+    }
+  },
+  "liveCardMenuTooltip": "More",
   "deployViewLiveStrategies": "View live strategies",
   "whaleSearchHint": "Address / label / asset / exchange",
   "whaleSearchPrompt": "Search addresses, labels, assets, exchanges or event types",

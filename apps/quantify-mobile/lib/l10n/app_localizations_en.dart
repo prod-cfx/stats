@@ -3348,6 +3348,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveNeedPausePrimary => 'Pause strategy';
 
   @override
+  String liveCardRunFor(String runFor) {
+    return 'Running $runFor';
+  }
+
+  @override
+  String liveCardTrades(int trades) {
+    return '$trades trades';
+  }
+
+  @override
+  String liveCardWinRate(String winRate) {
+    return 'Win $winRate%';
+  }
+
+  @override
+  String get liveCardMenuTooltip => 'More';
+
+  @override
   String get deployViewLiveStrategies => 'View live strategies';
 
   @override

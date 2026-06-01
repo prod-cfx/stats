@@ -3282,6 +3282,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveNeedPausePrimary => '去暂停策略';
 
   @override
+  String liveCardRunFor(String runFor) {
+    return '运行 $runFor';
+  }
+
+  @override
+  String liveCardTrades(int trades) {
+    return '$trades 笔';
+  }
+
+  @override
+  String liveCardWinRate(String winRate) {
+    return '胜率 $winRate%';
+  }
+
+  @override
+  String get liveCardMenuTooltip => '更多';
+
+  @override
   String get deployViewLiveStrategies => '查看实盘策略';
 
   @override

@@ -1286,6 +1286,25 @@
     }
   },
   "liveNeedPausePrimary": "去暂停策略",
+  "liveCardRunFor": "运行 {runFor}",
+  "@liveCardRunFor": {
+    "placeholders": {
+      "runFor": {"type": "String"}
+    }
+  },
+  "liveCardTrades": "{trades} 笔",
+  "@liveCardTrades": {
+    "placeholders": {
+      "trades": {"type": "int"}
+    }
+  },
+  "liveCardWinRate": "胜率 {winRate}%",
+  "@liveCardWinRate": {
+    "placeholders": {
+      "winRate": {"type": "String"}
+    }
+  },
+  "liveCardMenuTooltip": "更多",
   "deployViewLiveStrategies": "查看实盘策略",
   "whaleSearchHint": "输入地址 / 标签 / 资产 / 交易所",
   "whaleSearchPrompt": "搜索地址、标签、资产、交易所或事件类型",

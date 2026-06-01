@@ -6378,6 +6378,30 @@ abstract class AppLocalizations {
   /// **'去暂停策略'**
   String get liveNeedPausePrimary;
 
+  /// No description provided for @liveCardRunFor.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行 {runFor}'**
+  String liveCardRunFor(String runFor);
+
+  /// No description provided for @liveCardTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'{trades} 笔'**
+  String liveCardTrades(int trades);
+
+  /// No description provided for @liveCardWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率 {winRate}%'**
+  String liveCardWinRate(String winRate);
+
+  /// No description provided for @liveCardMenuTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get liveCardMenuTooltip;
+
   /// No description provided for @deployViewLiveStrategies.
   ///
   /// In zh, this message translates to:
