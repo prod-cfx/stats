@@ -70,6 +70,8 @@ class DeploymentResult {
   final String? symbol;
   final double? amount;
   final String? leverage;
+  // #1896：启动时间（对齐设计稿 ScreenDeploy success 受理；nullable 向后兼容）。
+  final DateTime? startedAt;
 
   const DeploymentResult({
     required this.exchange,
@@ -79,5 +81,6 @@ class DeploymentResult {
     this.symbol,
     this.amount,
     this.leverage,
+    this.startedAt,
   });
 }

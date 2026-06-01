@@ -872,6 +872,96 @@ abstract class AppLocalizations {
   /// **'确认无误，立即部署'**
   String get deployPreflightConfirmButton;
 
+  /// No description provided for @deployPreflightApiFailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所 API 未绑定'**
+  String get deployPreflightApiFailTitle;
+
+  /// No description provided for @deployPreflightApiFailSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到可用密钥，去绑定 API 后重试'**
+  String get deployPreflightApiFailSub;
+
+  /// No description provided for @deployPreflightBalanceFailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户余额不足'**
+  String get deployPreflightBalanceFailTitle;
+
+  /// No description provided for @deployPreflightBalanceFailSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用资金低于部署所需，请充值或调低投入金额'**
+  String get deployPreflightBalanceFailSub;
+
+  /// No description provided for @deployPreflightLatencyFailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络或交易所时延异常'**
+  String get deployPreflightLatencyFailTitle;
+
+  /// No description provided for @deployPreflightLatencyFailSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'下单延时偏高 · 数据流不稳定，建议稍后重试'**
+  String get deployPreflightLatencyFailSub;
+
+  /// No description provided for @deployConfirmSummaryReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计净值'**
+  String get deployConfirmSummaryReturn;
+
+  /// No description provided for @deployConfirmSummarySharpe.
+  ///
+  /// In zh, this message translates to:
+  /// **'Sharpe'**
+  String get deployConfirmSummarySharpe;
+
+  /// No description provided for @deployConfirmSummaryMaxDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'最大回撤'**
+  String get deployConfirmSummaryMaxDrawdown;
+
+  /// No description provided for @deployConfirmFieldExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所'**
+  String get deployConfirmFieldExchange;
+
+  /// No description provided for @deployConfirmFieldMarketType.
+  ///
+  /// In zh, this message translates to:
+  /// **'市场类型'**
+  String get deployConfirmFieldMarketType;
+
+  /// No description provided for @deployConfirmFieldAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择账户'**
+  String get deployConfirmFieldAccount;
+
+  /// No description provided for @deployConfirmFieldLeverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署杠杆'**
+  String get deployConfirmFieldLeverage;
+
+  /// No description provided for @deployConfirmMarketPerp.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约'**
+  String get deployConfirmMarketPerp;
+
+  /// No description provided for @deployConfirmFootnote.
+  ///
+  /// In zh, this message translates to:
+  /// **'以上为只读确认信息，确认后将按此方案部署实盘'**
+  String get deployConfirmFootnote;
+
   /// No description provided for @deployingTitle.
   ///
   /// In zh, this message translates to:

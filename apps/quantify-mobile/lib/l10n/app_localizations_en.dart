@@ -436,6 +436,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deployPreflightConfirmButton => 'Confirmed, deploy now';
 
   @override
+  String get deployPreflightApiFailTitle => 'Exchange API not bound';
+
+  @override
+  String get deployPreflightApiFailSub =>
+      'No usable key detected, bind API and retry';
+
+  @override
+  String get deployPreflightBalanceFailTitle => 'Insufficient account balance';
+
+  @override
+  String get deployPreflightBalanceFailSub =>
+      'Available funds below deploy requirement, top up or lower the amount';
+
+  @override
+  String get deployPreflightLatencyFailTitle =>
+      'Network or exchange latency abnormal';
+
+  @override
+  String get deployPreflightLatencyFailSub =>
+      'High order latency · unstable feed, retry later';
+
+  @override
+  String get deployConfirmSummaryReturn => 'Cumulative net value';
+
+  @override
+  String get deployConfirmSummarySharpe => 'Sharpe';
+
+  @override
+  String get deployConfirmSummaryMaxDrawdown => 'Max drawdown';
+
+  @override
+  String get deployConfirmFieldExchange => 'Exchange';
+
+  @override
+  String get deployConfirmFieldMarketType => 'Market type';
+
+  @override
+  String get deployConfirmFieldAccount => 'Account';
+
+  @override
+  String get deployConfirmFieldLeverage => 'Deploy leverage';
+
+  @override
+  String get deployConfirmMarketPerp => 'Perpetual';
+
+  @override
+  String get deployConfirmFootnote =>
+      'The above is read-only confirmation; the live strategy will deploy per this plan';
+
+  @override
   String deployingTitle(Object exchange) {
     return 'Deploying to $exchange';
   }

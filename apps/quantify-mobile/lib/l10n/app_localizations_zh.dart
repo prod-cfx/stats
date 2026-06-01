@@ -411,6 +411,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployPreflightConfirmButton => '确认无误，立即部署';
 
   @override
+  String get deployPreflightApiFailTitle => '交易所 API 未绑定';
+
+  @override
+  String get deployPreflightApiFailSub => '未检测到可用密钥，去绑定 API 后重试';
+
+  @override
+  String get deployPreflightBalanceFailTitle => '账户余额不足';
+
+  @override
+  String get deployPreflightBalanceFailSub => '可用资金低于部署所需，请充值或调低投入金额';
+
+  @override
+  String get deployPreflightLatencyFailTitle => '网络或交易所时延异常';
+
+  @override
+  String get deployPreflightLatencyFailSub => '下单延时偏高 · 数据流不稳定，建议稍后重试';
+
+  @override
+  String get deployConfirmSummaryReturn => '累计净值';
+
+  @override
+  String get deployConfirmSummarySharpe => 'Sharpe';
+
+  @override
+  String get deployConfirmSummaryMaxDrawdown => '最大回撤';
+
+  @override
+  String get deployConfirmFieldExchange => '交易所';
+
+  @override
+  String get deployConfirmFieldMarketType => '市场类型';
+
+  @override
+  String get deployConfirmFieldAccount => '选择账户';
+
+  @override
+  String get deployConfirmFieldLeverage => '部署杠杆';
+
+  @override
+  String get deployConfirmMarketPerp => '永续合约';
+
+  @override
+  String get deployConfirmFootnote => '以上为只读确认信息，确认后将按此方案部署实盘';
+
+  @override
   String deployingTitle(Object exchange) {
     return '正在部署到 $exchange';
   }

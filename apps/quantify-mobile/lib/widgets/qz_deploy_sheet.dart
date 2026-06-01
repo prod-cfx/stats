@@ -152,6 +152,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       symbol: 'BTC/USDT · 15m',
       amount: _amount,
       leverage: '5x · 全仓',
+      startedAt: now,
     );
     setState(() {
       _result = result;
@@ -1124,6 +1125,12 @@ class _DeployingStepRow extends StatelessWidget {
   }
 }
 
+/// 启动时间格式化（本地时区 `yyyy-MM-dd HH:mm`，不引第三方依赖）。
+String _formatStartedAt(DateTime t) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+}
+
 class _DonePane extends StatelessWidget {
   const _DonePane({required this.result, required this.onFinish});
 
@@ -1149,6 +1156,11 @@ class _DonePane extends StatelessWidget {
         ],
       if (result.leverage != null)
         <String>[l10n.deployDoneDetailLeverage, result.leverage!],
+      if (result.startedAt != null)
+        <String>[
+          l10n.deployDoneDetailStartedAt,
+          _formatStartedAt(result.startedAt!),
+        ],
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1283,6 +1295,45 @@ class _DetailRow extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 只读账单确认的风险 summary 单格（净值 / Sharpe / 最大回撤）（#1896）。
+class _SummaryCell extends StatelessWidget {
+  const _SummaryCell({
+    required this.label,
+    required this.value,
+    required this.scheme,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final QzColorScheme scheme;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? scheme.text,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(color: scheme.textDim, fontSize: 11),
           ),
         ],
       ),
@@ -1783,23 +1834,39 @@ class _PreflightPaneState extends State<_PreflightPane> {
 
   int _scanned = 0;
   bool _rechecking = false;
+  // 首轮预检 mock 失败（去绑定 API / 余额不足 / 时延异常）；「重新检测」翻转为全 pass。
+  // 替代旧的 3 项永远 pass，覆盖设计稿失败路径（#1896）。
+  bool _recovered = false;
   Timer? _timer;
 
   List<PreflightCheck> _checks(AppLocalizations l10n) => <PreflightCheck>[
         PreflightCheck(
-          ok: true,
-          title: l10n.deployPreflightApiOkTitle(widget.target.catalog.name),
-          sub: l10n.deployPreflightApiOkSub,
+          ok: _recovered,
+          title: _recovered
+              ? l10n.deployPreflightApiOkTitle(widget.target.catalog.name)
+              : l10n.deployPreflightApiFailTitle,
+          sub: _recovered
+              ? l10n.deployPreflightApiOkSub
+              : l10n.deployPreflightApiFailSub,
+          actionable: !_recovered,
         ),
         PreflightCheck(
-          ok: true,
-          title: l10n.deployPreflightBalanceOkTitle,
-          sub: l10n.deployPreflightBalanceOkSub,
+          ok: _recovered,
+          title: _recovered
+              ? l10n.deployPreflightBalanceOkTitle
+              : l10n.deployPreflightBalanceFailTitle,
+          sub: _recovered
+              ? l10n.deployPreflightBalanceOkSub
+              : l10n.deployPreflightBalanceFailSub,
         ),
         PreflightCheck(
-          ok: true,
-          title: l10n.deployPreflightLatencyOkTitle,
-          sub: l10n.deployPreflightLatencyOkSub,
+          ok: _recovered,
+          title: _recovered
+              ? l10n.deployPreflightLatencyOkTitle
+              : l10n.deployPreflightLatencyFailTitle,
+          sub: _recovered
+              ? l10n.deployPreflightLatencyOkSub
+              : l10n.deployPreflightLatencyFailSub,
         ),
       ];
 
@@ -1830,6 +1897,7 @@ class _PreflightPaneState extends State<_PreflightPane> {
   void _recheck() {
     setState(() {
       _rechecking = true;
+      _recovered = true; // 复检：mock 视作问题已处理 → 全 pass。
       _scanned = 0;
     });
     _startScan();
@@ -1849,8 +1917,10 @@ class _PreflightPaneState extends State<_PreflightPane> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        // strategy recap
+        // 只读账单确认：策略 + 风险 summary 卡（净值 / Sharpe / 最大回撤）
+        // + 只读表单（交易所 / 市场类型 / 选择账户 / 部署杠杆）+ footnote（#1896）。
         Container(
+          key: const Key('deploy-confirm-bill'),
           padding: const EdgeInsets.all(QzSpacing.md),
           decoration: BoxDecoration(
             color: c.bgSoft,
@@ -1872,6 +1942,59 @@ class _PreflightPaneState extends State<_PreflightPane> {
               Text(
                 l10n.deployPreflightStrategyMeta,
                 style: TextStyle(color: c.textDim, fontSize: 12),
+              ),
+              const SizedBox(height: QzSpacing.md),
+              // 风险 summary 3 格（mock）。
+              Row(
+                children: <Widget>[
+                  _SummaryCell(
+                    label: l10n.deployConfirmSummaryReturn,
+                    value: '+38.2%',
+                    valueColor: c.marketUp,
+                    scheme: c,
+                  ),
+                  _SummaryCell(
+                    label: l10n.deployConfirmSummarySharpe,
+                    value: '1.86',
+                    scheme: c,
+                  ),
+                  _SummaryCell(
+                    label: l10n.deployConfirmSummaryMaxDrawdown,
+                    value: '-12.4%',
+                    valueColor: c.marketDown,
+                    scheme: c,
+                  ),
+                ],
+              ),
+              const SizedBox(height: QzSpacing.sm),
+              Divider(color: c.border, height: 1),
+              const SizedBox(height: QzSpacing.xs),
+              // 只读表单。
+              _DetailRow(
+                label: l10n.deployConfirmFieldExchange,
+                value: widget.target.catalog.name,
+                scheme: c,
+              ),
+              _DetailRow(
+                label: l10n.deployConfirmFieldMarketType,
+                value: l10n.deployConfirmMarketPerp,
+                scheme: c,
+              ),
+              _DetailRow(
+                label: l10n.deployConfirmFieldAccount,
+                value:
+                    widget.target.apiKey?.label ?? widget.target.catalog.name,
+                scheme: c,
+              ),
+              _DetailRow(
+                label: l10n.deployConfirmFieldLeverage,
+                value: '5x · 全仓',
+                scheme: c,
+              ),
+              const SizedBox(height: QzSpacing.xs),
+              Text(
+                l10n.deployConfirmFootnote,
+                style: TextStyle(color: c.textDim, fontSize: 11, height: 1.4),
               ),
             ],
           ),

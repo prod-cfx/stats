@@ -143,14 +143,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('\$10000 USDT'), findsOneWidget);
 
-    // 「下一步」→ 预检查
+    // 「下一步」→ 预检查（只读账单确认 + 失败路径，#1896）
     await tester.tap(find.byKey(const Key('deploy-allocate-next')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('deploy-preflight-confirm')), findsOneWidget);
     expect(find.byKey(const Key('deploy-preflight-row-0')), findsOneWidget);
     expect(find.byKey(const Key('deploy-preflight-row-2')), findsOneWidget);
+    // 只读账单卡：summary 3 格 + 只读表单 + footnote
+    expect(find.byKey(const Key('deploy-confirm-bill')), findsOneWidget);
+    expect(find.text('累计净值'), findsOneWidget);
+    expect(find.text('最大回撤'), findsOneWidget);
+    expect(find.text('永续合约'), findsOneWidget);
 
-    // 等扫描跑完（3 × 360ms）→ 全通过状态
+    // 等扫描跑完（3 × 360ms）→ 首轮失败（#1896 失败路径），「重新检测」可见
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    expect(find.text('3/3 未通过'), findsOneWidget);
+    expect(find.byKey(const Key('deploy-preflight-recheck')), findsOneWidget);
+    // 失败态确认按钮 disabled
+    expect(
+      tester
+          .widget<QzButton>(find.byKey(const Key('deploy-preflight-confirm')))
+          .onPressed,
+      isNull,
+    );
+
+    // 「重新检测」→ 复检全通过
+    await tester.tap(find.byKey(const Key('deploy-preflight-recheck')));
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump();
     expect(find.text('3/3 通过'), findsOneWidget);
@@ -172,6 +191,8 @@ void main() {
     expect(find.byKey(const Key('deploy-done-detail')), findsOneWidget);
     expect(find.text('10000 USDT'), findsOneWidget);
     expect(find.text('运行中'), findsOneWidget);
+    // 启动时间行（#1896）
+    expect(find.text('启动时间'), findsOneWidget);
     expect(find.byKey(const Key('deploy-next-live')), findsOneWidget);
     expect(find.byKey(const Key('deploy-next-notify')), findsOneWidget);
     expect(find.byKey(const Key('deploy-next-tune')), findsOneWidget);
@@ -255,14 +276,26 @@ void main() {
     expect(confirmScanning.onPressed, isNull,
         reason: '扫描进行中不应允许部署');
 
-    // 扫完
+    // 扫完 → 首轮失败（#1896），确认仍 disabled
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    expect(
+      tester
+          .widget<QzButton>(find.byKey(const Key('deploy-preflight-confirm')))
+          .onPressed,
+      isNull,
+      reason: '存在未通过项时不应允许部署',
+    );
+
+    // 「重新检测」→ 复检全通过后才允许部署
+    await tester.tap(find.byKey(const Key('deploy-preflight-recheck')));
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump();
     final QzButton confirmDone = tester.widget<QzButton>(
       find.byKey(const Key('deploy-preflight-confirm')),
     );
     expect(confirmDone.onPressed, isNotNull,
-        reason: '三项全通过后应允许部署');
+        reason: '复检全通过后应允许部署');
   });
 
   testWidgets('QzDeploySheet: 未配置 API → 引导按钮可见且可点',
