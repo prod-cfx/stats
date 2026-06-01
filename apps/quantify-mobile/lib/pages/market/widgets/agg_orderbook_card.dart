@@ -57,12 +57,19 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
               const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
-                child: Text(l10n.aggPrecisionTitle,
-                    style: TextStyle(
-                        color: c.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700)),
+                  QzSpacing.lg,
+                  QzSpacing.sm,
+                  QzSpacing.lg,
+                  QzSpacing.sm,
+                ),
+                child: Text(
+                  l10n.aggPrecisionTitle,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               for (final int p in kAggPrecisions)
                 _PrecisionOption(
@@ -74,7 +81,11 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
               const SizedBox(height: QzSpacing.sm),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    QzSpacing.sm, 0, QzSpacing.sm, QzSpacing.sm),
+                  QzSpacing.sm,
+                  0,
+                  QzSpacing.sm,
+                  QzSpacing.sm,
+                ),
                 child: TextButton(
                   key: const Key('agg-precision-cancel'),
                   onPressed: () => Navigator.of(ctx).pop(),
@@ -91,13 +102,16 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
   }
 
   Future<void> _openSourceSheet() async {
-    final Set<String>? result = await showModalBottomSheet<Set<String>>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (BuildContext ctx) =>
-          _SourceSheet(initial: _selectedEx.toSet()),
+      builder: (BuildContext ctx) => _SourceSheet(
+        initial: _selectedEx.toSet(),
+        onSelectionChanged: (Set<String> selected) {
+          if (mounted) setState(() => _selectedEx = selected);
+        },
+      ),
     );
-    if (result != null) setState(() => _selectedEx = result);
   }
 
   @override
@@ -120,7 +134,11 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
         // 合约/现货 + BTC/ETH segments
         Padding(
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.sm),
+            QzSpacing.lg,
+            QzSpacing.md,
+            QzSpacing.lg,
+            QzSpacing.sm,
+          ),
           child: Row(
             children: <Widget>[
               _ModeSegment(
@@ -138,7 +156,11 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
         // 24h stats
         Padding(
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, 0, QzSpacing.lg, QzSpacing.md),
+            QzSpacing.lg,
+            0,
+            QzSpacing.lg,
+            QzSpacing.md,
+          ),
           child: _StatsLine(coin: _coin),
         ),
         // orderbook card
@@ -181,7 +203,11 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
         // depth chart
         Padding(
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.md, QzSpacing.md, QzSpacing.md, QzSpacing.lg),
+            QzSpacing.md,
+            QzSpacing.md,
+            QzSpacing.md,
+            QzSpacing.lg,
+          ),
           child: Container(
             decoration: BoxDecoration(
               color: c.bgElev,
@@ -194,25 +220,35 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    Text(l10n.aggDepthTitle,
-                        style: TextStyle(
-                            color: c.text,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      l10n.aggDepthTitle,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const Spacer(),
                     TextButton.icon(
                       key: const Key('agg-liquidity-heatmap'),
                       onPressed: null, // future
-                      icon: Icon(Icons.whatshot_outlined,
-                          size: 13, color: c.statusWarn),
-                      label: Text(l10n.aggLiquidityHeatmap,
-                          style: TextStyle(
-                              color: c.statusWarn,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
+                      icon: Icon(
+                        Icons.whatshot_outlined,
+                        size: 13,
+                        color: c.statusWarn,
+                      ),
+                      label: Text(
+                        l10n.aggLiquidityHeatmap,
+                        style: TextStyle(
+                          color: c.statusWarn,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: QzSpacing.sm),
+                          horizontal: QzSpacing.sm,
+                        ),
                         minimumSize: const Size(0, 22),
                       ),
                     ),
@@ -319,8 +355,9 @@ class _Pills extends StatelessWidget {
                   style: TextStyle(
                     color: i == selectedIndex ? c.accentOn : c.textMid,
                     fontSize: 12,
-                    fontWeight:
-                        i == selectedIndex ? FontWeight.w600 : FontWeight.w500,
+                    fontWeight: i == selectedIndex
+                        ? FontWeight.w600
+                        : FontWeight.w500,
                   ),
                 ),
               ),
@@ -341,31 +378,46 @@ class _StatsLine extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     TextStyle dim() => TextStyle(
-          color: c.textDim,
-          fontSize: 10.5,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        );
+      color: c.textDim,
+      fontSize: 10.5,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
     TextStyle strong() => TextStyle(
-          color: c.text,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        );
+      color: c.text,
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
+    Widget statText(String label, String value) => Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          TextSpan(text: '$label ', style: dim()),
+          TextSpan(text: value, style: strong()),
+        ],
+      ),
+    );
+
     return Wrap(
       spacing: 14,
       runSpacing: QzSpacing.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
-        Text.rich(TextSpan(children: <InlineSpan>[
-          TextSpan(text: '${l10n.aggStat24hVolume} ', style: dim()),
-          TextSpan(text: '6.82万 $coin', style: strong()),
-        ])),
-        Text.rich(TextSpan(children: <InlineSpan>[
-          TextSpan(text: '${l10n.aggStat24hTurnover} ', style: dim()),
-          TextSpan(text: 'US\$7159万', style: strong()),
-        ])),
+        statText(l10n.aggStat24hVolume, '6.82万 $coin'),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            SizedBox(
+              key: const Key('agg-stat-divider'),
+              width: 1,
+              height: 11,
+              child: ColoredBox(color: c.borderSoft),
+            ),
+            const SizedBox(width: 14),
+            statText(l10n.aggStat24hTurnover, 'US\$7159万'),
+          ],
+        ),
       ],
     );
   }
@@ -395,19 +447,26 @@ class _CardHeader extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     return Container(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.md, QzSpacing.md, QzSpacing.md, QzSpacing.sm),
+        QzSpacing.md,
+        QzSpacing.md,
+        QzSpacing.md,
+        QzSpacing.sm,
+      ),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
       child: Row(
         children: <Widget>[
           Flexible(
-            child: Text(title,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: c.text,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600)),
+            child: Text(
+              title,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           const SizedBox(width: QzSpacing.sm),
           const Spacer(),
@@ -427,7 +486,7 @@ class _CardHeader extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 24),
             padding: EdgeInsets.zero,
-            icon: Icon(Icons.tune, color: c.textMid),
+            icon: Icon(Icons.settings_outlined, color: c.textMid),
           ),
         ],
       ),
@@ -464,25 +523,32 @@ class _PrecisionButton extends StatelessWidget {
             gradient: expanded ? c.accentGrad : null,
             color: expanded ? null : Colors.transparent,
             borderRadius: BorderRadius.circular(QzRadii.input),
-            border:
-                Border.all(color: expanded ? Colors.transparent : c.border),
+            border: Border.all(color: expanded ? Colors.transparent : c.border),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-            Text('$precision',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                '$precision',
                 style: TextStyle(
                   color: fg,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
-                )),
-            AnimatedRotation(
-              turns: expanded ? 0.5 : 0,
-              duration: const Duration(milliseconds: 150),
-              child: Icon(Icons.keyboard_arrow_down,
-                  size: 14, color: expanded ? fg : c.textMid),
-            ),
-          ]),
+                ),
+              ),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 14,
+                  color: expanded ? fg : c.textMid,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -509,34 +575,40 @@ class _PrecisionOption extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-            horizontal: QzSpacing.lg, vertical: QzSpacing.md),
-        child: Row(children: <Widget>[
-          Expanded(
-            child: Text('$value',
+          horizontal: QzSpacing.lg,
+          vertical: QzSpacing.md,
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                '$value',
                 style: TextStyle(
                   color: selected ? c.accent : c.text,
                   fontFamily: QzFont.mono,
                   fontFamilyFallback: QzFont.monoFallback,
                   fontWeight: FontWeight.w600,
-                )),
-          ),
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: selected ? c.accent : Colors.transparent,
-              border: Border.all(
-                color: selected ? c.accent : c.border,
-                width: 1.5,
+                ),
               ),
             ),
-            child: selected
-                ? Icon(Icons.check, size: 13, color: c.accentOn)
-                : null,
-          ),
-        ]),
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? c.accent : Colors.transparent,
+                border: Border.all(
+                  color: selected ? c.accent : c.border,
+                  width: 1.5,
+                ),
+              ),
+              child: selected
+                  ? Icon(Icons.check, size: 13, color: c.accentOn)
+                  : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -564,31 +636,34 @@ class _ViewToggle extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
         border: Border.all(color: c.borderSoft),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-        for (final (AggView, String) item in items)
-          GestureDetector(
-            key: Key('agg-view-${item.$1.name}'),
-            onTap: () => onChanged(item.$1),
-            child: Semantics(
-              label: item.$2,
-              selected: view == item.$1,
-              button: true,
-              child: Container(
-                width: 24,
-                height: 22,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: view == item.$1 ? c.bgElev : Colors.transparent,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: _ViewModeIcon(
-                  view: item.$1,
-                  color: view == item.$1 ? c.accent : c.textMid,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final (AggView, String) item in items)
+            GestureDetector(
+              key: Key('agg-view-${item.$1.name}'),
+              onTap: () => onChanged(item.$1),
+              child: Semantics(
+                label: item.$2,
+                selected: view == item.$1,
+                button: true,
+                child: Container(
+                  width: 24,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: view == item.$1 ? c.bgElev : Colors.transparent,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: _ViewModeIcon(
+                    view: item.$1,
+                    color: view == item.$1 ? c.accent : c.textMid,
+                  ),
                 ),
               ),
             ),
-          ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -650,6 +725,13 @@ class _ViewModeIconPainter extends CustomPainter {
 
 const List<int> _bookFlex = <int>[16, 34, 24, 26];
 
+Color _marketSoft(QzColorScheme c, bool isAsk) {
+  if (c.brightness == Brightness.dark) {
+    return isAsk ? QzStatusDark.dangerSoft : QzStatusDark.okSoft;
+  }
+  return isAsk ? QzStatus.dangerSoft : QzStatus.okSoft;
+}
+
 class _ColumnHeader extends StatelessWidget {
   const _ColumnHeader({required this.coin});
 
@@ -660,29 +742,44 @@ class _ColumnHeader extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     TextStyle s() => TextStyle(
-          color: c.textDim,
-          fontSize: 10,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        );
+      color: c.textDim,
+      fontSize: 10,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: QzSpacing.md, vertical: QzSpacing.sm),
+        horizontal: QzSpacing.md,
+        vertical: QzSpacing.sm,
+      ),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
-      child: Row(children: <Widget>[
-        Expanded(flex: _bookFlex[0], child: const SizedBox()),
-        Expanded(flex: _bookFlex[1], child: Text(l10n.aggColPrice, style: s())),
-        Expanded(
+      child: Row(
+        children: <Widget>[
+          Expanded(flex: _bookFlex[0], child: const SizedBox()),
+          Expanded(
+            flex: _bookFlex[1],
+            child: Text(l10n.aggColPrice, style: s()),
+          ),
+          Expanded(
             flex: _bookFlex[2],
-            child: Text(l10n.aggColQty(coin),
-                textAlign: TextAlign.right, style: s())),
-        Expanded(
+            child: Text(
+              l10n.aggColQty(coin),
+              textAlign: TextAlign.right,
+              style: s(),
+            ),
+          ),
+          Expanded(
             flex: _bookFlex[3],
-            child: Text(l10n.aggColTotal(coin),
-                textAlign: TextAlign.right, style: s())),
-      ]),
+            child: Text(
+              l10n.aggColTotal(coin),
+              textAlign: TextAlign.right,
+              style: s(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -702,8 +799,11 @@ class _BookRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final Color side = isAsk ? c.marketDown : c.marketUp;
+    final Color sideSoft = _marketSoft(c, isAsk);
     final double w = maxCum <= 0 ? 0 : (level.total / maxCum).clamp(0, 1);
+    final double hotW = (w + 0.3).clamp(0, 1);
     final AggExchange? ex = kAggExchangeMap[level.exchange];
+    final String priceKey = level.price.toStringAsFixed(2);
     return Stack(
       children: <Widget>[
         Positioned.fill(
@@ -712,64 +812,87 @@ class _BookRow extends StatelessWidget {
             child: FractionallySizedBox(
               widthFactor: w,
               child: ColoredBox(
-                color: side.withValues(alpha: level.hot ? 0.18 : 0.1),
+                key: Key('agg-book-depth-base-$priceKey'),
+                color: sideSoft.withValues(alpha: 0.35),
               ),
             ),
           ),
         ),
+        if (level.hot)
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FractionallySizedBox(
+                widthFactor: hotW,
+                child: ColoredBox(
+                  key: Key('agg-book-depth-hot-$priceKey'),
+                  color: sideSoft.withValues(alpha: 0.45),
+                ),
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(
-              horizontal: QzSpacing.md, vertical: 7),
-          child: Row(children: <Widget>[
-            Expanded(
-              flex: _bookFlex[0],
-              child: ex == null
-                  ? const SizedBox()
-                  : Align(
-                      alignment: Alignment.centerLeft,
-                      child: AggExchangeAvatar(exchange: ex, size: 16)),
-            ),
-            Expanded(
-              flex: _bookFlex[1],
-              child: Text(
-                level.price.toStringAsFixed(2),
-                style: TextStyle(
-                  color: side,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: QzFont.mono,
-                  fontFamilyFallback: QzFont.monoFallback,
+            horizontal: QzSpacing.md,
+            vertical: 7,
+          ),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                flex: _bookFlex[0],
+                child: ex == null
+                    ? const SizedBox()
+                    : Align(
+                        alignment: Alignment.centerLeft,
+                        child: AggExchangeAvatar(
+                          exchange: ex,
+                          size: 16,
+                          shape: AggExchangeAvatarShape.circle,
+                        ),
+                      ),
+              ),
+              Expanded(
+                flex: _bookFlex[1],
+                child: Text(
+                  level.price.toStringAsFixed(2),
+                  style: TextStyle(
+                    color: side,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              flex: _bookFlex[2],
-              child: Text(
-                level.qty.toStringAsFixed(4),
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 11.5,
-                  fontFamily: QzFont.mono,
-                  fontFamilyFallback: QzFont.monoFallback,
+              Expanded(
+                flex: _bookFlex[2],
+                child: Text(
+                  level.qty.toStringAsFixed(4),
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 11.5,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              flex: _bookFlex[3],
-              child: Text(
-                level.total.toStringAsFixed(4),
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: QzFont.mono,
-                  fontFamilyFallback: QzFont.monoFallback,
+              Expanded(
+                flex: _bookFlex[3],
+                child: Text(
+                  level.total.toStringAsFixed(4),
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
                 ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       ],
     );
@@ -787,10 +910,20 @@ class _MidStrip extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Container(
+      key: const Key('agg-mid-strip'),
       padding: const EdgeInsets.symmetric(
-          horizontal: QzSpacing.md, vertical: QzSpacing.sm),
+        horizontal: QzSpacing.md,
+        vertical: QzSpacing.sm,
+      ),
       decoration: BoxDecoration(
-        color: c.bgSoft,
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: <Color>[
+            _marketSoft(c, false).withValues(alpha: 0.20),
+            _marketSoft(c, true).withValues(alpha: 0.20),
+          ],
+        ),
         border: Border(
           top: BorderSide(color: c.borderSoft),
           bottom: BorderSide(color: c.borderSoft),
@@ -799,33 +932,40 @@ class _MidStrip extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Text(l10n.aggBestBidAsk,
-              style: TextStyle(color: c.textDim, fontSize: 10)),
-          Text.rich(TextSpan(children: <InlineSpan>[
+          Text(
+            l10n.aggBestBidAsk,
+            style: TextStyle(color: c.textDim, fontSize: 10),
+          ),
+          Text.rich(
             TextSpan(
-              text: bestBid?.toStringAsFixed(2) ?? '--',
-              style: TextStyle(
-                color: c.marketUp,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: QzFont.mono,
-                fontFamilyFallback: QzFont.monoFallback,
-              ),
+              children: <InlineSpan>[
+                TextSpan(
+                  text: bestBid?.toStringAsFixed(2) ?? '--',
+                  style: TextStyle(
+                    color: c.marketUp,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
+                ),
+                TextSpan(
+                  text: '  ↔  ',
+                  style: TextStyle(color: c.textDim, fontSize: 13),
+                ),
+                TextSpan(
+                  text: bestAsk?.toStringAsFixed(2) ?? '--',
+                  style: TextStyle(
+                    color: c.marketDown,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
+                ),
+              ],
             ),
-            TextSpan(
-                text: '  ↔  ',
-                style: TextStyle(color: c.textDim, fontSize: 13)),
-            TextSpan(
-              text: bestAsk?.toStringAsFixed(2) ?? '--',
-              style: TextStyle(
-                color: c.marketDown,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: QzFont.mono,
-                fontFamilyFallback: QzFont.monoFallback,
-              ),
-            ),
-          ])),
+          ),
         ],
       ),
     );
@@ -842,33 +982,39 @@ class _DepthLegend extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     Widget dot(Color color, String label) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(2))),
-            const SizedBox(width: QzSpacing.xxs),
-            Text(label, style: TextStyle(color: c.textDim, fontSize: 10)),
-          ],
-        );
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: QzSpacing.xxs),
+        Text(label, style: TextStyle(color: c.textDim, fontSize: 10)),
+      ],
+    );
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: <Widget>[
-        Row(children: <Widget>[
-          dot(c.marketUp, l10n.aggDepthLegendBids),
-          const SizedBox(width: QzSpacing.md),
-          dot(c.marketDown, l10n.aggDepthLegendAsks),
-        ]),
-        Text(l10n.aggUnit(coin),
-            style: TextStyle(
-              color: c.textDim,
-              fontSize: 10,
-              fontFamily: QzFont.mono,
-              fontFamilyFallback: QzFont.monoFallback,
-            )),
+        Row(
+          children: <Widget>[
+            dot(c.marketUp, l10n.aggDepthLegendBids),
+            const SizedBox(width: QzSpacing.md),
+            dot(c.marketDown, l10n.aggDepthLegendAsks),
+          ],
+        ),
+        Text(
+          l10n.aggUnit(coin),
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 10,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
+          ),
+        ),
       ],
     );
   }
@@ -876,9 +1022,10 @@ class _DepthLegend extends StatelessWidget {
 
 /// 交易所来源底部抽屉（多选 + 全选/清空）。
 class _SourceSheet extends StatefulWidget {
-  const _SourceSheet({required this.initial});
+  const _SourceSheet({required this.initial, required this.onSelectionChanged});
 
   final Set<String> initial;
+  final ValueChanged<Set<String>> onSelectionChanged;
 
   @override
   State<_SourceSheet> createState() => _SourceSheetState();
@@ -886,6 +1033,21 @@ class _SourceSheet extends StatefulWidget {
 
 class _SourceSheetState extends State<_SourceSheet> {
   late Set<String> _selected = widget.initial.toSet();
+
+  void _update(Set<String> next) {
+    setState(() => _selected = next);
+    widget.onSelectionChanged(next.toSet());
+  }
+
+  void _toggle(String key) {
+    final Set<String> next = _selected.toSet();
+    if (next.contains(key)) {
+      next.remove(key);
+    } else {
+      next.add(key);
+    }
+    _update(next);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -900,59 +1062,113 @@ class _SourceSheetState extends State<_SourceSheet> {
           const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg, QzSpacing.md, QzSpacing.sm, QzSpacing.sm),
-            child: Row(children: <Widget>[
-              Expanded(
-                child: Text(l10n.aggExchangeSourceTitle,
+              QzSpacing.lg,
+              QzSpacing.md,
+              QzSpacing.sm,
+              QzSpacing.sm,
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    l10n.aggExchangeSourceTitle,
                     style: TextStyle(
-                        color: c.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700)),
-              ),
-              TextButton(
-                key: const Key('agg-source-select-all'),
-                onPressed: () => setState(() => _selected =
-                    kAggExchanges.map((AggExchange e) => e.key).toSet()),
-                child: Text(l10n.aggSelectAll,
-                    style: TextStyle(color: c.accent)),
-              ),
-              TextButton(
-                key: const Key('agg-source-clear-all'),
-                onPressed: () => setState(() => _selected = <String>{}),
-                child:
-                    Text(l10n.aggClearAll, style: TextStyle(color: c.textMid)),
-              ),
-            ]),
+                      color: c.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  key: const Key('agg-source-select-all'),
+                  onPressed: () => _update(
+                    kAggExchanges.map((AggExchange e) => e.key).toSet(),
+                  ),
+                  child: Text(
+                    l10n.aggSelectAll,
+                    style: TextStyle(color: c.accent),
+                  ),
+                ),
+                TextButton(
+                  key: const Key('agg-source-clear-all'),
+                  onPressed: () => _update(<String>{}),
+                  child: Text(
+                    l10n.aggClearAll,
+                    style: TextStyle(color: c.textMid),
+                  ),
+                ),
+              ],
+            ),
           ),
           for (final AggExchange ex in kAggExchanges)
-            CheckboxListTile(
+            InkWell(
               key: Key('agg-source-${ex.key}'),
-              value: _selected.contains(ex.key),
-              onChanged: (bool? v) => setState(() {
-                if (v ?? false) {
-                  _selected.add(ex.key);
-                } else {
-                  _selected.remove(ex.key);
-                }
-              }),
-              activeColor: c.accent,
-              controlAffinity: ListTileControlAffinity.trailing,
-              secondary: AggExchangeAvatar(exchange: ex, size: 20),
-              title: Text(ex.name,
-                  style: TextStyle(
-                      color: _selected.contains(ex.key) ? c.text : c.textMid,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600)),
+              onTap: () => _toggle(ex.key),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: QzSpacing.lg,
+                  vertical: QzSpacing.md,
+                ),
+                child: Row(
+                  children: <Widget>[
+                    AggExchangeAvatar(
+                      key: Key('agg-source-avatar-${ex.key}'),
+                      exchange: ex,
+                      size: 20,
+                      shape: AggExchangeAvatarShape.circle,
+                    ),
+                    const SizedBox(width: QzSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        ex.name,
+                        style: TextStyle(
+                          color: _selected.contains(ex.key)
+                              ? c.text
+                              : c.textMid,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    _CircleChoice(
+                      key: Key('agg-source-choice-${ex.key}'),
+                      selected: _selected.contains(ex.key),
+                    ),
+                  ],
+                ),
+              ),
             ),
           Padding(
             padding: const EdgeInsets.all(QzSpacing.sm),
             child: TextButton(
-              onPressed: () => Navigator.of(context).pop(_selected),
+              onPressed: () => Navigator.of(context).pop(),
               child: Text(l10n.aggCancel, style: TextStyle(color: c.text)),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CircleChoice extends StatelessWidget {
+  const _CircleChoice({super.key, required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? c.accent : Colors.transparent,
+        border: Border.all(color: selected ? c.accent : c.border, width: 1.5),
+      ),
+      child: selected ? Icon(Icons.check, size: 13, color: c.accentOn) : null,
     );
   }
 }
