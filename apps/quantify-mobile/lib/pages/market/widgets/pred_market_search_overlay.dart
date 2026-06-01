@@ -96,19 +96,25 @@ class _PredMarketSearchOverlayState extends State<PredMarketSearchOverlay> {
         child: Column(
           children: <Widget>[
             _inputRow(context, l10n, c),
-            Expanded(
-              child: hasQuery ? _results(l10n, c) : _hotTopics(l10n, c),
-            ),
+            Expanded(child: hasQuery ? _results(l10n, c) : _hotTopics(l10n, c)),
           ],
         ),
       ),
     );
   }
 
-  Widget _inputRow(BuildContext context, AppLocalizations l10n, QzColorScheme c) {
+  Widget _inputRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
+        QzSpacing.lg,
+        QzSpacing.sm,
+        QzSpacing.lg,
+        QzSpacing.sm,
+      ),
       child: Row(
         children: <Widget>[
           Expanded(
@@ -156,8 +162,10 @@ class _PredMarketSearchOverlayState extends State<PredMarketSearchOverlay> {
           TextButton(
             key: const Key('pred-search-cancel'),
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.commonCancel,
-                style: TextStyle(color: c.textMid, fontSize: 13)),
+            child: Text(
+              l10n.commonCancel,
+              style: TextStyle(color: c.textMid, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -167,15 +175,18 @@ class _PredMarketSearchOverlayState extends State<PredMarketSearchOverlay> {
   Widget _hotTopics(AppLocalizations l10n, QzColorScheme c) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.lg, QzSpacing.lg, QzSpacing.xl),
+        QzSpacing.lg,
+        QzSpacing.lg,
+        QzSpacing.lg,
+        QzSpacing.xl,
+      ),
       children: <Widget>[
         Text(
-          l10n.predMarketSearchHotLabel.toUpperCase(),
+          l10n.predMarketSearchHotLabel,
           style: TextStyle(
             color: c.textDim,
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
           ),
         ),
         const SizedBox(height: QzSpacing.sm),
@@ -188,8 +199,10 @@ class _PredMarketSearchOverlayState extends State<PredMarketSearchOverlay> {
                 key: Key('pred-search-hot-$t'),
                 onTap: () => _setQuery(t),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: c.bgElev,
                     borderRadius: BorderRadius.circular(999),
@@ -227,7 +240,11 @@ class _PredMarketSearchOverlayState extends State<PredMarketSearchOverlay> {
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, QzSpacing.xl),
+        QzSpacing.lg,
+        QzSpacing.xs,
+        QzSpacing.lg,
+        QzSpacing.xl,
+      ),
       itemCount: hits.length,
       itemBuilder: (BuildContext ctx, int i) => _resultRow(hits[i], c),
     );

@@ -4,7 +4,6 @@ import '../../../data/models/pred_market_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
-import '../../../widgets/qz_grab_handle.dart';
 import '../../../widgets/qz_pulse_dot.dart';
 
 /// 预测市场详情 bottom sheet（设计稿 `PredMarketDetailSheet`:1719）。
@@ -30,10 +29,11 @@ class PredMarketDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String status =
-        market.live ? l10n.predMarketStatusOpen : l10n.predMarketStatusClosed;
-    final String volText = fmtPredVol(market.volume)?.replaceAll(' Vol.', '') ??
-        '\$0';
+    final String status = market.live
+        ? l10n.predMarketStatusOpen
+        : l10n.predMarketStatusClosed;
+    final String volText =
+        fmtPredVol(market.volume)?.replaceAll(' Vol.', '') ?? '\$0';
     return Container(
       key: const Key('pred-detail-sheet'),
       constraints: BoxConstraints(
@@ -46,9 +46,10 @@ class PredMarketDetailSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
           _header(context, c, l10n),
-          Flexible(
+          SizedBox(
+            key: const Key('pred-detail-body'),
+            height: 300,
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               child: Column(
@@ -66,20 +67,30 @@ class PredMarketDetailSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   _ruleField(
-                      c, l10n.predMarketResolutionSource, market.resolutionSource),
+                    c,
+                    l10n.predMarketResolutionSource,
+                    market.resolutionSource,
+                  ),
                   const SizedBox(height: 10),
-                  _ruleField(c, l10n.predMarketEventWindow,
-                      '${market.eventStart} ~ ${market.eventEnd}'),
+                  _ruleField(
+                    c,
+                    l10n.predMarketEventWindow,
+                    '${market.eventStart} ~ ${market.eventEnd}',
+                  ),
                   _divider(c, top: 14, bottom: 12),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: <Widget>[
-                      Text('${l10n.predMarketCreatedAt}:',
-                          style: TextStyle(color: c.textDim, fontSize: 11)),
+                      Text(
+                        '${l10n.predMarketCreatedAt}:',
+                        style: TextStyle(color: c.textDim, fontSize: 11),
+                      ),
                       const SizedBox(width: 6),
-                      Text(market.createdAt,
-                          style: TextStyle(color: c.text, fontSize: 11)),
+                      Text(
+                        market.createdAt,
+                        style: TextStyle(color: c.text, fontSize: 11),
+                      ),
                     ],
                   ),
                 ],
@@ -210,7 +221,11 @@ class PredMarketDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _divider(QzColorScheme c, {required double top, required double bottom}) {
+  Widget _divider(
+    QzColorScheme c, {
+    required double top,
+    required double bottom,
+  }) {
     return Padding(
       padding: EdgeInsets.only(top: top, bottom: bottom),
       child: Container(height: 1, color: c.borderSoft),

@@ -84,13 +84,13 @@ void main() {
         volume: 0,
         live: true,
       );
-      expect(b.resolutionSource,
-          'https://data.chain.link/streams/xrp-usd');
+      expect(b.resolutionSource, 'https://data.chain.link/streams/xrp-usd');
     });
   });
 
-  testWidgets('副标题 + 可点搜索栏，点开弹 overlay 含热门话题（AC1）',
-      (WidgetTester tester) async {
+  testWidgets('副标题 + 可点搜索栏，点开弹 overlay 含热门话题（AC1）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     expect(find.text('基于链上数据的未来趋势预测'), findsOneWidget);
     expect(find.byKey(const Key('pred-search-bar')), findsOneWidget);
@@ -104,8 +104,7 @@ void main() {
     }
   });
 
-  testWidgets('2 列网格渲染卡片，含 LIVE / Vol（AC2）',
-      (WidgetTester tester) async {
+  testWidgets('2 列网格渲染卡片，含 LIVE / Vol（AC2）', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.byKey(const Key('pred-grid')), findsOneWidget);
     // 第二条 p2 有报价，渲染是/否
@@ -115,20 +114,24 @@ void main() {
     expect(find.text('LIVE'), findsWidgets);
   });
 
-  testWidgets('yes==null 的卡片不渲染是/否块（AC2）',
-      (WidgetTester tester) async {
+  testWidgets('预测市场网格使用最小 128 高度策略，非固定 140（#2045）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    expect(find.byType(GridView), findsNothing);
+    final Finder firstCard = find.byKey(const Key('pred-card-p1'));
+    expect(tester.getSize(firstCard).height, greaterThanOrEqualTo(128));
+  });
+
+  testWidgets('yes==null 的卡片不渲染是/否块（AC2）', (WidgetTester tester) async {
     await _pump(tester);
     // p1 yes==null：卡内不应出现「是」字
     final Finder card = find.byKey(const Key('pred-card-p1'));
     expect(card, findsOneWidget);
-    expect(
-      find.descendant(of: card, matching: find.text('是')),
-      findsNothing,
-    );
+    expect(find.descendant(of: card, matching: find.text('是')), findsNothing);
   });
 
-  testWidgets('点卡片弹市场详情 sheet（AC3）',
-      (WidgetTester tester) async {
+  testWidgets('点卡片弹市场详情 sheet（AC3）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('pred-card-p2')));
     await _settle(tester);
@@ -140,8 +143,21 @@ void main() {
     expect(find.textContaining('创建时间'), findsOneWidget);
   });
 
-  testWidgets('info / more 为可点按钮且吞掉点击不弹详情（#1922）',
-      (WidgetTester tester) async {
+  testWidgets('详情 sheet 无 grab handle 且正文高度固定 300（#2045）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('pred-card-p2')));
+    await _settle(tester);
+    expect(find.byKey(const Key('qz-grab-handle')), findsNothing);
+    expect(find.byKey(const Key('pred-detail-body')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('pred-detail-body'))).height,
+      300,
+    );
+  });
+
+  testWidgets('info / more 为可点按钮且吞掉点击不弹详情（#1922）', (WidgetTester tester) async {
     await _pump(tester);
     final Finder info = find.byKey(const Key('pred-card-info-p2'));
     final Finder more = find.byKey(const Key('pred-card-more-p2'));
@@ -153,25 +169,33 @@ void main() {
     expect(find.byKey(const Key('pred-detail-sheet')), findsNothing);
   });
 
-  testWidgets('搜索无匹配显示空态文案（AC4）',
-      (WidgetTester tester) async {
+  testWidgets('搜索无匹配显示空态文案（AC4）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('pred-search-bar')));
     await _settle(tester);
     await tester.enterText(
-        find.byKey(const Key('pred-search-input')), 'zzz_no_match_xyz');
+      find.byKey(const Key('pred-search-input')),
+      'zzz_no_match_xyz',
+    );
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('pred-search-empty')), findsOneWidget);
     expect(find.text('无匹配市场'), findsOneWidget);
   });
 
-  testWidgets('搜索命中后选中结果回到网格并弹详情（AC1/AC3）',
-      (WidgetTester tester) async {
+  testWidgets('热门话题 label 原样显示，不强制大写（#2045）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('pred-search-bar')));
     await _settle(tester);
-    await tester.enterText(
-        find.byKey(const Key('pred-search-input')), '比特币');
+    expect(find.text('热门话题'), findsOneWidget);
+    final Text label = tester.widget<Text>(find.text('热门话题'));
+    expect(label.style!.letterSpacing, isNull);
+  });
+
+  testWidgets('搜索命中后选中结果回到网格并弹详情（AC1/AC3）', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('pred-search-bar')));
+    await _settle(tester);
+    await tester.enterText(find.byKey(const Key('pred-search-input')), '比特币');
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('pred-search-result-p15')), findsOneWidget);
     await tester.tap(find.byKey(const Key('pred-search-result-p15')));

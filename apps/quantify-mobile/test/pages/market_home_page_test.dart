@@ -223,7 +223,9 @@ void main() {
     expect(spotLabel.style!.color, contextColor(tester).textDim);
   });
 
-  testWidgets('列头第三列跟随涨跌 tab 动态切换（#2031）', (WidgetTester tester) async {
+  testWidgets('列头第三列跟随涨跌 tab 动态切换，合约行追加永续后缀（#2031/#2044）', (
+    WidgetTester tester,
+  ) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
@@ -238,6 +240,11 @@ void main() {
     await tester.tap(_findTab('losers'));
     await tester.pump();
     expect(find.text('24H 跌幅'), findsOneWidget);
+
+    await tester.tap(_findTab('perp'));
+    await tester.pump();
+    expect(find.text('24H 涨跌'), findsOneWidget);
+    expect(find.textContaining('永续', findRichText: true), findsWidgets);
   });
 
   testWidgets('搜索按钮打开全屏浮层，空查询展示历史与热门搜索（#2030）', (WidgetTester tester) async {
@@ -265,7 +272,7 @@ void main() {
       (Widget widget) =>
           widget.key is ValueKey<String> &&
           (widget.key! as ValueKey<String>).value.startsWith(
-            'market-search-row-',
+            'market-search-result-',
           ),
     );
     expect(searchRows, findsNWidgets(6));
@@ -277,7 +284,7 @@ void main() {
           ))
           .first
           .symbol
-          .replaceFirst(RegExp('^'), 'market-search-row-'),
+          .replaceFirst(RegExp('^'), 'market-search-result-'),
     );
   });
 
@@ -295,7 +302,10 @@ void main() {
       'bitcoin',
     );
     await tester.pump();
-    expect(find.byKey(const Key('market-search-row-BTCUSDT')), findsOneWidget);
+    expect(
+      find.byKey(const Key('market-search-result-BTCUSDT')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('market-search-clear-query')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('market-search-clear-query')));
@@ -308,7 +318,7 @@ void main() {
       'ZZZZZZ',
     );
     await tester.pump();
-    expect(find.byKey(const Key('market-search-row-BTCUSDT')), findsNothing);
+    expect(find.byKey(const Key('market-search-result-BTCUSDT')), findsNothing);
     expect(find.text('无匹配币种'), findsOneWidget);
 
     // 关闭搜索 -> 输入清空 + 列表恢复。
@@ -317,6 +327,32 @@ void main() {
     expect(find.byKey(const Key('market-search-field')), findsNothing);
     expect(find.byKey(const Key('market-search-overlay')), findsNothing);
     expect(find.byType(TickerRow), findsNWidgets(5));
+  });
+
+  testWidgets('搜索浮层富行 star 可切换收藏色（#2043）', (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.byKey(const Key('market-search-toggle')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('market-search-field')),
+      'AAVE',
+    );
+    await tester.pump();
+
+    final Finder star = find.byKey(const Key('market-search-star-AAVEUSDT'));
+    Icon icon = tester.widget<Icon>(
+      find.descendant(of: star, matching: find.byType(Icon)),
+    );
+    expect(icon.color, isNot(const Color(0xFFF0B90B)));
+
+    await tester.tap(star);
+    await tester.pump();
+    icon = tester.widget<Icon>(
+      find.descendant(of: star, matching: find.byType(Icon)),
+    );
+    expect(icon.color, const Color(0xFFF0B90B));
   });
 
   testWidgets('点击行情行 push /market/:symbol 进入详情页', (WidgetTester tester) async {

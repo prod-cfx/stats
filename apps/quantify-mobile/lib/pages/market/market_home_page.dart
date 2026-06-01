@@ -280,6 +280,9 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
                               return TickerRow(
                                 key: Key('ticker-row-${ticker.symbol}'),
                                 ticker: ticker,
+                                nameSuffix: _tab == _MarketTab.perp
+                                    ? '永续'
+                                    : null,
                                 onTap: () =>
                                     context.push('/market/${ticker.symbol}'),
                               );
@@ -301,9 +304,12 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
             history: _searchHistory,
             trending: _trendingTickers(),
             results: _searchResults(),
+            favorites: favorites,
             onCancel: _closeSearch,
             onClearQuery: _clearSearchQuery,
             onClearHistory: _clearSearchHistory,
+            onToggleFavorite: (String symbol) =>
+                ref.read(marketFavoritesProvider.notifier).toggle(symbol),
             onSelectHistory: _selectSearchHistory,
             onSelectTicker: (Ticker ticker) {
               _recordSearchHistory(ticker.symbol);
@@ -336,9 +342,11 @@ class _SearchOverlay extends StatelessWidget {
     required this.history,
     required this.trending,
     required this.results,
+    required this.favorites,
     required this.onCancel,
     required this.onClearQuery,
     required this.onClearHistory,
+    required this.onToggleFavorite,
     required this.onSelectHistory,
     required this.onSelectTicker,
   });
@@ -348,9 +356,11 @@ class _SearchOverlay extends StatelessWidget {
   final List<String> history;
   final List<Ticker> trending;
   final List<Ticker> results;
+  final Set<String> favorites;
   final VoidCallback onCancel;
   final VoidCallback onClearQuery;
   final VoidCallback onClearHistory;
+  final ValueChanged<String> onToggleFavorite;
   final ValueChanged<String> onSelectHistory;
   final ValueChanged<Ticker> onSelectTicker;
 
@@ -464,6 +474,7 @@ class _SearchOverlay extends StatelessWidget {
     if (results.isEmpty) {
       return <Widget>[
         Padding(
+          key: const Key('market-search-empty'),
           padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 16),
           child: Center(
             child: Text(
@@ -476,7 +487,12 @@ class _SearchOverlay extends StatelessWidget {
     }
     return <Widget>[
       for (final Ticker ticker in results)
-        _MarketSearchRow(ticker: ticker, onTap: () => onSelectTicker(ticker)),
+        _MarketSearchRow(
+          ticker: ticker,
+          favorite: favorites.contains(ticker.symbol),
+          onToggleFavorite: () => onToggleFavorite(ticker.symbol),
+          onTap: () => onSelectTicker(ticker),
+        ),
     ];
   }
 
@@ -560,8 +576,11 @@ class _SearchOverlay extends StatelessWidget {
       ),
       for (int i = 0; i < trending.length; i++)
         _MarketSearchRow(
+          key: Key('market-search-hot-$i'),
           ticker: trending[i],
           rank: i + 1,
+          favorite: favorites.contains(trending[i].symbol),
+          onToggleFavorite: () => onToggleFavorite(trending[i].symbol),
           onTap: () => onSelectTicker(trending[i]),
         ),
     ];
@@ -570,14 +589,19 @@ class _SearchOverlay extends StatelessWidget {
 
 class _MarketSearchRow extends StatelessWidget {
   const _MarketSearchRow({
+    super.key,
     required this.ticker,
     required this.onTap,
+    required this.favorite,
+    required this.onToggleFavorite,
     this.rank,
   });
 
   final Ticker ticker;
   final int? rank;
   final VoidCallback onTap;
+  final bool favorite;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -588,7 +612,7 @@ class _MarketSearchRow extends StatelessWidget {
         ? c.marketUp
         : c.marketDown;
     return InkWell(
-      key: Key('market-search-row-${ticker.symbol}'),
+      key: Key('market-search-result-${ticker.symbol}'),
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
@@ -679,6 +703,20 @@ class _MarketSearchRow extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              key: Key('market-search-star-${ticker.symbol}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleFavorite,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  favorite ? Icons.star : Icons.star_border,
+                  color: favorite ? const Color(0xFFF0B90B) : c.textDim,
+                  size: 19,
+                ),
+              ),
             ),
           ],
         ),

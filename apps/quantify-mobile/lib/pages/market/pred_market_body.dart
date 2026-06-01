@@ -68,7 +68,11 @@ class _PredMarketBodyState extends State<PredMarketBody> {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg, QzSpacing.sm + 2, QzSpacing.lg, QzSpacing.xxs),
+              QzSpacing.lg,
+              QzSpacing.sm + 2,
+              QzSpacing.lg,
+              QzSpacing.xxs,
+            ),
             child: Text(
               l10n.predMarketSubtitle,
               style: TextStyle(color: c.textDim, fontSize: 11),
@@ -76,7 +80,11 @@ class _PredMarketBodyState extends State<PredMarketBody> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, QzSpacing.sm),
+              QzSpacing.lg,
+              QzSpacing.xs,
+              QzSpacing.lg,
+              QzSpacing.sm,
+            ),
             child: _searchBar(c, l10n),
           ),
           Expanded(
@@ -88,24 +96,36 @@ class _PredMarketBodyState extends State<PredMarketBody> {
                       style: TextStyle(color: c.textDim, fontSize: 13),
                     ),
                   )
-                : GridView.builder(
-                    key: const Key('pred-grid'),
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      mainAxisExtent: 140,
-                    ),
-                    itemCount: shown.length,
-                    itemBuilder: (BuildContext ctx, int i) {
-                      final PredMarket m = shown[i];
-                      return PredMarketCard(
-                        market: m,
-                        onTap: () => _openDetail(m),
-                      );
-                    },
+                : LayoutBuilder(
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                          const double gap = 8;
+                          final double width =
+                              (constraints.maxWidth - 24 - gap) / 2;
+                          return SingleChildScrollView(
+                            key: const Key('pred-grid'),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                            child: Wrap(
+                              spacing: gap,
+                              runSpacing: gap,
+                              children: <Widget>[
+                                for (final PredMarket m in shown)
+                                  SizedBox(
+                                    width: width,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: 128,
+                                      ),
+                                      child: PredMarketCard(
+                                        market: m,
+                                        onTap: () => _openDetail(m),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
                   ),
           ),
         ],

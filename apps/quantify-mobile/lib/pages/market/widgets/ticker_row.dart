@@ -52,10 +52,16 @@ Color? tickerAssetTone(String base) => _kAssetTone[base.toUpperCase()];
 /// - 中列：最新价，右对齐，等宽字体。
 /// - 右列：24H 涨跌 chip，右对齐。
 class TickerRow extends ConsumerStatefulWidget {
-  const TickerRow({super.key, required this.ticker, this.onTap});
+  const TickerRow({
+    super.key,
+    required this.ticker,
+    this.onTap,
+    this.nameSuffix,
+  });
 
   final Ticker ticker;
   final VoidCallback? onTap;
+  final String? nameSuffix;
 
   @override
   ConsumerState<TickerRow> createState() => _TickerRowState();
@@ -161,6 +167,15 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                                       color: c.textDim,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                if (widget.nameSuffix != null)
+                                  TextSpan(
+                                    text: ' · ${widget.nameSuffix}',
+                                    style: TextStyle(
+                                      color: c.textDim,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                               ],

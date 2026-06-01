@@ -32,6 +32,7 @@ class PredMarketCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,7 +68,7 @@ class PredMarketCard extends StatelessWidget {
               const SizedBox(height: 2),
               _pctRow('否', '${market.noPercent}%', c.marketDown, c),
             ],
-            const Spacer(),
+            const SizedBox(height: 8),
             Row(
               children: <Widget>[
                 if (market.live) ...<Widget>[
@@ -110,7 +111,12 @@ class PredMarketCard extends StatelessWidget {
     );
   }
 
-  Widget _pctRow(String label, String value, Color valueColor, QzColorScheme c) {
+  Widget _pctRow(
+    String label,
+    String value,
+    Color valueColor,
+    QzColorScheme c,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: <Widget>[
