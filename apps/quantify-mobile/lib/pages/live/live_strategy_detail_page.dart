@@ -750,32 +750,36 @@ class _PositionCard extends StatelessWidget {
           ),
           const SizedBox(height: QzSpacing.md),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              Flexible(
-                child: Text(
-                  l10n.livePositionStopLabel,
-                  maxLines: 1,
+              Text(
+                l10n.livePositionStopLabel,
+                softWrap: false,
+                style: TextStyle(color: c.statusDanger, fontSize: 10),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: RichText(
+                  textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.statusDanger, fontSize: 10),
+                  text: TextSpan(
+                    style: TextStyle(color: c.textDim, fontSize: 10),
+                    children: <InlineSpan>[
+                      TextSpan(text: '${l10n.livePositionStopDistance} '),
+                      TextSpan(
+                        text: position.stopDistance,
+                        style: TextStyle(color: c.text),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              Flexible(
-                child: Text(
-                  '${l10n.livePositionStopDistance} ${position.stopDistance}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.textDim, fontSize: 10),
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  '${l10n.livePositionHold} ${position.holdFor}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(color: c.text, fontSize: 10),
-                ),
+              const SizedBox(width: 8),
+              Text(
+                '${l10n.livePositionHold} ${position.holdFor}',
+                softWrap: false,
+                textAlign: TextAlign.right,
+                style: TextStyle(color: c.text, fontSize: 10),
               ),
             ],
           ),
