@@ -458,6 +458,114 @@ abstract class AppLocalizations {
   /// **'取消回测'**
   String get backtestProgressCancel;
 
+  /// No description provided for @backtestRunEta.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计剩余 {seconds}s'**
+  String backtestRunEta(Object seconds);
+
+  /// No description provided for @backtestRunReplayingPeriod.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在回放 · {period}'**
+  String backtestRunReplayingPeriod(Object period);
+
+  /// No description provided for @backtestRunCounterProcessedBars.
+  ///
+  /// In zh, this message translates to:
+  /// **'已处理 K 线'**
+  String get backtestRunCounterProcessedBars;
+
+  /// No description provided for @backtestRunCounterProcessedBarsSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'/ {total}'**
+  String backtestRunCounterProcessedBarsSub(Object total);
+
+  /// No description provided for @backtestRunCounterTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'已生成交易'**
+  String get backtestRunCounterTrades;
+
+  /// No description provided for @backtestRunCounterTradesSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜 {wins} · 负 {losses}'**
+  String backtestRunCounterTradesSub(Object wins, Object losses);
+
+  /// No description provided for @backtestRunCounterMaxDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前最大回撤'**
+  String get backtestRunCounterMaxDrawdown;
+
+  /// No description provided for @backtestRunCounterCumReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前累计收益'**
+  String get backtestRunCounterCumReturn;
+
+  /// No description provided for @backtestRunSectionEquity.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时净值'**
+  String get backtestRunSectionEquity;
+
+  /// No description provided for @backtestRunSectionLog.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎日志'**
+  String get backtestRunSectionLog;
+
+  /// No description provided for @backtestRunPrivacyNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测在你设备本地运行，数据与策略均不上传。完成后可继续追问 AI 调整参数。'**
+  String get backtestRunPrivacyNote;
+
+  /// No description provided for @backtestRunLogLoad.
+  ///
+  /// In zh, this message translates to:
+  /// **'载入 BTC/USDT 15m K 线 · 52,416 条'**
+  String get backtestRunLogLoad;
+
+  /// No description provided for @backtestRunLogIndex.
+  ///
+  /// In zh, this message translates to:
+  /// **'索引 fast_MA(5) / slow_MA(20) ... ✓'**
+  String get backtestRunLogIndex;
+
+  /// No description provided for @backtestRunLogReplay.
+  ///
+  /// In zh, this message translates to:
+  /// **'回放开始 · 滑点 5bps · 手续费 2bps'**
+  String get backtestRunLogReplay;
+
+  /// No description provided for @backtestRunLogOpenLong1.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发开多 @ 41,820.50 · 仓位 100%'**
+  String get backtestRunLogOpenLong1;
+
+  /// No description provided for @backtestRunLogCloseLong1.
+  ///
+  /// In zh, this message translates to:
+  /// **'平多 @ 43,108.00 · +3.08%'**
+  String get backtestRunLogCloseLong1;
+
+  /// No description provided for @backtestRunLogOpenLong2.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发开多 @ 44,260.00 · 仓位 100%'**
+  String get backtestRunLogOpenLong2;
+
+  /// No description provided for @backtestRunLogStopLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'止损触发 @ 43,375.00 · -2.00%'**
+  String get backtestRunLogStopLoss;
+
   /// No description provided for @deployButton.
   ///
   /// In zh, this message translates to:

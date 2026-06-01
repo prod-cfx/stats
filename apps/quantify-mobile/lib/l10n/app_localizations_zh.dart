@@ -190,6 +190,68 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestProgressCancel => '取消回测';
 
   @override
+  String backtestRunEta(Object seconds) {
+    return '预计剩余 ${seconds}s';
+  }
+
+  @override
+  String backtestRunReplayingPeriod(Object period) {
+    return '正在回放 · $period';
+  }
+
+  @override
+  String get backtestRunCounterProcessedBars => '已处理 K 线';
+
+  @override
+  String backtestRunCounterProcessedBarsSub(Object total) {
+    return '/ $total';
+  }
+
+  @override
+  String get backtestRunCounterTrades => '已生成交易';
+
+  @override
+  String backtestRunCounterTradesSub(Object wins, Object losses) {
+    return '胜 $wins · 负 $losses';
+  }
+
+  @override
+  String get backtestRunCounterMaxDrawdown => '当前最大回撤';
+
+  @override
+  String get backtestRunCounterCumReturn => '当前累计收益';
+
+  @override
+  String get backtestRunSectionEquity => '实时净值';
+
+  @override
+  String get backtestRunSectionLog => '引擎日志';
+
+  @override
+  String get backtestRunPrivacyNote => '回测在你设备本地运行，数据与策略均不上传。完成后可继续追问 AI 调整参数。';
+
+  @override
+  String get backtestRunLogLoad => '载入 BTC/USDT 15m K 线 · 52,416 条';
+
+  @override
+  String get backtestRunLogIndex => '索引 fast_MA(5) / slow_MA(20) ... ✓';
+
+  @override
+  String get backtestRunLogReplay => '回放开始 · 滑点 5bps · 手续费 2bps';
+
+  @override
+  String get backtestRunLogOpenLong1 => '触发开多 @ 41,820.50 · 仓位 100%';
+
+  @override
+  String get backtestRunLogCloseLong1 => '平多 @ 43,108.00 · +3.08%';
+
+  @override
+  String get backtestRunLogOpenLong2 => '触发开多 @ 44,260.00 · 仓位 100%';
+
+  @override
+  String get backtestRunLogStopLoss => '止损触发 @ 43,375.00 · -2.00%';
+
+  @override
   String get deployButton => '一键部署';
 
   @override

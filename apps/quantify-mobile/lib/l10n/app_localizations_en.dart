@@ -198,6 +198,70 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestProgressCancel => 'Cancel Backtest';
 
   @override
+  String backtestRunEta(Object seconds) {
+    return '${seconds}s remaining';
+  }
+
+  @override
+  String backtestRunReplayingPeriod(Object period) {
+    return 'Replaying · $period';
+  }
+
+  @override
+  String get backtestRunCounterProcessedBars => 'Candles Processed';
+
+  @override
+  String backtestRunCounterProcessedBarsSub(Object total) {
+    return '/ $total';
+  }
+
+  @override
+  String get backtestRunCounterTrades => 'Trades Generated';
+
+  @override
+  String backtestRunCounterTradesSub(Object wins, Object losses) {
+    return '${wins}W · ${losses}L';
+  }
+
+  @override
+  String get backtestRunCounterMaxDrawdown => 'Current Max Drawdown';
+
+  @override
+  String get backtestRunCounterCumReturn => 'Current Cumulative Return';
+
+  @override
+  String get backtestRunSectionEquity => 'Live Equity';
+
+  @override
+  String get backtestRunSectionLog => 'Engine Log';
+
+  @override
+  String get backtestRunPrivacyNote =>
+      'The backtest runs locally on your device; data and strategy are never uploaded. You can keep asking the AI to tune parameters when it\'s done.';
+
+  @override
+  String get backtestRunLogLoad => 'Loaded BTC/USDT 15m candles · 52,416 bars';
+
+  @override
+  String get backtestRunLogIndex => 'Indexed fast_MA(5) / slow_MA(20) ... ✓';
+
+  @override
+  String get backtestRunLogReplay =>
+      'Replay started · slippage 5bps · fee 2bps';
+
+  @override
+  String get backtestRunLogOpenLong1 => 'Long opened @ 41,820.50 · size 100%';
+
+  @override
+  String get backtestRunLogCloseLong1 => 'Long closed @ 43,108.00 · +3.08%';
+
+  @override
+  String get backtestRunLogOpenLong2 => 'Long opened @ 44,260.00 · size 100%';
+
+  @override
+  String get backtestRunLogStopLoss => 'Stop-loss @ 43,375.00 · -2.00%';
+
+  @override
   String get deployButton => 'One-click Deploy';
 
   @override

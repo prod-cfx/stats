@@ -112,6 +112,10 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('backtest-progress-card')), findsOneWidget);
 
+    // 进度卡升级后高度增大，取消按钮可能落在视口外；先滚动可见再点击。
+    await tester
+        .ensureVisible(find.byKey(const Key('backtest-progress-cancel')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('backtest-progress-cancel')));
     await tester.pump();
     expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
