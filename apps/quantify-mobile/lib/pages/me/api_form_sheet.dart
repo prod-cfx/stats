@@ -11,26 +11,44 @@ import '../../widgets/qz_button.dart';
 /// 交易所认证形态（对齐设计稿 `m-screens-4.jsx:2825-2831` 的 `API_META`）。
 enum _ApiMode { key, wallet }
 
+/// 表单环境：仅 `testnet=true` 的交易所允许在主网 / 测试网间切换。
+enum _ApiEnv { mainnet, testnet }
+
 /// 单个交易所的表单 meta：决定渲染哪种字段与权限。
 class _ApiMeta {
   const _ApiMeta({
     required this.mode,
     this.passphrase = false,
+    this.testnet = false,
   });
 
   final _ApiMode mode;
 
   /// OKX 家族（OKX/Bitget/KuCoin）需要 Passphrase。
   final bool passphrase;
+
+  /// 是否提供独立测试网（仅 Binance），决定是否渲染环境切换。
+  final bool testnet;
 }
 
 const Map<String, _ApiMeta> _apiMetaTable = <String, _ApiMeta>{
-  'binance': _ApiMeta(mode: _ApiMode.key),
+  'binance': _ApiMeta(mode: _ApiMode.key, testnet: true),
   'okx': _ApiMeta(mode: _ApiMode.key, passphrase: true),
   'bitget': _ApiMeta(mode: _ApiMode.key, passphrase: true),
   'kucoin': _ApiMeta(mode: _ApiMode.key, passphrase: true),
   'hyperliquid': _ApiMeta(mode: _ApiMode.wallet),
 };
+
+/// 测试网接口域名（仅 Binance 测试网展示，对齐 `m-screens-4.jsx:3008`）。
+const String _testnetEndpoint = 'https://testnet.binance.vision';
+
+/// 测试网保存按钮琥珀渐变（对齐 `m-screens-4.jsx:3028`，QzButton 仅有紫色 accent
+/// 渐变，故 testnet 按钮在本文件内自绘）。
+const LinearGradient _testnetButtonGrad = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: <Color>[Color(0xFFF59E0B), Color(0xFFD97706)],
+);
 
 _ApiMeta _metaFor(String exchange) =>
     _apiMetaTable[exchange.toLowerCase()] ??
@@ -80,6 +98,11 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   bool _saving = false;
 
   late final _ApiMeta _meta = _metaFor(widget.exchange);
+
+  /// 当前环境。不支持测试网的交易所恒为主网；切换控件也不渲染。
+  _ApiEnv _env = _ApiEnv.mainnet;
+
+  bool get _isTestnet => _meta.testnet && _env == _ApiEnv.testnet;
 
   @override
   void dispose() {
@@ -199,17 +222,29 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Text(
-                            '${widget.exchange} API',
-                            style: TextStyle(
-                              color: c.text,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          Row(
+                            children: <Widget>[
+                              Flexible(
+                                child: Text(
+                                  '${widget.exchange} API',
+                                  style: TextStyle(
+                                    color: c.text,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (_isTestnet) ...<Widget>[
+                                const SizedBox(width: 6),
+                                _TestnetBadge(c: c),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            l10n.meApiFormPermissionHint,
+                            _isTestnet
+                                ? l10n.meApiFormTestnetSubtitle
+                                : l10n.meApiFormPermissionHint,
                             style: TextStyle(
                               color: c.textMid,
                               fontSize: 12,
@@ -227,9 +262,22 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                     children: <Widget>[
+                      // 环境切换：仅支持测试网的交易所渲染（设计稿先于密钥决策）。
+                      if (_meta.testnet) ...<Widget>[
+                        _Label(text: l10n.meApiFormEnvLabel),
+                        const SizedBox(height: 6),
+                        _EnvToggle(
+                          l10n: l10n,
+                          env: _env,
+                          onChanged: (_ApiEnv next) =>
+                              setState(() => _env = next),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
                       _WarningBanner(
                         exchange: widget.exchange,
                         wallet: _meta.mode == _ApiMode.wallet,
+                        testnet: _isTestnet,
                       ),
                       const SizedBox(height: 18),
                       ..._buildCredentialFields(c, l10n),
@@ -241,12 +289,17 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                         decoration: _inputDecoration(c),
                         validator: _validateLabel,
                       ),
+                      if (_isTestnet) ...<Widget>[
+                        const SizedBox(height: 14),
+                        _EndpointHint(l10n: l10n),
+                      ],
                       const SizedBox(height: 18),
                       _Label(text: l10n.meApiFormPermissionSection),
                       const SizedBox(height: 8),
                       _PermissionList(
                         l10n: l10n,
                         wallet: _meta.mode == _ApiMode.wallet,
+                        testnet: _isTestnet,
                       ),
                     ],
                   ),
@@ -269,13 +322,19 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                     const SizedBox(width: QzSpacing.sm + 2),
                     Expanded(
                       flex: 2,
-                      child: QzButton(
-                        label: l10n.meApiFormSaveButton,
-                        variant: QzButtonVariant.accent,
-                        loading: _saving,
-                        onPressed: _saving ? null : _save,
-                        expanded: true,
-                      ),
+                      child: _isTestnet
+                          ? _TestnetSaveButton(
+                              label: l10n.meApiFormSaveTestnetButton,
+                              loading: _saving,
+                              onPressed: _saving ? null : _save,
+                            )
+                          : QzButton(
+                              label: l10n.meApiFormSaveButton,
+                              variant: QzButtonVariant.accent,
+                              loading: _saving,
+                              onPressed: _saving ? null : _save,
+                              expanded: true,
+                            ),
                     ),
                   ],
                 ),
@@ -497,9 +556,14 @@ class _ExchangeBadge extends StatelessWidget {
 /// - key 模式：读取账户与持仓 / 现货下单 / 合约下单（均 ok）+ 提币（blocked）。
 /// - wallet 模式：读取账户与持仓 / 永续·现货下单（均 ok）+ 转账·提币（disabled）。
 class _PermissionList extends StatelessWidget {
-  const _PermissionList({required this.l10n, required this.wallet});
+  const _PermissionList({
+    required this.l10n,
+    required this.wallet,
+    this.testnet = false,
+  });
   final AppLocalizations l10n;
   final bool wallet;
+  final bool testnet;
 
   @override
   Widget build(BuildContext context) {
@@ -546,10 +610,13 @@ class _PermissionList extends StatelessWidget {
           tone: _PermTone.ok,
         ),
         const SizedBox(height: 8),
+        // 测试网无资金，提币行降级为 disabled「测试网无提币」（设计稿 3058）。
         _PermissionRow(
           label: l10n.meApiFormPermWithdrawLabel,
-          value: l10n.meApiFormPermWithdrawValue,
-          tone: _PermTone.blocked,
+          value: testnet
+              ? l10n.meApiFormPermWithdrawTestnetValue
+              : l10n.meApiFormPermWithdrawValue,
+          tone: testnet ? _PermTone.disabled : _PermTone.blocked,
         ),
       ],
     );
@@ -627,19 +694,28 @@ class _PermissionRow extends StatelessWidget {
 }
 
 class _WarningBanner extends StatelessWidget {
-  const _WarningBanner({required this.exchange, required this.wallet});
+  const _WarningBanner({
+    required this.exchange,
+    required this.wallet,
+    this.testnet = false,
+  });
   final String exchange;
   final bool wallet;
+  final bool testnet;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final String boldText =
-        wallet ? l10n.meApiFormWalletWarningMust : l10n.meApiFormWarningMust;
-    final String bodyText = wallet
-        ? l10n.meApiFormWalletWarningBody
-        : l10n.meApiFormWarningBody(exchange);
+    // 测试网文案不分 bold/body，整段一句话提示去 testnet.binance.vision 申请。
+    final String boldText = testnet
+        ? l10n.meApiFormTestnetWarningBold
+        : (wallet ? l10n.meApiFormWalletWarningMust : l10n.meApiFormWarningMust);
+    final String bodyText = testnet
+        ? l10n.meApiFormTestnetWarningBody
+        : (wallet
+            ? l10n.meApiFormWalletWarningBody
+            : l10n.meApiFormWarningBody(exchange));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -670,6 +746,222 @@ class _WarningBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 标题旁的 `TESTNET` 琥珀标签（设计稿 `m-screens-4.jsx:2864`）。
+class _TestnetBadge extends StatelessWidget {
+  const _TestnetBadge({required this.c});
+  final QzColorScheme c;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: c.statusWarn.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'TESTNET',
+        style: TextStyle(
+          color: c.statusWarn,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+/// 主网 / 测试网分段控件（设计稿 `m-screens-4.jsx:2879-2918`）。
+class _EnvToggle extends StatelessWidget {
+  const _EnvToggle({
+    required this.l10n,
+    required this.env,
+    required this.onChanged,
+  });
+  final AppLocalizations l10n;
+  final _ApiEnv env;
+  final ValueChanged<_ApiEnv> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: c.bgInput,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Row(
+        children: <Widget>[
+          _segment(
+            c,
+            selected: env == _ApiEnv.mainnet,
+            label: l10n.meApiFormEnvMainnetLabel,
+            sub: l10n.meApiFormEnvMainnetSub,
+            color: c.accent,
+            onTap: () => onChanged(_ApiEnv.mainnet),
+          ),
+          const SizedBox(width: 3),
+          _segment(
+            c,
+            selected: env == _ApiEnv.testnet,
+            label: l10n.meApiFormEnvTestnetLabel,
+            sub: l10n.meApiFormEnvTestnetSub,
+            color: c.statusWarn,
+            onTap: () => onChanged(_ApiEnv.testnet),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(
+    QzColorScheme c, {
+    required bool selected,
+    required String label,
+    required String sub,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final Color fg = selected ? color : c.textMid;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? c.bgElev : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  color: fg,
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                sub,
+                style: TextStyle(
+                  color: selected ? fg : c.textMid,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 测试网接口域名 mono hint（设计稿 `m-screens-4.jsx:2998-3015`）。
+class _EndpointHint extends StatelessWidget {
+  const _EndpointHint({required this.l10n});
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: c.bgInput,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(QzRadii.input),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            l10n.meApiFormEndpointLabel,
+            style: TextStyle(
+              color: c.textMid,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _testnetEndpoint,
+            style: TextStyle(
+              color: c.text,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 测试网保存按钮：琥珀渐变（设计稿 `m-screens-4.jsx:3024-3038`）。
+class _TestnetSaveButton extends StatelessWidget {
+  const _TestnetSaveButton({
+    required this.label,
+    required this.loading,
+    required this.onPressed,
+  });
+  final String label;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool disabled = loading || onPressed == null;
+    return Opacity(
+      opacity: disabled ? 0.6 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: disabled ? null : onPressed,
+          borderRadius: BorderRadius.circular(QzRadii.input),
+          child: Container(
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: _testnetButtonGrad,
+              borderRadius: BorderRadius.circular(QzRadii.input),
+            ),
+            alignment: Alignment.center,
+            child: loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ),
       ),
     );
   }

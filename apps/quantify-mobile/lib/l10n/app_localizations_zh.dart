@@ -1414,6 +1414,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meApiFormPermAgentNoAccess => 'Agent 无权限';
 
   @override
+  String get meApiFormEnvLabel => '环境';
+
+  @override
+  String get meApiFormEnvMainnetLabel => '主网';
+
+  @override
+  String get meApiFormEnvMainnetSub => '真实资金';
+
+  @override
+  String get meApiFormEnvTestnetLabel => '测试网';
+
+  @override
+  String get meApiFormEnvTestnetSub => '模拟资金';
+
+  @override
+  String get meApiFormTestnetSubtitle => '测试网 · 模拟资金 · 不影响真实账户';
+
+  @override
+  String get meApiFormTestnetWarningBold => '请前往 testnet.binance.vision ';
+
+  @override
+  String get meApiFormTestnetWarningBody =>
+      '申请独立的测试网密钥（主网密钥不可用）。测试网币每 24h 自动重置，可放心调试策略。';
+
+  @override
+  String get meApiFormEndpointLabel => '接口域名';
+
+  @override
+  String get meApiFormPermWithdrawTestnetValue => '测试网无提币';
+
+  @override
+  String get meApiFormSaveTestnetButton => '保存测试网密钥';
+
+  @override
   String get themeSettingsTitle => '界面主题';
 
   @override

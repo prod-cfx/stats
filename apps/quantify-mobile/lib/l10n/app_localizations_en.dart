@@ -1450,6 +1450,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meApiFormPermAgentNoAccess => 'Agent No Access';
 
   @override
+  String get meApiFormEnvLabel => 'Environment';
+
+  @override
+  String get meApiFormEnvMainnetLabel => 'Mainnet';
+
+  @override
+  String get meApiFormEnvMainnetSub => 'Real Funds';
+
+  @override
+  String get meApiFormEnvTestnetLabel => 'Testnet';
+
+  @override
+  String get meApiFormEnvTestnetSub => 'Simulated Funds';
+
+  @override
+  String get meApiFormTestnetSubtitle =>
+      'Testnet · Simulated funds · No impact on real accounts';
+
+  @override
+  String get meApiFormTestnetWarningBold => 'Visit testnet.binance.vision ';
+
+  @override
+  String get meApiFormTestnetWarningBody =>
+      'to apply for dedicated testnet keys (mainnet keys won\'t work). Testnet coins reset every 24h, so debug strategies freely.';
+
+  @override
+  String get meApiFormEndpointLabel => 'Endpoint';
+
+  @override
+  String get meApiFormPermWithdrawTestnetValue => 'No withdrawal on testnet';
+
+  @override
+  String get meApiFormSaveTestnetButton => 'Save Testnet Keys';
+
+  @override
   String get themeSettingsTitle => 'Interface Theme';
 
   @override

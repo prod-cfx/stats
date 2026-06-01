@@ -29,6 +29,7 @@ class _FakeApiKeyRepo implements ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
+    String? apiPassphrase,
   }) async =>
       throw UnimplementedError();
 

@@ -2804,6 +2804,72 @@ abstract class AppLocalizations {
   /// **'Agent 无权限'**
   String get meApiFormPermAgentNoAccess;
 
+  /// No description provided for @meApiFormEnvLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'环境'**
+  String get meApiFormEnvLabel;
+
+  /// No description provided for @meApiFormEnvMainnetLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'主网'**
+  String get meApiFormEnvMainnetLabel;
+
+  /// No description provided for @meApiFormEnvMainnetSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'真实资金'**
+  String get meApiFormEnvMainnetSub;
+
+  /// No description provided for @meApiFormEnvTestnetLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试网'**
+  String get meApiFormEnvTestnetLabel;
+
+  /// No description provided for @meApiFormEnvTestnetSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟资金'**
+  String get meApiFormEnvTestnetSub;
+
+  /// No description provided for @meApiFormTestnetSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试网 · 模拟资金 · 不影响真实账户'**
+  String get meApiFormTestnetSubtitle;
+
+  /// No description provided for @meApiFormTestnetWarningBold.
+  ///
+  /// In zh, this message translates to:
+  /// **'请前往 testnet.binance.vision '**
+  String get meApiFormTestnetWarningBold;
+
+  /// No description provided for @meApiFormTestnetWarningBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'申请独立的测试网密钥（主网密钥不可用）。测试网币每 24h 自动重置，可放心调试策略。'**
+  String get meApiFormTestnetWarningBody;
+
+  /// No description provided for @meApiFormEndpointLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'接口域名'**
+  String get meApiFormEndpointLabel;
+
+  /// No description provided for @meApiFormPermWithdrawTestnetValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试网无提币'**
+  String get meApiFormPermWithdrawTestnetValue;
+
+  /// No description provided for @meApiFormSaveTestnetButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存测试网密钥'**
+  String get meApiFormSaveTestnetButton;
+
   /// No description provided for @themeSettingsTitle.
   ///
   /// In zh, this message translates to:

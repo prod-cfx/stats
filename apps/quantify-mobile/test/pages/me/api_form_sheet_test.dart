@@ -81,7 +81,63 @@ void main() {
     });
   });
 
+  group('Binance — 主网/测试网切换（Issue #1899）', () {
+    testWidgets('默认主网：无环境切换以外的 testnet UI', (WidgetTester tester) async {
+      await _pumpSheet(tester, 'Binance');
+
+      // 切换控件出现（仅 testnet 交易所）
+      expect(find.text('环境'), findsOneWidget);
+      expect(find.text('主网'), findsOneWidget);
+      expect(find.text('测试网'), findsOneWidget);
+      // 主网态：无 TESTNET 标签 / 域名提示 / 测试网按钮
+      expect(find.text('TESTNET'), findsNothing);
+      expect(find.text('接口域名'), findsNothing);
+      expect(find.text('保存测试网密钥'), findsNothing);
+      expect(find.text('验证并保存'), findsOneWidget);
+    });
+
+    testWidgets('切到测试网：标签/域名/按钮/副标题全部就位',
+        (WidgetTester tester) async {
+      await _pumpSheet(tester, 'Binance');
+      await tester.tap(find.text('测试网'));
+      await tester.pumpAndSettle();
+
+      // header / footer 区（无需滚动）
+      expect(find.text('TESTNET'), findsOneWidget);
+      expect(find.text('测试网 · 模拟资金 · 不影响真实账户'), findsOneWidget);
+      // 保存按钮切为琥珀「保存测试网密钥」，紫色「验证并保存」消失
+      expect(find.text('保存测试网密钥'), findsOneWidget);
+      expect(find.text('验证并保存'), findsNothing);
+
+      // 接口域名 mono hint 在表单中段，需滚动后可见
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+      expect(find.text('接口域名'), findsOneWidget);
+      expect(find.text('https://testnet.binance.vision'), findsOneWidget);
+    });
+
+    testWidgets('测试网：提币行变「测试网无提币」', (WidgetTester tester) async {
+      await _pumpSheet(tester, 'Binance');
+      await tester.tap(find.text('测试网'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -800));
+      await tester.pumpAndSettle();
+
+      expect(find.text('提币'), findsOneWidget);
+      expect(find.text('测试网无提币'), findsOneWidget);
+      expect(find.text('必须关闭'), findsNothing);
+    });
+  });
+
   group('OKX — key 模式 + Passphrase', () {
+    testWidgets('不支持测试网：无环境切换', (WidgetTester tester) async {
+      await _pumpSheet(tester, 'OKX');
+
+      expect(find.text('环境'), findsNothing);
+      expect(find.text('TESTNET'), findsNothing);
+      expect(find.text('保存测试网密钥'), findsNothing);
+    });
+
     testWidgets('显示 Passphrase，Secret 标签为 Secret Key',
         (WidgetTester tester) async {
       await _pumpSheet(tester, 'OKX');
@@ -119,6 +175,14 @@ void main() {
       // key 模式专属文案不应出现
       expect(find.text('合约下单'), findsNothing);
       expect(find.text('必须关闭'), findsNothing);
+    });
+
+    testWidgets('不支持测试网：无环境切换', (WidgetTester tester) async {
+      await _pumpSheet(tester, 'Hyperliquid');
+
+      expect(find.text('环境'), findsNothing);
+      expect(find.text('TESTNET'), findsNothing);
+      expect(find.text('保存测试网密钥'), findsNothing);
     });
   });
 }
