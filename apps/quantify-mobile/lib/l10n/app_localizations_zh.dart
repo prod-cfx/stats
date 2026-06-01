@@ -2293,6 +2293,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileEmptyHistory => '暂无历史委托';
 
   @override
+  String get whaleProfileFilterCoin => '币种筛选';
+
+  @override
+  String get whaleProfileFilterLabel => '筛选';
+
+  @override
+  String get whaleProfileFilterAll => '全部';
+
+  @override
+  String get whaleProfileFilterTitle => '币种筛选';
+
+  @override
+  String get whaleProfileMoreSort => '更多排序';
+
+  @override
+  String get whaleProfileSortMetric => '指标';
+
+  @override
+  String get whaleProfileSortDirection => '排序方式';
+
+  @override
+  String get whaleProfileSortAsc => '升序';
+
+  @override
+  String get whaleProfileSortDesc => '降序';
+
+  @override
+  String get whaleProfileSortNone => '不排序';
+
+  @override
+  String get whaleProfileSortDone => '完成';
+
+  @override
+  String get whaleProfileSortValue => '价值';
+
+  @override
+  String get whaleProfileSortAmount => '金额';
+
+  @override
   String whaleProfilePnlChartTitle(String period, String scope) {
     return '$period 总盈亏（$scope）';
   }

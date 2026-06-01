@@ -2334,6 +2334,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileEmptyHistory => 'No order history';
 
   @override
+  String get whaleProfileFilterCoin => 'Filter coin';
+
+  @override
+  String get whaleProfileFilterLabel => 'Filter';
+
+  @override
+  String get whaleProfileFilterAll => 'All';
+
+  @override
+  String get whaleProfileFilterTitle => 'Filter coin';
+
+  @override
+  String get whaleProfileMoreSort => 'More sort';
+
+  @override
+  String get whaleProfileSortMetric => 'Metric';
+
+  @override
+  String get whaleProfileSortDirection => 'Sort order';
+
+  @override
+  String get whaleProfileSortAsc => 'Ascending';
+
+  @override
+  String get whaleProfileSortDesc => 'Descending';
+
+  @override
+  String get whaleProfileSortNone => 'None';
+
+  @override
+  String get whaleProfileSortDone => 'Done';
+
+  @override
+  String get whaleProfileSortValue => 'Value';
+
+  @override
+  String get whaleProfileSortAmount => 'Amount';
+
+  @override
   String whaleProfilePnlChartTitle(String period, String scope) {
     return '$period total PnL ($scope)';
   }

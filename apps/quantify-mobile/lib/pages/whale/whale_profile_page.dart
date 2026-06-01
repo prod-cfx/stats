@@ -13,6 +13,7 @@ import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import 'widgets/whale_chart_filter_sheet.dart';
 import 'widgets/whale_detail_rows.dart';
+import 'widgets/whale_detail_sort.dart';
 import 'widgets/whale_perp_summary_card.dart';
 import 'widgets/whale_pnl_chart.dart';
 import 'widgets/whale_stat_cards.dart';
@@ -295,46 +296,11 @@ class _Detail extends StatelessWidget {
             child: TabBarView(
               children: <Widget>[
                 _BasicTab(profile: profile),
-                _ListTab(
-                  count: profile.spotHoldings.length,
-                  empty: l10n.whaleProfileEmptySpot,
-                  rows: <Widget>[
-                    for (final WhaleSpotHolding h in profile.spotHoldings)
-                      WhaleSpotRow(h: h),
-                  ],
-                ),
-                _ListTab(
-                  count: profile.perpHoldings.length,
-                  empty: l10n.whaleProfileEmptyPerp,
-                  rows: <Widget>[
-                    for (final WhalePerpHolding h in profile.perpHoldings)
-                      WhalePerpRow(h: h),
-                  ],
-                ),
-                _ListTab(
-                  count: profile.openOrders.length,
-                  empty: l10n.whaleProfileEmptyOrders,
-                  rows: <Widget>[
-                    for (final WhaleOpenOrder o in profile.openOrders)
-                      WhaleOrderRow(o: o),
-                  ],
-                ),
-                _ListTab(
-                  count: profile.recentTrades.length,
-                  empty: l10n.whaleProfileEmptyTrades,
-                  rows: <Widget>[
-                    for (final WhaleRecentTrade t in profile.recentTrades)
-                      WhaleTradeRow(t: t),
-                  ],
-                ),
-                _ListTab(
-                  count: profile.histOrders.length,
-                  empty: l10n.whaleProfileEmptyHistory,
-                  rows: <Widget>[
-                    for (final WhaleHistOrder o in profile.histOrders)
-                      WhaleHistRow(o: o),
-                  ],
-                ),
+                _SpotTab(items: profile.spotHoldings, empty: l10n.whaleProfileEmptySpot),
+                _PerpTab(items: profile.perpHoldings, empty: l10n.whaleProfileEmptyPerp),
+                _OrderTab(items: profile.openOrders, empty: l10n.whaleProfileEmptyOrders),
+                _TradeTab(items: profile.recentTrades, empty: l10n.whaleProfileEmptyTrades),
+                _HistTab(items: profile.histOrders, empty: l10n.whaleProfileEmptyHistory),
               ],
             ),
           ),
@@ -603,21 +569,365 @@ class _FilterPill extends StatelessWidget {
   }
 }
 
-/// 明细列表 tab（空 list 显示空态）。
-class _ListTab extends StatelessWidget {
-  const _ListTab({
-    required this.count,
+/// 明细 tab 排序/筛选脚手架（#1908）。
+///
+/// 设计稿 `TabBody`（jsx:1163）：工具条（左侧 sort label / 右侧 sort label +
+/// 币种筛选 [+ 更多排序]）+ 排序/筛选后的行。各 tab 通过泛型注入：取 sym、
+/// 列头排序键、数值取值（time 用行索引）、更多排序指标、行构建。
+typedef _SymOf<T> = String Function(T item);
+typedef _RowBuilder<T> = Widget Function(T item);
+
+/// 列头排序键定义：(key, label, 是否右对齐, 数值取值或 null=用索引(time))。
+class _SortKey<T> {
+  const _SortKey(this.key, this.label, {this.right = false, this.numOf});
+  final String key;
+  final String label;
+  final bool right;
+
+  /// null 表示 time 列——用行原始索引排序（fixture 已按时间倒序）。
+  final double Function(T item)? numOf;
+}
+
+/// 通用排序/筛选明细 tab。左/右列头三态排序 + 币种筛选 +（可选）更多排序。
+class _SortableTab<T> extends StatefulWidget {
+  const _SortableTab({
+    required this.items,
     required this.empty,
-    required this.rows,
+    required this.symOf,
+    required this.leftKeys,
+    required this.rightKeys,
+    required this.rowBuilder,
+    this.filterLabel,
+    this.moreSortKeys = const <Never>[],
   });
-  final int count;
+
+  final List<T> items;
   final String empty;
-  final List<Widget> rows;
+  final _SymOf<T> symOf;
+  final List<_SortKey<T>> leftKeys;
+  final List<_SortKey<T>> rightKeys;
+  final _RowBuilder<T> rowBuilder;
+
+  /// 现货 tab 用「筛选」，其余用默认「币种筛选」。
+  final String? filterLabel;
+
+  /// 更多排序指标（同 `_SortKey`，列头不展示）；空表示该 tab 无更多排序。
+  final List<_SortKey<T>> moreSortKeys;
+
+  @override
+  State<_SortableTab<T>> createState() => _SortableTabState<T>();
+}
+
+class _SortableTabState<T> extends State<_SortableTab<T>> {
+  WhaleSortState _sort = const WhaleSortState();
+  String _coin = '';
+  bool _coinInit = false;
+
+  List<_SortKey<T>> get _allKeys =>
+      <_SortKey<T>>[...widget.leftKeys, ...widget.rightKeys, ...widget.moreSortKeys];
+
+  _SortKey<T>? _keyOf(String? k) {
+    if (k == null) return null;
+    for (final _SortKey<T> sk in _allKeys) {
+      if (sk.key == k) return sk;
+    }
+    return null;
+  }
+
+  List<({int idx, T item})> _process() {
+    final String all = AppLocalizations.of(context).whaleProfileFilterAll;
+    final List<({int idx, T item})> indexed = <({int idx, T item})>[
+      for (int i = 0; i < widget.items.length; i++)
+        (idx: i, item: widget.items[i]),
+    ];
+    final List<({int idx, T item})> filtered = _coin == all
+        ? indexed
+        : indexed.where((e) => widget.symOf(e.item) == _coin).toList();
+    final _SortKey<T>? sk = _keyOf(_sort.key);
+    if (sk == null || _sort.dir == null) return filtered;
+    final List<({int idx, T item})> sorted = <({int idx, T item})>[...filtered];
+    // time 列（numOf==null）用行原始索引；其余用数值取值。
+    double v(({int idx, T item}) e) =>
+        sk.numOf == null ? -e.idx.toDouble() : sk.numOf!(e.item);
+    sorted.sort((a, b) => v(a).compareTo(v(b)));
+    if (_sort.dir == WhaleSortDir.desc) {
+      return sorted.reversed.toList();
+    }
+    return sorted;
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (count == 0) return WhaleDetailEmpty(text: empty);
-    return ListView(padding: EdgeInsets.zero, children: rows);
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    if (!_coinInit) {
+      _coin = l10n.whaleProfileFilterAll;
+      _coinInit = true;
+    }
+    final List<({int idx, T item})> rows = _process();
+    final List<String> coinOptions = <String>[
+      l10n.whaleProfileFilterAll,
+      ...<String>{for (final T it in widget.items) widget.symOf(it)},
+    ];
+    return Column(
+      children: <Widget>[
+        _Toolbar(
+          leftKeys: widget.leftKeys,
+          rightKeys: widget.rightKeys,
+          sort: _sort,
+          onSort: (String k) => setState(() => _sort = _sort.cycle(k)),
+          coin: _coin,
+          coinOptions: coinOptions,
+          filterLabel: widget.filterLabel,
+          onCoin: (String c) => setState(() => _coin = c),
+          moreSortKeys: widget.moreSortKeys,
+          onMoreSort: (WhaleSortState s) => setState(() => _sort = s),
+        ),
+        Expanded(
+          child: rows.isEmpty
+              ? WhaleDetailEmpty(text: widget.empty)
+              : ListView(
+                  padding: EdgeInsets.zero,
+                  children: <Widget>[
+                    for (final ({int idx, T item}) e in rows)
+                      widget.rowBuilder(e.item),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 工具条：左侧 sort label · spacer · 右侧 sort label + 币种筛选 [+ 更多排序]。
+class _Toolbar<T> extends StatelessWidget {
+  const _Toolbar({
+    required this.leftKeys,
+    required this.rightKeys,
+    required this.sort,
+    required this.onSort,
+    required this.coin,
+    required this.coinOptions,
+    required this.onCoin,
+    required this.moreSortKeys,
+    required this.onMoreSort,
+    this.filterLabel,
+  });
+
+  final List<_SortKey<T>> leftKeys;
+  final List<_SortKey<T>> rightKeys;
+  final WhaleSortState sort;
+  final ValueChanged<String> onSort;
+  final String coin;
+  final List<String> coinOptions;
+  final ValueChanged<String> onCoin;
+  final List<_SortKey<T>> moreSortKeys;
+  final ValueChanged<WhaleSortState> onMoreSort;
+  final String? filterLabel;
+
+  WhaleSortDir? _dirOf(String k) => sort.key == k ? sort.dir : null;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border(bottom: BorderSide(color: c.borderSoft)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      child: Row(
+        children: <Widget>[
+          for (final _SortKey<T> sk in leftKeys) ...<Widget>[
+            WhaleSortLabel(
+              label: sk.label,
+              dir: _dirOf(sk.key),
+              onTap: () => onSort(sk.key),
+            ),
+            const SizedBox(width: 16),
+          ],
+          const Spacer(),
+          for (final _SortKey<T> sk in rightKeys) ...<Widget>[
+            WhaleSortLabel(
+              label: sk.label,
+              dir: _dirOf(sk.key),
+              onTap: () => onSort(sk.key),
+            ),
+            const SizedBox(width: 16),
+          ],
+          WhaleCoinFilterTrigger(
+            value: coin,
+            options: coinOptions,
+            onChanged: onCoin,
+            label: filterLabel,
+          ),
+          if (moreSortKeys.isNotEmpty) ...<Widget>[
+            const SizedBox(width: 16),
+            WhaleMoreSortTrigger(
+              sort: sort,
+              metrics: <({String key, String label})>[
+                for (final _SortKey<T> sk in moreSortKeys)
+                  (key: sk.key, label: sk.label),
+              ],
+              onChanged: onMoreSort,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 现货持仓：价值/金额 排序 + 价格 排序 + 筛选。
+class _SpotTab extends StatelessWidget {
+  const _SpotTab({required this.items, required this.empty});
+  final List<WhaleSpotHolding> items;
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return _SortableTab<WhaleSpotHolding>(
+      items: items,
+      empty: empty,
+      symOf: (WhaleSpotHolding h) => h.sym,
+      filterLabel: l10n.whaleProfileFilterLabel,
+      leftKeys: <_SortKey<WhaleSpotHolding>>[
+        _SortKey<WhaleSpotHolding>('value', l10n.whaleProfileSortValue,
+            numOf: (h) => h.valueN),
+        _SortKey<WhaleSpotHolding>('amount', l10n.whaleProfileSortAmount,
+            numOf: (h) => whaleSortNum(h.qtyDisplay)),
+      ],
+      rightKeys: <_SortKey<WhaleSpotHolding>>[
+        _SortKey<WhaleSpotHolding>('price', l10n.whaleProfileColPrice,
+            right: true, numOf: (h) => whaleSortNum(h.priceDisplay)),
+      ],
+      rowBuilder: (WhaleSpotHolding h) => WhaleSpotRow(h: h),
+    );
+  }
+}
+
+/// 永续合约持仓：持仓价值/未实现盈亏 排序 + 筛选 + 更多排序。
+class _PerpTab extends StatelessWidget {
+  const _PerpTab({required this.items, required this.empty});
+  final List<WhalePerpHolding> items;
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return _SortableTab<WhalePerpHolding>(
+      items: items,
+      empty: empty,
+      symOf: (WhalePerpHolding h) => h.sym,
+      leftKeys: <_SortKey<WhalePerpHolding>>[
+        _SortKey<WhalePerpHolding>('value', l10n.whaleProfileColPosValue,
+            numOf: (h) => h.valueN),
+        _SortKey<WhalePerpHolding>('pnl', l10n.whaleProfileColUnrealized,
+            numOf: (h) => h.pnlN),
+      ],
+      rightKeys: const <_SortKey<WhalePerpHolding>>[],
+      moreSortKeys: <_SortKey<WhalePerpHolding>>[
+        _SortKey<WhalePerpHolding>('entry', l10n.whaleProfileColEntry,
+            numOf: (h) => whaleSortNum(h.entryDisplay)),
+        _SortKey<WhalePerpHolding>('mark', l10n.whaleProfileColMark,
+            numOf: (h) => whaleSortNum(h.markDisplay)),
+        _SortKey<WhalePerpHolding>('liq', l10n.whaleProfileColLiq,
+            numOf: (h) => whaleSortNum(h.liqDisplay)),
+        _SortKey<WhalePerpHolding>('margin', l10n.whaleProfileColMargin,
+            numOf: (h) => whaleSortNum(h.marginDisplay)),
+        _SortKey<WhalePerpHolding>('funding', l10n.whaleProfileColFunding,
+            numOf: (h) => h.fundingN),
+      ],
+      rowBuilder: (WhalePerpHolding h) => WhalePerpRow(h: h),
+    );
+  }
+}
+
+/// 挂单：时间/价值 排序 + 数量 排序 + 筛选。
+class _OrderTab extends StatelessWidget {
+  const _OrderTab({required this.items, required this.empty});
+  final List<WhaleOpenOrder> items;
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return _SortableTab<WhaleOpenOrder>(
+      items: items,
+      empty: empty,
+      symOf: (WhaleOpenOrder o) => o.sym,
+      leftKeys: <_SortKey<WhaleOpenOrder>>[
+        _SortKey<WhaleOpenOrder>('time', l10n.whaleProfileColTime),
+        _SortKey<WhaleOpenOrder>('value', l10n.whaleProfileColValue,
+            numOf: (o) => whaleSortNum(o.valueDisplay)),
+      ],
+      rightKeys: <_SortKey<WhaleOpenOrder>>[
+        _SortKey<WhaleOpenOrder>('qty', l10n.whaleProfileColQty,
+            right: true, numOf: (o) => whaleSortNum(o.qtyDisplay)),
+      ],
+      rowBuilder: (WhaleOpenOrder o) => WhaleOrderRow(o: o),
+    );
+  }
+}
+
+/// 最近成交：时间/数量 排序 + 筛选 + 更多排序。
+class _TradeTab extends StatelessWidget {
+  const _TradeTab({required this.items, required this.empty});
+  final List<WhaleRecentTrade> items;
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return _SortableTab<WhaleRecentTrade>(
+      items: items,
+      empty: empty,
+      symOf: (WhaleRecentTrade t) => t.sym,
+      leftKeys: <_SortKey<WhaleRecentTrade>>[
+        _SortKey<WhaleRecentTrade>('time', l10n.whaleProfileColTime),
+        _SortKey<WhaleRecentTrade>('qty', l10n.whaleProfileColQty,
+            numOf: (t) => whaleSortNum(t.qtyDisplay)),
+      ],
+      rightKeys: const <_SortKey<WhaleRecentTrade>>[],
+      moreSortKeys: <_SortKey<WhaleRecentTrade>>[
+        _SortKey<WhaleRecentTrade>('price', l10n.whaleProfileColPrice,
+            numOf: (t) => whaleSortNum(t.priceDisplay)),
+        _SortKey<WhaleRecentTrade>('pnl', l10n.whaleProfileColClosedPnl,
+            numOf: (t) => t.pnlN),
+        _SortKey<WhaleRecentTrade>('fee', l10n.whaleProfileColFee,
+            numOf: (t) => whaleSortNum(t.feeDisplay)),
+        _SortKey<WhaleRecentTrade>('start', l10n.whaleProfileColStart,
+            numOf: (t) => whaleSortNum(t.startDisplay)),
+      ],
+      rowBuilder: (WhaleRecentTrade t) => WhaleTradeRow(t: t),
+    );
+  }
+}
+
+/// 历史委托：时间/数量 排序 + 价格 排序 + 筛选。
+class _HistTab extends StatelessWidget {
+  const _HistTab({required this.items, required this.empty});
+  final List<WhaleHistOrder> items;
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return _SortableTab<WhaleHistOrder>(
+      items: items,
+      empty: empty,
+      symOf: (WhaleHistOrder o) => o.sym,
+      leftKeys: <_SortKey<WhaleHistOrder>>[
+        _SortKey<WhaleHistOrder>('time', l10n.whaleProfileColTime),
+        _SortKey<WhaleHistOrder>('qty', l10n.whaleProfileColQty,
+            numOf: (o) => whaleSortNum(o.qtyDisplay)),
+      ],
+      rightKeys: <_SortKey<WhaleHistOrder>>[
+        _SortKey<WhaleHistOrder>('price', l10n.whaleProfileColPrice,
+            right: true, numOf: (o) => whaleSortNum(o.priceDisplay)),
+      ],
+      rowBuilder: (WhaleHistOrder o) => WhaleHistRow(o: o),
+    );
   }
 }
 

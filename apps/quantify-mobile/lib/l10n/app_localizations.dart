@@ -4508,6 +4508,84 @@ abstract class AppLocalizations {
   /// **'暂无历史委托'**
   String get whaleProfileEmptyHistory;
 
+  /// No description provided for @whaleProfileFilterCoin.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种筛选'**
+  String get whaleProfileFilterCoin;
+
+  /// No description provided for @whaleProfileFilterLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选'**
+  String get whaleProfileFilterLabel;
+
+  /// No description provided for @whaleProfileFilterAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get whaleProfileFilterAll;
+
+  /// No description provided for @whaleProfileFilterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种筛选'**
+  String get whaleProfileFilterTitle;
+
+  /// No description provided for @whaleProfileMoreSort.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多排序'**
+  String get whaleProfileMoreSort;
+
+  /// No description provided for @whaleProfileSortMetric.
+  ///
+  /// In zh, this message translates to:
+  /// **'指标'**
+  String get whaleProfileSortMetric;
+
+  /// No description provided for @whaleProfileSortDirection.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式'**
+  String get whaleProfileSortDirection;
+
+  /// No description provided for @whaleProfileSortAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'升序'**
+  String get whaleProfileSortAsc;
+
+  /// No description provided for @whaleProfileSortDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'降序'**
+  String get whaleProfileSortDesc;
+
+  /// No description provided for @whaleProfileSortNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'不排序'**
+  String get whaleProfileSortNone;
+
+  /// No description provided for @whaleProfileSortDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get whaleProfileSortDone;
+
+  /// No description provided for @whaleProfileSortValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'价值'**
+  String get whaleProfileSortValue;
+
+  /// No description provided for @whaleProfileSortAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额'**
+  String get whaleProfileSortAmount;
+
   /// No description provided for @whaleProfilePnlChartTitle.
   ///
   /// In zh, this message translates to:
