@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
-import '../../data/models/backtest_models.dart';
-import '../../data/models/deploy_models.dart';
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
@@ -16,11 +14,7 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_ai_session_drawer.dart';
-import '../../widgets/qz_backtest_progress_card.dart';
-import '../../widgets/qz_backtest_result_card.dart';
-import '../../widgets/qz_button.dart';
 import '../../widgets/qz_chat_bubble.dart';
-import '../../widgets/qz_deploy_sheet.dart';
 import '../../widgets/qz_quick_reply_chips.dart';
 import '../../widgets/qz_typing_indicator.dart';
 
@@ -60,13 +54,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   Timer? _streamTimer;
-  BacktestResult? _backtest;
-
-  /// 回测阶段（验收 #1751 §3：回测中需明确 UI 表达）。
-  /// `running` 渲染进度卡，`done` 渲染结果卡 + 部署按钮，`idle` 不渲染。
-  BacktestPhase _btPhase = BacktestPhase.idle;
-  double _btProgress = 0;
-  Timer? _btTimer;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -119,7 +106,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     setState(() {
       _currentId = id;
       _input.text = _drafts[id] ?? '';
-      _resetBacktest();
       _isThinking = false;
       _isStreaming = false;
       _streamTimer?.cancel();
@@ -138,7 +124,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       _order.insert(0, fresh.id);
       _currentId = fresh.id;
       _input.text = '';
-      _resetBacktest();
     });
     if (_scaffoldKey.currentState?.isDrawerOpen == true) {
       Navigator.of(context).pop();
@@ -272,95 +257,10 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     });
   }
 
-  /// 回测中进度推进节奏：每 120ms +4%，约 3s 跑完（mock）。
-  static const Duration _btTick = Duration(milliseconds: 120);
-  static const double _btStep = 0.04;
-
-  /// 清空回测状态（切/删会话、新一轮提问等场景复用），同时停掉计时器。
-  void _resetBacktest() {
-    _btTimer?.cancel();
-    _btTimer = null;
-    _backtest = null;
-    _btPhase = BacktestPhase.idle;
-    _btProgress = 0;
-  }
-
   /// 进入确认策略屏（#1832）：把参数气泡的当前会话参数经 `extra` 透传，
   /// 供 `/ai/confirm` 渲染参数确认卡 + 脚本预览。
   void _openConfirm(Map<String, String>? params) {
     context.push('/ai/confirm', extra: params);
-  }
-
-  Future<void> _openBacktestSheet() async {
-    final Object? result = await context.push<Object?>('/ai/backtest-config');
-    if (!mounted) return;
-    if (result is! BacktestResult) return;
-    // 先进入「回测中」状态（验收 #3），mock 计时推进到 100% 再切结果卡。
-    _btTimer?.cancel();
-    setState(() {
-      _backtest = result;
-      _btPhase = BacktestPhase.running;
-      _btProgress = 0;
-    });
-    _scrollToBottom();
-    _btTimer = Timer.periodic(_btTick, (Timer t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      final double next = _btProgress + _btStep;
-      if (next >= 1.0) {
-        t.cancel();
-        setState(() {
-          _btProgress = 1.0;
-          _btPhase = BacktestPhase.done;
-        });
-        _scrollToBottom();
-        return;
-      }
-      setState(() => _btProgress = next);
-    });
-  }
-
-  void _cancelBacktest() {
-    setState(_resetBacktest);
-  }
-
-  Future<void> _openDeploySheet() async {
-    final DeploymentResult? result = await QzDeploySheet.show(context);
-    if (!mounted || result == null) return;
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final String? id = _currentId;
-    if (id == null) return;
-    final AiSession? cur = _sessions[id];
-    if (cur == null) return;
-    // 回写会话 `deployedTo`（实例 ID），供参数卡锁定态 / 部署终态富气泡读取。
-    final AiChatRepository repo = ref.read(aiChatRepositoryProvider);
-    await repo.markDeployed(id, result.instanceId);
-    if (!mounted) return;
-    // 部署终态富气泡（#1833）：header 复用 prefix 文案，exchange / instanceId
-    // 走结构化字段供气泡渲染「策略已部署到 {ex}」+「策略 ID {id} · 运行中」。
-    // 「查看实盘策略」CTA 收敛进气泡内（onViewLive），不再额外弹 SnackBar，
-    // 避免与气泡 CTA 形成重复入口。
-    final String exchangeName = result.exchange.toUpperCase();
-    setState(() {
-      _sessions[id] = cur.copyWith(
-        deployedTo: result.instanceId,
-        messages: <ChatTurn>[
-          ...cur.messages,
-          ChatTurn(
-            id: 'system-${DateTime.now().microsecondsSinceEpoch}',
-            role: 'system',
-            content: '${l10n.deploySystemMessagePrefix}$exchangeName',
-            timestamp: result.deployedAt,
-            kind: ChatTurnKind.deployed,
-            deployedExchange: exchangeName,
-            deployedInstanceId: result.instanceId,
-          ),
-        ],
-      );
-    });
-    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -377,7 +277,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   @override
   void dispose() {
     _streamTimer?.cancel();
-    _btTimer?.cancel();
     _input.removeListener(_persistDraft);
     _input.dispose();
     _scroll.dispose();
@@ -430,7 +329,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         _order.insert(0, fresh.id);
         _currentId = fresh.id;
         _input.text = '';
-        _resetBacktest();
       });
       targetId = fresh.id;
     }
@@ -512,9 +410,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     final List<ChatTurn> messages = current?.messages ?? <ChatTurn>[];
     // typing indicator 占一个虚拟 slot；只在 thinking 阶段显示
     final int extraTyping = _isThinking ? 1 : 0;
-    // running / done 各占一个 slot：running → 进度卡，done → 结果卡 + 部署按钮
-    final int extraBacktest = _btPhase == BacktestPhase.idle ? 0 : 1;
-    final int itemCount = messages.length + extraTyping + extraBacktest;
+    final int itemCount = messages.length + extraTyping;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -563,31 +459,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
             tooltip: l10n.aiAppBarNewSessionTooltip,
             icon: const Icon(Icons.add_comment_outlined),
             onPressed: _createSession,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: QzSpacing.sm,
-              vertical: QzSpacing.sm,
-            ),
-            child: TextButton.icon(
-              key: const Key('ai-backtest-button'),
-              onPressed: current == null || _isSending ? null : _openBacktestSheet,
-              icon: const Icon(Icons.tune, size: 14),
-              label: Text(l10n.aiAppBarParamsButton),
-              style: TextButton.styleFrom(
-                backgroundColor: c.accentSoft,
-                foregroundColor: c.accent,
-                disabledForegroundColor: c.textDim,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: const StadiumBorder(),
-                textStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -641,29 +512,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                     : null,
                               );
                             }
-                            if (i < messages.length + extraTyping) {
-                              return const QzTypingIndicator();
-                            }
-                            if (_btPhase == BacktestPhase.running) {
-                              return QzBacktestProgressCard(
-                                key: const Key('backtest-progress-card'),
-                                progress: _btProgress,
-                                onCancel: _cancelBacktest,
-                              );
-                            }
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                QzBacktestResultCard(result: _backtest!),
-                                const SizedBox(height: QzSpacing.sm),
-                                QzButton(
-                                  key: const Key('ai-deploy-button'),
-                                  label: l10n.deployButton,
-                                  variant: QzButtonVariant.accent,
-                                  onPressed: _openDeploySheet,
-                                ),
-                              ],
-                            );
+                            return const QzTypingIndicator();
                           },
                         ),
             ),

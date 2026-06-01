@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
-import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -21,13 +20,6 @@ Future<void> _pump(WidgetTester tester) async {
         path: '/ai',
         builder: (BuildContext context, GoRouterState state) =>
             const AiHomePage(),
-        routes: <RouteBase>[
-          GoRoute(
-            path: 'backtest-config',
-            builder: (BuildContext context, GoRouterState state) =>
-                const BacktestConfigSheet(),
-          ),
-        ],
       ),
     ],
   );
@@ -66,109 +58,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
     }
     expect(find.text('已收到："hi"。这是一段 mock 回复。'), findsOneWidget);
-  });
-
-  testWidgets('AI 对话页：点回测按钮 → 抽屉打开 → 提交后先回测中 → 完成切结果卡',
-      (WidgetTester tester) async {
-    await _pump(tester);
-
-    await tester.tap(find.byKey(const Key('ai-backtest-button')));
-    await tester.pumpAndSettle();
-    expect(find.text('回测参数'), findsOneWidget);
-
-    await tester
-        .ensureVisible(find.byKey(const Key('backtest-submit')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('backtest-submit')));
-    // sheet 内 200ms mock + pop 回 AI 页，先进入「回测中」进度卡
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump();
-    expect(find.byKey(const Key('backtest-progress-card')), findsOneWidget);
-    expect(find.text('回测进行中'), findsOneWidget);
-    // 结果卡此时尚未出现（结果卡状态行含「回测完成」chip）
-    expect(find.text('回测完成'), findsNothing);
-
-    // 推进进度计时器（120ms × ~25 tick）直到完成
-    for (int i = 0; i < 30; i++) {
-      await tester.pump(const Duration(milliseconds: 120));
-    }
-    expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
-    // 富结果卡（#1895）：状态行「回测完成」+ Hero 累计净值 +312.4%
-    expect(find.text('回测完成'), findsOneWidget);
-    expect(find.text('+312.4%'), findsOneWidget);
-    expect(find.byKey(const Key('ai-deploy-button')), findsOneWidget);
-  });
-
-  testWidgets('回测中：点取消回测 → 进度卡消失，不出现结果卡',
-      (WidgetTester tester) async {
-    await _pump(tester);
-
-    await tester.tap(find.byKey(const Key('ai-backtest-button')));
-    await tester.pumpAndSettle();
-    await tester
-        .ensureVisible(find.byKey(const Key('backtest-submit')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('backtest-submit')));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump();
-    expect(find.byKey(const Key('backtest-progress-card')), findsOneWidget);
-
-    // 进度卡升级后高度增大，取消按钮可能落在视口外；先滚动可见再点击。
-    await tester
-        .ensureVisible(find.byKey(const Key('backtest-progress-cancel')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('backtest-progress-cancel')));
-    await tester.pump();
-    expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
-    expect(find.text('回测完成'), findsNothing);
-  });
-
-  testWidgets('回测抽屉：自定义区间留空起止时间 → 显示校验错误，不 pop',
-      (WidgetTester tester) async {
-    await _pump(tester);
-    // 自定义模式下 sheet 内容更长，给一个更高的测试 surface 避免按钮被裁
-    await tester.binding.setSurfaceSize(const Size(400, 1800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('ai-backtest-button')));
-    await tester.pumpAndSettle();
-
-    // 切到「自定义」区间，露出 start/end 文本框
-    await tester.ensureVisible(find.byKey(const Key('backtest-range-custom')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('backtest-range-custom')));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byKey(const Key('backtest-start')), '');
-    await tester
-        .ensureVisible(find.byKey(const Key('backtest-submit')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('backtest-submit')));
-    await tester.pump();
-
-    expect(find.text('请输入正确的起止时间（YYYY-MM-DD）'), findsOneWidget);
-    expect(find.text('回测参数'), findsOneWidget);
-  });
-
-  testWidgets('回测抽屉：新字段渲染齐全（区间 chips / 滑点 / 手续费 / 成交价来源 / shield banner）',
-      (WidgetTester tester) async {
-    await _pump(tester);
-
-    await tester.tap(find.byKey(const Key('ai-backtest-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('backtest-range-7D')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-range-30D')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-range-90D')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-range-1Y')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-range-custom')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-slippage')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-fee')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-fill-source')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-partial-data')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-collapse')), findsOneWidget);
-    expect(find.text('确认并开始回测'), findsOneWidget);
   });
 
   testWidgets('多会话：顶栏点击历史按钮 → 抽屉列出 3 条 mock 会话 → 切换会话',
@@ -268,7 +157,7 @@ void main() {
     expect(find.text('ETH 4H 均值回归'), findsOneWidget);
   });
 
-  testWidgets('顶部栏：不再显示 debug count，渲染新建会话图标 + 参数 pill（#1590）',
+  testWidgets('顶部栏：仅历史 + 新建会话，无设计稿外的「参数」按钮（#2014）',
       (WidgetTester tester) async {
     await _pump(tester);
 
@@ -276,15 +165,11 @@ void main() {
     expect(find.textContaining('count:'), findsNothing);
     expect(find.byKey(const Key('ai-counter-inc')), findsNothing);
 
-    // 新建会话图标按钮 + 参数 pill 都要在。
+    // 设计稿顶栏：左历史 + 右新建会话；无「参数」pill（#2014）。
+    expect(find.byKey(const Key('ai-appbar-history')), findsOneWidget);
     expect(find.byKey(const Key('ai-appbar-new-session')), findsOneWidget);
-    expect(find.byKey(const Key('ai-backtest-button')), findsOneWidget);
-    expect(find.text('参数'), findsOneWidget);
-
-    // 点参数按钮 → 打开回测参数 sheet。
-    await tester.tap(find.byKey(const Key('ai-backtest-button')));
-    await tester.pumpAndSettle();
-    expect(find.text('回测参数'), findsOneWidget);
+    expect(find.byKey(const Key('ai-backtest-button')), findsNothing);
+    expect(find.text('参数'), findsNothing);
   });
 
   testWidgets('草稿不串台：在 s1 输入后切到 s2 输入框为空，再切回 s1 草稿仍在',
