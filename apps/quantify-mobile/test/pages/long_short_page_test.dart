@@ -38,8 +38,9 @@ Future<void> _pumpBody(
 }
 
 void main() {
-  testWidgets('/market/long-short 深链预选多空比 tab（顶部为 hub header）',
-      (WidgetTester tester) async {
+  testWidgets('/market/long-short 深链预选多空比 tab（顶部为 hub header）', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await tester.binding.setSurfaceSize(const Size(420, 1200));
@@ -68,8 +69,9 @@ void main() {
     expect(find.byKey(const Key('data-hub-notification-bell')), findsOneWidget);
     expect(find.byType(LongShortBody), findsOneWidget);
     expect(find.byType(LongShortBar), findsWidgets);
-    final DataHubPage page =
-        tester.widget<DataHubPage>(find.byType(DataHubPage));
+    final DataHubPage page = tester.widget<DataHubPage>(
+      find.byType(DataHubPage),
+    );
     expect(page.initial, DataHubScreen.longShort);
   });
 
@@ -84,5 +86,33 @@ void main() {
         expect(tester.takeException(), isNull);
       }
     }
+  });
+
+  testWidgets('LongShortBody 对齐设计稿骨架：chip、标题、周期抽屉、无刷新和历史', (
+    WidgetTester tester,
+  ) async {
+    await _pumpBody(tester);
+
+    expect(find.byKey(const Key('long-short-refresh')), findsNothing);
+    expect(find.text('历史多空比'), findsNothing);
+    expect(find.text('交易所 多空比图表'), findsOneWidget);
+    expect(find.text('持仓占比 (多 VS 空)'), findsOneWidget);
+    expect(find.byKey(const Key('long-short-coin-search')), findsOneWidget);
+    expect(
+      find.byKey(const Key('long-short-symbol-chip-BTCUSDT')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('long-short-period-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('long-short-period-sheet')), findsOneWidget);
+    expect(find.text('15分钟'), findsOneWidget);
+
+    await tester.tap(find.text('15分钟'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('15分钟'), findsOneWidget);
+    expect(find.byKey(const Key('long-short-period-sheet')), findsNothing);
   });
 }

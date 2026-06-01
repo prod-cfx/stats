@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/mock/fixtures/long_short.dart';
 import '../../data/mock/fixtures/tickers.dart';
 import '../../data/models/exchange_long_short_models.dart';
-import '../../data/models/long_short_models.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
@@ -12,14 +10,11 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
 import '../../widgets/qz_empty_state.dart';
-import '../../widgets/qz_segmented_tabs.dart';
+import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import 'widgets/exchange_long_short_tile.dart';
-import 'widgets/long_short_bar.dart';
 import 'widgets/long_short_hero_card.dart';
 
-/// 多空比主体（symbol 选择 + hero 卡 + 交易所榜 + 历史），无 Scaffold /
-/// 顶栏。顶部自带刷新按钮（抽 body 后 QzTopBar 的 refresh action 下放至此）。
 class LongShortBody extends ConsumerStatefulWidget {
   const LongShortBody({super.key});
 
@@ -28,7 +23,10 @@ class LongShortBody extends ConsumerStatefulWidget {
 }
 
 class _LongShortBodyState extends ConsumerState<LongShortBody> {
+  static const List<String> _periods = <String>['15分钟', '1小时', '4小时', '12小时'];
+
   String _symbol = 'BTCUSDT';
+  String _period = '4小时';
   MarketLongShortSnapshot? _snapshot;
   bool _loading = true;
   Object? _error;
@@ -64,172 +62,356 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
     }
   }
 
+  Future<void> _pickPeriod() async {
+    final String? picked = await QzSheet.show<String>(
+      context: context,
+      builder: (BuildContext context) =>
+          _PeriodSheet(selected: _period, periods: _periods),
+    );
+    if (picked == null || picked == _period || !mounted) return;
+    setState(() => _period = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
     final List<String> symbols = mockTickers
         .map((ticker) => ticker.symbol)
         .take(8)
         .toList();
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(QzSpacing.lg),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Align(
-            alignment: Alignment.centerRight,
-            child: IconButton(
-              key: const Key('long-short-refresh'),
-              icon: const Icon(Icons.refresh, size: 20),
-              color: c.text,
-              tooltip: l10n.marketLongShortRefreshTooltip,
-              onPressed: _loading ? null : _load,
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: QzSegmentedTabs(
-              options: symbols,
-              value: _symbol,
-              onChanged: (String value) {
-                setState(() => _symbol = value);
-                _load();
-              },
-            ),
+          _CoinTabs(
+            symbols: symbols,
+            selected: _symbol,
+            onChanged: (String value) {
+              setState(() => _symbol = value);
+              _load();
+            },
           ),
           const SizedBox(height: QzSpacing.md),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+            child: _ChartTitleRow(period: _period, onTapPeriod: _pickPeriod),
+          ),
+          const SizedBox(height: QzSpacing.sm),
           if (_loading)
-            const QzCard(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: QzSpinner()),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: QzSpacing.md),
+              child: QzCard(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: QzSpinner()),
+              ),
             )
           else if (_error != null || _snapshot == null)
-            QzCard(
-              child: QzEmptyState(
-                title: l10n.marketLongShortLoadError,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+              child: QzCard(
+                child: QzEmptyState(title: l10n.marketLongShortLoadError),
               ),
             )
           else ...<Widget>[
-            LongShortHeroCard(snapshot: _snapshot!),
-            const SizedBox(height: QzSpacing.md),
-            _ExchangeSectionHeader(
-              title: l10n.marketLongShortExchangesTitle,
-              hint: l10n.marketLongShortExchangesSortBy,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+              child: LongShortHeroCard(snapshot: _snapshot!),
             ),
-            QzCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: <Widget>[
-                  for (int i = 0; i < _snapshot!.exchanges.length; i++)
-                    ExchangeLongShortTile(
-                      rank: i + 1,
-                      item: _snapshot!.exchanges[i],
-                      showDivider: i < _snapshot!.exchanges.length - 1,
-                    ),
-                ],
-              ),
+            const SizedBox(height: QzSpacing.md),
+            const _ExchangeSectionHeader(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+              child: _ExchangeList(exchanges: _snapshot!.exchanges),
             ),
           ],
-          const SizedBox(height: QzSpacing.md),
-          _HistoryCard(symbol: _symbol),
         ],
       ),
+    );
+  }
+}
+
+class _CoinTabs extends StatelessWidget {
+  const _CoinTabs({
+    required this.symbols,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<String> symbols;
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        children: <Widget>[
+          ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(12, 6, 54, 6),
+            itemCount: symbols.length,
+            separatorBuilder: (BuildContext context, int index) =>
+                const SizedBox(width: QzSpacing.sm),
+            itemBuilder: (BuildContext context, int index) {
+              final String symbol = symbols[index];
+              final bool active = symbol == selected;
+              return InkWell(
+                key: Key('long-short-symbol-chip-$symbol'),
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => onChanged(symbol),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: active ? c.accentSoft : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: active ? c.accent : Colors.transparent,
+                    ),
+                  ),
+                  child: Text(
+                    symbol.replaceAll('USDT', ''),
+                    style: TextStyle(
+                      color: active ? c.accent : c.textMid,
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      letterSpacing: 0.3,
+                      fontFamily: QzFont.mono,
+                      fontFamilyFallback: QzFont.monoFallback,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              width: 54,
+              padding: const EdgeInsets.only(right: 12),
+              alignment: Alignment.centerRight,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
+                ),
+              ),
+              child: _SearchButton(colorScheme: c),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchButton extends StatelessWidget {
+  const _SearchButton({required this.colorScheme});
+
+  final QzColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: IconButton(
+        key: const Key('long-short-coin-search'),
+        padding: EdgeInsets.zero,
+        icon: const Icon(Icons.search, size: 17),
+        color: colorScheme.textMid,
+        style: IconButton.styleFrom(
+          backgroundColor: colorScheme.bgElev,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: colorScheme.borderSoft),
+          ),
+        ),
+        onPressed: () {},
+      ),
+    );
+  }
+}
+
+class _ChartTitleRow extends StatelessWidget {
+  const _ChartTitleRow({required this.period, required this.onTapPeriod});
+
+  final String period;
+  final VoidCallback onTapPeriod;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Row(
+      children: <Widget>[
+        Text(
+          '交易所 多空比图表',
+          style: TextStyle(
+            color: c.text,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: QzSpacing.xs),
+        Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: c.borderStrong),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'i',
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const Spacer(),
+        InkWell(
+          key: const Key('long-short-period-button'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTapPeriod,
+          child: Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: c.bgElev,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: c.borderSoft),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  period,
+                  style: TextStyle(
+                    color: c.textMid,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down, size: 16, color: c.textDim),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _ExchangeSectionHeader extends StatelessWidget {
-  const _ExchangeSectionHeader({required this.title, required this.hint});
-
-  final String title;
-  final String hint;
+  const _ExchangeSectionHeader();
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    final TextStyle style = TextStyle(
+      color: c.textDim,
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, QzSpacing.sm, 4, 10),
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
       child: Row(
         children: <Widget>[
-          Text(
-            title,
-            style: TextStyle(
-              color: c.textMid,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text('交易所', style: style),
           const Spacer(),
-          Text(
-            hint,
-            style: TextStyle(
-              color: c.textDim,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text('持仓占比 (多 VS 空)', style: style),
         ],
       ),
     );
   }
 }
 
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.symbol});
+class _ExchangeList extends StatelessWidget {
+  const _ExchangeList({required this.exchanges});
 
-  final String symbol;
+  final List<ExchangeLongShort> exchanges;
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final List<LongShortRatio> history =
-        mockLongShortHistory[symbol] ?? const <LongShortRatio>[];
-    return QzCard(
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.borderSoft),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            l10n.marketLongShortHistorySection,
-            style: TextStyle(
-              color: c.textMid,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+          for (int i = 0; i < exchanges.length; i++)
+            ExchangeLongShortTile(
+              rank: i + 1,
+              item: exchanges[i],
+              showDivider: i < exchanges.length - 1,
             ),
-          ),
-          const SizedBox(height: QzSpacing.md),
-          for (final LongShortRatio item in history) ...<Widget>[
-            Row(
-              children: <Widget>[
-                SizedBox(
-                  width: 96,
-                  child: Text(
-                    _formatTime(item.timestamp),
-                    style: TextStyle(color: c.textDim, fontSize: 12),
-                  ),
-                ),
-                Expanded(
-                  child: LongShortBar(
-                    longRatio: item.longRatio,
-                    shortRatio: item.shortRatio,
-                    height: 22,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: QzSpacing.sm),
-          ],
         ],
       ),
     );
   }
+}
 
-  String _formatTime(DateTime timestamp) {
-    final String month = timestamp.month.toString().padLeft(2, '0');
-    final String day = timestamp.day.toString().padLeft(2, '0');
-    final String hour = timestamp.hour.toString().padLeft(2, '0');
-    final String minute = timestamp.minute.toString().padLeft(2, '0');
-    return '$month-$day $hour:$minute';
+class _PeriodSheet extends StatelessWidget {
+  const _PeriodSheet({required this.selected, required this.periods});
+
+  final String selected;
+  final List<String> periods;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      key: const Key('long-short-period-sheet'),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final String period in periods)
+            InkWell(
+              onTap: () => Navigator.of(context).pop(period),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        period,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      period == selected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: period == selected ? c.accent : c.textDim,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
-import '../../../theme/tokens.dart';
 
 class LongShortBar extends StatelessWidget {
   const LongShortBar({
     super.key,
     required this.longRatio,
     required this.shortRatio,
-    this.height = 28,
+    this.height = 32,
+    this.radius = 6,
+    this.precision = 2,
   });
 
   final double longRatio;
   final double shortRatio;
   final double height;
+  final double radius;
+  final int precision;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +33,7 @@ class LongShortBar extends StatelessWidget {
     final int longFlex = (ln * 1000).round().clamp(1, 999);
     final int shortFlex = (sn * 1000).round().clamp(1, 999);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(QzRadii.pill),
+      borderRadius: BorderRadius.circular(radius),
       child: SizedBox(
         height: height,
         child: Row(
@@ -39,14 +42,14 @@ class LongShortBar extends StatelessWidget {
               flex: longFlex,
               child: _Segment(
                 color: c.marketUp,
-                text: '${(ln * 100).toStringAsFixed(1)}%',
+                text: '${(ln * 100).toStringAsFixed(precision)}%',
               ),
             ),
             Expanded(
               flex: shortFlex,
               child: _Segment(
                 color: c.marketDown,
-                text: '${(sn * 100).toStringAsFixed(1)}%',
+                text: '${(sn * 100).toStringAsFixed(precision)}%',
               ),
             ),
           ],
