@@ -2253,13 +2253,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleSortLabel => 'Sort';
 
   @override
+  String get whaleSortByLabel => 'Sort by:';
+
+  @override
   String get whaleSortWinRate => 'Win rate';
 
   @override
-  String get whaleSortAum => 'Total value';
+  String get whaleSortAum => 'Account value';
 
   @override
-  String get whaleSortPnl => 'PnL';
+  String get whaleSortPnl => 'Realized PnL';
 
   @override
   String get whaleLeaderPnlLabel => 'Realized PnL (1M)';

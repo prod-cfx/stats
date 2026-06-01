@@ -12,6 +12,7 @@ import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/whale_home_page.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_notification_sheet.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_sort_bar.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
@@ -96,8 +97,20 @@ void main() {
     await tester.tap(find.text('发现'));
     await tester.pumpAndSettle();
     // 排序条三档药丸。
-    expect(find.text('总值'), findsOneWidget);
-    expect(find.text('盈亏'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(WhaleSortBar),
+        matching: find.text('账户总价值'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(WhaleSortBar),
+        matching: find.text('已实现盈亏'),
+      ),
+      findsOneWidget,
+    );
     // 列表卡 AI 标签。
     expect(find.text('金库管家'), findsWidgets);
   });

@@ -49,7 +49,7 @@ class WhaleSortBar extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Text(
-            l10n.whaleSortLabel,
+            l10n.whaleSortByLabel,
             style: TextStyle(color: c.textMid, fontSize: 12),
           ),
           const SizedBox(width: QzSpacing.sm),

@@ -2201,13 +2201,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleSortLabel => '排序';
 
   @override
+  String get whaleSortByLabel => '排序方式:';
+
+  @override
   String get whaleSortWinRate => '胜率';
 
   @override
-  String get whaleSortAum => '总值';
+  String get whaleSortAum => '账户总价值';
 
   @override
-  String get whaleSortPnl => '盈亏';
+  String get whaleSortPnl => '已实现盈亏';
 
   @override
   String get whaleLeaderPnlLabel => '已实现盈亏(1月)';

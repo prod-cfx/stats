@@ -4278,6 +4278,12 @@ abstract class AppLocalizations {
   /// **'排序'**
   String get whaleSortLabel;
 
+  /// No description provided for @whaleSortByLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式:'**
+  String get whaleSortByLabel;
+
   /// No description provided for @whaleSortWinRate.
   ///
   /// In zh, this message translates to:
@@ -4287,13 +4293,13 @@ abstract class AppLocalizations {
   /// No description provided for @whaleSortAum.
   ///
   /// In zh, this message translates to:
-  /// **'总值'**
+  /// **'账户总价值'**
   String get whaleSortAum;
 
   /// No description provided for @whaleSortPnl.
   ///
   /// In zh, this message translates to:
-  /// **'盈亏'**
+  /// **'已实现盈亏'**
   String get whaleSortPnl;
 
   /// No description provided for @whaleLeaderPnlLabel.

@@ -12,6 +12,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_discover_tab.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_card_controls.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_leader_card.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_sort_bar.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_top_slideshow.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_trade_stats_sheet.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -146,9 +147,13 @@ void main() {
 
     testWidgets('排序条三档药丸均渲染', (WidgetTester tester) async {
       await _pump(tester);
-      expect(find.text('胜率'), findsWidgets);
-      expect(find.text('总值'), findsOneWidget);
-      expect(find.text('盈亏'), findsOneWidget);
+      Finder pill(String label) => find.descendant(
+            of: find.byType(WhaleSortBar),
+            matching: find.text(label),
+          );
+      expect(pill('胜率'), findsOneWidget);
+      expect(pill('账户总价值'), findsOneWidget);
+      expect(pill('已实现盈亏'), findsOneWidget);
     });
 
     testWidgets('巨鲸列表卡渲染 AI 标签', (WidgetTester tester) async {
@@ -157,13 +162,16 @@ void main() {
       expect(find.text('金库管家'), findsWidgets);
     });
 
-    testWidgets('点击「总值」药丸即时重排列表卡顺序', (WidgetTester tester) async {
+    testWidgets('点击「账户总价值」药丸即时重排列表卡顺序', (WidgetTester tester) async {
       await _pump(tester);
       // 默认胜率降序：首卡非 aum 最大者。
       final List<String> before = _cardOrder(tester);
       expect(before, isNotEmpty);
 
-      await tester.tap(find.text('总值'));
+      await tester.tap(find.descendant(
+        of: find.byType(WhaleSortBar),
+        matching: find.text('账户总价值'),
+      ));
       await tester.pump();
 
       final List<String> after = _cardOrder(tester);
