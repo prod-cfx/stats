@@ -135,9 +135,9 @@ router branches, and tests:
 
 | index | key | label | route |
 |---|---|---|---|
-| 0 | `tab-ai` | AI 量化 | `/ai` |
-| 1 | `tab-market` | 行情 | `/market` |
-| 2 | `tab-strategy` | 策略 | `/strategy` |
+| 0 | `tab-strategy` | 策略 | `/strategy` |
+| 1 | `tab-ai` | AI 量化 | `/ai` |
+| 2 | `tab-market` | 行情 | `/market` |
 | 3 | `tab-whale` | 巨鲸 | `/whale` |
 | 4 | `tab-me` | 我的 | `/me` |
 

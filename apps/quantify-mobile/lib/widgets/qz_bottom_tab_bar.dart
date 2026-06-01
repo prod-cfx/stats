@@ -11,9 +11,9 @@ import '../theme/theme_context.dart';
 /// Visual contract:
 /// - 5 fixed items in this canonical order (left → right), each tagged with a
 ///   stable `ValueKey('tab-<name>')`:
-///     0. `tab-ai`       — AI 量化
-///     1. `tab-market`   — 行情
-///     2. `tab-strategy` — 策略
+///     0. `tab-strategy` — 策略
+///     1. `tab-ai`       — AI 量化
+///     2. `tab-market`   — 行情
 ///     3. `tab-whale`    — 巨鲸
 ///     4. `tab-me`       — 我的
 ///   This order is the single source of truth, mirrored by router branches in
@@ -66,9 +66,9 @@ class QzBottomTabBar extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final List<_TabSpec> tabs = <_TabSpec>[
+      _TabSpec(keyName: 'strategy', icon: Icons.dashboard_outlined, label: l10n.tabStrategy),
       _TabSpec(keyName: 'ai', icon: Icons.auto_awesome, label: 'AI 量化'),
       _TabSpec(keyName: 'market', icon: Icons.show_chart, label: l10n.tabMarket),
-      _TabSpec(keyName: 'strategy', icon: Icons.dashboard_outlined, label: l10n.tabStrategy),
       _TabSpec(keyName: 'whale', icon: Icons.water_drop_outlined, label: l10n.tabWhale),
       _TabSpec(keyName: 'me', icon: Icons.person_outline, label: l10n.tabMe),
     ];

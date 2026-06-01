@@ -28,9 +28,9 @@ import '../shell/main_shell_scaffold.dart';
 ///   each branch preserves its own navigation + widget state across tab
 ///   switches. Branch order is the canonical tab order (mirrors
 ///   `QzBottomTabBar` and `docs/components.md`):
-///     index 0 → `/ai`       (AI 量化)
-///     index 1 → `/market`   (行情)
-///     index 2 → `/strategy` (策略)
+///     index 0 → `/strategy` (策略)
+///     index 1 → `/ai`       (AI 量化)
+///     index 2 → `/market`   (行情)
 ///     index 3 → `/whale`    (巨鲸)
 ///     index 4 → `/me`       (我的)
 ///   Reordering branches without updating `QzBottomTabBar` + the two
@@ -95,6 +95,15 @@ GoRouter buildRouter({
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
+                path: '/strategy',
+                builder: (BuildContext context, GoRouterState state) =>
+                    const StrategyHomePage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
                 path: '/ai',
                 builder: (BuildContext context, GoRouterState state) =>
                     const AiHomePage(),
@@ -107,15 +116,6 @@ GoRouter buildRouter({
                 path: '/market',
                 builder: (BuildContext context, GoRouterState state) =>
                     const DataHubPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
-                path: '/strategy',
-                builder: (BuildContext context, GoRouterState state) =>
-                    const StrategyHomePage(),
               ),
             ],
           ),

@@ -51,11 +51,11 @@ void main() {
     expect(find.text('AI'), findsNothing);
   });
 
-  testWidgets('tabs render in canonical order: ai → market → strategy → whale → me',
+  testWidgets('tabs render in canonical order: strategy → ai → market → whale → me',
       (tester) async {
-    // Source-of-truth guard for issue #1637: lock the visual left-to-right
-    // order of tabs so any future reshuffle in QzBottomTabBar trips this
-    // test (not just docs / golden).
+    // Source-of-truth guard for issue #1637 / #1881: lock the visual
+    // left-to-right order of tabs so any future reshuffle in QzBottomTabBar
+    // trips this test (not just docs / golden).
     await pumpQz(
       tester,
       SizedBox(
@@ -66,16 +66,16 @@ void main() {
     );
 
     const List<String> expectedKeys = <String>[
+      'tab-strategy',
       'tab-ai',
       'tab-market',
-      'tab-strategy',
       'tab-whale',
       'tab-me',
     ];
     const List<String> expectedLabels = <String>[
+      '策略',
       'AI 量化',
       '数据',
-      '策略',
       '巨鲸',
       '我的',
     ];
@@ -146,7 +146,7 @@ void main() {
       tester,
       SizedBox(
         width: 360,
-        child: QzBottomTabBar(currentIndex: 2, onTap: (_) {}),
+        child: QzBottomTabBar(currentIndex: 0, onTap: (_) {}),
       ),
       surfaceSize: const Size(360, 80),
     );
