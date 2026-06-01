@@ -4242,12 +4242,6 @@ abstract class AppLocalizations {
   /// **'卖出'**
   String get strategySignalSell;
 
-  /// No description provided for @whaleFeedTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'巨鲸动向'**
-  String get whaleFeedTitle;
-
   /// No description provided for @whaleFilterAll.
   ///
   /// In zh, this message translates to:
@@ -4385,12 +4379,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **' 天前'**
   String get whaleTimeDaysAgoSuffix;
-
-  /// No description provided for @whaleTopBarSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'链上 + 交易所'**
-  String get whaleTopBarSubtitle;
 
   /// No description provided for @whaleTabDiscover.
   ///
@@ -5609,12 +5597,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无通知'**
   String get whaleNotificationEmpty;
-
-  /// No description provided for @whaleSearchTooltip.
-  ///
-  /// In zh, this message translates to:
-  /// **'搜索'**
-  String get whaleSearchTooltip;
 
   /// No description provided for @whaleNotificationTooltip.
   ///

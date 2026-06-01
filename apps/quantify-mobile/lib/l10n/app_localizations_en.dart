@@ -2235,9 +2235,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategySignalSell => 'Sell';
 
   @override
-  String get whaleFeedTitle => 'Whale Activity';
-
-  @override
   String get whaleFilterAll => 'All amounts';
 
   @override
@@ -2305,9 +2302,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whaleTimeDaysAgoSuffix => ' days ago';
-
-  @override
-  String get whaleTopBarSubtitle => 'On-chain + Exchanges';
 
   @override
   String get whaleTabDiscover => 'Discover';
@@ -2927,9 +2921,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whaleNotificationEmpty => 'No notifications';
-
-  @override
-  String get whaleSearchTooltip => 'Search';
 
   @override
   String get whaleNotificationTooltip => 'Notifications';

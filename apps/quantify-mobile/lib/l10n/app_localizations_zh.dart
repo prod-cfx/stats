@@ -2183,9 +2183,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategySignalSell => '卖出';
 
   @override
-  String get whaleFeedTitle => '巨鲸动向';
-
-  @override
   String get whaleFilterAll => '全部金额';
 
   @override
@@ -2253,9 +2250,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get whaleTimeDaysAgoSuffix => ' 天前';
-
-  @override
-  String get whaleTopBarSubtitle => '链上 + 交易所';
 
   @override
   String get whaleTabDiscover => '发现';
@@ -2873,9 +2867,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get whaleNotificationEmpty => '暂无通知';
-
-  @override
-  String get whaleSearchTooltip => '搜索';
 
   @override
   String get whaleNotificationTooltip => '通知';
