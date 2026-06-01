@@ -1815,7 +1815,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketHomeSearchPlaceholder.
   ///
   /// In zh, this message translates to:
-  /// **'搜索币种 · BTC, ETH, SOL…'**
+  /// **'搜索'**
   String get marketHomeSearchPlaceholder;
 
   /// No description provided for @dataHubTitle.

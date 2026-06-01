@@ -905,7 +905,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketHomeSearchClose => '关闭搜索';
 
   @override
-  String get marketHomeSearchPlaceholder => '搜索币种 · BTC, ETH, SOL…';
+  String get marketHomeSearchPlaceholder => '搜索';
 
   @override
   String get dataHubTitle => '数据';

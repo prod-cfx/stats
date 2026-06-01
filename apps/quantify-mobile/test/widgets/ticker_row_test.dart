@@ -18,8 +18,7 @@ class _StubTickerRepository implements TickerRepository {
   Future<List<Ticker>> listTickers() async => const <Ticker>[];
 
   @override
-  Stream<Ticker> watchTicker(String symbol) =>
-      const Stream<Ticker>.empty();
+  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
 }
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
@@ -85,8 +84,7 @@ void main() {
     expect(symbolParts(tester, 'BTC'), <String>['BTC', ' / USDT']);
   });
 
-  testWidgets('未识别 quote 时整串作为 base，不渲染小字 quote',
-      (WidgetTester tester) async {
+  testWidgets('未识别 quote 时整串作为 base，不渲染小字 quote', (WidgetTester tester) async {
     const Ticker oddSymbol = Ticker(
       symbol: 'FOOBAR',
       price: 1.23,
@@ -98,16 +96,35 @@ void main() {
     expect(symbolParts(tester, 'FOOBAR'), <String>['FOOBAR']);
   });
 
-  testWidgets('三列布局：价格右对齐，涨跌 chip 位于行最右',
-      (WidgetTester tester) async {
+  testWidgets('三列布局：价格右对齐，涨跌 chip 位于行最右', (WidgetTester tester) async {
     await _pump(tester, const TickerRow(ticker: btcSpot));
     // 价格 Text 是 textAlign right。
-    final Text priceText = tester.widget<Text>(find.text('70000.00'));
+    final Text priceText = tester.widget<Text>(find.text('70,000.00'));
     expect(priceText.textAlign, TextAlign.right);
     // chip 中心 dx 应在价格中心 dx 右侧。
-    final Offset priceCenter = tester.getCenter(find.text('70000.00'));
+    final Offset priceCenter = tester.getCenter(find.text('70,000.00'));
     final Offset chipCenter = tester.getCenter(find.byType(QzStatChip));
     expect(chipCenter.dx, greaterThan(priceCenter.dx));
+  });
+
+  testWidgets('symbol 和价格字重为 w600，价格带千分位（#2032）', (WidgetTester tester) async {
+    await _pump(tester, const TickerRow(ticker: btcSpot));
+
+    final RichText symbolText = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .firstWhere((RichText rt) {
+          final InlineSpan span = rt.text;
+          return span is TextSpan &&
+              span.children?.whereType<TextSpan>().any(
+                    (TextSpan child) => child.text == 'BTC',
+                  ) ==
+                  true;
+        });
+    final TextSpan rootSpan = symbolText.text as TextSpan;
+    expect(rootSpan.style!.fontWeight, FontWeight.w600);
+
+    final Text priceText = tester.widget<Text>(find.text('70,000.00'));
+    expect(priceText.style!.fontWeight, FontWeight.w600);
   });
 
   testWidgets('展示 24H 量（Vol \$xx.xB/M 格式）', (WidgetTester tester) async {
@@ -128,8 +145,7 @@ void main() {
     expect(avatar.backgroundColor, const Color(0xFF627EEA));
   });
 
-  testWidgets('未识别资产头像回退到主题 accent (tone 为空)',
-      (WidgetTester tester) async {
+  testWidgets('未识别资产头像回退到主题 accent (tone 为空)', (WidgetTester tester) async {
     const Ticker oddSymbol = Ticker(
       symbol: 'FOOBAR',
       price: 1.23,
@@ -144,8 +160,7 @@ void main() {
 
   testWidgets('涨跌 chip 为 solid variant（涨）', (WidgetTester tester) async {
     await _pump(tester, const TickerRow(ticker: btcSpot));
-    final QzStatChip chip =
-        tester.widget<QzStatChip>(find.byType(QzStatChip));
+    final QzStatChip chip = tester.widget<QzStatChip>(find.byType(QzStatChip));
     expect(chip.variant, QzStatChipVariant.solid);
     expect(chip.minWidth, 70);
     expect(find.text('+2.50%'), findsOneWidget);
@@ -153,18 +168,14 @@ void main() {
 
   testWidgets('涨跌 chip 为 solid variant（跌）', (WidgetTester tester) async {
     await _pump(tester, const TickerRow(ticker: ethSpot));
-    final QzStatChip chip =
-        tester.widget<QzStatChip>(find.byType(QzStatChip));
+    final QzStatChip chip = tester.widget<QzStatChip>(find.byType(QzStatChip));
     expect(chip.variant, QzStatChipVariant.solid);
     expect(find.text('-1.25%'), findsOneWidget);
   });
 
   testWidgets('点击行触发 onTap', (WidgetTester tester) async {
     int taps = 0;
-    await _pump(
-      tester,
-      TickerRow(ticker: ethSpot, onTap: () => taps++),
-    );
+    await _pump(tester, TickerRow(ticker: ethSpot, onTap: () => taps++));
     await tester.tap(find.byType(TickerRow));
     await tester.pump();
     expect(taps, 1);

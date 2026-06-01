@@ -137,7 +137,7 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                       monospace: true,
                       backgroundColor: tickerAssetTone(parts.base),
                     ),
-                    const SizedBox(width: QzSpacing.sm),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,7 +150,7 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                               style: TextStyle(
                                 color: c.text,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                               ),
                               children: <InlineSpan>[
                                 TextSpan(text: parts.base),
@@ -180,12 +180,12 @@ class _TickerRowState extends ConsumerState<TickerRow> {
               Expanded(
                 flex: kTickerRowPriceFlex,
                 child: Text(
-                  _ticker.price.toStringAsFixed(2),
+                  _formatPrice(_ticker.price),
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     color: c.text,
                     fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     fontFamily: QzFont.mono,
                     fontFamilyFallback: QzFont.monoFallback,
                   ),
@@ -215,5 +215,17 @@ class _TickerRowState extends ConsumerState<TickerRow> {
     if (abs >= 1e6) return '${(value / 1e6).toStringAsFixed(1)}M';
     if (abs >= 1e3) return '${(value / 1e3).toStringAsFixed(1)}K';
     return value.toStringAsFixed(1);
+  }
+
+  String _formatPrice(double value) {
+    final String fixed = value.toStringAsFixed(2);
+    final List<String> parts = fixed.split('.');
+    final String whole = parts.first;
+    final StringBuffer buffer = StringBuffer();
+    for (int i = 0; i < whole.length; i++) {
+      if (i > 0 && (whole.length - i) % 3 == 0) buffer.write(',');
+      buffer.write(whole[i]);
+    }
+    return '${buffer.toString()}.${parts[1]}';
   }
 }

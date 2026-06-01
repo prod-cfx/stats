@@ -14,6 +14,7 @@ import 'package:quantify_mobile/pages/market/market_home_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/ticker_row.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
+import 'package:quantify_mobile/theme/theme_context.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
@@ -91,9 +92,12 @@ Finder _findTab(String tabName) {
   return find.byKey(Key('market-tab-$tabName'));
 }
 
+QzColorScheme contextColor(WidgetTester tester) {
+  return tester.element(find.byType(MarketHomeBody)).qzScheme;
+}
+
 void main() {
-  testWidgets('行情数据主体无独立 QzTopBar / 自带铃铛（#1852）',
-      (WidgetTester tester) async {
+  testWidgets('行情数据主体无独立 QzTopBar / 自带铃铛（#1852）', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
@@ -103,8 +107,7 @@ void main() {
     expect(find.byKey(const Key('market-notification-bell')), findsNothing);
   });
 
-  testWidgets('默认自选 tab 展示 5 条 + 推流变价生效（#1600）',
-      (WidgetTester tester) async {
+  testWidgets('默认自选 tab 展示 5 条 + 推流变价生效（#1600）', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
@@ -129,11 +132,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('70123.45'), findsOneWidget);
+    expect(find.text('70,123.45'), findsOneWidget);
   });
 
-  testWidgets('5 tabs 切换：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜 过滤与排序生效',
-      (WidgetTester tester) async {
+  testWidgets('5 tabs 切换：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜 过滤与排序生效', (
+    WidgetTester tester,
+  ) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
@@ -165,25 +169,29 @@ void main() {
     await tester.pump();
     expect(find.byType(TickerRow), findsNWidgets(gainCount));
     // 涨幅榜首行应为 mockTickers 中涨幅最大者。
-    final Ticker topGainer = (mockTickers.toList()
-          ..sort((Ticker a, Ticker b) =>
-              b.changePercent.compareTo(a.changePercent)))
-        .first;
-    final TickerRow firstRow =
-        tester.widget<TickerRow>(find.byType(TickerRow).first);
+    final Ticker topGainer =
+        (mockTickers.toList()..sort(
+              (Ticker a, Ticker b) =>
+                  b.changePercent.compareTo(a.changePercent),
+            ))
+            .first;
+    final TickerRow firstRow = tester.widget<TickerRow>(
+      find.byType(TickerRow).first,
+    );
     expect(firstRow.ticker.symbol, topGainer.symbol);
 
     await tester.tap(_findTab('losers'));
     await tester.pump();
     expect(find.byType(TickerRow), findsNWidgets(loseCount));
-    final Ticker topLoser = (mockTickers
-            .where((Ticker t) => t.changePercent < 0)
-            .toList()
-          ..sort((Ticker a, Ticker b) =>
-              a.changePercent.compareTo(b.changePercent)))
-        .first;
-    final TickerRow firstLoseRow =
-        tester.widget<TickerRow>(find.byType(TickerRow).first);
+    final Ticker topLoser =
+        (mockTickers.where((Ticker t) => t.changePercent < 0).toList()..sort(
+              (Ticker a, Ticker b) =>
+                  a.changePercent.compareTo(b.changePercent),
+            ))
+            .first;
+    final TickerRow firstLoseRow = tester.widget<TickerRow>(
+      find.byType(TickerRow).first,
+    );
     expect(firstLoseRow.ticker.symbol, topLoser.symbol);
 
     await tester.tap(_findTab('watchlist'));
@@ -191,8 +199,9 @@ void main() {
     expect(find.byType(TickerRow), findsNWidgets(5));
   });
 
-  testWidgets('默认选中 watchlist tab：底部 underline + 加粗文字（#1600）',
-      (WidgetTester tester) async {
+  testWidgets('默认选中 watchlist tab：底部 underline + 加粗文字（#1600/#2031）', (
+    WidgetTester tester,
+  ) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
@@ -202,7 +211,8 @@ void main() {
       matching: find.byType(Text),
     );
     final Text watchlistLabel = tester.widget<Text>(watchlistText);
-    expect(watchlistLabel.style!.fontWeight, FontWeight.w700);
+    expect(watchlistLabel.style!.fontWeight, FontWeight.w600);
+    expect(watchlistLabel.style!.color, contextColor(tester).text);
 
     final Finder spotText = find.descendant(
       of: _findTab('spot'),
@@ -210,31 +220,87 @@ void main() {
     );
     final Text spotLabel = tester.widget<Text>(spotText);
     expect(spotLabel.style!.fontWeight, FontWeight.w500);
+    expect(spotLabel.style!.color, contextColor(tester).textDim);
   });
 
-  testWidgets('搜索按钮展开行内搜索框并即时过滤当前 tab', (WidgetTester tester) async {
+  testWidgets('列头第三列跟随涨跌 tab 动态切换（#2031）', (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    expect(find.text('名称 / 24H量'), findsOneWidget);
+    expect(find.text('最新价'), findsOneWidget);
+    expect(find.text('24H 涨跌'), findsOneWidget);
+
+    await tester.tap(_findTab('gainers'));
+    await tester.pump();
+    expect(find.text('24H 涨幅'), findsOneWidget);
+
+    await tester.tap(_findTab('losers'));
+    await tester.pump();
+    expect(find.text('24H 跌幅'), findsOneWidget);
+  });
+
+  testWidgets('搜索按钮打开全屏浮层，空查询展示历史与热门搜索（#2030）', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
     // 初始无搜索框。
     expect(find.byKey(const Key('market-search-field')), findsNothing);
+    expect(find.byKey(const Key('market-search-overlay')), findsNothing);
 
     await tester.tap(find.byKey(const Key('market-search-toggle')));
     await tester.pump();
     expect(find.byKey(const Key('market-search-field')), findsOneWidget);
+    expect(find.byKey(const Key('market-search-overlay')), findsOneWidget);
+    expect(find.text('搜索历史'), findsOneWidget);
+    expect(find.text('热门搜索'), findsOneWidget);
+    expect(find.text('· 24H 异动'), findsOneWidget);
+    expect(find.text('BTC'), findsWidgets);
+    expect(
+      find.byKey(const Key('market-search-clear-history')),
+      findsOneWidget,
+    );
 
-    // 切到合约（BTCUSDT 在合约里），输入 BTC 应只剩 1 行。
-    await tester.tap(_findTab('perp'));
+    final Finder searchRows = find.byWidgetPredicate(
+      (Widget widget) =>
+          widget.key is ValueKey<String> &&
+          (widget.key! as ValueKey<String>).value.startsWith(
+            'market-search-row-',
+          ),
+    );
+    expect(searchRows, findsNWidgets(6));
+    expect(
+      (tester.widget<InkWell>(searchRows.first).key! as ValueKey<String>).value,
+      (mockTickers.toList()..sort(
+            (Ticker a, Ticker b) =>
+                b.changePercent.abs().compareTo(a.changePercent.abs()),
+          ))
+          .first
+          .symbol
+          .replaceFirst(RegExp('^'), 'market-search-row-'),
+    );
+  });
+
+  testWidgets('搜索浮层即时过滤 symbol/base 名称，支持清空和取消（#2030）', (
+    WidgetTester tester,
+  ) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.byKey(const Key('market-search-toggle')));
     await tester.pump();
+
     await tester.enterText(
       find.byKey(const Key('market-search-field')),
-      'BTC',
+      'bitcoin',
     );
     await tester.pump();
-    expect(find.byType(TickerRow), findsOneWidget);
-    final TickerRow only =
-        tester.widget<TickerRow>(find.byType(TickerRow).first);
-    expect(only.ticker.symbol, 'BTCUSDT');
+    expect(find.byKey(const Key('market-search-row-BTCUSDT')), findsOneWidget);
+    expect(find.byKey(const Key('market-search-clear-query')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('market-search-clear-query')));
+    await tester.pump();
+    expect(find.text('搜索历史'), findsOneWidget);
 
     // 无匹配 -> 空态。
     await tester.enterText(
@@ -242,17 +308,15 @@ void main() {
       'ZZZZZZ',
     );
     await tester.pump();
-    expect(find.byType(TickerRow), findsNothing);
-    expect(find.text('无匹配结果'), findsOneWidget);
+    expect(find.byKey(const Key('market-search-row-BTCUSDT')), findsNothing);
+    expect(find.text('无匹配币种'), findsOneWidget);
 
     // 关闭搜索 -> 输入清空 + 列表恢复。
-    await tester.tap(find.byKey(const Key('market-search-toggle')));
+    await tester.tap(find.byKey(const Key('market-search-cancel')));
     await tester.pump();
     expect(find.byKey(const Key('market-search-field')), findsNothing);
-    final int perpCount = mockTickers
-        .where((Ticker t) => t.kind == MarketKind.perp)
-        .length;
-    expect(find.byType(TickerRow), findsNWidgets(perpCount));
+    expect(find.byKey(const Key('market-search-overlay')), findsNothing);
+    expect(find.byType(TickerRow), findsNWidgets(5));
   });
 
   testWidgets('点击行情行 push /market/:symbol 进入详情页', (WidgetTester tester) async {
@@ -260,8 +324,9 @@ void main() {
     await _pump(tester, repo);
 
     // 默认 watchlist tab，首行点击进入详情。
-    final TickerRow firstRow =
-        tester.widget<TickerRow>(find.byType(TickerRow).first);
+    final TickerRow firstRow = tester.widget<TickerRow>(
+      find.byType(TickerRow).first,
+    );
     final String expectedSymbol = firstRow.ticker.symbol;
 
     await tester.tap(find.byType(TickerRow).first);
@@ -269,23 +334,22 @@ void main() {
 
     expect(find.byType(MarketDetailPage), findsOneWidget);
     expect(find.byType(MarketHomeBody), findsNothing);
-    final MarketDetailPage detailPage =
-        tester.widget<MarketDetailPage>(find.byType(MarketDetailPage));
+    final MarketDetailPage detailPage = tester.widget<MarketDetailPage>(
+      find.byType(MarketDetailPage),
+    );
     expect(detailPage.symbol, expectedSymbol);
   });
 
-  testWidgets('搜索框 placeholder 为「搜索币种 · BTC, ETH, SOL…」（#1597 设计稿）',
-      (WidgetTester tester) async {
+  testWidgets('搜索框 placeholder 为「搜索」（#2030）', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
     await tester.tap(find.byKey(const Key('market-search-toggle')));
     await tester.pump();
-    expect(find.text('搜索币种 · BTC, ETH, SOL…'), findsOneWidget);
+    expect(find.text('搜索'), findsOneWidget);
   });
 
-  testWidgets('行情数据屏 9 主题循环 pump 不抛异常',
-      (WidgetTester tester) async {
+  testWidgets('行情数据屏 9 主题循环 pump 不抛异常', (WidgetTester tester) async {
     for (final QzBg bg in QzBg.values) {
       for (final QzAccent accent in QzAccent.values) {
         await _pump(

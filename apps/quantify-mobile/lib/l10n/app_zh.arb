@@ -305,7 +305,7 @@
   "marketHomeSearchEmpty": "无匹配结果",
   "marketHomeSearchTooltip": "搜索",
   "marketHomeSearchClose": "关闭搜索",
-  "marketHomeSearchPlaceholder": "搜索币种 · BTC, ETH, SOL…",
+  "marketHomeSearchPlaceholder": "搜索",
   "dataHubTitle": "数据",
   "dataHubTabMarket": "行情数据",
   "dataHubTabLongShort": "多空比",
