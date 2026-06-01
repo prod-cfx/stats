@@ -3000,8 +3000,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleLiveWinSort => 'Win rate';
 
   @override
-  String get whaleLiveWinSortDisabledHint =>
-      'Win-rate sort needs trade-level data; enabled later';
+  String get whaleLiveWinSortNone => 'Win rate: unsorted';
+
+  @override
+  String get whaleLiveWinSortDesc => 'Win rate: descending';
+
+  @override
+  String get whaleLiveWinSortAsc => 'Win rate: ascending';
 
   @override
   String get klineLoadError => 'K-line load failed';

@@ -12,6 +12,9 @@ import '../../models/whale_models.dart';
 /// 至少 30 条覆盖 8 个交易对（BTC/ETH/SOL/BNB/XRP/DOGE/SUI/AVAX）+ 3 档金额
 /// （<100 万 / 100 万-500 万 / ≥500 万），满足 issue #1511 "历史 30+ 条"
 /// 与"筛选 chip 切换过滤生效"验收。
+///
+/// issue #1983：每条带 `winRate`（0–100），覆盖三档着色阈值
+/// （绿 ≥70 / 橙 ≥50 / 红 <50），供实时行卡胜率列展示与胜率排序使用。
 final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
   WhaleEvent(
     id: 'w-1',
@@ -20,6 +23,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Binance Hot',
     toLabel: 'Unknown Wallet',
+    winRate: 85,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_000_000),
   ),
   WhaleEvent(
@@ -29,6 +33,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Coinbase',
     toLabel: 'Cold Storage',
+    winRate: 48,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_060_000),
   ),
   WhaleEvent(
@@ -38,6 +43,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'OKX',
+    winRate: 72,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_120_000),
   ),
   WhaleEvent(
@@ -47,6 +53,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Bitfinex',
     toLabel: 'Unknown',
+    winRate: 61,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_180_000),
   ),
   WhaleEvent(
@@ -56,6 +63,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Robinhood',
     toLabel: 'Unknown',
+    winRate: 39,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_240_000),
   ),
   WhaleEvent(
@@ -65,6 +73,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Kraken',
     toLabel: 'Unknown',
+    winRate: 77,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_300_000),
   ),
   WhaleEvent(
@@ -74,6 +83,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Binance Hot',
     toLabel: 'Unknown',
+    winRate: 55,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_360_000),
   ),
   WhaleEvent(
@@ -83,6 +93,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Bitstamp',
     toLabel: 'Ripple Treasury',
+    winRate: 44,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_420_000),
   ),
   WhaleEvent(
@@ -92,6 +103,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Cold Storage',
     toLabel: 'Coinbase',
+    winRate: 91,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_480_000),
   ),
   WhaleEvent(
@@ -101,6 +113,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'OKX',
     toLabel: 'Unknown Wallet',
+    winRate: 50,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_540_000),
   ),
   WhaleEvent(
@@ -110,6 +123,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Binance Hot',
     toLabel: 'Cold Storage',
+    winRate: 68,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_600_000),
   ),
   WhaleEvent(
@@ -119,6 +133,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'Avalanche Foundation',
+    winRate: 73,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_660_000),
   ),
   WhaleEvent(
@@ -128,6 +143,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Sui Foundation',
     toLabel: 'Unknown',
+    winRate: 42,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_720_000),
   ),
   WhaleEvent(
@@ -137,6 +153,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Mt.Gox Trustee',
     toLabel: 'Kraken',
+    winRate: 88,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_780_000),
   ),
   WhaleEvent(
@@ -146,6 +163,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'Robinhood',
+    winRate: 51,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_840_000),
   ),
   WhaleEvent(
@@ -155,6 +173,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Bitfinex',
     toLabel: 'Unknown Whale',
+    winRate: 79,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_900_000),
   ),
   WhaleEvent(
@@ -164,6 +183,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'Binance Hot',
+    winRate: 46,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_960_000),
   ),
   WhaleEvent(
@@ -173,6 +193,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Ripple Treasury',
     toLabel: 'Bitstamp',
+    winRate: 63,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_020_000),
   ),
   WhaleEvent(
@@ -182,6 +203,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Cold Storage',
     toLabel: 'Coinbase',
+    winRate: 74,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_080_000),
   ),
   WhaleEvent(
@@ -191,6 +213,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'Coinbase',
+    winRate: 58,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_140_000),
   ),
   WhaleEvent(
@@ -200,6 +223,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Avalanche Foundation',
     toLabel: 'OKX',
+    winRate: 49,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_200_000),
   ),
   WhaleEvent(
@@ -209,6 +233,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Coinbase',
     toLabel: 'Unknown',
+    winRate: 35,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_260_000),
   ),
   WhaleEvent(
@@ -218,6 +243,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'Sui Foundation',
+    winRate: 70,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_320_000),
   ),
   WhaleEvent(
@@ -227,6 +253,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Unknown Whale',
     toLabel: 'Bitfinex',
+    winRate: 82,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_380_000),
   ),
   WhaleEvent(
@@ -236,6 +263,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Robinhood',
     toLabel: 'Unknown',
+    winRate: 41,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_440_000),
   ),
   WhaleEvent(
@@ -245,6 +273,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Cold Storage',
     toLabel: 'Kraken',
+    winRate: 66,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_500_000),
   ),
   WhaleEvent(
@@ -254,6 +283,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'OKX',
     toLabel: 'Unknown',
+    winRate: 53,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_560_000),
   ),
   WhaleEvent(
@@ -263,6 +293,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Cold Storage',
     toLabel: 'Binance Hot',
+    winRate: 76,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_620_000),
   ),
   WhaleEvent(
@@ -272,6 +303,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Bitstamp',
     toLabel: 'Unknown',
+    winRate: 47,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_680_000),
   ),
   WhaleEvent(
@@ -281,6 +313,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Bitfinex',
     toLabel: 'Cold Storage',
+    winRate: 69,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_740_000),
   ),
   WhaleEvent(
@@ -290,6 +323,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'in',
     fromLabel: 'Unknown',
     toLabel: 'Coinbase',
+    winRate: 38,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_800_000),
   ),
   WhaleEvent(
@@ -299,6 +333,7 @@ final List<WhaleEvent> mockWhaleEvents = <WhaleEvent>[
     direction: 'out',
     fromLabel: 'Binance Hot',
     toLabel: 'Unknown Whale',
+    winRate: 84,
     timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_001_860_000),
   ),
 ];

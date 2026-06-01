@@ -38,6 +38,10 @@ class _FeedItem {
   bool highlight;
 }
 
+/// 胜率排序状态（issue #1983）。循环：none → desc → asc → none，
+/// 对齐设计稿 `m-screens-4.jsx:595` 的 winSort 行为。
+enum _WinSort { none, desc, asc }
+
 class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   final List<_FeedItem> _items = <_FeedItem>[];
   StreamSubscription<WhaleEvent>? _sub;
@@ -53,6 +57,19 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   /// issue #1604：默认阈值 ≥ $5M，对齐设计稿 `m-screens-4.jsx` 的 `WhaleLive`
   /// filter strip。
   double _minAmount = 5_000_000;
+
+  /// issue #1983：胜率排序状态，默认不排序（按时间分组）。
+  _WinSort _winSort = _WinSort.none;
+
+  void _cycleWinSort() {
+    setState(() {
+      _winSort = switch (_winSort) {
+        _WinSort.none => _WinSort.desc,
+        _WinSort.desc => _WinSort.asc,
+        _WinSort.asc => _WinSort.none,
+      };
+    });
+  }
 
   @override
   void initState() {
@@ -150,7 +167,10 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
         ),
         _buildFilterBar(c, l10n),
         _buildActionRow(c, l10n),
-        ..._buildGroupedFeed(visible, l10n, c),
+        if (_winSort == _WinSort.none)
+          ..._buildGroupedFeed(visible, l10n, c)
+        else
+          ..._buildSortedFeed(visible, l10n, c),
         Padding(
           padding: const EdgeInsets.fromLTRB(
               QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.lg),
@@ -211,9 +231,8 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     setState(() => _minAmount = picked);
   }
 
-  /// issue #1769：关注币种推送（可用，mock SnackBar）+ 胜率排序 toggle。
-  /// 胜率排序在实时 feed（[WhaleEvent] 无 winRate 字段）下明确禁用，待
-  /// 交易级数据（#1682）接入后再启用；按设计稿 `m-screens-4.jsx:649` 占位。
+  /// issue #1769 / #1983：关注币种推送（可用，mock SnackBar）+ 胜率排序 toggle。
+  /// 胜率排序循环 none → desc → asc → none，对齐设计稿 `m-screens-4.jsx:595`。
   Widget _buildActionRow(QzColorScheme c, AppLocalizations l10n) {
     return Container(
       width: double.infinity,
@@ -248,30 +267,81 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
             ),
           ),
           const SizedBox(width: QzSpacing.sm),
-          Tooltip(
-            message: l10n.whaleLiveWinSortDisabledHint,
-            child: OutlinedButton.icon(
-              onPressed: null,
-              icon: const Icon(Icons.swap_vert, size: 14),
-              label: Text(
-                l10n.whaleLiveWinSort,
-                style: const TextStyle(fontSize: 12),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: c.textDim,
-                side: BorderSide(color: c.borderSoft),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                minimumSize: const Size(0, 30),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-              ),
-            ),
-          ),
+          _buildWinSortButton(c, l10n),
         ],
       ),
     );
+  }
+
+  /// issue #1983：胜率排序按钮，激活态高亮 + 方向图标，aria/tooltip 反映当前状态。
+  Widget _buildWinSortButton(QzColorScheme c, AppLocalizations l10n) {
+    final bool active = _winSort != _WinSort.none;
+    final String hint = switch (_winSort) {
+      _WinSort.none => l10n.whaleLiveWinSortNone,
+      _WinSort.desc => l10n.whaleLiveWinSortDesc,
+      _WinSort.asc => l10n.whaleLiveWinSortAsc,
+    };
+    final IconData icon = switch (_winSort) {
+      _WinSort.none => Icons.swap_vert,
+      _WinSort.desc => Icons.arrow_downward,
+      _WinSort.asc => Icons.arrow_upward,
+    };
+    return Tooltip(
+      message: hint,
+      child: OutlinedButton.icon(
+        onPressed: _cycleWinSort,
+        icon: Icon(icon, size: 14, semanticLabel: hint),
+        label: Text(
+          l10n.whaleLiveWinSort,
+          style: const TextStyle(fontSize: 12),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: active ? c.accent : c.textMid,
+          backgroundColor: active ? c.accentSoft : null,
+          side: BorderSide(color: active ? c.accent : c.borderSoft),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, 30),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// issue #1983：胜率排序激活时按 winRate 扁平展示（不再按时间分组），
+  /// 对齐设计稿 `m-screens-4.jsx:705` 的排序模式。
+  List<Widget> _buildSortedFeed(
+      List<_FeedItem> visible, AppLocalizations l10n, QzColorScheme c) {
+    if (visible.isEmpty) {
+      return <Widget>[
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: QzSpacing.xl),
+          child: QzEmptyState(title: l10n.whaleFeedEmpty),
+        ),
+      ];
+    }
+    final List<_FeedItem> sorted = <_FeedItem>[...visible]..sort(
+        (_FeedItem a, _FeedItem b) => _winSort == _WinSort.desc
+            ? b.event.winRate.compareTo(a.event.winRate)
+            : a.event.winRate.compareTo(b.event.winRate),
+      );
+    final String label = _winSort == _WinSort.desc
+        ? l10n.whaleLiveWinSortDesc
+        : l10n.whaleLiveWinSortAsc;
+    final DateTime now = DateTime.now();
+    return <Widget>[
+      _GroupHeader(label: label, count: sorted.length),
+      for (final _FeedItem item in sorted)
+        QzWhaleRow(
+          key: ValueKey<String>(item.event.id),
+          event: item.event,
+          highlight: item.highlight,
+          now: now,
+          displayTimestamp: now,
+        ),
+    ];
   }
 
   /// issue #1604：单行 filter strip = 资产 chips · 阈值 pill · LIVE。

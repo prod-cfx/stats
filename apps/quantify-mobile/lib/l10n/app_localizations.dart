@@ -5742,11 +5742,23 @@ abstract class AppLocalizations {
   /// **'胜率'**
   String get whaleLiveWinSort;
 
-  /// No description provided for @whaleLiveWinSortDisabledHint.
+  /// No description provided for @whaleLiveWinSortNone.
   ///
   /// In zh, this message translates to:
-  /// **'胜率排序需交易级数据，接入后启用'**
-  String get whaleLiveWinSortDisabledHint;
+  /// **'胜率不排序'**
+  String get whaleLiveWinSortNone;
+
+  /// No description provided for @whaleLiveWinSortDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率降序'**
+  String get whaleLiveWinSortDesc;
+
+  /// No description provided for @whaleLiveWinSortAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率升序'**
+  String get whaleLiveWinSortAsc;
 
   /// No description provided for @klineLoadError.
   ///

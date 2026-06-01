@@ -2946,7 +2946,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleLiveWinSort => '胜率';
 
   @override
-  String get whaleLiveWinSortDisabledHint => '胜率排序需交易级数据，接入后启用';
+  String get whaleLiveWinSortNone => '胜率不排序';
+
+  @override
+  String get whaleLiveWinSortDesc => '胜率降序';
+
+  @override
+  String get whaleLiveWinSortAsc => '胜率升序';
 
   @override
   String get klineLoadError => 'K 线加载失败';

@@ -45,6 +45,17 @@ class QzWhaleRow extends StatelessWidget {
     return '\$${amountUsd.toStringAsFixed(0)}';
   }
 
+  /// 暴露给测试的纯函数：胜率阈值着色（issue #1983）。
+  /// 绿 ≥70 / 橙 ≥50 / 红 <50，与设计稿 `m-screens-4.jsx` 行卡胜率列一致。
+  static Color winRateColor(double winRate, QzColorScheme c) {
+    if (winRate >= 70) return c.statusOk;
+    if (winRate >= 50) return c.statusWarn;
+    return c.statusDanger;
+  }
+
+  /// 暴露给测试的纯函数：胜率展示为整数百分比，如 `85%`。
+  static String formatWinRate(double winRate) => '${winRate.round()}%';
+
   /// 暴露给测试的纯函数（locale-neutral）：返回 'just now' / 'Nm ago' / 'Nh ago' / 'Nd ago'。
   /// UI 展示请使用 [_localizedRelativeTime]。
   static String formatRelativeTime(DateTime ts, DateTime now) {
@@ -131,9 +142,24 @@ class QzWhaleRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: QzSpacing.sm),
-          Text(
-            relTime,
-            style: TextStyle(color: c.textDim, fontSize: 11),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                formatWinRate(event.winRate),
+                style: TextStyle(
+                  color: winRateColor(event.winRate, c),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                relTime,
+                style: TextStyle(color: c.textDim, fontSize: 11),
+              ),
+            ],
           ),
         ],
       ),

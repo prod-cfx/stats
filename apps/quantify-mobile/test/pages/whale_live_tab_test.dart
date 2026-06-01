@@ -148,6 +148,7 @@ void main() {
       direction: 'in',
       fromLabel: 'Fresh',
       toLabel: 'Top',
+      winRate: 80,
       timestamp: DateTime.now(),
     );
     repo.emit(fresh);
@@ -186,6 +187,7 @@ void main() {
       direction: 'in',
       fromLabel: 'X',
       toLabel: 'Y',
+      winRate: 80,
       timestamp: DateTime.now(),
     ));
     await tester.pump();
@@ -273,6 +275,7 @@ void main() {
       direction: 'in',
       fromLabel: 'A',
       toLabel: 'B',
+      winRate: 80,
       timestamp: DateTime.now(),
     );
     repo.emit(first);
@@ -287,6 +290,7 @@ void main() {
       direction: 'in',
       fromLabel: 'A2',
       toLabel: 'B2',
+      winRate: 80,
       timestamp: DateTime.now(),
     );
     repo.emit(dup);
@@ -347,5 +351,93 @@ void main() {
       ),
       '2d ago',
     );
+  });
+
+  // ---- issue #1983: 胜率排序 ----
+
+  // 默认 BTC + ≥$5M 下保留 ≥3 条、winRate 互异的 BTC 历史，便于断言排序顺序。
+  List<WhaleEvent> winSortHistory() {
+    DateTime ts(int i) => DateTime.now().subtract(Duration(minutes: i));
+    return <WhaleEvent>[
+      WhaleEvent(
+        id: 's-low',
+        symbol: 'BTCUSDT',
+        amountUsd: 6_000_000,
+        direction: 'in',
+        fromLabel: 'A',
+        toLabel: 'B',
+        winRate: 40,
+        timestamp: ts(1),
+      ),
+      WhaleEvent(
+        id: 's-high',
+        symbol: 'BTCUSDT',
+        amountUsd: 7_000_000,
+        direction: 'in',
+        fromLabel: 'A',
+        toLabel: 'B',
+        winRate: 90,
+        timestamp: ts(2),
+      ),
+      WhaleEvent(
+        id: 's-mid',
+        symbol: 'BTCUSDT',
+        amountUsd: 8_000_000,
+        direction: 'out',
+        fromLabel: 'A',
+        toLabel: 'B',
+        winRate: 65,
+        timestamp: ts(3),
+      ),
+    ];
+  }
+
+  testWidgets('胜率排序按钮可点击，不再弹禁用提示 (issue #1983)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo =
+        _FakeWhaleFeedRepository(history: winSortHistory());
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    // 旧禁用文案不应再出现
+    expect(find.text('胜率排序需交易级数据，接入后启用'), findsNothing);
+
+    final Finder sortBtn = find.widgetWithText(OutlinedButton, '胜率');
+    expect(sortBtn, findsOneWidget);
+    final OutlinedButton btn = tester.widget<OutlinedButton>(sortBtn);
+    expect(btn.onPressed, isNotNull, reason: '胜率排序按钮必须可点击');
+  });
+
+  testWidgets('胜率排序循环 none→desc→asc→none 改变行顺序 (issue #1983)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo =
+        _FakeWhaleFeedRepository(history: winSortHistory());
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    List<String> rowIds() => tester
+        .widgetList<QzWhaleRow>(find.byType(QzWhaleRow))
+        .map((QzWhaleRow r) => r.event.id)
+        .toList();
+
+    final Finder sortBtn = find.widgetWithText(OutlinedButton, '胜率');
+
+    // 第一次点击 → 降序：90, 65, 40
+    await tester.tap(sortBtn);
+    await tester.pump();
+    expect(rowIds(), <String>['s-high', 's-mid', 's-low'],
+        reason: '降序应按 winRate 从高到低');
+
+    // 第二次点击 → 升序：40, 65, 90
+    await tester.tap(sortBtn);
+    await tester.pump();
+    expect(rowIds(), <String>['s-low', 's-mid', 's-high'],
+        reason: '升序应按 winRate 从低到高');
+
+    // 第三次点击 → 取消排序（回到时间分组）：不抛异常且三条仍在
+    await tester.tap(sortBtn);
+    await tester.pump();
+    expect(find.byType(QzWhaleRow), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
   });
 }

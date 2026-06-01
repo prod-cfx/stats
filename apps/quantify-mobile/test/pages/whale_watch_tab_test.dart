@@ -75,17 +75,17 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('默认在「实时巨鲸」子 Tab：含关注币种推送 + 胜率（禁用）',
+  testWidgets('默认在「实时巨鲸」子 Tab：含关注币种推送 + 胜率排序（可用）',
       (WidgetTester tester) async {
     await _pump(tester);
     expect(find.text('关注币种推送'), findsOneWidget);
-    // 胜率排序 toggle 明确禁用。
+    // issue #1983：胜率排序 toggle 已启用（不再禁用）。
     final Finder winSort = find.ancestor(
       of: find.text('胜率'),
       matching: find.byType(OutlinedButton),
     );
     final OutlinedButton btn = tester.widget<OutlinedButton>(winSort.first);
-    expect(btn.onPressed, isNull, reason: '胜率排序在 live feed 下应禁用');
+    expect(btn.onPressed, isNotNull, reason: 'issue #1983：胜率排序在 live feed 下应可用');
   });
 
   testWidgets('切到「监控地址」：渲染地址卡永续字段', (WidgetTester tester) async {
