@@ -4,6 +4,8 @@ import '../../../data/models/pred_market_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
+import '../../../widgets/qz_grab_handle.dart';
+import '../../../widgets/qz_pulse_dot.dart';
 
 /// 预测市场详情 bottom sheet（设计稿 `PredMarketDetailSheet`:1719）。
 ///
@@ -44,6 +46,7 @@ class PredMarketDetailSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
           _header(context, c, l10n),
           Flexible(
             child: SingleChildScrollView(
@@ -164,14 +167,17 @@ class PredMarketDetailSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: c.marketDown,
-                      borderRadius: BorderRadius.circular(3),
+                  if (market.live)
+                    QzPulseDot(color: c.marketDown, size: 6, ringSpread: 5)
+                  else
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: c.marketDown,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                     ),
-                  ),
                   const SizedBox(width: 4),
                   Text(
                     status,

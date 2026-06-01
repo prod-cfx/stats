@@ -4,6 +4,7 @@ import '../../../data/models/coin_stock_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
+import '../../../widgets/qz_grab_handle.dart';
 
 /// 排序选择结果：指标 + 方向（[dir] 为 null 表示不排序）。
 class CoinStockSortResult {
@@ -93,17 +94,7 @@ class _CoinStockSortSheetState extends State<CoinStockSortSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Center(
-            child: Container(
-              width: 42,
-              height: 4,
-              margin: const EdgeInsets.fromLTRB(0, 10, 0, 14),
-              decoration: BoxDecoration(
-                color: c.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const QzGrabHandle(),
           Text(
             l10n.coinStockSortTitle,
             style: TextStyle(

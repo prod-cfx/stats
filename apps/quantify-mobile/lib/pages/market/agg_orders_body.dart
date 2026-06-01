@@ -66,9 +66,17 @@ class _AggOrdersBodyState extends State<AggOrdersBody> {
                           color:
                               t == _tab ? c.bgElev : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: t == _tab ? c.border : Colors.transparent,
-                          ),
+                          // 选中段轻阴影（对齐设计稿 :357 的 rgba(15,23,42,.06)，
+                          // 替代原 border）。
+                          boxShadow: t == _tab
+                              ? const <BoxShadow>[
+                                  BoxShadow(
+                                    color: Color(0x0F0F1723),
+                                    blurRadius: 2,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Text(
                           _label(t, l10n),

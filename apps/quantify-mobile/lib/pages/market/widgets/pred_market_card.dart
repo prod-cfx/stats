@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/models/pred_market_models.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
+import '../../../widgets/qz_pulse_dot.dart';
 
 /// 预测市场卡片（设计稿 `PredCard`:1530）。
 ///
@@ -51,7 +52,13 @@ class PredMarketCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(Icons.info_outline, size: 13, color: c.textDim),
+                _iconButton(
+                  key: Key('pred-card-info-${market.id}'),
+                  icon: Icons.info_outline,
+                  size: 13,
+                  tooltip: '信息',
+                  color: c.textDim,
+                ),
               ],
             ),
             if (yes != null) ...<Widget>[
@@ -75,7 +82,13 @@ class PredMarketCard extends StatelessWidget {
                     style: TextStyle(color: c.textDim, fontSize: 10),
                   ),
                 ),
-                Icon(Icons.more_horiz, size: 14, color: c.textDim),
+                _iconButton(
+                  key: Key('pred-card-more-${market.id}'),
+                  icon: Icons.more_horiz,
+                  size: 14,
+                  tooltip: '更多',
+                  color: c.textDim,
+                ),
               ],
             ),
           ],
@@ -118,15 +131,8 @@ class PredMarketCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: c.marketDown,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(width: 3),
+        QzPulseDot(color: c.marketDown, size: 6, ringSpread: 6),
+        const SizedBox(width: 1),
         Text(
           'LIVE',
           style: TextStyle(
@@ -136,6 +142,27 @@ class PredMarketCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  /// 信息 / 更多按钮：对齐设计稿仅 stopPropagation（吞掉点击，不冒泡到整卡
+  /// `onTap`），暂无独立动作。
+  Widget _iconButton({
+    required Key key,
+    required IconData icon,
+    required double size,
+    required String tooltip,
+    required Color color,
+  }) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: GestureDetector(
+        key: key,
+        behavior: HitTestBehavior.opaque,
+        onTap: () {}, // 吞掉点击，阻止冒泡到整卡 onTap
+        child: Icon(icon, size: size, color: color),
+      ),
     );
   }
 }

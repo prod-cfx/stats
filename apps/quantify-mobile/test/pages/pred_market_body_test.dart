@@ -28,6 +28,14 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 250));
 }
 
+/// 有界推进：LIVE 卡片的 [QzPulseDot] 为无限循环动画，`pumpAndSettle()`
+/// 永不 settle，改用固定帧数推进路由 / overlay 过渡。
+Future<void> _settle(WidgetTester tester) async {
+  for (int i = 0; i < 8; i++) {
+    await tester.pump(const Duration(milliseconds: 60));
+  }
+}
+
 void main() {
   group('fmtPredVol（纯函数）', () {
     test('0 返回 null（调用方回退 \$0）', () {
@@ -88,7 +96,7 @@ void main() {
     expect(find.byKey(const Key('pred-search-bar')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('pred-search-bar')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('pred-search-input')), findsOneWidget);
     // 热门话题 6 个 chip
     for (final String t in kPredHotTopics) {
@@ -123,7 +131,7 @@ void main() {
       (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('pred-card-p2')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('pred-detail-sheet')), findsOneWidget);
     expect(find.text('市场详情'), findsOneWidget);
     expect(find.text('规则'), findsOneWidget);
@@ -132,11 +140,24 @@ void main() {
     expect(find.textContaining('创建时间'), findsOneWidget);
   });
 
+  testWidgets('info / more 为可点按钮且吞掉点击不弹详情（#1922）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final Finder info = find.byKey(const Key('pred-card-info-p2'));
+    final Finder more = find.byKey(const Key('pred-card-more-p2'));
+    expect(info, findsOneWidget);
+    expect(more, findsOneWidget);
+    // 点 info：吞掉点击，不应弹详情 sheet
+    await tester.tap(info);
+    await _settle(tester);
+    expect(find.byKey(const Key('pred-detail-sheet')), findsNothing);
+  });
+
   testWidgets('搜索无匹配显示空态文案（AC4）',
       (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('pred-search-bar')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.enterText(
         find.byKey(const Key('pred-search-input')), 'zzz_no_match_xyz');
     await tester.pump(const Duration(milliseconds: 250));
@@ -148,13 +169,13 @@ void main() {
       (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('pred-search-bar')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.enterText(
         find.byKey(const Key('pred-search-input')), '比特币');
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('pred-search-result-p15')), findsOneWidget);
     await tester.tap(find.byKey(const Key('pred-search-result-p15')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('pred-detail-sheet')), findsOneWidget);
   });
 }

@@ -6,6 +6,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import '../../../widgets/qz_grab_handle.dart';
 import 'agg_depth_chart.dart';
 import 'agg_exchange_avatar.dart';
 
@@ -53,7 +54,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const _SheetGrabHandle(),
+              const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                     QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
@@ -487,29 +488,6 @@ class _PrecisionButton extends StatelessWidget {
   }
 }
 
-/// 抽屉顶部 grab handle。
-class _SheetGrabHandle extends StatelessWidget {
-  const _SheetGrabHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: QzSpacing.sm, bottom: QzSpacing.xs),
-      child: Center(
-        child: Container(
-          width: 36,
-          height: 4,
-          decoration: BoxDecoration(
-            color: c.borderSoft,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// 价格精度抽屉单行：圆形单选（选中 accent 实心 + 勾）。
 class _PrecisionOption extends StatelessWidget {
   const _PrecisionOption({
@@ -863,6 +841,7 @@ class _SourceSheetState extends State<_SourceSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 QzSpacing.lg, QzSpacing.md, QzSpacing.sm, QzSpacing.sm),
