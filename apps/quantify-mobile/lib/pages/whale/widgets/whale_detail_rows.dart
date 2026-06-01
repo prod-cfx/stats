@@ -251,7 +251,9 @@ class WhaleSpotRow extends StatelessWidget {
                     value: (h.sharePct / 100).clamp(0, 1),
                     minHeight: 7,
                     backgroundColor: c.bgSoft,
-                    valueColor: AlwaysStoppedAnimation<Color>(c.accent),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF7C5CFF),
+                    ),
                   ),
                 ),
               ),
