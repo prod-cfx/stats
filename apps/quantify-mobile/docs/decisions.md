@@ -818,3 +818,31 @@ Bottom sheet（无独立 route，由调用方 `showXxxSheet(context, ...)` 打�
 - `KLineEntity.time` 单位为毫秒，映射时用 `Candle.openTime.millisecondsSinceEpoch`，不要混淆为秒
 
 **复核机制**：若后续要叠加多套指标 / 多主图切换 / 深度图，重新评估 k_chart_plus vs 自绘。
+
+
+---
+
+## 2026-06-01 · 发现 tab 下游 profile 详情页设计对齐核对（Issue #1968）
+
+**背景**：发现 tab 对齐系列（#1963–#1967）聚焦发现页主体，未逐项比对其下游 profile 详情页（`lib/pages/whale/whale_profile_page.dart`）。本次对照设计稿 `WhaleProfileDetail`（`design/project/mobile/m-screens-whale-discover.jsx:617`）逐项核验。
+
+**判定**：**已对齐，无需代码改动**。6 tab、基本信息 tab（P&L 图 + 4 stat 卡 + 永续总价值卡）、图表筛选底部抽屉均与设计稿一致；未发现需拆 fix issue 的差异。本节仅落文档，不改设计稿、不改 app 代码。
+
+**逐项对照表**：
+
+| 验收项 | 设计稿位置 | Dart 实现位置 | 结论 |
+|--------|-----------|--------------|------|
+| 6 tab 存在性 | jsx:728-734 TabBar tab 配置数组 | `whale_profile_page.dart:288` `DefaultTabController(length:6)` + `_TabBar` 六个 `_CountTab`（基本信息/现货持仓/永续合约持仓/挂单/最近成交/历史委托） | 对齐 |
+| 现货持仓列/排序 | jsx cfg `现货持仓`（持仓价值/金额/价格 + 币种筛选） | `_SpotTab` left=value/amount, right=price, filterLabel | 对齐 |
+| 永续合约列/排序 | jsx cfg `永续合约持仓`（持仓价值/未实现盈亏 + 入场均价/标记价/清算价/保证金/资金费用 更多排序） | `_PerpTab` left=value/pnl, moreSort=entry/mark/liq/margin/funding | 对齐 |
+| 挂单列/排序 | jsx cfg `挂单`（时间/价值/数量 + 币种筛选） | `_OrderTab` left=time/value, right=qty | 对齐 |
+| 最近成交列/排序 | jsx cfg `最近成交`（时间/数量 + 价格/已平盈亏/费用/起始仓位 更多排序） | `_TradeTab` left=time/qty, moreSort=price/pnl/fee/start | 对齐 |
+| 历史委托列/排序 | jsx cfg `历史委托`（时间/数量/价格） | `_HistTab` left=time/qty, right=price | 对齐 |
+| 基本信息：P&L 图 | jsx:779-870（标题 + 三 pill + 曲线） | `_BasicTab` `WhalePnlChart`(`whale_profile_page.dart:503`) + 三 `_FilterPill`（period/scope/metric） | 对齐 |
+| 基本信息：4 stat 卡 2x2 | jsx:872-905（账户总价值/可用保证金/总持仓价值/交易表现 PerfCard） | `WhaleStatCards` `GridView.count(crossAxisCount:2)`：3 张 `_StatCard`（donut+extras）+ `_PerfCard`（胜率/最大回撤/已成交订单/平仓次数） | 对齐 |
+| 基本信息：永续总价值卡 | jsx:907-1011（总价值/平均保证金率/方向偏差/仓位分布/ROI/未实现盈亏） | `WhalePerpSummaryCard`：总价值 + `_Progress` + 双 `_BiasBar` + 多/空 `_ValueBlock` + ROI + 未实现盈亏 | 对齐 |
+| 图表筛选底部抽屉 | jsx:925 drawer（时间范围/统计范围/指标，选中打勾 + 取消） | `whale_chart_filter_sheet.dart`：标题 + `_OptionRow`（选中 accent 打勾）+ 取消 | 对齐 |
+
+**差异清单**：无。所有项确认已对齐，无需另开 fix issue。
+
+**复核机制**：若后续设计稿 `WhaleProfileDetail` 调整 tab 列定义 / stat 卡指标 / 抽屉形态，需重跑本核对并更新此表。
