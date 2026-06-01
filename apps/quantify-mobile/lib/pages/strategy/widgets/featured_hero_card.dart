@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/models/strategy_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/tokens.dart';
+import '../../../widgets/qz_avatar.dart';
 import 'sparkline_view.dart';
 
 /// 「本周推荐」featured hero 卡（#1565）。
@@ -147,7 +148,12 @@ class FeaturedHeroCard extends StatelessWidget {
                     // 标题/副标题 + 查看详情胶囊（对齐设计稿，无指标行）。
                     Row(
                       children: <Widget>[
-                        // TODO(#1903): 头像（36 币种符号）依赖 #1884 sym 派生落地后补。
+                        QzAvatar(
+                          label: card.symbol,
+                          size: 36,
+                          monospace: true,
+                        ),
+                        const SizedBox(width: QzSpacing.sm),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

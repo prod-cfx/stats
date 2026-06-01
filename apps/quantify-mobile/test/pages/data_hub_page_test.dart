@@ -44,6 +44,13 @@ Future<void> _pumpHub(WidgetTester tester) async {
 Finder _hubTab(DataHubScreen screen) =>
     find.byKey(Key('data-hub-tab-${screen.name}'));
 
+/// 页面内 live 卡片含 QzPulseDot 无限动画，测试推进用固定时长。
+Future<void> _pumpBounded(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('hub 顶部渲染 5 个 tab（AC2）', (WidgetTester tester) async {
     await _pumpHub(tester);
@@ -130,7 +137,7 @@ void main() {
       (WidgetTester tester) async {
     await _pumpHub(tester);
     await tester.tap(find.byKey(const Key('data-hub-notification-bell')));
-    await tester.pumpAndSettle();
+    await _pumpBounded(tester);
     // 复用 #1560 WhaleNotificationSheet → 通知中心标题可见。
     expect(find.text('通知中心'), findsOneWidget);
   });

@@ -13,6 +13,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:quantify_mobile/widgets/qz_avatar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 简化测试用 router（**故意不含 shell**）：仅验证 `/strategy` 与
@@ -319,6 +320,28 @@ void main() {
       find.descendant(of: hero, matching: find.text('回撤')),
       findsNothing,
     );
+  });
+
+  testWidgets('featured hero：标题左侧渲染 36 币种符号头像 (#1903)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final Finder hero = find.byKey(const Key('strategy-featured-hero'));
+    expect(hero, findsOneWidget);
+
+    final StrategyCard featured = mockFeaturedStrategies.firstWhere(
+      (StrategyCard c) => c.status == StrategyStatusBadge.official,
+      orElse: () => mockFeaturedStrategies.first,
+    );
+    final Finder avatarFinder = find.descendant(
+      of: hero,
+      matching: find.byType(QzAvatar),
+    );
+    expect(avatarFinder, findsOneWidget);
+
+    final QzAvatar avatar = tester.widget<QzAvatar>(avatarFinder);
+    expect(avatar.label, featured.symbol);
+    expect(avatar.size, 36);
+    expect(avatar.monospace, isTrue);
   });
 
   testWidgets('筛选 sheet：点击右上 icon 弹出底部 sheet (#1565)',

@@ -89,6 +89,13 @@ Future<BuildContext> _pumpApp(
 /// keeps tests resilient against future icon swaps.
 Finder _tab(String name) => find.byKey(ValueKey<String>('tab-$name'));
 
+/// DataHub 内含无限循环的 QzPulseDot，切到 market 后不能用 pumpAndSettle。
+Future<void> _pumpAfterTabTap(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.pump();
+}
+
 /// 构造一份已登录的 InMemoryTokenStorage，用来绕过 `/me*` 守卫。
 InMemoryTokenStorage _loggedInStorage() {
   final AuthSession seed = AuthSession(
@@ -110,19 +117,19 @@ void main() {
     expect(find.byType(AiHomePage), findsOneWidget);
 
     await tester.tap(_tab('market'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(DataHubPage), findsOneWidget);
 
     await tester.tap(_tab('strategy'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(StrategyHomePage), findsOneWidget);
 
     await tester.tap(_tab('whale'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(WhaleHomePage), findsOneWidget);
 
     await tester.tap(_tab('me'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(MeHomePage), findsOneWidget);
   });
 
@@ -150,7 +157,7 @@ void main() {
 
     for (int i = 0; i < keys.length; i++) {
       await tester.tap(_tab(keys[i].substring('tab-'.length)));
-      await tester.pumpAndSettle();
+      await _pumpAfterTabTap(tester);
       expect(
         find.byType(expectedPages[i]),
         findsOneWidget,
@@ -173,11 +180,11 @@ void main() {
 
     // Switch to market and back; input draft should survive.
     await tester.tap(_tab('market'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(DataHubPage), findsOneWidget);
 
     await tester.tap(_tab('ai'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(AiHomePage), findsOneWidget);
     expect(find.text('draft-preserve-1590'), findsOneWidget);
   });
@@ -198,9 +205,9 @@ void main() {
     expect(find.byType(AiHomePage), findsOneWidget);
 
     await tester.tap(_tab('market'));
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     await tester.tap(_tab('market')); // tap active tab
-    await tester.pumpAndSettle();
+    await _pumpAfterTabTap(tester);
     expect(find.byType(DataHubPage), findsOneWidget);
   });
 
