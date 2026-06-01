@@ -38,27 +38,46 @@ class CoinStockCard extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(top: 10),
               padding: const EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: c.borderSoft)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
                 children: <Widget>[
-                  Expanded(child: _stat(c, l10n.coinStockStatMnav, stock.mnav)),
-                  Expanded(
-                      child: _stat(c, l10n.coinStockStatMcap, stock.mcap,
-                          suffix: 'USD')),
-                  Expanded(
-                      child: _stat(c, l10n.coinStockStatHoldValue, stock.holdV,
-                          suffix: 'USD')),
-                  Expanded(
-                    child: _stat(
-                      c,
-                      '${l10n.coinStockStatHoldQty} · ${stock.hold}',
-                      stock.holdQ,
-                      suffix: stock.hold,
-                      tone: stock.holdColor,
-                    ),
+                  CustomPaint(
+                    key: Key('coin-stock-card-stats-dash-${stock.sym}'),
+                    painter: _DashedLinePainter(color: c.borderSoft),
+                    child: const SizedBox(height: 1, width: double.infinity),
+                  ),
+                  const SizedBox(height: 9),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(
+                        child: _stat(c, l10n.coinStockStatMnav, stock.mnav),
+                      ),
+                      Expanded(
+                        child: _stat(
+                          c,
+                          l10n.coinStockStatMcap,
+                          stock.mcap,
+                          suffix: 'USD',
+                        ),
+                      ),
+                      Expanded(
+                        child: _stat(
+                          c,
+                          l10n.coinStockStatHoldValue,
+                          stock.holdV,
+                          suffix: 'USD',
+                        ),
+                      ),
+                      Expanded(
+                        child: _stat(
+                          c,
+                          '${l10n.coinStockStatHoldQty} · ${stock.hold}',
+                          stock.holdQ,
+                          suffix: stock.hold,
+                          tone: stock.holdColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -186,8 +205,13 @@ class CoinStockCard extends StatelessWidget {
     );
   }
 
-  Widget _stat(QzColorScheme c, String label, String value,
-      {String? suffix, Color? tone}) {
+  Widget _stat(
+    QzColorScheme c,
+    String label,
+    String value, {
+    String? suffix,
+    Color? tone,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -212,14 +236,35 @@ class CoinStockCard extends StatelessWidget {
           const SizedBox(height: 1),
           Text(
             suffix,
-            style: TextStyle(
-              fontSize: 9,
-              color: c.textDim,
-              letterSpacing: 0.3,
-            ),
+            style: TextStyle(fontSize: 9, color: c.textDim, letterSpacing: 0.3),
           ),
         ],
       ],
     );
   }
+}
+
+class _DashedLinePainter extends CustomPainter {
+  const _DashedLinePainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    const double dash = 4;
+    const double gap = 4;
+    double x = 0;
+    while (x < size.width) {
+      final double end = (x + dash).clamp(0, size.width).toDouble();
+      canvas.drawLine(Offset(x, 0.5), Offset(end, 0.5), paint);
+      x += dash + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedLinePainter oldDelegate) =>
+      oldDelegate.color != color;
 }

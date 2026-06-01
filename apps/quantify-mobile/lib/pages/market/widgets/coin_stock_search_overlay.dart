@@ -32,10 +32,12 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
   final TextEditingController _ctrl = TextEditingController();
   final FocusNode _focus = FocusNode();
   String _query = '';
+  late List<String> _history;
 
   @override
   void initState() {
     super.initState();
+    _history = _hot.take(3).toList(growable: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
@@ -71,12 +73,25 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
     setState(() => _query = term);
   }
 
+  void _remember(String term) {
+    final String value = term.trim();
+    if (value.isEmpty) return;
+    setState(() {
+      _history = <String>[
+        value,
+        ..._history.where((String old) => old != value),
+      ].take(12).toList(growable: true);
+    });
+  }
+
   void _pick(CoinStock r) {
+    _remember(r.sym);
     Navigator.of(context).pop();
     widget.onOpenStock(r);
   }
 
   void _apply(String raw) {
+    _remember(raw);
     Navigator.of(context).pop();
     widget.onApplyQuery(raw.trim());
   }
@@ -101,18 +116,25 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
     );
   }
 
-  Widget _inputRow(BuildContext context, AppLocalizations l10n, QzColorScheme c) {
+  Widget _inputRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
+        QzSpacing.lg,
+        QzSpacing.sm,
+        QzSpacing.lg,
+        QzSpacing.sm,
+      ),
       child: Row(
         children: <Widget>[
           Expanded(
             child: Container(
               height: 38,
               decoration: BoxDecoration(
-                color: c.bgInput,
-                border: Border.all(color: c.border),
+                color: c.bgSoft,
                 borderRadius: BorderRadius.circular(999),
               ),
               padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
@@ -142,7 +164,16 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
                     GestureDetector(
                       key: const Key('coin-stock-search-clear-input'),
                       onTap: () => _setQuery(''),
-                      child: Icon(Icons.cancel, size: 16, color: c.textDim),
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: c.border,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.close, size: 11, color: c.bg),
+                      ),
                     ),
                 ],
               ),
@@ -152,8 +183,10 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
           TextButton(
             key: const Key('coin-stock-search-cancel'),
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.commonCancel,
-                style: TextStyle(color: c.textMid, fontSize: 13)),
+            child: Text(
+              l10n.commonCancel,
+              style: TextStyle(color: c.textMid, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -163,46 +196,91 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
   Widget _hotTargets(AppLocalizations l10n, QzColorScheme c) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.lg, QzSpacing.lg, QzSpacing.xl),
+        QzSpacing.lg,
+        QzSpacing.lg,
+        QzSpacing.lg,
+        QzSpacing.xl,
+      ),
       children: <Widget>[
         Text(
-          l10n.coinStockSearchHotLabel.toUpperCase(),
+          l10n.coinStockSearchHotLabel,
           style: TextStyle(
-            color: c.textDim,
-            fontSize: 11,
+            color: c.text,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
           ),
         ),
-        const SizedBox(height: QzSpacing.sm),
+        const SizedBox(height: QzSpacing.md),
         Wrap(
-          spacing: QzSpacing.sm,
-          runSpacing: QzSpacing.sm,
+          spacing: 10,
+          runSpacing: 10,
           children: <Widget>[
             for (final String t in _hot)
-              GestureDetector(
-                key: Key('coin-stock-search-hot-$t'),
-                onTap: () => _setQuery(t),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: c.bgElev,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    t,
-                    style: TextStyle(
-                      color: c.textMid,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+              _chip(c, t, key: Key('coin-stock-search-hot-$t')),
+          ],
+        ),
+        if (_history.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 26),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  l10n.strategySearchHistoryLabel,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-          ],
-        ),
+              IconButton(
+                key: const Key('coin-stock-search-clear-history'),
+                onPressed: () => setState(() => _history = <String>[]),
+                icon: Icon(Icons.delete_outline, size: 16, color: c.textDim),
+                tooltip: l10n.strategySearchClearHistory,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              ),
+            ],
+          ),
+          const SizedBox(height: QzSpacing.md),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              for (final String t in _history)
+                _chip(c, t, key: Key('coin-stock-search-history-$t')),
+            ],
+          ),
+        ],
       ],
+    );
+  }
+
+  Widget _chip(QzColorScheme c, String term, {required Key key}) {
+    return GestureDetector(
+      key: key,
+      onTap: () {
+        _remember(term);
+        _setQuery(term);
+      },
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 62),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        decoration: BoxDecoration(
+          color: c.accentSoft,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          term,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: c.text,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 
@@ -223,7 +301,11 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, QzSpacing.xl),
+        QzSpacing.lg,
+        QzSpacing.xs,
+        QzSpacing.lg,
+        QzSpacing.xl,
+      ),
       itemCount: hits.length,
       itemBuilder: (BuildContext ctx, int i) => _resultRow(hits[i], c),
     );
@@ -243,13 +325,11 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
         child: Row(
           children: <Widget>[
             Container(
-              width: 30,
-              height: 30,
+              key: Key('coin-stock-search-avatar-${r.sym}'),
+              width: 28,
+              height: 28,
               alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: coinC,
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: coinC, shape: BoxShape.circle),
               child: Text(
                 r.sym.substring(0, 1),
                 style: const TextStyle(
@@ -261,34 +341,39 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
             ),
             const SizedBox(width: QzSpacing.sm + 2),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    r.sym,
-                    style: TextStyle(
-                      color: c.text,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+              child: Text.rich(
+                key: Key('coin-stock-search-title-sub-${r.sym}'),
+                TextSpan(
+                  children: <InlineSpan>[
+                    TextSpan(text: r.sym),
+                    TextSpan(
+                      text: ' ${r.cn}',
+                      style: TextStyle(
+                        color: c.textDim,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    r.cn,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: c.textDim, fontSize: 11),
-                  ),
-                ],
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(width: QzSpacing.sm),
             Text(
-              '\$${r.px}',
+              r.px,
               style: TextStyle(
                 color: c.text,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
               ),
             ),
           ],

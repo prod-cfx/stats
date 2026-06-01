@@ -61,10 +61,7 @@ class QzNotificationBell extends StatelessWidget {
                   maxWidth: 36,
                   maxHeight: 36,
                 ),
-                icon: Icon(
-                  Icons.notifications_outlined,
-                  color: c.textMid,
-                ),
+                icon: Icon(Icons.notifications_outlined, color: c.textMid),
               ),
             ),
           )
@@ -75,21 +72,21 @@ class QzNotificationBell extends StatelessWidget {
             tooltip: tooltip,
           );
     return Stack(
+      clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: <Widget>[
         button,
         if (unread > 0)
           Positioned(
-            right: 6,
-            top: 6,
+            right: -4,
+            top: -2,
             child: IgnorePointer(
               child: Container(
-                constraints:
-                    const BoxConstraints(minWidth: 14, minHeight: 14),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
                   color: c.badgeNotification,
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: c.bgElev, width: 1.5),
                 ),
                 alignment: Alignment.center,
@@ -97,7 +94,7 @@ class QzNotificationBell extends StatelessWidget {
                   label,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

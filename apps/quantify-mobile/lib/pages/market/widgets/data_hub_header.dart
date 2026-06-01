@@ -52,32 +52,32 @@ class DataHubHeader extends StatelessWidget {
   final VoidCallback onBell;
 
   static List<DataHubItem> items(AppLocalizations l10n) => <DataHubItem>[
-        DataHubItem(
-          screen: DataHubScreen.market,
-          label: l10n.dataHubTabMarket,
-          hint: l10n.dataHubHintMarket,
-        ),
-        DataHubItem(
-          screen: DataHubScreen.longShort,
-          label: l10n.dataHubTabLongShort,
-          hint: l10n.dataHubHintLongShort,
-        ),
-        DataHubItem(
-          screen: DataHubScreen.aggOrders,
-          label: l10n.dataHubTabAggOrders,
-          hint: l10n.dataHubHintAggOrders,
-        ),
-        DataHubItem(
-          screen: DataHubScreen.predict,
-          label: l10n.dataHubTabPredict,
-          hint: l10n.dataHubHintPredict,
-        ),
-        DataHubItem(
-          screen: DataHubScreen.coinStock,
-          label: l10n.dataHubTabCoinStock,
-          hint: l10n.dataHubHintCoinStock,
-        ),
-      ];
+    DataHubItem(
+      screen: DataHubScreen.market,
+      label: l10n.dataHubTabMarket,
+      hint: l10n.dataHubHintMarket,
+    ),
+    DataHubItem(
+      screen: DataHubScreen.longShort,
+      label: l10n.dataHubTabLongShort,
+      hint: l10n.dataHubHintLongShort,
+    ),
+    DataHubItem(
+      screen: DataHubScreen.aggOrders,
+      label: l10n.dataHubTabAggOrders,
+      hint: l10n.dataHubHintAggOrders,
+    ),
+    DataHubItem(
+      screen: DataHubScreen.predict,
+      label: l10n.dataHubTabPredict,
+      hint: l10n.dataHubHintPredict,
+    ),
+    DataHubItem(
+      screen: DataHubScreen.coinStock,
+      label: l10n.dataHubTabCoinStock,
+      hint: l10n.dataHubHintCoinStock,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +120,6 @@ class DataHubHeader extends StatelessWidget {
                   unread: unread,
                   onTap: onBell,
                   tooltip: l10n.dataHubNotificationTooltip,
-                  circular: true,
                 ),
               ),
             ],

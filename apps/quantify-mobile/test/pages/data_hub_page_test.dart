@@ -25,9 +25,7 @@ Future<void> _pumpHub(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 1400));
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
+      overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -55,8 +53,7 @@ void main() {
   testWidgets('hub 顶部渲染 5 个 tab（AC2）', (WidgetTester tester) async {
     await _pumpHub(tester);
     for (final DataHubScreen screen in DataHubScreen.values) {
-      expect(_hubTab(screen), findsOneWidget,
-          reason: 'tab ${screen.name} 应渲染');
+      expect(_hubTab(screen), findsOneWidget, reason: 'tab ${screen.name} 应渲染');
     }
     // 设计稿 5 项中文 label。
     expect(find.text('行情数据'), findsWidgets);
@@ -71,8 +68,9 @@ void main() {
     expect(find.byType(MarketHomeBody), findsOneWidget);
   });
 
-  testWidgets('点多空比 tab 进入 LongShortBody（AC4：不靠 URL）',
-      (WidgetTester tester) async {
+  testWidgets('点多空比 tab 进入 LongShortBody（AC4：不靠 URL）', (
+    WidgetTester tester,
+  ) async {
     await _pumpHub(tester);
     await tester.tap(_hubTab(DataHubScreen.longShort));
     await tester.pump();
@@ -82,8 +80,7 @@ void main() {
     expect(find.byType(LongShortBar), findsWidgets);
   });
 
-  testWidgets('已落地 tab（聚合挂单/预测/币股）切换不崩溃（AC5）',
-      (WidgetTester tester) async {
+  testWidgets('已落地 tab（聚合挂单/预测/币股）切换不崩溃（AC5）', (WidgetTester tester) async {
     await _pumpHub(tester);
     // 聚合挂单（#1854）/ 预测市场（#1855）已落地 → 不再是占位屏，验证不抛异常。
     for (final DataHubScreen screen in <DataHubScreen>[
@@ -93,29 +90,29 @@ void main() {
       await tester.tap(_hubTab(screen));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(tester.takeException(), isNull,
-          reason: '切到 ${screen.name} 不应抛异常');
+      expect(tester.takeException(), isNull, reason: '切到 ${screen.name} 不应抛异常');
     }
 
     // 币股（#1856）已落地 → 渲染 CoinStockBody，不再是占位屏。
     await tester.tap(_hubTab(DataHubScreen.coinStock));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byType(CoinStockBody), findsOneWidget,
-        reason: 'coinStock 应渲染 CoinStockBody');
-    expect(tester.takeException(), isNull,
-        reason: '切到 coinStock 不应抛异常');
+    expect(
+      find.byType(CoinStockBody),
+      findsOneWidget,
+      reason: 'coinStock 应渲染 CoinStockBody',
+    );
+    expect(tester.takeException(), isNull, reason: '切到 coinStock 不应抛异常');
   });
 
-  testWidgets('通知铃铛存在，未读 > 0 显示红数字 badge（AC3）',
-      (WidgetTester tester) async {
+  testWidgets('通知铃铛存在，未读 > 0 显示红数字 badge（AC3）', (WidgetTester tester) async {
     await _pumpHub(tester);
     expect(find.byKey(const Key('data-hub-notification-bell')), findsOneWidget);
     // mockWhaleNotifications 含未读项 → badge 显示数字（非 0）。
-    final Finder bell =
-        find.byKey(const Key('data-hub-notification-bell'));
-    final Finder bellStack =
-        find.ancestor(of: bell, matching: find.byType(Stack)).first;
+    final Finder bell = find.byKey(const Key('data-hub-notification-bell'));
+    final Finder bellStack = find
+        .ancestor(of: bell, matching: find.byType(Stack))
+        .first;
     expect(
       find.descendant(
         of: bellStack,
@@ -133,8 +130,51 @@ void main() {
     );
   });
 
-  testWidgets('点击 hub header 铃铛打开通知中心 sheet（AC3）',
-      (WidgetTester tester) async {
+  testWidgets('hub header 铃铛使用裸铃铛形态并保留 badge（#2049）', (
+    WidgetTester tester,
+  ) async {
+    await _pumpHub(tester);
+    final Finder bell = find.byKey(const Key('data-hub-notification-bell'));
+    final Finder bellStack = find
+        .ancestor(of: bell, matching: find.byType(Stack))
+        .first;
+
+    expect(
+      find.descendant(
+        of: bellStack,
+        matching: find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is SizedBox && widget.width == 36 && widget.height == 36,
+        ),
+      ),
+      findsNothing,
+      reason: 'DataHubHeader 应使用裸铃铛，无 36px 圆形描边容器',
+    );
+
+    final Icon icon = tester.widget<Icon>(
+      find.descendant(
+        of: bellStack,
+        matching: find.byIcon(Icons.notifications_outlined),
+      ),
+    );
+    expect(icon.size, 20);
+
+    final Positioned badgePosition = tester.widget<Positioned>(
+      find.descendant(of: bellStack, matching: find.byType(Positioned)),
+    );
+    expect(badgePosition.top, -2);
+    expect(badgePosition.right, -4);
+
+    final Text badgeText = tester.widget<Text>(
+      find.descendant(
+        of: bellStack,
+        matching: find.textContaining(RegExp(r'\d|9\+')),
+      ),
+    );
+    expect(badgeText.style?.fontSize, 10);
+  });
+
+  testWidgets('点击 hub header 铃铛打开通知中心 sheet（AC3）', (WidgetTester tester) async {
     await _pumpHub(tester);
     await tester.tap(find.byKey(const Key('data-hub-notification-bell')));
     await _pumpBounded(tester);
@@ -142,8 +182,7 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('header 无静态「数据」标题文本（#2016）',
-      (WidgetTester tester) async {
+  testWidgets('header 无静态「数据」标题文本（#2016）', (WidgetTester tester) async {
     await _pumpHub(tester);
     // 决策 #2016：header 收敛为单行（tab 条 + 铃铛），不再渲染静态标题。
     expect(find.byKey(const Key('data-hub-title')), findsNothing);

@@ -4,6 +4,7 @@ import 'package:quantify_mobile/data/models/coin_stock_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/coin_stock_body.dart';
 import 'package:quantify_mobile/pages/market/widgets/coin_stock_card.dart';
+import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
@@ -147,8 +148,7 @@ void main() {
     expect(find.byKey(const Key('coin-stock-card-TSLA')), findsOneWidget);
   });
 
-  testWidgets('点搜索按钮弹 overlay，含热门标的（AC1）',
-      (WidgetTester tester) async {
+  testWidgets('点搜索按钮弹 overlay，含热门标的（AC1）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('coin-stock-search-button')));
     await tester.pumpAndSettle();
@@ -157,14 +157,110 @@ void main() {
     expect(find.byKey(const Key('coin-stock-search-hot-MSTR')), findsOneWidget);
     // 输入 HOOD → 命中结果行。
     await tester.enterText(
-        find.byKey(const Key('coin-stock-search-input')), 'HOOD');
+      find.byKey(const Key('coin-stock-search-input')),
+      'HOOD',
+    );
     await tester.pump();
     expect(
-        find.byKey(const Key('coin-stock-search-result-HOOD')), findsOneWidget);
+      find.byKey(const Key('coin-stock-search-result-HOOD')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('排序 sheet：指标 pills + 三向方向，应用后重排（AC2）',
-      (WidgetTester tester) async {
+  testWidgets('搜索 overlay 空查询态对齐共享 SearchOverlay（#2047）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('coin-stock-search-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('热门标的'), findsOneWidget);
+    final Text hotTitle = tester.widget<Text>(find.text('热门标的'));
+    expect(hotTitle.style?.fontSize, 14);
+    expect(hotTitle.style?.fontWeight, FontWeight.w600);
+    expect(hotTitle.style?.color, qzColors(QzBg.light, QzAccent.violet).text);
+
+    expect(find.text('搜索历史'), findsOneWidget);
+    expect(
+      find.byKey(const Key('coin-stock-search-clear-history')),
+      findsOneWidget,
+    );
+    for (final String sym in <String>['MSTR', 'HOOD', 'TSLA']) {
+      expect(find.byKey(Key('coin-stock-search-history-$sym')), findsOneWidget);
+    }
+
+    final Container hotChip = tester.widget<Container>(
+      find.descendant(
+        of: find.byKey(const Key('coin-stock-search-hot-MSTR')),
+        matching: find.byType(Container),
+      ),
+    );
+    final BoxDecoration chipDecoration = hotChip.decoration! as BoxDecoration;
+    expect(hotChip.constraints?.minWidth, 62);
+    expect(
+      chipDecoration.color,
+      qzColors(QzBg.light, QzAccent.violet).accentSoft,
+    );
+    final Text hotChipText = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const Key('coin-stock-search-hot-MSTR')),
+        matching: find.text('MSTR'),
+      ),
+    );
+    expect(
+      hotChipText.style?.color,
+      qzColors(QzBg.light, QzAccent.violet).text,
+    );
+  });
+
+  testWidgets('搜索结果行对齐共享 SearchResultRow（#2047）', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('coin-stock-search-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('coin-stock-search-input')),
+      'MSTR',
+    );
+    await tester.pump();
+
+    final Finder row = find.byKey(const Key('coin-stock-search-result-MSTR'));
+    expect(row, findsOneWidget);
+    expect(find.text('\$412.80'), findsNothing);
+    expect(find.text('412.80'), findsOneWidget);
+
+    final Finder avatarFinder = find.descendant(
+      of: row,
+      matching: find.byKey(const Key('coin-stock-search-avatar-MSTR')),
+    );
+    final Container avatar = tester.widget<Container>(avatarFinder);
+    final BoxDecoration avatarDecoration = avatar.decoration! as BoxDecoration;
+    expect(tester.getSize(avatarFinder), const Size(28, 28));
+    expect(avatarDecoration.shape, BoxShape.circle);
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.byKey(const Key('coin-stock-search-title-sub-MSTR')),
+      ),
+      findsOneWidget,
+      reason: 'title + sub 应合并为单行富文本',
+    );
+  });
+
+  testWidgets('搜索 icon 叠放在 tab 条右缘并带渐隐遮罩（#2048）', (WidgetTester tester) async {
+    await _pump(tester);
+    expect(
+      find.byKey(const Key('coin-stock-tabs-search-stack')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('coin-stock-tabs-fade-search')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('排序 sheet：指标 pills + 三向方向，应用后重排（AC2）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('coin-stock-sort-button')));
     await tester.pumpAndSettle();
@@ -184,13 +280,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // 升序股价：HOOD(66.55) < TSLA(364.89) < MSTR(412.80)，首张应为 HOOD。
-    final CoinStockCard first =
-        tester.widget<CoinStockCard>(find.byType(CoinStockCard).first);
+    final CoinStockCard first = tester.widget<CoinStockCard>(
+      find.byType(CoinStockCard).first,
+    );
     expect(first.stock.sym, 'HOOD');
   });
 
-  testWidgets('公司卡展示代码/名称/股价/涨跌/stats（AC3）',
-      (WidgetTester tester) async {
+  testWidgets('公司卡展示代码/名称/股价/涨跌/stats（AC3）', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.text('MSTR'), findsWidgets);
     expect(find.text('Strategy'), findsOneWidget);
@@ -199,6 +295,16 @@ void main() {
     // stats label。
     expect(find.text('MNAV'), findsWidgets);
     expect(find.text('市值'), findsWidgets);
+  });
+
+  testWidgets('公司卡 stats 顶部分隔线使用虚线 painter（#2048）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    expect(
+      find.byKey(const Key('coin-stock-card-stats-dash-MSTR')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('点卡片弹公司详情 sheet（AC4）', (WidgetTester tester) async {
@@ -216,7 +322,9 @@ void main() {
     await tester.tap(find.byKey(const Key('coin-stock-search-button')));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.byKey(const Key('coin-stock-search-input')), 'ZZZZ');
+      find.byKey(const Key('coin-stock-search-input')),
+      'ZZZZ',
+    );
     await tester.pump();
     expect(find.byKey(const Key('coin-stock-search-empty')), findsOneWidget);
   });

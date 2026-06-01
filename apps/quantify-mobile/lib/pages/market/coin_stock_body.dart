@@ -53,8 +53,10 @@ class _CoinStockBodyState extends State<CoinStockBody> {
     final String q = _filter.trim().toLowerCase();
     final List<CoinStock> filtered = widget.stocks
         .where(_matchTab)
-        .where((CoinStock r) =>
-            q.isEmpty || '${r.sym}${r.cn}${r.ex}'.toLowerCase().contains(q))
+        .where(
+          (CoinStock r) =>
+              q.isEmpty || '${r.sym}${r.cn}${r.ex}'.toLowerCase().contains(q),
+        )
         .toList();
     if (_dir == null) return filtered; // 不排序，保持原始顺序
     filtered.sort((CoinStock a, CoinStock b) {
@@ -111,7 +113,11 @@ class _CoinStockBodyState extends State<CoinStockBody> {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.sm),
+              QzSpacing.lg,
+              QzSpacing.md,
+              QzSpacing.lg,
+              QzSpacing.sm,
+            ),
             child: _controls(c, l10n),
           ),
           Expanded(
@@ -126,7 +132,11 @@ class _CoinStockBodyState extends State<CoinStockBody> {
                 : ListView.separated(
                     key: const Key('coin-stock-list'),
                     padding: const EdgeInsets.fromLTRB(
-                        QzSpacing.lg, QzSpacing.xxs, QzSpacing.lg, 16),
+                      QzSpacing.lg,
+                      QzSpacing.xxs,
+                      QzSpacing.lg,
+                      16,
+                    ),
                     itemCount: shown.length,
                     separatorBuilder: (_, _) =>
                         const SizedBox(height: QzSpacing.sm),
@@ -144,9 +154,33 @@ class _CoinStockBodyState extends State<CoinStockBody> {
   Widget _controls(QzColorScheme c, AppLocalizations l10n) {
     return Row(
       children: <Widget>[
-        Expanded(child: _tabs(c, l10n)),
-        const SizedBox(width: QzSpacing.xs),
-        _searchButton(c),
+        Expanded(
+          child: Stack(
+            key: const Key('coin-stock-tabs-search-stack'),
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.only(right: 36),
+                child: _tabs(c, l10n),
+              ),
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 52,
+                child: Container(
+                  key: const Key('coin-stock-tabs-fade-search'),
+                  alignment: Alignment.centerRight,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
+                    ),
+                  ),
+                  child: _searchButton(c),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(width: QzSpacing.xs),
         _sortButton(c, l10n),
       ],
@@ -215,8 +249,8 @@ class _CoinStockBodyState extends State<CoinStockBody> {
     final String arrow = _dir == SortDir.desc
         ? '↓'
         : _dir == SortDir.asc
-            ? '↑'
-            : '↕';
+        ? '↑'
+        : '↕';
     return GestureDetector(
       key: const Key('coin-stock-sort-button'),
       onTap: _openSort,
@@ -231,8 +265,10 @@ class _CoinStockBodyState extends State<CoinStockBody> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(l10n.coinStockSortBy,
-                style: TextStyle(fontSize: 11, color: c.textDim)),
+            Text(
+              l10n.coinStockSortBy,
+              style: TextStyle(fontSize: 11, color: c.textDim),
+            ),
             const SizedBox(width: 4),
             Text(
               _sortLabel(l10n, _sort),
