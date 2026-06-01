@@ -264,14 +264,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AiConfirmPage), findsOneWidget);
-    // 顶栏标题 + 参数确认卡 + 下一步 CTA 均渲染。脚本预览已拆到独立屏
-    // `/ai/script`（#1892），确认页不再内嵌脚本块/复制按钮。
+    // #1891 内容对齐：Hero / 策略逻辑 RuleBlock / EXECUTE / 免责声明 / 双按钮
+    // 均渲染（脚本预览块已下沉到 `/ai/script`，本屏不再有 copy-script）。
     expect(find.text('确认策略'), findsWidgets);
-    expect(find.byKey(const Key('ai-confirm-params')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-hero')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-rule-0')), findsOneWidget);
+    // 底部双按钮在 sticky bar（始终在屏）。
+    expect(find.byKey(const Key('ai-confirm-back-cta')), findsOneWidget);
     expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
+    // 脚本预览块已移除（#1891 方案）。
+    expect(find.byKey(const Key('ai-confirm-copy-script')), findsNothing);
+    // EXECUTE / AI 提示 / 免责声明在长列表下方，滚动后再断言渲染。
+    final Finder list = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('ai-confirm-execute')),
+      300,
+      scrollable: list,
+    );
+    expect(find.byKey(const Key('ai-confirm-execute')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('ai-confirm-disclaimer')),
+      300,
+      scrollable: list,
+    );
+    expect(find.byKey(const Key('ai-confirm-advice')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-disclaimer')), findsOneWidget);
   });
 
-  testWidgets('/ai/confirm 接收 extra 参数并渲染到参数卡', (
+  testWidgets('/ai/confirm 接收 extra 参数并渲染到策略逻辑区', (
     WidgetTester tester,
   ) async {
     final BuildContext ctx = await _pumpApp(tester);
@@ -279,6 +299,7 @@ void main() {
       '/ai/confirm',
       extra: const <String, String>{
         'category': '网格',
+        'symbol': 'BTC/USDT',
         'fast_ma': '7',
         'slow_ma': '30',
       },
@@ -286,19 +307,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AiConfirmPage), findsOneWidget);
-    // extra 透传的 category 走普通 Text（chip），断言非 mock 兜底值「趋势跟踪」。
+    // extra 透传的 category 进 Hero chip，断言非 mock 兜底值「趋势跟踪」。
     expect(find.text('网格'), findsWidgets);
     expect(find.text('趋势跟踪'), findsNothing);
-    // 参数表用 RichText（mono），断言其拼接文本含 extra 透传的 fast_ma=7。
-    final Iterable<RichText> richTexts =
-        tester.widgetList<RichText>(find.byType(RichText));
-    final bool hasFastMa = richTexts.any((RichText rt) {
-      final InlineSpan span = rt.text;
-      return span.toPlainText().contains('fast_ma') &&
-          span.toPlainText().contains('7');
-    });
-    expect(hasFastMa, isTrue,
-        reason: 'extra 透传的 fast_ma=7 应渲染到参数卡 RichText');
+    // 规则文案由 fast_ma/slow_ma 派生（如「MA7 上穿 MA30」），断言透传值落地。
+    final Finder rule0 = find.byKey(const Key('ai-confirm-rule-0'));
+    expect(
+      find.descendant(of: rule0, matching: find.textContaining('MA7')),
+      findsOneWidget,
+      reason: 'extra 透传的 fast_ma=7 应渲染到 IF 规则文案',
+    );
+    expect(
+      find.descendant(of: rule0, matching: find.textContaining('MA30')),
+      findsOneWidget,
+      reason: 'extra 透传的 slow_ma=30 应渲染到 IF 规则文案',
+    );
   });
 
   test('/me/api 已下线（issue #1648）→ router 不再注册该路径', () {

@@ -1532,6 +1532,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConfirmStrategy => 'Confirm Strategy';
 
   @override
+  String get aiConfirmSubtitle => 'Review params before backtesting';
+
+  @override
+  String get aiConfirmCancel => 'Cancel';
+
+  @override
+  String get aiConfirmHeroSubtitle =>
+      'Generated from this chat · keep tuning in dialogue';
+
+  @override
+  String get aiConfirmLogicTitle => 'Strategy Logic';
+
+  @override
+  String get aiConfirmEditInChat => 'Edit in chat';
+
+  @override
+  String get aiConfirmRuleIf => 'IF';
+
+  @override
+  String get aiConfirmRuleThen => 'THEN';
+
+  @override
+  String get aiConfirmRuleSep => 'AND AT THEN';
+
+  @override
+  String get aiConfirmExecuteTitle => 'EXECUTE';
+
+  @override
+  String get aiConfirmExecExchange => 'Exchange';
+
+  @override
+  String get aiConfirmExecSymbol => 'Symbol';
+
+  @override
+  String get aiConfirmExecPeriod => 'Period';
+
+  @override
+  String get aiConfirmExecPosition => 'Position';
+
+  @override
+  String get aiConfirmExecMarket => 'Market';
+
+  @override
+  String get aiConfirmRiskBadge => 'Risk';
+
+  @override
+  String get aiConfirmAdviceTitle => 'AI Hint';
+
+  @override
+  String get aiConfirmDisclaimer =>
+      'Backtests use historical data and cannot guarantee live results. Validate with a paper account before deploying.';
+
+  @override
+  String get aiConfirmBackToChat => 'Back to chat';
+
+  @override
+  String get aiConfirmNextScript => 'Next: Strategy Script';
+
+  @override
   String get aiStartBacktestPrompt => 'Shall I start the backtest?';
 
   @override
@@ -3143,7 +3202,4 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiScriptNext => 'Next: Backtest Setup';
-
-  @override
-  String get aiConfirmNextScript => 'Next: Strategy Script';
 }

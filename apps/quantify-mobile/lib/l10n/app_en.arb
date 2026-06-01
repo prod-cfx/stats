@@ -549,6 +549,25 @@
   "themePreviewIdentified": "Identified as \"Trend Following\" strategy",
   "themePreviewStartBacktest": "Start Backtest",
   "aiConfirmStrategy": "Confirm Strategy",
+  "aiConfirmSubtitle": "Review params before backtesting",
+  "aiConfirmCancel": "Cancel",
+  "aiConfirmHeroSubtitle": "Generated from this chat · keep tuning in dialogue",
+  "aiConfirmLogicTitle": "Strategy Logic",
+  "aiConfirmEditInChat": "Edit in chat",
+  "aiConfirmRuleIf": "IF",
+  "aiConfirmRuleThen": "THEN",
+  "aiConfirmRuleSep": "AND AT THEN",
+  "aiConfirmExecuteTitle": "EXECUTE",
+  "aiConfirmExecExchange": "Exchange",
+  "aiConfirmExecSymbol": "Symbol",
+  "aiConfirmExecPeriod": "Period",
+  "aiConfirmExecPosition": "Position",
+  "aiConfirmExecMarket": "Market",
+  "aiConfirmRiskBadge": "Risk",
+  "aiConfirmAdviceTitle": "AI Hint",
+  "aiConfirmDisclaimer": "Backtests use historical data and cannot guarantee live results. Validate with a paper account before deploying.",
+  "aiConfirmBackToChat": "Back to chat",
+  "aiConfirmNextScript": "Next: Strategy Script",
   "aiStartBacktestPrompt": "Shall I start the backtest?",
   "aiParamsBadgePrefix": "Identified as",
   "@aiParamsBadgePrefix": {
@@ -1214,6 +1233,5 @@
   "aiScriptCollapse": "Collapse",
   "aiScriptSuccessHint": "Script generated and risk control injected. You can continue to backtest setup.",
   "aiScriptPrev": "Back",
-  "aiScriptNext": "Next: Backtest Setup",
-  "aiConfirmNextScript": "Next: Strategy Script"
+  "aiScriptNext": "Next: Backtest Setup"
 }

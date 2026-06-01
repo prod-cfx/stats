@@ -2960,6 +2960,120 @@ abstract class AppLocalizations {
   /// **'确认策略'**
   String get aiConfirmStrategy;
 
+  /// No description provided for @aiConfirmSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查参数无误后开始回测'**
+  String get aiConfirmSubtitle;
+
+  /// No description provided for @aiConfirmCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消'**
+  String get aiConfirmCancel;
+
+  /// No description provided for @aiConfirmHeroSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'由当前对话生成 · 可在对话中继续微调'**
+  String get aiConfirmHeroSubtitle;
+
+  /// No description provided for @aiConfirmLogicTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略逻辑'**
+  String get aiConfirmLogicTitle;
+
+  /// No description provided for @aiConfirmEditInChat.
+  ///
+  /// In zh, this message translates to:
+  /// **'在对话中修改'**
+  String get aiConfirmEditInChat;
+
+  /// No description provided for @aiConfirmRuleIf.
+  ///
+  /// In zh, this message translates to:
+  /// **'IF'**
+  String get aiConfirmRuleIf;
+
+  /// No description provided for @aiConfirmRuleThen.
+  ///
+  /// In zh, this message translates to:
+  /// **'THEN'**
+  String get aiConfirmRuleThen;
+
+  /// No description provided for @aiConfirmRuleSep.
+  ///
+  /// In zh, this message translates to:
+  /// **'AND AT THEN'**
+  String get aiConfirmRuleSep;
+
+  /// No description provided for @aiConfirmExecuteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'EXECUTE'**
+  String get aiConfirmExecuteTitle;
+
+  /// No description provided for @aiConfirmExecExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所'**
+  String get aiConfirmExecExchange;
+
+  /// No description provided for @aiConfirmExecSymbol.
+  ///
+  /// In zh, this message translates to:
+  /// **'标的'**
+  String get aiConfirmExecSymbol;
+
+  /// No description provided for @aiConfirmExecPeriod.
+  ///
+  /// In zh, this message translates to:
+  /// **'周期'**
+  String get aiConfirmExecPeriod;
+
+  /// No description provided for @aiConfirmExecPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'仓位'**
+  String get aiConfirmExecPosition;
+
+  /// No description provided for @aiConfirmExecMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'市场'**
+  String get aiConfirmExecMarket;
+
+  /// No description provided for @aiConfirmRiskBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'风控'**
+  String get aiConfirmRiskBadge;
+
+  /// No description provided for @aiConfirmAdviceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 提示'**
+  String get aiConfirmAdviceTitle;
+
+  /// No description provided for @aiConfirmDisclaimer.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测基于历史数据，无法保证实盘表现。部署前请使用模拟账户验证。'**
+  String get aiConfirmDisclaimer;
+
+  /// No description provided for @aiConfirmBackToChat.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回对话'**
+  String get aiConfirmBackToChat;
+
+  /// No description provided for @aiConfirmNextScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一步：策略脚本'**
+  String get aiConfirmNextScript;
+
   /// No description provided for @aiStartBacktestPrompt.
   ///
   /// In zh, this message translates to:
@@ -6025,12 +6139,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'下一步：回测设置'**
   String get aiScriptNext;
-
-  /// No description provided for @aiConfirmNextScript.
-  ///
-  /// In zh, this message translates to:
-  /// **'下一步：策略脚本'**
-  String get aiConfirmNextScript;
 }
 
 class _AppLocalizationsDelegate

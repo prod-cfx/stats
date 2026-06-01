@@ -1494,6 +1494,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConfirmStrategy => '确认策略';
 
   @override
+  String get aiConfirmSubtitle => '检查参数无误后开始回测';
+
+  @override
+  String get aiConfirmCancel => '取消';
+
+  @override
+  String get aiConfirmHeroSubtitle => '由当前对话生成 · 可在对话中继续微调';
+
+  @override
+  String get aiConfirmLogicTitle => '策略逻辑';
+
+  @override
+  String get aiConfirmEditInChat => '在对话中修改';
+
+  @override
+  String get aiConfirmRuleIf => 'IF';
+
+  @override
+  String get aiConfirmRuleThen => 'THEN';
+
+  @override
+  String get aiConfirmRuleSep => 'AND AT THEN';
+
+  @override
+  String get aiConfirmExecuteTitle => 'EXECUTE';
+
+  @override
+  String get aiConfirmExecExchange => '交易所';
+
+  @override
+  String get aiConfirmExecSymbol => '标的';
+
+  @override
+  String get aiConfirmExecPeriod => '周期';
+
+  @override
+  String get aiConfirmExecPosition => '仓位';
+
+  @override
+  String get aiConfirmExecMarket => '市场';
+
+  @override
+  String get aiConfirmRiskBadge => '风控';
+
+  @override
+  String get aiConfirmAdviceTitle => 'AI 提示';
+
+  @override
+  String get aiConfirmDisclaimer => '回测基于历史数据，无法保证实盘表现。部署前请使用模拟账户验证。';
+
+  @override
+  String get aiConfirmBackToChat => '返回对话';
+
+  @override
+  String get aiConfirmNextScript => '下一步：策略脚本';
+
+  @override
   String get aiStartBacktestPrompt => '需要我开始回测吗?';
 
   @override
@@ -3084,7 +3141,4 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiScriptNext => '下一步：回测设置';
-
-  @override
-  String get aiConfirmNextScript => '下一步：策略脚本';
 }

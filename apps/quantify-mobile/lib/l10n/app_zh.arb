@@ -552,6 +552,25 @@
   "themePreviewIdentified": "已识别为「趋势跟踪」策略",
   "themePreviewStartBacktest": "开始回测",
   "aiConfirmStrategy": "确认策略",
+  "aiConfirmSubtitle": "检查参数无误后开始回测",
+  "aiConfirmCancel": "取消",
+  "aiConfirmHeroSubtitle": "由当前对话生成 · 可在对话中继续微调",
+  "aiConfirmLogicTitle": "策略逻辑",
+  "aiConfirmEditInChat": "在对话中修改",
+  "aiConfirmRuleIf": "IF",
+  "aiConfirmRuleThen": "THEN",
+  "aiConfirmRuleSep": "AND AT THEN",
+  "aiConfirmExecuteTitle": "EXECUTE",
+  "aiConfirmExecExchange": "交易所",
+  "aiConfirmExecSymbol": "标的",
+  "aiConfirmExecPeriod": "周期",
+  "aiConfirmExecPosition": "仓位",
+  "aiConfirmExecMarket": "市场",
+  "aiConfirmRiskBadge": "风控",
+  "aiConfirmAdviceTitle": "AI 提示",
+  "aiConfirmDisclaimer": "回测基于历史数据，无法保证实盘表现。部署前请使用模拟账户验证。",
+  "aiConfirmBackToChat": "返回对话",
+  "aiConfirmNextScript": "下一步：策略脚本",
   "aiStartBacktestPrompt": "需要我开始回测吗?",
   "aiParamsBadgePrefix": "已为你识别为",
   "@aiParamsBadgePrefix": {
@@ -1226,6 +1245,5 @@
   "aiScriptCollapse": "收起",
   "aiScriptSuccessHint": "脚本已生成、风控已注入，可继续下一步配置回测。",
   "aiScriptPrev": "上一步",
-  "aiScriptNext": "下一步：回测设置",
-  "aiConfirmNextScript": "下一步：策略脚本"
+  "aiScriptNext": "下一步：回测设置"
 }
