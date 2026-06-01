@@ -90,13 +90,15 @@ void main() {
       // 真实场景在可滚动 ListView 内不溢出；测试放宽画布高度复现真实布局。
       surfaceSize: const Size(360, 360),
       (WidgetTester t) async {
-        // 分类 Chip + 识别话术（#1831 验收 1）。
+        // 分类 badge：「已为你识别为」+ 分类 chip +「类策略，建议参数：」
+        // （#1831 验收 1 / #1897 文案对齐）。
         expect(
           find.byKey(const Key('ai-bubble-category-chip')),
           findsOneWidget,
         );
         expect(find.text('趋势跟踪'), findsOneWidget);
-        expect(find.text('已识别为「趋势跟踪」策略'), findsOneWidget);
+        expect(find.text('已为你识别为'), findsOneWidget);
+        expect(find.text('类策略，建议参数：'), findsOneWidget);
         // 「需要我开始回测吗?」+「确认策略」CTA（#1831 验收 2）。
         expect(find.text('需要我开始回测吗?'), findsOneWidget);
         expect(find.text('确认策略'), findsOneWidget);
@@ -186,7 +188,7 @@ void main() {
           find.byKey(const Key('ai-bubble-locked-banner')),
           findsOneWidget,
         );
-        expect(find.text('策略已部署，参数已锁定'), findsOneWidget);
+        expect(find.text('已归档 · 仅供查看'), findsOneWidget);
       },
     );
   });

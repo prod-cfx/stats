@@ -534,9 +534,17 @@
   "themePreviewStartBacktest": "Start Backtest",
   "aiConfirmStrategy": "Confirm Strategy",
   "aiStartBacktestPrompt": "Shall I start the backtest?",
-  "aiParamsLockedBanner": "Strategy deployed, parameters locked",
+  "aiParamsBadgePrefix": "Identified as",
+  "@aiParamsBadgePrefix": {
+    "description": "Params bubble category chip prefix, aligned with ScreenAIChat (#1897)"
+  },
+  "aiParamsBadgeSuffix": "strategy. Suggested parameters:",
+  "@aiParamsBadgeSuffix": {
+    "description": "Params bubble category chip suffix, aligned with ScreenAIChat (#1897)"
+  },
+  "aiParamsLockedBanner": "Archived · view only",
   "@aiParamsLockedBanner": {
-    "description": "Locked banner shown atop the params card of a deployed session (#1834)"
+    "description": "Locked banner shown atop the params card of a deployed session, aligned with design LockedBanner (#1834 / #1897)"
   },
   "themeToggleAutoFollowSystem": "Auto Follow System",
   "themeToggleReduceMotion": "Reduce Motion",

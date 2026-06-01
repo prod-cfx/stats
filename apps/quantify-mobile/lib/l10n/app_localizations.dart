@@ -2870,10 +2870,22 @@ abstract class AppLocalizations {
   /// **'需要我开始回测吗?'**
   String get aiStartBacktestPrompt;
 
-  /// 已部署会话参数卡顶部的锁定横幅文案（#1834）
+  /// 参数气泡分类 chip 前缀，对齐设计稿 ScreenAIChat「已为你识别为」（#1897）
   ///
   /// In zh, this message translates to:
-  /// **'策略已部署，参数已锁定'**
+  /// **'已为你识别为'**
+  String get aiParamsBadgePrefix;
+
+  /// 参数气泡分类 chip 后缀，对齐设计稿 ScreenAIChat「类策略，建议参数：」（#1897）
+  ///
+  /// In zh, this message translates to:
+  /// **'类策略，建议参数：'**
+  String get aiParamsBadgeSuffix;
+
+  /// 已部署会话参数卡顶部的锁定横幅文案，对齐设计稿 LockedBanner（#1834 / #1897）
+  ///
+  /// In zh, this message translates to:
+  /// **'已归档 · 仅供查看'**
   String get aiParamsLockedBanner;
 
   /// No description provided for @themeToggleAutoFollowSystem.

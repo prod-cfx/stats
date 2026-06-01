@@ -1445,7 +1445,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiStartBacktestPrompt => '需要我开始回测吗?';
 
   @override
-  String get aiParamsLockedBanner => '策略已部署，参数已锁定';
+  String get aiParamsBadgePrefix => '已为你识别为';
+
+  @override
+  String get aiParamsBadgeSuffix => '类策略，建议参数：';
+
+  @override
+  String get aiParamsLockedBanner => '已归档 · 仅供查看';
 
   @override
   String get themeToggleAutoFollowSystem => '自动跟随系统';

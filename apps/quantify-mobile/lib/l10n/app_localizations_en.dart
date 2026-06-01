@@ -1482,7 +1482,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiStartBacktestPrompt => 'Shall I start the backtest?';
 
   @override
-  String get aiParamsLockedBanner => 'Strategy deployed, parameters locked';
+  String get aiParamsBadgePrefix => 'Identified as';
+
+  @override
+  String get aiParamsBadgeSuffix => 'strategy. Suggested parameters:';
+
+  @override
+  String get aiParamsLockedBanner => 'Archived · view only';
 
   @override
   String get themeToggleAutoFollowSystem => 'Auto Follow System';

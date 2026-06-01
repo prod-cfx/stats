@@ -85,6 +85,10 @@ class QzChatBubble extends StatelessWidget {
     bottomLeft: Radius.circular(16),
   );
 
+  /// 参数气泡分类 badge 前/后缀文案共用样式（dim 文本、12px、行高 1.4）。
+  TextStyle _badgeTextStyle(QzColorScheme c) =>
+      TextStyle(color: c.textDim, fontSize: 12, height: 1.4);
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -155,8 +159,8 @@ class QzChatBubble extends StatelessWidget {
                     ),
                   ),
                 if (params != null && params!.isNotEmpty) ...<Widget>[
-                  // 已部署锁定态横幅（#1834，设计稿 m-screens-1.jsx:403-414）：
-                  // 参数卡顶部锁图标 +「策略已部署，参数已锁定」，accentSoft 浅底。
+                  // 已部署锁定态横幅（#1834 / #1897，设计稿 m-screens-1.jsx:403、1135）：
+                  // 参数卡顶部锁图标 +「已归档 · 仅供查看」，accentSoft 浅底。
                   if (locked) ...<Widget>[
                     const SizedBox(height: QzSpacing.sm),
                     Container(
@@ -190,13 +194,21 @@ class QzChatBubble extends StatelessWidget {
                       ),
                     ),
                   ],
-                  // 分类 Chip + 识别话术（设计稿 m-screens-1.jsx:407）：
-                  // category 取自 params['category']，话术复用 themePreviewIdentified。
+                  // 分类 badge（设计稿 m-screens-1.jsx:407）：
+                  // 「已为你识别为」+ 分类 chip +「类策略，建议参数：」，
+                  // category 取自 params['category']，前后缀走专用 l10n key
+                  // （不复用 themePreviewIdentified，该 key 被主题预览页共用）。
                   if ((params!['category'] ?? '').isNotEmpty) ...<Widget>[
                     const SizedBox(height: QzSpacing.sm),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: QzSpacing.xs,
+                      runSpacing: QzSpacing.xxs,
                       children: <Widget>[
+                        Text(
+                          AppLocalizations.of(context).aiParamsBadgePrefix,
+                          style: _badgeTextStyle(c),
+                        ),
                         Container(
                           key: const Key('ai-bubble-category-chip'),
                           padding: const EdgeInsets.symmetric(
@@ -218,17 +230,9 @@ class QzChatBubble extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: QzSpacing.xs),
-                        Flexible(
-                          child: Text(
-                            AppLocalizations.of(context)
-                                .themePreviewIdentified,
-                            style: TextStyle(
-                              color: c.textDim,
-                              fontSize: 12,
-                              height: 1.4,
-                            ),
-                          ),
+                        Text(
+                          AppLocalizations.of(context).aiParamsBadgeSuffix,
+                          style: _badgeTextStyle(c),
                         ),
                       ],
                     ),

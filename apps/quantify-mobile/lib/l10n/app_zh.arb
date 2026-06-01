@@ -537,9 +537,17 @@
   "themePreviewStartBacktest": "开始回测",
   "aiConfirmStrategy": "确认策略",
   "aiStartBacktestPrompt": "需要我开始回测吗?",
-  "aiParamsLockedBanner": "策略已部署，参数已锁定",
+  "aiParamsBadgePrefix": "已为你识别为",
+  "@aiParamsBadgePrefix": {
+    "description": "参数气泡分类 chip 前缀，对齐设计稿 ScreenAIChat「已为你识别为」（#1897）"
+  },
+  "aiParamsBadgeSuffix": "类策略，建议参数：",
+  "@aiParamsBadgeSuffix": {
+    "description": "参数气泡分类 chip 后缀，对齐设计稿 ScreenAIChat「类策略，建议参数：」（#1897）"
+  },
+  "aiParamsLockedBanner": "已归档 · 仅供查看",
   "@aiParamsLockedBanner": {
-    "description": "已部署会话参数卡顶部的锁定横幅文案（#1834）"
+    "description": "已部署会话参数卡顶部的锁定横幅文案，对齐设计稿 LockedBanner（#1834 / #1897）"
   },
   "themeToggleAutoFollowSystem": "自动跟随系统",
   "themeToggleReduceMotion": "减少动画",
