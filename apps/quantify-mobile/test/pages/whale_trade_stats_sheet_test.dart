@@ -93,19 +93,28 @@ void main() {
     expect(find.text(pos.label ?? pos.sym), findsWidgets);
   });
 
-  testWidgets('周期 PillSelect 可切换：默认 1周，点 1天后高亮', (WidgetTester tester) async {
+  testWidgets('周期 PillSelect 下拉可切换：默认药丸显示 1周，展开选 1天后药丸更新', (
+    WidgetTester tester,
+  ) async {
     final WhaleTradeStats s = mockWhaleProfiles[_knownAddress]!.stats;
     await _open(tester, stats: s);
 
-    expect(find.text('1天'), findsOneWidget);
-    final Text before = tester.widget<Text>(find.text('1天'));
-    expect(before.style?.fontWeight, FontWeight.w500);
+    // 收起态：药丸只显示当前周期 1周，1天/1月/全部 不平铺常驻。
+    expect(find.text('1周'), findsOneWidget);
+    expect(find.text('1天'), findsNothing);
 
+    // 点药丸展开下拉列表（4 档全部出现）。
+    await tester.tap(find.text('1周'));
+    await tester.pumpAndSettle();
+    expect(find.text('1天'), findsOneWidget);
+    expect(find.text('1月'), findsOneWidget);
+    expect(find.text('全部'), findsOneWidget);
+
+    // 选 1天后菜单收起，药丸更新为 1天，原 1周不再显示。
     await tester.tap(find.text('1天'));
     await tester.pumpAndSettle();
-
-    final Text after = tester.widget<Text>(find.text('1天'));
-    expect(after.style?.fontWeight, FontWeight.w700);
+    expect(find.text('1天'), findsOneWidget);
+    expect(find.text('1周'), findsNothing);
   });
 
   testWidgets('空态：成交为 0 显示「暂无成交记录」且无 PerfRow', (WidgetTester tester) async {

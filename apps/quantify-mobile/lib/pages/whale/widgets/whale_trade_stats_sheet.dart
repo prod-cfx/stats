@@ -246,51 +246,73 @@ class _AddressChip extends StatelessWidget {
   }
 }
 
+/// 周期选择器（issue #1966 决策方案 A）：对齐设计真源 jsx:2242 的 `PillSelect`
+/// 下拉形态——单药丸显示当前周期 + chevron，点击展开列表选择，而非分段平铺。
 class _PeriodSelect extends StatelessWidget {
   const _PeriodSelect({required this.value, required this.onChanged});
   final _Period value;
   final ValueChanged<_Period> onChanged;
 
+  String _label(AppLocalizations l10n, _Period p) {
+    switch (p) {
+      case _Period.day:
+        return l10n.whaleTradeStatsPeriodDay;
+      case _Period.week:
+        return l10n.whaleTradeStatsPeriodWeek;
+      case _Period.month:
+        return l10n.whaleTradeStatsPeriodMonth;
+      case _Period.all:
+        return l10n.whaleTradeStatsPeriodAll;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final List<(_Period, String)> opts = <(_Period, String)>[
-      (_Period.day, l10n.whaleTradeStatsPeriodDay),
-      (_Period.week, l10n.whaleTradeStatsPeriodWeek),
-      (_Period.month, l10n.whaleTradeStatsPeriodMonth),
-      (_Period.all, l10n.whaleTradeStatsPeriodAll),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: c.bgSoft,
-        borderRadius: BorderRadius.circular(QzRadii.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          for (final (_Period, String) o in opts)
-            GestureDetector(
-              onTap: () => onChanged(o.$1),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: o.$1 == value ? c.bgElev : Colors.transparent,
-                  borderRadius: BorderRadius.circular(QzRadii.pill),
-                ),
-                child: Text(
-                  o.$2,
-                  style: TextStyle(
-                    color: o.$1 == value ? c.text : c.textDim,
-                    fontSize: 11,
-                    fontWeight:
-                        o.$1 == value ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                ),
+    return PopupMenuButton<_Period>(
+      tooltip: '',
+      initialValue: value,
+      onSelected: onChanged,
+      offset: const Offset(0, 32),
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<_Period>>[
+        for (final _Period p in _Period.values)
+          PopupMenuItem<_Period>(
+            value: p,
+            height: 36,
+            child: Text(
+              _label(l10n, p),
+              style: TextStyle(
+                color: p == value ? c.accent : c.text,
+                fontSize: 12,
+                fontWeight: p == value ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
-        ],
+          ),
+      ],
+      // 设计 jsx:1122 药丸：elev 底 + border，当前周期文字 + chevron。
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: c.bgElev,
+          border: Border.all(color: c.borderSoft),
+          borderRadius: BorderRadius.circular(QzRadii.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              _label(l10n, value),
+              style: TextStyle(
+                color: c.text,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Icon(Icons.keyboard_arrow_down, size: 14, color: c.textMid),
+          ],
+        ),
       ),
     );
   }
