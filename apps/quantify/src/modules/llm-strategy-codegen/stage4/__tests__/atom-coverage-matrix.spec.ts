@@ -127,6 +127,15 @@ describe('Stage 4 atom coverage matrix', () => {
     expect(STAGE4_DEPLOY_READY_STATUSES).toEqual(['deploy_ready', 'corpus_pass'])
   })
 
+  it('requires deploy-ready statuses to have both backtest and deploy payload coverage', () => {
+    const invalidRows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row =>
+      STAGE4_DEPLOY_READY_STATUSES.includes(row.status)
+      && (!row.reachesBacktest || !row.reachesDeployPayload),
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
   it('contains PR2 predicate umbrella rows mapped to typed condition atoms', () => {
     const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
 

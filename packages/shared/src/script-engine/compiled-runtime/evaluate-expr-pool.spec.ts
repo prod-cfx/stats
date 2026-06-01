@@ -188,6 +188,142 @@ describe('evaluateExprPool', () => {
     expect(values.long_liquidation_gt_1m).toBe(true)
   })
 
+  it('evaluates orderbookImbalance predicates from event inbox bid and ask depth', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-1', ts: 9_000, payload: { bidDepth: 1_600, askDepth: 1_000 } },
+          ],
+        },
+      },
+      [{
+        id: 'orderbook_bid_dominant',
+        nodeType: 'predicate',
+        sourceRef: 'orderbook.imbalance',
+        payload: {
+          kind: 'orderbookImbalance',
+          params: { sourceFeedId: 'orderbook.imbalance', side: 'bid', operator: 'GT', value: 1.5 },
+        },
+        deps: [],
+      }],
+      ['orderbook_bid_dominant'],
+    )
+
+    expect(values.orderbook_bid_dominant).toBe(true)
+  })
+
+  it('fails closed for orderbookImbalance without feed data', () => {
+    const values = evaluateExprPool(
+      { timestamp: 10_000, eventInbox: {} },
+      [{
+        id: 'orderbook_missing',
+        nodeType: 'predicate',
+        sourceRef: 'orderbook.imbalance',
+        payload: {
+          kind: 'orderbookImbalance',
+          params: { sourceFeedId: 'orderbook.imbalance', side: 'bid', operator: 'GT', value: 1.5 },
+        },
+        deps: [],
+      }],
+      ['orderbook_missing'],
+    )
+
+    expect(values.orderbook_missing).toBe(false)
+  })
+
+  it('evaluates openInterestCondition predicates from open interest feed changes', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          open_interest: [
+            { id: 'oi-0', ts: 1_000, payload: { openInterest: 100 } },
+            { id: 'oi-1', ts: 9_000, payload: { openInterest: 106 } },
+          ],
+        },
+      },
+      [{
+        id: 'oi_up_5pct',
+        nodeType: 'predicate',
+        sourceRef: 'openInterest.condition',
+        payload: {
+          kind: 'openInterestCondition',
+          params: { sourceFeedId: 'open_interest', direction: 'up', operator: 'GTE', value: 5 },
+        },
+        deps: [],
+      }],
+      ['oi_up_5pct'],
+    )
+
+    expect(values.oi_up_5pct).toBe(true)
+  })
+
+  it('evaluates indicator slope up from close series', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 1, high: 1, low: 1, close: 100, volume: 10, timestamp: 1 },
+          { open: 1, high: 1, low: 1, close: 101, volume: 10, timestamp: 2 },
+          { open: 1, high: 1, low: 1, close: 102, volume: 10, timestamp: 3 },
+        ],
+      },
+      [{
+        id: 'ema_slope_up',
+        nodeType: 'predicate',
+        sourceRef: 'indicator.slope',
+        payload: { kind: 'indicatorSlope', params: { direction: 'up', period: 3 } },
+        deps: [],
+      }],
+      ['ema_slope_up'],
+    )
+
+    expect(values.ema_slope_up).toBe(true)
+  })
+
+  it('evaluates volume confirmation from current volume versus rolling average', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 1, high: 1, low: 1, close: 1, volume: 100, timestamp: 1 },
+          { open: 1, high: 1, low: 1, close: 1, volume: 100, timestamp: 2 },
+          { open: 1, high: 1, low: 1, close: 1, volume: 100, timestamp: 3 },
+          { open: 1, high: 1, low: 1, close: 1, volume: 180, timestamp: 4 },
+        ],
+      },
+      [{
+        id: 'volume_confirmed',
+        nodeType: 'predicate',
+        sourceRef: 'volume.confirmation',
+        payload: { kind: 'volumeConfirmation', params: { multiplier: 1.5, refWindow: 3 } },
+        deps: [],
+      }],
+      ['volume_confirmed'],
+    )
+
+    expect(values.volume_confirmed).toBe(true)
+  })
+
+  it('evaluates cooldown window against semantic runtime state', () => {
+    const values = evaluateExprPool(
+      {
+        semanticRuntimeState: { cooldown: { lastExitBarIndex: 3 } },
+        __compiledDecisionState: { barIndex: 6, lastTriggeredByProgram: {} },
+      },
+      [{
+        id: 'cooldown_done',
+        nodeType: 'predicate',
+        sourceRef: 'time.cooldown_window',
+        payload: { kind: 'cooldownWindow', params: { durationBars: 2 } },
+        deps: [],
+      }],
+      ['cooldown_done'],
+    )
+
+    expect(values.cooldown_done).toBe(true)
+  })
+
   it('evaluates CANDLE_PATTERN series and predicate from runtime bars', () => {
     const exprPool: Array<{
       id: string

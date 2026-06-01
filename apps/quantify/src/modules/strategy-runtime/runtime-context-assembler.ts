@@ -55,7 +55,7 @@ function buildDataSourceFeeds(
   if (!eventStreams) return undefined
 
   const feeds: Record<string, {
-    schema: 'funding' | 'liquidation' | 'webhook_event'
+    schema: 'funding' | 'liquidation' | 'orderbook' | 'open_interest' | 'webhook_event'
     permissionGranted: boolean
     hasData: boolean
   }> = {}
@@ -71,9 +71,11 @@ function buildDataSourceFeeds(
   return Object.keys(feeds).length > 0 ? feeds : undefined
 }
 
-function inferEventFeedSchema(feedId: string): 'funding' | 'liquidation' | 'webhook_event' {
+function inferEventFeedSchema(feedId: string): 'funding' | 'liquidation' | 'orderbook' | 'open_interest' | 'webhook_event' {
   if (/funding/iu.test(feedId)) return 'funding'
   if (/liquidation|liq/iu.test(feedId)) return 'liquidation'
+  if (/orderbook|book/iu.test(feedId)) return 'orderbook'
+  if (/open[_-]?interest|\boi\b/iu.test(feedId)) return 'open_interest'
   return 'webhook_event'
 }
 

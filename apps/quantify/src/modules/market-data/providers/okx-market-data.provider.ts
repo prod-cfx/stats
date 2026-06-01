@@ -79,6 +79,32 @@ interface OkxLiquidationOrdersResponse {
   }>
 }
 
+interface OkxOrderbookRow {
+  asks?: string[][]
+  bids?: string[][]
+  ts?: string
+}
+
+interface OkxOrderbookResponse {
+  code: string
+  msg: string
+  data: OkxOrderbookRow[]
+}
+
+interface OkxOpenInterestRow {
+  instId?: string
+  oi?: string
+  oiCcy?: string
+  oiUsd?: string
+  ts?: string
+}
+
+interface OkxOpenInterestResponse {
+  code: string
+  msg: string
+  data: OkxOpenInterestRow[]
+}
+
 export interface OkxRuntimeEvent {
   id: string
   ts: number
@@ -269,6 +295,71 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
       .sort((left, right) => left.ts - right.ts)
   }
 
+  async fetchOrderbookImbalanceEvents(input: { symbol: string; startMs: number; endMs: number; depth?: number }): Promise<OkxRuntimeEvent[]> {
+    const raw = extractRawSymbol(input.symbol)
+    const market = parseSymbolMarket(input.symbol)
+    const instId = this.toInstId(raw, market)
+    const depth = Math.min(Math.max(Math.floor(input.depth ?? 50), 1), 400)
+    const data = await this.requestRest<OkxOrderbookResponse>(new URL('/api/v5/market/books', this.restBaseUrl).toString(), {
+      params: { instId, sz: String(depth) },
+      timeout: this.restTimeoutMs,
+    }).catch((): OkxOrderbookResponse => ({ code: '0', msg: '', data: [] }))
+
+    return (data.data ?? [])
+      .map((row): OkxRuntimeEvent | null => {
+        const ts = this.readFiniteNumber(row.ts)
+        if (ts === null) return null
+        const bidDepth = this.sumOrderbookSize(row.bids ?? [])
+        const askDepth = this.sumOrderbookSize(row.asks ?? [])
+        if (bidDepth <= 0 || askDepth <= 0) return null
+        return {
+          id: `okx-orderbook:${instId}:${ts}`,
+          ts,
+          payload: {
+            instId,
+            bidDepth,
+            askDepth,
+            imbalanceRatio: bidDepth / askDepth,
+          },
+        }
+      })
+      .filter((event): event is OkxRuntimeEvent => event !== null)
+      .filter(event => event.ts >= input.startMs && event.ts <= input.endMs)
+      .sort((left, right) => left.ts - right.ts)
+  }
+
+  async fetchOpenInterestEvents(input: { symbol: string; startMs: number; endMs: number }): Promise<OkxRuntimeEvent[]> {
+    const raw = extractRawSymbol(input.symbol)
+    const instId = this.toInstId(raw, 'PERP')
+    const data = await this.requestRest<OkxOpenInterestResponse>(new URL('/api/v5/public/open-interest', this.restBaseUrl).toString(), {
+      params: { instType: 'SWAP', instId },
+      timeout: this.restTimeoutMs,
+    }).catch((): OkxOpenInterestResponse => ({ code: '0', msg: '', data: [] }))
+
+    return (data.data ?? [])
+      .map((row): OkxRuntimeEvent | null => {
+        const ts = this.readFiniteNumber(row.ts)
+        const openInterest = this.readFiniteNumber(row.oi)
+        if (ts === null || openInterest === null) return null
+        const openInterestCcy = this.readFiniteNumber(row.oiCcy)
+        const openInterestUsd = this.readFiniteNumber(row.oiUsd)
+        return {
+          id: `okx-open-interest:${row.instId ?? instId}:${ts}`,
+          ts,
+          payload: {
+            instId: row.instId ?? instId,
+            openInterest,
+            oi: openInterest,
+            ...(openInterestCcy !== null ? { openInterestCcy } : {}),
+            ...(openInterestUsd !== null ? { openInterestUsd } : {}),
+          },
+        }
+      })
+      .filter((event): event is OkxRuntimeEvent => event !== null)
+      .filter(event => event.ts >= input.startMs && event.ts <= input.endMs)
+      .sort((left, right) => left.ts - right.ts)
+  }
+
   async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
     this.tickHandler = params.onTick
     this.klineHandler = params.onKline
@@ -425,6 +516,13 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         ? Number(value)
         : NaN
     return Number.isFinite(numeric) ? numeric : null
+  }
+
+  private sumOrderbookSize(levels: string[][]): number {
+    return levels.reduce((sum, level) => {
+      const size = this.readFiniteNumber(level[1])
+      return size === null ? sum : sum + size
+    }, 0)
   }
 
   private fromInstId(instId: string): string {

@@ -136,4 +136,64 @@ describe('resolveRuntimeDataPlan', () => {
       { provider: 'external_feed', signalId: 'liquidation.events', sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' },
     ]))
   })
+
+  it('derives orderbook and open interest event stream requirements from upgraded atom predicates', () => {
+    const plan = resolveRuntimeDataPlan({
+      strictParams: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+      },
+      stateTimeframes: [],
+      scriptMetadata: {},
+      orchestrationScopes: [],
+      exprPool: [
+        {
+          id: 'expr_orderbook_bid_dominant',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'orderbookImbalance',
+            params: { sourceFeedId: 'orderbook.imbalance', side: 'bid', operator: 'GT', value: 1.5 },
+          },
+        },
+        {
+          id: 'expr_oi_up_5pct',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'openInterestCondition',
+            params: { sourceFeedId: 'open_interest', direction: 'up', operator: 'GTE', value: 5 },
+          },
+        },
+      ],
+    })
+
+    expect(plan.eventStreams).toEqual(expect.arrayContaining([
+      { provider: 'external_feed', signalId: 'orderbook.imbalance', sourceFeedId: 'orderbook.imbalance', schemaRef: 'orderbook' },
+      { provider: 'external_feed', signalId: 'open_interest', sourceFeedId: 'open_interest', schemaRef: 'open_interest' },
+    ]))
+  })
+
+  it('derives fallback event stream requirements when upgraded atom params are omitted', () => {
+    const plan = resolveRuntimeDataPlan({
+      strictParams: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+      },
+      stateTimeframes: [],
+      scriptMetadata: {},
+      orchestrationScopes: [],
+      exprPool: [
+        { id: 'expr_orderbook', nodeType: 'predicate', payload: { kind: 'orderbookImbalance' } },
+        { id: 'expr_oi', nodeType: 'predicate', payload: { kind: 'openInterestCondition' } },
+      ],
+    })
+
+    expect(plan.eventStreams).toEqual(expect.arrayContaining([
+      { provider: 'external_feed', signalId: 'orderbook.imbalance', sourceFeedId: 'orderbook.imbalance', schemaRef: 'orderbook' },
+      { provider: 'external_feed', signalId: 'open_interest', sourceFeedId: 'open_interest', schemaRef: 'open_interest' },
+    ]))
+  })
 })

@@ -182,6 +182,18 @@ export class BacktestJobExecutorService {
           startMs: input.dataRange.fromTs,
           endMs: input.dataRange.toTs,
         })
+      } else if (stream.schemaRef === 'orderbook') {
+        output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOrderbookImbalanceEvents({
+          symbol,
+          startMs: input.dataRange.fromTs,
+          endMs: input.dataRange.toTs,
+        })
+      } else if (stream.schemaRef === 'open_interest') {
+        output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOpenInterestEvents({
+          symbol,
+          startMs: input.dataRange.fromTs,
+          endMs: input.dataRange.toTs,
+        })
       }
     }
 

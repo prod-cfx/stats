@@ -1046,6 +1046,18 @@ export class SignalGeneratorService {
           startMs: since,
           endMs: primaryCloseTs,
         })
+      } else if (stream.schemaRef === 'orderbook' && this.okxMarketDataProvider) {
+        eventStreams[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOrderbookImbalanceEvents({
+          symbol: symbolCode,
+          startMs: since,
+          endMs: primaryCloseTs,
+        })
+      } else if (stream.schemaRef === 'open_interest' && this.okxMarketDataProvider) {
+        eventStreams[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOpenInterestEvents({
+          symbol: symbolCode,
+          startMs: since,
+          endMs: primaryCloseTs,
+        })
       } else {
         eventStreams[stream.sourceFeedId] = []
       }

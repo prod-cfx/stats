@@ -31,7 +31,7 @@ export interface RuntimeEventStreamRequirement {
   signalId: string
   sourceFeedId: string
   ttlMs?: number
-  schemaRef: 'webhook_event' | 'funding' | 'liquidation'
+  schemaRef: 'webhook_event' | 'funding' | 'liquidation' | 'orderbook' | 'open_interest'
 }
 
 export interface RuntimeDataPlan {

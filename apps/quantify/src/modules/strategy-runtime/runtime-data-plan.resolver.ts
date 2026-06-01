@@ -58,17 +58,36 @@ export function readEventStreamsFromExprPool(exprPool: unknown): RuntimeEventStr
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
     const payloadRecord = payload as Record<string, unknown>
     const params = payloadRecord.params
-    if (!params || typeof params !== 'object' || Array.isArray(params)) return []
-    const paramsRecord = params as Record<string, unknown>
+    const paramsRecord = params && typeof params === 'object' && !Array.isArray(params)
+      ? params as Record<string, unknown>
+      : {}
 
-    if (payloadRecord.kind === 'fundingRateCondition' || payloadRecord.kind === 'liquidationCondition') {
-      const fallback = payloadRecord.kind === 'fundingRateCondition'
-        ? { sourceFeedId: 'funding.rate', schemaRef: 'funding' as const }
-        : { sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' as const }
+    if (
+      payloadRecord.kind === 'fundingRateCondition'
+      || payloadRecord.kind === 'liquidationCondition'
+      || payloadRecord.kind === 'orderbookImbalance'
+      || payloadRecord.kind === 'openInterestCondition'
+    ) {
+      const fallback = (() => {
+        switch (payloadRecord.kind) {
+          case 'fundingRateCondition':
+            return { sourceFeedId: 'funding.rate', schemaRef: 'funding' as const }
+          case 'liquidationCondition':
+            return { sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' as const }
+          case 'orderbookImbalance':
+            return { sourceFeedId: 'orderbook.imbalance', schemaRef: 'orderbook' as const }
+          case 'openInterestCondition':
+          default:
+            return { sourceFeedId: 'open_interest', schemaRef: 'open_interest' as const }
+        }
+      })()
       const sourceFeedId = typeof paramsRecord.sourceFeedId === 'string' && paramsRecord.sourceFeedId.trim()
         ? paramsRecord.sourceFeedId.trim()
         : fallback.sourceFeedId
-      const schemaRef = paramsRecord.schemaRef === 'funding' || paramsRecord.schemaRef === 'liquidation'
+      const schemaRef = paramsRecord.schemaRef === 'funding'
+        || paramsRecord.schemaRef === 'liquidation'
+        || paramsRecord.schemaRef === 'orderbook'
+        || paramsRecord.schemaRef === 'open_interest'
         ? paramsRecord.schemaRef
         : fallback.schemaRef
 

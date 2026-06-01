@@ -104,4 +104,70 @@ describe('okx market data provider', () => {
     expect(btcRows).toHaveLength(2)
     expect(ethRows).toHaveLength(0)
   })
+
+  it('fetches orderbook imbalance events from OKX books depth', async () => {
+    httpMock.get.mockReturnValue(of({
+      data: {
+        code: '0',
+        msg: '',
+        data: [{
+          ts: '1710000000000',
+          bids: [['100', '2'], ['99', '1']],
+          asks: [['101', '1'], ['102', '1']],
+        }],
+      },
+    }))
+
+    const events = await provider.fetchOrderbookImbalanceEvents({
+      symbol: 'BTCUSDT:PERP',
+      startMs: 1709999999000,
+      endMs: 1710000001000,
+      depth: 2,
+    })
+
+    const [url, requestConfig] = httpMock.get.mock.calls[0] as [string, { params: Record<string, string> }]
+    expect(url).toContain('/api/v5/market/books')
+    expect(requestConfig.params).toEqual({ instId: 'BTC-USDT-SWAP', sz: '2' })
+    expect(events).toEqual([{
+      id: 'okx-orderbook:BTC-USDT-SWAP:1710000000000',
+      ts: 1710000000000,
+      payload: {
+        instId: 'BTC-USDT-SWAP',
+        bidDepth: 3,
+        askDepth: 2,
+        imbalanceRatio: 1.5,
+      },
+    }])
+  })
+
+  it('fetches open interest events from OKX public open interest', async () => {
+    httpMock.get.mockReturnValue(of({
+      data: {
+        code: '0',
+        msg: '',
+        data: [{ instId: 'BTC-USDT-SWAP', ts: '1710000000000', oi: '123', oiCcy: '12.3', oiUsd: '123000' }],
+      },
+    }))
+
+    const events = await provider.fetchOpenInterestEvents({
+      symbol: 'BTCUSDT:PERP',
+      startMs: 1709999999000,
+      endMs: 1710000001000,
+    })
+
+    const [url, requestConfig] = httpMock.get.mock.calls[0] as [string, { params: Record<string, string> }]
+    expect(url).toContain('/api/v5/public/open-interest')
+    expect(requestConfig.params).toEqual({ instType: 'SWAP', instId: 'BTC-USDT-SWAP' })
+    expect(events).toEqual([{
+      id: 'okx-open-interest:BTC-USDT-SWAP:1710000000000',
+      ts: 1710000000000,
+      payload: {
+        instId: 'BTC-USDT-SWAP',
+        openInterest: 123,
+        oi: 123,
+        openInterestCcy: 12.3,
+        openInterestUsd: 123000,
+      },
+    }])
+  })
 })

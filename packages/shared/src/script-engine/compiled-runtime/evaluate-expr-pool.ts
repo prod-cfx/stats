@@ -191,6 +191,16 @@ function evaluatePredicate(
       return evaluateFundingRateCondition(node, ctx)
     case 'liquidationCondition':
       return evaluateLiquidationCondition(node, ctx)
+    case 'orderbookImbalance':
+      return evaluateOrderbookImbalance(node, ctx)
+    case 'openInterestCondition':
+      return evaluateOpenInterestCondition(node, ctx)
+    case 'indicatorSlope':
+      return evaluateIndicatorSlope(node, ctx)
+    case 'volumeConfirmation':
+      return evaluateVolumeConfirmation(node, ctx)
+    case 'cooldownWindow':
+      return evaluateCooldownWindow(node, ctx)
     case 'sequence':
       return evaluateGenericSequence(node, values, ctx)
     case 'TOUCH_LEVEL_DOWN':
@@ -292,6 +302,121 @@ function evaluateLiquidationCondition(
     const notional = readFirstNumber(payload, ['notionalUsd', 'notionalUSDT', 'notional_usd', 'notional', 'value'])
     return notional !== null && compareByOperator(notional, threshold, operator)
   })
+}
+
+function evaluateOrderbookImbalance(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const sourceFeedId = readStringParam(node.payload.params, 'sourceFeedId') ?? 'orderbook.imbalance'
+  const threshold = readNumberParam(node.payload.params, 'value')
+    ?? readNumberParam(node.payload.params, 'ratio')
+    ?? 1
+  const operator = readStringParam(node.payload.params, 'operator') ?? 'GT'
+  const side = readStringParam(node.payload.params, 'side')?.toLowerCase() ?? 'bid'
+  const events = readVisibleFeedEvents(ctx, sourceFeedId)
+
+  return events.some((event) => {
+    const payload = readPayloadRecord(event.payload)
+    if (!payload) return false
+    const bidDepth = readFirstNumber(payload, ['bidDepth', 'bid_depth', 'bidLiquidity', 'bid_liquidity', 'bids', 'bid'])
+    const askDepth = readFirstNumber(payload, ['askDepth', 'ask_depth', 'askLiquidity', 'ask_liquidity', 'asks', 'ask'])
+    if (bidDepth === null || askDepth === null || bidDepth <= 0 || askDepth <= 0) return false
+    const ratio = side === 'ask' || side === 'sell'
+      ? askDepth / bidDepth
+      : bidDepth / askDepth
+    return Number.isFinite(ratio) && compareByOperator(ratio, threshold, operator)
+  })
+}
+
+function evaluateOpenInterestCondition(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const sourceFeedId = readStringParam(node.payload.params, 'sourceFeedId') ?? 'open_interest'
+  const threshold = readNumberParam(node.payload.params, 'value')
+    ?? readNumberParam(node.payload.params, 'changePct')
+    ?? 0
+  const operator = readStringParam(node.payload.params, 'operator') ?? 'GT'
+  const direction = readStringParam(node.payload.params, 'direction')?.toLowerCase() ?? 'up'
+  const values = readVisibleFeedEvents(ctx, sourceFeedId)
+    .slice()
+    .sort((left, right) => Number(left.ts ?? 0) - Number(right.ts ?? 0))
+    .map(event => {
+      const payload = readPayloadRecord(event.payload)
+      return payload ? readFirstNumber(payload, ['openInterest', 'open_interest', 'oi', 'value']) : null
+    })
+    .filter((value): value is number => value !== null && value > 0)
+  if (values.length < 2) return false
+
+  const previous = values[values.length - 2]
+  const current = values[values.length - 1]
+  const changePct = ((current - previous) / previous) * 100
+  const comparable = direction === 'down' ? -changePct : changePct
+  return Number.isFinite(comparable) && compareByOperator(comparable, threshold, operator)
+}
+
+function evaluateIndicatorSlope(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const period = Math.max(2, Math.floor(readNumberParam(node.payload.params, 'period') ?? 3))
+  const direction = readStringParam(node.payload.params, 'direction')?.toLowerCase() ?? 'up'
+  const bars = resolveBarsForNode(node, ctx)
+  if (bars.length < period) return false
+  const window = bars.slice(-period)
+  const first = window[0]?.close
+  const last = window[window.length - 1]?.close
+  if (typeof first !== 'number' || typeof last !== 'number' || !Number.isFinite(first) || !Number.isFinite(last)) {
+    return false
+  }
+
+  if (direction === 'down') return last < first
+  if (direction === 'flat') return last === first
+  return last > first
+}
+
+function evaluateVolumeConfirmation(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const refWindow = Math.max(1, Math.floor(readNumberParam(node.payload.params, 'refWindow') ?? 20))
+  const multiplier = readNumberParam(node.payload.params, 'multiplier') ?? 1.5
+  const bars = resolveBarsForNode(node, ctx)
+  if (bars.length < refWindow + 1 || multiplier <= 0) return false
+  const currentVolume = bars[bars.length - 1]?.volume
+  if (typeof currentVolume !== 'number' || !Number.isFinite(currentVolume)) return false
+  const previousVolumes = bars
+    .slice(-(refWindow + 1), -1)
+    .map(bar => bar.volume)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  if (previousVolumes.length !== refWindow) return false
+  const average = previousVolumes.reduce((sum, value) => sum + value, 0) / refWindow
+  return average > 0 && currentVolume >= average * multiplier
+}
+
+function evaluateCooldownWindow(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const durationBars = readNumberParam(node.payload.params, 'durationBars')
+    ?? readNumberParam(node.payload.params, 'bars')
+  if (typeof durationBars === 'number') {
+    const currentBarIndex = readNestedNumber(ctx, ['__compiledDecisionState', 'barIndex'])
+      ?? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'currentBarIndex'])
+    const lastExitBarIndex = readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastExitBarIndex'])
+      ?? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastStopLossBarIndex'])
+    if (currentBarIndex === null || lastExitBarIndex === null) return false
+    return currentBarIndex - lastExitBarIndex >= durationBars
+  }
+
+  const durationMs = readNumberParam(node.payload.params, 'durationMs')
+  if (typeof durationMs !== 'number') return false
+  const now = resolveRuntimeTimestamp(ctx)
+  const lastExitTs = readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastExitTs'])
+    ?? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastStopLossTs'])
+  if (now === null || lastExitTs === null) return false
+  return now - lastExitTs >= durationMs
 }
 
 function readVisibleFeedEvents(
@@ -1337,6 +1462,18 @@ function readNumberParam(
       ? Number(raw)
       : NaN
   return Number.isFinite(value) ? value : null
+}
+
+function readNestedNumber(
+  record: Record<string, unknown>,
+  path: readonly string[],
+): number | null {
+  let current: unknown = record
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null
+    current = (current as Record<string, unknown>)[key]
+  }
+  return typeof current === 'number' && Number.isFinite(current) ? current : null
 }
 
 function readStringValue(value: unknown): string | null {
