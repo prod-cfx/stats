@@ -7,9 +7,9 @@ import 'sparkline_view.dart';
 
 /// 「本周推荐」featured hero 卡（#1565）。
 ///
-/// 紫色渐变背景 + 半透明 sparkline 装饰 + 3 项核心指标（CAGR / Sharpe / 回撤）。
-/// 顶层包 `InkWell` 让整卡可点；颜色不读 theme token——hero 是品牌渐变，
-/// 在 3 套主题下保持视觉锚点一致。
+/// 紫色三段渐变背景 + 半透明 sparkline 装饰 + 标题/副标题 + 查看详情胶囊；
+/// 对齐设计稿 `ScreenMarket` hero（无指标行）。顶层包 `InkWell` 让整卡可点；
+/// 颜色不读 theme token——hero 是品牌渐变，在 3 套主题下保持视觉锚点一致。
 class FeaturedHeroCard extends StatelessWidget {
   const FeaturedHeroCard({
     super.key,
@@ -20,14 +20,10 @@ class FeaturedHeroCard extends StatelessWidget {
   final StrategyMarketItem item;
   final VoidCallback onTap;
 
-  String _fmtPct(double v, {bool sign = true}) =>
-      '${sign && v > 0 ? '+' : ''}${v.toStringAsFixed(1)}%';
-
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final StrategyCard card = item.card;
-    final StrategyMarketStats stats = item.stats;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: QzSpacing.md),
@@ -39,13 +35,16 @@ class FeaturedHeroCard extends StatelessWidget {
           child: Ink(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(QzRadii.card),
+              // 三段渐变对齐设计稿 ScreenMarket hero。
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: <Color>[
-                  Color(0xFF1A1530),
-                  Color(0xFF2B1E5A),
+                  Color(0xFF16122F),
+                  Color(0xFF241B52),
+                  Color(0xFF14112C),
                 ],
+                stops: <double>[0.0, 0.52, 1.0],
               ),
             ),
             padding: const EdgeInsets.fromLTRB(
@@ -117,60 +116,69 @@ class FeaturedHeroCard extends StatelessWidget {
                             borderRadius:
                                 BorderRadius.circular(QzRadii.input),
                           ),
-                          child: Text(
-                            l10n.strategyHomeFeaturedBadge,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                            ),
+                          // badge 前缀 ★ 对齐设计稿。
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              const Text(
+                                '★',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  height: 1.0,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                l10n.strategyHomeFeaturedBadge,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: QzSpacing.sm),
-                    Text(
-                      card.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: QzSpacing.xxs),
-                    Text(
-                      '${card.author} · ${l10n.strategyHomeFeaturedSubtitle}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.82),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: QzSpacing.sm),
+                    // 标题/副标题 + 查看详情胶囊（对齐设计稿，无指标行）。
                     Row(
                       children: <Widget>[
-                        _HeroStat(
-                          label: l10n.strategyHomeStatCagr,
-                          value: _fmtPct(stats.cagr),
-                          hot: true,
+                        // TODO(#1903): 头像（36 币种符号）依赖 #1884 sym 派生落地后补。
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                card.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: QzSpacing.xxs),
+                              Text(
+                                '${card.author} · '
+                                '${l10n.strategyHomeFeaturedSubtitle}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.82),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(width: QzSpacing.lg),
-                        _HeroStat(
-                          label: l10n.strategyHomeStatSharpe,
-                          value: stats.sharpe.toStringAsFixed(2),
-                        ),
-                        const SizedBox(width: QzSpacing.lg),
-                        _HeroStat(
-                          label: l10n.strategyHomeStatDrawdown,
-                          value: _fmtPct(stats.maxDrawdown, sign: false),
-                        ),
-                        const Spacer(),
+                        const SizedBox(width: QzSpacing.sm),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 13,
@@ -212,46 +220,6 @@ class FeaturedHeroCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({
-    required this.label,
-    required this.value,
-    this.hot = false,
-  });
-
-  final String label;
-  final String value;
-  final bool hot;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 9,
-            letterSpacing: 0.4,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: hot ? const Color(0xFF7EFFB0) : Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
     );
   }
 }

@@ -292,6 +292,35 @@ void main() {
     );
   });
 
+  testWidgets('featured hero：badge 带 ★ 前缀且无指标行 (#1885)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final Finder hero = find.byKey(const Key('strategy-featured-hero'));
+    expect(hero, findsOneWidget);
+    // badge 含 ★ 前缀 + 本周推荐文案
+    expect(
+      find.descendant(of: hero, matching: find.text('★')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: hero, matching: find.text('本周推荐')),
+      findsOneWidget,
+    );
+    // 删除指标行后 hero 内不出现 CAGR / Sharpe / 回撤 标签
+    expect(
+      find.descendant(of: hero, matching: find.text('CAGR')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: hero, matching: find.text('Sharpe')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: hero, matching: find.text('回撤')),
+      findsNothing,
+    );
+  });
+
   testWidgets('筛选 sheet：点击右上 icon 弹出底部 sheet (#1565)',
       (WidgetTester tester) async {
     await _pump(tester);
