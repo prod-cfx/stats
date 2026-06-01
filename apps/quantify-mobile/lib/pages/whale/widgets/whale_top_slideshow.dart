@@ -334,15 +334,22 @@ class WhaleTopCard extends StatelessWidget {
 
   Widget _miniStats(QzColorScheme c) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: <Widget>[
-        _MiniStat(label: '交易', value: '${entry.trades}'),
+        _MiniStat(
+          label: '交易',
+          value: '${entry.trades}',
+          align: CrossAxisAlignment.start,
+        ),
         _MiniStat(
           label: '胜率',
           value: '${entry.winRate.toStringAsFixed(2)}%',
           highlight: entry.winRate >= 60,
         ),
-        _MiniStat(label: '持仓', value: '${entry.positions}'),
+        _MiniStat(
+          label: '持仓',
+          value: '${entry.positions}',
+          align: CrossAxisAlignment.end,
+        ),
       ],
     );
   }
@@ -353,28 +360,46 @@ class _MiniStat extends StatelessWidget {
     required this.label,
     required this.value,
     this.highlight = false,
+    this.align = CrossAxisAlignment.center,
   });
 
   final String label;
   final String value;
   final bool highlight;
 
+  /// 内部文字对齐，对齐设计 `MiniStatTop` 的 `textAlign`：交易左 / 胜率中 / 持仓右。
+  final CrossAxisAlignment align;
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    return Column(
-      children: <Widget>[
-        Text(label, style: TextStyle(color: c.textDim, fontSize: 9)),
-        const SizedBox(height: 1),
-        Text(
-          value,
-          style: TextStyle(
-            color: highlight ? c.marketUp : c.text,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: align,
+        children: <Widget>[
+          Text(
+            label,
+            textAlign: _textAlign,
+            style: TextStyle(color: c.textDim, fontSize: 9),
           ),
-        ),
-      ],
+          const SizedBox(height: 1),
+          Text(
+            value,
+            textAlign: _textAlign,
+            style: TextStyle(
+              color: highlight ? c.marketUp : c.text,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  TextAlign get _textAlign => switch (align) {
+        CrossAxisAlignment.start => TextAlign.left,
+        CrossAxisAlignment.end => TextAlign.right,
+        _ => TextAlign.center,
+      };
 }
