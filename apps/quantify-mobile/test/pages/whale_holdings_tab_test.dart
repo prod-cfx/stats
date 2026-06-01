@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/mock/fixtures/whale_holdings.dart';
@@ -7,6 +8,7 @@ import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_holdings_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_holdings_tab.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_card_controls.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_holding_card.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -227,6 +229,39 @@ void main() {
       final List<String> after = _cardAddresses(tester);
       // 持仓价值降序首卡应为最大 value 持仓（0xa5b0…1d41，1.55 亿）。
       expect(after.first, '0xa5b0…1d41');
+    });
+
+    testWidgets('Row1 渲染地址链接 / 复制按钮 / 「巨鲸」徽标 / 趋势按钮',
+        (WidgetTester tester) async {
+      await _pump(tester);
+      expect(find.byType(WhaleAddressLink), findsWidgets);
+      expect(find.byType(WhaleCopyButton), findsWidgets);
+      expect(find.byType(WhaleTrendButton), findsWidgets);
+      expect(find.text('巨鲸'), findsWidgets);
+    });
+
+    testWidgets('点击复制按钮复制完整地址并提示', (WidgetTester tester) async {
+      final List<MethodCall> calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') calls.add(call);
+          return null;
+        },
+      );
+      await _pump(tester);
+      await tester.tap(find.byType(WhaleCopyButton).first);
+      await tester.pump();
+      expect(calls, isNotEmpty);
+      expect(
+        (calls.first.arguments as Map<dynamic, dynamic>)['text'],
+        isNotEmpty,
+      );
+      expect(find.text('地址已复制'), findsOneWidget);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
     });
   });
 }

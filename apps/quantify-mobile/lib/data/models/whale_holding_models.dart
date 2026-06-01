@@ -6,6 +6,8 @@
 /// 筛选与排序在 tab 本地态即时完成。
 library;
 
+import 'whale_profile_models.dart';
+
 /// 持仓方向。
 enum WhaleHoldingSide { long, short }
 
@@ -170,4 +172,23 @@ List<String> whaleHoldingCoins(List<WhaleHoldingPosition> entries) {
     if (!coins.contains(e.symbol)) coins.add(e.symbol);
   }
   return coins;
+}
+
+/// 由持仓条目派生交易统计入参（issue #1977 持仓卡「趋势/交易统计」入口）。
+///
+/// [WhaleTradeStats] 已与 WhaleProfile 解耦，统计弹窗只需 address + stats。持仓
+/// 卡仅持有单仓展示串（盈亏/未实现盈亏），无逐资产/逐仓位明细，故派生一个轻量
+/// stats：复用已有展示串，明细列表留空（mock 阶段）。真实读路径接通后改为按
+/// 地址拉取完整 stats。
+WhaleTradeStats whaleHoldingTradeStats(WhaleHoldingPosition e) {
+  return WhaleTradeStats(
+    pnlDisplay: e.pnlDisplay,
+    pnlTone: e.isProfit ? 'up' : 'dn',
+    winRatePct: 50,
+    realizedDisplay: '—',
+    unrealizedDisplay: e.pnlDisplay,
+    longPct: e.isLong ? 100 : 0,
+    shortPct: e.isLong ? 0 : 100,
+    assetPerf: const <WhaleAssetPerf>[],
+  );
 }

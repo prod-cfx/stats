@@ -2237,6 +2237,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleLeaderTrendTooltip => '交易统计';
 
   @override
+  String get whaleHoldingsBadge => '巨鲸';
+
+  @override
   String get whaleFeedEmpty => '暂无符合条件的巨鲸事件';
 
   @override

@@ -4350,6 +4350,12 @@ abstract class AppLocalizations {
   /// **'交易统计'**
   String get whaleLeaderTrendTooltip;
 
+  /// No description provided for @whaleHoldingsBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'巨鲸'**
+  String get whaleHoldingsBadge;
+
   /// No description provided for @whaleFeedEmpty.
   ///
   /// In zh, this message translates to:

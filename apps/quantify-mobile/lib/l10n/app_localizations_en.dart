@@ -2289,6 +2289,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleLeaderTrendTooltip => 'Trade stats';
 
   @override
+  String get whaleHoldingsBadge => 'Whale';
+
+  @override
   String get whaleFeedEmpty => 'No whale events matching criteria';
 
   @override

@@ -846,6 +846,7 @@
   "whaleLeaderCopyTooltip": "Copy address",
   "whaleLeaderCopied": "Address copied",
   "whaleLeaderTrendTooltip": "Trade stats",
+  "whaleHoldingsBadge": "Whale",
   "whaleFeedEmpty": "No whale events matching criteria",
   "whaleTimeJustNow": "Just now",
   "whaleTimeMinutesAgoSuffix": " min ago",

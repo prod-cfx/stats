@@ -5,13 +5,23 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import 'whale_card_controls.dart';
 
 /// 巨鲸持仓明细卡（issue #1790）。对齐设计稿 `WhaleHoldingCard`：
 /// 地址 + 币种/全仓/多空/杠杆 + 持仓价值/未实现盈亏 + 保证金/开盘价/清算价。
 class WhaleHoldingCard extends StatelessWidget {
-  const WhaleHoldingCard({required this.entry, super.key});
+  const WhaleHoldingCard({
+    required this.entry,
+    required this.onOpen,
+    required this.onCopy,
+    required this.onStats,
+    super.key,
+  });
 
   final WhaleHoldingPosition entry;
+  final VoidCallback onOpen;
+  final VoidCallback onCopy;
+  final VoidCallback onStats;
 
   @override
   Widget build(BuildContext context) {
@@ -29,26 +39,27 @@ class WhaleHoldingCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // Row 1 — 地址 + 创建时间。
+          // Row 1 — 地址 + 复制 + 「巨鲸」徽标 + 时间 + 趋势按钮（对齐设计稿）。
           Row(
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  entry.address,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const <FontFeature>[
-                      FontFeature.tabularFigures(),
-                    ],
-                  ),
+              Flexible(
+                child: WhaleAddressLink(
+                  address: entry.address,
+                  onOpen: onOpen,
+                  fontSize: 13,
                 ),
               ),
+              const SizedBox(width: QzSpacing.xs),
+              WhaleCopyButton(onCopy: onCopy),
+              const SizedBox(width: QzSpacing.xs),
+              _WhaleBadge(label: l10n.whaleHoldingsBadge),
+              const Spacer(),
               Text(
                 entry.timeDisplay,
                 style: TextStyle(color: c.textDim, fontSize: 11),
               ),
+              const SizedBox(width: QzSpacing.sm),
+              WhaleTrendButton(onStats: onStats),
             ],
           ),
           const SizedBox(height: QzSpacing.sm),
@@ -166,6 +177,34 @@ class WhaleHoldingCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 「巨鲸」徽标：紫色背景 + 紫色文字（对齐设计稿 violet / violetSoft）。
+class _WhaleBadge extends StatelessWidget {
+  const _WhaleBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: c.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }

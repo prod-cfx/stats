@@ -864,6 +864,7 @@
   "whaleLeaderCopyTooltip": "复制地址",
   "whaleLeaderCopied": "地址已复制",
   "whaleLeaderTrendTooltip": "交易统计",
+  "whaleHoldingsBadge": "巨鲸",
   "whaleFeedEmpty": "暂无符合条件的巨鲸事件",
   "whaleTimeJustNow": "刚刚",
   "whaleTimeMinutesAgoSuffix": " 分钟前",

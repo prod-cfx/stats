@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../data/models/whale_holding_models.dart';
 import '../../../data/providers.dart';
@@ -8,6 +10,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 import '../widgets/whale_holding_card.dart';
+import '../widgets/whale_trade_stats_sheet.dart';
 
 /// 巨鲸动向 — 持仓 tab（issue #1790）。对齐设计稿 `WhaleHoldings`：
 /// 币种 chip + 方向/盈亏筛选 + 更多排序 + 持仓明细卡列表。
@@ -45,6 +48,32 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
 
   void _selectCoin(String? coin) {
     setState(() => _filter = _filter.copyWith(coin: coin));
+  }
+
+  /// 点地址 → 详情页（按缩写地址路由，对齐设计稿 holdings → profile）。
+  void _openProfile(WhaleHoldingPosition entry) {
+    context.push('/whale/profile/${Uri.encodeComponent(entry.address)}');
+  }
+
+  /// 点趋势按钮 / 卡片 → 交易统计弹窗（复用 #1859 的 [WhaleTradeStatsSheet]）。
+  void _openStats(WhaleHoldingPosition entry) {
+    WhaleTradeStatsSheet.show(
+      context,
+      address: entry.address,
+      stats: whaleHoldingTradeStats(entry),
+    );
+  }
+
+  Future<void> _copyAddress(WhaleHoldingPosition entry) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    await Clipboard.setData(ClipboardData(text: entry.address));
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(l10n.whaleLeaderCopied),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   @override
@@ -100,7 +129,12 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
                     QzSpacing.lg,
                     QzSpacing.sm,
                   ),
-                  child: WhaleHoldingCard(entry: e),
+                  child: WhaleHoldingCard(
+                    entry: e,
+                    onOpen: () => _openProfile(e),
+                    onCopy: () => _copyAddress(e),
+                    onStats: () => _openStats(e),
+                  ),
                 ),
           ],
         );
