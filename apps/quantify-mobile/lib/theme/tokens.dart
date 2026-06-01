@@ -37,6 +37,8 @@ class QzStatus {
   static const Color marketDown = Color(0xFFE5484D);
   /// Fixed cyan accent for perp margin-rate bar (design spec).
   static const Color cyan = Color(0xFF22D3EE);
+  /// Fixed notification badge red (design spec, theme-invariant).
+  static const Color badgeNotification = Color(0xFFE5484D);
 }
 
 /// Status colors for dark theme.

@@ -41,6 +41,7 @@ class QzColorScheme {
     required this.statusInfo,
     required this.marketUp,
     required this.marketDown,
+    required this.badgeNotification,
   });
 
   final Color bg;
@@ -71,6 +72,9 @@ class QzColorScheme {
   final Color statusInfo;
   final Color marketUp;
   final Color marketDown;
+
+  /// 通知 badge 固定红，设计稿 theme-invariant（不随 bg/accent 变化）。
+  final Color badgeNotification;
 }
 
 class _BgPalette {
@@ -300,5 +304,6 @@ QzColorScheme qzColors(QzBg bg, QzAccent accent) {
     statusInfo: isDark ? QzStatusDark.info : QzStatus.info,
     marketUp: isDark ? QzStatusDark.marketUp : QzStatus.marketUp,
     marketDown: isDark ? QzStatusDark.marketDown : QzStatus.marketDown,
+    badgeNotification: QzStatus.badgeNotification,
   );
 }

@@ -15,6 +15,7 @@ class QzNotificationBell extends StatelessWidget {
     required this.tooltip,
     this.iconKey,
     this.circular = false,
+    this.bordered = true,
   });
 
   /// 未读数量；<= 0 时不渲染 badge。
@@ -29,6 +30,10 @@ class QzNotificationBell extends StatelessWidget {
   /// 沿用 whale / strategy 等页面的低强度顶栏样式。
   final bool circular;
 
+  /// 圆形变体是否带描边/填充背景。默认 true = market 行情页样式（c.bgElev 填充 + c.border 描边）；
+  /// false = 设计稿巨鲸顶栏样式（透明、无边框）。仅在 circular 为 true 时生效。
+  final bool bordered;
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -39,9 +44,9 @@ class QzNotificationBell extends StatelessWidget {
             height: 36,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: c.bgElev,
+                color: bordered ? c.bgElev : Colors.transparent,
                 shape: BoxShape.circle,
-                border: Border.all(color: c.border),
+                border: bordered ? Border.all(color: c.border) : null,
               ),
               child: IconButton(
                 key: iconKey,
@@ -83,7 +88,7 @@ class QzNotificationBell extends StatelessWidget {
                     const BoxConstraints(minWidth: 14, minHeight: 14),
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
-                  color: c.statusDanger,
+                  color: c.badgeNotification,
                   borderRadius: BorderRadius.circular(7),
                   border: Border.all(color: c.bgElev, width: 1.5),
                 ),
