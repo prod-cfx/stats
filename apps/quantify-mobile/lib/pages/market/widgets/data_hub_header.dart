@@ -31,15 +31,12 @@ class DataHubItem {
 
 /// 「数据」hub 顶部统一 header（设计稿 `DataHubHeader`）。
 ///
-/// 两行结构：
-/// - 第一行：静态标题「数据」+ 右侧通知铃铛（复用 [QzNotificationBell]，
-///   未读 > 0 显示红 badge）。
-/// - 第二行：横向可滑动 tab 条（5 项，选中态 accent 下划线），通过 [onSelect]
-///   切换 [current]。
+/// 单行结构：横向可滑动 tab 条（5 项，选中态 accent 下划线）`Expanded` 占满
+/// 左侧，右侧通知铃铛（复用 [QzNotificationBell]，未读 > 0 显示红 badge）贴右
+/// 垂直居中。无独立「数据」标题。通过 [onSelect] 切换 [current]。
 ///
-/// 决策（#1921）：设计稿注释明确 tab 条是「下拉的可发现替代品」，二者择一。
-/// 旧实现把标题下拉与 tab 条同屏并存属冗余双控件，这里收敛为单一导航入口
-/// （tab 条），标题降级为静态文本，所有 5 个子屏统一形态、无按屏特例分支。
+/// 决策（#2016）：设计稿 `DataHubHeader` 为单行（tab 条 + 铃铛同行），不含静态
+/// 标题。所有 5 个子屏统一形态、无按屏特例分支。
 class DataHubHeader extends StatelessWidget {
   const DataHubHeader({
     super.key,
@@ -95,56 +92,35 @@ class DataHubHeader extends StatelessWidget {
         bottom: false,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: c.borderSoft)),
+            border: Border(bottom: BorderSide(color: c.border)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  QzSpacing.lg,
-                  QzSpacing.sm,
-                  QzSpacing.md,
-                  0,
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        l10n.dataHubTitle,
-                        key: const Key('data-hub-title'),
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(left: QzSpacing.lg),
+                  child: Row(
+                    children: <Widget>[
+                      for (final DataHubItem item in list)
+                        _HubTab(
+                          key: Key('data-hub-tab-${item.screen.name}'),
+                          label: item.label,
+                          selected: item.screen == current,
+                          onTap: () => onSelect(item.screen),
                         ),
-                      ),
-                    ),
-                    QzNotificationBell(
-                      iconKey: const Key('data-hub-notification-bell'),
-                      unread: unread,
-                      onTap: onBell,
-                      tooltip: l10n.dataHubNotificationTooltip,
-                      circular: true,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(left: QzSpacing.lg),
-                child: Row(
-                  children: <Widget>[
-                    for (final DataHubItem item in list)
-                      _HubTab(
-                        key: Key('data-hub-tab-${item.screen.name}'),
-                        label: item.label,
-                        selected: item.screen == current,
-                        onTap: () => onSelect(item.screen),
-                      ),
-                  ],
+              Padding(
+                padding: const EdgeInsets.only(left: QzSpacing.xs, right: 14),
+                child: QzNotificationBell(
+                  iconKey: const Key('data-hub-notification-bell'),
+                  unread: unread,
+                  onTap: onBell,
+                  tooltip: l10n.dataHubNotificationTooltip,
+                  circular: true,
                 ),
               ),
             ],
@@ -178,30 +154,32 @@ class _HubTab extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: Container(
-          margin: const EdgeInsets.only(right: 20),
-          padding: const EdgeInsets.only(top: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                label,
-                style: TextStyle(
-                  color: selected ? c.text : c.textMid,
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected ? c.text : c.textMid,
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                height: 2,
-                width: 28,
-                decoration: BoxDecoration(
-                  color: selected ? c.accent : Colors.transparent,
-                  borderRadius: BorderRadius.circular(2),
+                const SizedBox(height: 10),
+                Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: selected ? c.accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

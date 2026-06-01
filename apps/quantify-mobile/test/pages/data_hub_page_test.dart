@@ -142,21 +142,12 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('header 标题为静态文本，不再是下拉触发器（#1921）',
+  testWidgets('header 无静态「数据」标题文本（#2016）',
       (WidgetTester tester) async {
     await _pumpHub(tester);
-    // 决策 #1921：收敛为单一导航入口（tab 条），标题降级为静态 Text。
-    final Finder title = find.byKey(const Key('data-hub-title'));
-    expect(title, findsOneWidget);
-    expect(
-      tester.widget(title),
-      isA<Text>().having((Text t) => t.data, 'data', '数据'),
-    );
-    // 不应存在标题下拉的 PopupMenuButton；点击标题不弹 popover、不切屏。
+    // 决策 #2016：header 收敛为单行（tab 条 + 铃铛），不再渲染静态标题。
+    expect(find.byKey(const Key('data-hub-title')), findsNothing);
+    // 仍不应存在标题下拉的 PopupMenuButton。
     expect(find.byType(PopupMenuButton<DataHubScreen>), findsNothing);
-    await tester.tap(title);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byType(MarketHomeBody), findsOneWidget);
   });
 }
