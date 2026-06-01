@@ -619,6 +619,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketHomeSearchPlaceholder => '搜索币种 · BTC, ETH, SOL…';
 
   @override
+  String get dataHubTitle => '数据';
+
+  @override
   String get dataHubTabMarket => '行情数据';
 
   @override

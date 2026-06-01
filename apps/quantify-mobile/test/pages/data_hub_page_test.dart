@@ -135,15 +135,21 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('DataHubTitle 下拉切换子屏', (WidgetTester tester) async {
+  testWidgets('header 标题为静态文本，不再是下拉触发器（#1921）',
+      (WidgetTester tester) async {
     await _pumpHub(tester);
-    expect(find.byType(MarketHomeBody), findsOneWidget);
-    await tester.tap(find.byKey(const Key('data-hub-title')));
-    await tester.pumpAndSettle();
-    // popover 列出全部子屏 label；点「多空比」切过去。
-    await tester.tap(find.text('多空比').last);
+    // 决策 #1921：收敛为单一导航入口（tab 条），标题降级为静态 Text。
+    final Finder title = find.byKey(const Key('data-hub-title'));
+    expect(title, findsOneWidget);
+    expect(
+      tester.widget(title),
+      isA<Text>().having((Text t) => t.data, 'data', '数据'),
+    );
+    // 不应存在标题下拉的 PopupMenuButton；点击标题不弹 popover、不切屏。
+    expect(find.byType(PopupMenuButton<DataHubScreen>), findsNothing);
+    await tester.tap(title);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byType(LongShortBody), findsOneWidget);
+    expect(find.byType(MarketHomeBody), findsOneWidget);
   });
 }

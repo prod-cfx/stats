@@ -13,7 +13,10 @@ import '../../../widgets/qz_notification_bell.dart';
 /// `data-hub-tab-<enum.name>`，供 widget test 定位。
 enum DataHubScreen { market, longShort, aggOrders, predict, coinStock }
 
-/// 单个子屏的展示元数据（label + 下拉副标题 hint）。
+/// 单个子屏的展示元数据。
+///
+/// `label` 用于 tab 条；`hint` 为保留字段（与设计稿 `DATA_HUB_ITEMS`
+/// 数据模型对齐，#1921 收敛掉下拉后当前无消费方，不做破坏性删除）。
 class DataHubItem {
   const DataHubItem({
     required this.screen,
@@ -26,15 +29,17 @@ class DataHubItem {
   final String hint;
 }
 
-/// 「数据」hub 顶部统一 header（设计稿 `DataHubHeader` + `DataHubTitle`）。
+/// 「数据」hub 顶部统一 header（设计稿 `DataHubHeader`）。
 ///
-/// 单行结构：
-/// - 左侧 [DataHubTitle] 标题下拉（当前 label + caret，点击弹 popover 列出 5 项，
-///   含 hint 副标题 + 选中态 accent 高亮 + check）。
-/// - 中部横向可滑动 tab 条（5 项，选中态 accent 下划线）。
-/// - 右侧通知铃铛（复用 [QzNotificationBell]，未读 > 0 显示红 badge）。
+/// 两行结构：
+/// - 第一行：静态标题「数据」+ 右侧通知铃铛（复用 [QzNotificationBell]，
+///   未读 > 0 显示红 badge）。
+/// - 第二行：横向可滑动 tab 条（5 项，选中态 accent 下划线），通过 [onSelect]
+///   切换 [current]。
 ///
-/// tab 条与标题下拉都通过 [onSelect] 切换 [current]（设计稿两入口并存）。
+/// 决策（#1921）：设计稿注释明确 tab 条是「下拉的可发现替代品」，二者择一。
+/// 旧实现把标题下拉与 tab 条同屏并存属冗余双控件，这里收敛为单一导航入口
+/// （tab 条），标题降级为静态文本，所有 5 个子屏统一形态、无按屏特例分支。
 class DataHubHeader extends StatelessWidget {
   const DataHubHeader({
     super.key,
@@ -105,10 +110,16 @@ class DataHubHeader extends StatelessWidget {
                 child: Row(
                   children: <Widget>[
                     Expanded(
-                      child: _DataHubTitle(
-                        items: list,
-                        current: current,
-                        onSelect: onSelect,
+                      child: Text(
+                        l10n.dataHubTitle,
+                        key: const Key('data-hub-title'),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ),
                     QzNotificationBell(
@@ -140,108 +151,6 @@ class DataHubHeader extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// 标题下拉：当前子屏 label + caret，点击弹 popover 切换。
-class _DataHubTitle extends StatelessWidget {
-  const _DataHubTitle({
-    required this.items,
-    required this.current,
-    required this.onSelect,
-  });
-
-  final List<DataHubItem> items;
-  final DataHubScreen current;
-  final ValueChanged<DataHubScreen> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    final DataHubItem active =
-        items.firstWhere((DataHubItem i) => i.screen == current);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: PopupMenuButton<DataHubScreen>(
-        key: const Key('data-hub-title'),
-        tooltip: active.label,
-        offset: const Offset(0, 36),
-        color: c.bgElev,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(QzRadii.card),
-          side: BorderSide(color: c.border),
-        ),
-        onSelected: onSelect,
-        itemBuilder: (BuildContext context) => <PopupMenuEntry<DataHubScreen>>[
-          for (final DataHubItem item in items)
-            PopupMenuItem<DataHubScreen>(
-              value: item.screen,
-              child: _TitleMenuRow(
-                item: item,
-                selected: item.screen == current,
-              ),
-            ),
-        ],
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Flexible(
-              child: Text(
-                active.label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down, size: 18, color: c.textMid),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TitleMenuRow extends StatelessWidget {
-  const _TitleMenuRow({required this.item, required this.selected});
-
-  final DataHubItem item;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    final Color titleColor = selected ? c.accent : c.text;
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                item.label,
-                style: TextStyle(
-                  color: titleColor,
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                item.hint,
-                style: TextStyle(color: c.textDim, fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-        if (selected) Icon(Icons.check, size: 16, color: c.accent),
-      ],
     );
   }
 }

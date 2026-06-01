@@ -205,6 +205,7 @@
   "marketHomeSearchTooltip": "Search",
   "marketHomeSearchClose": "Close search",
   "marketHomeSearchPlaceholder": "Search symbol · BTC, ETH, SOL…",
+  "dataHubTitle": "Data",
   "dataHubTabMarket": "Market",
   "dataHubTabLongShort": "Long/Short",
   "dataHubTabAggOrders": "Agg. Orders",

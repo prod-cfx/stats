@@ -652,6 +652,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketHomeSearchPlaceholder => 'Search symbol · BTC, ETH, SOL…';
 
   @override
+  String get dataHubTitle => 'Data';
+
+  @override
   String get dataHubTabMarket => 'Market';
 
   @override
