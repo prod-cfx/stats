@@ -539,6 +539,27 @@ describe('semanticSupportClassifierService', () => {
     expect(result.state.trigger[0].support).toBeUndefined()
   })
 
+  it('routes explicit leverage position effects through projection instead of unsupported fallback', () => {
+    const result = service.classify(baseState({
+      rules: [{
+        id: 'entry-with-leverage',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.leverage', params: { value: 2 } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+  })
+
   it('preserves substrate metadata when resolving executable moving-average indicator aliases', () => {
     const resolved = (service as unknown as ClassifierInternals).resolveTriggerSupport({
       id: 'entry-ma',

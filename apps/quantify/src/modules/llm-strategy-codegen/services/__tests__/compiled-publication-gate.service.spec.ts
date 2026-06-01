@@ -504,6 +504,135 @@ describe('compiledPublicationGateService', () => {
     }))
   })
 
+  it('uses locked leverage as perp backtest and deployment default', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-perp-leverage' }),
+    }
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+    )
+    const ir = createIrFixture({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      instrumentType: 'perpetual',
+      timeframes: ['15m'],
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cross' as const,
+      tickSize: 0.1,
+      pricePrecision: 1,
+      quantityPrecision: 2,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-perp-leverage',
+      strategyTemplateId: 'template-perp',
+      strategyInstanceId: 'instance-perp',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1', canonicalDigest: 'sha256:perp', confirmation: { required: false } },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
+      graphSnapshot: { version: 3, status: 'confirmed', trigger: [], actions: [], risk: [], meta: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 25, executionTags: [] } },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'perp-leverage' },
+      scriptSummary: { indicators: [] },
+      lockedParams: { positionPct: 25, leverage: 2 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      strategyConfig: expect.objectContaining({
+        strategyDeclaredLeverageRange: { min: 2, max: 2 },
+      }),
+      backtestConfigDefaults: expect.objectContaining({ leverage: 2 }),
+      deploymentExecutionDefaults: expect.objectContaining({ leverage: 2 }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        strategyDeclaredLeverageRange: { min: 2, max: 2 },
+        defaultLeverage: 2,
+        effectiveAllowedLeverageRange: { min: 1, max: 2 },
+      }),
+      lockedParams: expect.objectContaining({ leverage: 2 }),
+    }))
+  })
+
+  it('caps locked perp leverage at the platform risk maximum', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-perp-leverage-capped' }),
+    }
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+    )
+    const ir = createIrFixture({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      instrumentType: 'perpetual',
+      timeframes: ['15m'],
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cross' as const,
+      tickSize: 0.1,
+      pricePrecision: 1,
+      quantityPrecision: 2,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-perp-leverage-capped',
+      strategyTemplateId: 'template-perp',
+      strategyInstanceId: 'instance-perp',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1', canonicalDigest: 'sha256:perp-capped', confirmation: { required: false } },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
+      graphSnapshot: { version: 3, status: 'confirmed', trigger: [], actions: [], risk: [], meta: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 25, executionTags: [] } },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'perp-leverage-capped' },
+      scriptSummary: { indicators: [] },
+      lockedParams: { positionPct: 25, leverage: 8 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      strategyConfig: expect.objectContaining({
+        strategyDeclaredLeverageRange: { min: 5, max: 5 },
+      }),
+      backtestConfigDefaults: expect.objectContaining({ leverage: 5 }),
+      deploymentExecutionDefaults: expect.objectContaining({ leverage: 5 }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        platformRiskMaxLeverage: 5,
+        strategyDeclaredLeverageRange: { min: 5, max: 5 },
+        defaultLeverage: 5,
+        effectiveAllowedLeverageRange: { min: 1, max: 5 },
+      }),
+      lockedParams: expect.objectContaining({ leverage: 8 }),
+    }))
+  })
+
   it('publishes deploy leverage ranges for generated perpetual snapshots', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-perp-1' }),

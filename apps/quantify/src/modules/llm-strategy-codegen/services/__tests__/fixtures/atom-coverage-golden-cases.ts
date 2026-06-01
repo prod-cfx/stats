@@ -982,22 +982,21 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'projection_gate',
   },
   {
-    id: 'golden-corpus-030-recognized-unsupported-leverage',
-    name: 'recognized unsupported leverage',
+    id: 'golden-corpus-030-supported-leverage',
+    name: 'supported leverage',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，使用 10 倍杠杆。',
     tags: ['trend', 'position_lifecycle'],
     expectedAtoms: [
       { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
       { key: 'open_long', category: 'action', minContractSubstrate: true },
-      { key: 'position.leverage', category: 'position' },
+      { key: 'position.leverage', category: 'position', minContractSubstrate: true },
     ],
     expectedKeys: [
       'indicator.cross_over',
       'open_long',
       'position.leverage',
-      'unsupported:position.leverage',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'projection_gate',
   },
   {
     id: 'golden-corpus-031-recognized-unsupported-margin-mode',

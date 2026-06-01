@@ -89,7 +89,7 @@ interface FormalStrategyConfig {
     value: number
     asset?: string
   }
-  strategyDeclaredLeverageRange: null
+  strategyDeclaredLeverageRange: { min: number; max: number } | null
 }
 
 interface FormalBacktestConfigDefaults {
@@ -111,7 +111,7 @@ interface FormalDeploymentExecutionDefaults {
 
 interface FormalDeploymentExecutionConstraints {
   platformRiskMaxLeverage: number
-  strategyDeclaredLeverageRange: null
+  strategyDeclaredLeverageRange: { min: number; max: number } | null
   defaultLeverage: number
   effectiveAllowedLeverageRange: { min: number; max: number }
   supportedPriceSources: Array<'open' | 'close' | 'mid'>
@@ -832,6 +832,7 @@ export class CompiledPublicationGateService {
   private buildStrategyConfig(input: PublishCompiledSnapshotInput): FormalStrategyConfig {
     const [baseTimeframe, ...stateTimeframes] = input.ir.market.timeframes
     const marketType = input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot'
+    const declaredLeverage = this.resolveDeclaredLeverage(input)
     const symbol = assertStrictSymbol(input.ir.market.symbol, {
       sessionId: input.sessionId,
       marketType,
@@ -846,14 +847,15 @@ export class CompiledPublicationGateService {
         ? input.ir.portfolio.sizing.value
         : null,
       positionSizing: input.ir.portfolio.sizing,
-      strategyDeclaredLeverageRange: null,
+      strategyDeclaredLeverageRange: declaredLeverage === null ? null : { min: declaredLeverage, max: declaredLeverage },
     }
   }
 
   private buildBacktestConfigDefaults(input: PublishCompiledSnapshotInput): FormalBacktestConfigDefaults {
+    const leverage = this.resolveDeclaredLeverage(input) ?? 1
     return {
       initialCash: 10000,
-      leverage: 1,
+      leverage,
       slippageBps: 10,
       feeBps: 5,
       priceSource: this.resolvePriceSource(input.ir.market.priceFeed),
@@ -865,8 +867,9 @@ export class CompiledPublicationGateService {
     input: PublishCompiledSnapshotInput,
   ): FormalDeploymentExecutionDefaults {
     const isPerp = input.ir.market.instrumentType === 'perpetual'
+    const leverage = this.resolveDeclaredLeverage(input) ?? 1
     return {
-      leverage: 1,
+      leverage,
       priceSource: this.resolvePriceSource(input.ir.market.priceFeed),
       orderType: input.ir.executionPolicy.orderTypeDefault,
       timeInForce: input.ir.executionPolicy.timeInForce,
@@ -882,17 +885,27 @@ export class CompiledPublicationGateService {
     const platformRiskMaxLeverage = isPerp
       ? DEFAULT_PERP_PLATFORM_MAX_LEVERAGE
       : 1
+    const declaredLeverage = this.resolveDeclaredLeverage(input)
+    const strategyDeclaredLeverageRange = declaredLeverage === null ? null : { min: declaredLeverage, max: declaredLeverage }
     return {
       platformRiskMaxLeverage,
-      strategyDeclaredLeverageRange: null,
+      strategyDeclaredLeverageRange,
       defaultLeverage: defaults.leverage,
-      effectiveAllowedLeverageRange: { min: 1, max: platformRiskMaxLeverage },
+      effectiveAllowedLeverageRange: { min: 1, max: declaredLeverage ?? platformRiskMaxLeverage },
       supportedPriceSources: [defaults.priceSource],
       supportedOrderTypes: [defaults.orderType],
       supportedTimeInForce: [defaults.timeInForce],
       ...(isPerp ? { supportedTdModes: ['cross'] as const } : {}),
       constraintExplanation: 'strategy/default constraints pending account-capability intersection',
     }
+  }
+
+  private resolveDeclaredLeverage(input: PublishCompiledSnapshotInput): number | null {
+    if (input.ir.market.instrumentType !== 'perpetual') return null
+    const value = input.lockedParams.leverage
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? Math.min(value, DEFAULT_PERP_PLATFORM_MAX_LEVERAGE)
+      : null
   }
 
   private resolvePriceSource(priceFeed: CanonicalStrategyIrV1['market']['priceFeed']): 'open' | 'close' | 'mid' {

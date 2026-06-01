@@ -682,10 +682,10 @@ const STANDALONE_ATOM_MAP = new Map<string, SemanticRegisteredAtomDefinition>([
   }],
   // ── recognized_unsupported position / risk ──
   ['position.leverage', {
-    key: 'position.leverage', category: 'position', supportStatus: 'recognized_unsupported',
-    requiredParams: [], defaultableParams: [], executableProjection: [], openSlots: [],
-    unsupported: { displayName: '策略杠杆声明', reasonCode: 'leverage_contract_public_beta_unsupported', publicReason: '策略内声明杠杆当前公测暂未支持生成和回测。' },
-    replacement: DEFAULT_REPLACEMENT,
+    key: 'position.leverage', category: 'position', supportStatus: 'supported_executable',
+    requiredParams: ['value'], defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [], contractSubstrate: positionSubstrate(),
   }],
   ['position.margin_mode', {
     key: 'position.margin_mode', category: 'position', supportStatus: 'recognized_unsupported',

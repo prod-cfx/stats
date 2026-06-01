@@ -485,6 +485,7 @@ export class CodegenPublicationGenerationStage {
 
     const position = args.semanticState.position
     const rulesPositionPct = this.readRulesOnlyPositionPct(args.semanticState)
+    const rulesLeverage = this.readRulesOnlyLeverage(args.semanticState)
     if (rulesPositionPct !== null) {
       locked.positionPct = rulesPositionPct
     } else if (
@@ -493,6 +494,16 @@ export class CodegenPublicationGenerationStage {
       && Number.isFinite(position.value)
     ) {
       locked.positionPct = position.value <= 1 ? position.value * 100 : position.value
+    }
+    if (rulesLeverage !== null) {
+      locked.leverage = rulesLeverage
+    } else if (
+      position?.status === 'locked'
+      && position.mode === 'position.leverage'
+      && Number.isFinite(position.value)
+      && position.value > 0
+    ) {
+      locked.leverage = position.value
     }
 
     for (const riskLeaf of this.collectRulesOnlyEffectAtoms(args.semanticState, 'risks')) {
@@ -619,8 +630,26 @@ export class CodegenPublicationGenerationStage {
     for (const leaf of this.collectRulesOnlyEffectAtoms(semanticState, 'positions')) {
       if (leaf.key !== 'position.per_order_budget' && leaf.key !== 'position.sizing') continue
       const value = leaf.params.value
+      const sizing = leaf.params.sizing
+      if (sizing && typeof sizing === 'object' && !Array.isArray(sizing)) {
+        const sizingValue = (sizing as { value?: unknown }).value
+        if (typeof sizingValue === 'number' && Number.isFinite(sizingValue) && sizingValue > 0) {
+          return sizingValue <= 1 ? Number((sizingValue * 100).toFixed(8)) : sizingValue
+        }
+      }
       if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
         return value <= 1 ? Number((value * 100).toFixed(8)) : value
+      }
+    }
+    return null
+  }
+
+  private readRulesOnlyLeverage(semanticState: SemanticState): number | null {
+    for (const leaf of this.collectRulesOnlyEffectAtoms(semanticState, 'positions')) {
+      if (leaf.key !== 'position.leverage') continue
+      const value = leaf.params.value
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value
       }
     }
     return null

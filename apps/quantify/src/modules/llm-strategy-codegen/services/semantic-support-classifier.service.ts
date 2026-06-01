@@ -48,6 +48,11 @@ export interface SemanticSupportClassification {
 }
 
 type ResolvedSemanticAtom = ReturnType<SemanticAtomRegistryService['resolve']>
+type LegacyFlatSemanticState = SemanticState & {
+  trigger?: SemanticTriggerState[]
+  action?: SemanticActionState[]
+  risk?: SemanticRiskState[]
+}
 
 // 不变量 D — orchestration 节点的 support 判定必须经 orchestration registry
 //   当前所有 SemanticOrchestrationContractKind 都走 orchestrationRegistry.getContractByKey；
@@ -68,12 +73,25 @@ export class SemanticSupportClassifierService {
   ) {}
 
   classify(state: SemanticState, strategyVersion?: StrategyVersionInfo): SemanticSupportClassification {
+    const legacyState = state as LegacyFlatSemanticState
     const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
     const unknownAtoms: string[] = []
     const derivedOpenSlots: SemanticSlotState[] = []
 
-    this.collectRulesFactSupport(state, unsupportedAtoms, unknownAtoms, strategyVersion)
+    this.collectRulesPositionFactSupport(state, unsupportedAtoms, unknownAtoms, strategyVersion)
     const facts = this.rulesMainflowReader.readFacts(state)
+
+    const trigger = (legacyState.trigger ?? []).map((triggerState) => {
+      if (triggerState.status === 'superseded') {
+        return { ...triggerState }
+      }
+
+      const resolved = this.applyRuntimeVersionGate(this.resolveTriggerSupport(triggerState), strategyVersion)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      const nextTrigger = withRegistryOpenSlots(withSupportMetadata(triggerState, resolved), resolved)
+      derivedOpenSlots.push(...readNodeOpenSlots(nextTrigger))
+      return nextTrigger
+    })
 
     facts.filter(fact => fact.role === 'condition').map(fact => this.factToTrigger(fact)).forEach((trigger) => {
       if (trigger.status === 'superseded') {
@@ -86,6 +104,21 @@ export class SemanticSupportClassifierService {
     })
 
     const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms, strategyVersion)
+
+    const action = (legacyState.action ?? []).map((actionState) => {
+      if (actionState.status === 'superseded') {
+        return { ...actionState }
+      }
+
+      const resolved = this.applyRuntimeVersionGate(this.registry.resolve(actionState.key), strategyVersion)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      const nextAction = withAddPositionConstraintOpenSlot(
+        withRegistryOpenSlots(withSupportMetadata(actionState, resolved), resolved),
+        hasActiveAddPositionConstraint(state, this.rulesMainflowReader),
+      )
+      derivedOpenSlots.push(...readNodeOpenSlots(nextAction))
+      return nextAction
+    })
 
     facts.filter(fact => fact.role === 'action').map(fact => this.factToAction(fact)).forEach((action) => {
       if (action.status === 'superseded') {
@@ -113,12 +146,31 @@ export class SemanticSupportClassifierService {
       derivedOpenSlots.push(...readNodeOpenSlots(withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)))
     })
 
+    const risk = (legacyState.risk ?? []).map((riskState) => {
+      if (riskState.status === 'superseded') {
+        return { ...riskState }
+      }
+
+      const riskParams = 'params' in riskState && riskState.params !== undefined
+        ? riskState.params as Record<string, unknown>
+        : {}
+      const resolved = this.applyRuntimeVersionGate(this.registry.resolve(riskState.key, riskParams), strategyVersion)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      const nextRisk = withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
+      derivedOpenSlots.push(...readNodeOpenSlots(nextRisk))
+      return nextRisk
+    })
+
     this.classifyOrchestrationFacts(state, unknownAtoms)
 
-    const nextState: SemanticState = {
+    const nextState = {
       ...state,
       position,
-    }
+    } as LegacyFlatSemanticState
+
+    if (legacyState.trigger !== undefined) nextState.trigger = trigger
+    if (legacyState.action !== undefined) nextState.action = action
+    if (legacyState.risk !== undefined) nextState.risk = risk
 
     if (unknownAtoms.length > 0) {
       return {
@@ -268,20 +320,17 @@ export class SemanticSupportClassifierService {
     }
   }
 
-  private collectRulesFactSupport(
+  private collectRulesPositionFactSupport(
     state: SemanticState,
     unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'],
     unknownAtoms: string[],
     strategyVersion?: StrategyVersionInfo,
   ): void {
     if (!state.rules?.length) return
-    const supportRoles = ['condition', 'action', 'risk', 'position'] as const
-    for (const role of supportRoles) {
-      for (const fact of this.rulesMainflowReader.readFactsByRole(state, role)) {
-        if (fact.status === 'superseded') continue
-        const resolved = this.applyRuntimeVersionGate(this.registry.resolve(fact.key, fact.params), strategyVersion)
-        this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      }
+    for (const fact of this.rulesMainflowReader.readFactsByRole(state, 'position')) {
+      if (fact.status === 'superseded') continue
+      const resolved = this.applyRuntimeVersionGate(this.registry.resolve(fact.key, fact.params), strategyVersion)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
     }
   }
 

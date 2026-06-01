@@ -1815,6 +1815,53 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('carries rules-only leverage position effects into locked params', async () => {
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      new SpecDescBuilderService(),
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+        scriptProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:semantic-leverage' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+    )
+    const semanticState = buildLockedBollingerSemanticState()
+    semanticState.position = null
+    semanticState.rules = semanticState.rules?.map(rule => rule.phase === 'entry'
+      ? {
+          ...rule,
+          effects: {
+            ...rule.effects,
+            positions: [
+              { kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.35 } } },
+              { kind: 'atom', key: 'position.leverage', params: { value: 2 } },
+            ],
+          },
+        }
+      : rule)
+
+    const artifacts = await stage.generate({ semanticState })
+
+    expect(artifacts.lockedParams).toEqual(expect.objectContaining({
+      positionPct: 35,
+      leverage: 2,
+    }))
+    expect(artifacts.normalizedIntent.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.35,
+    }))
+  })
+
   it('uses normalized ETHUSDT semantic context symbol in publication artifacts', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
