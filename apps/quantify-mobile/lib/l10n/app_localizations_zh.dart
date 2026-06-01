@@ -1010,24 +1010,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aggOiRowAll => '全部';
 
   @override
-  String get aggSortQty => '持仓量';
-
-  @override
-  String get aggSortShare => '占比';
-
-  @override
-  String get aggSortH1 => '1h 变化';
-
-  @override
-  String get aggSortH4 => '4h 变化';
-
-  @override
-  String get aggSortH24 => '24h 变化';
-
-  @override
-  String get aggSortOiVol => 'OI/V';
-
-  @override
   String get aggCoinSearchHint => '搜索币种';
 
   @override

@@ -1044,24 +1044,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aggOiRowAll => 'All';
 
   @override
-  String get aggSortQty => 'Open interest';
-
-  @override
-  String get aggSortShare => 'Share';
-
-  @override
-  String get aggSortH1 => '1h change';
-
-  @override
-  String get aggSortH4 => '4h change';
-
-  @override
-  String get aggSortH24 => '24h change';
-
-  @override
-  String get aggSortOiVol => 'OI/V';
-
-  @override
   String get aggCoinSearchHint => 'Search coin';
 
   @override

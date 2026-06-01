@@ -79,24 +79,6 @@ class OiRow {
   final double h4;
   final double h24;
   final double oiVol;
-
-  /// 排序键取值（与 [OiSortKey] 对应）。
-  double valueFor(OiSortKey key) {
-    switch (key) {
-      case OiSortKey.qty:
-        return qty;
-      case OiSortKey.pct:
-        return pct;
-      case OiSortKey.h1:
-        return h1;
-      case OiSortKey.h4:
-        return h4;
-      case OiSortKey.h24:
-        return h24;
-      case OiSortKey.oiVol:
-        return oiVol;
-    }
-  }
 }
 
 /// 持仓量总计行。
@@ -119,9 +101,6 @@ class OiSnapshot {
   final OiTotal total;
   final List<OiRow> rows;
 }
-
-/// 持仓量 6 指标排序键。
-enum OiSortKey { qty, pct, h1, h4, h24, oiVol }
 
 /// 成交量单行（某交易所，单位：十亿美元 B）。
 class VolRow {

@@ -2030,42 +2030,6 @@ abstract class AppLocalizations {
   /// **'全部'**
   String get aggOiRowAll;
 
-  /// No description provided for @aggSortQty.
-  ///
-  /// In zh, this message translates to:
-  /// **'持仓量'**
-  String get aggSortQty;
-
-  /// No description provided for @aggSortShare.
-  ///
-  /// In zh, this message translates to:
-  /// **'占比'**
-  String get aggSortShare;
-
-  /// No description provided for @aggSortH1.
-  ///
-  /// In zh, this message translates to:
-  /// **'1h 变化'**
-  String get aggSortH1;
-
-  /// No description provided for @aggSortH4.
-  ///
-  /// In zh, this message translates to:
-  /// **'4h 变化'**
-  String get aggSortH4;
-
-  /// No description provided for @aggSortH24.
-  ///
-  /// In zh, this message translates to:
-  /// **'24h 变化'**
-  String get aggSortH24;
-
-  /// No description provided for @aggSortOiVol.
-  ///
-  /// In zh, this message translates to:
-  /// **'OI/V'**
-  String get aggSortOiVol;
-
   /// No description provided for @aggCoinSearchHint.
   ///
   /// In zh, this message translates to:

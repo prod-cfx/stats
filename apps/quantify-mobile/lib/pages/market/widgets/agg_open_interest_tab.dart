@@ -10,13 +10,13 @@ import 'agg_coin_chips.dart';
 import 'agg_exchange_avatar.dart';
 import 'agg_format.dart';
 
-/// 排序方向：降序 → 升序 → 无（与设计稿 `OpenInterestTab` desc/asc/null 循环一致）。
-enum _SortDir { desc, asc, none }
-
 /// 聚合持仓量 tab（设计稿 `OpenInterestTab`:1245）。
 ///
-/// 币种 chips + 搜索；交易所表（占比条 / 持仓 USD+量 / 24H 变化 badge / 全部行）；
-/// 6 指标排序（持仓量/占比/1h/4h/24h/OI-V）。
+/// 币种 chips + 交易所表（占比条 / 持仓 USD+量 / 24H 变化 badge / 全部行）。
+///
+/// 排序入口已按设计稿对齐移除（Issue #1919，decisions.md 同日节）：设计稿
+/// `OpenInterestTab` 渲染层只有 chips + 表格，排序 state 在设计稿中即为未渲染
+/// 死代码；表格按 fixtures 原始顺序展示，不再提供排序按钮 / 抽屉。
 class AggOpenInterestTab extends StatefulWidget {
   const AggOpenInterestTab({super.key});
 
@@ -26,94 +26,13 @@ class AggOpenInterestTab extends StatefulWidget {
 
 class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
   String _coin = 'BTC';
-  OiSortKey _sortKey = OiSortKey.qty;
-  _SortDir _sortDir = _SortDir.desc;
-
-  String _sortLabel(OiSortKey k, AppLocalizations l10n) {
-    switch (k) {
-      case OiSortKey.qty:
-        return l10n.aggSortQty;
-      case OiSortKey.pct:
-        return l10n.aggSortShare;
-      case OiSortKey.h1:
-        return l10n.aggSortH1;
-      case OiSortKey.h4:
-        return l10n.aggSortH4;
-      case OiSortKey.h24:
-        return l10n.aggSortH24;
-      case OiSortKey.oiVol:
-        return l10n.aggSortOiVol;
-    }
-  }
-
-  void _pickSort(OiSortKey k) {
-    setState(() {
-      if (k != _sortKey) {
-        _sortKey = k;
-        _sortDir = _SortDir.desc;
-      } else {
-        _sortDir = switch (_sortDir) {
-          _SortDir.desc => _SortDir.asc,
-          _SortDir.asc => _SortDir.none,
-          _SortDir.none => _SortDir.desc,
-        };
-      }
-    });
-  }
-
-  Future<void> _openSortSheet() async {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final OiSortKey? picked = await showModalBottomSheet<OiSortKey>(
-      context: context,
-      builder: (BuildContext ctx) {
-        final QzColorScheme c = ctx.qzScheme;
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              for (final OiSortKey k in OiSortKey.values)
-                ListTile(
-                  key: Key('agg-oi-sort-${k.name}'),
-                  title: Text(
-                    _sortLabel(k, l10n),
-                    style: TextStyle(
-                      color: k == _sortKey ? c.accent : c.text,
-                    ),
-                  ),
-                  trailing: k == _sortKey
-                      ? Icon(Icons.check, color: c.accent, size: 18)
-                      : null,
-                  onTap: () => Navigator.of(ctx).pop(k),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-    if (picked != null) _pickSort(picked);
-  }
-
-  List<OiRow> _sorted(OiSnapshot data) {
-    if (_sortDir == _SortDir.none) return data.rows;
-    final int sign = _sortDir == _SortDir.desc ? -1 : 1;
-    return data.rows.toList()
-      ..sort((OiRow a, OiRow b) =>
-          sign * a.valueFor(_sortKey).compareTo(b.valueFor(_sortKey)));
-  }
-
-  IconData get _sortIcon => switch (_sortDir) {
-        _SortDir.desc => Icons.arrow_downward,
-        _SortDir.asc => Icons.arrow_upward,
-        _SortDir.none => Icons.swap_vert,
-      };
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final OiSnapshot? data = kOiData[_coin];
-    final List<OiRow> rows = data == null ? <OiRow>[] : _sorted(data);
+    final List<OiRow> rows = data?.rows ?? <OiRow>[];
     final double maxPct = rows.isEmpty
         ? 1
         : rows.map((OiRow r) => r.pct).reduce((double a, double b) => a > b ? a : b);
@@ -122,35 +41,10 @@ class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
       key: const Key('agg-oi-list'),
       padding: const EdgeInsets.only(top: QzSpacing.md, bottom: QzSpacing.xxl),
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: AggCoinChips(
-                coins: kOiCoins,
-                value: _coin,
-                onChanged: (String v) => setState(() => _coin = v),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: QzSpacing.sm),
-              child: OutlinedButton.icon(
-                key: const Key('agg-oi-sort-button'),
-                onPressed: _openSortSheet,
-                icon: Icon(_sortIcon, size: 14, color: c.textMid),
-                label: Text(
-                  _sortLabel(_sortKey, l10n),
-                  style: TextStyle(
-                      color: c.text, fontSize: 11, fontWeight: FontWeight.w600),
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 30),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
-                  side: BorderSide(color: c.border),
-                ),
-              ),
-            ),
-          ],
+        AggCoinChips(
+          coins: kOiCoins,
+          value: _coin,
+          onChanged: (String v) => setState(() => _coin = v),
         ),
         const SizedBox(height: QzSpacing.sm),
         if (data == null)

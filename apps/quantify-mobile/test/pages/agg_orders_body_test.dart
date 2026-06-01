@@ -13,7 +13,7 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// 覆盖验收标准：
 /// - AC1 子 tab 切换：聚合挂单 / 聚合持仓量 / 聚合成交量
 /// - AC2 聚合挂单：视图切换、价格精度抽屉、交易所来源抽屉、买一↔卖一中价条
-/// - AC3 聚合持仓量：表格 + 全部行 + 6 指标排序
+/// - AC3 聚合持仓量：表格 + 全部行（排序入口已按设计稿对齐移除，Issue #1919）
 /// - AC4 聚合成交量：总计行 + 各所占比条
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(430, 1600));
@@ -97,9 +97,9 @@ void main() {
     await tester.tap(find.byKey(const Key('agg-subtab-openInterest')));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('agg-oi-list')), findsOneWidget);
-    // 全部行 + 排序按钮
+    // 全部行（排序入口已按设计稿对齐移除，Issue #1919）
     expect(find.text('全部'), findsOneWidget);
-    expect(find.byKey(const Key('agg-oi-sort-button')), findsOneWidget);
+    expect(find.byKey(const Key('agg-oi-sort-button')), findsNothing);
 
     await tester.tap(find.byKey(const Key('agg-subtab-volume')));
     await tester.pump(const Duration(milliseconds: 250));
@@ -150,23 +150,16 @@ void main() {
     expect(find.textContaining('--'), findsWidgets);
   });
 
-  testWidgets('持仓量排序抽屉可选 OI/V（AC3）',
+  testWidgets('持仓量 tab 无排序按钮 / 抽屉，表格按原始顺序（AC3，Issue #1919）',
       (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('agg-subtab-openInterest')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('agg-oi-sort-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('agg-oi-sort-oiVol')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('agg-oi-sort-oiVol')));
-    await tester.pumpAndSettle();
-    // 排序按钮 label 更新
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('agg-oi-sort-button')),
-        matching: find.text('OI/V'),
-      ),
-      findsOneWidget,
-    );
+    // 排序入口与抽屉已按设计稿 OpenInterestTab 对齐移除
+    expect(find.byKey(const Key('agg-oi-sort-button')), findsNothing);
+    expect(find.byKey(const Key('agg-oi-sort-oiVol')), findsNothing);
+    // 表格仍渲染（全部行 + 各所行）
+    expect(find.byKey(const Key('agg-oi-list')), findsOneWidget);
+    expect(find.text('全部'), findsOneWidget);
   });
 }

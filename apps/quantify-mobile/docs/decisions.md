@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-06-01 · 聚合持仓量 tab 排序按钮：方案 A 移除、对齐设计稿（Issue #1919）
+
+**背景**：`apps/quantify-mobile/lib/pages/market/widgets/agg_open_interest_tab.dart:134-152` 在币种 chips 旁渲染了一个可见排序 `OutlinedButton`（`agg-oi-sort-button`）+ 排序抽屉（`agg-oi-sort-*`，6 指标 desc/asc/none 三态循环）。但设计真源 `design/project/mobile/m-screens-data.jsx` 的 `OpenInterestTab`（`:1245`）渲染层（`return` JSX，`:1285-1318`）**只有币种 chips + 表格**——其 `sortKey/sortDir/sortOpen` state（`:1249-1251`）+ `SORT_OPTS` + `filteredRows` 排序逻辑在设计稿中是**未渲染触发器的死代码**（无任何按钮/抽屉消费它）。即 Flutter 在持仓量 tab **多出**了设计稿未呈现的排序入口。issue 引用的「币股屏 `ScreenCoinStocks` 有完整筛选&排序 sheet」是**另一屏**（且该 sheet 在设计稿中真实渲染），不构成持仓量 tab 保留排序的先例。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 严格对齐设计稿（采纳） | 移除持仓量 tab 排序按钮 + 抽屉 + 排序 state；表格按 fixtures 原始顺序渲染（对齐设计稿 `data.rows`）；连带清理仅服务排序的死代码（`OiSortKey` 枚举 / `OiRow.valueFor` / 6 个 `aggSort*` 文案） | 设计稿渲染层无排序入口，Flutter 排序按钮是 app 残留，与设计真源冲突；排序对纯 mock 固定数据无产品价值；对齐 #1799/#1750 已确立的「设计超前/app 残留 → 按设计基线清理」精神；移除后 `agg-oi-list` 渲染（chips + 表格）与设计稿 1:1 一致 |
+| B. 视为有意补强 UX 保留 | 保留排序按钮/抽屉，PR 注明对齐扩展 | 与设计真源渲染层冲突，需反向回写设计稿才自洽；排序在固定 mock 数据下无真实价值；保留即把 app 残留固化为基线，与「以设计真源为准」的对齐方向背离 |
+
+**判定**：**采纳方案 A——移除持仓量 tab 排序入口**，使 `agg_open_interest_tab.dart` 渲染层与设计稿 `OpenInterestTab` 一致（币种 chips + 表格，表格按 fixtures 原始顺序）。
+
+**理由**：
+
+1. **以设计真源为准**：设计稿 `OpenInterestTab` 渲染层（`:1285`）明确只输出 chips + 表格，排序 state 是设计稿自身的死代码；Flutter 排序按钮是 app 单方面多出的入口，属未对齐残留而非有意补强。
+2. **YAGNI / 无产品价值**：持仓量数据为固定 mock（`kOiData`），排序在无真实数据通道（#1683 聚合数据范畴）下是无意义交互；真实数据接入后排序口径大概率由后端/产品重新定义，提前保留前端 mock 排序是技术债。
+3. **KISS / 清理死代码**：排序移除后 `OiSortKey` 枚举、`OiRow.valueFor`、6 个 `aggSort*` 文案再无消费者，一并删除避免留下孤儿死代码（对齐 #1799 移除孤儿模型/文案的处理）。
+4. **Never break userspace**：`agg-oi-list` / `agg-oi-row-*` / 表格结构与既有 `agg-subtab-openInterest` 切换路径维持现状，仅移除 `agg-oi-sort-button` / `agg-oi-sort-*`；持仓量数据 `OiRow` 的 `h1/h4/oiVol` 字段保留（设计稿表格数据模型一部分，非排序专属）。
+
+**落地范围**：
+
+- `lib/pages/market/widgets/agg_open_interest_tab.dart`：删 `_SortDir` 枚举、`_sortKey/_sortDir` state、`_sortLabel`/`_pickSort`/`_openSortSheet`/`_sorted`/`_sortIcon`，chips 行去掉排序按钮（`Row`+`Expanded`+`OutlinedButton` → 直接 `AggCoinChips`），表格改用 `data.rows` 原始顺序。
+- `lib/data/models/agg_orders_models.dart`：删 `OiRow.valueFor` 方法 + `OiSortKey` 枚举（排序移除后无消费者）。
+- `lib/l10n/app_zh.arb` / `app_en.arb`：删 6 个 `aggSortQty/Share/H1/H4/H24/OiVol` 文案，`flutter gen-l10n` 重生成 localizations。
+- `test/pages/agg_orders_body_test.dart`：「切到持仓量子 tab」用例排序按钮断言由 `findsOneWidget` 翻转为 `findsNothing`；原「持仓量排序抽屉可选 OI/V」用例改为「无排序按钮/抽屉，表格按原始顺序」守护；AC3 注释同步。
+- `README.md`「设计真源」段补 #1919 引用。
+
+**对齐结论（对应 #1919 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 给出 A/B 明确结论并记录原因 | 已满足。结论＝方案 A 移除，记入本节 | 本节 |
+| [2] 选 A：移除排序按钮/抽屉后 `agg-oi-list` 渲染与设计稿一致，widget test 同步更新 | 已满足。渲染层＝chips + 表格（对齐 `OpenInterestTab` `:1285`）；test 排序断言翻转为 `findsNothing` | 上「落地范围」 |
+| [3] 选 B 分支 | 不适用（采纳 A） | — |
+| [4] `dx build quantify --dev` 通过 | 见 PR「已做的验证」段（Flutter app，附 `flutter analyze` / `flutter test` 证据） | 验证段 |
+
+**不变项**：聚合挂单 / 聚合成交量 tab 及其各自交互（视图切换 / 价格精度抽屉 / 来源抽屉 / 占比条）维持现状；币股屏 `ScreenCoinStocks` 的筛选&排序 sheet 不受影响（另一屏，本决策不涉及）。设计稿 `OpenInterestTab` 的排序 state 死代码保留在设计稿中不动（设计侧清理不在本 app issue 范围）。
+
+---
+
 ## 2026-06-01 · AI 量化形态裁决 + 5 步 StepBar 向导骨架：方案 B 维持对话中心、向导标 future（Issue #1890，AI 量化对齐批次前置基座）
 
 **背景**：#1890 为本批「AI 量化」对齐工作的**基座 Issue**，要求先裁决形态：设计稿 `design/project/mobile`（`proto.jsx` 串联）把「AI 量化」定义为 **6 屏线性向导**，每屏顶部共享一条 5 步进度指示器 `BtcStepBar`（`m-screens-btconfig.jsx:285`，标签 `:287-289` `确认策略 / 策略脚本 / 回测设置 / 回测 / 部署`，已完成步可点击回跳），屏间「上一步 / 下一步」线性导航；现实现走**对话中心**形态——确认+脚本合并为单页 `/ai/confirm`（无 StepBar）、回测设置是弹层 `backtest_config_sheet.dart`、回测中/结果退化为对话内嵌卡（`qz_backtest_progress_card.dart` / `qz_backtest_result_card.dart`）、部署是弹层 `qz_deploy_sheet.dart`。`qz_backtest_progress_card.dart` 头部注释引用本文件 #1749，说明现 route/sheet 边界是**有意决策**。
