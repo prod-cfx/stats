@@ -31,6 +31,9 @@ void main() {
       expect(QzCurves.short.inMilliseconds, 240);
       expect(QzCurves.long.inMilliseconds, 360);
       expect(QzCurves.standard, const Cubic(0.32, 0.72, 0.0, 1.0));
+      expect(QzCurves.sheetPanel, const Cubic(0.2, 0.8, 0.2, 1.0));
+      expect(QzCurves.sheetPanelDuration.inMilliseconds, 260);
+      expect(QzCurves.sheetScrimDuration.inMilliseconds, 180);
     });
 
     test('spacing scale present and monotonic', () {

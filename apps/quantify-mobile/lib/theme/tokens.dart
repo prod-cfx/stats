@@ -92,13 +92,28 @@ class QzShadow {
   ];
 }
 
-/// Animation curves & durations matching the web prototype
-/// (`cubic-bezier(.32,.72,0,1)` plus 240 / 360 ms).
+/// Animation curves & durations matching the web prototype.
+///
+/// - Generic surface motion (`standard` = `cubic-bezier(.32,.72,0,1)`, with
+///   `short` 240 ms / `long` 360 ms) drives most chrome transitions.
+/// - Bottom-sheet motion has its own tokens (`sheetPanel` =
+///   `cubic-bezier(.2,.8,.2,1)`, `sheetPanelDuration` .26s, `sheetScrimDuration`
+///   .18s) matching the design source for the whale/strategy/filter drawers.
 class QzCurves {
   const QzCurves._();
   static const Cubic standard = Cubic(0.32, 0.72, 0.0, 1.0);
   static const Duration short = Duration(milliseconds: 240);
   static const Duration long = Duration(milliseconds: 360);
+
+  /// Bottom-sheet panel slide-up curve, matching design `cubic-bezier(.2,.8,.2,1)`.
+  static const Cubic sheetPanel = Cubic(0.2, 0.8, 0.2, 1.0);
+
+  /// Bottom-sheet panel enter/exit duration, design `.26s`.
+  static const Duration sheetPanelDuration = Duration(milliseconds: 260);
+
+  /// Bottom-sheet scrim fade-in duration (design `.18s`); see QzSheet doc for
+  /// the Flutter limitation that prevents applying it independently.
+  static const Duration sheetScrimDuration = Duration(milliseconds: 180);
 }
 
 /// Bundled font families + platform fallbacks.

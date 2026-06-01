@@ -10,11 +10,17 @@ import '../theme/tokens.dart';
 /// design-system look (16dp top radius, `bgElev` surface, `scrim` barrier,
 /// 40×4 drag handle).
 ///
-/// The enter/exit transition matches the prototype's
-/// `cubic-bezier(.32,.72,0,1)` over 360 ms (enter) / 240 ms (exit) via
-/// [AnimationStyle] passed to `sheetAnimationStyle`. Flutter wraps the route
-/// animation in a [CurvedAnimation] internally, so no external
-/// [AnimationController] / [TickerProvider] is required from this static API.
+/// The panel slide-up transition matches the design source's
+/// `cubic-bezier(.2,.8,.2,1)` over 260 ms (enter/exit) via [AnimationStyle]
+/// passed to `sheetAnimationStyle`. Flutter wraps the route animation in a
+/// [CurvedAnimation] internally, so no external [AnimationController] /
+/// [TickerProvider] is required from this static API.
+///
+/// Scrim limitation: Flutter's [showModalBottomSheet] [AnimationStyle] cannot
+/// set an independent duration for the barrier fade-in — the scrim follows the
+/// route animation. The design's `.18s` scrim fade is therefore recorded as
+/// design intent in [QzCurves.sheetScrimDuration] but cannot be applied
+/// separately from the panel timing here.
 ///
 /// Known limitation: the [QzColorScheme] used for chrome (background, drag
 /// handle, scrim) is captured at [show] time. If the user toggles the app
@@ -38,10 +44,10 @@ class QzSheet {
       backgroundColor: c.bgElev,
       barrierColor: c.scrim,
       sheetAnimationStyle: const AnimationStyle(
-        curve: QzCurves.standard,
-        duration: QzCurves.long,
-        reverseCurve: QzCurves.standard,
-        reverseDuration: QzCurves.short,
+        curve: QzCurves.sheetPanel,
+        duration: QzCurves.sheetPanelDuration,
+        reverseCurve: QzCurves.sheetPanel,
+        reverseDuration: QzCurves.sheetPanelDuration,
       ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
