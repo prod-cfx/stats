@@ -855,16 +855,6 @@
   "whaleTabLive": "Live",
   "whaleTabHoldings": "Holdings",
   "whaleTabWatch": "Watch",
-  "whaleNetFlowLabel": "{symbol} net inflow · 1H",
-  "@whaleNetFlowLabel": {
-    "placeholders": {
-      "symbol": {"type": "String"}
-    }
-  },
-  "whaleStatBigTrades": "Big trades",
-  "whaleStatActiveWhales": "Active whales",
-  "whaleStatNetAccumulation": "Net acc.",
-  "whaleStatPast1h": "Past 1H",
   "whaleLiveLabel": "LIVE",
   "whaleGroupNow": "Last 5 min",
   "whaleGroup15m": "Within 15 min",

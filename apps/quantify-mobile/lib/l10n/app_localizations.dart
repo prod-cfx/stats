@@ -4404,36 +4404,6 @@ abstract class AppLocalizations {
   /// **'监控'**
   String get whaleTabWatch;
 
-  /// No description provided for @whaleNetFlowLabel.
-  ///
-  /// In zh, this message translates to:
-  /// **'{symbol} 净流入 · 1H'**
-  String whaleNetFlowLabel(String symbol);
-
-  /// No description provided for @whaleStatBigTrades.
-  ///
-  /// In zh, this message translates to:
-  /// **'大额交易'**
-  String get whaleStatBigTrades;
-
-  /// No description provided for @whaleStatActiveWhales.
-  ///
-  /// In zh, this message translates to:
-  /// **'活跃巨鲸'**
-  String get whaleStatActiveWhales;
-
-  /// No description provided for @whaleStatNetAccumulation.
-  ///
-  /// In zh, this message translates to:
-  /// **'净增持'**
-  String get whaleStatNetAccumulation;
-
-  /// No description provided for @whaleStatPast1h.
-  ///
-  /// In zh, this message translates to:
-  /// **'过去 1H'**
-  String get whaleStatPast1h;
-
   /// No description provided for @whaleLiveLabel.
   ///
   /// In zh, this message translates to:

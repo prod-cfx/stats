@@ -11,7 +11,6 @@ import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_live_tab.dart';
 import 'package:quantify_mobile/pages/whale/widgets/qz_whale_row.dart';
-import 'package:quantify_mobile/pages/whale/widgets/whale_net_flow_card.dart';
 import 'package:quantify_mobile/widgets/qz_chip.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -182,16 +181,6 @@ void main() {
     final bool hasPrefilled =
         fields.any((TextField f) => f.controller?.text == '750000');
     expect(hasPrefilled, isTrue, reason: '监控弹窗应 prefill 阈值 750000');
-  });
-
-  testWidgets('WhaleNetFlowCard 从实时巨鲸顶部移除 (issue #1986)',
-      (WidgetTester tester) async {
-    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
-    await _pump(tester, repo);
-    addTearDown(() async => repo.dispose());
-
-    expect(find.byType(WhaleNetFlowCard), findsNothing,
-        reason: '实时巨鲸段不再渲染净流入 hero 卡');
   });
 
   testWidgets('默认 BTC chip 下所有 row 都是 BTC', (WidgetTester tester) async {

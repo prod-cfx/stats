@@ -873,16 +873,6 @@
   "whaleTabLive": "实时",
   "whaleTabHoldings": "持仓",
   "whaleTabWatch": "监控",
-  "whaleNetFlowLabel": "{symbol} 净流入 · 1H",
-  "@whaleNetFlowLabel": {
-    "placeholders": {
-      "symbol": {"type": "String"}
-    }
-  },
-  "whaleStatBigTrades": "大额交易",
-  "whaleStatActiveWhales": "活跃巨鲸",
-  "whaleStatNetAccumulation": "净增持",
-  "whaleStatPast1h": "过去 1H",
   "whaleLiveLabel": "LIVE",
   "whaleGroupNow": "最近 5 分钟",
   "whaleGroup15m": "15 分钟内",

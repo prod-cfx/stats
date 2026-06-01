@@ -1,18 +1,5 @@
 import '../../models/whale_extra_models.dart';
 
-/// 实时 tab 顶部 hero 卡 mock（BTC 1H 净流入）。
-const WhaleNetFlowStat mockWhaleNetFlowBtc1h = WhaleNetFlowStat(
-  symbol: 'BTC',
-  netFlowDisplay: '+\$284M',
-  pctDisplay: '+18.4%',
-  tone: 'up',
-  summary: '累计 4,128 BTC · 较昨日同期 +62%',
-  bigTrades: '42',
-  activeWhales: '18',
-  netAccumulationDisplay: '+2,640',
-  netAccumulationTone: 'up',
-);
-
 /// 发现 tab — 聪明钱榜 Top5。
 const List<SmartMoneyEntry> mockSmartMoneyTop5 = <SmartMoneyEntry>[
   SmartMoneyEntry(

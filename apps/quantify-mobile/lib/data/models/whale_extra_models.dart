@@ -5,31 +5,6 @@
 /// 转换在 mock 阶段引入不必要复杂度。
 library;
 
-/// 净流入 hero 卡所需统计（实时 tab 顶部）。
-class WhaleNetFlowStat {
-  const WhaleNetFlowStat({
-    required this.symbol,
-    required this.netFlowDisplay,
-    required this.pctDisplay,
-    required this.tone,
-    required this.summary,
-    required this.bigTrades,
-    required this.activeWhales,
-    required this.netAccumulationDisplay,
-    required this.netAccumulationTone,
-  });
-
-  final String symbol; // BTC / ETH ...
-  final String netFlowDisplay; // 例如 '+$284M'
-  final String pctDisplay; // 例如 '+18.4%'
-  final String tone; // 'up' | 'dn'
-  final String summary; // 例如 '累计 4,128 BTC · 较昨日同期 +62%'
-  final String bigTrades; // 例如 '42'
-  final String activeWhales; // 例如 '18'
-  final String netAccumulationDisplay; // 例如 '+2,640'
-  final String netAccumulationTone; // 'up' | 'dn' | 'flat'
-}
-
 /// 聪明钱榜单行。
 class SmartMoneyEntry {
   const SmartMoneyEntry({

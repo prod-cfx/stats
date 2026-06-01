@@ -2264,23 +2264,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleTabWatch => '监控';
 
   @override
-  String whaleNetFlowLabel(String symbol) {
-    return '$symbol 净流入 · 1H';
-  }
-
-  @override
-  String get whaleStatBigTrades => '大额交易';
-
-  @override
-  String get whaleStatActiveWhales => '活跃巨鲸';
-
-  @override
-  String get whaleStatNetAccumulation => '净增持';
-
-  @override
-  String get whaleStatPast1h => '过去 1H';
-
-  @override
   String get whaleLiveLabel => 'LIVE';
 
   @override

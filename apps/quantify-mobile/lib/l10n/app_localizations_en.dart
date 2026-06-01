@@ -2316,23 +2316,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleTabWatch => 'Watch';
 
   @override
-  String whaleNetFlowLabel(String symbol) {
-    return '$symbol net inflow · 1H';
-  }
-
-  @override
-  String get whaleStatBigTrades => 'Big trades';
-
-  @override
-  String get whaleStatActiveWhales => 'Active whales';
-
-  @override
-  String get whaleStatNetAccumulation => 'Net acc.';
-
-  @override
-  String get whaleStatPast1h => 'Past 1H';
-
-  @override
   String get whaleLiveLabel => 'LIVE';
 
   @override

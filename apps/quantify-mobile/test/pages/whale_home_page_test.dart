@@ -106,19 +106,6 @@ void main() {
     );
   });
 
-  testWidgets('切到「实时」tab，可见净流入卡片',
-      (WidgetTester tester) async {
-    await _pump(tester);
-    await tester.tap(find.byKey(const Key('whaleSubTab_1')));
-    await tester.pumpAndSettle();
-    // hero 卡 label：来自 whaleNetFlowLabel("BTC 净流入 · 1H")
-    expect(find.textContaining('净流入'), findsWidgets);
-    // 3 格统计
-    expect(find.text('大额交易'), findsOneWidget);
-    expect(find.text('活跃巨鲸'), findsOneWidget);
-    expect(find.text('净增持'), findsOneWidget);
-  });
-
   testWidgets('默认进入「发现」tab → WhaleDiscoverNew（轮播+排序条+列表卡）出现',
       (WidgetTester tester) async {
     // issue #1789：发现 tab 重构为 top3 轮播 + 排序条 + 巨鲸列表卡。
