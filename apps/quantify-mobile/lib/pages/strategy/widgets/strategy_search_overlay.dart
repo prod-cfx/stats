@@ -483,8 +483,6 @@ class _StrategySearchOverlayState
   Widget _stratRow(StrategyMarketItem item, QzColorScheme c) {
     final StrategyCard card = item.card;
     final bool up = card.pnlPercent >= 0;
-    final String initial =
-        card.name.isEmpty ? '?' : card.name.characters.first;
     return GestureDetector(
       key: Key('strategy-search-strat-${card.id}'),
       behavior: HitTestBehavior.opaque,
@@ -496,7 +494,7 @@ class _StrategySearchOverlayState
         ),
         child: Row(
           children: <Widget>[
-            QzAvatar(label: initial, size: 36),
+            QzAvatar(label: card.symbol, size: 36, monospace: true),
             const SizedBox(width: QzSpacing.sm),
             Expanded(
               child: Column(

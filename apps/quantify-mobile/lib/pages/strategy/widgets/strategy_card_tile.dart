@@ -88,7 +88,8 @@ class StrategyCardTile extends StatelessWidget {
     final StrategyCard card = item.card;
     final StrategyMarketStats stats = item.stats;
     final bool up = card.pnlPercent >= 0;
-    final String initial =
+    // 行 4 作者头像仍用作者首字符（区别于行 1 的币种头像）。
+    final String authorInitial =
         card.author.isEmpty ? '?' : card.author.characters.first;
 
     return Padding(
@@ -102,7 +103,7 @@ class StrategyCardTile extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                QzAvatar(label: initial, size: 40),
+                QzAvatar(label: card.symbol, size: 40, monospace: true),
                 const SizedBox(width: QzSpacing.sm),
                 Expanded(
                   child: Column(
@@ -236,7 +237,7 @@ class StrategyCardTile extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      _AuthorAvatar(initial: initial),
+                      _AuthorAvatar(initial: authorInitial),
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(

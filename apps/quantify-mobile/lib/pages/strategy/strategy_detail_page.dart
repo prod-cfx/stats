@@ -457,9 +457,7 @@ class _Header extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final StrategyCard? card = this.card;
-    final String initial = (card == null || card.author.isEmpty)
-        ? '?'
-        : card.author.characters.first;
+    final String symbol = card?.symbol ?? '?';
     final String? catLabel =
         card == null ? null : _categoryLabel(context, card.category);
     final String pairPeriod = card == null ? '' : _pairPeriod(card);
@@ -467,7 +465,7 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        QzAvatar(label: initial, size: 48),
+        QzAvatar(label: symbol, size: 48, monospace: true),
         const SizedBox(width: QzSpacing.md),
         Expanded(
           child: Column(

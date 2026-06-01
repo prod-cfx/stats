@@ -34,16 +34,22 @@ class QzAvatar extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: c.accentOn,
-          fontSize: (size * 0.42).roundToDouble(),
-          fontWeight: FontWeight.w700,
-          fontFamily: monospace ? QzFont.mono : null,
-          fontFamilyFallback:
-              monospace ? QzFont.monoFallback : QzFont.sansFallback,
-          height: 1.0,
+      // 币种符号 label 长度不定（BTC / 1000PEPE），FittedBox 缩放兜底，
+      // 避免多字符在圆形内换行或溢出裁剪。
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(
+            color: c.accentOn,
+            fontSize: (size * 0.42).roundToDouble(),
+            fontWeight: FontWeight.w700,
+            fontFamily: monospace ? QzFont.mono : null,
+            fontFamilyFallback:
+                monospace ? QzFont.monoFallback : QzFont.sansFallback,
+            height: 1.0,
+          ),
         ),
       ),
     );

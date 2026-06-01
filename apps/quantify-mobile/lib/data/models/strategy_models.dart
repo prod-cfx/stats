@@ -61,6 +61,40 @@ class StrategyCard {
     this.pair = '',
     this.period = '',
   });
+
+  /// 头像展示用币种符号，对齐设计稿 `s.sym`（`m-screens-2.jsx`）。
+  ///
+  /// 从 [pair] 派生：取第一个 base 币种（`BTC/USDT` → `BTC`、`ARB-OP` → `ARB`）。
+  /// 多币种 / 特殊 pair（如 `多币种`、`USDT`）无法拆出 base 时回退到 `⇄`，
+  /// 空 pair 回退到 `?`，避免头像空白。
+  String get symbol => deriveStrategySymbol(pair);
+}
+
+/// 币种 base 分隔符（`/` 或 `-`），提为顶层常量避免每次派生重复编译。
+final RegExp _pairSeparator = RegExp(r'[/\-]');
+
+/// 从交易对 [pair] 派生头像币种符号。
+///
+/// 规则（对齐设计稿 `s.sym`）：
+/// - `BTC/USDT` / `ARB-OP` → 取分隔符前的 base 币种 `BTC` / `ARB`
+/// - `多币种` 等无 `/`、`-` 分隔且非 ASCII 的占位 → `⇄`（多币种符号）
+/// - `USDT` 这类纯计价/单币种 ASCII pair → 原样大写返回
+/// - 空字符串 → `?`
+String deriveStrategySymbol(String pair) {
+  final String trimmed = pair.trim();
+  if (trimmed.isEmpty) {
+    return '?';
+  }
+  final List<String> parts = trimmed.split(_pairSeparator);
+  final String base = parts.first.trim();
+  if (base.isEmpty) {
+    return '⇄';
+  }
+  // 含 CJK 等非 ASCII（如「多币种」）视为聚合占位。
+  if (base.runes.any((int r) => r > 0x7f)) {
+    return '⇄';
+  }
+  return base.toUpperCase();
 }
 
 /// 4 格指标 + featured hero 卡共享的"广场摘要"数据（#1565）。
