@@ -12,6 +12,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/whale_chart_filter_sheet.dart';
 import 'widgets/whale_detail_rows.dart';
 import 'widgets/whale_perp_summary_card.dart';
 import 'widgets/whale_pnl_chart.dart';
@@ -252,15 +253,85 @@ class _TabBar extends StatelessWidget {
   String _withCount(String label, int n) => n > 0 ? '$label $n' : label;
 }
 
-/// 基本信息 tab：P&L 图（含静态 pill 行）+ 4 stat 卡 + 永续总价值明细。
-class _BasicTab extends StatelessWidget {
+/// 基本信息 tab：P&L 图（顶部金额 + 可交互 pill 行 + 底部抽屉）
+/// + 4 stat 卡 + 永续总价值明细（issue #1906）。
+///
+/// 三个 pill（时间范围 / 统计范围 / 指标）点击弹底部抽屉切换，选择后回填
+/// pill 文案并刷新图表标题。真实数据刷新依赖 #1682；mock 阶段仅切换文案与
+/// 顶部金额展示。
+class _BasicTab extends StatefulWidget {
   const _BasicTab({required this.profile});
   final WhaleProfile profile;
+
+  @override
+  State<_BasicTab> createState() => _BasicTabState();
+}
+
+class _BasicTabState extends State<_BasicTab> {
+  late String _period;
+  late String _scope;
+  late String _metric;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 仅首次初始化，避免依赖变化（主题/locale 重建）重置用户已选的 pill。
+    if (_initialized) return;
+    _initialized = true;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    // 初值对齐设计稿默认（1周 / 仅永续合约 / 总盈亏）。
+    _period = l10n.whaleProfilePeriodWeek;
+    _scope = l10n.whaleProfileScopePerpOnly;
+    _metric = l10n.whaleProfileMetricTotalPnl;
+  }
+
+  Future<void> _pickPeriod(AppLocalizations l10n) async {
+    final String? next = await WhaleChartFilterSheet.show(
+      context,
+      title: l10n.whaleProfilePillPeriodTitle,
+      options: <String>[
+        l10n.whaleProfilePeriodDay,
+        l10n.whaleProfilePeriodWeek,
+        l10n.whaleProfilePeriodMonth,
+        l10n.whaleProfilePeriodAll,
+      ],
+      value: _period,
+    );
+    if (next != null && mounted) setState(() => _period = next);
+  }
+
+  Future<void> _pickScope(AppLocalizations l10n) async {
+    final String? next = await WhaleChartFilterSheet.show(
+      context,
+      title: l10n.whaleProfilePillScopeTitle,
+      options: <String>[
+        l10n.whaleProfileScopePerpOnly,
+        l10n.whaleProfileScopePerpSpot,
+      ],
+      value: _scope,
+    );
+    if (next != null && mounted) setState(() => _scope = next);
+  }
+
+  Future<void> _pickMetric(AppLocalizations l10n) async {
+    final String? next = await WhaleChartFilterSheet.show(
+      context,
+      title: l10n.whaleProfilePillMetricTitle,
+      options: <String>[
+        l10n.whaleProfileMetricTotalPnl,
+        l10n.whaleProfileMetricAccountValue,
+      ],
+      value: _metric,
+    );
+    if (next != null && mounted) setState(() => _metric = next);
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final WhaleProfile profile = widget.profile;
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
       children: <Widget>[
@@ -275,10 +346,7 @@ class _BasicTab extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                l10n.whaleProfilePnlChartTitle(
-                  l10n.whaleProfilePeriodWeek,
-                  l10n.whaleProfileScopePerpOnly,
-                ),
+                l10n.whaleProfilePnlChartTitle(_period, _scope),
                 style: TextStyle(fontSize: 12, color: c.textMid),
               ),
               const SizedBox(height: QzSpacing.sm),
@@ -286,13 +354,20 @@ class _BasicTab extends StatelessWidget {
                 spacing: QzSpacing.xs,
                 runSpacing: QzSpacing.xs,
                 children: <Widget>[
-                  _StaticPill(text: l10n.whaleProfilePeriodWeek),
-                  _StaticPill(text: l10n.whaleProfileScopePerpOnly),
-                  _StaticPill(text: l10n.whaleProfileMetricTotalPnl, accent: true),
+                  _FilterPill(text: _period, onTap: () => _pickPeriod(l10n)),
+                  _FilterPill(text: _scope, onTap: () => _pickScope(l10n)),
+                  _FilterPill(
+                    text: _metric,
+                    accent: true,
+                    onTap: () => _pickMetric(l10n),
+                  ),
                 ],
               ),
               const SizedBox(height: QzSpacing.md),
-              WhalePnlChart(points: profile.pnlCurve),
+              WhalePnlChart(
+                points: profile.pnlCurve,
+                totalDisplay: profile.pnlTotalDisplay,
+              ),
             ],
           ),
         ),
@@ -308,30 +383,50 @@ class _BasicTab extends StatelessWidget {
   }
 }
 
-/// 静态 pill（图表参数当前值展示，不可交互——mock 阶段切换无意义）。
-class _StaticPill extends StatelessWidget {
-  const _StaticPill({required this.text, this.accent = false});
+/// 可交互 pill（点击弹底部抽屉切换图表参数，issue #1906）。
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.text,
+    required this.onTap,
+    this.accent = false,
+  });
   final String text;
+  final VoidCallback onTap;
   final bool accent;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: accent ? c.accent : c.bgElev,
-        border: Border.all(color: accent ? c.accent : c.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
-          color: accent ? c.accentOn : c.text,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: accent ? c.accent : c.bgElev,
+          border: Border.all(color: accent ? c.accent : c.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
+                color: accent ? c.accentOn : c.text,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 14,
+              color: accent ? c.accentOn : c.textMid,
+            ),
+          ],
         ),
       ),
     );

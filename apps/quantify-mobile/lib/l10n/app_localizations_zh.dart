@@ -2206,13 +2206,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileClosedCount => '平仓次数';
 
   @override
+  String get whaleProfilePeriodDay => '1天';
+
+  @override
   String get whaleProfilePeriodWeek => '1周';
+
+  @override
+  String get whaleProfilePeriodMonth => '1月';
+
+  @override
+  String get whaleProfilePeriodAll => '全部';
 
   @override
   String get whaleProfileScopePerpOnly => '仅永续合约';
 
   @override
+  String get whaleProfileScopePerpSpot => '永续合约和现货';
+
+  @override
   String get whaleProfileMetricTotalPnl => '总盈亏';
+
+  @override
+  String get whaleProfileMetricAccountValue => '账户价值';
+
+  @override
+  String get whaleProfilePillPeriodTitle => '时间范围';
+
+  @override
+  String get whaleProfilePillScopeTitle => '统计范围';
+
+  @override
+  String get whaleProfilePillMetricTitle => '指标';
+
+  @override
+  String get whaleProfilePillCancel => '取消';
 
   @override
   String get whaleProfileEmptySpot => '暂无现货持仓';

@@ -190,6 +190,69 @@ void main() {
     expect(find.byType(WhaleProfilePage), findsNothing);
   });
 
+  testWidgets('基本信息 tab：折线图顶部渲染总盈亏金额（正负色）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
+    expect(p.pnlTotalDisplay, isNotNull);
+    expect(find.text(p.pnlTotalDisplay!), findsOneWidget);
+  });
+
+  testWidgets('Pill 交互：点时间范围 pill 弹抽屉，选「1月」后 pill 文案与标题更新', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    // 初始默认：1周 / 仅永续合约 标题。
+    expect(find.text('1周 总盈亏（仅永续合约）'), findsOneWidget);
+
+    // 点时间范围 pill（默认 '1周'）弹底部抽屉。
+    await tester.tap(find.text('1周').first);
+    await tester.pumpAndSettle();
+    // 抽屉标题 + 全部选项。
+    expect(find.text('时间范围'), findsOneWidget);
+    expect(find.text('1天'), findsOneWidget);
+    expect(find.text('1月'), findsOneWidget);
+    expect(find.text('全部'), findsOneWidget);
+
+    // 选「1月」→ 抽屉关闭，pill 文案与标题更新。
+    await tester.tap(find.text('1月'));
+    await tester.pumpAndSettle();
+    expect(find.text('时间范围'), findsNothing);
+    expect(find.text('1月 总盈亏（仅永续合约）'), findsOneWidget);
+  });
+
+  testWidgets('Pill 交互：统计范围切「永续合约和现货」更新标题；指标抽屉「取消」不变', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    // 切统计范围。
+    await tester.tap(find.text('仅永续合约').first);
+    await tester.pumpAndSettle();
+    expect(find.text('统计范围'), findsOneWidget);
+    await tester.tap(find.text('永续合约和现货'));
+    await tester.pumpAndSettle();
+    expect(find.text('1周 总盈亏（永续合约和现货）'), findsOneWidget);
+
+    // 指标 pill 弹抽屉后点取消，pill 文案不变。
+    await tester.tap(find.text('总盈亏').first);
+    await tester.pumpAndSettle();
+    expect(find.text('指标'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('指标'), findsNothing);
+    expect(find.text('总盈亏'), findsWidgets);
+  });
+
   testWidgets('fallback：未命中地址仍渲染 6 tab 骨架与地址', (WidgetTester tester) async {
     const String unknown = '0xdead…beef';
     await _pump(

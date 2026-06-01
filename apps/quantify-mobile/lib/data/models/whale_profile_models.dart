@@ -168,6 +168,7 @@ class WhaleProfile {
     this.recentTrades = const <WhaleRecentTrade>[],
     this.histOrders = const <WhaleHistOrder>[],
     this.pnlCurve = const <WhalePnlPoint>[],
+    this.pnlTotalDisplay,
     this.statCards,
     this.perpSummary,
   });
@@ -188,6 +189,7 @@ class WhaleProfile {
   final List<WhaleRecentTrade> recentTrades; // 最近成交
   final List<WhaleHistOrder> histOrders; // 历史委托
   final List<WhalePnlPoint> pnlCurve; // P&L 曲线点
+  final String? pnlTotalDisplay; // 折线图顶部总盈亏展示串，例如 '$ -172.51K'
   final WhaleProfileStatCards? statCards; // 2×2 stat 卡
   final WhalePerpSummary? perpSummary; // 永续合约总价值明细
 }

@@ -389,6 +389,7 @@ const Map<String, WhaleProfile> mockWhaleProfiles = <String, WhaleProfile>{
       WhalePnlPoint(x: 270, valueK: -182),
       WhalePnlPoint(x: 276, valueK: -150),
     ],
+    pnlTotalDisplay: '\$ -172.51K', // 设计稿顶部金额（:768）
     // 2×2 stat 卡（:816）。
     statCards: WhaleProfileStatCards(
       accountValueDisplay: '\$ 3.59M',

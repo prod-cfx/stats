@@ -11,9 +11,13 @@ import '../../../theme/tokens.dart';
 /// 纵轴 top=400 / span=700（400K..-300K），消费 [WhalePnlPoint]（x:0..276）。
 /// 末点正负决定 up/dn 配色。空数据降级为占位文案。
 class WhalePnlChart extends StatelessWidget {
-  const WhalePnlChart({super.key, required this.points});
+  const WhalePnlChart({super.key, required this.points, this.totalDisplay});
 
   final List<WhalePnlPoint> points;
+
+  /// 折线图顶部总盈亏金额展示串（设计稿 `:768`，例如 '$ -172.51K'）。
+  /// 为空时不渲染顶部数值。
+  final String? totalDisplay;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +35,43 @@ class WhalePnlChart extends StatelessWidget {
     }
     final bool down = points.last.valueK < 0;
     final Color tone = down ? c.marketDown : c.marketUp;
+    final String? total = totalDisplay;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (total != null) ...<Widget>[
+          Text(
+            total,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: tone,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+          const SizedBox(height: QzSpacing.sm),
+        ],
+        _ChartBody(points: points, tone: tone, scheme: c),
+      ],
+    );
+  }
+}
+
+/// 折线图主体（曲线 + 网格 + Y 轴刻度），高度固定 140。
+class _ChartBody extends StatelessWidget {
+  const _ChartBody({
+    required this.points,
+    required this.tone,
+    required this.scheme,
+  });
+  final List<WhalePnlPoint> points;
+  final Color tone;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
     return SizedBox(
       height: 140,
       child: Row(

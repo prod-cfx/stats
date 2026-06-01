@@ -2247,13 +2247,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileClosedCount => 'Closed count';
 
   @override
+  String get whaleProfilePeriodDay => '1D';
+
+  @override
   String get whaleProfilePeriodWeek => '1W';
+
+  @override
+  String get whaleProfilePeriodMonth => '1M';
+
+  @override
+  String get whaleProfilePeriodAll => 'All';
 
   @override
   String get whaleProfileScopePerpOnly => 'Perps only';
 
   @override
+  String get whaleProfileScopePerpSpot => 'Perps and spot';
+
+  @override
   String get whaleProfileMetricTotalPnl => 'Total PnL';
+
+  @override
+  String get whaleProfileMetricAccountValue => 'Account value';
+
+  @override
+  String get whaleProfilePillPeriodTitle => 'Time range';
+
+  @override
+  String get whaleProfilePillScopeTitle => 'Scope';
+
+  @override
+  String get whaleProfilePillMetricTitle => 'Metric';
+
+  @override
+  String get whaleProfilePillCancel => 'Cancel';
 
   @override
   String get whaleProfileEmptySpot => 'No spot holdings';

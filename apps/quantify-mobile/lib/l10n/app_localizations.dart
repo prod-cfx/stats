@@ -4340,11 +4340,29 @@ abstract class AppLocalizations {
   /// **'平仓次数'**
   String get whaleProfileClosedCount;
 
+  /// No description provided for @whaleProfilePeriodDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'1天'**
+  String get whaleProfilePeriodDay;
+
   /// No description provided for @whaleProfilePeriodWeek.
   ///
   /// In zh, this message translates to:
   /// **'1周'**
   String get whaleProfilePeriodWeek;
+
+  /// No description provided for @whaleProfilePeriodMonth.
+  ///
+  /// In zh, this message translates to:
+  /// **'1月'**
+  String get whaleProfilePeriodMonth;
+
+  /// No description provided for @whaleProfilePeriodAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get whaleProfilePeriodAll;
 
   /// No description provided for @whaleProfileScopePerpOnly.
   ///
@@ -4352,11 +4370,47 @@ abstract class AppLocalizations {
   /// **'仅永续合约'**
   String get whaleProfileScopePerpOnly;
 
+  /// No description provided for @whaleProfileScopePerpSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约和现货'**
+  String get whaleProfileScopePerpSpot;
+
   /// No description provided for @whaleProfileMetricTotalPnl.
   ///
   /// In zh, this message translates to:
   /// **'总盈亏'**
   String get whaleProfileMetricTotalPnl;
+
+  /// No description provided for @whaleProfileMetricAccountValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户价值'**
+  String get whaleProfileMetricAccountValue;
+
+  /// No description provided for @whaleProfilePillPeriodTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'时间范围'**
+  String get whaleProfilePillPeriodTitle;
+
+  /// No description provided for @whaleProfilePillScopeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'统计范围'**
+  String get whaleProfilePillScopeTitle;
+
+  /// No description provided for @whaleProfilePillMetricTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'指标'**
+  String get whaleProfilePillMetricTitle;
+
+  /// No description provided for @whaleProfilePillCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消'**
+  String get whaleProfilePillCancel;
 
   /// No description provided for @whaleProfileEmptySpot.
   ///
