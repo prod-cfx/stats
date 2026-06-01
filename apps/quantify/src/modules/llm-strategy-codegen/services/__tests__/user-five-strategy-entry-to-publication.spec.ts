@@ -124,6 +124,7 @@ function findSemanticFact(state: SemanticState, key: string): RulesMainflowAtomF
 
 describe('user reported five strategies: entry -> middle -> publication generation', () => {
   const plazaMaCrossTrendMessage = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。'
+  const plazaBollMeanReversionMessage = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。'
   const plazaRsiReversalMessage = '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。'
 
   const strategies = [
@@ -458,6 +459,32 @@ describe('user reported five strategies: entry -> middle -> publication generati
     expect(clarificationState.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'missing_entry_rules' }),
     ]))
+  })
+
+  it('策略广场 BOLL 均值回归：下轨做多保持 entry，中轨平多保持 exit', () => {
+    const state = buildStateFromUserMessage(plazaBollMeanReversionMessage)
+    const conversation = createConversationService()
+    const clarificationState = conversation.buildClarificationFromSemanticState(state)
+    const summary = clarificationState.summary ?? ''
+    const entryFacts = factsByRole(state, 'condition').filter(fact => fact.phase === 'entry')
+    const exitFacts = factsByRole(state, 'condition').filter(fact => fact.phase === 'exit')
+    const actionFacts = factsByRole(state, 'action')
+
+    expect(entryFacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'bollinger.touch_lower' }),
+    ]))
+    expect(exitFacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'bollinger.touch_middle' }),
+    ]))
+    expect(actionFacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.open_long', phase: 'entry' }),
+      expect.objectContaining({ key: 'action.close_long', phase: 'exit' }),
+    ]))
+    expect(summary).toContain('入场：')
+    expect(summary).toContain('BOLL（30, 0.9）下轨触及')
+    expect(summary).toContain('出场：')
+    expect(summary).toContain('BOLL（30, 0.9）中轨触及')
+    expect(summary).not.toContain('入场：BOLL（30, 0.9）中轨触及')
   })
 
   it('策略广场 RSI 反转：publication 脚本入场只编译 rsi_reclaim，不保留 impossible threshold 噪声', async () => {

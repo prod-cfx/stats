@@ -1410,6 +1410,15 @@ export class SemanticStateMergeService {
     if (leaf.key === 'indicator.cross_under') {
       return /(?:下穿|死叉|cross(?:es)?\s+under|cross\s+below)/iu.test(text) ? 2 : 0
     }
+    if (leaf.key === 'bollinger.touch_lower') {
+      return /(?:下轨|lower\s+band|touch(?:es)?\s+lower|retest\s+lower)/iu.test(text) ? 2 : 0
+    }
+    if (leaf.key === 'bollinger.touch_upper') {
+      return /(?:上轨|upper\s+band|touch(?:es)?\s+upper|retest\s+upper)/iu.test(text) ? 2 : 0
+    }
+    if (leaf.key === 'bollinger.touch_middle') {
+      return /(?:中轨|中线|middle\s+band|touch(?:es)?\s+middle|retest\s+middle)/iu.test(text) ? 2 : 0
+    }
     return 0
   }
 
