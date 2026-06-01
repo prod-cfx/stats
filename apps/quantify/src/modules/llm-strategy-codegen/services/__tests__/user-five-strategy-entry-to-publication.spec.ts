@@ -15,6 +15,7 @@ import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compil
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
+import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 import { CodegenGraphSnapshotService } from '../codegen-graph-snapshot.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
@@ -409,6 +410,54 @@ describe('user reported five strategies: entry -> middle -> publication generati
     ]))
     expect(prompt).not.toContain('请补充入场条件')
     expect(prompt).not.toContain('请补充入场触发条件')
+  })
+
+  it('策略广场 MA 趋势跟随：planner 错把上穿归为 exit 时，主数据流 clarification 文案使用修正后的 entry', () => {
+    const conversation = createConversationService()
+    const plannerPatch = {
+      contextSlots: {
+        venue: 'okx',
+        symbol: 'BTCUSDT',
+        instrumentType: 'perpetual',
+        timeframe: '15m',
+      },
+      rules: [{
+        id: 'planner-wrong-exit-cross-over',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 2 } }, { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 0.6 } }],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: { mode: 'pct_equity', value: 35 } }, { kind: 'atom', key: 'position.leverage', params: { value: 2 } }],
+          orchestration: [],
+          programs: [],
+        },
+      }, {
+        id: 'planner-exit-cross-under',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as CodegenSemanticPatch
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(plazaMaCrossTrendMessage) as CodegenSemanticPatch
+    const mergedPatch = new PlannerDispatcherMergeService().mergeDeterministicExecutionSlots(
+      plannerPatch,
+      dispatcherPatch,
+      plazaMaCrossTrendMessage,
+    ) as CodegenSemanticPatch
+    const state = new SemanticSeedStateBuilderService().build(mergedPatch, plazaMaCrossTrendMessage)
+    expect(state).not.toBeNull()
+    const normalized = conversation.normalizeSemanticContractReadiness(state!, { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION })
+    const clarificationState = conversation.buildClarificationFromSemanticState(normalized)
+    const summary = clarificationState.summary ?? ''
+
+    expect(summary).toContain('入场：MA6 上穿 MA48')
+    expect(summary).not.toContain('出场：MA6 上穿 MA48')
+    expect(clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
   })
 
   it('策略广场 RSI 反转：publication 脚本入场只编译 rsi_reclaim，不保留 impossible threshold 噪声', async () => {

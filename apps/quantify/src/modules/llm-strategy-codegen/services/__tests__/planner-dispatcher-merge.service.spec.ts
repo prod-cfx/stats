@@ -1599,6 +1599,49 @@ describe.skip('PlannerDispatcherMergeService legacy five-bucket merge spec', () 
 describe('PlannerDispatcherMergeService — deterministic context slot merge', () => {
   const svc = new PlannerDispatcherMergeService()
 
+  it('does not append dispatcher gate scope rules when planner lifecycle rule already carries the same scope effect', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry-compound',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 100 } },
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd' } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [{ kind: 'atom', key: 'scope.timeframe', params: { primaryTimeframe: '30m', requiredTimeframes: ['30m'] } }],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-gate-ma100-scope',
+        phase: 'gate',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 100 } },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [{ kind: 'atom', key: 'scope.timeframe', params: { primaryTimeframe: '30m', requiredTimeframes: ['30m'] } }],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, 'SOL 30分钟价格在 MA100 上方，MACD 金叉买入')
+
+    expect((merged?.rules ?? []).map(rule => rule.id)).toEqual(['planner-entry-compound'])
+  })
+
   it('keeps dispatcher locked context when planner returns an open placeholder for the same field', () => {
     const dispatcher = {
       contextSlots: {

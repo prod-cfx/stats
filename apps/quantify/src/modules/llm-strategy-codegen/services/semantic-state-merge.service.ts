@@ -1389,11 +1389,28 @@ export class SemanticStateMergeService {
     const normalized = text.replace(/\s+/gu, '')
     let score = 0
     for (const leaf of collectAtomLeaves(condition)) {
+      score += this.scoreLifecycleClauseDirection(text, leaf)
       for (const value of this.collectNumericConditionParams(leaf.params)) {
         if (normalized.includes(this.formatConditionNumber(value))) score += 1
       }
     }
     return score
+  }
+
+  private scoreLifecycleClauseDirection(text: string, leaf: AtomExpr & { kind: 'atom' }): number {
+    if (leaf.key === 'indicator.above') {
+      return /(?:上方|之上|高于|站上|突破|above)/iu.test(text) ? 2 : 0
+    }
+    if (leaf.key === 'indicator.below') {
+      return /(?:下方|之下|低于|跌破|below)/iu.test(text) ? 2 : 0
+    }
+    if (leaf.key === 'indicator.cross_over') {
+      return /(?:上穿|金叉|cross(?:es)?\s+over|cross\s+above)/iu.test(text) ? 2 : 0
+    }
+    if (leaf.key === 'indicator.cross_under') {
+      return /(?:下穿|死叉|cross(?:es)?\s+under|cross\s+below)/iu.test(text) ? 2 : 0
+    }
+    return 0
   }
 
   private collectNumericConditionParams(value: unknown): number[] {
@@ -1417,7 +1434,7 @@ export class SemanticStateMergeService {
   }
 
   private hasCloseLongIntent(text: string): boolean {
-    return /(?:平多|卖出平多|卖出平仓|平仓|平一半|平剩余|止盈|止损|close\s+long|sell\s+to\s+close)/iu.test(text)
+    return /(?:平多|卖出(?!\s*(?:开空|做空))|卖出平多|卖出平仓|平仓|平一半|平剩余|止盈|止损|close\s+long|sell\s+to\s+close)/iu.test(text)
   }
 
   private hasCloseShortIntent(text: string): boolean {

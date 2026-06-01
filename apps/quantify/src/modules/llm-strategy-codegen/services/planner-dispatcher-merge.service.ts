@@ -3136,7 +3136,7 @@ export class PlannerDispatcherMergeService {
       }
 
       if (this.shouldAppendNonLifecycleDispatcherRule(dispatcherRule)) {
-        if (!nextRules.some(rule => this.rulesRepresentSameNonLifecycleSemantics(rule, dispatcherRule))) {
+        if (!nextRules.some(rule => this.ruleCoversNonLifecycleDispatcherRule(rule, dispatcherRule))) {
           nextRules.push(dispatcherRule)
         }
       }
@@ -3227,6 +3227,25 @@ export class PlannerDispatcherMergeService {
       ...collectAtomLeaves(right.condition),
       ...listRuleEffects(right.effects).flatMap(effect => collectAtomLeaves(effect)),
     ].every(leaf => leftKeys.has(leaf.key))
+  }
+
+  private ruleCoversNonLifecycleDispatcherRule(existing: SemanticRule, dispatcherRule: SemanticRule): boolean {
+    if (this.rulesRepresentSameNonLifecycleSemantics(existing, dispatcherRule)) return true
+    if (!this.sideScopesCompatible(existing.sideScope, dispatcherRule.sideScope)) return false
+    const dispatcherConditionLeaves = collectAtomLeaves(dispatcherRule.condition)
+    const existingConditionLeaves = collectAtomLeaves(existing.condition)
+    if (dispatcherConditionLeaves.length === 0 || existingConditionLeaves.length === 0) return false
+    const conditionCovered = dispatcherConditionLeaves.every(dispatcherLeaf =>
+      existingConditionLeaves.some(existingLeaf => this.conditionLeafRepresents(existingLeaf, dispatcherLeaf)),
+    )
+    if (!conditionCovered) return false
+
+    const dispatcherEffects = listRuleEffects(dispatcherRule.effects).flatMap(effect => collectAtomLeaves(effect))
+    if (dispatcherEffects.length === 0) return false
+    const existingEffects = listRuleEffects(existing.effects).flatMap(effect => collectAtomLeaves(effect))
+    return dispatcherEffects.every(dispatcherEffect =>
+      existingEffects.some(existingEffect => this.effectLeafMatches(existingEffect, dispatcherEffect)),
+    )
   }
 
   private mergeMissingConditionLeaves(existing: AtomExpr, additions: readonly AtomExprAtom[]): AtomExpr {

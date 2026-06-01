@@ -493,20 +493,28 @@ export class CodegenConversationService {
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       : semanticArtifacts.clarificationPrompt
+    const semanticAuthoritativePrompt = plan.semanticPatch
+      ? this.buildSemanticAuthoritativeAssistantPrompt({
+        semanticState: initialSemanticState,
+        semanticArtifacts,
+        normalization,
+        responseLocale,
+      })
+      : null
     const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
-      ? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState, responseLocale)
+      ? (semanticAuthoritativePrompt ?? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState, responseLocale))
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
       initialStatus,
       clarificationState,
-      clarificationPrompt,
+      clarificationPrompt: semanticAuthoritativePrompt ?? clarificationPrompt,
       confirmationAssistantPrompt,
       decisionKind: decision.kind,
-      plan,
+      plan: semanticAuthoritativePrompt ? { ...plan, assistantPrompt: semanticAuthoritativePrompt } : plan,
       normalizationBlocked: normalization?.blocked === true,
       normalizationAssistantPrompt: normalization?.blocked
-        ? this.buildSemanticNormalizationAssistantPrompt(initialSemanticState, normalization, responseLocale)
+        ? (semanticAuthoritativePrompt ?? this.buildSemanticNormalizationAssistantPrompt(initialSemanticState, normalization, responseLocale))
         : undefined,
       locale: responseLocale,
     })
@@ -1975,11 +1983,19 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
-    const plannerAssistantPrompt = this.localizePlannerPromptForResponse({
-      assistantPrompt: plan.assistantPrompt,
-      locale: responseLocale,
-      clarificationState,
-    })
+    const semanticAuthoritativePlannerPrompt = plan.semanticPatch
+      ? this.buildSemanticAuthoritativeAssistantPrompt({
+        semanticState: reducedSemanticState,
+        semanticArtifacts,
+        normalization,
+        responseLocale,
+      })
+      : null
+    const plannerAssistantPrompt = semanticAuthoritativePlannerPrompt ?? this.localizePlannerPromptForResponse({
+        assistantPrompt: plan.assistantPrompt,
+        locale: responseLocale,
+        clarificationState,
+      })
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
@@ -5608,6 +5624,27 @@ export class CodegenConversationService {
       return `I organized the strategy logic as follows: ${summary}. Please confirm whether I should generate the script with this logic.`
     }
     return `我整理出的策略逻辑如下：${summary}。请确认是否按这个逻辑生成脚本。`
+  }
+
+  private buildSemanticAuthoritativeAssistantPrompt(input: {
+    semanticState: SemanticState
+    semanticArtifacts: ReturnType<CodegenConversationService['resolveSemanticClarificationArtifacts']>
+    normalization: NormalizationResult
+    responseLocale: CodegenConversationLocale
+  }): string | null {
+    if (!this.hasDeterministicStrategySemantics(input.semanticState)) return null
+
+    if (input.semanticArtifacts.clarificationState.status === 'NEEDS_CLARIFICATION') {
+      return input.semanticArtifacts.clarificationPrompt
+        || this.clarificationQuestion.build(input.semanticArtifacts.clarificationState, input.responseLocale)
+        || this.buildSemanticNormalizationAssistantPrompt(input.semanticState, input.normalization, input.responseLocale)
+    }
+
+    if (input.normalization.blocked) {
+      return this.buildSemanticNormalizationAssistantPrompt(input.semanticState, input.normalization, input.responseLocale)
+    }
+
+    return this.buildSemanticLogicGateAssistantPrompt(input.semanticState, input.responseLocale)
   }
 
   private buildSemanticNormalizationAssistantPrompt(

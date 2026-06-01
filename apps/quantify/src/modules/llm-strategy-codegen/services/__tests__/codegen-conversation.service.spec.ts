@@ -1322,6 +1322,59 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('does not return stale planner prompt when dispatcher repairs MA cross lifecycle', async () => {
+    const initialMessage = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我当前理解的策略是：OKX BTCUSDT 永续合约 15m；出场：MA6 上穿 MA48 → 平多，止损：价格相对入场均价下跌2% 强制平仓，止盈：价格相对入场均价上涨0.6% 平仓，杠杆：2 倍，单笔仓位 35%，周期范围:主 15m，依赖 15m（tolerant）；出场：MA6 下穿 MA48 → 平多，周期范围:主 15m，依赖 15m（tolerant） 现在还缺一个会影响脚本生成一致性的条件：核心交易语义。 请确认：请补充入场条件，例如什么价格或指标条件触发开仓。',
+        semanticPatch: {
+          contextSlots: {
+            venue: 'okx',
+            symbol: 'BTCUSDT',
+            instrumentType: 'perpetual',
+            timeframe: '15m',
+          },
+          rules: [{
+            id: 'planner-wrong-exit-cross-over',
+            phase: 'exit',
+            sideScope: 'long',
+            evidence: { text: initialMessage },
+            condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 }, evidence: { text: 'MA6 上穿 MA48 时做多开仓' } },
+            effects: {
+              actions: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: 'MA6 上穿 MA48 时做多开仓' } }],
+              risks: [
+                { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 2 }, evidence: { text: '止损 2%' } },
+                { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 0.6 }, evidence: { text: '止盈 0.6%' } },
+              ],
+              positions: [
+                { kind: 'atom', key: 'position.sizing', params: { mode: 'pct_equity', value: 35 }, evidence: { text: '仓位 35%' } },
+                { kind: 'atom', key: 'position.leverage', params: { value: 2 }, evidence: { text: '2 倍杠杆' } },
+              ],
+              orchestration: [],
+              programs: [],
+            },
+          }, {
+            id: 'planner-exit-cross-under',
+            phase: 'exit',
+            sideScope: 'long',
+            evidence: { text: initialMessage },
+            condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 }, evidence: { text: 'MA6 下穿 MA48 时平多' } },
+            effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: 'MA6 下穿 MA48 时平多' } }], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-ma-lifecycle-prompt' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+
+    expect(result.assistantPrompt).toContain('入场：MA6 上穿 MA48')
+    expect(result.assistantPrompt).not.toContain('出场：MA6 上穿 MA48')
+    expect(result.assistantPrompt).not.toContain('请补充入场条件')
+  })
+
   it('lists conversations from the dedicated conversation aggregate instead of raw session rows', async () => {
     mockConversationsRepo.listByUser.mockResolvedValue([
       {
