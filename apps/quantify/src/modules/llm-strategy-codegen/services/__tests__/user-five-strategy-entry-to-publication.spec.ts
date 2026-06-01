@@ -22,6 +22,7 @@ import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execu
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
+import { RulesMainflowReaderService, type MainflowLeafRole, type RulesMainflowAtomFact } from '../rules-mainflow-reader.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StrategyClarificationQuestionService } from '../strategy-clarification-question.service'
@@ -39,6 +40,7 @@ type ConversationInternals = {
 
 const noop = () => undefined
 const stubObj = new Proxy({}, { get: () => noop }) as never
+const rulesMainflowReader = new RulesMainflowReaderService()
 const forbiddenUserVisibleFragments = [
   '请补充入场触发条件',
   '请补充该原子的执行合约',
@@ -101,6 +103,22 @@ function buildStateFromUserMessage(message: string): SemanticState {
     state!,
     { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION },
   )
+}
+
+function factsByRole(state: SemanticState, role: MainflowLeafRole): RulesMainflowAtomFact[] {
+  return [...rulesMainflowReader.readFactsByRole(state, role)]
+}
+
+function keysWithLegacyAliases(keys: readonly string[]): string[] {
+  return [...new Set(keys.flatMap(key => key.startsWith('action.') ? [key, key.slice('action.'.length)] : [key]))]
+}
+
+function allSemanticKeys(state: SemanticState): string[] {
+  return keysWithLegacyAliases(rulesMainflowReader.readFacts(state).map(item => item.key))
+}
+
+function findSemanticFact(state: SemanticState, key: string): RulesMainflowAtomFact | undefined {
+  return rulesMainflowReader.readFacts(state).find(item => item.key === key)
 }
 
 describe('user reported five strategies: entry -> middle -> publication generation', () => {
@@ -198,14 +216,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
   for (const strategy of strategies) {
     it(`${strategy.name}: 入口和中链路不回退 missing/unsupported`, () => {
       const state = buildStateFromUserMessage(strategy.message)
-      const allKeys = [
-        ...state.trigger.map(item => item.key),
-        ...state.action.map(item => item.key),
-        ...state.risk.map(item => item.key),
-        ...state.positionConstraint.map(item => item.key),
-        ...(state.position?.constraints ?? []).map(item => item.key),
-        ...state.orchestration.map(item => item.key),
-      ]
+      const allKeys = allSemanticKeys(state)
       const conversation = createConversationService()
       const projection = new SemanticStateProjectionService().buildConversationView(state)
       const clarificationState = conversation.buildClarificationFromSemanticState(state)
@@ -329,9 +340,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
 
   it('策略1: 网格每格间距已给出时不再追问密度', () => {
     const state = buildStateFromUserMessage('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
-    const grid = state.trigger.find(item => item.key === 'grid.range_rebalance')
-      ?? state.positionConstraint.find(item => item.key === 'grid.range_rebalance')
-      ?? state.position?.constraints?.find(item => item.key === 'grid.range_rebalance')
+    const grid = findSemanticFact(state, 'grid.range_rebalance')
     const conversation = createConversationService()
     const clarificationState = conversation.buildClarificationFromSemanticState(state)
     const prompt = new StrategyClarificationQuestionService().build(clarificationState)
@@ -343,7 +352,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
 
   it('策略2: 普通止盈不误归类为分批止盈', () => {
     const state = buildStateFromUserMessage('在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%')
-    const riskKeys = state.risk.map(item => item.key)
+    const riskKeys = factsByRole(state, 'risk').map(item => item.key)
     const conversation = createConversationService()
     const clarificationState = conversation.buildClarificationFromSemanticState(state)
     const prompt = new StrategyClarificationQuestionService().build(clarificationState)
@@ -365,12 +374,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
 
   it('策略4: RSI/ATR/分批止盈/回撤护栏不回退入场追问', () => {
     const state = buildStateFromUserMessage('ETH 永续，15 分钟。RSI(14) ≤ 30 时开多，仓位的 2% ATR 作为止损，达到 3% 利润分批止盈一半；任何时刻账户回撤超过 10% 暂停开新仓。')
-    const allKeys = [
-      ...state.trigger.map(item => item.key),
-      ...state.action.map(item => item.key),
-      ...state.risk.map(item => item.key),
-      ...state.orchestration.map(item => item.key),
-    ]
+    const allKeys = allSemanticKeys(state)
     const conversation = createConversationService()
     const clarificationState = conversation.buildClarificationFromSemanticState(state)
     const prompt = new StrategyClarificationQuestionService().build(clarificationState)
