@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-06-01 · AI 量化形态裁决 + 5 步 StepBar 向导骨架：方案 B 维持对话中心、向导标 future（Issue #1890，AI 量化对齐批次前置基座）
+
+**背景**：#1890 为本批「AI 量化」对齐工作的**基座 Issue**，要求先裁决形态：设计稿 `design/project/mobile`（`proto.jsx` 串联）把「AI 量化」定义为 **6 屏线性向导**，每屏顶部共享一条 5 步进度指示器 `BtcStepBar`（`m-screens-btconfig.jsx:285`，标签 `:287-289` `确认策略 / 策略脚本 / 回测设置 / 回测 / 部署`，已完成步可点击回跳），屏间「上一步 / 下一步」线性导航；现实现走**对话中心**形态——确认+脚本合并为单页 `/ai/confirm`（无 StepBar）、回测设置是弹层 `backtest_config_sheet.dart`、回测中/结果退化为对话内嵌卡（`qz_backtest_progress_card.dart` / `qz_backtest_result_card.dart`）、部署是弹层 `qz_deploy_sheet.dart`。`qz_backtest_progress_card.dart` 头部注释引用本文件 #1749，说明现 route/sheet 边界是**有意决策**。
+
+**候选**：
+
+| 方案 | 描述 | 取舍 |
+|------|------|------|
+| A. 对齐设计稿（向导形态） | 新增 `BtcStepBar` 组件 + 整屏路由 `/ai/confirm`→`/ai/script`→`/ai/backtest-config`→`/ai/backtest-run`→`/ai/backtest-result`→`/ai/deploy`，全程共享 StepBar + 上一步/下一步线性导航，推翻 #1749 §3 route↔sheet 边界与 #1751 简化边界 | 5 步向导骨架 + 6 屏 route + StepBar 回跳态全部依赖真实策略代码生成 / 回测引擎产出（#1679/#1682）才有产品价值；未就绪前落 mock 向导骨架，真实接入时大概率重写（步骤序、回跳语义、上下文持有者归属均由真实数据形态决定）；直接推翻 #1749/#1751/#1770/#1771 已反复确立的「对话是唯一会话上下文持有者、回测/部署走 sheet+聊天卡、不新增多步骤 route」边界，破坏现役可走通链路（Never break userspace） |
+| B. 维持对话中心、向导标 future（采纳） | 钉死「AI 量化以 app 现有对话中心形态为最终基线」：对话 → `/ai/confirm` → `/ai/backtest-config`（route 承载回测配置弹层）→ 聊天内回测卡 → `QzDeploySheet`；不引入 `BtcStepBar`、不新增 6 屏向导 route、不做屏间线性导航。设计稿 6 屏向导 + 5 步 StepBar 统一标 future。本结论作为后续「AI 量化」单屏对齐 Issue 的前置依据被显式引用 | 对齐 #1749 §3（route↔sheet 硬边界）、#1751（AI 对话直接接回测、不新增独立 route）、#1770（5 步 StepBar + 确认/脚本步骤页同题已采纳暂缓）、#1771（回测中/结果独立页标 future）已建立的统一基线；真实数据通道 #1679/#1682 未就绪，KISS/YAGNI；现役对话链路零破坏 |
+
+**判定**：**采纳方案 B——AI 量化维持对话中心形态为最终基线，6 屏线性向导 + 5 步 `BtcStepBar` 统一标 future，不引入向导骨架与线性导航**。本节作为本批「AI 量化」对齐工作的形态前置结论，supersede #1890「方案 A（对齐设计稿）」分支，并更新 #1749 关于 AI 量化形态的边界为最终结论。
+
+**对齐结论（对应 #1890 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] decisions.md 中 AI 量化形态（#1749）决策更新为最终结论 + 理由 | 已满足。结论＝方案 B 维持对话中心，6 屏向导 + StepBar 标 future，记入本节并写明理由；#1749 关于 AI 量化形态的边界由本节钉死为最终结论 | 本节 + #1749 §3 |
+| [2] 若采用向导形态：存在 `BtcStepBar` 组件 5 步、当前步高亮、已完成步可点回跳 | 不适用。采纳方案 B，不落地 StepBar；设计稿 `BtcStepBar`（`m-screens-btconfig.jsx:285`）标 future | 本节判定 |
+| [3] 若采用向导形态：各屏顶部渲染同一 StepBar | 不适用。同上，不落地 | 本节判定 |
+| [4] 屏间「上一步/下一步」线性导航与设计稿一致 | 不适用。维持对话 → route → 聊天卡 → sheet 的现役链路，不引入线性向导导航 | #1749 §3、#1751 |
+| [5] 本 Issue 最终形态结论作为后续对齐 Issue 前置依据被显式引用 | 已满足。本节钉死方案 B，README「设计真源」段补 #1890 引用；后续「AI 量化」单屏对齐 Issue 一律以本节为形态前置，不重复论证 | 本节 + README |
+
+**理由**：
+
+1. **真实问题判定**：现 AI 链路（对话 → `/ai/confirm` → `/ai/backtest-config` → 聊天内回测卡 → `QzDeploySheet`）已闭环可走通；「6 屏向导 + StepBar 回跳」是设计超前表达而非阻塞用户的真实缺口。
+2. **同题已裁**：#1770 对「5 步 StepBar + 确认/脚本显式步骤页」已采纳方案 B 暂缓、标 future；#1771 对「回测中/结果独立页」同样标 future。#1890 是同一组形态差异的基座汇总，结论必须与既有谱系一致，否则自相矛盾。
+3. **依赖未就绪 / YAGNI**：StepBar 回跳态、脚本查看、IF/THEN 规则块均依赖真实策略代码生成与回测接入（#1679/#1682）。mock 阶段堆向导骨架，真实接入后大概率重写。
+4. **route↔sheet 硬边界**：#1749 §3 钉死「同一交互不允许 route + sheet 两条入口」，`backtest-config` 以 route 承载弹层视觉。新增 6 屏向导会引入与现链路并行的第二形态，与该边界冲突。
+5. **Never break userspace**：维持对话中心对现役 AI 对话流、`backtest_config_sheet.dart`、`QzDeploySheet`、聊天内回测卡及其 widget 测试全部零破坏。
+
+**对后续 Issue 的约束（前置依据）**：本批所有「AI 量化」单屏对齐 Issue（确认策略 / 策略脚本 / 回测设置 / 回测中 / 回测结果 / 部署各屏）一律以本节方案 B 为形态前置——只在现有 route/sheet/聊天卡形态内补齐内容缺口，**不得以「对齐缺口」名义复活 6 屏向导 route、`BtcStepBar` 或屏间线性导航**。设计稿对应屏（`m-screens-confirm.jsx` `ScreenStratConfirm:199` / `ScreenStratScript:704`、`m-screens-btconfig.jsx` `BtcStepBar:285`、`m-screens-backtest.jsx` `ScreenBacktestRun` / `ScreenBacktestResult`、`m-screens-deploy.jsx` 多页结构）保留为 future 高保真表达，不删除、不回流 app，直到 #1679/#1682 接入真实能力后另立 issue 解除本暂缓。
+
+**触发条件**：当 #1679（策略代码生成 / 回测引擎）/ #1682（数据通道）在 app 侧产出真实策略代码与回测结果时，新立「AI 量化向导形态实现」issue，引用本节作为暂缓解除依据，届时统一评估 6 屏 route + `BtcStepBar` + 线性导航 + 结果模型扩展，并同步复核是否解除 #1749 §3 / #1751 的边界。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1890 引用。不改 `design/project/mobile/*`、不改 `app_router.dart` / `ai_home_page.dart` / `ai_confirm_page.dart` / `backtest_config_sheet.dart` / `qz_deploy_sheet.dart` / 聊天卡 widget 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · 策略详情「用户评价」区块移除：对齐设计稿已删 reviews（Issue #1799）
 
 **背景**：设计稿 `design/project/mobile/m-screens-2.jsx`（`StratDetail`，`:1106` `{/* reviews removed */}`）已移除 reviews（用户评价）区块。Flutter app `apps/quantify-mobile/lib/pages/strategy/strategy_detail_page.dart` 仍保留「用户评价」区块——`strategyReviewsProvider` + section UI（标题 + `_ReviewsSection`/`_ReviewTile`/`_StarsRow`）+ `StrategyReview` 模型 + mock `listReviews`（按 id 派生 3 条 mock 评价）。属设计已删的 app 残留。
