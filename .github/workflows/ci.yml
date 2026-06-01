@@ -213,8 +213,7 @@ jobs:
           AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${AWS_SSH_PORT}" -H "${AWS_SSH_HOST}" >> ~/.ssh/known_hosts
+          bash scripts/ci/preheat-ssh-known-hosts.sh
 
       - name: 远端环境 preflight（Node/pnpm/pm2）
         env:
@@ -358,8 +357,7 @@ jobs:
           AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${AWS_SSH_PORT}" -H "${AWS_SSH_HOST}" >> ~/.ssh/known_hosts
+          bash scripts/ci/preheat-ssh-known-hosts.sh
 
       - name: 远端环境 preflight（Node/pnpm/pm2）
         env:
