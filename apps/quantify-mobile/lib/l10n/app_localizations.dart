@@ -3962,6 +3962,18 @@ abstract class AppLocalizations {
   /// **'地址已复制'**
   String get whaleProfileCopied;
 
+  /// No description provided for @whaleProfileWatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'一键监控'**
+  String get whaleProfileWatch;
+
+  /// No description provided for @whaleProfileRefreshTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新'**
+  String get whaleProfileRefreshTooltip;
+
   /// No description provided for @whaleProfileAssetSummaryPrefix.
   ///
   /// In zh, this message translates to:

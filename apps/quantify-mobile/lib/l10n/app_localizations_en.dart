@@ -2056,6 +2056,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileCopied => 'Address copied';
 
   @override
+  String get whaleProfileWatch => 'Watch';
+
+  @override
+  String get whaleProfileRefreshTooltip => 'Refresh';
+
+  @override
   String get whaleProfileAssetSummaryPrefix => 'Holdings · ';
 
   @override

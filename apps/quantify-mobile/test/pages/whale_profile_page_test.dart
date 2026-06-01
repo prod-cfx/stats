@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/mock/fixtures/whale_profiles.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/whale_profile_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/whale_profile_page.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_pnl_chart.dart';
@@ -44,10 +46,25 @@ GoRouter _router({required String initial}) {
   );
 }
 
-Future<void> _pump(WidgetTester tester, {required String initial}) async {
+/// 计数 repository：记录 getProfile 调用次数，用于断言刷新触发重载。
+class _CountingProfileRepository implements WhaleProfileRepository {
+  int calls = 0;
+  @override
+  Future<WhaleProfile> getProfile(String address) async {
+    calls++;
+    return mockWhaleProfiles[_knownAddress]!;
+  }
+}
+
+Future<void> _pump(
+  WidgetTester tester, {
+  required String initial,
+  List<Override> overrides = const <Override>[],
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 1800));
   await tester.pumpWidget(
     ProviderScope(
+      overrides: overrides,
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -144,6 +161,62 @@ void main() {
       findsWidgets,
     );
     expect(find.text('按资产的表现'), findsOneWidget);
+  });
+
+  testWidgets('header：一键监控按钮存在且点击打开 watch 规则弹窗', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    expect(find.text('一键监控'), findsOneWidget);
+
+    await tester.tap(find.text('一键监控'));
+    await tester.pumpAndSettle();
+    // watch 规则 sheet 标题（复用 #1791 添加地址监控流程）。
+    expect(find.text('添加地址监控'), findsOneWidget);
+  });
+
+  testWidgets('header：刷新按钮存在且触发 profile 重载', (WidgetTester tester) async {
+    final _CountingProfileRepository repo = _CountingProfileRepository();
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+      overrides: <Override>[
+        whaleProfileRepositoryProvider.overrideWithValue(repo),
+      ],
+    );
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
+    expect(repo.calls, 1); // 初次加载
+
+    // 点击刷新 → provider 失效并重新拉取 → getProfile 再次被调用。
+    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+    expect(repo.calls, 2);
+    expect(find.byType(WhalePnlChart), findsOneWidget); // 重载后仍渲染数据
+  });
+
+  testWidgets('header：avatar 为圆形 tier 头像，非钱包方块 icon', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    // 旧实现的钱包方块 icon 已移除。
+    expect(find.byIcon(Icons.account_balance_wallet), findsNothing);
+    // tier 圆形 avatar：圆形 BoxDecoration 容器存在。
+    final Iterable<Container> circles = tester
+        .widgetList<Container>(find.byType(Container))
+        .where(
+          (Container w) =>
+              w.decoration is BoxDecoration &&
+              (w.decoration! as BoxDecoration).shape == BoxShape.circle,
+        );
+    expect(circles, isNotEmpty);
   });
 
   testWidgets('复制地址：点击复制按钮写入剪贴板并提示', (WidgetTester tester) async {

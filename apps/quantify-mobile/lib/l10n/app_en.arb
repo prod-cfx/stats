@@ -773,6 +773,8 @@
   "whaleProfileCopyTooltip": "Copy address",
   "whaleProfileShareTooltip": "Share",
   "whaleProfileCopied": "Address copied",
+  "whaleProfileWatch": "Watch",
+  "whaleProfileRefreshTooltip": "Refresh",
   "whaleProfileAssetSummaryPrefix": "Holdings · ",
   "whaleProfileHoldingsValueLabel": "Total holdings value",
   "whaleProfileSectionHoldings": "Holdings",

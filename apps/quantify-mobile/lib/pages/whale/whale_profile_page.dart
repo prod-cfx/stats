@@ -11,13 +11,13 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
-import '../../widgets/qz_top_bar.dart';
 import 'widgets/whale_chart_filter_sheet.dart';
 import 'widgets/whale_detail_rows.dart';
 import 'widgets/whale_perp_summary_card.dart';
 import 'widgets/whale_pnl_chart.dart';
 import 'widgets/whale_stat_cards.dart';
 import 'widgets/whale_trade_stats_sheet.dart';
+import 'widgets/whale_watch_rule_sheet.dart';
 
 /// 巨鲸地址详情页（#1791，`/whale/profile/:address`）。
 ///
@@ -42,6 +42,16 @@ class WhaleProfilePage extends ConsumerWidget {
     );
   }
 
+  // 「一键监控」入口：复用现有 watch 规则流程（#1791 watch tab 同款 sheet）。
+  Future<void> _openWatch(BuildContext context) async {
+    await WhaleWatchRuleSheet.show(context);
+  }
+
+  // 「刷新」入口：失效 profile provider 触发详情数据重载。
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(whaleProfileProvider(address));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
@@ -50,57 +60,205 @@ class WhaleProfilePage extends ConsumerWidget {
       whaleProfileProvider(address),
     );
 
+    Widget header({String? tagTone}) => _ProfileHeader(
+          address: address,
+          tagTone: tagTone,
+          onBack: () => context.pop(),
+          onCopy: () => _copyAddress(context, l10n),
+          onWatch: () => _openWatch(context),
+          onRefresh: () => _refresh(ref),
+        );
+
     return Scaffold(
       backgroundColor: c.bg,
       body: profile.when(
-        loading: () => _Frame(
-          address: address,
-          l10n: l10n,
-          child: const Expanded(child: Center(child: QzSpinner())),
+        loading: () => Column(
+          children: <Widget>[
+            header(),
+            const Expanded(child: Center(child: QzSpinner())),
+          ],
         ),
-        error: (Object e, StackTrace _) => _Frame(
-          address: address,
-          l10n: l10n,
-          child: Expanded(
-            child: Center(
-              child: Text(
-                l10n.whaleProfileLoadError,
-                style: TextStyle(color: c.statusDanger),
+        error: (Object e, StackTrace _) => Column(
+          children: <Widget>[
+            header(),
+            Expanded(
+              child: Center(
+                child: Text(
+                  l10n.whaleProfileLoadError,
+                  style: TextStyle(color: c.statusDanger),
+                ),
               ),
             ),
-          ),
+          ],
         ),
         data: (WhaleProfile p) => _Detail(
           profile: p,
-          onCopy: () => _copyAddress(context, l10n),
+          header: header(tagTone: p.tagTone),
         ),
       ),
     );
   }
 }
 
-/// loading/error 共用骨架（topbar + 占位）。
-class _Frame extends StatelessWidget {
-  const _Frame({
+/// 详情页单条 header bar（设计稿 `WhaleProfileDetail` header，jsx:639-676）：
+/// 返回 + tier 配色圆形 avatar + 地址(mono) + 复制 + 一键监控 + 刷新。
+class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
+  const _ProfileHeader({
     required this.address,
-    required this.l10n,
-    required this.child,
+    required this.onBack,
+    required this.onCopy,
+    required this.onWatch,
+    required this.onRefresh,
+    this.tagTone,
   });
+
   final String address;
-  final AppLocalizations l10n;
-  final Widget child;
+  final String? tagTone;
+  final VoidCallback onBack;
+  final VoidCallback onCopy;
+  final VoidCallback onWatch;
+  final VoidCallback onRefresh;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(56);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        QzTopBar(
-          title: l10n.whaleProfileTitle,
-          subtitle: address,
-          onBack: () => context.pop(),
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Material(
+      color: c.bgElev,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.borderSoft)),
         ),
-        child,
-      ],
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: SizedBox(
+            height: 56,
+            child: Row(
+              children: <Widget>[
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                  color: c.text,
+                  onPressed: onBack,
+                  tooltip: 'Back',
+                ),
+                _TierAvatar(seed: address, tagTone: tagTone),
+                const SizedBox(width: QzSpacing.sm),
+                Expanded(
+                  child: Text(
+                    address,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: c.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const <FontFeature>[
+                        FontFeature.tabularFigures(),
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  color: c.textMid,
+                  tooltip: l10n.whaleProfileCopyTooltip,
+                  onPressed: onCopy,
+                ),
+                _WatchButton(label: l10n.whaleProfileWatch, onTap: onWatch),
+                const SizedBox(width: QzSpacing.xs),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 18),
+                  color: c.textMid,
+                  tooltip: l10n.whaleProfileRefreshTooltip,
+                  onPressed: onRefresh,
+                ),
+                const SizedBox(width: QzSpacing.sm),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// tier 配色圆形 avatar：色相取自地址 hash，glyph 取地址首段字符。
+/// tagTone 命中语义色时优先使用语义色（accent/info/warn）。
+class _TierAvatar extends StatelessWidget {
+  const _TierAvatar({required this.seed, this.tagTone});
+  final String seed;
+  final String? tagTone;
+
+  static const double _size = 32;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final Color bg = switch (tagTone) {
+      'accent' => c.accent,
+      'info' => c.statusInfo,
+      'warn' => c.statusWarn,
+      _ => HSLColor.fromAHSL(
+          1,
+          (seed.codeUnits.fold<int>(0, (int a, int b) => a + b) * 17) % 360,
+          0.55,
+          0.62,
+        ).toColor(),
+    };
+    final String glyph = _glyph(seed);
+    return Container(
+      width: _size,
+      height: _size,
+      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(
+        glyph,
+        style: const TextStyle(
+          color: Color(0xFFFFFFFF),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  // 取地址 '0x' 之后的两位字符（无则回退首两位），与设计稿 av 短标一致。
+  String _glyph(String s) {
+    final String body = s.startsWith('0x') && s.length >= 4 ? s.substring(2) : s;
+    final String picked = body.length >= 2 ? body.substring(0, 2) : body;
+    return picked.toUpperCase();
+  }
+}
+
+/// 绿底「一键监控」按钮（设计稿 violet 实底胶囊，jsx:659-665）。
+class _WatchButton extends StatelessWidget {
+  const _WatchButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        backgroundColor: c.accentSoft,
+        foregroundColor: c.accent,
+        minimumSize: const Size(0, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
@@ -119,46 +277,18 @@ QzChipTone _chipTone(String tone) {
 }
 
 class _Detail extends StatelessWidget {
-  const _Detail({required this.profile, required this.onCopy});
+  const _Detail({required this.profile, required this.header});
   final WhaleProfile profile;
-  final VoidCallback onCopy;
+  final Widget header;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
     return DefaultTabController(
       length: 6,
       child: Column(
         children: <Widget>[
-          QzTopBar(
-            title: l10n.whaleProfileTitle,
-            subtitle: profile.address,
-            onBack: () => context.pop(),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => WhaleTradeStatsSheet.show(
-                  context,
-                  address: profile.address,
-                  stats: profile.stats,
-                ),
-                child: Text(
-                  l10n.whaleTradeStatsTitle,
-                  style: TextStyle(
-                    color: c.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                color: c.textMid,
-                tooltip: l10n.whaleProfileCopyTooltip,
-                onPressed: onCopy,
-              ),
-            ],
-          ),
+          header,
           _Hero(profile: profile),
           _TabBar(profile: profile),
           Expanded(
@@ -512,51 +642,33 @@ class _Hero extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: c.accentSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.account_balance_wallet,
-                  size: 20,
-                  color: c.accent,
+              QzChip(label: profile.tag, tone: _chipTone(profile.tagTone)),
+              const SizedBox(width: QzSpacing.sm),
+              Expanded(
+                child: Text(
+                  '${l10n.whaleProfileAssetSummaryPrefix}${profile.assetSummary}',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.textDim, fontSize: 11),
                 ),
               ),
-              const SizedBox(width: QzSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            profile.address,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: c.text,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: QzSpacing.sm),
-                        QzChip(
-                          label: profile.tag,
-                          tone: _chipTone(profile.tagTone),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${l10n.whaleProfileAssetSummaryPrefix}${profile.assetSummary}',
-                      style: TextStyle(color: c.textDim, fontSize: 11),
-                    ),
-                  ],
+              // 「交易统计」由卡片触发（设计稿不放 header），避免成为死代码。
+              TextButton(
+                onPressed: () => WhaleTradeStatsSheet.show(
+                  context,
+                  address: profile.address,
+                  stats: profile.stats,
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: c.accent,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                ),
+                child: Text(
+                  l10n.whaleTradeStatsTitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],

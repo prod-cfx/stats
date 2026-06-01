@@ -2015,6 +2015,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileCopied => '地址已复制';
 
   @override
+  String get whaleProfileWatch => '一键监控';
+
+  @override
+  String get whaleProfileRefreshTooltip => '刷新';
+
+  @override
   String get whaleProfileAssetSummaryPrefix => '主要持仓 · ';
 
   @override
