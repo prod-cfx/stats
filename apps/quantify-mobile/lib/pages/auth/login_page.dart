@@ -136,37 +136,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         // 沉浸：无 AppBar，靠下方 SafeArea(top: false) 让内容自然延伸到 statusBar。
         body: SafeArea(
           top: false,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _Hero(key: const ValueKey<String>('login-hero'), l10n: l10n),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    QzSpacing.lg,
-                    QzSpacing.lg,
-                    QzSpacing.lg,
-                    QzSpacing.lg,
-                  ),
-                  child: _LoginForm(
-                    formKey: _formKey,
-                    email: _email,
-                    password: _password,
-                    busy: busy,
-                    emailLoading: _emailLoading,
-                    telegramLoading: _telegramLoading,
-                    validateEmail: _validateEmail,
-                    validatePassword: _validatePassword,
-                    onSubmitEmail: _submitEmail,
-                    onSubmitTelegram: _submitTelegram,
-                    onTermsTap: _onTermsTap,
-                    onPrivacyTap: _onPrivacyTap,
-                    colors: c,
-                    l10n: l10n,
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _Hero(
+                          key: const ValueKey<String>('login-hero'),
+                          l10n: l10n,
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              QzSpacing.lg,
+                              QzSpacing.lg,
+                              QzSpacing.lg,
+                              0,
+                            ),
+                            child: _LoginForm(
+                              formKey: _formKey,
+                              email: _email,
+                              password: _password,
+                              busy: busy,
+                              emailLoading: _emailLoading,
+                              telegramLoading: _telegramLoading,
+                              validateEmail: _validateEmail,
+                              validatePassword: _validatePassword,
+                              onSubmitEmail: _submitEmail,
+                              onSubmitTelegram: _submitTelegram,
+                              onTermsTap: _onTermsTap,
+                              onPrivacyTap: _onPrivacyTap,
+                              colors: c,
+                              l10n: l10n,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -458,79 +472,172 @@ class _LoginForm extends StatelessWidget {
             style: TextStyle(color: c.textDim, fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: QzSpacing.lg),
-          TextFormField(
-            key: const ValueKey<String>('login-email-field'),
+          _LoginTextField(
+            fieldKey: const ValueKey<String>('login-email-field'),
+            shellKey: const ValueKey<String>('login-email-field-shell'),
+            labelKey: const ValueKey<String>('login-email-label'),
             controller: email,
             enabled: !busy,
+            label: l10n.authLoginEmailLabel,
+            hintText: 'you@example.com',
             keyboardType: TextInputType.emailAddress,
-            autocorrect: false,
-            decoration: InputDecoration(
-              labelText: l10n.authLoginEmailLabel,
-              hintText: 'you@example.com',
-            ),
             validator: validateEmail,
+            colors: c,
           ),
           const SizedBox(height: QzSpacing.md),
-          TextFormField(
-            key: const ValueKey<String>('login-password-field'),
+          _LoginTextField(
+            fieldKey: const ValueKey<String>('login-password-field'),
+            shellKey: const ValueKey<String>('login-password-field-shell'),
+            labelKey: const ValueKey<String>('login-password-label'),
             controller: password,
             enabled: !busy,
+            label: l10n.authLoginPasswordLabel,
+            hintText: l10n.authLoginPasswordHint,
             obscureText: true,
-            decoration: InputDecoration(
-              labelText: l10n.authLoginPasswordLabel,
-              hintText: l10n.authLoginPasswordHint,
-            ),
             validator: validatePassword,
-          ),
-          const SizedBox(height: QzSpacing.lg),
-
-          // 渐变主按钮 —— 走原生 Material InkWell + Ink 渲染，避免 QzButton
-          // 默认 accent variant 是纯色填充。
-          _GradientPrimaryButton(
-            key: const ValueKey<String>('login-submit'),
-            label: l10n.authLoginButton,
-            loading: emailLoading,
-            onPressed: busy ? null : onSubmitEmail,
             colors: c,
           ),
-          const SizedBox(height: QzSpacing.md),
+          const Spacer(),
+          const SizedBox(height: 16),
 
-          // OR 分割线
-          Row(
-            children: <Widget>[
-              Expanded(child: Divider(color: c.border, height: 1)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
-                child: Text(
-                  l10n.authLoginOr,
-                  style: TextStyle(color: c.textDim, fontSize: 12),
+          Padding(
+            key: const ValueKey<String>('login-actions-stack'),
+            padding: const EdgeInsets.only(bottom: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // 渐变主按钮 —— 走原生 Material InkWell + Ink 渲染，避免 QzButton
+                // 默认 accent variant 是纯色填充。
+                _GradientPrimaryButton(
+                  key: const ValueKey<String>('login-submit'),
+                  label: l10n.authLoginButton,
+                  loading: emailLoading,
+                  onPressed: busy ? null : onSubmitEmail,
+                  colors: c,
                 ),
-              ),
-              Expanded(child: Divider(color: c.border, height: 1)),
-            ],
-          ),
-          const SizedBox(height: QzSpacing.md),
+                const SizedBox(height: 14),
 
-          // Telegram 一键登录（保留）
-          _GhostButton(
-            key: const ValueKey<String>('login-telegram'),
-            label: l10n.authLoginTelegramButton,
-            loading: telegramLoading,
-            onPressed: busy ? null : onSubmitTelegram,
-            colors: c,
-          ),
-          const SizedBox(height: QzSpacing.sm),
+                // OR 分割线
+                Row(
+                  children: <Widget>[
+                    Expanded(child: Divider(color: c.border, height: 1)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: QzSpacing.sm,
+                      ),
+                      child: Text(
+                        l10n.authLoginOr,
+                        style: TextStyle(color: c.textDim, fontSize: 12),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: c.border, height: 1)),
+                  ],
+                ),
+                const SizedBox(height: 14),
 
-          // 服务条款 / 隐私政策（mock 跳转）
-          _TermsLine(
-            key: const ValueKey<String>('login-terms'),
-            onTermsTap: onTermsTap,
-            onPrivacyTap: onPrivacyTap,
-            colors: c,
-            l10n: l10n,
+                // Telegram 一键登录（保留）
+                _GhostButton(
+                  key: const ValueKey<String>('login-telegram'),
+                  label: l10n.authLoginTelegramButton,
+                  loading: telegramLoading,
+                  onPressed: busy ? null : onSubmitTelegram,
+                  colors: c,
+                ),
+                const SizedBox(height: 16),
+
+                // 服务条款 / 隐私政策（mock 跳转）
+                _TermsLine(
+                  key: const ValueKey<String>('login-terms'),
+                  onTermsTap: onTermsTap,
+                  onPrivacyTap: onPrivacyTap,
+                  colors: c,
+                  l10n: l10n,
+                ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LoginTextField extends StatelessWidget {
+  const _LoginTextField({
+    required this.fieldKey,
+    required this.shellKey,
+    required this.labelKey,
+    required this.controller,
+    required this.enabled,
+    required this.label,
+    required this.hintText,
+    required this.validator,
+    required this.colors,
+    this.keyboardType,
+    this.obscureText = false,
+  });
+
+  final Key fieldKey;
+  final Key shellKey;
+  final Key labelKey;
+  final TextEditingController controller;
+  final bool enabled;
+  final String label;
+  final String hintText;
+  final FormFieldValidator<String> validator;
+  final QzColorScheme colors;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label,
+          key: labelKey,
+          style: TextStyle(
+            color: colors.textMid,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          key: shellKey,
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: colors.bgSoft,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: colors.borderSoft),
+          ),
+          alignment: Alignment.center,
+          child: TextFormField(
+            key: fieldKey,
+            controller: controller,
+            enabled: enabled,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            autocorrect: false,
+            style: TextStyle(color: colors.text, fontSize: 14),
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+              hintText: hintText,
+              hintStyle: TextStyle(color: colors.textFaint, fontSize: 14),
+            ),
+            validator: validator,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -634,8 +741,13 @@ class _GhostButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  Icon(Icons.send, size: 16, color: const Color(0xFF2AABEE)),
-                  const SizedBox(width: 8),
+                  const SizedBox(
+                    key: ValueKey<String>('login-telegram-logo'),
+                    width: 20,
+                    height: 20,
+                    child: CustomPaint(painter: _TelegramLogoPainter()),
+                  ),
+                  const SizedBox(width: 10),
                   Text(
                     label,
                     style: TextStyle(
@@ -649,6 +761,42 @@ class _GhostButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TelegramLogoPainter extends CustomPainter {
+  const _TelegramLogoPainter();
+
+  static const Color _brand = Color(0xFF2AABEE);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width / 24.0;
+    canvas.drawCircle(
+      Offset(size.width / 2, size.height / 2),
+      size.width / 2,
+      Paint()..color = _brand,
+    );
+    final Path mark = Path()
+      ..moveTo(17.6 * s, 8.2 * s)
+      ..lineTo(15.7 * s, 17.0 * s)
+      ..cubicTo(15.6 * s, 17.6 * s, 15.2 * s, 17.8 * s, 14.7 * s, 17.5 * s)
+      ..lineTo(11.9 * s, 15.4 * s)
+      ..lineTo(10.5 * s, 16.7 * s)
+      ..cubicTo(10.3 * s, 16.9 * s, 10.2 * s, 17.0 * s, 9.9 * s, 17.0 * s)
+      ..lineTo(10.1 * s, 14.1 * s)
+      ..lineTo(15.4 * s, 9.3 * s)
+      ..cubicTo(15.6 * s, 9.1 * s, 15.4 * s, 9.0 * s, 15.1 * s, 9.2 * s)
+      ..lineTo(8.5 * s, 13.3 * s)
+      ..lineTo(5.6 * s, 12.4 * s)
+      ..cubicTo(5.0 * s, 12.2 * s, 5.0 * s, 11.8 * s, 5.7 * s, 11.5 * s)
+      ..lineTo(17.1 * s, 7.1 * s)
+      ..cubicTo(17.6 * s, 6.9 * s, 18.1 * s, 7.2 * s, 17.6 * s, 8.2 * s)
+      ..close();
+    canvas.drawPath(mark, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// 服务条款 / 隐私政策行 —— 使用 TapGestureRecognizer 让 TextSpan 内可点击。

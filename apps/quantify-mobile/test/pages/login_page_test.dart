@@ -200,6 +200,53 @@ void main() {
     expect(find.text('使用邮箱或 Telegram 继续'), findsOneWidget);
   });
 
+  testWidgets('动作栈锚定底部拇指区', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpLogin(tester);
+    final Finder actions = find.byKey(
+      const ValueKey<String>('login-actions-stack'),
+    );
+    expect(actions, findsOneWidget);
+
+    final Offset topLeft = tester.getTopLeft(actions);
+    final Size size = tester.getSize(actions);
+    final double bottom = topLeft.dy + size.height;
+    expect(bottom, lessThanOrEqualTo(844));
+    expect(bottom, greaterThanOrEqualTo(780));
+  });
+
+  testWidgets('输入框使用外置 label 和填充框形态', (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    expect(
+      find.byKey(const ValueKey<String>('login-email-label')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-password-label')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-email-field-shell')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-password-field-shell')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Telegram 按钮使用品牌圆形 logo', (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    expect(
+      find.byKey(const ValueKey<String>('login-telegram-logo')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('登录页不显示忘记密码链接', (WidgetTester tester) async {
     await _pumpLogin(tester);
     final Finder forgot = find.byKey(
@@ -253,5 +300,19 @@ void main() {
     await tester.pump();
     expect(find.widgetWithText(SnackBar, '隐私政策'), findsOneWidget);
     expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+  });
+
+  testWidgets('登录页底部拇指区与输入框形态 golden', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpLogin(tester);
+
+    await expectLater(
+      find.byType(LoginPage),
+      matchesGoldenFile('goldens/login_page.png'),
+    );
   });
 }
