@@ -3493,18 +3493,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Threshold must be a number greater than 0';
 
   @override
-  String get whaleRuleDirectionLabel => 'Direction';
-
-  @override
-  String get whaleRuleDirectionInflow => 'Inflow';
-
-  @override
-  String get whaleRuleDirectionOutflow => 'Outflow';
-
-  @override
-  String get whaleRuleDirectionBoth => 'Both';
-
-  @override
   String get whaleRuleChannelLabel => 'Channels';
 
   @override

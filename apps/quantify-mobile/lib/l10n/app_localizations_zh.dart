@@ -3426,18 +3426,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleRuleThresholdInvalid => '阈值需为大于 0 的数字';
 
   @override
-  String get whaleRuleDirectionLabel => '监控方向';
-
-  @override
-  String get whaleRuleDirectionInflow => '流入';
-
-  @override
-  String get whaleRuleDirectionOutflow => '流出';
-
-  @override
-  String get whaleRuleDirectionBoth => '双向';
-
-  @override
   String get whaleRuleChannelLabel => '推送渠道';
 
   @override

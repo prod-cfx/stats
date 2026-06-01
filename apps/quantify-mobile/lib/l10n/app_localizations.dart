@@ -6654,30 +6654,6 @@ abstract class AppLocalizations {
   /// **'阈值需为大于 0 的数字'**
   String get whaleRuleThresholdInvalid;
 
-  /// No description provided for @whaleRuleDirectionLabel.
-  ///
-  /// In zh, this message translates to:
-  /// **'监控方向'**
-  String get whaleRuleDirectionLabel;
-
-  /// No description provided for @whaleRuleDirectionInflow.
-  ///
-  /// In zh, this message translates to:
-  /// **'流入'**
-  String get whaleRuleDirectionInflow;
-
-  /// No description provided for @whaleRuleDirectionOutflow.
-  ///
-  /// In zh, this message translates to:
-  /// **'流出'**
-  String get whaleRuleDirectionOutflow;
-
-  /// No description provided for @whaleRuleDirectionBoth.
-  ///
-  /// In zh, this message translates to:
-  /// **'双向'**
-  String get whaleRuleDirectionBoth;
-
   /// No description provided for @whaleRuleChannelLabel.
   ///
   /// In zh, this message translates to:

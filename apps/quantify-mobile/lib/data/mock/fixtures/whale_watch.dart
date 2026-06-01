@@ -1,7 +1,7 @@
 import '../../models/whale_watch_models.dart';
 
 /// 监控规则种子（issue #1754）。由原 `mockWatchAddresses` 派生显示字段，
-/// 补齐规则字段（阈值 / 方向 / 渠道 / 静音），作为 mock CRUD 初始状态。
+/// 补齐规则字段（阈值 / 渠道 / 静音），作为 mock CRUD 初始状态。
 const List<WatchRule> mockWatchRules = <WatchRule>[
   WatchRule(
     id: 'w1',
@@ -12,7 +12,6 @@ const List<WatchRule> mockWatchRules = <WatchRule>[
     pnlDisplay: '+12.8%',
     live: true,
     thresholdUsd: 1000000,
-    direction: WatchRuleDirection.both,
     channels: <WatchRuleChannel>{WatchRuleChannel.push},
     muted: false,
     alias: 'Galaxy 主仓',
@@ -31,7 +30,6 @@ const List<WatchRule> mockWatchRules = <WatchRule>[
     pnlDisplay: '-3.2%',
     live: false,
     thresholdUsd: 5000000,
-    direction: WatchRuleDirection.outflow,
     channels: <WatchRuleChannel>{
       WatchRuleChannel.push,
       WatchRuleChannel.telegram,
@@ -53,7 +51,6 @@ const List<WatchRule> mockWatchRules = <WatchRule>[
     pnlDisplay: '+24.6%',
     live: false,
     thresholdUsd: 10000000,
-    direction: WatchRuleDirection.inflow,
     channels: <WatchRuleChannel>{WatchRuleChannel.email},
     muted: true,
     // 空仓地址：永续字段全 null，卡片以灰显 `-` 占位。

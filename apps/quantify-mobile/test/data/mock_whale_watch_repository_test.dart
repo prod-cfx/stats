@@ -94,7 +94,6 @@ void main() {
         pnlDisplay: 'p',
         live: false,
         thresholdUsd: 100,
-        direction: WatchRuleDirection.both,
         channels: <WatchRuleChannel>{WatchRuleChannel.push},
         muted: false,
       );

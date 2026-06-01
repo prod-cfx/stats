@@ -55,6 +55,8 @@ void main() {
   testWidgets('校验失败：空地址/空阈值阻止提交，行内错误提示',
       (WidgetTester tester) async {
     await _pump(tester);
+    // 阈值默认预填 500000，需先清空才能触发阈值必填校验。
+    await tester.enterText(find.byType(TextFormField).at(2), '');
     await tester.tap(find.text('创建监控'));
     await tester.pumpAndSettle();
     expect(find.text('请输入监控地址'), findsOneWidget);
@@ -102,6 +104,34 @@ void main() {
     expect(find.textContaining('请先完成 Telegram'), findsOneWidget);
   });
 
+  testWidgets('对齐设计稿：不渲染方向字段', (WidgetTester tester) async {
+    await _pump(tester);
+    // 方向控件已移除：标签与选项均不应存在。
+    expect(find.text('监控方向'), findsNothing);
+    expect(find.text('流入'), findsNothing);
+    expect(find.text('流出'), findsNothing);
+    expect(find.text('双向'), findsNothing);
+  });
+
+  testWidgets('新增态默认：阈值 500000，渠道 Web+Mail 开 / Telegram 关',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    // 阈值默认预填 500000。
+    expect(find.text('500000'), findsOneWidget);
+    // 直接提交（仅填地址，沿用默认渠道）。
+    await tester.enterText(find.byType(TextFormField).at(0), '0xabc…1234');
+    await tester.tap(find.text('创建监控'));
+    await tester.pumpAndSettle();
+    expect(_returned, isTrue);
+    expect(_result!.thresholdUsd, 500000);
+    // 默认 Web(push) + Mail(email) 开，Telegram 关（且未绑定被过滤）。
+    expect(_result!.channels, <WatchRuleChannel>{
+      WatchRuleChannel.push,
+      WatchRuleChannel.email,
+    });
+    expect(_result!.channels.contains(WatchRuleChannel.telegram), isFalse);
+  });
+
   testWidgets('编辑态：预填字段、标题为编辑、保存返回更新规则',
       (WidgetTester tester) async {
     const WatchRule initial = WatchRule(
@@ -113,7 +143,6 @@ void main() {
       pnlDisplay: '-3.2%',
       live: false,
       thresholdUsd: 5000000,
-      direction: WatchRuleDirection.outflow,
       channels: <WatchRuleChannel>{WatchRuleChannel.push},
       muted: false,
     );

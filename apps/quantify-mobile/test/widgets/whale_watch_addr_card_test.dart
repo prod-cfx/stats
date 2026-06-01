@@ -16,7 +16,6 @@ const WatchRule _filled = WatchRule(
   pnlDisplay: '+12.8%',
   live: true,
   thresholdUsd: 1000000,
-  direction: WatchRuleDirection.both,
   channels: <WatchRuleChannel>{WatchRuleChannel.push},
   muted: false,
   alias: 'Galaxy 主仓',
@@ -36,7 +35,6 @@ const WatchRule _empty = WatchRule(
   pnlDisplay: '—',
   live: false,
   thresholdUsd: 1000000,
-  direction: WatchRuleDirection.both,
   channels: <WatchRuleChannel>{WatchRuleChannel.email},
   muted: true,
 );

@@ -5,16 +5,13 @@
 /// 替换 repository 实现即可，UI/校验不变。
 library;
 
-/// 监控方向：流入 / 流出 / 双向。
-enum WatchRuleDirection { inflow, outflow, both }
-
-/// 告警推送渠道。
-enum WatchRuleChannel { push, telegram, email }
+/// 告警推送渠道。展示顺序对齐设计稿 CreateMonitorSheet：Web / Mail / Telegram。
+enum WatchRuleChannel { push, email, telegram }
 
 /// 监控规则——监控 tab 行的「显示 + 规则」超集。
 ///
 /// 显示字段（[name]/[lastEventDisplay]/[tone]/[pnlDisplay]/[live]）由种子
-/// 派生，CRUD 只修改规则字段（[thresholdUsd]/[direction]/[channels]/[muted]）。
+/// 派生，CRUD 只修改规则字段（[thresholdUsd]/[channels]/[muted]）。
 class WatchRule {
   const WatchRule({
     required this.id,
@@ -25,7 +22,6 @@ class WatchRule {
     required this.pnlDisplay,
     required this.live,
     required this.thresholdUsd,
-    required this.direction,
     required this.channels,
     required this.muted,
     this.alias,
@@ -44,7 +40,6 @@ class WatchRule {
   final String pnlDisplay;
   final bool live;
   final double thresholdUsd; // 触发阈值（USD）
-  final WatchRuleDirection direction;
   final Set<WatchRuleChannel> channels;
   final bool muted;
 
@@ -63,7 +58,6 @@ class WatchRule {
     String? name,
     String? alias,
     double? thresholdUsd,
-    WatchRuleDirection? direction,
     Set<WatchRuleChannel>? channels,
     bool? muted,
   }) {
@@ -76,7 +70,6 @@ class WatchRule {
       pnlDisplay: pnlDisplay,
       live: live,
       thresholdUsd: thresholdUsd ?? this.thresholdUsd,
-      direction: direction ?? this.direction,
       channels: channels ?? this.channels,
       muted: muted ?? this.muted,
       alias: alias ?? this.alias,

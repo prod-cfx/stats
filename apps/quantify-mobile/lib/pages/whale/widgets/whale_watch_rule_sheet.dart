@@ -9,8 +9,8 @@ import '../../../widgets/qz_sheet.dart';
 
 /// 监控规则新增/编辑表单 sheet（issue #1754 / #1769）。
 ///
-/// 字段：地址（必填）、备注（可选）、阈值 USD（必填正数）、方向（单选）、
-/// 通知渠道（网页 / 邮箱 / Telegram，多选，至少 1）。Telegram 在未绑定时
+/// 字段：地址（必填）、备注（可选）、阈值 USD（必填正数）、
+/// 通知渠道（Web / Mail / Telegram，多选，至少 1）。Telegram 在未绑定时
 /// 为禁用态并提示先完成绑定（mock 阶段 [tgBound] 恒为 false）。编辑态预填
 /// [initial]。校验失败行内错误提示；提交返回 [WatchRule]。取消返回 null。
 class WhaleWatchRuleSheet {
@@ -44,7 +44,6 @@ class _RuleFormState extends State<_RuleForm> {
   late final TextEditingController _addressCtrl;
   late final TextEditingController _aliasCtrl;
   late final TextEditingController _thresholdCtrl;
-  late WatchRuleDirection _direction;
   late Set<WatchRuleChannel> _channels;
   bool _channelError = false;
 
@@ -57,12 +56,16 @@ class _RuleFormState extends State<_RuleForm> {
     _addressCtrl = TextEditingController(text: r?.address ?? '');
     _aliasCtrl = TextEditingController(text: r?.alias ?? '');
     _thresholdCtrl = TextEditingController(
-      text: r == null ? '' : r.thresholdUsd.toStringAsFixed(0),
+      // 新增态阈值默认 500000，对齐设计稿 CreateMonitorSheet。
+      text: r == null ? '500000' : r.thresholdUsd.toStringAsFixed(0),
     );
-    _direction = r?.direction ?? WatchRuleDirection.both;
     _channels = <WatchRuleChannel>{
       ...?r?.channels,
-      if (r == null) WatchRuleChannel.push,
+      // 新增态默认开启 Web + Mail，关闭 Telegram，对齐设计稿。
+      if (r == null) ...<WatchRuleChannel>{
+        WatchRuleChannel.push,
+        WatchRuleChannel.email,
+      },
     };
     // Telegram 未绑定时，编辑态可能携带历史 telegram 渠道——保留显示但提交
     // 时由 _submit 过滤，避免在禁用态下静默生效一个用户无法管理的渠道。
@@ -96,7 +99,6 @@ class _RuleFormState extends State<_RuleForm> {
         ? base.copyWith(
             alias: alias,
             thresholdUsd: threshold,
-            direction: _direction,
             channels: effective,
           )
         : WatchRule(
@@ -108,7 +110,6 @@ class _RuleFormState extends State<_RuleForm> {
             pnlDisplay: '—',
             live: false,
             thresholdUsd: threshold,
-            direction: _direction,
             channels: effective,
             muted: false,
             alias: alias,
@@ -180,20 +181,6 @@ class _RuleFormState extends State<_RuleForm> {
                 }
                 return null;
               },
-            ),
-            const SizedBox(height: QzSpacing.md),
-            _FieldLabel(text: l10n.whaleRuleDirectionLabel),
-            const SizedBox(height: QzSpacing.xs),
-            Wrap(
-              spacing: QzSpacing.xs,
-              children: <Widget>[
-                for (final WatchRuleDirection d in WatchRuleDirection.values)
-                  _ChoiceChip(
-                    label: _directionLabel(d, l10n),
-                    selected: _direction == d,
-                    onTap: () => setState(() => _direction = d),
-                  ),
-              ],
             ),
             const SizedBox(height: QzSpacing.md),
             _FieldLabel(text: l10n.whaleRuleChannelLabel),
@@ -283,17 +270,6 @@ class _RuleFormState extends State<_RuleForm> {
         borderSide: BorderSide.none,
       ),
     );
-  }
-
-  String _directionLabel(WatchRuleDirection d, AppLocalizations l10n) {
-    switch (d) {
-      case WatchRuleDirection.inflow:
-        return l10n.whaleRuleDirectionInflow;
-      case WatchRuleDirection.outflow:
-        return l10n.whaleRuleDirectionOutflow;
-      case WatchRuleDirection.both:
-        return l10n.whaleRuleDirectionBoth;
-    }
   }
 
   String _channelLabel(WatchRuleChannel ch, AppLocalizations l10n) {
@@ -421,44 +397,6 @@ class _FieldLabel extends StatelessWidget {
           color: c.textMid,
           fontSize: 12,
           fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-class _ChoiceChip extends StatelessWidget {
-  const _ChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? c.accentSoft : c.bgSoft,
-          borderRadius: BorderRadius.circular(QzRadii.pill),
-          border: Border.all(
-            color: selected ? c.accent : c.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? c.accent : c.textMid,
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          ),
         ),
       ),
     );
