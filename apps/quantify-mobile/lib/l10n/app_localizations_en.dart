@@ -3053,4 +3053,57 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whaleRuleDeleteConfirm => 'Delete';
+
+  @override
+  String get aiScriptTitle => 'Strategy Script';
+
+  @override
+  String get aiScriptSubtitle =>
+      'Generate executable script, push to backtest engine';
+
+  @override
+  String get aiScriptStatusPending => 'Pending';
+
+  @override
+  String get aiScriptStatusReady => 'Generated';
+
+  @override
+  String get aiScriptGeneratingTitle => 'Generating strategy script';
+
+  @override
+  String get aiScriptGeneratingSteps =>
+      'Compile params · Validate syntax · Inject risk control';
+
+  @override
+  String get aiScriptReadyBadge => '✓ READY';
+
+  @override
+  String get aiScriptCopy => 'Copy script';
+
+  @override
+  String get aiScriptCopied => 'Copied';
+
+  @override
+  String get aiScriptCopiedToast => 'Script copied';
+
+  @override
+  String aiScriptExpand(int count) {
+    return 'Show all $count lines';
+  }
+
+  @override
+  String get aiScriptCollapse => 'Collapse';
+
+  @override
+  String get aiScriptSuccessHint =>
+      'Script generated and risk control injected. You can continue to backtest setup.';
+
+  @override
+  String get aiScriptPrev => 'Back';
+
+  @override
+  String get aiScriptNext => 'Next: Backtest Setup';
+
+  @override
+  String get aiConfirmNextScript => 'Next: Strategy Script';
 }

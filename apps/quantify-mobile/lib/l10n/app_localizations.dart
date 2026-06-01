@@ -5863,6 +5863,102 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'删除'**
   String get whaleRuleDeleteConfirm;
+
+  /// No description provided for @aiScriptTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略脚本'**
+  String get aiScriptTitle;
+
+  /// No description provided for @aiScriptSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成可执行脚本，推送回测引擎'**
+  String get aiScriptSubtitle;
+
+  /// No description provided for @aiScriptStatusPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'待生成'**
+  String get aiScriptStatusPending;
+
+  /// No description provided for @aiScriptStatusReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已生成'**
+  String get aiScriptStatusReady;
+
+  /// No description provided for @aiScriptGeneratingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在生成策略脚本'**
+  String get aiScriptGeneratingTitle;
+
+  /// No description provided for @aiScriptGeneratingSteps.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译参数 · 校验语法 · 注入风控'**
+  String get aiScriptGeneratingSteps;
+
+  /// No description provided for @aiScriptReadyBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'✓ READY'**
+  String get aiScriptReadyBadge;
+
+  /// No description provided for @aiScriptCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制脚本'**
+  String get aiScriptCopy;
+
+  /// No description provided for @aiScriptCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制'**
+  String get aiScriptCopied;
+
+  /// No description provided for @aiScriptCopiedToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制脚本'**
+  String get aiScriptCopiedToast;
+
+  /// No description provided for @aiScriptExpand.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部 {count} 行'**
+  String aiScriptExpand(int count);
+
+  /// No description provided for @aiScriptCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get aiScriptCollapse;
+
+  /// No description provided for @aiScriptSuccessHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本已生成、风控已注入，可继续下一步配置回测。'**
+  String get aiScriptSuccessHint;
+
+  /// No description provided for @aiScriptPrev.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一步'**
+  String get aiScriptPrev;
+
+  /// No description provided for @aiScriptNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一步：回测设置'**
+  String get aiScriptNext;
+
+  /// No description provided for @aiConfirmNextScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一步：策略脚本'**
+  String get aiConfirmNextScript;
 }
 
 class _AppLocalizationsDelegate

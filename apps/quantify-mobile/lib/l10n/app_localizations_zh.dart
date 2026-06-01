@@ -2998,4 +2998,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get whaleRuleDeleteConfirm => '删除';
+
+  @override
+  String get aiScriptTitle => '策略脚本';
+
+  @override
+  String get aiScriptSubtitle => '生成可执行脚本，推送回测引擎';
+
+  @override
+  String get aiScriptStatusPending => '待生成';
+
+  @override
+  String get aiScriptStatusReady => '已生成';
+
+  @override
+  String get aiScriptGeneratingTitle => '正在生成策略脚本';
+
+  @override
+  String get aiScriptGeneratingSteps => '编译参数 · 校验语法 · 注入风控';
+
+  @override
+  String get aiScriptReadyBadge => '✓ READY';
+
+  @override
+  String get aiScriptCopy => '复制脚本';
+
+  @override
+  String get aiScriptCopied => '已复制';
+
+  @override
+  String get aiScriptCopiedToast => '已复制脚本';
+
+  @override
+  String aiScriptExpand(int count) {
+    return '查看全部 $count 行';
+  }
+
+  @override
+  String get aiScriptCollapse => '收起';
+
+  @override
+  String get aiScriptSuccessHint => '脚本已生成、风控已注入，可继续下一步配置回测。';
+
+  @override
+  String get aiScriptPrev => '上一步';
+
+  @override
+  String get aiScriptNext => '下一步：回测设置';
+
+  @override
+  String get aiConfirmNextScript => '下一步：策略脚本';
 }

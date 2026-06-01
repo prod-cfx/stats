@@ -1187,5 +1187,28 @@
       }
     }
   },
-  "whaleRuleDeleteConfirm": "删除"
+  "whaleRuleDeleteConfirm": "删除",
+  "aiScriptTitle": "策略脚本",
+  "aiScriptSubtitle": "生成可执行脚本，推送回测引擎",
+  "aiScriptStatusPending": "待生成",
+  "aiScriptStatusReady": "已生成",
+  "aiScriptGeneratingTitle": "正在生成策略脚本",
+  "aiScriptGeneratingSteps": "编译参数 · 校验语法 · 注入风控",
+  "aiScriptReadyBadge": "✓ READY",
+  "aiScriptCopy": "复制脚本",
+  "aiScriptCopied": "已复制",
+  "aiScriptCopiedToast": "已复制脚本",
+  "aiScriptExpand": "查看全部 {count} 行",
+  "@aiScriptExpand": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiScriptCollapse": "收起",
+  "aiScriptSuccessHint": "脚本已生成、风控已注入，可继续下一步配置回测。",
+  "aiScriptPrev": "上一步",
+  "aiScriptNext": "下一步：回测设置",
+  "aiConfirmNextScript": "下一步：策略脚本"
 }

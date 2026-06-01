@@ -7,6 +7,7 @@ import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
 import '../pages/ai/ai_confirm_page.dart';
 import '../pages/ai/ai_home_page.dart';
+import '../pages/ai/ai_script_page.dart';
 import '../pages/ai/backtest_config_sheet.dart';
 import '../pages/auth/login_page.dart';
 import '../pages/live/live_strategies_page.dart';
@@ -184,6 +185,17 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState state) {
           final Object? extra = state.extra;
           return AiConfirmPage(
+            params: extra is Map<String, String> ? extra : null,
+          );
+        },
+      ),
+      // 策略脚本屏（#1892）：确认页「下一步：策略脚本」进入，向导第 2 步；
+      // 当前会话参数经 `extra`（Map<String, String>）透传，深链直达回退 mock。
+      GoRoute(
+        path: '/ai/script',
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return AiScriptPage(
             params: extra is Map<String, String> ? extra : null,
           );
         },

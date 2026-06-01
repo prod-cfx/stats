@@ -264,10 +264,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AiConfirmPage), findsOneWidget);
-    // 顶栏标题 + 参数确认卡 + 脚本预览 + 下一步 CTA 均渲染。
+    // 顶栏标题 + 参数确认卡 + 下一步 CTA 均渲染。脚本预览已拆到独立屏
+    // `/ai/script`（#1892），确认页不再内嵌脚本块/复制按钮。
     expect(find.text('确认策略'), findsWidgets);
     expect(find.byKey(const Key('ai-confirm-params')), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-copy-script')), findsOneWidget);
     expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
   });
 

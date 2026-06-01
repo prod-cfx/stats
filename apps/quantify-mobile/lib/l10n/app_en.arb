@@ -1175,5 +1175,28 @@
       }
     }
   },
-  "whaleRuleDeleteConfirm": "Delete"
+  "whaleRuleDeleteConfirm": "Delete",
+  "aiScriptTitle": "Strategy Script",
+  "aiScriptSubtitle": "Generate executable script, push to backtest engine",
+  "aiScriptStatusPending": "Pending",
+  "aiScriptStatusReady": "Generated",
+  "aiScriptGeneratingTitle": "Generating strategy script",
+  "aiScriptGeneratingSteps": "Compile params · Validate syntax · Inject risk control",
+  "aiScriptReadyBadge": "✓ READY",
+  "aiScriptCopy": "Copy script",
+  "aiScriptCopied": "Copied",
+  "aiScriptCopiedToast": "Script copied",
+  "aiScriptExpand": "Show all {count} lines",
+  "@aiScriptExpand": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiScriptCollapse": "Collapse",
+  "aiScriptSuccessHint": "Script generated and risk control injected. You can continue to backtest setup.",
+  "aiScriptPrev": "Back",
+  "aiScriptNext": "Next: Backtest Setup",
+  "aiConfirmNextScript": "Next: Strategy Script"
 }
