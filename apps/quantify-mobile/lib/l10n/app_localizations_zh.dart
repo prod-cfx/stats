@@ -1396,6 +1396,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meApiFormMinLenInfix => ' 至少 ';
 
   @override
+  String get meApiFormSecretKeyLabel => 'Secret Key';
+
+  @override
+  String get meApiFormPassphraseLabel => 'Passphrase';
+
+  @override
+  String get meApiFormPassphraseHint =>
+      '创建 API Key 时由你自行设置的口令，交易所不会再次展示。三项缺一不可，否则无法签名下单。';
+
+  @override
+  String get meApiFormWalletAddressLabel => '主钱包地址';
+
+  @override
+  String get meApiFormAgentKeyLabel => 'Agent 私钥';
+
+  @override
+  String get meApiFormWalletHint =>
+      '在 Hyperliquid → More → API 中生成 Agent Wallet，把它的私钥粘到这里。Agent 私钥只能下单、不能动资产；主钱包地址用于读取持仓。';
+
+  @override
+  String get meApiFormWalletWarningMust => 'Agent 钱包';
+
+  @override
+  String get meApiFormWalletWarningBody =>
+      '仅有下单权限，永远无法转账或提币——主钱包资产始终由你掌控。请勿粘贴主钱包私钥。';
+
+  @override
+  String get meApiFormPermPerpSpotOrder => '永续 / 现货下单';
+
+  @override
+  String get meApiFormPermTransferWithdraw => '转账 / 提币';
+
+  @override
+  String get meApiFormPermAgentNoAccess => 'Agent 无权限';
+
+  @override
   String get themeSettingsTitle => '界面主题';
 
   @override

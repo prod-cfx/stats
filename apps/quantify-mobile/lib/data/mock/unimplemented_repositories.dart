@@ -189,6 +189,7 @@ class UnimplementedApiKeyRepository implements ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
+    String? apiPassphrase,
   }) => _todo('ApiKeyRepository');
   @override
   Future<void> removeKey(String id) => _todo('ApiKeyRepository');

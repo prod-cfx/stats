@@ -8,6 +8,34 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_button.dart';
 
+/// 交易所认证形态（对齐设计稿 `m-screens-4.jsx:2825-2831` 的 `API_META`）。
+enum _ApiMode { key, wallet }
+
+/// 单个交易所的表单 meta：决定渲染哪种字段与权限。
+class _ApiMeta {
+  const _ApiMeta({
+    required this.mode,
+    this.passphrase = false,
+  });
+
+  final _ApiMode mode;
+
+  /// OKX 家族（OKX/Bitget/KuCoin）需要 Passphrase。
+  final bool passphrase;
+}
+
+const Map<String, _ApiMeta> _apiMetaTable = <String, _ApiMeta>{
+  'binance': _ApiMeta(mode: _ApiMode.key),
+  'okx': _ApiMeta(mode: _ApiMode.key, passphrase: true),
+  'bitget': _ApiMeta(mode: _ApiMode.key, passphrase: true),
+  'kucoin': _ApiMeta(mode: _ApiMode.key, passphrase: true),
+  'hyperliquid': _ApiMeta(mode: _ApiMode.wallet),
+};
+
+_ApiMeta _metaFor(String exchange) =>
+    _apiMetaTable[exchange.toLowerCase()] ??
+    const _ApiMeta(mode: _ApiMode.key);
+
 /// 弹出原型第 10 屏的 API 凭据表单。
 ///
 /// 调用方负责传 [exchange]（已选定，sheet 内不让改）。`addKey` 成功后
@@ -33,30 +61,54 @@ class ApiFormSheet extends ConsumerStatefulWidget {
 }
 
 class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
-  /// API Key 与 Secret 共用的最小长度阈值（plan 决策 #6：加固高于原型
-  /// 非空校验；现实交易所凭据均 ≥ 32 字符，16 是相对保守的下限）。
+  /// API Key / Secret / 钱包地址 / Agent 私钥共用的最小长度阈值（plan 决策：
+  /// 加固高于原型非空校验；现实凭据 / 0x 地址均 ≥ 32 字符，16 是保守下限）。
   static const int _minCredentialLen = 16;
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  // key 模式
   final TextEditingController _apiKey = TextEditingController();
   final TextEditingController _secret = TextEditingController();
+  final TextEditingController _passphrase = TextEditingController();
+  // wallet 模式
+  final TextEditingController _walletAddress = TextEditingController();
+  final TextEditingController _agentKey = TextEditingController();
+  // 共用
   final TextEditingController _label = TextEditingController();
 
   bool _showSecret = false;
   bool _saving = false;
 
+  late final _ApiMeta _meta = _metaFor(widget.exchange);
+
   @override
   void dispose() {
     _apiKey.dispose();
     _secret.dispose();
+    _passphrase.dispose();
+    _walletAddress.dispose();
+    _agentKey.dispose();
     _label.dispose();
     super.dispose();
   }
 
-  String? _validateRequired(String? v, {required int minLen, required String name}) {
+  String? _validateRequired(
+    String? v, {
+    required int minLen,
+    required String name,
+  }) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     if (v == null || v.isEmpty) return '${l10n.meApiFormPleaseEnter}$name';
-    if (v.length < minLen) return '$name${l10n.meApiFormMinLenInfix}$minLen${l10n.meApiFormMinLenSuffix}';
+    if (v.length < minLen) {
+      return '$name${l10n.meApiFormMinLenInfix}$minLen${l10n.meApiFormMinLenSuffix}';
+    }
+    return null;
+  }
+
+  String? _validateNotEmpty(String? v, {required String name}) {
+    if (v == null || v.isEmpty) {
+      return '${AppLocalizations.of(context).meApiFormPleaseEnter}$name';
+    }
     return null;
   }
 
@@ -69,12 +121,22 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _saving = true);
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    // wallet 模式：主钱包地址 → apiKey 槽，Agent 私钥 → apiSecret 槽。
+    final bool isWallet = _meta.mode == _ApiMode.wallet;
+    final String apiKey = isWallet ? _walletAddress.text : _apiKey.text;
+    final String apiSecret = isWallet ? _agentKey.text : _secret.text;
+    final String? passphrase =
+        (!isWallet && _meta.passphrase) ? _passphrase.text : null;
     try {
       await ref.read(apiKeyRepositoryProvider).addKey(
             exchange: widget.exchange,
-            label: _label.text.trim().isEmpty ? AppLocalizations.of(context).meApiFormDefaultLabel : _label.text.trim(),
-            apiKey: _apiKey.text,
-            apiSecret: _secret.text,
+            label: _label.text.trim().isEmpty
+                ? l10n.meApiFormDefaultLabel
+                : _label.text.trim(),
+            apiKey: apiKey,
+            apiSecret: apiSecret,
+            apiPassphrase: passphrase,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -83,7 +145,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
       // 字段名 / stack trace 片段。统一显示固定通用文案；详细错误走日志。
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).meApiFormSaveFailed)),
+        SnackBar(content: Text(l10n.meApiFormSaveFailed)),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -165,45 +227,12 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                     children: <Widget>[
-                      _WarningBanner(exchange: widget.exchange),
+                      _WarningBanner(
+                        exchange: widget.exchange,
+                        wallet: _meta.mode == _ApiMode.wallet,
+                      ),
                       const SizedBox(height: 18),
-                      _Label(text: l10n.meApiFormApiKeyLabel, required: true),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _apiKey,
-                        decoration: _inputDecoration(c),
-                        validator: (String? v) => _validateRequired(
-                          v,
-                          minLen: _minCredentialLen,
-                          name: 'API Key',
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _Label(text: l10n.meApiFormSecretLabel, required: true),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _secret,
-                        obscureText: !_showSecret,
-                        decoration: _inputDecoration(c).copyWith(
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _showSecret
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              size: 18,
-                              color: c.textMid,
-                            ),
-                            onPressed: () => setState(
-                              () => _showSecret = !_showSecret,
-                            ),
-                          ),
-                        ),
-                        validator: (String? v) => _validateRequired(
-                          v,
-                          minLen: _minCredentialLen,
-                          name: 'Secret',
-                        ),
-                      ),
+                      ..._buildCredentialFields(c, l10n),
                       const SizedBox(height: 14),
                       _Label(text: l10n.meApiFormLabelNote),
                       const SizedBox(height: 6),
@@ -215,7 +244,10 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                       const SizedBox(height: 18),
                       _Label(text: l10n.meApiFormPermissionSection),
                       const SizedBox(height: 8),
-                      _PermissionList(l10n: l10n),
+                      _PermissionList(
+                        l10n: l10n,
+                        wallet: _meta.mode == _ApiMode.wallet,
+                      ),
                     ],
                   ),
                 ),
@@ -255,6 +287,89 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     );
   }
 
+  /// 按 meta.mode 渲染凭据字段：wallet → 地址 + Agent 私钥；
+  /// key → API Key + Secret(+ Passphrase)。
+  List<Widget> _buildCredentialFields(
+    QzColorScheme c,
+    AppLocalizations l10n,
+  ) {
+    if (_meta.mode == _ApiMode.wallet) {
+      return <Widget>[
+        _Label(text: l10n.meApiFormWalletAddressLabel, required: true),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _walletAddress,
+          decoration: _inputDecoration(c),
+          validator: (String? v) => _validateRequired(
+            v,
+            minLen: _minCredentialLen,
+            name: l10n.meApiFormWalletAddressLabel,
+          ),
+        ),
+        const SizedBox(height: 14),
+        _Label(text: l10n.meApiFormAgentKeyLabel, required: true),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _agentKey,
+          obscureText: !_showSecret,
+          decoration: _secretDecoration(c),
+          validator: (String? v) => _validateRequired(
+            v,
+            minLen: _minCredentialLen,
+            name: l10n.meApiFormAgentKeyLabel,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _FieldHint(text: l10n.meApiFormWalletHint),
+      ];
+    }
+
+    final String secretLabel =
+        _meta.passphrase ? l10n.meApiFormSecretKeyLabel : l10n.meApiFormSecretLabel;
+    return <Widget>[
+      _Label(text: l10n.meApiFormApiKeyLabel, required: true),
+      const SizedBox(height: 6),
+      TextFormField(
+        controller: _apiKey,
+        decoration: _inputDecoration(c),
+        validator: (String? v) => _validateRequired(
+          v,
+          minLen: _minCredentialLen,
+          name: 'API Key',
+        ),
+      ),
+      const SizedBox(height: 14),
+      _Label(text: secretLabel, required: true),
+      const SizedBox(height: 6),
+      TextFormField(
+        controller: _secret,
+        obscureText: !_showSecret,
+        decoration: _secretDecoration(c),
+        validator: (String? v) => _validateRequired(
+          v,
+          minLen: _minCredentialLen,
+          name: secretLabel,
+        ),
+      ),
+      if (_meta.passphrase) ...<Widget>[
+        const SizedBox(height: 14),
+        _Label(text: l10n.meApiFormPassphraseLabel, required: true),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _passphrase,
+          obscureText: !_showSecret,
+          decoration: _inputDecoration(c),
+          validator: (String? v) => _validateNotEmpty(
+            v,
+            name: l10n.meApiFormPassphraseLabel,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _FieldHint(text: l10n.meApiFormPassphraseHint),
+      ],
+    ];
+  }
+
   InputDecoration _inputDecoration(QzColorScheme c) {
     return InputDecoration(
       filled: true,
@@ -275,6 +390,34 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
         borderRadius: BorderRadius.circular(QzRadii.input),
         borderSide: BorderSide(color: c.accent),
       ),
+    );
+  }
+
+  /// 带「显示/隐藏」眼睛图标的 secret 类输入框装饰。
+  InputDecoration _secretDecoration(QzColorScheme c) {
+    return _inputDecoration(c).copyWith(
+      suffixIcon: IconButton(
+        icon: Icon(
+          _showSecret ? Icons.visibility_off : Icons.visibility,
+          size: 18,
+          color: c.textMid,
+        ),
+        onPressed: () => setState(() => _showSecret = !_showSecret),
+      ),
+    );
+  }
+}
+
+class _FieldHint extends StatelessWidget {
+  const _FieldHint({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Text(
+      text,
+      style: TextStyle(color: c.textMid, fontSize: 11, height: 1.5),
     );
   }
 }
@@ -349,15 +492,40 @@ class _ExchangeBadge extends StatelessWidget {
   }
 }
 
-/// 「授权权限」区块（原型 `m-screens-4.jsx:1146-1152`）。
-/// 3 行允许权限（读取账户与持仓/现货下单/合约下单）+ 1 行红色禁止行
-/// （提币 必须关闭），合计 4 行。所有值为静态文案，不接 API。
+/// 「授权权限」区块（对齐设计稿 `m-screens-4.jsx:2998-3015`）。
+///
+/// - key 模式：读取账户与持仓 / 现货下单 / 合约下单（均 ok）+ 提币（blocked）。
+/// - wallet 模式：读取账户与持仓 / 永续·现货下单（均 ok）+ 转账·提币（disabled）。
 class _PermissionList extends StatelessWidget {
-  const _PermissionList({required this.l10n});
+  const _PermissionList({required this.l10n, required this.wallet});
   final AppLocalizations l10n;
+  final bool wallet;
 
   @override
   Widget build(BuildContext context) {
+    if (wallet) {
+      return Column(
+        children: <Widget>[
+          _PermissionRow(
+            label: l10n.meApiFormPermAccountRead,
+            value: l10n.meApiFormPermRequired,
+            tone: _PermTone.ok,
+          ),
+          const SizedBox(height: 8),
+          _PermissionRow(
+            label: l10n.meApiFormPermPerpSpotOrder,
+            value: l10n.meApiFormPermRequired,
+            tone: _PermTone.ok,
+          ),
+          const SizedBox(height: 8),
+          _PermissionRow(
+            label: l10n.meApiFormPermTransferWithdraw,
+            value: l10n.meApiFormPermAgentNoAccess,
+            tone: _PermTone.disabled,
+          ),
+        ],
+      );
+    }
     return Column(
       children: <Widget>[
         _PermissionRow(
@@ -388,7 +556,7 @@ class _PermissionList extends StatelessWidget {
   }
 }
 
-enum _PermTone { ok, blocked }
+enum _PermTone { ok, blocked, disabled }
 
 class _PermissionRow extends StatelessWidget {
   const _PermissionRow({
@@ -403,57 +571,75 @@ class _PermissionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final bool blocked = tone == _PermTone.blocked;
-    final Color fg = blocked ? c.statusDanger : c.statusOk;
-    final Color bg = blocked
-        ? c.statusDanger.withValues(alpha: 0.10)
-        : c.statusOk.withValues(alpha: 0.10);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(QzRadii.input),
-      ),
-      child: Row(
-        children: <Widget>[
-          Icon(
-            blocked ? Icons.block : Icons.check_circle_outline,
-            size: 16,
-            color: fg,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: c.text,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+    final Color fg;
+    final Color bg;
+    final IconData icon;
+    switch (tone) {
+      case _PermTone.ok:
+        fg = c.statusOk;
+        bg = c.statusOk.withValues(alpha: 0.10);
+        icon = Icons.check_circle_outline;
+      case _PermTone.blocked:
+        fg = c.statusDanger;
+        bg = c.statusDanger.withValues(alpha: 0.10);
+        icon = Icons.block;
+      case _PermTone.disabled:
+        fg = c.textMid;
+        bg = c.bgInput;
+        icon = Icons.remove;
+    }
+    final double opacity = tone == _PermTone.disabled ? 0.6 : 1;
+    return Opacity(
+      opacity: opacity,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(QzRadii.input),
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 16, color: fg),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: fg,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+            Text(
+              value,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 class _WarningBanner extends StatelessWidget {
-  const _WarningBanner({required this.exchange});
+  const _WarningBanner({required this.exchange, required this.wallet});
   final String exchange;
+  final bool wallet;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final String boldText =
+        wallet ? l10n.meApiFormWalletWarningMust : l10n.meApiFormWarningMust;
+    final String bodyText = wallet
+        ? l10n.meApiFormWalletWarningBody
+        : l10n.meApiFormWarningBody(exchange);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -475,12 +661,10 @@ class _WarningBanner extends StatelessWidget {
                 ),
                 children: <InlineSpan>[
                   TextSpan(
-                    text: l10n.meApiFormWarningMust,
+                    text: boldText,
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  TextSpan(
-                    text: l10n.meApiFormWarningBody(exchange),
-                  ),
+                  TextSpan(text: bodyText),
                 ],
               ),
             ),

@@ -1432,6 +1432,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meApiFormMinLenInfix => ' must be at least ';
 
   @override
+  String get meApiFormSecretKeyLabel => 'Secret Key';
+
+  @override
+  String get meApiFormPassphraseLabel => 'Passphrase';
+
+  @override
+  String get meApiFormPassphraseHint =>
+      'The passphrase you set when creating the API key; the exchange won\'t show it again. All three fields are required to sign orders.';
+
+  @override
+  String get meApiFormWalletAddressLabel => 'Main Wallet Address';
+
+  @override
+  String get meApiFormAgentKeyLabel => 'Agent Private Key';
+
+  @override
+  String get meApiFormWalletHint =>
+      'Generate an Agent Wallet under Hyperliquid → More → API and paste its private key here. The agent key can only place orders, never move funds; the main wallet address is used to read positions.';
+
+  @override
+  String get meApiFormWalletWarningMust => 'The agent wallet ';
+
+  @override
+  String get meApiFormWalletWarningBody =>
+      'can only place orders and can never transfer or withdraw—your main wallet assets stay under your control. Never paste your main wallet private key.';
+
+  @override
+  String get meApiFormPermPerpSpotOrder => 'Perp / Spot Order';
+
+  @override
+  String get meApiFormPermTransferWithdraw => 'Transfer / Withdrawal';
+
+  @override
+  String get meApiFormPermAgentNoAccess => 'Agent No Access';
+
+  @override
   String get themeSettingsTitle => 'Interface Theme';
 
   @override

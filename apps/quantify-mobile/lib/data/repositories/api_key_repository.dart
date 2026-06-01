@@ -13,11 +13,13 @@ abstract class ApiKeyRepository {
   ///
   /// 实现内部应：① `maskApiKey(apiKey)` 生成 `ExchangeApiKey.maskedKey`；
   /// ② 自行生成 `id` / `createdAt`。
+  /// [apiPassphrase] 仅 OKX 家族（passphrase 模式）填写；其余交易所传 null。
   Future<ExchangeApiKey> addKey({
     required String exchange,
     required String label,
     required String apiKey,
     required String apiSecret,
+    String? apiPassphrase,
   });
 
   Future<void> removeKey(String id);

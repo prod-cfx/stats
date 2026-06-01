@@ -2774,6 +2774,72 @@ abstract class AppLocalizations {
   /// **' 至少 '**
   String get meApiFormMinLenInfix;
 
+  /// No description provided for @meApiFormSecretKeyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Secret Key'**
+  String get meApiFormSecretKeyLabel;
+
+  /// No description provided for @meApiFormPassphraseLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Passphrase'**
+  String get meApiFormPassphraseLabel;
+
+  /// No description provided for @meApiFormPassphraseHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建 API Key 时由你自行设置的口令，交易所不会再次展示。三项缺一不可，否则无法签名下单。'**
+  String get meApiFormPassphraseHint;
+
+  /// No description provided for @meApiFormWalletAddressLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'主钱包地址'**
+  String get meApiFormWalletAddressLabel;
+
+  /// No description provided for @meApiFormAgentKeyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Agent 私钥'**
+  String get meApiFormAgentKeyLabel;
+
+  /// No description provided for @meApiFormWalletHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 Hyperliquid → More → API 中生成 Agent Wallet，把它的私钥粘到这里。Agent 私钥只能下单、不能动资产；主钱包地址用于读取持仓。'**
+  String get meApiFormWalletHint;
+
+  /// No description provided for @meApiFormWalletWarningMust.
+  ///
+  /// In zh, this message translates to:
+  /// **'Agent 钱包'**
+  String get meApiFormWalletWarningMust;
+
+  /// No description provided for @meApiFormWalletWarningBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅有下单权限，永远无法转账或提币——主钱包资产始终由你掌控。请勿粘贴主钱包私钥。'**
+  String get meApiFormWalletWarningBody;
+
+  /// No description provided for @meApiFormPermPerpSpotOrder.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续 / 现货下单'**
+  String get meApiFormPermPerpSpotOrder;
+
+  /// No description provided for @meApiFormPermTransferWithdraw.
+  ///
+  /// In zh, this message translates to:
+  /// **'转账 / 提币'**
+  String get meApiFormPermTransferWithdraw;
+
+  /// No description provided for @meApiFormPermAgentNoAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'Agent 无权限'**
+  String get meApiFormPermAgentNoAccess;
+
   /// No description provided for @themeSettingsTitle.
   ///
   /// In zh, this message translates to:
