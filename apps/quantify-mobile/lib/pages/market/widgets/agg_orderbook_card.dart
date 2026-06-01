@@ -28,6 +28,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
   String _coin = 'BTC';
   AggView _view = AggView.both;
   int _precision = 1;
+  bool _precisionOpen = false;
   late Set<String> _selectedEx = kAggExchanges
       .map((AggExchange e) => e.key)
       .toSet();
@@ -41,17 +42,21 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
 
   Future<void> _openPrecisionSheet() async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    setState(() => _precisionOpen = true);
     final int? picked = await showModalBottomSheet<int>(
       context: context,
       builder: (BuildContext ctx) {
         final QzColorScheme c = ctx.qzScheme;
         return SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              const _SheetGrabHandle(),
               Padding(
-                padding: const EdgeInsets.all(QzSpacing.lg),
+                padding: const EdgeInsets.fromLTRB(
+                    QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
                 child: Text(l10n.aggPrecisionTitle,
                     style: TextStyle(
                         color: c.text,
@@ -59,25 +64,28 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
                         fontWeight: FontWeight.w700)),
               ),
               for (final int p in kAggPrecisions)
-                ListTile(
+                _PrecisionOption(
                   key: Key('agg-precision-$p'),
-                  title: Text('$p',
-                      style: TextStyle(
-                        color: p == _precision ? c.accent : c.text,
-                        fontFamily: QzFont.mono,
-                        fontFamilyFallback: QzFont.monoFallback,
-                        fontWeight: FontWeight.w600,
-                      )),
-                  trailing: p == _precision
-                      ? Icon(Icons.check, color: c.accent, size: 18)
-                      : null,
+                  value: p,
+                  selected: p == _precision,
                   onTap: () => Navigator.of(ctx).pop(p),
                 ),
+              const SizedBox(height: QzSpacing.sm),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    QzSpacing.sm, 0, QzSpacing.sm, QzSpacing.sm),
+                child: TextButton(
+                  key: const Key('agg-precision-cancel'),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(l10n.aggCancel, style: TextStyle(color: c.text)),
+                ),
+              ),
             ],
           ),
         );
       },
     );
+    if (mounted) setState(() => _precisionOpen = false);
     if (picked != null) setState(() => _precision = picked);
   }
 
@@ -151,6 +159,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
                   ),
                   view: _view,
                   precision: _precision,
+                  precisionExpanded: _precisionOpen,
                   onView: (AggView v) => setState(() => _view = v),
                   onPrecision: _openPrecisionSheet,
                   onSource: _openSourceSheet,
@@ -365,6 +374,7 @@ class _CardHeader extends StatelessWidget {
     required this.title,
     required this.view,
     required this.precision,
+    required this.precisionExpanded,
     required this.onView,
     required this.onPrecision,
     required this.onSource,
@@ -373,6 +383,7 @@ class _CardHeader extends StatelessWidget {
   final String title;
   final AggView view;
   final int precision;
+  final bool precisionExpanded;
   final ValueChanged<AggView> onView;
   final VoidCallback onPrecision;
   final VoidCallback onSource;
@@ -400,25 +411,10 @@ class _CardHeader extends StatelessWidget {
           const Spacer(),
           _ViewToggle(view: view, onChanged: onView),
           const SizedBox(width: QzSpacing.xs),
-          OutlinedButton(
-            key: const Key('agg-precision-button'),
+          _PrecisionButton(
+            precision: precision,
+            expanded: precisionExpanded,
             onPressed: onPrecision,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 24),
-              padding: const EdgeInsets.symmetric(horizontal: QzSpacing.xs),
-              side: BorderSide(color: c.border),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-              Text('$precision',
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: QzFont.mono,
-                    fontFamilyFallback: QzFont.monoFallback,
-                  )),
-              Icon(Icons.keyboard_arrow_down, size: 14, color: c.textMid),
-            ]),
           ),
           const SizedBox(width: QzSpacing.xs),
           IconButton(
@@ -432,6 +428,136 @@ class _CardHeader extends StatelessWidget {
             icon: Icon(Icons.tune, color: c.textMid),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 价格精度按钮：展开时紫色渐变底 + 反白文本 + caret 翻转 180°。
+class _PrecisionButton extends StatelessWidget {
+  const _PrecisionButton({
+    required this.precision,
+    required this.expanded,
+    required this.onPressed,
+  });
+
+  final int precision;
+  final bool expanded;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final Color fg = expanded ? c.accentOn : c.text;
+    return Semantics(
+      button: true,
+      label: 'precision $precision',
+      child: GestureDetector(
+        key: const Key('agg-precision-button'),
+        onTap: onPressed,
+        child: Container(
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: QzSpacing.xs),
+          decoration: BoxDecoration(
+            gradient: expanded ? c.accentGrad : null,
+            color: expanded ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(QzRadii.input),
+            border:
+                Border.all(color: expanded ? Colors.transparent : c.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
+            Text('$precision',
+                style: TextStyle(
+                  color: fg,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
+                )),
+            AnimatedRotation(
+              turns: expanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 150),
+              child: Icon(Icons.keyboard_arrow_down,
+                  size: 14, color: expanded ? fg : c.textMid),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// 抽屉顶部 grab handle。
+class _SheetGrabHandle extends StatelessWidget {
+  const _SheetGrabHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: QzSpacing.sm, bottom: QzSpacing.xs),
+      child: Center(
+        child: Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: c.borderSoft,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 价格精度抽屉单行：圆形单选（选中 accent 实心 + 勾）。
+class _PrecisionOption extends StatelessWidget {
+  const _PrecisionOption({
+    super.key,
+    required this.value,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int value;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: QzSpacing.lg, vertical: QzSpacing.md),
+        child: Row(children: <Widget>[
+          Expanded(
+            child: Text('$value',
+                style: TextStyle(
+                  color: selected ? c.accent : c.text,
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
+                  fontWeight: FontWeight.w600,
+                )),
+          ),
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? c.accent : Colors.transparent,
+              border: Border.all(
+                color: selected ? c.accent : c.border,
+                width: 1.5,
+              ),
+            ),
+            child: selected
+                ? Icon(Icons.check, size: 13, color: c.accentOn)
+                : null,
+          ),
+        ]),
       ),
     );
   }
