@@ -812,6 +812,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginPasswordHint => '至少 6 位';
 
   @override
+  String get authLoginCodeLabel => '验证码';
+
+  @override
+  String get authLoginCodeHint => '6位验证码';
+
+  @override
+  String get authLoginSendCode => '发送验证码';
+
+  @override
+  String get authLoginResend => '重新发送';
+
+  @override
+  String authLoginCountdown(Object secs) {
+    return '${secs}s 后重发';
+  }
+
+  @override
   String get authLoginButton => '登录';
 
   @override

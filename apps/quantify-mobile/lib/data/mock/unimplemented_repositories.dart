@@ -13,6 +13,14 @@ class UnimplementedAuthRepository implements AuthRepository {
     required String password,
   }) => _todo('AuthRepository');
   @override
+  Future<void> sendLoginCode({required String email}) =>
+      _todo('AuthRepository');
+  @override
+  Future<AuthSession> loginWithCode({
+    required String email,
+    required String code,
+  }) => _todo('AuthRepository');
+  @override
   Future<void> logout() => _todo('AuthRepository');
   @override
   Stream<AuthSession?> watchSession() => _todo('AuthRepository');
@@ -75,8 +83,7 @@ class UnimplementedWhaleLeaderboardRepository
       _todo('WhaleLeaderboardRepository');
 }
 
-class UnimplementedWhaleHoldingsRepository
-    implements WhaleHoldingsRepository {
+class UnimplementedWhaleHoldingsRepository implements WhaleHoldingsRepository {
   @override
   Future<List<WhaleHoldingPosition>> getHoldings() =>
       _todo('WhaleHoldingsRepository');

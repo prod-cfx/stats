@@ -8,9 +8,7 @@ import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 
-ProviderContainer _container({
-  InMemoryTokenStorage? storage,
-}) {
+ProviderContainer _container({InMemoryTokenStorage? storage}) {
   final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
   return ProviderContainer(
     overrides: <Override>[
@@ -25,8 +23,7 @@ void main() {
     test('build() 在空 storage 下返回 null', () async {
       final ProviderContainer c = _container();
       addTearDown(c.dispose);
-      final AuthSession? s =
-          await c.read(sessionControllerProvider.future);
+      final AuthSession? s = await c.read(sessionControllerProvider.future);
       expect(s, isNull);
     });
 
@@ -36,30 +33,30 @@ void main() {
         token: 't1',
         email: 'a@b.com',
       );
-      final InMemoryTokenStorage storage =
-          InMemoryTokenStorage(<String, String>{
-        kSessionStorageKey: jsonEncode(seed.toMap()),
-      });
+      final InMemoryTokenStorage storage = InMemoryTokenStorage(
+        <String, String>{kSessionStorageKey: jsonEncode(seed.toMap())},
+      );
       final ProviderContainer c = _container(storage: storage);
       addTearDown(c.dispose);
 
-      final AuthSession? restored =
-          await c.read(sessionControllerProvider.future);
+      final AuthSession? restored = await c.read(
+        sessionControllerProvider.future,
+      );
       expect(restored, isNotNull);
       expect(restored!.userId, 'u1');
       expect(restored.email, 'a@b.com');
     });
 
     test('损坏的 session JSON 被清除并降级为 null', () async {
-      final InMemoryTokenStorage storage =
-          InMemoryTokenStorage(<String, String>{
-        kSessionStorageKey: '{not valid json',
-      });
+      final InMemoryTokenStorage storage = InMemoryTokenStorage(
+        <String, String>{kSessionStorageKey: '{not valid json'},
+      );
       final ProviderContainer c = _container(storage: storage);
       addTearDown(c.dispose);
 
-      final AuthSession? restored =
-          await c.read(sessionControllerProvider.future);
+      final AuthSession? restored = await c.read(
+        sessionControllerProvider.future,
+      );
       expect(restored, isNull);
       expect(storage.snapshot.containsKey(kSessionStorageKey), isFalse);
     });
@@ -74,8 +71,7 @@ void main() {
           .read(sessionControllerProvider.notifier)
           .loginEmail(email: 'x@y.com', password: 'pwpwpw');
 
-      final AuthSession? cur =
-          c.read(sessionControllerProvider).valueOrNull;
+      final AuthSession? cur = c.read(sessionControllerProvider).valueOrNull;
       expect(cur, isNotNull);
       expect(cur!.email, 'x@y.com');
       expect(storage.snapshot[kSessionStorageKey], isNotNull);
@@ -83,6 +79,29 @@ void main() {
           jsonDecode(storage.snapshot[kSessionStorageKey]!)
               as Map<String, dynamic>;
       expect(persisted['email'], 'x@y.com');
+      expect(persisted['token'], 'mock-token');
+    });
+
+    test('loginEmailCode 使用验证码登录写盘并发出 session', () async {
+      final InMemoryTokenStorage storage = InMemoryTokenStorage();
+      final ProviderContainer c = _container(storage: storage);
+      addTearDown(c.dispose);
+
+      await c.read(sessionControllerProvider.future);
+      final SessionController controller = c.read(
+        sessionControllerProvider.notifier,
+      );
+      await controller.sendLoginCode(email: 'code@y.com');
+      await controller.loginEmailCode(email: 'code@y.com', code: '123456');
+
+      final AuthSession? cur = c.read(sessionControllerProvider).valueOrNull;
+      expect(cur, isNotNull);
+      expect(cur!.email, 'code@y.com');
+      expect(storage.snapshot[kSessionStorageKey], isNotNull);
+      final Map<String, dynamic> persisted =
+          jsonDecode(storage.snapshot[kSessionStorageKey]!)
+              as Map<String, dynamic>;
+      expect(persisted['email'], 'code@y.com');
       expect(persisted['token'], 'mock-token');
     });
 
@@ -94,8 +113,7 @@ void main() {
       await c.read(sessionControllerProvider.future);
       await c.read(sessionControllerProvider.notifier).loginTelegram();
 
-      final AuthSession? cur =
-          c.read(sessionControllerProvider).valueOrNull;
+      final AuthSession? cur = c.read(sessionControllerProvider).valueOrNull;
       expect(cur, isNotNull);
       expect(cur!.email, kTelegramMockEmail);
     });

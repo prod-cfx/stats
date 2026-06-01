@@ -1626,6 +1626,36 @@ abstract class AppLocalizations {
   /// **'至少 6 位'**
   String get authLoginPasswordHint;
 
+  /// No description provided for @authLoginCodeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证码'**
+  String get authLoginCodeLabel;
+
+  /// No description provided for @authLoginCodeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'6位验证码'**
+  String get authLoginCodeHint;
+
+  /// No description provided for @authLoginSendCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送验证码'**
+  String get authLoginSendCode;
+
+  /// No description provided for @authLoginResend.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新发送'**
+  String get authLoginResend;
+
+  /// No description provided for @authLoginCountdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'{secs}s 后重发'**
+  String authLoginCountdown(Object secs);
+
   /// No description provided for @authLoginButton.
   ///
   /// In zh, this message translates to:

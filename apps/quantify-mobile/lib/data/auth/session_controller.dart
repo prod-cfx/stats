@@ -32,8 +32,7 @@ class SessionController extends AsyncNotifier<AuthSession?> {
     final String? raw = await storage.read(kSessionStorageKey);
     if (raw == null || raw.isEmpty) return null;
     try {
-      final Map<String, dynamic> map =
-          jsonDecode(raw) as Map<String, dynamic>;
+      final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
       return AuthSession.fromMap(map);
     } on FormatException {
       // 旧数据/损坏 token：清掉，避免每次启动都炸。
@@ -51,12 +50,30 @@ class SessionController extends AsyncNotifier<AuthSession?> {
   }) async {
     state = const AsyncLoading<AuthSession?>();
     state = await AsyncValue.guard<AuthSession?>(() async {
-      final AuthSession session =
-          await _repo.login(email: email, password: password);
-      await _storage.write(
-        kSessionStorageKey,
-        jsonEncode(session.toMap()),
+      final AuthSession session = await _repo.login(
+        email: email,
+        password: password,
       );
+      await _storage.write(kSessionStorageKey, jsonEncode(session.toMap()));
+      return session;
+    });
+  }
+
+  Future<void> sendLoginCode({required String email}) async {
+    await _repo.sendLoginCode(email: email);
+  }
+
+  Future<void> loginEmailCode({
+    required String email,
+    required String code,
+  }) async {
+    state = const AsyncLoading<AuthSession?>();
+    state = await AsyncValue.guard<AuthSession?>(() async {
+      final AuthSession session = await _repo.loginWithCode(
+        email: email,
+        code: code,
+      );
+      await _storage.write(kSessionStorageKey, jsonEncode(session.toMap()));
       return session;
     });
   }
@@ -77,10 +94,7 @@ class SessionController extends AsyncNotifier<AuthSession?> {
         email: kGuestMockEmail,
         isGuest: true,
       );
-      await _storage.write(
-        kSessionStorageKey,
-        jsonEncode(session.toMap()),
-      );
+      await _storage.write(kSessionStorageKey, jsonEncode(session.toMap()));
       return session;
     });
   }
@@ -103,5 +117,5 @@ final Provider<TokenStorage> tokenStorageProvider = Provider<TokenStorage>(
 final AsyncNotifierProvider<SessionController, AuthSession?>
 sessionControllerProvider =
     AsyncNotifierProvider<SessionController, AuthSession?>(
-  SessionController.new,
-);
+      SessionController.new,
+    );

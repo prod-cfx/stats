@@ -854,6 +854,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authLoginPasswordHint => 'At least 6 characters';
 
   @override
+  String get authLoginCodeLabel => 'Verification code';
+
+  @override
+  String get authLoginCodeHint => '6-digit code';
+
+  @override
+  String get authLoginSendCode => 'Send code';
+
+  @override
+  String get authLoginResend => 'Resend';
+
+  @override
+  String authLoginCountdown(Object secs) {
+    return 'Resend in ${secs}s';
+  }
+
+  @override
   String get authLoginButton => 'Log In';
 
   @override

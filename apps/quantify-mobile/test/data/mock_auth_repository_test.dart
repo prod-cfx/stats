@@ -6,11 +6,48 @@ void main() {
   group('MockAuthRepository', () {
     test('login 返回固定 mock-user/mock-token 并保留输入 email', () async {
       final MockAuthRepository repo = MockAuthRepository();
-      final AuthSession session =
-          await repo.login(email: 'tester@example.com', password: 'pw');
+      final AuthSession session = await repo.login(
+        email: 'tester@example.com',
+        password: 'pw',
+      );
       expect(session.userId, 'mock-user');
       expect(session.token, 'mock-token');
       expect(session.email, 'tester@example.com');
+    });
+
+    test('sendLoginCode 标记邮箱可验证码登录', () async {
+      final MockAuthRepository repo = MockAuthRepository();
+      await repo.sendLoginCode(email: 'tester@example.com');
+
+      final AuthSession session = await repo.loginWithCode(
+        email: 'tester@example.com',
+        code: '123456',
+      );
+
+      expect(session.userId, 'mock-user');
+      expect(session.token, 'mock-token');
+      expect(session.email, 'tester@example.com');
+    });
+
+    test('loginWithCode 未发码邮箱失败且不推送 session', () async {
+      final MockAuthRepository repo = MockAuthRepository();
+
+      expect(
+        () => repo.loginWithCode(email: 'missing@example.com', code: '123456'),
+        throwsA(isA<StateError>()),
+      );
+      expect(await repo.watchSession().first, isNull);
+    });
+
+    test('loginWithCode 空验证码失败且不推送 session', () async {
+      final MockAuthRepository repo = MockAuthRepository();
+      await repo.sendLoginCode(email: 'tester@example.com');
+
+      expect(
+        () => repo.loginWithCode(email: 'tester@example.com', code: ''),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(await repo.watchSession().first, isNull);
     });
 
     test('login 后 watchSession 推送当前 session', () async {

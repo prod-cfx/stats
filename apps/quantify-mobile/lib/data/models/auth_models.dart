@@ -37,3 +37,10 @@ class Credentials {
 
   const Credentials({required this.email, required this.password});
 }
+
+class LoginCodeCredentials {
+  final String email;
+  final String code;
+
+  const LoginCodeCredentials({required this.email, required this.code});
+}
