@@ -6,17 +6,21 @@ import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 
-/// 巨鲸事件单行展示。
+/// 巨鲸逐笔持仓推送卡（issue #1985）。
 ///
-/// 设计要点：
-/// - 方向 icon：`in` 绿色 `arrow_downward` / `out` 红色 `arrow_upward`，
-///   语义上"流入"=资金进场（看涨），"流出"=资金离场（看跌）。
-/// - 高亮：新条目从顶部插入后，外层在 700ms 内将 `highlight=true` 切回 false；
-///   行内用 [AnimatedContainer] 在 700ms 内淡出 `accentSoft` 背景。
-/// - 相对时间显示由外部注入 `now` 计算，不读 fixture 真实墙钟，避免测试 flake。
-/// - 当外部提供 `displayTimestamp` 时，相对时间基于它计算而不是 `event.timestamp`，
-///   解决 issue #1602：mock fixture timestamp 写死 2024-05，与分组语义冲突
-///   （行内会显示 `731 天前` 而分组是 `最近 5 分钟`）。生产侧不传则回退原逻辑。
+/// 三行结构（对齐设计稿 `m-screens-4.jsx` 的 `WhaleRow`）：
+/// - Row1：地址 + 商人标签(traderTag) + fresh 圆点 + 相对时间。
+/// - Row2：币种 + 全/逐仓(mode) + 多/空胶囊(side 色) + 杠杆(null→`--`)。
+/// - Row3：持仓价值/数量 · 开盘价 · 胜率（色阶 ≥70 涨 / ≥50 警示 / <50 跌，issue #1983）。
+///
+/// 兼容性（Never break userspace）：
+/// - 保留 [formatAmountUsd] / [formatRelativeTime] / [winRateColor] / [formatWinRate]
+///   静态方法签名（live tab #1983 胜率排序依赖 `event.winRate`）。
+/// - 构造参数 `event` / `highlight` / `now` / `displayTimestamp` 不变。
+/// - 持仓字段（winRate 以外）缺省时优雅降级：显示 `--` 或隐藏胶囊，不抛异常。
+///
+/// 相对时间：当外部提供 `displayTimestamp` 时基于它计算（issue #1602），否则
+/// 回退 `event.timestamp`；`now` 由外部注入避免测试 flake。
 class QzWhaleRow extends StatelessWidget {
   const QzWhaleRow({
     super.key,
@@ -31,8 +35,9 @@ class QzWhaleRow extends StatelessWidget {
   final DateTime? _now;
 
   /// 可选：相对时间渲染基于此 timestamp 而非 `event.timestamp`。
-  /// 用于 mock 场景与分组保持一致；真实数据场景传 null 即可。
   final DateTime? displayTimestamp;
+
+  static const String _dash = '--';
 
   /// 暴露给测试的纯函数：金额格式化为 `$1.25M` / `$12.5M` / `$320K`。
   static String formatAmountUsd(double amountUsd) {
@@ -45,7 +50,24 @@ class QzWhaleRow extends StatelessWidget {
     return '\$${amountUsd.toStringAsFixed(0)}';
   }
 
-  /// 暴露给测试的纯函数：胜率阈值着色（issue #1983）。
+  /// 暴露给测试的纯函数：开盘价格式化。
+  /// - ≥1000：千分位整数（如 `75,763`）。
+  /// - <1000：保留 2 位小数（如 `83.70`）。
+  static String formatPrice(double price) {
+    if (price >= 1000) {
+      final String intStr = price.round().toString();
+      final StringBuffer buf = StringBuffer();
+      final int len = intStr.length;
+      for (int i = 0; i < len; i++) {
+        if (i > 0 && (len - i) % 3 == 0) buf.write(',');
+        buf.write(intStr[i]);
+      }
+      return buf.toString();
+    }
+    return price.toStringAsFixed(2);
+  }
+
+  /// 暴露给测试的纯函数：胜率阈值着色（issue #1983 / #1985）。
   /// 绿 ≥70 / 橙 ≥50 / 红 <50，与设计稿 `m-screens-4.jsx` 行卡胜率列一致。
   static Color winRateColor(double winRate, QzColorScheme c) {
     if (winRate >= 70) return c.statusOk;
@@ -56,8 +78,7 @@ class QzWhaleRow extends StatelessWidget {
   /// 暴露给测试的纯函数：胜率展示为整数百分比，如 `85%`。
   static String formatWinRate(double winRate) => '${winRate.round()}%';
 
-  /// 暴露给测试的纯函数（locale-neutral）：返回 'just now' / 'Nm ago' / 'Nh ago' / 'Nd ago'。
-  /// UI 展示请使用 [_localizedRelativeTime]。
+  /// 暴露给测试的纯函数（locale-neutral）：'just now' / 'Nm ago' / 'Nh ago' / 'Nd ago'。
   static String formatRelativeTime(DateTime ts, DateTime now) {
     final Duration d = now.difference(ts);
     if (d.inSeconds < 60) return 'just now';
@@ -78,12 +99,10 @@ class QzWhaleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool isIn = event.direction == 'in';
-    final Color dirColor = isIn ? c.statusOk : c.statusDanger;
-    final IconData dirIcon = isIn ? Icons.arrow_downward : Icons.arrow_upward;
     final DateTime now = _now ?? DateTime.now();
     final DateTime tsForDisplay = displayTimestamp ?? event.timestamp;
     final String relTime = _localizedRelativeTime(l10n, tsForDisplay, now);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 700),
       color: highlight ? c.accentSoft : Colors.transparent,
@@ -91,78 +110,250 @@ class QzWhaleRow extends StatelessWidget {
         horizontal: QzSpacing.lg,
         vertical: QzSpacing.md,
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: dirColor.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(dirIcon, size: 18, color: dirColor),
-          ),
-          const SizedBox(width: QzSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Flexible(
-                      child: Text(
-                        event.symbol,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: QzSpacing.sm),
-                    Text(
-                      formatAmountUsd(event.amountUsd),
-                      style: TextStyle(
-                        color: dirColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${event.fromLabel} → ${event.toLabel}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.textMid, fontSize: 12),
-                ),
-              ],
+          _buildHeaderRow(c, relTime),
+          const SizedBox(height: QzSpacing.sm),
+          _buildPositionRow(c, l10n),
+          const SizedBox(height: QzSpacing.sm),
+          _buildMetricsRow(c, l10n),
+        ],
+      ),
+    );
+  }
+
+  /// Row1：地址 + 商人标签 + fresh 圆点 + 相对时间。
+  Widget _buildHeaderRow(QzColorScheme c, String relTime) {
+    final String addressText = event.address ?? event.fromLabel;
+    return Row(
+      children: <Widget>[
+        Flexible(
+          child: Text(
+            addressText,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: c.accent,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),
+        ),
+        if (event.traderTag != null) ...<Widget>[
           const SizedBox(width: QzSpacing.sm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                formatWinRate(event.winRate),
-                style: TextStyle(
-                  color: winRateColor(event.winRate, c),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: c.accentSoft,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              event.traderTag!,
+              style: TextStyle(
+                color: c.accent,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 2),
-              Text(
-                relTime,
-                style: TextStyle(color: c.textDim, fontSize: 11),
+            ),
+          ),
+        ],
+        if (event.isFresh) ...<Widget>[
+          const SizedBox(width: QzSpacing.sm),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: c.marketUp,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ],
+        const Spacer(),
+        const SizedBox(width: QzSpacing.sm),
+        Text(
+          relTime,
+          style: TextStyle(color: c.textDim, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  /// Row2：币种 + mode + 多/空胶囊 + 杠杆。
+  Widget _buildPositionRow(QzColorScheme c, AppLocalizations l10n) {
+    final bool isLong = event.side == 'long';
+    final bool isShort = event.side == 'short';
+    final Color sideColor = isLong ? c.marketUp : c.marketDown;
+    return Row(
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Text(
+            event.symbol,
+            style: TextStyle(
+              color: c.text,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (event.mode != null) ...<Widget>[
+          const SizedBox(width: QzSpacing.sm),
+          Text(
+            event.mode!,
+            style: TextStyle(
+              color: c.textMid,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+        const Spacer(),
+        if (isLong || isShort)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: sideColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: sideColor.withValues(alpha: 0.2)),
+            ),
+            child: Text(
+              isLong ? l10n.whaleRowLong : l10n.whaleRowShort,
+              style: TextStyle(
+                color: sideColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
               ),
-            ],
+            ),
+          ),
+        const SizedBox(width: QzSpacing.sm),
+        Text(
+          event.leverage == null ? _dash : '${event.leverage}x',
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 11,
+            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Row3：持仓价值/数量 · 开盘价 · 胜率。
+  Widget _buildMetricsRow(QzColorScheme c, AppLocalizations l10n) {
+    final String valueText =
+        event.positionValue == null ? _dash : formatAmountUsd(event.positionValue!);
+    final String openText =
+        event.openPrice == null ? _dash : formatPrice(event.openPrice!);
+    return Container(
+      padding: const EdgeInsets.only(top: QzSpacing.sm),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.borderSoft)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            flex: 13,
+            child: _MetricCell(
+              label: l10n.whaleRowPositionValue,
+              value: valueText,
+              valueColor: c.text,
+              valueSize: 15,
+              caption: event.quantity,
+            ),
+          ),
+          Expanded(
+            flex: 10,
+            child: _MetricCell(
+              label: l10n.whaleRowOpenPrice,
+              value: openText,
+              valueColor: c.text,
+              valueSize: 13,
+            ),
+          ),
+          Expanded(
+            flex: 7,
+            child: _MetricCell(
+              label: l10n.whaleRowWinRate,
+              value: formatWinRate(event.winRate),
+              valueColor: winRateColor(event.winRate, c),
+              valueSize: 14,
+              alignEnd: true,
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Row3 单元格：上方小标签 + 主值（可带次级 caption）。
+class _MetricCell extends StatelessWidget {
+  const _MetricCell({
+    required this.label,
+    required this.value,
+    required this.valueColor,
+    required this.valueSize,
+    this.caption,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final Color valueColor;
+  final double valueSize;
+  final String? caption;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final CrossAxisAlignment cross =
+        alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    return Column(
+      crossAxisAlignment: cross,
+      children: <Widget>[
+        Text(
+          label,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: valueSize,
+            fontWeight: FontWeight.w700,
+            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
+        if (caption != null) ...<Widget>[
+          const SizedBox(height: 1),
+          Text(
+            caption!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 10,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -4470,6 +4470,42 @@ abstract class AppLocalizations {
   /// **'过去 1 小时'**
   String get whaleGroup1h;
 
+  /// No description provided for @whaleRowLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'做多'**
+  String get whaleRowLong;
+
+  /// No description provided for @whaleRowShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'做空'**
+  String get whaleRowShort;
+
+  /// No description provided for @whaleRowPositionValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓价值'**
+  String get whaleRowPositionValue;
+
+  /// No description provided for @whaleRowQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量'**
+  String get whaleRowQuantity;
+
+  /// No description provided for @whaleRowOpenPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'开盘价格'**
+  String get whaleRowOpenPrice;
+
+  /// No description provided for @whaleRowWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get whaleRowWinRate;
+
   /// No description provided for @whaleAddWatchAddress.
   ///
   /// In zh, this message translates to:

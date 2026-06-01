@@ -2351,6 +2351,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleGroup1h => 'Past 1 hour';
 
   @override
+  String get whaleRowLong => 'Long';
+
+  @override
+  String get whaleRowShort => 'Short';
+
+  @override
+  String get whaleRowPositionValue => 'Position value';
+
+  @override
+  String get whaleRowQuantity => 'Quantity';
+
+  @override
+  String get whaleRowOpenPrice => 'Entry price';
+
+  @override
+  String get whaleRowWinRate => 'Win rate';
+
+  @override
   String get whaleAddWatchAddress => 'Add watch address';
 
   @override

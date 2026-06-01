@@ -130,6 +130,83 @@ void main() {
     expect(QzWhaleRow.formatAmountUsd(12_500_000), '\$12.50M');
   });
 
+  // ── issue #1985：逐笔持仓推送卡 ────────────────────────────────────────
+  WhaleEvent holding({
+    String id = 'w-h',
+    String side = 'long',
+    int? leverage,
+    double winRate = 73,
+  }) {
+    return WhaleEvent(
+      id: id,
+      symbol: 'BTCUSDT',
+      amountUsd: 2_538_787,
+      direction: 'in',
+      fromLabel: 'A',
+      toLabel: 'B',
+      timestamp: DateTime(2024, 5, 18),
+      address: '0xe2…55d6',
+      traderTag: '趋势跟踪',
+      isFresh: true,
+      mode: '全仓',
+      side: side,
+      leverage: leverage,
+      positionValue: 2_538_787,
+      quantity: '33.5140 BTC',
+      openPrice: 75763,
+      winRate: winRate,
+    );
+  }
+
+  testWidgets('完整持仓字段渲染：地址/标签/币种/mode/方向/持仓价值/数量/开盘价/胜率',
+      (WidgetTester tester) async {
+    await _pump(
+      tester,
+      QzWhaleRow(event: holding(), now: DateTime(2024, 5, 18, 0, 2)),
+    );
+    expect(find.text('0xe2…55d6'), findsOneWidget);
+    expect(find.text('趋势跟踪'), findsOneWidget);
+    expect(find.text('BTCUSDT'), findsOneWidget);
+    expect(find.text('全仓'), findsOneWidget);
+    expect(find.text('做多'), findsOneWidget);
+    expect(find.text('\$2.54M'), findsOneWidget); // 持仓价值
+    expect(find.text('33.5140 BTC'), findsOneWidget); // 数量
+    expect(find.text('75,763'), findsOneWidget); // 开盘价
+    expect(find.text('73%'), findsOneWidget); // 胜率
+  });
+
+  testWidgets('side long → 做多，short → 做空', (WidgetTester tester) async {
+    await _pump(tester, QzWhaleRow(event: holding(side: 'long'), now: DateTime(2024, 5, 18)));
+    expect(find.text('做多'), findsOneWidget);
+    expect(find.text('做空'), findsNothing);
+
+    await _pump(tester, QzWhaleRow(event: holding(side: 'short'), now: DateTime(2024, 5, 18)));
+    expect(find.text('做空'), findsOneWidget);
+    expect(find.text('做多'), findsNothing);
+  });
+
+  testWidgets('leverage null → 显示 --，非 null → Nx', (WidgetTester tester) async {
+    await _pump(tester, QzWhaleRow(event: holding(leverage: null), now: DateTime(2024, 5, 18)));
+    expect(find.text('--'), findsOneWidget);
+
+    await _pump(tester, QzWhaleRow(event: holding(leverage: 20), now: DateTime(2024, 5, 18)));
+    expect(find.text('20x'), findsOneWidget);
+  });
+
+  testWidgets('旧数据（无持仓字段）优雅降级不抛异常', (WidgetTester tester) async {
+    final WhaleEvent legacy = _ev(ts: DateTime(2024, 5, 18));
+    await _pump(tester, QzWhaleRow(event: legacy, now: DateTime(2024, 5, 18, 0, 1)));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(QzWhaleRow), findsOneWidget);
+  });
+
+  test('formatPrice 边界：≥1000 千分位 / <1000 两位小数', () {
+    expect(QzWhaleRow.formatPrice(75763), '75,763');
+    expect(QzWhaleRow.formatPrice(1000), '1,000');
+    expect(QzWhaleRow.formatPrice(83.7), '83.70');
+    expect(QzWhaleRow.formatPrice(0.16), '0.16');
+  });
+
   test('formatWinRate 整数百分比 (issue #1983)', () {
     expect(QzWhaleRow.formatWinRate(85), '85%');
     expect(QzWhaleRow.formatWinRate(49.6), '50%');
@@ -137,7 +214,7 @@ void main() {
     expect(QzWhaleRow.formatWinRate(100), '100%');
   });
 
-  test('winRateColor 三档阈值着色 绿≥70 / 橙≥50 / 红<50 (issue #1983)', () {
+  test('winRateColor 三档阈值着色 绿≥70 / 橙≥50 / 红<50 (issue #1983 / #1985)', () {
     final QzColorScheme c = qzColors(QzBg.dark, QzAccent.violet);
     // 边界与档内取值
     expect(QzWhaleRow.winRateColor(70, c), c.statusOk);

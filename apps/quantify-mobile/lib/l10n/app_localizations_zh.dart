@@ -2299,6 +2299,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleGroup1h => '过去 1 小时';
 
   @override
+  String get whaleRowLong => '做多';
+
+  @override
+  String get whaleRowShort => '做空';
+
+  @override
+  String get whaleRowPositionValue => '持仓价值';
+
+  @override
+  String get whaleRowQuantity => '数量';
+
+  @override
+  String get whaleRowOpenPrice => '开盘价格';
+
+  @override
+  String get whaleRowWinRate => '胜率';
+
+  @override
   String get whaleAddWatchAddress => '添加地址监控';
 
   @override
