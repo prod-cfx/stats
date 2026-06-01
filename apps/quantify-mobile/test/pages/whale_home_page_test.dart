@@ -15,6 +15,7 @@ import 'package:quantify_mobile/pages/whale/widgets/whale_notification_sheet.dar
 import 'package:quantify_mobile/pages/whale/widgets/whale_sort_bar.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:quantify_mobile/widgets/qz_notification_bell.dart';
 
 class _FakeWhaleFeedRepository implements WhaleFeedRepository {
   _FakeWhaleFeedRepository({List<WhaleEvent>? history})
@@ -73,15 +74,43 @@ void main() {
   testWidgets('WhaleHomePage 渲染 4 个二级 tab label',
       (WidgetTester tester) async {
     await _pump(tester);
-    expect(find.text('发现'), findsOneWidget);
-    expect(find.text('实时'), findsOneWidget);
-    expect(find.text('持仓'), findsOneWidget);
-    expect(find.text('监控'), findsOneWidget);
+    // 子 tab label 在 tab 栏内（按 key 定位，避开默认「发现」tab body
+    // 中同名文案的干扰）。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('whaleSubTab_0')),
+        matching: find.text('发现'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('whaleSubTab_1')),
+        matching: find.text('实时'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('whaleSubTab_2')),
+        matching: find.text('持仓'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('whaleSubTab_3')),
+        matching: find.text('监控'),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('默认进入实时 tab，可见净流入卡片',
+  testWidgets('切到「实时」tab，可见净流入卡片',
       (WidgetTester tester) async {
     await _pump(tester);
+    await tester.tap(find.byKey(const Key('whaleSubTab_1')));
+    await tester.pumpAndSettle();
     // hero 卡 label：来自 whaleNetFlowLabel("BTC 净流入 · 1H")
     expect(find.textContaining('净流入'), findsWidgets);
     // 3 格统计
@@ -90,11 +119,11 @@ void main() {
     expect(find.text('净增持'), findsOneWidget);
   });
 
-  testWidgets('切到「发现」tab → WhaleDiscoverNew（轮播+排序条+列表卡）出现',
+  testWidgets('默认进入「发现」tab → WhaleDiscoverNew（轮播+排序条+列表卡）出现',
       (WidgetTester tester) async {
     // issue #1789：发现 tab 重构为 top3 轮播 + 排序条 + 巨鲸列表卡。
+    // issue #1976：默认 tab 改为「发现」，无需点击即应可见发现内容。
     await _pump(tester);
-    await tester.tap(find.text('发现'));
     await tester.pumpAndSettle();
     // 排序条三档药丸。
     expect(
@@ -121,7 +150,7 @@ void main() {
     // 持仓明细卡列表（WhaleHoldingsTab），废弃旧的「交易所余额/头部地址持仓」
     // section。断言同步到现行 WhaleHoldingsTab 可见结构。
     await _pump(tester);
-    await tester.tap(find.text('持仓'));
+    await tester.tap(find.byKey(const Key('whaleSubTab_2')));
     await tester.pumpAndSettle();
     // 区段标题（whaleHoldingsSectionTitle）。
     expect(find.text('巨鲸持仓'), findsOneWidget);
@@ -136,7 +165,7 @@ void main() {
       (WidgetTester tester) async {
     // issue #1769：监控 tab 改为 segmented 三子 Tab。
     await _pump(tester);
-    await tester.tap(find.text('监控'));
+    await tester.tap(find.byKey(const Key('whaleSubTab_3')));
     await tester.pumpAndSettle();
     expect(find.text('实时巨鲸'), findsOneWidget);
     expect(find.text('监控地址'), findsOneWidget);
@@ -147,7 +176,7 @@ void main() {
       '监控 tab → 监控地址子 Tab「添加地址监控」按钮可点，打开规则表单 sheet',
       (WidgetTester tester) async {
     await _pump(tester);
-    await tester.tap(find.text('监控'));
+    await tester.tap(find.byKey(const Key('whaleSubTab_3')));
     await tester.pumpAndSettle();
     // 切到「监控地址」子 Tab。
     await tester.tap(find.text('监控地址'));
@@ -164,21 +193,27 @@ void main() {
     expect(find.text('添加地址监控'), findsWidgets);
   });
 
-  testWidgets('默认进入「实时」tab：tab 高亮 + 实时内容可见',
+  testWidgets('默认进入「发现」tab：tab 高亮 + 发现内容可见',
       (WidgetTester tester) async {
-    // issue #1663 守护：设计稿 ScreenWhale 默认 tab='实时'，Flutter
-    // _tabIndex=1，必须有测试断言避免后续回归。
+    // issue #1976 守护：设计稿 proto.jsx 巨鲸子 tab 首项为「发现」(w-discover)，
+    // Flutter _tabIndex=0，必须有测试断言避免回退到「实时」。
     await _pump(tester);
-    // 「实时」tab Text 颜色应为高亮（fontWeight=w700）。tab 实现：
+    // 「发现」tab Text 颜色应为高亮（fontWeight=w700）。tab 实现：
     // _SubTab 选中态 fontWeight w700，未选中 w500。
-    final Finder liveTabText = find.text('实时');
-    expect(liveTabText, findsOneWidget);
-    final Text liveText = tester.widget<Text>(liveTabText);
-    expect(liveText.style?.fontWeight, FontWeight.w700,
-        reason: '默认 tab 应为「实时」，文案应高亮 w700');
-    // 「发现」未选中应为 w500
-    final Text discoverText = tester.widget<Text>(find.text('发现'));
-    expect(discoverText.style?.fontWeight, FontWeight.w500);
+    final Finder discoverTabText = find.descendant(
+      of: find.byKey(const Key('whaleSubTab_0')),
+      matching: find.text('发现'),
+    );
+    expect(discoverTabText, findsOneWidget);
+    final Text discoverText = tester.widget<Text>(discoverTabText);
+    expect(discoverText.style?.fontWeight, FontWeight.w700,
+        reason: '默认 tab 应为「发现」，文案应高亮 w700');
+    // 「实时」未选中应为 w500
+    final Text liveText = tester.widget<Text>(find.descendant(
+      of: find.byKey(const Key('whaleSubTab_1')),
+      matching: find.text('实时'),
+    ));
+    expect(liveText.style?.fontWeight, FontWeight.w500);
   });
 
   testWidgets('右上铃铛存在且显示初始未读数 badge',
@@ -189,8 +224,14 @@ void main() {
         .length;
     expect(expectedUnread, greaterThan(0),
         reason: 'fixture 至少包含 1 条未读');
-    // badge 文字 = unread 数
-    expect(find.text('$expectedUnread'), findsWidgets);
+    // badge 文字 = unread 数（限定在铃铛内，避开默认「发现」tab body 同名数字）。
+    expect(
+      find.descendant(
+        of: find.byType(QzNotificationBell),
+        matching: find.text('$expectedUnread'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
   });
 
@@ -278,9 +319,14 @@ void main() {
     final int unreadBefore = mockWhaleNotifications
         .where((w) => w.unread)
         .length;
-    // 防御：unreadBefore 可能也出现在其他地方，因此只断言铃铛旁不再有 'unreadBefore'
-    // 文字位置。简单做法：找到 notifications_outlined icon 后兄弟里没有 unreadBefore。
-    expect(find.text('$unreadBefore'), findsNothing,
-        reason: '全部已读后 badge 数字应消失');
+    // 限定在铃铛内断言：全部已读后铃铛 badge 数字不再渲染（unread=0 时不画 badge）。
+    // 注意不能用全树 find.text('$unreadBefore')——默认「发现」tab body 可能含同名数字。
+    expect(
+      find.descendant(
+        of: find.byType(QzNotificationBell),
+        matching: find.text('$unreadBefore'),
+      ),
+      findsNothing,
+      reason: '全部已读后 badge 数字应消失');
   });
 }

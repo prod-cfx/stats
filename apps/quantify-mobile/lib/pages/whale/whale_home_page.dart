@@ -28,7 +28,7 @@ class WhaleHomePage extends ConsumerStatefulWidget {
 }
 
 class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
-  int _tabIndex = 1; // 默认实时 tab
+  int _tabIndex = 0; // 默认发现 tab（issue #1976，对齐设计稿首项 w-discover）
 
   /// issue #1769：通知中心改为单一数据源 [whaleNotificationsProvider]，
   /// 铃铛 panel 与监控 Tab「通知中心」子 Tab 共享同一份列表/已读态。
@@ -97,6 +97,7 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
               children: <Widget>[
                 for (int i = 0; i < tabs.length; i++)
                   _SubTab(
+                    key: Key('whaleSubTab_$i'),
                     label: tabs[i].label,
                     selected: _tabIndex == i,
                     onTap: () => setState(() => _tabIndex = i),
@@ -167,6 +168,7 @@ class _CircularIconAction extends StatelessWidget {
 
 class _SubTab extends StatelessWidget {
   const _SubTab({
+    super.key,
     required this.label,
     required this.selected,
     required this.onTap,
