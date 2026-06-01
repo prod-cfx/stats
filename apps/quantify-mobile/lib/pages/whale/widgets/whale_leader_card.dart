@@ -207,14 +207,65 @@ class _AiTagChip extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: fg,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            label,
+            style: TextStyle(
+              color: fg,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 3),
+          // info 图标（圆圈 + i），对齐设计稿 jsx:79-82，0.55 透明度。
+          Opacity(
+            opacity: 0.55,
+            child: CustomPaint(
+              size: const Size(9, 9),
+              painter: _InfoIconPainter(color: fg),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+/// AI 标签尾部 info 图标：9x9 圆圈 + "i"，描边色继承标签前景色（对齐设计稿）。
+class _InfoIconPainter extends CustomPainter {
+  const _InfoIconPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 设计稿 viewBox 24，stroke-width 2 → 缩放后线宽。
+    final double scale = size.width / 24;
+    final Paint stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2 * scale
+      ..strokeCap = StrokeCap.round;
+    final Offset center = Offset(size.width / 2, size.height / 2);
+    // circle cx=12 cy=12 r=9
+    canvas.drawCircle(center, 9 * scale, stroke);
+    // path M12 8v5（竖线主体）
+    canvas.drawLine(
+      Offset(center.dx, 8 * scale),
+      Offset(center.dx, 13 * scale),
+      stroke,
+    );
+    // path M12 16v.5（点）
+    canvas.drawLine(
+      Offset(center.dx, 16 * scale),
+      Offset(center.dx, 16.5 * scale),
+      stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_InfoIconPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
