@@ -9,6 +9,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
+import '../../../widgets/qz_toast.dart';
 import '../widgets/whale_leader_card.dart';
 import '../widgets/whale_sort_bar.dart';
 import '../widgets/whale_top_slideshow.dart';
@@ -49,12 +50,7 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     await Clipboard.setData(ClipboardData(text: entry.id));
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(l10n.whaleLeaderCopied),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    QzToast.show(context, l10n.whaleLeaderCopied);
   }
 
   @override

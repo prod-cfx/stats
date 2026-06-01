@@ -11,6 +11,7 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
+import '../../widgets/qz_toast.dart';
 import 'widgets/whale_chart_filter_sheet.dart';
 import 'widgets/whale_detail_rows.dart';
 import 'widgets/whale_detail_sort.dart';
@@ -35,12 +36,7 @@ class WhaleProfilePage extends ConsumerWidget {
   Future<void> _copyAddress(BuildContext context, AppLocalizations l10n) async {
     await Clipboard.setData(ClipboardData(text: address));
     if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(l10n.whaleProfileCopied),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    QzToast.show(context, l10n.whaleProfileCopied);
   }
 
   // 「一键监控」入口：复用现有 watch 规则流程（#1791 watch tab 同款 sheet）。

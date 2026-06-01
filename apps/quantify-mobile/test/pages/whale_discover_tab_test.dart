@@ -252,6 +252,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       expect(calls, isNotEmpty);
       expect(find.text('地址已复制'), findsOneWidget);
+      // 浮层 toast 自带 1s 延时 + 淡出动画，drain 掉定时器避免 pending Timer。
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('地址已复制'), findsNothing);
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
         null,
