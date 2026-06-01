@@ -99,7 +99,7 @@ class _SortPill extends StatelessWidget {
         height: 28,
         padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
         decoration: BoxDecoration(
-          color: active ? c.accent : c.bgSoft,
+          color: active ? c.accent : Colors.transparent,
           borderRadius: BorderRadius.circular(QzRadii.pill),
         ),
         child: Row(
