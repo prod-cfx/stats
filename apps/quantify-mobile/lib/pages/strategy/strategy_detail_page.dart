@@ -689,6 +689,13 @@ class _ParamsSection extends StatelessWidget {
     return '—';
   }
 
+  /// 交易周期：直接取 [StrategyCard.period]（如 `30D`），缺省回退 `—`。
+  String _period() => card.period.isNotEmpty ? card.period : '—';
+
+  /// 杠杆：高频策略 `5×`，其余 `1×`（对齐设计稿 m-screens-2.jsx:995）。
+  String _leverage() =>
+      card.category == StrategyCategory.highFreq ? '5×' : '1×';
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -697,10 +704,10 @@ class _ParamsSection extends StatelessWidget {
         <({String label, String value})>[
       (label: l10n.strategyDetailParamType, value: _categoryLabel(context)),
       (label: l10n.strategyDetailParamSymbol, value: _symbol()),
-      (label: l10n.strategyDetailParamPeriod, value: '15m / 1H'),
+      (label: l10n.strategyDetailParamPeriod, value: _period()),
       (label: l10n.strategyDetailParamStopLoss, value: '2.0%'),
       (label: l10n.strategyDetailParamPosition, value: '100%'),
-      (label: l10n.strategyDetailParamLeverage, value: '1×'),
+      (label: l10n.strategyDetailParamLeverage, value: _leverage()),
     ];
     return Container(
       decoration: BoxDecoration(

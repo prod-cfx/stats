@@ -60,6 +60,7 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   QzTheme? theme,
   String id = _kId,
   Map<String, Object> initialPrefs = const <String, Object>{},
+  String id = _kId,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   SharedPreferences.setMockInitialValues(initialPrefs);
@@ -94,6 +95,25 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   return (container: container, router: router);
 }
 
+/// 读取「策略参数」区块中 [label] 所在行的值：定位含该 label 的 Row，
+/// 取该 Row 内另一个非 label 的 Text。避免与同名 equity tab（如 30D）冲突。
+String _paramValue(WidgetTester tester, String label) {
+  final Finder row = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(Row),
+  );
+  final Finder values = find.descendant(
+    of: row.first,
+    matching: find.byType(Text),
+  );
+  final Iterable<Text> texts = tester.widgetList<Text>(values);
+  return texts.map((Text t) => t.data).firstWhere(
+        (String? d) => d != null && d != label,
+        orElse: () => null,
+      ) ??
+      '';
+}
+
 void main() {
   testWidgets(
       '渲染：6 张指标卡 + 运行 / 分享 / 载入对话 + 策略说明 + equity 真实图，无信号段（#1825）',
@@ -122,6 +142,27 @@ void main() {
     // 策略参数区块（用户评价区块已随设计稿移除，#1799）
     expect(find.text('策略参数'), findsOneWidget);
     expect(find.text('用户评价'), findsNothing);
+  });
+
+  testWidgets('策略参数：非高频策略交易周期取 card.period、杠杆 1× (#1886)',
+      (WidgetTester tester) async {
+    // st-grid-btc：category=grid、period=30D
+    await _pumpDetail(tester);
+    // 「交易周期」行的值取 card.period（30D，与 equity tab 同名故按行定位）
+    expect(_paramValue(tester, '交易周期'), '30D');
+    expect(_paramValue(tester, '杠杆'), '1×');
+    // 旧硬编码值不应再出现
+    expect(find.text('15m / 1H'), findsNothing);
+    expect(find.text('5×'), findsNothing);
+  });
+
+  testWidgets('策略参数：高频策略杠杆 5×、交易周期取 card.period (#1886)',
+      (WidgetTester tester) async {
+    // st-grid-pepe：category=highFreq、period=7D
+    await _pumpDetail(tester, id: 'st-grid-pepe');
+    expect(_paramValue(tester, '杠杆'), '5×');
+    expect(_paramValue(tester, '交易周期'), '7D');
+    expect(find.text('15m / 1H'), findsNothing);
   });
 
   testWidgets('equity 时间维度切换：tap 90D tab 不抛异常 (#1565)',
