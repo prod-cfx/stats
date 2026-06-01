@@ -154,16 +154,30 @@ class WhaleTopCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
           decoration: BoxDecoration(
+            // 三段渐变贴近设计 155°：tint 高透(0%) → tint 低透(40%) → elev(78%)
+            // （`m-screens-whale-discover.jsx:317`）。155° 自顶偏右下，用
+            // topCenter→bottomRight 近似。
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
+              begin: Alignment.topCenter,
               end: Alignment.bottomRight,
+              stops: const <double>[0.0, 0.4, 0.78],
               colors: <Color>[
                 tint.withValues(alpha: 0.11),
+                tint.withValues(alpha: 0.02),
                 c.bgElev,
               ],
             ),
             border: Border.all(color: tint.withValues(alpha: 0.2)),
             borderRadius: BorderRadius.circular(14),
+            // 底部柔和阴影，对齐设计 `0 6px 16px -12px tint55`（`:323`）。
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: tint.withValues(alpha: 0.33),
+                blurRadius: 16,
+                spreadRadius: -12,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
