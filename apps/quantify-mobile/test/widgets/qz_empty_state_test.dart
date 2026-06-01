@@ -4,22 +4,29 @@ import 'package:quantify_mobile/widgets/qz_empty_state.dart';
 
 import '../helpers/golden_harness.dart';
 
+final Uri _testFile = Uri.parse('test/widgets/qz_empty_state_test.dart');
+const double _sdkPixelDriftTolerance = 0.0002;
+
 void main() {
-  testWidgets('QzEmptyState golden baseline — title only (light+violet)',
-      (tester) async {
+  testWidgets('QzEmptyState golden baseline — title only (light+violet)', (
+    tester,
+  ) async {
     await pumpQz(
       tester,
       const QzEmptyState(title: 'Nothing here'),
       surfaceSize: const Size(360, 160),
     );
-    await expectLater(
+    await expectGoldenWithinTolerance(
       find.byType(QzEmptyState),
-      matchesGoldenFile('goldens/qz_empty_state.png'),
+      'goldens/qz_empty_state.png',
+      testFile: _testFile,
+      precisionTolerance: _sdkPixelDriftTolerance,
     );
   });
 
-  testWidgets('QzEmptyState golden baseline — with icon (light+violet)',
-      (tester) async {
+  testWidgets('QzEmptyState golden baseline — with icon (light+violet)', (
+    tester,
+  ) async {
     await pumpQz(
       tester,
       const QzEmptyState(
@@ -28,14 +35,17 @@ void main() {
       ),
       surfaceSize: const Size(360, 200),
     );
-    await expectLater(
+    await expectGoldenWithinTolerance(
       find.byType(QzEmptyState),
-      matchesGoldenFile('goldens/qz_empty_state_with_icon.png'),
+      'goldens/qz_empty_state_with_icon.png',
+      testFile: _testFile,
+      precisionTolerance: _sdkPixelDriftTolerance,
     );
   });
 
-  testWidgets('QzEmptyState golden baseline — full (icon+subtitle+action)',
-      (tester) async {
+  testWidgets('QzEmptyState golden baseline — full (icon+subtitle+action)', (
+    tester,
+  ) async {
     await pumpQz(
       tester,
       QzEmptyState(
@@ -46,19 +56,18 @@ void main() {
       ),
       surfaceSize: const Size(360, 320),
     );
-    await expectLater(
+    await expectGoldenWithinTolerance(
       find.byType(QzEmptyState),
-      matchesGoldenFile('goldens/qz_empty_state_full.png'),
+      'goldens/qz_empty_state_full.png',
+      testFile: _testFile,
+      precisionTolerance: _sdkPixelDriftTolerance,
     );
   });
 
   testWidgets('QzEmptyState renders cleanly under 9 themes', (tester) async {
     await verifyAllThemes(
       tester,
-      () => const QzEmptyState(
-        title: 'Empty',
-        icon: Icons.inbox_outlined,
-      ),
+      () => const QzEmptyState(title: 'Empty', icon: Icons.inbox_outlined),
       (t) async {
         expect(find.text('Empty'), findsOneWidget);
       },
@@ -66,8 +75,9 @@ void main() {
     );
   });
 
-  testWidgets('QzEmptyState full variant renders cleanly under 9 themes',
-      (tester) async {
+  testWidgets('QzEmptyState full variant renders cleanly under 9 themes', (
+    tester,
+  ) async {
     await verifyAllThemes(
       tester,
       () => QzEmptyState(

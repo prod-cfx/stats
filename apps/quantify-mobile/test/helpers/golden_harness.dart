@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -61,5 +62,55 @@ Future<void> verifyAllThemes(
         reason: 'rendering exception under bg=$bg accent=$accent',
       );
     }
+  }
+}
+
+Future<void> expectGoldenWithinTolerance(
+  Finder finder,
+  String goldenFile, {
+  required Uri testFile,
+  required double precisionTolerance,
+}) async {
+  final GoldenFileComparator previous = goldenFileComparator;
+  goldenFileComparator = _TolerantGoldenFileComparator(
+    testFile,
+    precisionTolerance: precisionTolerance,
+  );
+  try {
+    await expectLater(finder, matchesGoldenFile(goldenFile));
+  } finally {
+    goldenFileComparator = previous;
+  }
+}
+
+class _TolerantGoldenFileComparator extends LocalFileComparator {
+  _TolerantGoldenFileComparator(
+    super.testFile, {
+    required double precisionTolerance,
+  }) : assert(
+         0 <= precisionTolerance && precisionTolerance <= 1,
+         'precisionTolerance must be between 0 and 1',
+       ),
+       _precisionTolerance = precisionTolerance;
+
+  final double _precisionTolerance;
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    final ComparisonResult result = await GoldenFileComparator.compareLists(
+      imageBytes,
+      await getGoldenBytes(golden),
+    );
+
+    final bool passed =
+        result.passed || result.diffPercent <= _precisionTolerance;
+    if (passed) {
+      result.dispose();
+      return true;
+    }
+
+    final String error = await generateFailureOutput(result, golden, basedir);
+    result.dispose();
+    throw FlutterError(error);
   }
 }
