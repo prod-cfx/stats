@@ -483,10 +483,14 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
       int running = 0;
       int warning = 0;
       int paused = 0;
+      double winRateWeighted = 0;
+      int tradesTotal = 0;
       for (final LiveStrategy s in active) {
         cap += s.capital;
         today += s.todayPnl;
         total += s.totalPnl;
+        winRateWeighted += s.winRate * s.trades;
+        tradesTotal += s.trades;
         switch (s.status) {
           case LiveStrategyStatus.running:
             running++;
@@ -510,6 +514,7 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
         warningCount: warning,
         pausedCount: paused,
         stoppedCount: stopped,
+        winRate: tradesTotal == 0 ? 0 : winRateWeighted / tradesTotal,
       );
     });
 

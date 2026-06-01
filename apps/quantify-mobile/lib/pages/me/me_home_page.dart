@@ -339,15 +339,44 @@ class _Content extends ConsumerWidget {
   }
 }
 
-class _StatsCard extends StatelessWidget {
-  // 三栏当前按原型 m-screens-4 第 9 屏使用 mock 字面量（活跃策略 / 累计收益
-  // / 胜率），不读 AccountInfo；待 strategy 维度真实数据接通后再注入。
+class _StatsCard extends ConsumerWidget {
+  // 三栏（活跃策略 / 累计收益 / 胜率）派生自 `liveStrategySummaryProvider`，
+  // 与同页大卡同源（#1902）。加载/错误态退化为 0：count=0 / +$0 / 0.0%，
+  // 整卡始终可见，不崩。待后端实例接口接通后随 provider 自动切真实数据。
   const _StatsCard();
 
+  /// 累计收益展示串，口径对齐 live 列表页 `_money`：`+$8,420` / `-$1,200`。
+  /// 千分位分组，无小数（统计卡为概览，精度交详情页）。
+  static String _formatPnl(double v) {
+    final String sign = v >= 0 ? '+\$' : '-\$';
+    final String digits = v.abs().round().toString();
+    final StringBuffer grouped = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+      grouped.write(digits[i]);
+    }
+    return '$sign$grouped';
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    // 加载/错误态退化为全 0 摘要，整卡照常渲染（不闪 spinner / 不抛错）。
+    final LiveStrategySummary s =
+        ref.watch(liveStrategySummaryProvider).maybeWhen(
+              data: (LiveStrategySummary v) => v,
+              orElse: () => const LiveStrategySummary(
+                totalAssets: 0,
+                totalCapital: 0,
+                todayPnl: 0,
+                totalPnl: 0,
+                runningCount: 0,
+                warningCount: 0,
+                pausedCount: 0,
+                stoppedCount: 0,
+              ),
+            );
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: QzSpacing.lg,
@@ -365,26 +394,25 @@ class _StatsCard extends StatelessWidget {
           ),
         ],
       ),
-      // 三栏统计：主视图按原型 m-screens-4 第 9 屏「活跃策略 / 累计收益
-      // / 胜率」展示。本迭代用 mock 值（与原型常量一致），后续 issue 接通
-      // strategy 维度真实数据后切换；AccountInfo 财务字段保留供副视图复用。
+      // 三栏统计：活跃策略数 / 累计收益 / 综合胜率，均派生自 summary。
+      // 累计收益正负分别用 ok / danger tone（0 视为非负，走 ok）。
       child: Row(
         children: <Widget>[
           _Stat(
             label: l10n.meStatsActiveStrategies,
-            value: '3',
+            value: '${s.activeCount}',
             color: c.text,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(
             label: l10n.meStatsCumulativeReturn,
-            value: '+\$8,420',
-            color: c.statusOk,
+            value: _formatPnl(s.totalPnl),
+            color: s.totalPnl >= 0 ? c.statusOk : c.statusDanger,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(
             label: l10n.meStatsWinRate,
-            value: '62.4%',
+            value: '${s.winRate.toStringAsFixed(1)}%',
             color: c.text,
           ),
         ],

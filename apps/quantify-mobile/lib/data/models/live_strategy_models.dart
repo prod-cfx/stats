@@ -219,6 +219,10 @@ class LiveStrategySummary {
   final int pausedCount;
   final int stoppedCount;
 
+  /// 活跃策略综合胜率（0..100），按成交数加权平均。无成交时为 0。
+  /// 可选默认 0：旧调用点（仅关心计数/盈亏）无需感知该字段。
+  final double winRate;
+
   const LiveStrategySummary({
     required this.totalAssets,
     required this.totalCapital,
@@ -228,6 +232,7 @@ class LiveStrategySummary {
     required this.warningCount,
     required this.pausedCount,
     required this.stoppedCount,
+    this.winRate = 0,
   });
 
   /// 活跃策略总数（非 stopped），口径与设计稿 `active.length` 一致。

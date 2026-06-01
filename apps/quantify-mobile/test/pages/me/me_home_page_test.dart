@@ -32,12 +32,13 @@ Future<ProviderContainer> _pumpMe(
   LiveStrategySummary summary = const LiveStrategySummary(
     totalAssets: 0,
     totalCapital: 0,
-    todayPnl: 0,
-    totalPnl: 0,
+    todayPnl: 8420,
+    totalPnl: 8420,
     runningCount: 2,
     warningCount: 1,
     pausedCount: 1,
     stoppedCount: 1,
+    winRate: 62.4,
   ),
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
@@ -175,7 +176,14 @@ void main() {
       (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     // active = running 2 + warning 1 + paused 1 = 4（stopped 不计）。
-    expect(find.text('4'), findsOneWidget);
+    // 限定在入口大卡内：统计卡也展示活跃数 4（#1902），避免与之撞车。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('me-live-strategies-entry')),
+        matching: find.text('4'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('多状态明细行按顺序展示且 0 计数不渲染（#1816）',
@@ -199,8 +207,14 @@ void main() {
     // pausedCount=0 → 不渲染。
     expect(find.textContaining('已暂停'), findsNothing);
     expect(find.text('1 已停止'), findsOneWidget);
-    // badge active = 3 + 2 + 0 = 5。
-    expect(find.text('5'), findsOneWidget);
+    // badge active = 3 + 2 + 0 = 5。限定入口大卡内（统计卡也显示 5）。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('me-live-strategies-entry')),
+        matching: find.text('5'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('全 0 计数退化为副标题且整卡仍可点进入 /me/live（#1816）',
@@ -271,6 +285,40 @@ void main() {
     expect(find.text('活跃策略'), findsOneWidget);
     expect(find.text('累计收益'), findsOneWidget);
     expect(find.text('胜率'), findsOneWidget);
+  });
+
+  testWidgets('统计卡三栏数值来自 provider（正常态，无硬编码）（#1902）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    // active = running 2 + warning 1 + paused 1 = 4。
+    expect(find.text('4'), findsWidgets);
+    // 累计收益 totalPnl=8420 → 千分位 +$8,420（旧硬编码同值，但现来自 provider）。
+    expect(find.text('+\$8,420'), findsOneWidget);
+    // 胜率 62.4 → 62.4%。
+    expect(find.text('62.4%'), findsOneWidget);
+  });
+
+  testWidgets('统计卡退化态：summary 全 0 → 0 / +\$0 / 0.0%，不崩（#1902）',
+      (WidgetTester tester) async {
+    await _pumpMe(
+      tester,
+      initialSession: kSession,
+      summary: const LiveStrategySummary(
+        totalAssets: 0,
+        totalCapital: 0,
+        todayPnl: 0,
+        totalPnl: 0,
+        runningCount: 0,
+        warningCount: 0,
+        pausedCount: 0,
+        stoppedCount: 0,
+      ),
+    );
+    expect(find.text('+\$0'), findsOneWidget);
+    expect(find.text('0.0%'), findsOneWidget);
+    // 旧硬编码值不再出现。
+    expect(find.text('62.4%'), findsNothing);
+    expect(find.text('+\$8,420'), findsNothing);
   });
 
   testWidgets('header 显示 Telegram 已绑定 chip', (WidgetTester tester) async {
