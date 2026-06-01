@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/auth/session_controller.dart';
-import '../../data/models/auth_models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -16,9 +15,8 @@ import '../../theme/tokens.dart';
 /// 视觉重点：
 /// - 顶部 300px 紫色径向渐变 hero + 同心圆装饰 + 白底紫色 Logo 方块（量化折线）
 /// - 大标题「把交易想法 / 变成可回测的策略」 + 副标题「对话生成 · 历史回测 · API 部署」
-/// - 表单：邮箱 + 密码（密码右侧「忘记?」文字链接）
+/// - 表单：邮箱 + 密码
 /// - 主按钮：渐变样式（accentGrad）；OR 分割线；Telegram ghost 按钮
-/// - 游客入口 ghost 按钮：「以游客身份先看看 · 无需注册」 → mock guest session → /ai
 /// - 底部「继续即表示同意 服务条款 与 隐私政策」（mock 跳转，仅 SnackBar 提示）
 ///
 /// 适配深浅主题：hero 永远是深色渐变（品牌表达），表单区跟随主题；statusBar
@@ -39,7 +37,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   bool _emailLoading = false;
   bool _telegramLoading = false;
-  bool _guestLoading = false;
 
   @override
   void dispose() {
@@ -66,10 +63,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _emailLoading = true);
     try {
-      await ref.read(sessionControllerProvider.notifier).loginEmail(
-            email: _email.text.trim(),
-            password: _password.text,
-          );
+      await ref
+          .read(sessionControllerProvider.notifier)
+          .loginEmail(email: _email.text.trim(), password: _password.text);
       if (!mounted) return;
       context.go('/ai');
     } catch (e) {
@@ -106,44 +102,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  Future<void> _submitGuest() async {
-    setState(() => _guestLoading = true);
-    try {
-      await ref.read(sessionControllerProvider.notifier).loginGuest();
-      if (!mounted) return;
-      // SessionController.loginGuest 走 AsyncValue.guard，异常不会 rethrow，
-      // 需要读 state 判断 hasError，避免错误态下仍跳 /ai。
-      final AsyncValue<AuthSession?> s = ref.read(sessionControllerProvider);
-      if (s.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${AppLocalizations.of(context).authLoginGuestFailedPrefix}${s.error}',
-            ),
-          ),
-        );
-        return;
-      }
-      context.go('/ai');
-    } finally {
-      if (mounted) setState(() => _guestLoading = false);
-    }
-  }
-
-  void _onForgotPassword() {
-    // mock: 后续接入真实重置流程，先用 SnackBar 占位。
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(AppLocalizations.of(context).authLoginForgotMockToast),
-      ),
-    );
-  }
-
   void _onTermsTap() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(AppLocalizations.of(context).authLoginTermsLink),
-      ),
+      SnackBar(content: Text(AppLocalizations.of(context).authLoginTermsLink)),
     );
   }
 
@@ -159,15 +120,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool busy = _emailLoading || _telegramLoading || _guestLoading;
+    final bool busy = _emailLoading || _telegramLoading;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       // hero 永远是深色，statusBar 文字反白；底部跟随主题。
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
         systemNavigationBarColor: c.bg,
-        systemNavigationBarIconBrightness:
-            c.brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+        systemNavigationBarIconBrightness: c.brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: c.bg,
@@ -178,10 +140,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _Hero(
-                  key: const ValueKey<String>('login-hero'),
-                  l10n: l10n,
-                ),
+                _Hero(key: const ValueKey<String>('login-hero'), l10n: l10n),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     QzSpacing.lg,
@@ -196,13 +155,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     busy: busy,
                     emailLoading: _emailLoading,
                     telegramLoading: _telegramLoading,
-                    guestLoading: _guestLoading,
                     validateEmail: _validateEmail,
                     validatePassword: _validatePassword,
                     onSubmitEmail: _submitEmail,
                     onSubmitTelegram: _submitTelegram,
-                    onSubmitGuest: _submitGuest,
-                    onForgotPassword: _onForgotPassword,
                     onTermsTap: _onTermsTap,
                     onPrivacyTap: _onPrivacyTap,
                     colors: c,
@@ -300,9 +256,7 @@ class _Hero extends StatelessWidget {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    _BrandLogoMark(
-                      key: const ValueKey<String>('login-brand'),
-                    ),
+                    _BrandLogoMark(key: const ValueKey<String>('login-brand')),
                     const SizedBox(width: QzSpacing.sm),
                     const Text(
                       'Quantify',
@@ -452,13 +406,10 @@ class _LoginForm extends StatelessWidget {
     required this.busy,
     required this.emailLoading,
     required this.telegramLoading,
-    required this.guestLoading,
     required this.validateEmail,
     required this.validatePassword,
     required this.onSubmitEmail,
     required this.onSubmitTelegram,
-    required this.onSubmitGuest,
-    required this.onForgotPassword,
     required this.onTermsTap,
     required this.onPrivacyTap,
     required this.colors,
@@ -471,13 +422,10 @@ class _LoginForm extends StatelessWidget {
   final bool busy;
   final bool emailLoading;
   final bool telegramLoading;
-  final bool guestLoading;
   final FormFieldValidator<String> validateEmail;
   final FormFieldValidator<String> validatePassword;
   final VoidCallback onSubmitEmail;
   final VoidCallback onSubmitTelegram;
-  final VoidCallback onSubmitGuest;
-  final VoidCallback onForgotPassword;
   final VoidCallback onTermsTap;
   final VoidCallback onPrivacyTap;
   final QzColorScheme colors;
@@ -507,11 +455,7 @@ class _LoginForm extends StatelessWidget {
           Text(
             l10n.authLoginWelcomeSubtitle,
             key: const ValueKey<String>('login-welcome-subtitle'),
-            style: TextStyle(
-              color: c.textDim,
-              fontSize: 13,
-              height: 1.5,
-            ),
+            style: TextStyle(color: c.textDim, fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: QzSpacing.lg),
           TextFormField(
@@ -535,25 +479,6 @@ class _LoginForm extends StatelessWidget {
             decoration: InputDecoration(
               labelText: l10n.authLoginPasswordLabel,
               hintText: l10n.authLoginPasswordHint,
-              // 「忘记?」放在密码框右侧 suffix。
-              suffixIcon: TextButton(
-                key: const ValueKey<String>('login-forgot-password'),
-                onPressed: busy ? null : onForgotPassword,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 0),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: c.accent,
-                ),
-                child: Text(
-                  l10n.authLoginForgotPassword,
-                  style: TextStyle(
-                    color: c.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
             ),
             validator: validatePassword,
           ),
@@ -592,17 +517,6 @@ class _LoginForm extends StatelessWidget {
             label: l10n.authLoginTelegramButton,
             loading: telegramLoading,
             onPressed: busy ? null : onSubmitTelegram,
-            colors: c,
-          ),
-          const SizedBox(height: QzSpacing.sm),
-
-          // 游客入口 ghost 按钮
-          _GuestButton(
-            key: const ValueKey<String>('login-guest'),
-            label: l10n.authLoginGuestButton,
-            hint: l10n.authLoginGuestHint,
-            loading: guestLoading,
-            onPressed: busy ? null : onSubmitGuest,
             colors: c,
           ),
           const SizedBox(height: QzSpacing.sm),
@@ -661,8 +575,7 @@ class _GradientPrimaryButton extends StatelessWidget {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : Text(
@@ -738,72 +651,6 @@ class _GhostButton extends StatelessWidget {
   }
 }
 
-class _GuestButton extends StatelessWidget {
-  const _GuestButton({
-    super.key,
-    required this.label,
-    required this.hint,
-    required this.loading,
-    required this.onPressed,
-    required this.colors,
-  });
-
-  final String label;
-  final String hint;
-  final bool loading;
-  final VoidCallback? onPressed;
-  final QzColorScheme colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: colors.textMid,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: loading
-            ? SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(colors.textMid),
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(Icons.person_outline,
-                      size: 14, color: colors.textMid),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: colors.textMid,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    hint,
-                    style: TextStyle(
-                      color: colors.textFaint,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-}
-
 /// 服务条款 / 隐私政策行 —— 使用 TapGestureRecognizer 让 TextSpan 内可点击。
 /// stateful 是为了拿到 recognizer 的生命周期：随 widget dispose 一并释放。
 class _TermsLine extends StatefulWidget {
@@ -825,10 +672,10 @@ class _TermsLine extends StatefulWidget {
 }
 
 class _TermsLineState extends State<_TermsLine> {
-  late final TapGestureRecognizer _termsTap =
-      TapGestureRecognizer()..onTap = () => widget.onTermsTap();
-  late final TapGestureRecognizer _privacyTap =
-      TapGestureRecognizer()..onTap = () => widget.onPrivacyTap();
+  late final TapGestureRecognizer _termsTap = TapGestureRecognizer()
+    ..onTap = () => widget.onTermsTap();
+  late final TapGestureRecognizer _privacyTap = TapGestureRecognizer()
+    ..onTap = () => widget.onPrivacyTap();
 
   @override
   void dispose() {

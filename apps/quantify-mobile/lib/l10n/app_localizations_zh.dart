@@ -862,15 +862,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginHeroSubtitle => '对话生成 · 历史回测 · API 部署';
 
   @override
-  String get authLoginForgotPassword => '忘记?';
-
-  @override
-  String get authLoginGuestButton => '以游客身份先看看';
-
-  @override
-  String get authLoginGuestHint => '· 无需注册';
-
-  @override
   String get authLoginTermsPrefix => '继续即表示同意 ';
 
   @override
@@ -881,12 +872,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get authLoginPrivacyLink => '隐私政策';
-
-  @override
-  String get authLoginGuestFailedPrefix => '游客登录失败：';
-
-  @override
-  String get authLoginForgotMockToast => '重置密码（mock）';
 
   @override
   String get marketHomeTabWatchlist => '自选';

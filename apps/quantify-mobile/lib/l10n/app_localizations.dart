@@ -1722,24 +1722,6 @@ abstract class AppLocalizations {
   /// **'对话生成 · 历史回测 · API 部署'**
   String get authLoginHeroSubtitle;
 
-  /// No description provided for @authLoginForgotPassword.
-  ///
-  /// In zh, this message translates to:
-  /// **'忘记?'**
-  String get authLoginForgotPassword;
-
-  /// No description provided for @authLoginGuestButton.
-  ///
-  /// In zh, this message translates to:
-  /// **'以游客身份先看看'**
-  String get authLoginGuestButton;
-
-  /// No description provided for @authLoginGuestHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'· 无需注册'**
-  String get authLoginGuestHint;
-
   /// No description provided for @authLoginTermsPrefix.
   ///
   /// In zh, this message translates to:
@@ -1763,18 +1745,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'隐私政策'**
   String get authLoginPrivacyLink;
-
-  /// No description provided for @authLoginGuestFailedPrefix.
-  ///
-  /// In zh, this message translates to:
-  /// **'游客登录失败：'**
-  String get authLoginGuestFailedPrefix;
-
-  /// No description provided for @authLoginForgotMockToast.
-  ///
-  /// In zh, this message translates to:
-  /// **'重置密码（mock）'**
-  String get authLoginForgotMockToast;
 
   /// No description provided for @marketHomeTabWatchlist.
   ///

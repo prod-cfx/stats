@@ -22,10 +22,7 @@ class _AiPlaceholder extends StatelessWidget {
 }
 
 Future<({ProviderContainer container, InMemoryTokenStorage storage})>
-_pumpLogin(
-  WidgetTester tester, {
-  InMemoryTokenStorage? storage,
-}) async {
+_pumpLogin(WidgetTester tester, {InMemoryTokenStorage? storage}) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
@@ -72,20 +69,25 @@ _pumpLogin(
 }
 
 void main() {
-  testWidgets('LoginPage 渲染品牌占位 + 邮箱/密码字段 + 两个按钮',
-      (WidgetTester tester) async {
+  testWidgets('LoginPage 渲染品牌占位 + 邮箱/密码字段 + 两个按钮', (WidgetTester tester) async {
     await _pumpLogin(tester);
     expect(find.byKey(const ValueKey<String>('login-brand')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-email-field')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-password-field')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('login-email-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-password-field')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey<String>('login-submit')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-telegram')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('login-telegram')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('点击登录但邮箱格式不正确 → 显示错误，不跳转',
-      (WidgetTester tester) async {
+  testWidgets('点击登录但邮箱格式不正确 → 显示错误，不跳转', (WidgetTester tester) async {
     await _pumpLogin(tester);
     await tester.enterText(
       find.byKey(const ValueKey<String>('login-email-field')),
@@ -119,8 +121,9 @@ void main() {
     expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
   });
 
-  testWidgets('合法表单 → mock 登录成功 → 跳 /ai + token 写盘',
-      (WidgetTester tester) async {
+  testWidgets('合法表单 → mock 登录成功 → 跳 /ai + token 写盘', (
+    WidgetTester tester,
+  ) async {
     final (:ProviderContainer container, :InMemoryTokenStorage storage) =
         await _pumpLogin(tester);
 
@@ -143,8 +146,7 @@ void main() {
     );
   });
 
-  testWidgets('Telegram 按钮 → mock 登录 → 跳 /ai',
-      (WidgetTester tester) async {
+  testWidgets('Telegram 按钮 → mock 登录 → 跳 /ai', (WidgetTester tester) async {
     final (:ProviderContainer container, :InMemoryTokenStorage storage) =
         await _pumpLogin(tester);
     final Finder tg = find.byKey(const ValueKey<String>('login-telegram'));
@@ -161,63 +163,58 @@ void main() {
     );
   });
 
-  testWidgets('hero 区域渲染品牌 Logo + 大标题 + 副标题',
-      (WidgetTester tester) async {
+  testWidgets('hero 区域渲染品牌 Logo + 大标题 + 副标题', (WidgetTester tester) async {
     await _pumpLogin(tester);
     expect(find.byKey(const ValueKey<String>('login-hero')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('login-brand')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-hero-title-1')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-hero-title-2')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-hero-subtitle')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('login-hero-title-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-hero-title-2')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-hero-subtitle')),
+      findsOneWidget,
+    );
     expect(find.text('把交易想法'), findsOneWidget);
     expect(find.text('变成可回测的策略'), findsOneWidget);
     expect(find.text('对话生成 · 历史回测 · API 部署'), findsOneWidget);
   });
 
-  testWidgets('表单区显示「欢迎回来」+「使用邮箱或 Telegram 继续」副标题',
-      (WidgetTester tester) async {
+  testWidgets('表单区显示「欢迎回来」+「使用邮箱或 Telegram 继续」副标题', (
+    WidgetTester tester,
+  ) async {
     await _pumpLogin(tester);
-    expect(find.byKey(const ValueKey<String>('login-welcome-title')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('login-welcome-subtitle')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('login-welcome-title')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('login-welcome-subtitle')),
+      findsOneWidget,
+    );
     expect(find.text('欢迎回来'), findsOneWidget);
     expect(find.text('使用邮箱或 Telegram 继续'), findsOneWidget);
   });
 
-  testWidgets('密码框右侧存在「忘记?」链接，点击不导致跳转',
-      (WidgetTester tester) async {
+  testWidgets('登录页不显示忘记密码链接', (WidgetTester tester) async {
     await _pumpLogin(tester);
-    final Finder forgot =
-        find.byKey(const ValueKey<String>('login-forgot-password'));
-    expect(forgot, findsOneWidget);
-    await tester.tap(forgot);
-    await tester.pump(); // SnackBar 入场
-    // 不应离开登录页
-    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+    final Finder forgot = find.byKey(
+      const ValueKey<String>('login-forgot-password'),
+    );
+    expect(forgot, findsNothing);
+    expect(find.text('忘记?'), findsNothing);
   });
 
-  testWidgets('游客按钮 → mock guest 登录 → 跳 /ai',
-      (WidgetTester tester) async {
-    final (:ProviderContainer container, :InMemoryTokenStorage storage) =
-        await _pumpLogin(tester);
+  testWidgets('登录页不显示游客入口', (WidgetTester tester) async {
+    await _pumpLogin(tester);
     final Finder guest = find.byKey(const ValueKey<String>('login-guest'));
-    expect(guest, findsOneWidget);
-    // hero 300px + 表单整体使按钮可能超出默认 800px 窗口，先滚到可见再点。
-    await tester.ensureVisible(guest);
-    await tester.pumpAndSettle();
-    await tester.tap(guest);
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI_HOME_PLACEHOLDER'), findsOneWidget);
-    expect(storage.snapshot.containsKey(kSessionStorageKey), isTrue);
-    expect(
-      container.read(sessionControllerProvider).valueOrNull?.email,
-      kGuestMockEmail,
-    );
+    expect(guest, findsNothing);
+    expect(find.text('以游客身份先看看'), findsNothing);
+    expect(find.text('· 无需注册'), findsNothing);
   });
 
   testWidgets('底部服务条款 / 隐私政策文字存在', (WidgetTester tester) async {
@@ -230,8 +227,7 @@ void main() {
     expect(find.textContaining('隐私政策'), findsOneWidget);
   });
 
-  testWidgets('点击服务条款 link → 弹 SnackBar，不跳转',
-      (WidgetTester tester) async {
+  testWidgets('点击服务条款 link → 弹 SnackBar，不跳转', (WidgetTester tester) async {
     await _pumpLogin(tester);
     final Finder terms = find.byKey(const ValueKey<String>('login-terms'));
     expect(terms, findsOneWidget);
@@ -247,8 +243,7 @@ void main() {
     expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
   });
 
-  testWidgets('点击隐私政策 link → 弹 SnackBar，不跳转',
-      (WidgetTester tester) async {
+  testWidgets('点击隐私政策 link → 弹 SnackBar，不跳转', (WidgetTester tester) async {
     await _pumpLogin(tester);
     final Finder terms = find.byKey(const ValueKey<String>('login-terms'));
     expect(terms, findsOneWidget);
