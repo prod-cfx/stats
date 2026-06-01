@@ -648,6 +648,12 @@
   "strategyHomeFilterButton": "Filter & sort",
   "strategyHomeSheetCategory": "Category",
   "strategyHomeSheetSort": "Sort by",
+  "strategyHomeSortByOption": "Sort by {label}",
+  "@strategyHomeSortByOption": {
+    "placeholders": {
+      "label": {"type": "String"}
+    }
+  },
   "strategyHomeSheetApply": "View {count} results",
   "@strategyHomeSheetApply": {
     "placeholders": {

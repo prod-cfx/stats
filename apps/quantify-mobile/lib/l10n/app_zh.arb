@@ -660,6 +660,12 @@
   "strategyHomeFilterButton": "筛选 & 排序",
   "strategyHomeSheetCategory": "类型",
   "strategyHomeSheetSort": "排序方式",
+  "strategyHomeSortByOption": "按 {label} 排序",
+  "@strategyHomeSortByOption": {
+    "placeholders": {
+      "label": {"type": "String"}
+    }
+  },
   "strategyHomeSheetApply": "查看 {count} 个结果",
   "@strategyHomeSheetApply": {
     "placeholders": {

@@ -125,7 +125,7 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
               for (final StrategySortKey k in StrategySortKey.values)
                 _PillChoice(
                   key: Key('strategy-sheet-sort-${k.name}'),
-                  label: _sortLabel(context, k),
+                  label: l10n.strategyHomeSortByOption(_sortLabel(context, k)),
                   selected: k == _sort,
                   onTap: () => setState(() => _sort = k),
                 ),

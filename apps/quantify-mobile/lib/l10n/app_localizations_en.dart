@@ -1740,6 +1740,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyHomeSheetSort => 'Sort by';
 
   @override
+  String strategyHomeSortByOption(String label) {
+    return 'Sort by $label';
+  }
+
+  @override
   String strategyHomeSheetApply(int count) {
     return 'View $count results';
   }

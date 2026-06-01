@@ -1701,6 +1701,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyHomeSheetSort => '排序方式';
 
   @override
+  String strategyHomeSortByOption(String label) {
+    return '按 $label 排序';
+  }
+
+  @override
   String strategyHomeSheetApply(int count) {
     return '查看 $count 个结果';
   }

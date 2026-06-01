@@ -48,7 +48,21 @@ class StrategyDetailPage extends ConsumerStatefulWidget {
 }
 
 class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
-  EquityTimeframe _tf = EquityTimeframe.d30;
+  /// 用户尚未手动切换时为 null，渲染时按策略 `card.period` 推导默认 tab
+  /// （对齐设计稿 line 1052-1058 默认高亮策略自身周期，#1888）。
+  EquityTimeframe? _tf;
+
+  /// 把策略 `period`（如 `7D`/`30D`/`90D`/`1Y`）映射到 [EquityTimeframe]；
+  /// 无法映射（如 `14D`/`15m`）时回退 [EquityTimeframe.d30]。
+  static EquityTimeframe _defaultTimeframe(String period) {
+    return switch (period.trim().toUpperCase()) {
+      '7D' => EquityTimeframe.d7,
+      '30D' => EquityTimeframe.d30,
+      '90D' => EquityTimeframe.d90,
+      '1Y' => EquityTimeframe.y1,
+      _ => EquityTimeframe.d30,
+    };
+  }
 
   /// 「载入对话」toast 与跳转 timer（#1666 对齐 strategy_home_page #1596）。
   /// 显示 toast 后约 700ms 跳 `/ai?loadStrategy=$id`；
@@ -168,7 +182,9 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
         error: (Object err, _) => Center(
           child: QzEmptyState(title: l10n.commonLoadError, subtitle: err.toString()),
         ),
-        data: (StrategyDetail d) => SafeArea(
+        data: (StrategyDetail d) {
+          final EquityTimeframe tf = _tf ?? _defaultTimeframe(d.card.period);
+          return SafeArea(
           top: false,
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
@@ -186,10 +202,10 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                 // （对齐设计稿 StratDetail equity 卡，#1825）。
                 _EquityCard(
                   cagr: d.cagr,
-                  tf: _tf,
+                  tf: tf,
                   onChanged: (EquityTimeframe v) =>
                       setState(() => _tf = v),
-                  curve: _EquitySection(id: id, tf: _tf),
+                  curve: _EquitySection(id: id, tf: tf),
                 ),
                 const SizedBox(height: QzSpacing.lg),
                 // 6 格指标：Sharpe / 最大回撤 / 胜率 / 盈亏比 / 交易次数 / 使用人数
@@ -248,7 +264,8 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
               ],
             ),
           ),
-        ),
+        );
+        },
       ),
                   if (_toast != null)
                     Positioned(

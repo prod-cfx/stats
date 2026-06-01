@@ -3344,6 +3344,12 @@ abstract class AppLocalizations {
   /// **'排序方式'**
   String get strategyHomeSheetSort;
 
+  /// No description provided for @strategyHomeSortByOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'按 {label} 排序'**
+  String strategyHomeSortByOption(String label);
+
   /// No description provided for @strategyHomeSheetApply.
   ///
   /// In zh, this message translates to:

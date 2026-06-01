@@ -19,9 +19,9 @@ const String _kId = 'st-grid-btc';
 /// 测试用 GoRouter：把 `/strategy/:id` 作为 detail 页落点，
 /// 同时注册 `/ai`，使「载入对话」按钮的 `context.go('/ai?...')` 可被
 /// 路由观察（而不是抛 GoRouter 未配置异常）。
-GoRouter _buildTestRouter() {
+GoRouter _buildTestRouter({String id = _kId}) {
   return GoRouter(
-    initialLocation: '/strategy/$_kId',
+    initialLocation: '/strategy/$id',
     routes: <RouteBase>[
       GoRoute(
         path: '/strategy/:id',
@@ -58,6 +58,7 @@ class _AiStub extends StatelessWidget {
 Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   WidgetTester tester, {
   QzTheme? theme,
+  String id = _kId,
   Map<String, Object> initialPrefs = const <String, Object>{},
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
@@ -68,7 +69,7 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
   );
-  final GoRouter router = _buildTestRouter();
+  final GoRouter router = _buildTestRouter(id: id);
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
@@ -132,6 +133,55 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
     expect(find.byType(EquityCurveView), findsOneWidget);
+  });
+
+  // 选中 tab 的 period 文本 fontWeight=w600（见 _EquityTimeframeTabs build）。
+  bool _tfSelected(WidgetTester tester, String tfName) {
+    final Text label = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(Key('strategy-detail-tf-$tfName')),
+        matching: find.byType(Text),
+      ),
+    );
+    return label.style?.fontWeight == FontWeight.w600;
+  }
+
+  testWidgets('equity 默认 tab：period=30D 的策略默认选中 d30（#1888）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester, id: 'st-grid-btc');
+    expect(_tfSelected(tester, 'd30'), isTrue);
+    expect(_tfSelected(tester, 'd90'), isFalse);
+  });
+
+  testWidgets('equity 默认 tab：period=90D 的策略默认选中 d90（#1888）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester, id: 'st-dca-sol');
+    expect(_tfSelected(tester, 'd90'), isTrue);
+    expect(_tfSelected(tester, 'd30'), isFalse);
+  });
+
+  testWidgets('equity 默认 tab：period=7D 的策略默认选中 d7（#1888）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester, id: 'st-mom-doge');
+    expect(_tfSelected(tester, 'd7'), isTrue);
+  });
+
+  testWidgets('equity 默认 tab：不可映射 period=14D 回退 d30（#1888）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester, id: 'st-grid-stable');
+    expect(_tfSelected(tester, 'd30'), isTrue);
+  });
+
+  testWidgets('equity 默认 tab：手动切换后不再被 period 覆盖（#1888）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester, id: 'st-dca-sol');
+    // 默认 d90，手动切到 d7 后应保持 d7
+    await tester.tap(find.byKey(const Key('strategy-detail-tf-d7')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(_tfSelected(tester, 'd7'), isTrue);
+    expect(_tfSelected(tester, 'd90'), isFalse);
   });
 
   testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘监控 /me/live（#1825）',

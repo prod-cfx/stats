@@ -330,6 +330,9 @@ void main() {
     expect(find.byKey(const Key('strategy-sheet-cat-all')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sheet-sort-hot')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
+    // 排序选项文案对齐设计稿「按 {label} 排序」（#1888）
+    expect(find.text('按 热门 排序'), findsOneWidget);
+    expect(find.text('按 低回撤 排序'), findsOneWidget);
   });
 
   testWidgets('星标按钮：点击切换收藏状态 (#1565)',
