@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
+import 'qz_tab_icon.dart';
 
 /// Bottom tab bar matching the `MTabBar` design (`design/project/mobile/m-shell.jsx`).
 ///
@@ -66,11 +67,11 @@ class QzBottomTabBar extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final List<_TabSpec> tabs = <_TabSpec>[
-      _TabSpec(keyName: 'strategy', icon: Icons.dashboard_outlined, label: l10n.tabStrategy),
-      _TabSpec(keyName: 'ai', icon: Icons.auto_awesome, label: 'AI 量化'),
-      _TabSpec(keyName: 'market', icon: Icons.show_chart, label: l10n.tabMarket),
-      _TabSpec(keyName: 'whale', icon: Icons.water_drop_outlined, label: l10n.tabWhale),
-      _TabSpec(keyName: 'me', icon: Icons.person_outline, label: l10n.tabMe),
+      _TabSpec(keyName: 'strategy', glyph: QzTabGlyph.strat, label: l10n.tabStrategy),
+      _TabSpec(keyName: 'ai', glyph: QzTabGlyph.ai, label: 'AI 量化'),
+      _TabSpec(keyName: 'market', glyph: QzTabGlyph.market, label: l10n.tabMarket),
+      _TabSpec(keyName: 'whale', glyph: QzTabGlyph.whale, label: l10n.tabWhale),
+      _TabSpec(keyName: 'me', glyph: QzTabGlyph.me, label: l10n.tabMe),
     ];
     return Material(
       type: MaterialType.transparency,
@@ -111,12 +112,12 @@ class QzBottomTabBar extends StatelessWidget {
 class _TabSpec {
   const _TabSpec({
     required this.keyName,
-    required this.icon,
+    required this.glyph,
     required this.label,
   });
 
   final String keyName;
-  final IconData icon;
+  final QzTabGlyph glyph;
   final String label;
 }
 
@@ -153,11 +154,12 @@ class _TabItem extends StatelessWidget {
                 color: active ? scheme.accentSoft : Colors.transparent,
                 borderRadius: BorderRadius.circular(QzBottomTabBar._pillRadius),
               ),
-              child: Icon(
-                spec.icon,
+              child: QzTabIcon(
                 key: ValueKey<String>('tab-${spec.keyName}'),
-                size: 20,
+                glyph: spec.glyph,
+                active: active,
                 color: fg,
+                size: 20,
               ),
             ),
             const SizedBox(height: 3),
