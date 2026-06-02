@@ -4,7 +4,7 @@ import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, TimeInForce, UnifiedOrder } from '@/modules/trading/core/types'
 import type {
   OrderIntent,
   OrderIntentRole,
@@ -567,8 +567,19 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'skipped'
       }
 
+      const runtimeOrder = this.readRuntimeOrderIntent(resolvedSignal.metadata)
+      if (runtimeOrder.ok === false) {
+        await this.executionRepository.markFailed(execution.id, runtimeOrder.reason)
+        await this.releaseReservation(account.id, reservedQuote, reserveReference)
+        return 'failed'
+      }
+
       let exchangeAccepted = false
       try {
+        const orderType = runtimeOrder.order?.orderType ?? 'market'
+        const orderPrice = runtimeOrder.order?.orderType === 'limit'
+          ? runtimeOrder.order.limitPrice
+          : effectiveOrderParams.price
         const orderIntent: OrderIntent = {
           source: 'signal',
           sourceId: execution.id,
@@ -578,9 +589,10 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           marketType: effectiveOrderParams.marketType,
           symbol: effectiveOrderParams.symbol,
           side: effectiveOrderParams.side,
-          type: 'market',
+          type: orderType,
           amount: effectiveOrderParams.amount,
-          price: effectiveOrderParams.price,
+          price: orderPrice,
+          ...(runtimeOrder.order?.timeInForce ? { timeInForce: runtimeOrder.order.timeInForce } : {}),
           reduceOnly: effectiveOrderParams.reduceOnly ?? false,
           role: this.mapOrderIntentRole(
             effectiveOrderParams.marketType,
@@ -1921,6 +1933,46 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     const raw = runtimeProvenance?.marketType
     if (raw === 'spot' || raw === 'perp') return raw
     return null
+  }
+
+  private readRuntimeOrderIntent(
+    metadata: Prisma.JsonValue | null | undefined,
+  ): { ok: true; order?: { orderType: 'market' | 'limit'; limitPrice?: number; timeInForce?: TimeInForce } } | { ok: false; reason: string } {
+    if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') return { ok: true }
+    const runtimeOrder = (metadata as Prisma.JsonObject).runtimeOrder
+    if (!runtimeOrder || Array.isArray(runtimeOrder) || typeof runtimeOrder !== 'object') return { ok: true }
+
+    const record = runtimeOrder as Record<string, unknown>
+    if (typeof record.triggerConditionRef === 'string' && record.triggerConditionRef.trim()) {
+      return { ok: false, reason: 'RUNTIME_CONDITIONAL_ORDER_UNSUPPORTED' }
+    }
+
+    if (record.orderType !== 'market' && record.orderType !== 'limit') return { ok: true }
+    if (record.orderType === 'limit' && !this.isPositiveFiniteNumber(record.limitPrice)) {
+      return { ok: false, reason: 'RUNTIME_LIMIT_ORDER_PRICE_MISSING' }
+    }
+
+    const timeInForce = this.readRuntimeOrderTimeInForce(record.timeInForce)
+    const limitPrice = this.isPositiveFiniteNumber(record.limitPrice) ? record.limitPrice : undefined
+    return {
+      ok: true,
+      order: {
+        orderType: record.orderType,
+        ...(record.orderType === 'limit' ? { limitPrice } : {}),
+        ...(timeInForce ? { timeInForce } : {}),
+      },
+    }
+  }
+
+  private readRuntimeOrderTimeInForce(value: unknown): TimeInForce | undefined {
+    if (value === 'gtc' || value === 'GTC') return 'GTC'
+    if (value === 'ioc' || value === 'IOC') return 'IOC'
+    if (value === 'fok' || value === 'FOK') return 'FOK'
+    return undefined
+  }
+
+  private isPositiveFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
   }
 
   private readSignalEntryTimeframe(

@@ -1313,7 +1313,7 @@ export class AccountStrategyViewService {
         strategyInstanceId: deployResult.strategyInstanceId,
         ...riskProfile,
       })
-      if (this.hasExclusiveAstOrderPrograms(resolvedDeploy.snapshot)) {
+      if (this.hasExclusiveAstGridOrderPrograms(resolvedDeploy.snapshot)) {
         const gridExecutionSymbol = normalizeExecutionSymbol(resolvedDeploy.symbol, resolvedDeploy.marketType, resolvedDeploy.exchange)
         await this.requireGridRuntimeService().createFromDeployment({
           strategyInstanceId: deployResult.strategyInstanceId,
@@ -2974,7 +2974,7 @@ export class AccountStrategyViewService {
     })
   }
 
-  private hasExclusiveAstOrderPrograms(snapshot: unknown): boolean {
+  private hasExclusiveAstGridOrderPrograms(snapshot: unknown): boolean {
     const record = this.readRecord(snapshot)
     const astSnapshot = this.readRecord(record?.astSnapshot)
     const orderPrograms = astSnapshot?.orderPrograms
@@ -2982,6 +2982,13 @@ export class AccountStrategyViewService {
     return Array.isArray(orderPrograms)
       && orderPrograms.length > 0
       && (!Array.isArray(decisionPrograms) || decisionPrograms.length === 0)
+      && orderPrograms.every(program => this.isGridOrderProgram(program))
+  }
+
+  private isGridOrderProgram(program: unknown): boolean {
+    const record = this.readRecord(program)
+    const payload = this.readRecord(record?.payload)
+    return payload?.kind === 'LIMIT_LADDER'
   }
 
   private readSnapshotMarketType(source: Record<string, unknown> | null | undefined): MarketType | null {
