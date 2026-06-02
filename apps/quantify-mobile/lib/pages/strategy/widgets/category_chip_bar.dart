@@ -5,7 +5,6 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
-import '../../../widgets/qz_chip.dart';
 
 /// 顶部分类筛选条。
 ///
@@ -13,8 +12,10 @@ import '../../../widgets/qz_chip.dart';
 /// 列表只显示已星标策略，与分类标签互斥——开收藏即清掉分类高亮、分类 chip
 /// 半透明示意失效。
 ///
-/// `QzChip` 自身不带 `selected` API（只 tone 切换），因此用 GestureDetector
-/// 包裹后切换 tone（inverse=选中 / neutral=未选）。
+/// 普通分类 chip 用设计稿规格（line 608-619）的 [_CategoryChip] 渲染：
+/// 30 高、padding `0 14`、字体 12，与行头收藏 chip 等高；选中态走 `text`
+/// 实底 + `bgElev` 文字，未选态走 `bgElev` 表面 + `border` 描边。不再复用
+/// `QzChip`（22 高 / 11 字），避免与收藏 chip 高度不一致。
 class CategoryChipBar extends StatelessWidget {
   const CategoryChipBar({
     super.key,
@@ -66,15 +67,12 @@ class CategoryChipBar extends StatelessWidget {
           final bool on = !favOnly && e.key == selected;
           return Opacity(
             opacity: favOnly ? 0.55 : 1,
-            child: GestureDetector(
-              key: Key('strategy-chip-${e.key.name}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onChanged(e.key),
-              child: Center(
-                child: QzChip(
-                  label: e.label,
-                  tone: on ? QzChipTone.inverse : QzChipTone.neutral,
-                ),
+            child: Center(
+              child: _CategoryChip(
+                chipKey: Key('strategy-chip-${e.key.name}'),
+                label: e.label,
+                on: on,
+                onTap: () => onChanged(e.key),
               ),
             ),
           );
@@ -135,6 +133,51 @@ class _FavoriteToggle extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 普通分类 chip（设计稿 m-screens-2 line 608-619）：30 高、padding `0 14`、
+/// 字体 12 / w500，圆角 999。选中态 `text` 实底 + `bgElev` 文字（无边框）；
+/// 未选态 `bgElev` 表面 + `border` 描边 + `textMid` 文字。
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({
+    required this.chipKey,
+    required this.label,
+    required this.on,
+    required this.onTap,
+  });
+
+  final Key chipKey;
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return GestureDetector(
+      key: chipKey,
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? c.text : c.bgElev,
+          borderRadius: BorderRadius.circular(QzRadii.pill),
+          border: Border.all(color: on ? Colors.transparent : c.border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: on ? c.bgElev : c.textMid,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );

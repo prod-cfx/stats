@@ -12,7 +12,6 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_empty_state.dart';
-import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import 'widgets/category_chip_bar.dart';
@@ -47,6 +46,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   bool _hasMore = true;
   bool _loading = true;
   bool _loadingMore = false;
+
+  /// 「筛选 & 排序」sheet 是否打开：驱动顶部筛选按钮的设计稿激活态
+  /// （m-screens-2:578-583，打开时 accentSoft 圆底 + accent 图标）。
+  bool _filterSheetOpen = false;
   List<StrategyMarketItem> _items = <StrategyMarketItem>[];
   StrategyMarketItem? _featured;
 
@@ -230,15 +233,15 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   }
 
   Future<void> _openFilterSheet() async {
+    setState(() => _filterSheetOpen = true);
     final StrategySortFilterResult? res =
-        await QzSheet.show<StrategySortFilterResult>(
+        await StrategySortSheet.show(
       context: context,
-      builder: (BuildContext ctx) => StrategySortSheet(
-        initialCategory: _category,
-        initialSort: _sort,
-        resultCount: _items.length,
-      ),
+      initialCategory: _category,
+      initialSort: _sort,
+      resultCount: _items.length,
     );
+    if (mounted) setState(() => _filterSheetOpen = false);
     if (res == null || !mounted) return;
     final bool catChanged = res.category != _category;
     if (catChanged) {
@@ -317,14 +320,9 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
             tooltip: l10n.strategySearchButton,
             onPressed: _openSearchOverlay,
           ),
-          IconButton(
-            key: const Key('strategy-filter-btn'),
+          _FilterButton(
+            active: _filterSheetOpen,
             tooltip: l10n.strategyHomeFilterButton,
-            // 设计稿操作按钮统一 36×36 圆形、图标 20。
-            iconSize: 20,
-            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.filter_alt),
             onPressed: _openFilterSheet,
           ),
         ],
@@ -492,6 +490,51 @@ class _SearchButton extends StatelessWidget {
                   ),
                 ),
               ],
+            )
+          : icon,
+    );
+  }
+}
+
+/// 顶部「筛选 & 排序」按钮（设计稿 m-screens-2:578-583）。
+///
+/// sheet 打开时（[active]）呈激活态：36×36 accentSoft 圆底 + accent 图标；
+/// 关闭后恢复普通态（透明底 + `textMid` 图标）。
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({
+    required this.active,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final bool active;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final Widget icon = Icon(
+      Icons.filter_alt,
+      size: 20,
+      color: active ? c.accent : c.textMid,
+    );
+    return IconButton(
+      key: const Key('strategy-filter-btn'),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      // 设计稿操作按钮统一 36×36 圆形、图标 20。
+      iconSize: 20,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
+      icon: active
+          ? Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: c.accentSoft,
+                shape: BoxShape.circle,
+              ),
+              child: icon,
             )
           : icon,
     );
