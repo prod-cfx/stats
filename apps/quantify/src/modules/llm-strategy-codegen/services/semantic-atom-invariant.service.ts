@@ -1,6 +1,6 @@
 import type { ExprNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { ActionDef, CanonicalStrategyIrV1, OrderProgram, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
-import type { CanonicalConditionAtom, CanonicalConditionNode, CanonicalExpressionCondition, CanonicalOrderProgramIntent, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { ActionDef, CanonicalStrategyIrV1, IrOrchestrationProgram, OrderProgram, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
+import type { CanonicalConditionAtom, CanonicalConditionNode, CanonicalExpressionCondition, CanonicalOrderProgramIntent, CanonicalOrchestrationProgram, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { SemanticAtomContract, SemanticCapability, SemanticCapabilityShape, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { StrategyConsistencyCheck } from '../types/strategy-consistency-report'
 import { Injectable } from '@nestjs/common'
@@ -77,6 +77,7 @@ interface CapabilityCandidateResolution {
 
 interface ExpectedOrderProgramContract {
   id: string
+  sourcePath?: string
   kind: 'contract_order_program'
   mode: CanonicalOrderProgramIntent['mode']
   levelSetMode: NonNullable<CanonicalOrderProgramIntent['levelSet']['mode']>
@@ -134,8 +135,13 @@ export class SemanticAtomInvariantService {
   }): StrategyConsistencyCheck[] {
     return this.expectedOrderProgramContracts(input.semanticState).map((expected) => {
       const canonicalCandidates = input.canonicalSpec.version === 2
-        ? input.canonicalSpec.orderPrograms ?? []
+        ? [...(input.canonicalSpec.orderPrograms ?? []), ...(input.canonicalSpec.orchestration?.programs ?? [])]
         : []
+      const irCandidates = [...input.ir.orderPrograms, ...(input.ir.orchestrationPrograms ?? [])]
+      const astCandidates = [
+        ...input.ast.orderPrograms.map(candidate => candidate.payload),
+        ...(input.ast.orchestrationPrograms ?? []),
+      ]
       const irFallbackActions = this.findIrOrderProgramFallbackActions(input.ir, expected)
       const astFallbackActions = this.findAstOrderProgramFallbackActions(input.ast, expected)
       const canonical = {
@@ -144,15 +150,15 @@ export class SemanticAtomInvariantService {
         candidates: canonicalCandidates,
       }
       const ir = {
-        passed: input.ir.orderPrograms.some(candidate => this.matchesIrOrderProgram(candidate, expected)),
+        passed: irCandidates.some(candidate => this.matchesIrOrderProgram(candidate, expected)),
         expected,
-        candidates: input.ir.orderPrograms,
+        candidates: irCandidates,
         fallbackActions: irFallbackActions,
       }
       const ast = {
-        passed: input.ast.orderPrograms.some(candidate => this.matchesIrOrderProgram(candidate.payload, expected)),
+        passed: astCandidates.some(candidate => this.matchesIrOrderProgram(candidate, expected)),
         expected,
-        candidates: input.ast.orderPrograms.map(candidate => candidate.payload),
+        candidates: astCandidates,
         fallbackActions: astFallbackActions,
       }
       const passed = canonical.passed
@@ -285,6 +291,7 @@ export class SemanticAtomInvariantService {
 
     return {
       id,
+      sourcePath: path,
       kind: 'contract_order_program',
       mode,
       levelSetMode,
@@ -612,9 +619,25 @@ export class SemanticAtomInvariantService {
   }
 
   private matchesCanonicalOrderProgram(
-    candidate: CanonicalOrderProgramIntent,
+    candidate: CanonicalOrderProgramIntent | CanonicalOrchestrationProgram,
     expected: ExpectedOrderProgramContract,
   ): boolean {
+    if (this.isCanonicalFixedGridGatedProgram(candidate)) {
+      return candidate.programKind === 'fixed_grid_gated'
+        && expected.kind === 'contract_order_program'
+        && expected.levelSetMode === 'static_range'
+        && candidate.sourcePath === expected.sourcePath
+        && candidate.gridParams.lowerBound === expected.lower
+        && candidate.gridParams.upperBound === expected.upper
+        && candidate.gridParams.levelCount === expected.gridCount
+        && this.matchesFixedGridStep(candidate.gridParams.stepPct, expected)
+        && this.matchesOrchestrationSizing(candidate.sizing, expected)
+        && candidate.sizing.value === expected.budgetValue
+        && candidate.onDeactivate === (expected.cancelOnStop ? 'cancel' : 'keep')
+    }
+
+    if (!this.isCanonicalOrderProgramIntent(candidate)) return false
+
     return candidate.id === expected.id
       && candidate.kind === expected.kind
       && candidate.mode === expected.mode
@@ -639,9 +662,25 @@ export class SemanticAtomInvariantService {
   }
 
   private matchesIrOrderProgram(
-    candidate: OrderProgram,
+    candidate: OrderProgram | IrOrchestrationProgram,
     expected: ExpectedOrderProgramContract,
   ): boolean {
+    if (this.isIrFixedGridGatedProgram(candidate)) {
+      return expected.kind === 'contract_order_program'
+        && expected.levelSetMode === 'static_range'
+        && candidate.programKind === 'fixed_grid_gated'
+        && candidate.sourcePath === expected.sourcePath
+        && candidate.gridParams.lowerBound === expected.lower
+        && candidate.gridParams.upperBound === expected.upper
+        && candidate.gridParams.levelCount === expected.gridCount
+        && this.matchesFixedGridStep(candidate.gridParams.stepPct, expected)
+        && this.matchesOrchestrationSizing(candidate.sizing, expected)
+        && candidate.sizing.value === expected.budgetValue
+        && candidate.onDeactivate === (expected.cancelOnStop ? 'cancel' : 'keep')
+    }
+
+    if (!this.isIrOrderProgram(candidate)) return false
+
     return candidate.id === expected.irId
       && candidate.kind === 'LIMIT_LADDER'
       && this.matchesOrderProgramActiveWhen(candidate.activeWhen, expected.activeWhen)
@@ -659,6 +698,39 @@ export class SemanticAtomInvariantService {
 
   private matchesOrderProgramActiveWhen(actual: string, expected: string): boolean {
     return actual === expected || actual.endsWith(`_${expected}`)
+  }
+
+  private isCanonicalFixedGridGatedProgram(candidate: CanonicalOrderProgramIntent | CanonicalOrchestrationProgram): candidate is Extract<CanonicalOrchestrationProgram, { programKind: 'fixed_grid_gated' }> {
+    return 'programKind' in candidate && candidate.programKind === 'fixed_grid_gated' && 'gridParams' in candidate
+  }
+
+  private isCanonicalOrderProgramIntent(candidate: CanonicalOrderProgramIntent | CanonicalOrchestrationProgram): candidate is CanonicalOrderProgramIntent {
+    return 'kind' in candidate && candidate.kind === 'contract_order_program' && 'levelSet' in candidate && 'budget' in candidate
+  }
+
+  private isIrFixedGridGatedProgram(candidate: OrderProgram | IrOrchestrationProgram): candidate is Extract<IrOrchestrationProgram, { programKind: 'fixed_grid_gated' }> {
+    return 'programKind' in candidate && candidate.programKind === 'fixed_grid_gated' && 'gridParams' in candidate
+  }
+
+  private isIrOrderProgram(candidate: OrderProgram | IrOrchestrationProgram): candidate is OrderProgram {
+    return 'kind' in candidate && candidate.kind === 'LIMIT_LADDER' && 'quantity' in candidate
+  }
+
+  private matchesFixedGridStep(actualStepPct: number, expected: ExpectedOrderProgramContract): boolean {
+    if (expected.spacingPct !== undefined) return actualStepPct === expected.spacingPct
+    return expected.absoluteSpacing !== undefined
+      && expected.lower !== undefined
+      && expected.upper !== undefined
+      && expected.gridCount !== undefined
+  }
+
+  private matchesOrchestrationSizing(
+    sizing: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number },
+    expected: ExpectedOrderProgramContract,
+  ): boolean {
+    if (expected.budgetMode === 'per_order_pct_equity') return sizing.mode === 'fixed_pct'
+    if (expected.budgetMode === 'per_order_quote') return sizing.mode === 'fixed_quote'
+    return false
   }
 
   private findIrOrderProgramFallbackActions(
@@ -1011,7 +1083,16 @@ export class SemanticAtomInvariantService {
       ...openActionSizings,
       ...addActionSizings,
       ...ast.orderPrograms.map(program => program.payload.quantity),
+      ...(ast.orchestrationPrograms ?? []).flatMap(program => this.readOrchestrationProgramPositionSizing(program)),
     ]
+  }
+
+  private readOrchestrationProgramPositionSizing(program: IrOrchestrationProgram): PositionSizingSnapshot[] {
+    if (!('sizing' in program)) return []
+    if (program.sizing.mode === 'fixed_pct') return [{ mode: 'pct_equity', value: program.sizing.value }]
+    if (program.sizing.mode === 'fixed_quote') return [{ mode: 'fixed_quote', value: program.sizing.value }]
+    if (program.sizing.mode === 'fixed_base') return [{ mode: 'fixed_base', value: program.sizing.value }]
+    return []
   }
 
   private isDcaScheduleAstAddAction(action: ActionDef): boolean {

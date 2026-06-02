@@ -1260,6 +1260,67 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('passes rules fixed grid orchestration program with pct sizing and no open action', () => {
+    const base = buildSemanticState()
+    const state: SemanticState = {
+      ...base,
+      trigger: [],
+      action: [],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.01,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        sizing: { kind: 'ratio', value: 0.01, unit: 'ratio' },
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '15m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+      },
+      rules: [
+        rule({
+          id: 'fixed-grid-gated',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: atom('trend.direction', { value: 'up' }),
+          programs: [atom('program.fixed_grid_gated', {
+            lowerBound: 50000,
+            upperBound: 60000,
+            levelCount: 10,
+            stepPct: 5,
+            onDeactivate: 'cancel',
+            programKind: 'fixed_grid_gated',
+            sizing: { mode: 'fixed_pct', value: 1 },
+          })],
+        }),
+      ],
+    }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orchestration?.programs : []).toHaveLength(1)
+    expect(ir.orchestrationPrograms ?? []).toHaveLength(1)
+    expect(ast.orchestrationPrograms ?? []).toHaveLength(1)
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+    expect(checks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'failed',
+      }),
+    ]))
+  })
+
   it('fails when canonical contract order program drops normalized absolute spacing', () => {
     const state = buildContractOrderProgramSemanticState()
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
