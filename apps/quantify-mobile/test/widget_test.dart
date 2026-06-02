@@ -3,12 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:quantify_mobile/main.dart';
-import 'package:quantify_mobile/pages/auth/login_page.dart';
+import 'package:quantify_mobile/pages/strategy/strategy_guest_page.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
 void main() {
-  testWidgets('boots the app on the login page by default',
-      (WidgetTester tester) async {
+  testWidgets('boots the app on the strategy guest page by default', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
 
@@ -21,9 +22,10 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
 
-    // Unauthenticated users land on /login by default — the dev preview
-    // screens stay reachable via explicit `/_dev/*` paths only.
-    expect(find.byType(LoginPage), findsOneWidget);
+    // Anonymous users land on strategy guest page; dev preview screens stay
+    // reachable via explicit `/_dev/*` paths only.
+    expect(find.byType(StrategyGuestPage), findsOneWidget);
   });
 }

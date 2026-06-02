@@ -1608,22 +1608,22 @@ abstract class AppLocalizations {
   /// **'登录'**
   String get authLoginTitle;
 
-  /// No description provided for @authLoginWelcome.
+  /// No description provided for @authLoginSheetTitle.
   ///
   /// In zh, this message translates to:
-  /// **'欢迎回来'**
-  String get authLoginWelcome;
+  /// **'登录 Quantify'**
+  String get authLoginSheetTitle;
 
-  /// No description provided for @authLoginWelcomeSubtitle.
+  /// No description provided for @authLoginSheetSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'使用邮箱或 Telegram 继续'**
-  String get authLoginWelcomeSubtitle;
+  /// **'邮箱或 Telegram 继续'**
+  String get authLoginSheetSubtitle;
 
   /// No description provided for @authLoginOr.
   ///
   /// In zh, this message translates to:
-  /// **'或者'**
+  /// **'或'**
   String get authLoginOr;
 
   /// No description provided for @authLoginEmailLabel.
@@ -1631,18 +1631,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'邮箱'**
   String get authLoginEmailLabel;
-
-  /// No description provided for @authLoginPasswordLabel.
-  ///
-  /// In zh, this message translates to:
-  /// **'密码'**
-  String get authLoginPasswordLabel;
-
-  /// No description provided for @authLoginPasswordHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'至少 6 位'**
-  String get authLoginPasswordHint;
 
   /// No description provided for @authLoginCodeLabel.
   ///
@@ -1710,18 +1698,6 @@ abstract class AppLocalizations {
   /// **'邮箱格式不正确'**
   String get authLoginEmailInvalid;
 
-  /// No description provided for @authLoginPasswordRequired.
-  ///
-  /// In zh, this message translates to:
-  /// **'请输入密码'**
-  String get authLoginPasswordRequired;
-
-  /// No description provided for @authLoginPasswordTooShort.
-  ///
-  /// In zh, this message translates to:
-  /// **'密码至少 6 位'**
-  String get authLoginPasswordTooShort;
-
   /// No description provided for @authLoginFailedPrefix.
   ///
   /// In zh, this message translates to:
@@ -1733,24 +1709,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'Telegram 登录失败：'**
   String get authTelegramLoginFailedPrefix;
-
-  /// No description provided for @authLoginHeroTitleLine1.
-  ///
-  /// In zh, this message translates to:
-  /// **'把交易想法'**
-  String get authLoginHeroTitleLine1;
-
-  /// No description provided for @authLoginHeroTitleLine2.
-  ///
-  /// In zh, this message translates to:
-  /// **'变成可回测的策略'**
-  String get authLoginHeroTitleLine2;
-
-  /// No description provided for @authLoginHeroSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'对话生成 · 历史回测 · API 部署'**
-  String get authLoginHeroSubtitle;
 
   /// No description provided for @authLoginTermsPrefix.
   ///
@@ -1775,6 +1733,72 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'隐私政策'**
   String get authLoginPrivacyLink;
+
+  /// No description provided for @strategyGuestHeroLine1.
+  ///
+  /// In zh, this message translates to:
+  /// **'小白也能用的'**
+  String get strategyGuestHeroLine1;
+
+  /// No description provided for @strategyGuestHeroAiQuant.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 量化'**
+  String get strategyGuestHeroAiQuant;
+
+  /// No description provided for @strategyGuestHeroLine2Suffix.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易工具'**
+  String get strategyGuestHeroLine2Suffix;
+
+  /// No description provided for @strategyGuestHeroSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'描述你的交易想法,AI 自动生成策略并帮你完成回测部署。'**
+  String get strategyGuestHeroSubtitle;
+
+  /// No description provided for @strategyGuestPrimaryCta.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即体验'**
+  String get strategyGuestPrimaryCta;
+
+  /// No description provided for @strategyGuestHotTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门策略'**
+  String get strategyGuestHotTitle;
+
+  /// No description provided for @strategyGuestHotBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'HOT'**
+  String get strategyGuestHotBadge;
+
+  /// No description provided for @strategyGuestViewAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部'**
+  String get strategyGuestViewAll;
+
+  /// No description provided for @strategyGuestUnlockTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录解锁完整功能'**
+  String get strategyGuestUnlockTitle;
+
+  /// No description provided for @strategyGuestUnlockSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 对话生成 · 一键回测 · 实盘部署'**
+  String get strategyGuestUnlockSubtitle;
+
+  /// No description provided for @strategyGuestUnlockCta.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录 / 注册'**
+  String get strategyGuestUnlockCta;
 
   /// No description provided for @marketHomeTabWatchlist.
   ///

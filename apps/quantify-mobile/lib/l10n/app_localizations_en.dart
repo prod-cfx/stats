@@ -846,22 +846,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authLoginTitle => 'Login';
 
   @override
-  String get authLoginWelcome => 'Welcome back';
+  String get authLoginSheetTitle => 'Login Quantify';
 
   @override
-  String get authLoginWelcomeSubtitle => 'Continue with email or Telegram';
+  String get authLoginSheetSubtitle => 'Continue with email or Telegram';
 
   @override
   String get authLoginOr => 'or';
 
   @override
   String get authLoginEmailLabel => 'Email';
-
-  @override
-  String get authLoginPasswordLabel => 'Password';
-
-  @override
-  String get authLoginPasswordHint => 'At least 6 characters';
 
   @override
   String get authLoginCodeLabel => 'Verification code';
@@ -899,26 +893,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authLoginEmailInvalid => 'Invalid email format';
 
   @override
-  String get authLoginPasswordRequired => 'Please enter your password';
-
-  @override
-  String get authLoginPasswordTooShort =>
-      'Password must be at least 6 characters';
-
-  @override
   String get authLoginFailedPrefix => 'Login failed: ';
 
   @override
   String get authTelegramLoginFailedPrefix => 'Telegram login failed: ';
-
-  @override
-  String get authLoginHeroTitleLine1 => 'Turn trading ideas';
-
-  @override
-  String get authLoginHeroTitleLine2 => 'into backtestable strategies';
-
-  @override
-  String get authLoginHeroSubtitle => 'Chat · Backtest · Deploy via API';
 
   @override
   String get authLoginTermsPrefix => 'By continuing you agree to our ';
@@ -931,6 +909,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authLoginPrivacyLink => 'Privacy Policy';
+
+  @override
+  String get strategyGuestHeroLine1 => 'Beginner-friendly';
+
+  @override
+  String get strategyGuestHeroAiQuant => 'AI quant';
+
+  @override
+  String get strategyGuestHeroLine2Suffix => 'trading tools';
+
+  @override
+  String get strategyGuestHeroSubtitle =>
+      'Describe your trading idea, and AI generates, backtests, and deploys the strategy for you.';
+
+  @override
+  String get strategyGuestPrimaryCta => 'Try now';
+
+  @override
+  String get strategyGuestHotTitle => 'Hot strategies';
+
+  @override
+  String get strategyGuestHotBadge => 'HOT';
+
+  @override
+  String get strategyGuestViewAll => 'View all';
+
+  @override
+  String get strategyGuestUnlockTitle => 'Log in to unlock full features';
+
+  @override
+  String get strategyGuestUnlockSubtitle =>
+      'AI chat generation · One-click backtest · Live deployment';
+
+  @override
+  String get strategyGuestUnlockCta => 'Login / Register';
 
   @override
   String get marketHomeTabWatchlist => 'Watchlist';

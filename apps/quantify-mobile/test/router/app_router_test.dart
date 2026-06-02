@@ -20,7 +20,7 @@ import 'package:quantify_mobile/pages/_dev/theme_preview_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
-import 'package:quantify_mobile/pages/auth/login_page.dart';
+import 'package:quantify_mobile/pages/auth/login_sheet.dart';
 import 'package:quantify_mobile/pages/market/data_hub_page.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
@@ -28,9 +28,9 @@ import 'package:quantify_mobile/pages/live/live_strategies_page.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
+import 'package:quantify_mobile/pages/strategy/strategy_guest_page.dart';
 import 'package:quantify_mobile/pages/whale/whale_home_page.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
-import 'package:quantify_mobile/widgets/qz_bottom_tab_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Pumps the app and navigates to `/ai` to bypass the debug-only landing
@@ -77,8 +77,8 @@ Future<BuildContext> _pumpApp(
     ),
   );
   await tester.pumpAndSettle();
-  // Default initial route is /login (公开浏览也需先穿过登录页跳转）。测试场景
-  // 需要直接落到 /ai，借 Navigator context 调 GoRouter.go。
+  // Default initial route is /strategy guest. Most router tests need a stable
+  // tab page, so jump to /ai explicitly.
   final BuildContext bootCtx = tester.element(find.byType(Navigator).first);
   GoRouter.of(bootCtx).go('/ai');
   await tester.pumpAndSettle();
@@ -133,38 +133,41 @@ void main() {
     expect(find.byType(MeHomePage), findsOneWidget);
   });
 
-  testWidgets('bottom-bar index → page mapping is strategy/ai/market/whale/me',
-      (WidgetTester tester) async {
-    // Source-of-truth guard for issue #1637 / #1881: lock the router branch
-    // order so reshuffling branches in `app_router.dart` (or tab order in
-    // `QzBottomTabBar`) trips this test, not just runtime UX.
-    await _pumpApp(tester, storage: _loggedInStorage());
+  testWidgets(
+    'bottom-bar index → page mapping is strategy/ai/market/whale/me',
+    (WidgetTester tester) async {
+      // Source-of-truth guard for issue #1637 / #1881: lock the router branch
+      // order so reshuffling branches in `app_router.dart` (or tab order in
+      // `QzBottomTabBar`) trips this test, not just runtime UX.
+      await _pumpApp(tester, storage: _loggedInStorage());
 
-    const List<String> keys = <String>[
-      'tab-strategy',
-      'tab-ai',
-      'tab-market',
-      'tab-whale',
-      'tab-me',
-    ];
-    final List<Type> expectedPages = <Type>[
-      StrategyHomePage,
-      AiHomePage,
-      DataHubPage,
-      WhaleHomePage,
-      MeHomePage,
-    ];
+      const List<String> keys = <String>[
+        'tab-strategy',
+        'tab-ai',
+        'tab-market',
+        'tab-whale',
+        'tab-me',
+      ];
+      final List<Type> expectedPages = <Type>[
+        StrategyHomePage,
+        AiHomePage,
+        DataHubPage,
+        WhaleHomePage,
+        MeHomePage,
+      ];
 
-    for (int i = 0; i < keys.length; i++) {
-      await tester.tap(_tab(keys[i].substring('tab-'.length)));
-      await _pumpAfterTabTap(tester);
-      expect(
-        find.byType(expectedPages[i]),
-        findsOneWidget,
-        reason: 'tab index $i (key=${keys[i]}) must land on ${expectedPages[i]}',
-      );
-    }
-  });
+      for (int i = 0; i < keys.length; i++) {
+        await tester.tap(_tab(keys[i].substring('tab-'.length)));
+        await _pumpAfterTabTap(tester);
+        expect(
+          find.byType(expectedPages[i]),
+          findsOneWidget,
+          reason:
+              'tab index $i (key=${keys[i]}) must land on ${expectedPages[i]}',
+        );
+      }
+    },
+  );
 
   testWidgets('branch state is preserved across tab switch', (
     WidgetTester tester,
@@ -211,15 +214,10 @@ void main() {
     expect(find.byType(DataHubPage), findsOneWidget);
   });
 
-  testWidgets('push /login covers the bottom tab bar', (
-    WidgetTester tester,
-  ) async {
-    final BuildContext ctx = await _pumpApp(tester);
-    GoRouter.of(ctx).push('/login');
-    await tester.pumpAndSettle();
-
-    expect(find.byType(LoginPage), findsOneWidget);
-    expect(find.byType(QzBottomTabBar), findsNothing);
+  test('/login route 已移除（issue #2075）', () {
+    final String source = File('lib/router/app_router.dart').readAsStringSync();
+    expect(source.contains("path: '/login'"), isFalse);
+    expect(source.contains('LoginPage'), isFalse);
   });
 
   testWidgets('/market/long-short resolves to DataHubPage (not :symbol)', (
@@ -234,8 +232,9 @@ void main() {
     expect(find.byType(DataHubPage), findsOneWidget);
     expect(find.byType(MarketDetailPage), findsNothing);
     // 深链预选多空比 tab（#1853）。
-    final DataHubPage page =
-        tester.widget<DataHubPage>(find.byType(DataHubPage));
+    final DataHubPage page = tester.widget<DataHubPage>(
+      find.byType(DataHubPage),
+    );
     expect(page.initial, DataHubScreen.longShort);
   });
 
@@ -298,9 +297,7 @@ void main() {
     expect(find.byKey(const Key('ai-confirm-disclaimer')), findsOneWidget);
   });
 
-  testWidgets('/ai/confirm 接收 extra 参数并渲染到策略逻辑区', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('/ai/confirm 接收 extra 参数并渲染到策略逻辑区', (WidgetTester tester) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).push(
       '/ai/confirm',
@@ -335,8 +332,7 @@ void main() {
     // API 配置入口统一为 bottom sheet（me_home + deploy sheet 均直接打开
     // `showApiFormSheet`），独立列表页 `/me/api` 已移除。守护这条测试，
     // 避免未来误恢复路由造成入口双轨。
-    final String source =
-        File('lib/router/app_router.dart').readAsStringSync();
+    final String source = File('lib/router/app_router.dart').readAsStringSync();
     expect(
       source.contains("path: '/me/api'"),
       isFalse,
@@ -374,19 +370,17 @@ void main() {
     expect(find.byType(LiveStrategiesPage), findsOneWidget);
   });
 
-  testWidgets('未登录访问 /me/live 重定向到 /login（#1752 受守卫）', (
+  testWidgets('未登录访问 /me/live 弹 LoginSheet（#2075 受守卫）', (
     WidgetTester tester,
   ) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).go('/me/live');
     await tester.pumpAndSettle();
-    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(LoginSheet), findsOneWidget);
     expect(find.byType(LiveStrategiesPage), findsNothing);
   });
 
-  testWidgets('未登录首次启动落在 /login', (WidgetTester tester) async {
-    // Verifies issue #1586 acceptance criterion: default landing is /login,
-    // not /_dev/theme-preview, even in debug builds.
+  testWidgets('未登录首次启动落在 /strategy guest', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer c = ProviderContainer(
@@ -401,13 +395,11 @@ void main() {
       UncontrolledProviderScope(container: c, child: const QuantifyMobileApp()),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(StrategyGuestPage), findsOneWidget);
     expect(find.byType(ThemePreviewPage), findsNothing);
   });
 
-  testWidgets('/_dev/theme-preview 仍可通过显式路径打开', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('/_dev/theme-preview 仍可通过显式路径打开', (WidgetTester tester) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).go('/_dev/theme-preview');
     await tester.pumpAndSettle();
@@ -446,7 +438,7 @@ void main() {
       UncontrolledProviderScope(container: c, child: const QuantifyMobileApp()),
     );
     await tester.pumpAndSettle();
-    // 默认 landing 已切到 /login（见 issue #1586），所以这里显式跳到主题预览。
+    // 默认 landing 是 /strategy guest，所以这里显式跳到主题预览。
     final BuildContext bootCtx = tester.element(find.byType(Navigator).first);
     GoRouter.of(bootCtx).go('/_dev/theme-preview');
     await tester.pumpAndSettle();
@@ -459,11 +451,11 @@ void main() {
     expect(linkFinder, findsOneWidget);
   });
 
-  testWidgets('未登录访问 /me 重定向到 /login', (WidgetTester tester) async {
+  testWidgets('未登录访问 /me 弹 LoginSheet', (WidgetTester tester) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).go('/me');
     await tester.pumpAndSettle();
-    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(LoginSheet), findsOneWidget);
     expect(find.byType(MeHomePage), findsNothing);
   });
 
@@ -480,10 +472,12 @@ void main() {
     GoRouter.of(ctx).go('/me');
     await tester.pumpAndSettle();
     expect(find.byType(MeHomePage), findsOneWidget);
-    expect(find.byType(LoginPage), findsNothing);
+    expect(find.byType(LoginSheet), findsNothing);
   });
 
-  testWidgets('登出后再访问 /me 弹回 /login', (WidgetTester tester) async {
+  testWidgets('登出后落到 /strategy guest', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final AuthSession seed = AuthSession(
       userId: 'u',
       token: 't',
@@ -514,9 +508,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MeHomePage), findsOneWidget);
 
-    await container.read(sessionControllerProvider.notifier).logout();
+    final Finder logout = find.byKey(const Key('me-logout-button'));
+    await tester.scrollUntilVisible(logout, 300);
+    await tester.ensureVisible(logout);
+    await tester.tap(logout);
     await tester.pumpAndSettle();
-    expect(find.byType(LoginPage), findsOneWidget);
+    expect(container.read(sessionControllerProvider).valueOrNull, isNull);
+    expect(find.byType(StrategyGuestPage), findsOneWidget);
     expect(find.byType(MeHomePage), findsNothing);
   });
 }

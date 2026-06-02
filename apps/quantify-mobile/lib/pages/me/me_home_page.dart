@@ -25,9 +25,8 @@ import 'widgets/qz_settings_row.dart';
 /// 结构：紫色 header → 三栏统计卡 → 账户分组 → 交易所 API 摘要
 /// → 偏好（语言/主题/通知）→ 退出登录 → 版本号。
 ///
-/// 退出登录依赖 `sessionControllerProvider.logout()` 把 session 置 null，
-/// router 的 `kAuthProtectedPrefixes = ['/me']` redirect 会自动跳 `/login`。
-/// **不在按钮里写 `context.go('/login')`** —— 保持单一来源（router redirect）。
+/// 退出登录依赖 `sessionControllerProvider.logout()` 把 session 置 null。
+/// 入口收口在 app router/shell：匿名回到策略 guest 态，关键入口弹 LoginSheet。
 class MeHomePage extends ConsumerWidget {
   const MeHomePage({super.key});
 
@@ -62,8 +61,9 @@ const double _statsCardOverlap = -26;
 /// （tracking #1515 follow-up）。本 provider 仅承载抽屉选中值回显，**不实际
 /// 切换 locale**；待 locale 基建接通后改为驱动真实 `localeProvider`。
 /// 默认值在 widget 内由 `meSettingsLanguageOptionZh` 回填（避免在此硬编码文案）。
-final StateProvider<String?> selectedLanguageProvider =
-    StateProvider<String?>((Ref ref) => null);
+final StateProvider<String?> selectedLanguageProvider = StateProvider<String?>(
+  (Ref ref) => null,
+);
 
 /// 弹出语言底部抽屉（简体中文 / English 单选 + 勾选态 + 取消），结构对齐
 /// 设计稿 `m-screens-4.jsx:2640-2730`。返回所选项；点取消 / 点遮罩返回 null。
@@ -99,7 +99,12 @@ Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(QzSpacing.lg, 12, QzSpacing.lg, 6),
+              padding: const EdgeInsets.fromLTRB(
+                QzSpacing.lg,
+                12,
+                QzSpacing.lg,
+                6,
+              ),
               child: Text(
                 l10n.meSettingsLanguageSheetTitle,
                 style: TextStyle(
@@ -125,7 +130,10 @@ Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
               ),
               child: Text(
                 l10n.commonCancel,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -214,9 +222,8 @@ class _Content extends ConsumerWidget {
     // 被填充。这里先以 `meSettingsTelegram` 是否非占位判断（mock 永远占位
     // → false）；待 `AccountInfo.bindings` 真接通后切换。
     final bool binanceConnected = apiKeys.maybeWhen(
-      data: (List<ExchangeApiKey> list) => list.any(
-        (ExchangeApiKey k) => k.exchange.toLowerCase() == 'binance',
-      ),
+      data: (List<ExchangeApiKey> list) =>
+          list.any((ExchangeApiKey k) => k.exchange.toLowerCase() == 'binance'),
       orElse: () => false,
     );
     // 当前 mock 已绑定 Telegram（原型 m-screens-4 第 9 屏 chip + 列表
@@ -256,7 +263,10 @@ class _Content extends ConsumerWidget {
               QzSectionTitle(text: l10n.meSectionAccount),
               _SettingsGroup(
                 children: <Widget>[
-                  QzSettingsRow(label: l10n.authLoginEmailLabel, value: info.email),
+                  QzSettingsRow(
+                    label: l10n.authLoginEmailLabel,
+                    value: info.email,
+                  ),
                   QzSettingsRow(label: 'UID', value: info.uid, mono: true),
                   QzSettingsRow(
                     label: l10n.meSettingsTelegram,
@@ -285,7 +295,8 @@ class _Content extends ConsumerWidget {
                   QzSettingsRow(
                     label: l10n.meSettingsLanguage,
                     // 选中值回显（会话态）；未选择时退回默认 简体中文。
-                    value: ref.watch(selectedLanguageProvider) ??
+                    value:
+                        ref.watch(selectedLanguageProvider) ??
                         l10n.meSettingsLanguageValue,
                     trailing: const QzSettingsCaret(),
                     onTap: () => showLanguageSheet(context, ref),
@@ -310,11 +321,9 @@ class _Content extends ConsumerWidget {
               const SizedBox(height: QzSpacing.xl),
               _LogoutButton(
                 onPressed: () async {
-                  await ref
-                      .read(sessionControllerProvider.notifier)
-                      .logout();
-                  // 不显式跳转：router redirect 会因 session=null + `/me`
-                  // 自动把当前位置改为 `/login`。
+                  await ref.read(sessionControllerProvider.notifier).logout();
+                  if (!context.mounted) return;
+                  context.go('/strategy');
                 },
               ),
               const SizedBox(height: 18),
@@ -363,20 +372,21 @@ class _StatsCard extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     // 加载/错误态退化为全 0 摘要，整卡照常渲染（不闪 spinner / 不抛错）。
-    final LiveStrategySummary s =
-        ref.watch(liveStrategySummaryProvider).maybeWhen(
-              data: (LiveStrategySummary v) => v,
-              orElse: () => const LiveStrategySummary(
-                totalAssets: 0,
-                totalCapital: 0,
-                todayPnl: 0,
-                totalPnl: 0,
-                runningCount: 0,
-                warningCount: 0,
-                pausedCount: 0,
-                stoppedCount: 0,
-              ),
-            );
+    final LiveStrategySummary s = ref
+        .watch(liveStrategySummaryProvider)
+        .maybeWhen(
+          data: (LiveStrategySummary v) => v,
+          orElse: () => const LiveStrategySummary(
+            totalAssets: 0,
+            totalCapital: 0,
+            todayPnl: 0,
+            totalPnl: 0,
+            runningCount: 0,
+            warningCount: 0,
+            pausedCount: 0,
+            stoppedCount: 0,
+          ),
+        );
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: QzSpacing.lg,
@@ -432,8 +442,9 @@ class _LiveStrategiesHeroCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<LiveStrategySummary> summary =
-        ref.watch(liveStrategySummaryProvider);
+    final AsyncValue<LiveStrategySummary> summary = ref.watch(
+      liveStrategySummaryProvider,
+    );
     // 加载/错误态退化为 0 计数；整卡始终可点。
     final LiveStrategySummary s = summary.maybeWhen(
       data: (LiveStrategySummary v) => v,
@@ -574,16 +585,20 @@ class _LiveStatusBreakdown extends StatelessWidget {
     final List<Widget> children = <Widget>[];
     for (int i = 0; i < entries.length; i++) {
       if (i > 0) {
-        children.add(Text('·', style: TextStyle(color: c.textDim, fontSize: 11)));
+        children.add(
+          Text('·', style: TextStyle(color: c.textDim, fontSize: 11)),
+        );
       }
       final (LiveStrategyStatus status, int count) = entries[i];
-      children.add(_StatusChip(
-        status: status,
-        count: count,
-        showDot: i == 0,
-        c: c,
-        l10n: l10n,
-      ));
+      children.add(
+        _StatusChip(
+          status: status,
+          count: count,
+          showDot: i == 0,
+          c: c,
+          l10n: l10n,
+        ),
+      );
     }
 
     return Wrap(
@@ -661,10 +676,7 @@ class _Stat extends StatelessWidget {
               color: color,
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              fontFamilyFallback: const <String>[
-                'ui-monospace',
-                'monospace',
-              ],
+              fontFamilyFallback: const <String>['ui-monospace', 'monospace'],
             ),
           ),
           const SizedBox(height: 3),
@@ -717,8 +729,7 @@ class _ApiExchangesGroup extends ConsumerWidget {
     WidgetRef ref,
     String exchange,
   ) async {
-    final bool? saved =
-        await showApiFormSheet(context, exchange: exchange);
+    final bool? saved = await showApiFormSheet(context, exchange: exchange);
     // await 后 widget 可能已 dispose（用户在 sheet 打开时导航离开）；
     // 缺 mounted 检查会触发 `Ref was disposed` StateError（debug）
     // 或 release 模式下未定义行为。
@@ -790,9 +801,7 @@ class _ApiExchangeRow extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: last ? Colors.transparent : c.borderSoft,
-          ),
+          bottom: BorderSide(color: last ? Colors.transparent : c.borderSoft),
         ),
       ),
       child: Row(
@@ -829,8 +838,9 @@ class _ApiExchangeRow extends StatelessWidget {
               onPressed: onTap,
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                backgroundColor:
-                    configured ? c.bgSoft : c.accent.withValues(alpha: 0.16),
+                backgroundColor: configured
+                    ? c.bgSoft
+                    : c.accent.withValues(alpha: 0.16),
                 foregroundColor: configured ? c.textMid : c.accent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -861,6 +871,7 @@ class _LogoutButton extends StatelessWidget {
       color: c.bgElev,
       borderRadius: BorderRadius.circular(QzRadii.input + 2),
       child: InkWell(
+        key: const Key('me-logout-button'),
         onTap: onPressed,
         borderRadius: BorderRadius.circular(QzRadii.input + 2),
         child: Container(

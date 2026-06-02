@@ -18,13 +18,6 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _LoginPlaceholder extends StatelessWidget {
-  const _LoginPlaceholder();
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('LOGIN_PLACEHOLDER')));
-}
-
 Future<ProviderContainer> _pumpMe(
   WidgetTester tester, {
   AuthSession? initialSession,
@@ -79,13 +72,7 @@ Future<ProviderContainer> _pumpMe(
   final GoRouter router = GoRouter(
     initialLocation: '/me',
     refreshListenable: refresh,
-    redirect: (BuildContext context, GoRouterState state) {
-      final bool loggedIn =
-          container.read(sessionControllerProvider).valueOrNull != null;
-      final String loc = state.matchedLocation;
-      if (!loggedIn && loc.startsWith('/me')) return '/login';
-      return null;
-    },
+    redirect: (BuildContext context, GoRouterState state) => null,
     routes: <RouteBase>[
       GoRoute(
         path: '/me',
@@ -93,15 +80,16 @@ Future<ProviderContainer> _pumpMe(
             const MeHomePage(),
       ),
       GoRoute(
-        path: '/login',
-        builder: (BuildContext context, GoRouterState state) =>
-            const _LoginPlaceholder(),
-      ),
-      GoRoute(
         path: '/me/live',
         builder: (BuildContext context, GoRouterState state) => const Scaffold(
           key: Key('live-stub'),
           body: Center(child: Text('LIVE_STUB')),
+        ),
+      ),
+      GoRoute(
+        path: '/strategy',
+        builder: (BuildContext context, GoRouterState state) => const Scaffold(
+          body: Center(child: Text('GUEST_STRATEGY_PLACEHOLDER')),
         ),
       ),
     ],
@@ -140,27 +128,25 @@ void main() {
     expect(find.byKey(const Key('live-stub')), findsOneWidget);
   });
 
-  testWidgets('实盘策略入口为 header 下首位大卡（账户分组之前）（#1792）',
-      (WidgetTester tester) async {
+  testWidgets('实盘策略入口为 header 下首位大卡（账户分组之前）（#1792）', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(tester, initialSession: kSession);
     final Finder entry = find.byKey(const Key('me-live-strategies-entry'));
     expect(entry, findsOneWidget);
     // 大卡的「实盘策略」标题需位于「账户」分组标题之前（更靠上）。
     final double entryY = tester.getTopLeft(entry).dy;
     final double accountY = tester.getTopLeft(find.text('账户')).dy;
-    expect(entryY, lessThan(accountY),
-        reason: '实盘策略入口应在账户分组之前');
+    expect(entryY, lessThan(accountY), reason: '实盘策略入口应在账户分组之前');
   });
 
-  testWidgets('实盘策略大卡展示运行中策略计数（#1792）',
-      (WidgetTester tester) async {
+  testWidgets('实盘策略大卡展示运行中策略计数（#1792）', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     // fixture 含 2 个 running 策略 → 「2 运行中」。
     expect(find.text('2 运行中'), findsOneWidget);
   });
 
-  testWidgets('标题文案对齐设计稿「查看实盘策略」（#1816）',
-      (WidgetTester tester) async {
+  testWidgets('标题文案对齐设计稿「查看实盘策略」（#1816）', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     // 限定在入口卡内（避免与他处同名文案撞车）。
     expect(
@@ -172,8 +158,9 @@ void main() {
     );
   });
 
-  testWidgets('标题旁渲染活跃计数 badge（非 stopped 总数）（#1816）',
-      (WidgetTester tester) async {
+  testWidgets('标题旁渲染活跃计数 badge（非 stopped 总数）（#1816）', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(tester, initialSession: kSession);
     // active = running 2 + warning 1 + paused 1 = 4（stopped 不计）。
     // 限定在入口大卡内：统计卡也展示活跃数 4（#1902），避免与之撞车。
@@ -186,8 +173,7 @@ void main() {
     );
   });
 
-  testWidgets('多状态明细行按顺序展示且 0 计数不渲染（#1816）',
-      (WidgetTester tester) async {
+  testWidgets('多状态明细行按顺序展示且 0 计数不渲染（#1816）', (WidgetTester tester) async {
     await _pumpMe(
       tester,
       initialSession: kSession,
@@ -217,8 +203,9 @@ void main() {
     );
   });
 
-  testWidgets('全 0 计数退化为副标题且整卡仍可点进入 /me/live（#1816）',
-      (WidgetTester tester) async {
+  testWidgets('全 0 计数退化为副标题且整卡仍可点进入 /me/live（#1816）', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(
       tester,
       initialSession: kSession,
@@ -257,8 +244,7 @@ void main() {
     expect(find.text('退出登录'), findsOneWidget);
   });
 
-  testWidgets('「我的」首页内联展开三家交易所 API（多行 + 管理/连接）',
-      (WidgetTester tester) async {
+  testWidgets('「我的」首页内联展开三家交易所 API（多行 + 管理/连接）', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     // 多行槽位（每家一行 + 状态 + 按钮）
     expect(find.text('Binance'), findsOneWidget);
@@ -269,9 +255,9 @@ void main() {
     expect(find.text('连接'), findsOneWidget);
   });
 
-  testWidgets(
-      '点击「连接」(Hyperliquid 未配置) 打开 api_form_sheet 并预填该交易所',
-      (WidgetTester tester) async {
+  testWidgets('点击「连接」(Hyperliquid 未配置) 打开 api_form_sheet 并预填该交易所', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(tester, initialSession: kSession);
     // Hyperliquid 默认未配置 → 行尾按钮为「连接」
     await tester.tap(find.text('连接'));
@@ -287,8 +273,9 @@ void main() {
     expect(find.text('胜率'), findsOneWidget);
   });
 
-  testWidgets('统计卡三栏数值来自 provider（正常态，无硬编码）（#1902）',
-      (WidgetTester tester) async {
+  testWidgets('统计卡三栏数值来自 provider（正常态，无硬编码）（#1902）', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(tester, initialSession: kSession);
     // active = running 2 + warning 1 + paused 1 = 4。
     expect(find.text('4'), findsWidgets);
@@ -298,8 +285,9 @@ void main() {
     expect(find.text('62.4%'), findsOneWidget);
   });
 
-  testWidgets('统计卡退化态：summary 全 0 → 0 / +\$0 / 0.0%，不崩（#1902）',
-      (WidgetTester tester) async {
+  testWidgets('统计卡退化态：summary 全 0 → 0 / +\$0 / 0.0%，不崩（#1902）', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(
       tester,
       initialSession: kSession,
@@ -326,8 +314,9 @@ void main() {
     expect(find.text('Telegram 已绑定'), findsOneWidget);
   });
 
-  testWidgets('账户分组 Telegram 行显示 handle、安全行显示双重认证状态',
-      (WidgetTester tester) async {
+  testWidgets('账户分组 Telegram 行显示 handle、安全行显示双重认证状态', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(tester, initialSession: kSession);
     // 对齐设计稿 m-screens-4.jsx:1009-1010
     expect(find.text('@victor_qf'), findsOneWidget);
@@ -336,14 +325,14 @@ void main() {
     expect(find.text('查看'), findsNothing);
   });
 
-  testWidgets('推送通知行显示「Telegram · 开启」（ok tone）（#1817）',
-      (WidgetTester tester) async {
+  testWidgets('推送通知行显示「Telegram · 开启」（ok tone）（#1817）', (
+    WidgetTester tester,
+  ) async {
     await _pumpMe(tester, initialSession: kSession);
     expect(find.text('Telegram · 开启'), findsOneWidget);
   });
 
-  testWidgets('点击语言行弹出底部抽屉（含两选项 + 取消）（#1817）',
-      (WidgetTester tester) async {
+  testWidgets('点击语言行弹出底部抽屉（含两选项 + 取消）（#1817）', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     await tester.tap(find.text('语言'));
     await tester.pumpAndSettle();
@@ -354,8 +343,7 @@ void main() {
     expect(find.text('简体中文'), findsWidgets);
   });
 
-  testWidgets('选择 English 后抽屉关闭并回显到语言行（#1817）',
-      (WidgetTester tester) async {
+  testWidgets('选择 English 后抽屉关闭并回显到语言行（#1817）', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     await tester.tap(find.text('语言'));
     await tester.pumpAndSettle();
@@ -367,18 +355,20 @@ void main() {
     expect(find.text('English'), findsOneWidget);
   });
 
-  testWidgets('UID 复制按钮点击 → Clipboard.setData(uid) + SnackBar',
-      (WidgetTester tester) async {
+  testWidgets('UID 复制按钮点击 → Clipboard.setData(uid) + SnackBar', (
+    WidgetTester tester,
+  ) async {
     // Clipboard mock：记录调用
     final List<MethodCall> clipboardCalls = <MethodCall>[];
-    tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform,
-            (MethodCall call) async {
-      if (call.method == 'Clipboard.setData') {
-        clipboardCalls.add(call);
-      }
-      return null;
-    });
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardCalls.add(call);
+        }
+        return null;
+      },
+    );
     await _pumpMe(tester, initialSession: kSession);
     // header 内 IconButton + Icons.copy
     final Finder copyBtn = find.byIcon(Icons.copy);
@@ -395,20 +385,17 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('退出登录 → session 清零，自动跳 /login',
-      (WidgetTester tester) async {
-    final ProviderContainer container =
-        await _pumpMe(tester, initialSession: kSession);
+  testWidgets('退出登录 → session 清零并落到策略 guest 入口', (WidgetTester tester) async {
+    final ProviderContainer container = await _pumpMe(
+      tester,
+      initialSession: kSession,
+    );
     // 触发退出
     await tester.tap(find.text('退出登录'));
     await tester.pumpAndSettle();
     // session 已被清零
-    expect(
-      container.read(sessionControllerProvider).valueOrNull,
-      isNull,
-    );
-    // router redirect 把我们从 /me 推到 /login
-    expect(find.text('LOGIN_PLACEHOLDER'), findsOneWidget);
+    expect(container.read(sessionControllerProvider).valueOrNull, isNull);
+    expect(find.text('GUEST_STRATEGY_PLACEHOLDER'), findsOneWidget);
   });
 
   testWidgets('9 主题循环 pump 不抛异常', (WidgetTester tester) async {
@@ -416,8 +403,7 @@ void main() {
     expect(
       QzBg.values.length * QzAccent.values.length,
       9,
-      reason:
-          '主题枚举数量变了，更新 me_home_page_test',
+      reason: '主题枚举数量变了，更新 me_home_page_test',
     );
     for (final QzBg bg in QzBg.values) {
       for (final QzAccent acc in QzAccent.values) {

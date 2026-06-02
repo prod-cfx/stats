@@ -804,22 +804,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginTitle => '登录';
 
   @override
-  String get authLoginWelcome => '欢迎回来';
+  String get authLoginSheetTitle => '登录 Quantify';
 
   @override
-  String get authLoginWelcomeSubtitle => '使用邮箱或 Telegram 继续';
+  String get authLoginSheetSubtitle => '邮箱或 Telegram 继续';
 
   @override
-  String get authLoginOr => '或者';
+  String get authLoginOr => '或';
 
   @override
   String get authLoginEmailLabel => '邮箱';
-
-  @override
-  String get authLoginPasswordLabel => '密码';
-
-  @override
-  String get authLoginPasswordHint => '至少 6 位';
 
   @override
   String get authLoginCodeLabel => '验证码';
@@ -857,25 +851,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginEmailInvalid => '邮箱格式不正确';
 
   @override
-  String get authLoginPasswordRequired => '请输入密码';
-
-  @override
-  String get authLoginPasswordTooShort => '密码至少 6 位';
-
-  @override
   String get authLoginFailedPrefix => '登录失败：';
 
   @override
   String get authTelegramLoginFailedPrefix => 'Telegram 登录失败：';
-
-  @override
-  String get authLoginHeroTitleLine1 => '把交易想法';
-
-  @override
-  String get authLoginHeroTitleLine2 => '变成可回测的策略';
-
-  @override
-  String get authLoginHeroSubtitle => '对话生成 · 历史回测 · API 部署';
 
   @override
   String get authLoginTermsPrefix => '继续即表示同意 ';
@@ -888,6 +867,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get authLoginPrivacyLink => '隐私政策';
+
+  @override
+  String get strategyGuestHeroLine1 => '小白也能用的';
+
+  @override
+  String get strategyGuestHeroAiQuant => 'AI 量化';
+
+  @override
+  String get strategyGuestHeroLine2Suffix => '交易工具';
+
+  @override
+  String get strategyGuestHeroSubtitle => '描述你的交易想法,AI 自动生成策略并帮你完成回测部署。';
+
+  @override
+  String get strategyGuestPrimaryCta => '立即体验';
+
+  @override
+  String get strategyGuestHotTitle => '热门策略';
+
+  @override
+  String get strategyGuestHotBadge => 'HOT';
+
+  @override
+  String get strategyGuestViewAll => '查看全部';
+
+  @override
+  String get strategyGuestUnlockTitle => '登录解锁完整功能';
+
+  @override
+  String get strategyGuestUnlockSubtitle => 'AI 对话生成 · 一键回测 · 实盘部署';
+
+  @override
+  String get strategyGuestUnlockCta => '登录 / 注册';
 
   @override
   String get marketHomeTabWatchlist => '自选';
