@@ -208,13 +208,18 @@ class _TickerRowState extends ConsumerState<TickerRow> {
               ),
               Expanded(
                 flex: kTickerRowChangeFlex,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: QzStatChip(
-                    value: _ticker.changePercent / 100,
-                    variant: QzStatChipVariant.solid,
-                    minWidth: 70,
-                  ),
+                // Row(end) 给 chip 无界宽度约束，使其按内容自适应（≥minWidth），
+                // 对齐设计稿 justifyContent:flex-end + inline-flex；
+                // 不能用 Align —— 它传入有界约束会让 chip 撑满整列留白。
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    QzStatChip(
+                      value: _ticker.changePercent / 100,
+                      variant: QzStatChipVariant.solid,
+                      minWidth: 70,
+                    ),
+                  ],
                 ),
               ),
             ],
