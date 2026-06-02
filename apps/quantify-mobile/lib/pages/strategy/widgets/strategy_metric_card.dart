@@ -37,35 +37,31 @@ class StrategyMetricCard extends StatelessWidget {
         valueColor = c.text;
         break;
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: QzSpacing.md,
-        vertical: QzSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: c.bgSoft,
-        borderRadius: BorderRadius.circular(QzRadii.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: c.textDim, fontSize: 12),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          label.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 10,
+            letterSpacing: 0.4,
           ),
-          const SizedBox(height: QzSpacing.xxs),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+        ),
+        const SizedBox(height: QzSpacing.xxs),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

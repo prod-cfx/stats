@@ -12,6 +12,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:quantify_mobile/widgets/qz_button.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String _kId = 'st-grid-btc';
@@ -113,6 +114,16 @@ String _paramValue(WidgetTester tester, String label) {
       '';
 }
 
+bool _tfSelected(WidgetTester tester, String tfName) {
+  final Text label = tester.widget<Text>(
+    find.descendant(
+      of: find.byKey(Key('strategy-detail-tf-$tfName')),
+      matching: find.byType(Text),
+    ),
+  );
+  return label.style?.fontWeight == FontWeight.w600;
+}
+
 void main() {
   testWidgets(
       '渲染：6 张指标卡 + 运行 / 分享 / 载入对话 + 策略说明 + equity 真实图，无信号段（#1825）',
@@ -141,6 +152,107 @@ void main() {
     // 策略参数区块（用户评价区块已随设计稿移除，#1799）
     expect(find.text('策略参数'), findsOneWidget);
     expect(find.text('用户评价'), findsNothing);
+  });
+
+  testWidgets('指标区：单个 bgElev 边框卡承载 3x2 DStat 网格（#2078）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+
+    final Finder grid = find.byKey(const Key('strategy-detail-metric-grid'));
+    expect(grid, findsOneWidget);
+
+    final Container container = tester.widget<Container>(grid);
+    final BoxDecoration decoration = container.decoration! as BoxDecoration;
+    final QzColorScheme c = qzColors(QzBg.light, QzAccent.violet);
+    expect(decoration.color, c.bgElev);
+    expect(decoration.border, Border.all(color: c.borderSoft));
+    expect(decoration.borderRadius, BorderRadius.circular(14));
+    expect(container.padding,
+        const EdgeInsets.symmetric(horizontal: 14, vertical: 12));
+
+    expect(find.descendant(of: grid, matching: find.byType(StrategyMetricCard)),
+        findsNWidgets(6));
+    final StrategyMetricCard first = tester.widget<StrategyMetricCard>(
+      find.descendant(of: grid, matching: find.byType(StrategyMetricCard)).first,
+    );
+    expect(first.label, 'Sharpe');
+    expect(first.value, isNot('1.84'));
+  });
+
+  testWidgets('指标单格：DStat label/value 字号、mono、最大回撤跌色（#2078）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+
+    final Text sharpeLabel = tester.widget<Text>(find.text('SHARPE'));
+    expect(sharpeLabel.style?.fontSize, 10);
+    expect(sharpeLabel.style?.letterSpacing, 0.4);
+
+    final StrategyMetricCard drawdownCard = tester.widget<StrategyMetricCard>(
+      find
+          .ancestor(
+            of: find.text('最大回撤'),
+            matching: find.byType(StrategyMetricCard),
+          )
+          .first,
+    );
+    expect(drawdownCard.emphasis, QzMetricEmphasis.down);
+
+    final Text drawdownValue = tester.widget<Text>(
+      find.descendant(
+        of: find.byWidget(drawdownCard),
+        matching: find.textContaining('%'),
+      ),
+    );
+    final QzColorScheme c = qzColors(QzBg.light, QzAccent.violet);
+    expect(drawdownValue.style?.fontSize, 16);
+    expect(drawdownValue.style?.fontWeight, FontWeight.w700);
+    expect(drawdownValue.style?.fontFamily, 'JetBrainsMono');
+    expect(drawdownValue.style?.color, c.marketDown);
+  });
+
+  testWidgets('底栏按钮：分享无图标，载入/运行带图标，三按钮高 48（#2080）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+
+    for (final Key key in <Key>[
+      const Key('strategy-detail-share-btn'),
+      const Key('strategy-detail-load-chat-btn'),
+      const Key('strategy-detail-run-btn'),
+    ]) {
+      final RenderBox box =
+          tester.renderObject<RenderBox>(find.byKey(key));
+      expect(box.size.height, 48);
+    }
+
+    final QzButton share = tester.widget<QzButton>(
+      find.byKey(const Key('strategy-detail-share-btn')),
+    );
+    final QzButton load = tester.widget<QzButton>(
+      find.byKey(const Key('strategy-detail-load-chat-btn')),
+    );
+    final QzButton run = tester.widget<QzButton>(
+      find.byKey(const Key('strategy-detail-run-btn')),
+    );
+    expect(share.leading, isNull);
+    expect(load.leading, isNotNull);
+    expect(run.leading, isNotNull);
+  });
+
+  testWidgets('equity：曲线高度 120，timeframe tab 保持可点击增强（#2081）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+
+    final Finder section = find.byKey(const Key('strategy-detail-equity-section'));
+    expect(section, findsOneWidget);
+    final SizedBox box = tester.widget<SizedBox>(section);
+    expect(box.height, 120);
+
+    expect(_tfSelected(tester, 'd30'), isTrue);
+    await tester.tap(find.byKey(const Key('strategy-detail-tf-d90')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(_tfSelected(tester, 'd90'), isTrue);
   });
 
   testWidgets('策略参数：非高频策略交易周期取 card.period、杠杆 1× (#1886)',
@@ -175,41 +287,30 @@ void main() {
     expect(find.byType(EquityCurveView), findsOneWidget);
   });
 
-  // 选中 tab 的 period 文本 fontWeight=w600（见 _EquityTimeframeTabs build）。
-  bool tfSelected(WidgetTester tester, String tfName) {
-    final Text label = tester.widget<Text>(
-      find.descendant(
-        of: find.byKey(Key('strategy-detail-tf-$tfName')),
-        matching: find.byType(Text),
-      ),
-    );
-    return label.style?.fontWeight == FontWeight.w600;
-  }
-
   testWidgets('equity 默认 tab：period=30D 的策略默认选中 d30（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-grid-btc');
-    expect(tfSelected(tester, 'd30'), isTrue);
-    expect(tfSelected(tester, 'd90'), isFalse);
+    expect(_tfSelected(tester, 'd30'), isTrue);
+    expect(_tfSelected(tester, 'd90'), isFalse);
   });
 
   testWidgets('equity 默认 tab：period=90D 的策略默认选中 d90（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-dca-sol');
-    expect(tfSelected(tester, 'd90'), isTrue);
-    expect(tfSelected(tester, 'd30'), isFalse);
+    expect(_tfSelected(tester, 'd90'), isTrue);
+    expect(_tfSelected(tester, 'd30'), isFalse);
   });
 
   testWidgets('equity 默认 tab：period=7D 的策略默认选中 d7（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-mom-doge');
-    expect(tfSelected(tester, 'd7'), isTrue);
+    expect(_tfSelected(tester, 'd7'), isTrue);
   });
 
   testWidgets('equity 默认 tab：不可映射 period=14D 回退 d30（#1888）',
       (WidgetTester tester) async {
     await _pumpDetail(tester, id: 'st-grid-stable');
-    expect(tfSelected(tester, 'd30'), isTrue);
+    expect(_tfSelected(tester, 'd30'), isTrue);
   });
 
   testWidgets('equity 默认 tab：手动切换后不再被 period 覆盖（#1888）',
@@ -220,8 +321,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
-    expect(tfSelected(tester, 'd7'), isTrue);
-    expect(tfSelected(tester, 'd90'), isFalse);
+    expect(_tfSelected(tester, 'd7'), isTrue);
+    expect(_tfSelected(tester, 'd90'), isFalse);
   });
 
   testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘监控 /me/live（#1825）',

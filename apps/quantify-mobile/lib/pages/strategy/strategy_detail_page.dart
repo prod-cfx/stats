@@ -213,7 +213,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                 _MetricGrid(
                   cards: <Widget>[
                     StrategyMetricCard(
-                      label: l10n.strategyDetailSharpe,
+                      label: 'Sharpe',
                       value: d.sharpe.toStringAsFixed(2),
                     ),
                     StrategyMetricCard(
@@ -296,6 +296,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                         key: const Key('strategy-detail-share-btn'),
                         label: l10n.strategyDetailShareButton,
                         variant: QzButtonVariant.ghost,
+                        height: 48,
                         onPressed: () => _share(context, id),
                       ),
                       const SizedBox(width: QzSpacing.sm),
@@ -306,6 +307,8 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                         key: const Key('strategy-detail-load-chat-btn'),
                         label: l10n.strategyDetailLoadConversation,
                         variant: QzButtonVariant.ghost,
+                        height: 48,
+                        leading: const Icon(Icons.smart_toy_outlined),
                         onPressed: detailAsync.maybeWhen(
                           data: (StrategyDetail d) =>
                               () => _onLoadConversation(d),
@@ -321,6 +324,8 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                           label: l10n.strategyDetailRunButton,
                           variant: QzButtonVariant.accent,
                           expanded: true,
+                          height: 48,
+                          leading: const Icon(Icons.play_arrow_rounded),
                           onPressed: detailAsync.maybeWhen(
                             data: (StrategyDetail d) => () => _onRun(d),
                             orElse: () => null,
@@ -555,18 +560,24 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 3 列 × 2 行；使用 GridView.count 简化，shrinkWrap 让其落在
-    // SingleChildScrollView 内不冲突。
-    return GridView.count(
-      crossAxisCount: 3,
-      mainAxisSpacing: QzSpacing.sm,
-      crossAxisSpacing: QzSpacing.sm,
-      // 1.3 留出指标 value 字号 + label 行 + 上下 padding 的高度，
-      // 1.5 会让 BoxConstraints h=66.7 而 column 实际 ~73，触发 6.3px overflow。
-      childAspectRatio: 1.3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: cards,
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      key: const Key('strategy-detail-metric-grid'),
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border.all(color: c.borderSoft),
+        borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: GridView.count(
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 2.2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: cards,
+      ),
     );
   }
 }
@@ -641,7 +652,8 @@ class _EquitySection extends ConsumerWidget {
       strategyEquityProvider((id: id, tf: tf)),
     );
     return SizedBox(
-      height: 140,
+      key: const Key('strategy-detail-equity-section'),
+      height: 120,
       child: async.when(
         loading: () => const Center(child: QzSpinner()),
         error: (Object e, _) =>
@@ -870,4 +882,3 @@ class _DescriptionSection extends StatelessWidget {
     );
   }
 }
-

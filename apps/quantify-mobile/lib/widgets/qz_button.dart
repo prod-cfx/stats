@@ -24,6 +24,7 @@ class QzButton extends StatelessWidget {
     this.loading = false,
     this.leading,
     this.expanded = false,
+    this.height = 44,
   });
 
   final String label;
@@ -32,6 +33,7 @@ class QzButton extends StatelessWidget {
   final bool loading;
   final Widget? leading;
   final bool expanded;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +113,7 @@ class QzButton extends StatelessWidget {
           onTap: disabled ? null : onPressed,
           borderRadius: BorderRadius.circular(QzRadii.input),
           child: Container(
-            height: 44,
+            height: height,
             padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
             decoration: decoration,
             child: Center(child: content),
