@@ -626,7 +626,6 @@ export class SemanticAtomInvariantService {
       return candidate.programKind === 'fixed_grid_gated'
         && expected.kind === 'contract_order_program'
         && expected.levelSetMode === 'static_range'
-        && candidate.sourcePath === expected.sourcePath
         && candidate.gridParams.lowerBound === expected.lower
         && candidate.gridParams.upperBound === expected.upper
         && candidate.gridParams.levelCount === expected.gridCount
@@ -669,7 +668,6 @@ export class SemanticAtomInvariantService {
       return expected.kind === 'contract_order_program'
         && expected.levelSetMode === 'static_range'
         && candidate.programKind === 'fixed_grid_gated'
-        && candidate.sourcePath === expected.sourcePath
         && candidate.gridParams.lowerBound === expected.lower
         && candidate.gridParams.upperBound === expected.upper
         && candidate.gridParams.levelCount === expected.gridCount
@@ -1017,7 +1015,8 @@ export class SemanticAtomInvariantService {
     )
     const hasLifecycleSizingCarrier = effectLeaves.some(leaf =>
       leaf.key === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
-      || leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key,
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key
+      || leaf.key === 'program.fixed_grid_gated',
     )
     return hasLifecycleSizingCarrier && !hasOpenAction
   }

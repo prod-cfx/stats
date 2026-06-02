@@ -543,7 +543,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
   })
 
   it('用户复杂策略：固定网格只生成 orchestration program，不重复生成 legacy order programs', async () => {
-    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用。')
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用，单笔 10% 仓位。')
     const artifacts = await createPublicationStage().generate({ semanticState: state })
 
     expect(artifacts.ast.orchestrationPrograms).toHaveLength(1)
@@ -555,6 +555,34 @@ describe('user reported five strategies: entry -> middle -> publication generati
     expect(JSON.stringify(artifacts.ast.orchestrationPrograms[0])).toContain('60000')
     expect(artifacts.ast.orderPrograms).toHaveLength(0)
     expect(artifacts.compiledScript).toContain('fixed_grid_gated')
+  })
+
+  it('用户复杂策略：固定网格缺仓位时不默认每格 10%，补仓位后才可发布', async () => {
+    const conversation = createConversationService()
+    const patch = new GenericSeedDispatcher().dispatch('OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用。') as CodegenSemanticPatch
+    const seedState = new SemanticSeedStateBuilderService().build(patch, 'OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用。')
+    expect(seedState).not.toBeNull()
+
+    const state = conversation.normalizeSemanticContractReadiness(
+      seedState!,
+      { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION },
+    )
+    const program = state.orchestration?.find(node => node.kind === 'program' && node.key === 'program.fixed_grid_gated')
+
+    expect(state.position?.openSlots).toContainEqual(expect.objectContaining({ slotKey: 'position.sizing' }))
+    expect(program?.sizing).toBeUndefined()
+    const unsizedArtifacts = await createPublicationStage().generate({ semanticState: state })
+    expect(unsizedArtifacts.ast.orchestrationPrograms ?? []).toEqual([])
+    expect(unsizedArtifacts.compiledScript).not.toContain('fixed_grid_gated')
+
+    const sizedState = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用，单笔 10% 仓位。')
+    const sizedProgramLeaf = factsByRole(sizedState, 'program').find(leaf => leaf.key === 'program.fixed_grid_gated')
+    expect(sizedProgramLeaf?.params.sizing).toEqual({ mode: 'fixed_pct', value: 10 })
+    const sizedArtifacts = await createPublicationStage().generate({ semanticState: sizedState })
+
+    expect(sizedArtifacts.ast.orchestrationPrograms[0]).toEqual(expect.objectContaining({
+      sizing: { mode: 'fixed_pct', value: 10 },
+    }))
   })
 
   it('用户复杂策略：反手做空保留 reversePosition metadata', async () => {

@@ -14,6 +14,7 @@ import type {
   SemanticNodeStatus,
   SemanticOrderRequirement,
   SemanticPositionConstraintState,
+  SemanticPositionSizingContract,
   SemanticPositionState,
   SemanticPriority,
   SemanticRequirement,
@@ -163,8 +164,10 @@ export class SemanticContractReadinessService {
 
     let materialized: ReadinessMaterializedState
     if (hasRules) {
-      state = this.dropStandalonePositionSizingRules(
-        this.withTopLevelPositionSizingProjectedToRules(state),
+      state = this.withGridSizingProjectedToProgramRules(
+        this.dropStandalonePositionSizingRules(
+          this.withTopLevelPositionSizingProjectedToRules(state),
+        ),
       )
 
       materialized = this.materializeRulesMainflowState({
@@ -409,11 +412,77 @@ export class SemanticContractReadinessService {
               params: { sizing },
             },
           ],
+          programs: rule.effects.programs.map(effect => this.withProgramSizingFromPosition(effect, sizing)),
         },
       }
     })
 
     return { ...state, rules }
+  }
+
+  private withGridSizingProjectedToProgramRules(state: SemanticState): SemanticState {
+    if (!state.rules?.length) return state
+    const rules = state.rules.map((rule) => {
+      if (!isRuleEffectsByRole(rule.effects)) return rule
+      const sizing = this.resolveRuleGridProgramSizing(rule)
+      if (!sizing) return rule
+      return {
+        ...rule,
+        effects: {
+          ...rule.effects,
+          programs: rule.effects.programs.map(effect => this.withProgramSizing(effect, sizing)),
+        },
+      }
+    })
+    return { ...state, rules }
+  }
+
+  private resolveRuleGridProgramSizing(rule: SemanticRule): SemanticOrchestrationNode['sizing'] | undefined {
+    const leaves = [
+      ...collectAtomLeaves(rule.condition),
+      ...(isRuleEffectsByRole(rule.effects)
+        ? [...rule.effects.positions, ...rule.effects.programs].flatMap(effect => collectAtomLeaves(effect))
+        : []),
+    ]
+    for (const leaf of leaves) {
+      if (leaf.key === POSITION_SIZING_ATOM_KEY) {
+        const sizing = readPositionSizingParam(leaf.params?.sizing)
+        const programSizing = sizing ? programSizingFromPositionSizing(sizing) : undefined
+        if (programSizing) return programSizing
+      }
+      if (leaf.key !== 'grid.range_rebalance' && leaf.key !== 'program.fixed_grid_gated') continue
+      const direct = normalizeProgramSizing(leaf.params?.sizing) ?? normalizeProgramSizing(leaf.params ?? {})
+      if (direct) return direct
+      const perGridSizing = readNumber(leaf.params?.perGridSizing) ?? readNumber(leaf.params?.perOrderSizing)
+      if (perGridSizing !== undefined && perGridSizing > 0) {
+        return { mode: 'fixed_pct', value: perGridSizing <= 1 ? Number((perGridSizing * 100).toFixed(8)) : perGridSizing }
+      }
+    }
+    return undefined
+  }
+
+  private withProgramSizing(effect: AtomExpr, sizing: SemanticOrchestrationNode['sizing']): AtomExpr {
+    if (effect.kind !== 'atom') return effect
+    if (effect.key !== 'program.fixed_grid_gated') return effect
+    const existing = normalizeProgramSizing(effect.params?.sizing) ?? normalizeProgramSizing(effect.params ?? {})
+    if (existing) return effect
+    return {
+      ...effect,
+      params: {
+        ...(effect.params ?? {}),
+        sizing,
+      },
+    }
+  }
+
+  private withProgramSizingFromPosition(effect: AtomExpr, sizing: SemanticPositionSizingContract): AtomExpr {
+    if (effect.kind !== 'atom') return effect
+    if (effect.key !== 'program.fixed_grid_gated') return effect
+    const existing = normalizeProgramSizing(effect.params?.sizing) ?? normalizeProgramSizing(effect.params ?? {})
+    if (existing) return effect
+    const programSizing = programSizingFromPositionSizing(sizing)
+    if (!programSizing) return effect
+    return this.withProgramSizing(effect, programSizing)
   }
 
   private dropStandalonePositionSizingRules(state: SemanticState): SemanticState {
@@ -424,13 +493,16 @@ export class SemanticContractReadinessService {
 
   private isStandalonePositionSizingRule(rule: SemanticRule): boolean {
     const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+    const materialEffectLeaves = effectLeaves.filter(leaf => leaf.key !== 'scope.timeframe')
     if (effectLeaves.length === 0 && /(?:^|[-_])(?:pos|position)[-_]?sizing(?:[-_]|$)/iu.test(rule.id)) return true
-    if (effectLeaves.length === 0) return false
-    if (!effectLeaves.every(leaf => leaf.key === POSITION_SIZING_ATOM_KEY)) return false
+    if (materialEffectLeaves.length === 0) return false
+    if (!materialEffectLeaves.every(leaf => leaf.key === POSITION_SIZING_ATOM_KEY)) return false
     if (!isRuleEffectsByRole(rule.effects)) return true
+    const orchestrationLeaves = rule.effects.orchestration.flatMap(effect => collectAtomLeaves(effect))
+    const hasOnlyTimeframeScopeOrchestration = orchestrationLeaves.every(leaf => leaf.key === 'scope.timeframe')
     return rule.effects.actions.length === 0
       && rule.effects.risks.length === 0
-      && rule.effects.orchestration.length === 0
+      && hasOnlyTimeframeScopeOrchestration
       && rule.effects.programs.length === 0
   }
 
@@ -567,6 +639,7 @@ export class SemanticContractReadinessService {
 
     if (fact.key === 'program.fixed_grid_gated') {
       const activeWhenRef = readString(fact.params.activeWhenRef)
+      const sizing = normalizeProgramSizing(fact.params.sizing) ?? normalizeProgramSizing(fact.params)
       return [{
         ...base,
         programKind: 'fixed_grid_gated',
@@ -574,7 +647,7 @@ export class SemanticContractReadinessService {
         onDeactivate: readEnum(fact.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
         rebuildPolicy: 'static',
         gridParams: normalizeFixedGridParams(fact.params),
-        sizing: normalizeProgramSizing(fact.params.sizing) ?? normalizeProgramSizing(fact.params) ?? { mode: 'fixed_pct', value: 10 },
+        ...(sizing ? { sizing } : {}),
       }]
     }
 
@@ -1281,6 +1354,33 @@ function normalizeProgramSizing(value: unknown): SemanticOrchestrationNode['sizi
   const amount = readNumber(record.value) ?? readNumber(record.quote) ?? readNumber(record.pct)
   if (!mode || amount === undefined || amount <= 0) return undefined
   return { mode, value: amount }
+}
+
+function programSizingFromPositionSizing(sizing: SemanticPositionSizingContract): SemanticOrchestrationNode['sizing'] | undefined {
+  if (sizing.kind === 'ratio') {
+    const pct = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
+    return pct > 0 ? { mode: 'fixed_pct', value: pct } : undefined
+  }
+  if (sizing.kind === 'quote') return { mode: 'fixed_quote', value: sizing.value }
+  if (sizing.kind === 'base') return { mode: 'fixed_base', value: sizing.value }
+  return undefined
+}
+
+function readPositionSizingParam(value: unknown): SemanticPositionSizingContract | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const amount = readNumber(record.value)
+  if (amount === undefined || amount <= 0) return undefined
+  if (record.kind === 'ratio' && (record.unit === 'ratio' || record.unit === 'percent')) {
+    return { kind: 'ratio', value: amount, unit: record.unit }
+  }
+  if (record.kind === 'quote' && (record.asset === 'USDT' || record.asset === 'USDC' || record.asset === 'USD')) {
+    return { kind: 'quote', value: amount, asset: record.asset }
+  }
+  if (record.kind === 'base' && typeof record.asset === 'string' && record.asset.trim() !== '') {
+    return { kind: 'base', value: amount, asset: record.asset.trim() }
+  }
+  return undefined
 }
 
 function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {

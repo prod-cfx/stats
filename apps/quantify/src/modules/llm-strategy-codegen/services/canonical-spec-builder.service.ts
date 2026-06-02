@@ -2056,7 +2056,7 @@ export class CanonicalSpecBuilderService {
     const params = {
       ...this.defaultProgramParamsFromRuleContext(leaf, rule),
       ...leaf.params,
-      ...(leaf.params.sizing ? {} : { sizing }),
+      ...(leaf.params.sizing || !sizing ? {} : { sizing }),
     }
 
     return { ...leaf, params }
@@ -2381,7 +2381,7 @@ export class CanonicalSpecBuilderService {
 
   private resolveProgramSizingFromRuleProgramLeaf(
     leaf: AtomExprAtom,
-  ): SemanticOrchestrationNode['sizing'] {
+  ): SemanticOrchestrationNode['sizing'] | undefined {
     const sizing = leaf.params.sizing
     if (sizing && typeof sizing === 'object' && !Array.isArray(sizing)) {
       const mode = (sizing as { mode?: unknown }).mode
@@ -2399,7 +2399,7 @@ export class CanonicalSpecBuilderService {
     if (value !== null && value > 0) {
       return { mode: 'fixed_quote', value }
     }
-    return { mode: 'fixed_pct', value: 10 }
+    return undefined
   }
 
   private resolveSizingFromSemanticRulePositionLeaves(
