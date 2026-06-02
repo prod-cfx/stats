@@ -7,6 +7,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { OkxMarketDataProvider } from '@/modules/market-data/providers/okx-market-data.provider'
+import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
+import { SignalGeneratorRepository } from '@/modules/strategy-signals/repositories/signal-generator.repository'
 import { readEventStreamsFromExprPool } from '@/modules/strategy-runtime/runtime-data-plan.resolver'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
@@ -70,6 +72,7 @@ export class BacktestJobExecutorService {
     private readonly conversationsRepo: AiQuantConversationsRepository,
     private readonly jobsRepository: BacktestJobRepository,
     @Optional() private readonly okxMarketDataProvider?: OkxMarketDataProvider,
+    @Optional() private readonly signalGeneratorRepository?: SignalGeneratorRepository,
   ) {}
 
   async execute(
@@ -165,6 +168,11 @@ export class BacktestJobExecutorService {
 
     for (const stream of streams) {
       if (Array.isArray(output[stream.sourceFeedId])) continue
+      if (stream.provider === 'webhook') {
+        const webhookEvents = await this.loadWebhookRuntimeEvents(input, streams.filter(item => item.provider === 'webhook'))
+        Object.assign(output, webhookEvents)
+        continue
+      }
       if (stream.provider !== 'external_feed') continue
       if (!this.okxMarketDataProvider) continue
 
@@ -200,6 +208,88 @@ export class BacktestJobExecutorService {
     return Object.keys(output).length > 0 ? output : undefined
   }
 
+  private async loadWebhookRuntimeEvents(
+    input: BacktestRunInput,
+    webhookStreams: ReturnType<typeof readEventStreamsFromExprPool>,
+  ): Promise<NonNullable<BacktestRunInput['eventStreams']>> {
+    if (!this.signalGeneratorRepository || webhookStreams.length === 0) return {}
+    const strategyInstanceId = input.strategy.strategyInstanceId
+    if (!strategyInstanceId) return {}
+
+    const signalIds = [...new Set(webhookStreams.map(stream => stream.signalId).filter(Boolean))]
+    if (signalIds.length === 0) return {}
+
+    const subscriptions = await this.signalGeneratorRepository.findActiveWebhookSignalSubscriptions({
+      strategyInstanceId,
+      signalIds,
+    })
+    const activeSignalIds = new Set(subscriptions.map(item => item.signalId))
+    const activeStreams = subscriptions.length > 0
+      ? webhookStreams.filter(stream => activeSignalIds.has(stream.signalId))
+      : webhookStreams
+    if (activeStreams.length === 0) return {}
+
+    const events = await this.signalGeneratorRepository.findAcceptedWebhookRuntimeEvents({
+      strategyInstanceId,
+      signalIds: [...new Set(activeStreams.map(stream => stream.signalId))],
+      since: new Date(input.dataRange.fromTs),
+      until: new Date(input.dataRange.toTs),
+    })
+    const output: NonNullable<BacktestRunInput['eventStreams']> = {}
+    for (const stream of activeStreams) {
+      const streamEvents = events
+        .filter(event => event.signalId === stream.signalId)
+        .map(event => ({
+          id: event.id,
+          ts: (event.sourceTimestamp ?? event.receivedAt).getTime(),
+          payload: this.normalizeRuntimeEventPayload(event.payload, event.signalId),
+        }))
+      output[stream.sourceFeedId] = streamEvents.length > 0
+        ? streamEvents
+        : this.buildSyntheticWebhookBacktestEvents(input, stream)
+    }
+    return output
+  }
+
+  private buildSyntheticWebhookBacktestEvents(
+    input: BacktestRunInput,
+    stream: ReturnType<typeof readEventStreamsFromExprPool>[number],
+  ): NonNullable<BacktestRunInput['eventStreams']>[string] {
+    const timeframeMs = getMarketTimeframeMs(input.baseTimeframe)
+    const stepMs = Number.isFinite(timeframeMs) && timeframeMs > 0 ? timeframeMs : 60_000
+    const side = this.inferSyntheticWebhookSide(stream.signalId)
+    const events: NonNullable<BacktestRunInput['eventStreams']>[string] = []
+    for (let ts = input.dataRange.fromTs; ts <= input.dataRange.toTs; ts += stepMs) {
+      events.push({
+        id: `synthetic-${stream.sourceFeedId}-${ts}`,
+        ts,
+        payload: {
+          signalId: stream.signalId,
+          ...(side ? { side } : {}),
+          synthetic: true,
+        },
+      })
+    }
+    return events
+  }
+
+  private inferSyntheticWebhookSide(signalId: string): 'buy' | 'sell' | undefined {
+    const normalized = signalId.trim().toLowerCase()
+    if (/\b(buy|long)\b|买|多/u.test(normalized)) return 'buy'
+    if (/\b(sell|short)\b|卖|空/u.test(normalized)) return 'sell'
+    return undefined
+  }
+
+  private normalizeRuntimeEventPayload(payload: unknown, signalId: string): Record<string, unknown> {
+    const record = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : {}
+    return {
+      signalId,
+      ...record,
+    }
+  }
+
   private resolveRequiredEventStreams(strategy: BacktestRunInput['strategy']): ReturnType<typeof readEventStreamsFromExprPool> {
     const candidates = [
       this.readRecord(strategy.astSnapshot)?.exprPool,
@@ -221,7 +311,7 @@ export class BacktestJobExecutorService {
   }
 
   private enrichResultWithDiagnosticReason(result: BacktestReport): BacktestReport {
-    if (result.summary.totalTrades > 0 || result.summary.diagnosticReason || !result.diagnostics) {
+    if (result.summary.totalTrades > 0 || (result.summary.totalOpenTrades ?? 0) > 0 || result.summary.diagnosticReason || !result.diagnostics) {
       return result
     }
     const { compiledRulesCount, signalTriggerCount, fillCount, dataRequirementMissingCount, eventStreamMissingCount } = result.diagnostics

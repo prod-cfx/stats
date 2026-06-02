@@ -62,6 +62,22 @@ describe('compiledScriptParserService', () => {
     }))
   })
 
+  it('parses compiler.v1 scripts emitted with legacy relative shared imports', () => {
+    const emitter = new CompiledScriptEmitterService()
+    const parser = new CompiledScriptParserService()
+    const legacyImportScript = toLegacyRelativeImportScript(emitter.emit({
+      ast: createAstFixture(),
+      executionEnvelope: createExecutionEnvelope(),
+    }))
+
+    const parsed = parser.parse(legacyImportScript)
+
+    expect(parsed.compiledManifest.compileVersion).toBe('compiler.v1')
+    expect(parsed.decisionPrograms).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceRef: 'entry_long' }),
+    ]))
+  })
+
   it('parses compiler.v1 scripts emitted before risk predicate wrapper execution existed', () => {
     const emitter = new CompiledScriptEmitterService()
     const parser = new CompiledScriptParserService()
@@ -122,6 +138,12 @@ describe('compiledScriptParserService', () => {
     expect(parsed.decisionPrograms.filter(program => program.sourceRef === 'exit-short-middle')).toHaveLength(1)
   })
 })
+
+function toLegacyRelativeImportScript(script: string): string {
+  return script
+    .replace("import type { StrategyAdapterV1 } from '@ai/shared'", "import type { StrategyAdapterV1 } from '../../../../../../packages/shared/src/index.js'")
+    .replace("} from '@ai/shared/script-engine/compiled-runtime'", "} from '../../../../../../packages/shared/src/script-engine/compiled-runtime'")
+}
 
 function createAstFixture() {
   const compiler = new CanonicalStrategyAstCompilerService()

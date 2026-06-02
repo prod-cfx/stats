@@ -417,6 +417,7 @@ const BacktestingCreateJobRequestDto = z
     dataRange: BacktestingCreateJobRangeDto,
     requestedRangeInput: BacktestingCreateJobRequestedRangeInputDto.optional(),
     bars: z.array(BacktestingCreateJobBarDto).optional(),
+    eventStreams: z.object({}).partial().passthrough().optional(),
   })
   .passthrough()
 const BacktestingCreateJobErrorDetailsDto = z

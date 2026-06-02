@@ -382,14 +382,14 @@ export class BacktestRunnerService {
       ...(pos.entryTimeframe ? { entryTimeframe: pos.entryTimeframe } : {}),
     }))
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
-    // 只数已完结撮合，避免「开仓未平」被误判为成交导致 SIGNAL_FIRED_BUT_NO_FILL 错判。
+    // fillCount 只数已完结撮合；有效成交判断另看 totalOpenTrades，避免开仓未平被部署门禁误挡。
     diagnostics.fillCount = report.trades.length
     const requiredRuntimeKeys = this.resolveRequiredRuntimeKeys(baseBars, requestedRuntimeTimeframes)
     diagnostics.dataRequirementMissingCount = requiredRuntimeKeys
       .filter(key => !availableRuntimeKeys.has(key))
       .length
     diagnostics.eventStreamMissingCount = this.resolveMissingEventStreamCount(input)
-    const diagnosticReason = this.resolveDiagnosticReason(report, diagnostics)
+    const diagnosticReason = this.resolveDiagnosticReason(report, diagnostics, openPositions.length)
 
     this.stateEngine.reset()
     this.riskEvaluator.reset()
@@ -448,8 +448,10 @@ export class BacktestRunnerService {
   private resolveDiagnosticReason(
     report: BacktestReport,
     diagnostics: BacktestReport['diagnostics'],
+    totalOpenTrades: number,
   ): BacktestReport['summary']['diagnosticReason'] | undefined {
     if (report.summary.totalTrades > 0) return undefined
+    if (totalOpenTrades > 0) return undefined
     if (diagnostics.compiledRulesCount === 0) return 'BACKTEST_NO_RULES_COMPILED'
     if (diagnostics.dataRequirementMissingCount > 0) return 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE'
     if (diagnostics.eventStreamMissingCount > 0) return 'BACKTEST_EVENT_STREAM_UNAVAILABLE'
@@ -491,8 +493,15 @@ export class BacktestRunnerService {
 
   private countCompiledRules(specSnapshot: BacktestRunInput['strategy']['specSnapshot']): number {
     if (!specSnapshot || typeof specSnapshot !== 'object') return 0
-    const rules = (specSnapshot as { rules?: unknown }).rules
-    return Array.isArray(rules) ? rules.length : 0
+    const record = specSnapshot as { rules?: unknown; orderPrograms?: unknown; orchestration?: unknown }
+    const rulesCount = Array.isArray(record.rules) ? record.rules.length : 0
+    const orderProgramsCount = Array.isArray(record.orderPrograms) ? record.orderPrograms.length : 0
+    const orchestration = record.orchestration
+    const orchestrationPrograms = orchestration && typeof orchestration === 'object' && !Array.isArray(orchestration)
+      ? (orchestration as { programs?: unknown }).programs
+      : undefined
+    const orchestrationProgramsCount = Array.isArray(orchestrationPrograms) ? orchestrationPrograms.length : 0
+    return rulesCount + orderProgramsCount + orchestrationProgramsCount
   }
 
   private applyDeltaOrder(input: {
@@ -703,7 +712,7 @@ export class BacktestRunnerService {
     equity: number
   }): CompiledOrderProgramRuntimeOrder[] {
     const levels = this.normalizeOrderProgramLevels(input.program)
-    const sidePolicy = this.readString(input.program.payload?.sidePolicy)
+      const sidePolicy = this.resolveCompiledOrderProgramSidePolicy(input.program)
     const orders: CompiledOrderProgramRuntimeOrder[] = []
 
     levels.forEach((level, levelIndex) => {
@@ -747,8 +756,25 @@ export class BacktestRunnerService {
       levelIndex,
       price,
       side,
-      qty: this.resolveCompiledOrderProgramQty(input.program.payload?.quantity, price, input.equity),
+      qty: this.resolveCompiledOrderProgramQty(this.resolveCompiledOrderProgramQuantity(input.program), price, input.equity),
       role,
+    }
+  }
+
+  private resolveCompiledOrderProgramSidePolicy(program: CompiledWorkingOrderProgram): string | undefined {
+    const explicit = this.readString(program.payload?.sidePolicy)
+    if (explicit) return explicit
+    return program.sourceRef === 'orchestration:program.fixed_grid_gated' ? 'perp_neutral' : undefined
+  }
+
+  private resolveCompiledOrderProgramQuantity(program: CompiledWorkingOrderProgram): unknown {
+    if (program.payload?.quantity) return program.payload.quantity
+    const sizing = program.payload?.sizing
+    if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) return undefined
+    const record = sizing as Record<string, unknown>
+    return {
+      ...record,
+      mode: record.mode === 'fixed_pct' ? 'pct_equity' : record.mode,
     }
   }
 

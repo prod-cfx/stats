@@ -298,7 +298,7 @@ function runFixedGridGatedProgram(args: FixedGridGatedRunArgs): void {
     return
   }
 
-  const exprValue = exprValues[program.activeWhenExprId]
+  const exprValue = readExprValue(exprValues, program.activeWhenExprId)
   const isActive = exprValue === true
   programLifecycleStateNext[program.id] = { kind: 'fixed_grid_gated' }
 
@@ -319,6 +319,19 @@ function runFixedGridGatedProgram(args: FixedGridGatedRunArgs): void {
       orchCloseIds.push(program.id)
       break
   }
+}
+
+function readExprValue(
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
+  exprIdOrSourceRef: string,
+): CompiledRuntimeValue | undefined {
+  if (Object.prototype.hasOwnProperty.call(exprValues, exprIdOrSourceRef)) {
+    return exprValues[exprIdOrSourceRef]
+  }
+
+  const suffix = `_${exprIdOrSourceRef}`
+  const matched = Object.entries(exprValues).filter(([key]) => key.endsWith(suffix))
+  return matched.length === 1 ? matched[0]![1] : undefined
 }
 
 function isValidFixedGridGated(program: CompiledFixedGridGatedProgram): boolean {

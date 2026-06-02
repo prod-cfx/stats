@@ -11,10 +11,11 @@ import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 export class BacktestMarketDataRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
-  findSymbolsByCodes(codes: string[]) {
+  findSymbolsByCodes(codes: string[], exchange?: string | null) {
     return this.txHost.tx.symbol.findMany({
       where: {
         code: { in: codes },
+        ...(exchange ? { exchange } : {}),
       },
       select: { id: true, code: true },
     })

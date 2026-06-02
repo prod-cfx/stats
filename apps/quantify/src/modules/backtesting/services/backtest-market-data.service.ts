@@ -200,7 +200,7 @@ export class BacktestMarketDataService {
   async loadBars(input: LoadBarsInput): Promise<Bar[]> {
     const symbols = this.normalizeSymbols(input.symbols, this.extractMarketType(input.strategy?.params ?? {}))
     const bars: Bar[] = []
-    const symbolMap = await this.loadSymbolMap(symbols)
+    const symbolMap = await this.loadSymbolMap(symbols, this.extractExchange(input.strategy?.params ?? {}))
     const timeframes = this.resolveRequestedTimeframes(input)
 
     for (const symbol of symbols) {
@@ -244,7 +244,7 @@ export class BacktestMarketDataService {
   async resolveCoverage(input: CoverageInput): Promise<BacktestRangeCoverage> {
     const symbols = this.normalizeSymbols(input.symbols, this.extractMarketType(input.strategy?.params ?? {}))
     const ranges: Array<{ fromTs: number; toTs: number }> = []
-    const symbolMap = await this.loadSymbolMap(symbols)
+    const symbolMap = await this.loadSymbolMap(symbols, this.extractExchange(input.strategy?.params ?? {}))
     if (symbolMap.size < symbols.length) return { kind: 'empty' }
 
     const timeframes = this.resolveRequestedTimeframes(input)
@@ -312,10 +312,10 @@ export class BacktestMarketDataService {
     return { kind: 'partial', availableRange, appliedRange }
   }
 
-  private async loadSymbolMap(symbols: string[]): Promise<Map<string, string>> {
+  private async loadSymbolMap(symbols: string[], exchange?: BacktestExchangeId | null): Promise<Map<string, string>> {
     const normalizedSymbols = symbols.map(symbol => normalizeExactCode(symbol))
     const codeCandidates = [...new Set(normalizedSymbols.flatMap(symbol => this.buildCodeCandidates(symbol)))]
-    const rows = await this.repository.findSymbolsByCodes(codeCandidates)
+    const rows = await this.repository.findSymbolsByCodes(codeCandidates, exchange?.toUpperCase())
 
     const rowMap = new Map(rows.map(row => [normalizeExactCode(row.code), row.id]))
     const result = new Map<string, string>()
