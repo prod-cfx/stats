@@ -58,5 +58,6 @@ import { StateEngineService } from './state/state-engine.service'
     AiQuantConversationsRepository,
     PublishedStrategySnapshotsRepository,
   ],
+  exports: [BacktestJobsService, BacktestJobExecutorService],
 })
 export class BacktestingModule {}
