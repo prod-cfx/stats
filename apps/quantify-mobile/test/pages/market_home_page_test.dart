@@ -256,7 +256,7 @@ void main() {
     expect(find.byKey(const Key('market-search-overlay')), findsNothing);
 
     await tester.tap(find.byKey(const Key('market-search-toggle')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('market-search-field')), findsOneWidget);
     expect(find.byKey(const Key('market-search-overlay')), findsOneWidget);
     expect(find.text('搜索历史'), findsOneWidget);
@@ -295,7 +295,7 @@ void main() {
     await _pump(tester, repo);
 
     await tester.tap(find.byKey(const Key('market-search-toggle')));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const Key('market-search-field')),
@@ -321,9 +321,9 @@ void main() {
     expect(find.byKey(const Key('market-search-result-BTCUSDT')), findsNothing);
     expect(find.text('无匹配币种'), findsOneWidget);
 
-    // 关闭搜索 -> 输入清空 + 列表恢复。
+    // 关闭搜索 -> 返回列表（路由 pop）。
     await tester.tap(find.byKey(const Key('market-search-cancel')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('market-search-field')), findsNothing);
     expect(find.byKey(const Key('market-search-overlay')), findsNothing);
     expect(find.byType(TickerRow), findsNWidgets(5));
@@ -334,7 +334,7 @@ void main() {
     await _pump(tester, repo);
 
     await tester.tap(find.byKey(const Key('market-search-toggle')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('market-search-field')),
       'AAVE',
@@ -415,7 +415,7 @@ void main() {
     await _pump(tester, repo);
 
     await tester.tap(find.byKey(const Key('market-search-toggle')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('搜索'), findsOneWidget);
   });
 

@@ -41,30 +41,13 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
   bool _loading = true;
   Object? _error;
 
-  bool _searchOpen = false;
-  final TextEditingController _searchCtrl = TextEditingController();
   List<String> _searchHistory = <String>['BTC', 'ETH', 'SOL'];
 
   @override
   void initState() {
     super.initState();
-    _searchCtrl.addListener(_onSearchChanged);
     _load();
   }
-
-  @override
-  void dispose() {
-    _searchCtrl
-      ..removeListener(_onSearchChanged)
-      ..dispose();
-    super.dispose();
-  }
-
-  /// 搜索输入触发重 build。controller.text 已是真值来源，不再镜像到字段，避免双重状态。
-  void _onSearchChanged() => setState(() {});
-
-  /// 归一化后的搜索词（大写、去首尾空格）。
-  String get _searchQuery => _searchCtrl.text.trim().toUpperCase();
 
   Future<void> _load() async {
     final repo = ref.read(tickerRepositoryProvider);
@@ -84,99 +67,59 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
     }
   }
 
-  void _openSearch() {
-    setState(() {
-      _searchOpen = true;
-      _searchCtrl.clear();
-    });
+  /// 打开全屏搜索路由（对齐设计稿 `SearchOverlay` 全屏覆盖 + 兄弟屏
+  /// [CoinStockSearchOverlay] 范式）。搜索词/结果均在路由内部管理，
+  /// 选中条目先记入历史再 pop，回到本屏跳详情。历史经路由回填本 state。
+  Future<void> _openSearch() async {
+    final List<String> updated = await Navigator.of(context).push<List<String>>(
+          MaterialPageRoute<List<String>>(
+            fullscreenDialog: true,
+            builder: (_) => _MarketSearchRoute(
+              tickers: _tickers,
+              history: _searchHistory,
+              onSelectTicker: (Ticker ticker) =>
+                  context.push('/market/${ticker.symbol}'),
+            ),
+          ),
+        ) ??
+        _searchHistory;
+    if (!mounted) return;
+    setState(() => _searchHistory = updated);
   }
 
-  void _closeSearch() {
-    setState(() {
-      _searchOpen = false;
-      _searchCtrl.clear();
-    });
-  }
-
-  void _clearSearchQuery() => _searchCtrl.clear();
-
-  void _recordSearchHistory(String symbol) {
-    final String base = _tickerBase(symbol);
-    setState(() {
-      _searchHistory = <String>[
-        base,
-        ..._searchHistory.where((String item) => item != base),
-      ].take(12).toList();
-    });
-  }
-
-  void _selectSearchHistory(String query) => _searchCtrl.text = query;
-
-  void _clearSearchHistory() => setState(() => _searchHistory = <String>[]);
-
-  /// 按当前 tab + 搜索词过滤/排序行情列表。
+  /// 按当前 tab 过滤/排序行情列表。
   ///
   /// Tab 语义：
   /// - watchlist：仅命中收藏集合 [favorites]（来自 `marketFavoritesProvider`）的条目；
   /// - spot/perp：按 `Ticker.kind` 过滤；
   /// - gainers：按 24H 涨幅降序（仅展示涨幅 > 0）；
   /// - losers：按 24H 跌幅升序（仅展示跌幅 < 0）。
-  /// 搜索按 symbol/base/name 包含匹配，大小写无关。
+  /// 搜索已迁出为全屏路由，本屏列表不再内联过滤。
   List<Ticker> _visibleTickers(Set<String> favorites) {
-    Iterable<Ticker> base;
     switch (_tab) {
       case _MarketTab.watchlist:
-        base = _tickers.where((Ticker t) => favorites.contains(t.symbol));
-        break;
+        return _tickers
+            .where((Ticker t) => favorites.contains(t.symbol))
+            .toList();
       case _MarketTab.spot:
-        base = _tickers.where((Ticker t) => t.kind == MarketKind.spot);
-        break;
+        return _tickers
+            .where((Ticker t) => t.kind == MarketKind.spot)
+            .toList();
       case _MarketTab.perp:
-        base = _tickers.where((Ticker t) => t.kind == MarketKind.perp);
-        break;
+        return _tickers
+            .where((Ticker t) => t.kind == MarketKind.perp)
+            .toList();
       case _MarketTab.gainers:
-        final List<Ticker> g =
-            _tickers.where((Ticker t) => t.changePercent > 0).toList()..sort(
-              (Ticker a, Ticker b) =>
-                  b.changePercent.compareTo(a.changePercent),
-            );
-        base = g;
-        break;
+        return _tickers.where((Ticker t) => t.changePercent > 0).toList()
+          ..sort(
+            (Ticker a, Ticker b) => b.changePercent.compareTo(a.changePercent),
+          );
       case _MarketTab.losers:
-        final List<Ticker> l =
-            _tickers.where((Ticker t) => t.changePercent < 0).toList()..sort(
-              (Ticker a, Ticker b) =>
-                  a.changePercent.compareTo(b.changePercent),
-            );
-        base = l;
-        break;
+        return _tickers.where((Ticker t) => t.changePercent < 0).toList()
+          ..sort(
+            (Ticker a, Ticker b) => a.changePercent.compareTo(b.changePercent),
+          );
     }
-    if (_searchQuery.isEmpty) return base.toList();
-    return base.where((Ticker t) => _matchesTicker(t, _searchQuery)).toList();
-  }
-
-  List<Ticker> _searchResults() {
-    if (_searchQuery.isEmpty) return <Ticker>[];
-    return _tickers
-        .where((Ticker t) => _matchesTicker(t, _searchQuery))
-        .toList();
-  }
-
-  List<Ticker> _trendingTickers() {
-    return (_tickers.toList()..sort(
-          (Ticker a, Ticker b) =>
-              b.changePercent.abs().compareTo(a.changePercent.abs()),
-        ))
-        .take(6)
-        .toList();
-  }
-
-  bool _matchesTicker(Ticker ticker, String query) {
-    final String q = query.trim().toUpperCase();
-    if (q.isEmpty) return true;
-    return ticker.symbol.toUpperCase().contains(q) ||
-        _tickerBase(ticker.symbol).toUpperCase().contains(q) ||
-        _tickerName(ticker.symbol).toUpperCase().contains(q);
   }
 
   @override
@@ -195,131 +138,91 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
     final Set<String> favorites = ref.watch(marketFavoritesProvider);
     final List<Ticker> visible = _visibleTickers(favorites);
 
-    return Stack(
+    return Column(
       children: <Widget>[
-        Column(
-          children: <Widget>[
-            Container(
-              decoration: BoxDecoration(color: c.bg),
-              padding: const EdgeInsets.fromLTRB(
-                QzSpacing.lg,
-                8,
-                QzSpacing.sm,
-                0,
-              ),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: <Widget>[
-                          for (final ({_MarketTab tab, String label}) item
-                              in tabs)
-                            _SubTab(
-                              key: Key('market-tab-${item.tab.name}'),
-                              label: item.label,
-                              selected: _tab == item.tab,
-                              onTap: () => setState(() => _tab = item.tab),
-                            ),
-                        ],
-                      ),
-                    ),
+        Container(
+          decoration: BoxDecoration(color: c.bg),
+          padding: const EdgeInsets.fromLTRB(QzSpacing.lg, 8, QzSpacing.sm, 0),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: <Widget>[
+                      for (final ({_MarketTab tab, String label}) item in tabs)
+                        _SubTab(
+                          key: Key('market-tab-${item.tab.name}'),
+                          label: item.label,
+                          selected: _tab == item.tab,
+                          onTap: () => setState(() => _tab = item.tab),
+                        ),
+                    ],
                   ),
-                  IconButton(
-                    key: const Key('market-search-toggle'),
-                    onPressed: _openSearch,
-                    iconSize: 18,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(QzSpacing.sm),
-                    constraints: const BoxConstraints(
-                      minWidth: 30,
-                      minHeight: 30,
-                    ),
-                    icon: Icon(Icons.search, color: c.textMid),
-                    tooltip: l10n.marketHomeSearchTooltip,
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Container(
-                color: c.bgElev,
-                child: Column(
-                  children: <Widget>[
-                    if (!_loading && _error == null)
-                      _ColumnHeader(
-                        name: l10n.marketHomeColumnName,
-                        price: l10n.marketHomeColumnPrice,
-                        change: _columnChangeLabel(l10n),
-                      ),
-                    Expanded(
-                      child: Builder(
-                        builder: (BuildContext context) {
-                          if (_loading) return const Center(child: QzSpinner());
-                          if (_error != null) {
-                            return QzEmptyState(
-                              title: l10n.marketHomeLoadError,
-                            );
-                          }
-                          if (visible.isEmpty) {
-                            final String title = _searchQuery.isNotEmpty
-                                ? l10n.marketHomeSearchEmpty
-                                : (_tab == _MarketTab.watchlist
-                                      ? l10n.marketHomeWatchlistEmpty
-                                      : l10n.marketHomeEmpty);
-                            return QzEmptyState(title: title);
-                          }
-                          return ListView.separated(
-                            // 不继承 MediaQuery 顶部 inset（刘海/状态栏），否则
-                            // 列头与首行间被注入空白（issue: 行情列表顶部留白）。
-                            padding: EdgeInsets.zero,
-                            itemCount: visible.length,
-                            separatorBuilder:
-                                (BuildContext context, int index) =>
-                                    Divider(height: 1, color: c.borderSoft),
-                            itemBuilder: (BuildContext context, int index) {
-                              final Ticker ticker = visible[index];
-                              return TickerRow(
-                                key: Key('ticker-row-${ticker.symbol}'),
-                                ticker: ticker,
-                                nameSuffix: _tab == _MarketTab.perp
-                                    ? '永续'
-                                    : null,
-                                onTap: () =>
-                                    context.push('/market/${ticker.symbol}'),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
                 ),
               ),
-            ),
-          ],
-        ),
-        if (_searchOpen)
-          _SearchOverlay(
-            controller: _searchCtrl,
-            query: _searchQuery,
-            history: _searchHistory,
-            trending: _trendingTickers(),
-            results: _searchResults(),
-            favorites: favorites,
-            onCancel: _closeSearch,
-            onClearQuery: _clearSearchQuery,
-            onClearHistory: _clearSearchHistory,
-            onToggleFavorite: (String symbol) =>
-                ref.read(marketFavoritesProvider.notifier).toggle(symbol),
-            onSelectHistory: _selectSearchHistory,
-            onSelectTicker: (Ticker ticker) {
-              _recordSearchHistory(ticker.symbol);
-              _closeSearch();
-              context.push('/market/${ticker.symbol}');
-            },
+              IconButton(
+                key: const Key('market-search-toggle'),
+                onPressed: _openSearch,
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(QzSpacing.sm),
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                icon: Icon(Icons.search, color: c.textMid),
+                tooltip: l10n.marketHomeSearchTooltip,
+              ),
+            ],
           ),
+        ),
+        Expanded(
+          child: Container(
+            color: c.bgElev,
+            child: Column(
+              children: <Widget>[
+                if (!_loading && _error == null)
+                  _ColumnHeader(
+                    name: l10n.marketHomeColumnName,
+                    price: l10n.marketHomeColumnPrice,
+                    change: _columnChangeLabel(l10n),
+                  ),
+                Expanded(
+                  child: Builder(
+                    builder: (BuildContext context) {
+                      if (_loading) return const Center(child: QzSpinner());
+                      if (_error != null) {
+                        return QzEmptyState(title: l10n.marketHomeLoadError);
+                      }
+                      if (visible.isEmpty) {
+                        final String title = _tab == _MarketTab.watchlist
+                            ? l10n.marketHomeWatchlistEmpty
+                            : l10n.marketHomeEmpty;
+                        return QzEmptyState(title: title);
+                      }
+                      return ListView.separated(
+                        // 不继承 MediaQuery 顶部 inset（刘海/状态栏），否则
+                        // 列头与首行间被注入空白（issue: 行情列表顶部留白 #2122）。
+                        padding: EdgeInsets.zero,
+                        itemCount: visible.length,
+                        separatorBuilder: (BuildContext context, int index) =>
+                            Divider(height: 1, color: c.borderSoft),
+                        itemBuilder: (BuildContext context, int index) {
+                          final Ticker ticker = visible[index];
+                          return TickerRow(
+                            key: Key('ticker-row-${ticker.symbol}'),
+                            ticker: ticker,
+                            nameSuffix: _tab == _MarketTab.perp ? '永续' : null,
+                            onTap: () =>
+                                context.push('/market/${ticker.symbol}'),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -338,47 +241,104 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
   }
 }
 
-class _SearchOverlay extends StatelessWidget {
-  const _SearchOverlay({
-    required this.controller,
-    required this.query,
+/// 行情数据全屏搜索路由（设计稿 `SearchOverlay`:m-screens-3.jsx:1052 —— `inset:0`
+/// 全屏覆盖，盖住 `行情数据/多空比/...` 整条 header）。对齐兄弟屏
+/// [CoinStockSearchOverlay]：`Scaffold` + `SafeArea` 而非 body 内 `Positioned.fill`
+/// + 62 魔数（旧实现把设计稿的状态栏留白照搬进 body，留下 tab 与输入框间空白）。
+///
+/// query / history 均在本路由内部管理；选中条目先记入历史再 pop 回上层跳详情，
+/// 取消/返回时通过 `pop(history)` 把最新历史回传 [MarketHomeBody]。
+class _MarketSearchRoute extends ConsumerStatefulWidget {
+  const _MarketSearchRoute({
+    required this.tickers,
     required this.history,
-    required this.trending,
-    required this.results,
-    required this.favorites,
-    required this.onCancel,
-    required this.onClearQuery,
-    required this.onClearHistory,
-    required this.onToggleFavorite,
-    required this.onSelectHistory,
     required this.onSelectTicker,
   });
 
-  final TextEditingController controller;
-  final String query;
+  final List<Ticker> tickers;
   final List<String> history;
-  final List<Ticker> trending;
-  final List<Ticker> results;
-  final Set<String> favorites;
-  final VoidCallback onCancel;
-  final VoidCallback onClearQuery;
-  final VoidCallback onClearHistory;
-  final ValueChanged<String> onToggleFavorite;
-  final ValueChanged<String> onSelectHistory;
   final ValueChanged<Ticker> onSelectTicker;
+
+  @override
+  ConsumerState<_MarketSearchRoute> createState() => _MarketSearchRouteState();
+}
+
+class _MarketSearchRouteState extends ConsumerState<_MarketSearchRoute> {
+  final TextEditingController _ctrl = TextEditingController();
+  late List<String> _history;
+
+  @override
+  void initState() {
+    super.initState();
+    _history = List<String>.from(widget.history);
+    _ctrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  /// 归一化搜索词（大写、去首尾空格）。
+  String get _query => _ctrl.text.trim().toUpperCase();
+
+  List<Ticker> get _results {
+    if (_query.isEmpty) return const <Ticker>[];
+    return widget.tickers
+        .where((Ticker t) => _matches(t, _query))
+        .toList();
+  }
+
+  /// 热门搜索 = 24H 绝对涨跌幅前 6（与旧实现 `_trendingTickers` 一致）。
+  List<Ticker> get _trending {
+    return (widget.tickers.toList()..sort(
+          (Ticker a, Ticker b) =>
+              b.changePercent.abs().compareTo(a.changePercent.abs()),
+        ))
+        .take(6)
+        .toList();
+  }
+
+  bool _matches(Ticker ticker, String query) {
+    final String q = query.trim().toUpperCase();
+    if (q.isEmpty) return true;
+    return ticker.symbol.toUpperCase().contains(q) ||
+        _tickerBase(ticker.symbol).toUpperCase().contains(q) ||
+        _tickerName(ticker.symbol).toUpperCase().contains(q);
+  }
+
+  void _recordHistory(String symbol) {
+    final String base = _tickerBase(symbol);
+    setState(() {
+      _history = <String>[
+        base,
+        ..._history.where((String item) => item != base),
+      ].take(12).toList();
+    });
+  }
+
+  void _toggleFavorite(String symbol) =>
+      ref.read(marketFavoritesProvider.notifier).toggle(symbol);
+
+  void _selectTicker(Ticker ticker) {
+    _recordHistory(ticker.symbol);
+    Navigator.of(context).pop(_history);
+    widget.onSelectTicker(ticker);
+  }
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final bool hasQuery = query.isNotEmpty;
-    return Positioned.fill(
+    final bool hasQuery = _query.isNotEmpty;
+    return Scaffold(
       key: const Key('market-search-overlay'),
-      child: Material(
-        color: c.bg,
+      backgroundColor: c.bg,
+      body: SafeArea(
         child: Column(
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 62, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Row(
                 children: <Widget>[
                   Expanded(
@@ -396,7 +356,7 @@ class _SearchOverlay extends StatelessWidget {
                           Expanded(
                             child: TextField(
                               key: const Key('market-search-field'),
-                              controller: controller,
+                              controller: _ctrl,
                               autofocus: true,
                               textCapitalization: TextCapitalization.characters,
                               style: TextStyle(color: c.text, fontSize: 13),
@@ -414,7 +374,7 @@ class _SearchOverlay extends StatelessWidget {
                           if (hasQuery)
                             GestureDetector(
                               key: const Key('market-search-clear-query'),
-                              onTap: onClearQuery,
+                              onTap: () => _ctrl.clear(),
                               child: Container(
                                 width: 16,
                                 height: 16,
@@ -440,7 +400,7 @@ class _SearchOverlay extends StatelessWidget {
                   const SizedBox(width: 12),
                   TextButton(
                     key: const Key('market-search-cancel'),
-                    onPressed: onCancel,
+                    onPressed: () => Navigator.of(context).pop(_history),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       minimumSize: const Size(34, 30),
@@ -474,6 +434,7 @@ class _SearchOverlay extends StatelessWidget {
 
   List<Widget> _buildResults(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    final List<Ticker> results = _results;
     if (results.isEmpty) {
       return <Widget>[
         Padding(
@@ -488,21 +449,24 @@ class _SearchOverlay extends StatelessWidget {
         ),
       ];
     }
+    final Set<String> favorites = ref.watch(marketFavoritesProvider);
     return <Widget>[
       for (final Ticker ticker in results)
         _MarketSearchRow(
           ticker: ticker,
           favorite: favorites.contains(ticker.symbol),
-          onToggleFavorite: () => onToggleFavorite(ticker.symbol),
-          onTap: () => onSelectTicker(ticker),
+          onToggleFavorite: () => _toggleFavorite(ticker.symbol),
+          onTap: () => _selectTicker(ticker),
         ),
     ];
   }
 
   List<Widget> _buildEmptyQuery(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    final List<Ticker> trending = _trending;
+    final Set<String> favorites = ref.watch(marketFavoritesProvider);
     return <Widget>[
-      if (history.isNotEmpty) ...<Widget>[
+      if (_history.isNotEmpty) ...<Widget>[
         Row(
           children: <Widget>[
             Expanded(
@@ -517,7 +481,7 @@ class _SearchOverlay extends StatelessWidget {
             ),
             IconButton(
               key: const Key('market-search-clear-history'),
-              onPressed: onClearHistory,
+              onPressed: () => setState(() => _history = <String>[]),
               iconSize: 16,
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.all(4),
@@ -531,9 +495,14 @@ class _SearchOverlay extends StatelessWidget {
           spacing: 10,
           runSpacing: 10,
           children: <Widget>[
-            for (final String item in history)
+            for (final String item in _history)
               GestureDetector(
-                onTap: () => onSelectHistory(item),
+                onTap: () {
+                  _ctrl.text = item;
+                  _ctrl.selection = TextSelection.collapsed(
+                    offset: item.length,
+                  );
+                },
                 child: Container(
                   constraints: const BoxConstraints(minWidth: 56),
                   padding: const EdgeInsets.symmetric(
@@ -559,7 +528,7 @@ class _SearchOverlay extends StatelessWidget {
         ),
       ],
       Padding(
-        padding: EdgeInsets.only(top: history.isEmpty ? 6 : 20, bottom: 4),
+        padding: EdgeInsets.only(top: _history.isEmpty ? 6 : 20, bottom: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
@@ -583,8 +552,8 @@ class _SearchOverlay extends StatelessWidget {
           ticker: trending[i],
           rank: i + 1,
           favorite: favorites.contains(trending[i].symbol),
-          onToggleFavorite: () => onToggleFavorite(trending[i].symbol),
-          onTap: () => onSelectTicker(trending[i]),
+          onToggleFavorite: () => _toggleFavorite(trending[i].symbol),
+          onTap: () => _selectTicker(trending[i]),
         ),
     ];
   }
