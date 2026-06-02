@@ -13,6 +13,7 @@
  *   - metric 在 reject 路径有计数（结构化 logger.warn stub）
  */
 import { Logger } from '@nestjs/common'
+import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
 describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', () => {
@@ -67,6 +68,66 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     expect(merged?.rules).toHaveLength(1)
     expect(merged?.rules?.[0]?.id).toBe('entry-long-15m-ema-stack')
     expect(JSON.stringify(merged?.rules)).not.toContain('dispatcher-typed-rule-1')
+  })
+
+  it('repairs short profit exit drift from relative entry down percent', () => {
+    const text = 'OKX 合约 BTCUSDT 15m，出现多头清算超过 100 万 USDT 后开空，单笔 10% 仓位。相对入场价下跌5%平仓'
+    const planner = {
+      rules: [{
+        id: 'entry-short-long-liquidation-cap',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'liquidation.condition',
+          params: { side: 'long', operator: 'GT', threshold: 1000000, dataSource: 'liquidation', notionalUsd: 1000000 },
+          evidence: { text: '出现多头清算超过 100 万 USDT 后开空' },
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_short', params: {} }] }),
+      }, {
+        id: 'dispatcher-typed-rule-1',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'price.percent_change',
+          params: { valuePct: -5, direction: 'down' },
+          evidence: { text: '相对入场价下跌5%平仓' },
+          sideScope: 'both',
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.close_long', params: {} }] }),
+      }, {
+        id: 'exit-short-relative-entry-5pct',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'risk.stop_loss_pct',
+          params: { basis: 'entry_avg_price', valuePct: 5 },
+          evidence: { text: '相对入场价下跌5%平仓' },
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.close_short', params: {} }] }),
+      }],
+    }
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner as never, {}, text)
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+    const exitActionKeys = exitRules.flatMap(rule =>
+      listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key),
+    )
+    const exitConditionKeys = exitRules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key))
+
+    expect(exitRules).toHaveLength(1)
+    expect(exitRules[0]?.sideScope).toBe('short')
+    expect(exitActionKeys).toContain('action.close_short')
+    expect(exitActionKeys).not.toContain('action.close_long')
+    expect(exitConditionKeys).toContain('price.percent_change')
+    expect(exitConditionKeys).not.toContain('risk.stop_loss_pct')
+    expect(collectAtomLeaves(exitRules[0]!.condition)[0]?.params).toEqual(expect.objectContaining({
+      basis: 'entry_avg_price',
+      direction: 'down',
+      valuePct: -5,
+    }))
   })
 
   it('rejects legacy flat atoms[] form (no rules[])', () => {
