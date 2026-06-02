@@ -189,6 +189,19 @@ function isRuleEffectRole(value: string): value is RuleEffectRole {
   return (RULE_EFFECT_ROLE_KEYS as readonly string[]).includes(value)
 }
 
+function resolveAtomBucket(key: string): string | undefined {
+  return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
+}
+
+function resolveLegacyRuleEffectRole(effect: AtomExpr): RuleEffectRole {
+  const leaves = collectAtomLeaves(effect)
+  if (leaves.some(leaf => leaf.key.startsWith('program.'))) return 'programs'
+  if (leaves.some(leaf => resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.'))) return 'risks'
+  if (leaves.some(leaf => resolveAtomBucket(leaf.key) === 'positionConstraint' || leaf.key.startsWith('position.'))) return 'positions'
+  if (leaves.some(leaf => resolveAtomBucket(leaf.key) === 'orchestration' || leaf.key.startsWith('orchestration.'))) return 'orchestration'
+  return 'actions'
+}
+
 export function isRuleEffectsByRole(effects: RuleEffects | null | undefined): effects is RuleEffectsByRole {
   return !!effects && typeof effects === 'object' && !Array.isArray(effects)
 }
@@ -647,11 +660,11 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
   }
   const effects = emptyMutableRuleEffects()
   if (Array.isArray(obj.effects)) {
-    // Stage 1 fail-open compatibility: legacy bare effects arrays are preserved under
-    // actions so existing valid effects are not silently dropped while typed roles roll out.
+    // Stage 1 fail-open compatibility: legacy bare effects arrays are mapped into
+    // typed roles so mainflow keeps strict RuleEffectsByRole downstream.
     for (let i = 0; i < obj.effects.length; i++) {
       const pruned = pruneAtomExprWithErrors(obj.effects[i], `effects[${i}]`)
-      if (pruned.result) effects.actions.push(pruned.result)
+      if (pruned.result) effects[resolveLegacyRuleEffectRole(pruned.result)].push(pruned.result)
     }
   }
   else {

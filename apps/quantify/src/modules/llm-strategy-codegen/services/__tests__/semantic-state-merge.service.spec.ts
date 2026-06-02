@@ -2133,6 +2133,41 @@ describe('SemanticStateMergeService', () => {
         // sideScope 不同 → Pass 2 shape 不同 → 保留 2 条（这是混合条件的保守行为）
         expect((merged.rules ?? []).length).toBe(2)
       })
+
+      it('独立 remembered level stop gate → 迁入最近 entry rule 的 risks effects', () => {
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [
+            {
+              id: 'entry-breakout-retest',
+              phase: 'entry',
+              sideScope: 'long',
+              condition: { kind: 'atom', key: 'condition.sequence', params: { sequenceKind: 'breakout_retest', memoryKey: 'breakout' } },
+              effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            },
+            {
+              id: 'gate-breakout-stop',
+              phase: 'gate',
+              sideScope: 'long',
+              condition: { kind: 'atom', key: 'risk.remembered_level_stop', params: { levelKey: 'breakout' } },
+              effects: [],
+            },
+          ],
+        }
+
+        const merged = service.merge({ persisted: emptyBase(), derived })
+        const rules = merged.rules ?? []
+
+        expect(rules).toHaveLength(1)
+        expect(rules[0]?.id).toBe('entry-breakout-retest')
+        expect(rules[0]?.effects).toEqual({
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.remembered_level_stop', params: { levelKey: 'breakout' } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        })
+      })
     })
 
     it('keeps persisted rules untouched when derived has no rules field', () => {
