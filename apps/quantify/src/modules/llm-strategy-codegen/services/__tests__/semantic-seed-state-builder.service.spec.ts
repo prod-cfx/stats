@@ -446,12 +446,53 @@ describe('SemanticSeedStateBuilderService — rules-only seed input', () => {
 
     const state = service.build({ rules: [rule] })
 
-    expect(state?.rules).toEqual([rule])
+    expect(state?.rules).toEqual([{
+      ...rule,
+      effects: {
+        actions: [{
+          kind: 'atom',
+          key: 'open_long',
+          params: { orderType: 'market' },
+        }],
+        risks: [],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    }])
     expect(state).not.toHaveProperty('trigger')
     expect(state).not.toHaveProperty('action')
     expect(state).not.toHaveProperty('risk')
     expect(state).not.toHaveProperty('positionConstraint')
     expect(state).not.toHaveProperty('orchestration')
+  })
+
+  it('preserves typed effect role when atom bucket is not classifiable', () => {
+    const service = new SemanticSeedStateBuilderService()
+
+    const state = service.build({
+      rules: [{
+        id: 'program-custom-effect',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [{ kind: 'atom', key: 'custom.unregistered_program', params: {} }],
+        },
+      }],
+    })
+
+    expect(state?.rules?.[0]?.effects).toEqual({
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [{ kind: 'atom', key: 'custom.unregistered_program', params: {} }],
+    })
   })
 
   it('ignores legacy flat bucket patch input after Stage 3 hard delete', () => {

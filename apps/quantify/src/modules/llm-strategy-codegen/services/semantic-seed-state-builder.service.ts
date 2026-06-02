@@ -373,7 +373,7 @@ export class SemanticSeedStateBuilderService {
     if (effects && typeof effects === 'object' && !Array.isArray(effects)) {
       for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const) {
         for (const effect of Array.isArray(effects[role]) ? effects[role] : []) {
-          pushByRole(this.resolveLegacyRuleEffectRole(effect), effect)
+          pushByRole(this.resolveTypedRuleEffectRole(effect, role), effect)
         }
       }
       return typed
@@ -391,6 +391,20 @@ export class SemanticSeedStateBuilderService {
     if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'positionConstraint' || leaf.key.startsWith('position.'))) return 'positions'
     if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'orchestration' || leaf.key.startsWith('orchestration.'))) return 'orchestration'
     return 'actions'
+  }
+
+  private resolveTypedRuleEffectRole(
+    effect: AtomExpr,
+    fallbackRole: keyof RuleEffectsByRole,
+  ): keyof RuleEffectsByRole {
+    const mapped = this.resolveLegacyRuleEffectRole(effect)
+    const leaves = collectAtomLeaves(effect)
+    const hasClassifiableLeaf = leaves.some((leaf) => {
+      if (leaf.key.startsWith('program.')) return true
+      const bucket = this.resolveAtomBucket(leaf.key)
+      return bucket === 'risk' || bucket === 'positionConstraint' || bucket === 'orchestration' || bucket === 'action'
+    })
+    return hasClassifiableLeaf ? mapped : fallbackRole
   }
 
   private isStandaloneRememberedLevelStopRule(rule: SemanticRule): boolean {
