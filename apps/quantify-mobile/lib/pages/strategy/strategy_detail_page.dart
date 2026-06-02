@@ -495,7 +495,7 @@ class _Header extends StatelessWidget {
             children: <Widget>[
               Text(
                 card?.name ?? '',
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: c.text,
@@ -531,25 +531,83 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: QzSpacing.sm),
-        IconButton(
+        _HeaderButton(
           key: const Key('strategy-detail-star-btn'),
           tooltip: l10n.strategyDetailFavoriteTooltip,
           onPressed: onToggleStar,
-          visualDensity: VisualDensity.compact,
+          borderRadius: 10,
+          background: starred
+              ? const Color(0x1FF59E0B) // rgba(245,158,11,0.12)
+              : c.bgSoft,
           icon: Icon(
             starred ? Icons.star_rounded : Icons.star_outline_rounded,
-            size: 22,
+            size: 18,
             color: starred ? const Color(0xFFF59E0B) : c.textMid,
           ),
         ),
-        IconButton(
+        const SizedBox(width: QzSpacing.xs),
+        _HeaderButton(
           key: const Key('strategy-detail-close-btn'),
           tooltip: l10n.strategyDetailCloseTooltip,
           onPressed: onClose,
-          visualDensity: VisualDensity.compact,
-          icon: Icon(Icons.close_rounded, size: 20, color: c.textMid),
+          borderRadius: 17,
+          background: c.bgSoft,
+          icon: Icon(Icons.close_rounded, size: 16, color: c.textMid),
         ),
       ],
+    );
+  }
+}
+
+/// 34×34 头部填充按钮（对齐设计稿 star/close 容器）。
+/// [borderRadius] 10 = star 圆角方钮，17 = close 圆形钮。
+class _HeaderButton extends StatelessWidget {
+  const _HeaderButton({
+    super.key,
+    required this.tooltip,
+    required this.onPressed,
+    required this.background,
+    required this.icon,
+    required this.borderRadius,
+  });
+
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Color background;
+  final Widget icon;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    // 视觉容器固定 34×34（对齐设计稿），触控热区放大到 48×48（Material 48dp 最小可点击尺寸）。
+    return Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true, // 语义名仅由下方 Semantics 提供，避免旁白重复朗读
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        // 48×48 触控热区（Material 48dp），内含 34×34 视觉块；
+        // InkWell 包住视觉块本身，ripple 形状/范围与圆角块严格一致（star r10 圆角方、close r17 圆）。
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Material(
+              color: background,
+              borderRadius: BorderRadius.circular(borderRadius),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onPressed,
+                child: SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: Center(child: icon),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

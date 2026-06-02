@@ -438,6 +438,67 @@ void main() {
     expect(find.text('网格'), findsWidgets);
   });
 
+  testWidgets('头部 star/close：34×34 填充按钮 + name 单行（#2077）',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+
+    // star / close 均含 34×34 视觉容器 + 48×48 触控热区（设计稿 1015-1035；Material 48dp 命中区）
+    for (final String key in const <String>[
+      'strategy-detail-star-btn',
+      'strategy-detail-close-btn',
+    ]) {
+      final Finder visual = find.descendant(
+        of: find.byKey(Key(key)),
+        matching: find.byWidgetPredicate(
+          (Widget w) => w is SizedBox && w.width == 34 && w.height == 34,
+        ),
+      );
+      expect(visual, findsOneWidget, reason: '$key 应有 34×34 视觉容器');
+
+      final Finder hit = find.descendant(
+        of: find.byKey(Key(key)),
+        matching: find.byWidgetPredicate(
+          (Widget w) => w is SizedBox && w.width == 48 && w.height == 48,
+        ),
+      );
+      expect(hit, findsOneWidget, reason: '$key 应有 48×48 触控热区');
+    }
+
+    // star 圆角 10、close 圆角 17（圆形）——断言整体 BorderRadius，守住四角一致
+    BorderRadius radiusOf(String key) {
+      final Material m = tester.widget<Material>(
+        find.descendant(
+          of: find.byKey(Key(key)),
+          matching: find.byWidgetPredicate(
+            (Widget w) => w is Material && w.borderRadius is BorderRadius,
+          ),
+        ),
+      );
+      return m.borderRadius! as BorderRadius;
+    }
+
+    expect(radiusOf('strategy-detail-star-btn'), BorderRadius.circular(10),
+        reason: 'star 圆角 10');
+    expect(radiusOf('strategy-detail-close-btn'), BorderRadius.circular(17),
+        reason: 'close 圆角 17');
+
+    // 收藏后 star 图标转橙色填充态
+    await tester.tap(find.byKey(const Key('strategy-detail-star-btn')));
+    await tester.pump();
+    await tester.pump();
+    final Icon starIcon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('strategy-detail-star-btn')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(starIcon.icon, Icons.star_rounded);
+    expect(starIcon.color, const Color(0xFFF59E0B));
+
+    // 标题 name 单行（移除 maxLines:2）
+    expect(tester.widget<Text>(find.text('BTC 网格搬砖')).maxLines, 1);
+  });
+
   testWidgets('收藏 star：点击切换 favorites，与列表同源 provider 双向同步（#1820）',
       (WidgetTester tester) async {
     final ProviderContainer c = (await _pumpDetail(tester)).container;
