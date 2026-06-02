@@ -396,6 +396,15 @@
   "orderbookPrecisionTitle": "价格精度",
   "orderbookRefreshFuture": "刷新（即将上线）",
   "orderbookSortFuture": "排序（即将上线）",
+  "orderbookColPrice": "价格({quote})",
+  "@orderbookColPrice": {
+    "placeholders": { "quote": { "type": "String" } }
+  },
+  "orderbookColQty": "数量({base})",
+  "@orderbookColQty": {
+    "placeholders": { "base": { "type": "String" } }
+  },
+  "orderbookColAmount": "委托额($)",
   "aggSubTabOrders": "聚合挂单",
   "aggSubTabOpenInterest": "聚合持仓量",
   "aggSubTabVolume": "聚合成交量",

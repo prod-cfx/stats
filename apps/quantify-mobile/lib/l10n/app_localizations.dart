@@ -2262,6 +2262,24 @@ abstract class AppLocalizations {
   /// **'排序（即将上线）'**
   String get orderbookSortFuture;
 
+  /// No description provided for @orderbookColPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格({quote})'**
+  String orderbookColPrice(String quote);
+
+  /// No description provided for @orderbookColQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量({base})'**
+  String orderbookColQty(String base);
+
+  /// No description provided for @orderbookColAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'委托额(\$)'**
+  String get orderbookColAmount;
+
   /// No description provided for @aggSubTabOrders.
   ///
   /// In zh, this message translates to:

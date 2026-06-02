@@ -88,30 +88,36 @@ void main() {
     expect(find.text('买单'), findsOneWidget);
   });
 
-  testWidgets('切到卖单视图后行数等于单侧档位数', (WidgetTester tester) async {
+  testWidgets('双向视图渲染列头与 mid 行', (WidgetTester tester) async {
     await _pump(tester);
-    // 双向：bid+ask 各 10 行 = 20 个 price text 区域；切卖单后单侧。
+    // 列头三列。
+    expect(find.text('价格(USDT)'), findsOneWidget);
+    expect(find.text('数量(BTC)'), findsOneWidget);
+    expect(find.text('委托额(\$)'), findsOneWidget);
+    // mid 行：未传 mid 时由最优买卖档推导 = (68249.42+68251.42)/2 = 68250.42。
+    expect(find.text('68250.42'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('切到卖单视图无异常且无 mid 行', (WidgetTester tester) async {
+    await _pump(tester);
     await tester.tap(find.text('卖单'));
     await tester.pump();
-    // 卖单视图下不应再有 bid 列与 ask 列并排（Row 内两个 _OrderbookSide）。
-    // 通过精度按钮存在确认 toolbar 仍在，且不抛异常。
     expect(tester.takeException(), isNull);
     expect(find.byType(OrderbookView), findsOneWidget);
   });
 
-  testWidgets('切换精度到 10 改变可见档位数', (WidgetTester tester) async {
+  testWidgets('默认精度为 0.01 并可切换到 10', (WidgetTester tester) async {
     await _pump(tester);
-    // 默认精度 1：mock step=1，bids 10 档不聚合。
-    final Finder priceBtn = find.text('1');
-    expect(priceBtn, findsOneWidget);
-    await tester.tap(priceBtn);
+    // 默认精度 0.01：toolbar 按钮文案为 0.01。
+    final Finder precBtn = find.text('0.01');
+    expect(precBtn, findsOneWidget);
+    await tester.tap(precBtn);
     await tester.pumpAndSettle();
-    // sheet 列出 5 个精度档
-    expect(find.text('0.01'), findsOneWidget);
+    // sheet 列出 5 个精度档。
     expect(find.text('100'), findsOneWidget);
     await tester.tap(find.text('10').last);
     await tester.pumpAndSettle();
-    // 精度切到 10 后 toolbar 按钮文案变 10，且无异常。
     expect(tester.takeException(), isNull);
     expect(find.byType(OrderbookView), findsOneWidget);
   });

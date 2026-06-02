@@ -1183,6 +1183,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get orderbookSortFuture => 'Sort (coming soon)';
 
   @override
+  String orderbookColPrice(String quote) {
+    return 'Price($quote)';
+  }
+
+  @override
+  String orderbookColQty(String base) {
+    return 'Qty($base)';
+  }
+
+  @override
+  String get orderbookColAmount => 'Amount(\$)';
+
+  @override
   String get aggSubTabOrders => 'Agg Orders';
 
   @override

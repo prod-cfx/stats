@@ -393,6 +393,15 @@
   "orderbookPrecisionTitle": "Price precision",
   "orderbookRefreshFuture": "Refresh (coming soon)",
   "orderbookSortFuture": "Sort (coming soon)",
+  "orderbookColPrice": "Price({quote})",
+  "@orderbookColPrice": {
+    "placeholders": { "quote": { "type": "String" } }
+  },
+  "orderbookColQty": "Qty({base})",
+  "@orderbookColQty": {
+    "placeholders": { "base": { "type": "String" } }
+  },
+  "orderbookColAmount": "Amount($)",
   "aggSubTabOrders": "Agg Orders",
   "aggSubTabOpenInterest": "Open Interest",
   "aggSubTabVolume": "Volume",

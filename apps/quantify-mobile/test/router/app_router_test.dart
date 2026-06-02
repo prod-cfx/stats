@@ -246,10 +246,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MarketDetailPage), findsOneWidget);
-    // MarketDetailPage 当前以 symbol 本身作为页面标题（见 market_detail_page.dart：
-    // `title: widget.symbol`），故断言文案与之保持一致；旧的「行情详情：BTCUSDT」
-    // 字面量已随页面重构移除。
-    expect(find.text('BTCUSDT'), findsWidgets);
+    // MarketDetailPage 的 TopBar 标题经 #2109 改为 `BASE / QUOTE` 分隔格式
+    // （见 market_detail_page.dart `_topBarTitle`：`'$base / $quote'`），
+    // `BTCUSDT` 由 `splitSymbolAssets` 拆为 `BTC / USDT`，故断言对齐该文案。
+    expect(find.text('BTC / USDT'), findsWidgets);
   });
 
   testWidgets('/ai/backtest-config resolves to BacktestConfigSheet', (

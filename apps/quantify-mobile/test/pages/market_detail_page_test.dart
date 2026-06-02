@@ -201,7 +201,8 @@ void main() {
     await _pump(tester, orderbookRepo);
 
     expect(find.byType(QzKlineChart), findsOneWidget);
-    expect(find.text('68250.42'), findsOneWidget);
+    // 头部价格 + 盘口 mid 行均渲染该价格。
+    expect(find.text('68250.42'), findsWidgets);
     expect(find.byType(OrderbookView), findsOneWidget);
 
     orderbookRepo.controller.add(

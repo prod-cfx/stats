@@ -335,6 +335,7 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                   panel: _panel,
                   symbol: widget.symbol,
                   mid: _priceSnapshot!.price,
+                  changePercent: _priceSnapshot!.changePercent,
                   trades: _trades ??= trade_fixtures.buildMockTrades(
                     symbol: widget.symbol,
                     mid: _priceSnapshot!.price,
@@ -470,12 +471,14 @@ class _PanelBody extends StatelessWidget {
     required this.panel,
     required this.symbol,
     required this.mid,
+    required this.changePercent,
     required this.trades,
   });
 
   final _DetailPanel panel;
   final String symbol;
   final double mid;
+  final double changePercent;
   final List<Trade> trades;
 
   @override
@@ -489,7 +492,11 @@ class _PanelBody extends StatelessWidget {
             QzSpacing.lg,
             0,
           ),
-          child: OrderbookView(symbol: symbol),
+          child: OrderbookView(
+            symbol: symbol,
+            mid: mid,
+            changePercent: changePercent,
+          ),
         );
       case _DetailPanel.trades:
         return TradesPanel(symbol: symbol, mid: mid, trades: trades);

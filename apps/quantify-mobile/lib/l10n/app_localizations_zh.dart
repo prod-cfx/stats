@@ -1139,6 +1139,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get orderbookSortFuture => '排序（即将上线）';
 
   @override
+  String orderbookColPrice(String quote) {
+    return '价格($quote)';
+  }
+
+  @override
+  String orderbookColQty(String base) {
+    return '数量($base)';
+  }
+
+  @override
+  String get orderbookColAmount => '委托额(\$)';
+
+  @override
   String get aggSubTabOrders => '聚合挂单';
 
   @override

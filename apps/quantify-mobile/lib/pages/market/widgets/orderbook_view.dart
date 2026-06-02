@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/orderbook_models.dart';
+import '../../../data/models/trade_models.dart' show splitSymbolAssets;
 import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
@@ -46,9 +47,20 @@ List<OrderbookLevel> aggregateLevels(
 }
 
 class OrderbookView extends ConsumerStatefulWidget {
-  const OrderbookView({super.key, required this.symbol});
+  const OrderbookView({
+    super.key,
+    required this.symbol,
+    this.mid,
+    this.changePercent,
+  });
 
   final String symbol;
+
+  /// 中间价（mid 行展示）；缺省时由最优买卖档推导。
+  final double? mid;
+
+  /// 24H 涨跌百分比（mid 行展示）；缺省时不渲染涨跌。
+  final double? changePercent;
 
   @override
   ConsumerState<OrderbookView> createState() => _OrderbookViewState();
@@ -61,7 +73,7 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
   Object? _error;
 
   ObView _view = ObView.both;
-  double _precision = 1;
+  double _precision = 0.01;
 
   @override
   void initState() {
@@ -167,9 +179,21 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
     }
     final OrderbookSnapshot snap = _snapshot!;
     final List<OrderbookLevel> bids =
-        aggregateLevels(snap.bids, _precision, true);
+        aggregateLevels(snap.bids, _precision, true).take(10).toList();
     final List<OrderbookLevel> asks =
-        aggregateLevels(snap.asks, _precision, false);
+        aggregateLevels(snap.asks, _precision, false).take(10).toList();
+
+    // 累计量：从 mid 向外累加。bid 价高在前（近 mid），ask 价低在前（近 mid）。
+    final List<double> bidCum = _cumulative(bids);
+    final List<double> askCum = _cumulative(asks);
+    final double maxCum = <double>[
+      ...bidCum,
+      ...askCum,
+      0,
+    ].reduce((double a, double b) => a > b ? a : b);
+
+    final (String base, String quote) = splitSymbolAssets(widget.symbol);
+    final double mid = widget.mid ?? _deriveMid(bids, asks);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,27 +205,68 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
           onPrecisionTap: _openPrecisionSheet,
         ),
         const SizedBox(height: QzSpacing.sm),
-        _body(bids, asks),
+        _Header(base: base, quote: quote),
+        _body(bids, asks, bidCum, askCum, maxCum, mid),
       ],
     );
   }
 
-  Widget _body(List<OrderbookLevel> bids, List<OrderbookLevel> asks) {
-    switch (_view) {
-      case ObView.both:
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(child: _OrderbookSide(levels: bids, isBid: true)),
-            const SizedBox(width: QzSpacing.md),
-            Expanded(child: _OrderbookSide(levels: asks, isBid: false)),
-          ],
-        );
-      case ObView.asks:
-        return _OrderbookSide(levels: asks, isBid: false);
-      case ObView.bids:
-        return _OrderbookSide(levels: bids, isBid: true);
+  /// 单侧累计量序列：`cum[i]` = 该侧从 mid 向外到第 i 档的数量累加。
+  ///
+  /// 入参档位已按距 mid 由近及远排序（ask 价低在前、bid 价高在前），直接顺序累加即可。
+  List<double> _cumulative(List<OrderbookLevel> levels) {
+    final List<double> out = <double>[];
+    double sum = 0;
+    for (final OrderbookLevel l in levels) {
+      sum += l.quantity;
+      out.add(sum);
     }
+    return out;
+  }
+
+  double _deriveMid(List<OrderbookLevel> bids, List<OrderbookLevel> asks) {
+    final double? bestBid = bids.isNotEmpty ? bids.first.price : null;
+    final double? bestAsk = asks.isNotEmpty ? asks.first.price : null;
+    if (bestBid != null && bestAsk != null) return (bestBid + bestAsk) / 2;
+    return bestBid ?? bestAsk ?? 0;
+  }
+
+  Widget _body(
+    List<OrderbookLevel> bids,
+    List<OrderbookLevel> asks,
+    List<double> bidCum,
+    List<double> askCum,
+    double maxCum,
+    double mid,
+  ) {
+    final bool showAsks = _view != ObView.bids;
+    final bool showBids = _view != ObView.asks;
+    // ask 渲染需价高在上：列表近 mid 在前，倒序后高价落顶部。
+    final List<int> askOrder = List<int>.generate(asks.length, (int i) => i)
+        .reversed
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (showAsks)
+          for (final int i in askOrder)
+            _OrderRow(
+              level: asks[i],
+              cum: askCum[i],
+              maxCum: maxCum,
+              isBid: false,
+            ),
+        if (_view == ObView.both) _MidRow(mid: mid, changePercent: widget.changePercent),
+        if (showBids)
+          for (int i = 0; i < bids.length; i++)
+            _OrderRow(
+              level: bids[i],
+              cum: bidCum[i],
+              maxCum: maxCum,
+              isBid: true,
+            ),
+      ],
+    );
   }
 }
 
@@ -328,47 +393,193 @@ class _ViewSegmented extends StatelessWidget {
   }
 }
 
-class _OrderbookSide extends StatelessWidget {
-  const _OrderbookSide({required this.levels, required this.isBid});
+/// 三列列头：价格(quote) / 数量(base) / 委托额($)，对齐设计稿 `:558-568`。
+class _Header extends StatelessWidget {
+  const _Header({required this.base, required this.quote});
 
-  final List<OrderbookLevel> levels;
+  final String base;
+  final String quote;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    TextStyle style() => TextStyle(
+          color: c.textDim,
+          fontSize: 10,
+          fontFamily: QzFont.mono,
+          fontFamilyFallback: QzFont.monoFallback,
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Text(l10n.orderbookColPrice(quote), style: style())),
+          Expanded(
+            child: Text(
+              l10n.orderbookColQty(base),
+              textAlign: TextAlign.right,
+              style: style(),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              l10n.orderbookColAmount,
+              textAlign: TextAlign.right,
+              style: style(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 单档行：累计量背景深度条 + 价格 / 数量 / 委托额三列，对齐设计稿 `OrderRow`。
+class _OrderRow extends StatelessWidget {
+  const _OrderRow({
+    required this.level,
+    required this.cum,
+    required this.maxCum,
+    required this.isBid,
+  });
+
+  final OrderbookLevel level;
+  final double cum;
+  final double maxCum;
   final bool isBid;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final Color color = isBid ? c.marketUp : c.marketDown;
-    return Column(
+    final double widthFactor =
+        maxCum > 0 ? (cum / maxCum).clamp(0.0, 1.0) : 0.0;
+    // 委托额 = 价格 × 累计数量（notional），设计稿口径。
+    final double notional = level.price * cum;
+    TextStyle mono(Color col) => TextStyle(
+          color: col,
+          fontSize: 12,
+          fontFamily: QzFont.mono,
+          fontFamilyFallback: QzFont.monoFallback,
+        );
+    return Stack(
       children: <Widget>[
-        for (final OrderbookLevel level in levels.take(10))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    level.price.toStringAsFixed(2),
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontFamily: QzFont.mono,
-                      fontFamilyFallback: QzFont.monoFallback,
-                    ),
-                  ),
-                ),
-                Text(
-                  level.quantity.toStringAsFixed(3),
-                  style: TextStyle(
-                    color: c.textMid,
-                    fontSize: 12,
-                    fontFamily: QzFont.mono,
-                    fontFamilyFallback: QzFont.monoFallback,
-                  ),
-                ),
-              ],
+        Positioned.fill(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FractionallySizedBox(
+              widthFactor: widthFactor,
+              child: ColoredBox(color: color.withValues(alpha: 0.10)),
             ),
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  level.price.toStringAsFixed(2),
+                  style: mono(color),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  level.quantity.toStringAsFixed(3),
+                  textAlign: TextAlign.right,
+                  style: mono(c.text),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  _fmtNotional(notional),
+                  textAlign: TextAlign.right,
+                  style: mono(c.textMid),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
+}
+
+/// 双向视图中间 mid 价格行：大字价格 + 涨跌% + ≈$，对齐设计稿 `:575-588`。
+class _MidRow extends StatelessWidget {
+  const _MidRow({required this.mid, required this.changePercent});
+
+  final double mid;
+  final double? changePercent;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final double? pct = changePercent;
+    final Color pctColor =
+        pct == null || pct >= 0 ? c.marketUp : c.marketDown;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.sm,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: c.bgSoft,
+        border: Border(
+          top: BorderSide(color: c.borderSoft),
+          bottom: BorderSide(color: c.borderSoft),
+        ),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            mid.toStringAsFixed(2),
+            style: TextStyle(
+              color: c.text,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+          const SizedBox(width: QzSpacing.sm),
+          if (pct != null)
+            Text(
+              '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
+              style: TextStyle(
+                color: pctColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
+              ),
+            ),
+          const Spacer(),
+          Text(
+            '≈ \$${_fmtNotional(mid)}',
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 10.5,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 委托额/金额格式化：千分位整数，保持紧凑。
+String _fmtNotional(double v) {
+  final int rounded = v.round();
+  final String s = rounded.abs().toString();
+  final StringBuffer buf = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+    buf.write(s[i]);
+  }
+  return '${rounded < 0 ? '-' : ''}$buf';
 }
