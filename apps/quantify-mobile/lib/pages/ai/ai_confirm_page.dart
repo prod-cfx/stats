@@ -178,27 +178,61 @@ class StrategyConfirmView {
   final String advice;
 }
 
-/// 由会话参数派生确认视图（对齐设计稿 BTC 双均线场景模板）。
+/// 确认页支持的策略场景（对齐设计稿 `STRAT_SCENARIOS`）。
+enum _ConfirmScenario { btcTrend, ethGrid }
+
+/// 由会话参数推断展示场景（#2132）。
 ///
-/// 规则 / 执行 / 风控 / 建议文案含参数插值（fast_ma / slow_ma / stop_loss），
-/// 故在 Dart 侧拼装；纯静态标签（IF/THEN/EXECUTE 等）走 l10n。
+/// 设计稿确认页以「策略身份 + 场景内容」为核心，而非 `symbol + category` 自由拼接。
+/// 优先取显式 `scenario` 字段；否则由 `category` / `symbol` 推断：
+///   - 网格类（category 含「网格」或 symbol 为 ETH）→ ETH 网格场景
+///   - 其余 → BTC 趋势双均线场景（默认）
+_ConfirmScenario _scenarioOf(Map<String, String> params) {
+  final String explicit = (params['scenario'] ?? '').toLowerCase();
+  if (explicit == 'eth' || explicit == 'eth_grid') {
+    return _ConfirmScenario.ethGrid;
+  }
+  if (explicit == 'btc' || explicit == 'btc_trend') {
+    return _ConfirmScenario.btcTrend;
+  }
+
+  final String category = params['category'] ?? '';
+  final String symbol = (params['symbol'] ?? '').toUpperCase();
+  if (category.contains('网格') || symbol.startsWith('ETH')) {
+    return _ConfirmScenario.ethGrid;
+  }
+  return _ConfirmScenario.btcTrend;
+}
+
+/// 由会话参数派生确认视图（对齐设计稿 `STRAT_SCENARIOS` 的策略身份与场景内容）。
+///
+/// 展示文案优先服从设计稿场景模板；仅 fast_ma / slow_ma / stop_loss 等业务参数
+/// 做必要插值。纯静态标签（IF/THEN/EXECUTE 等）走 l10n。业务参数仍经 `extra`
+/// 原样透传到 `/ai/script`，不受此展示映射影响（验收项 4）。
 StrategyConfirmView confirmStrategyView(
   Map<String, String> params,
   AppLocalizations l10n,
 ) {
-  final String category = params['category'] ?? '趋势跟踪';
+  return switch (_scenarioOf(params)) {
+    _ConfirmScenario.ethGrid => _ethGridView(params),
+    _ConfirmScenario.btcTrend => _btcTrendView(params),
+  };
+}
+
+/// BTC 趋势 · 双均线场景（设计稿 `STRAT_SCENARIOS.btc`）。
+StrategyConfirmView _btcTrendView(Map<String, String> params) {
   final String symbol = params['symbol'] ?? 'BTC/USDT';
   final String period = params['period'] ?? '15m';
   final String fast = params['fast_ma'] ?? '5';
   final String slow = params['slow_ma'] ?? '20';
   final String stop = (params['stop_loss'] ?? '2.0%').replaceAll('%', '');
   final String leverage = params['leverage'] ?? '';
-  final String market = leverage.isNotEmpty ? '合约 · $leverage' : '现货';
+  final String market = leverage.isNotEmpty ? '合约 · $leverage' : '合约 · 5x';
 
   return StrategyConfirmView(
-    name: '$symbol $category',
+    name: 'BTC 趋势 · 双均线',
     chips: <({String label, QzChipTone tone})>[
-      (label: category, tone: QzChipTone.accent),
+      (label: '趋势跟踪', tone: QzChipTone.accent),
       (label: symbol, tone: QzChipTone.neutral),
       (label: period, tone: QzChipTone.neutral),
       (label: market, tone: QzChipTone.info),
@@ -213,15 +247,50 @@ StrategyConfirmView confirmStrategyView(
       symbol: symbol.replaceAll('/', ''),
       period: period,
       position: '100%',
-      market: leverage.isNotEmpty ? '永续合约' : '现货',
+      market: '永续合约',
     ),
     risks: <({String kind, String desc})>[
       (kind: '止损', desc: '价格相对入场均价下跌 $stop% → 强制平仓'),
       (kind: '止盈', desc: '价格相对入场均价上涨 0.6% → 平仓'),
     ],
     advice:
-        '该策略在 $symbol $period 周期上历史表现稳定，但在区间震荡市场可能出现频繁假突破。'
+        '该策略在 BTC 4H/15m 上历史表现稳定，但在区间震荡市场可能出现频繁假突破。'
         '建议同时开启「ATR 过滤」减少噪音。',
+  );
+}
+
+/// ETH 网格 · 区间震荡场景（设计稿 `STRAT_SCENARIOS.eth`）。
+StrategyConfirmView _ethGridView(Map<String, String> params) {
+  final String symbol = params['symbol'] ?? 'ETH/USDT';
+  final String period = params['period'] ?? '1H';
+
+  return StrategyConfirmView(
+    name: 'ETH 网格 · 区间震荡',
+    chips: <({String label, QzChipTone tone})>[
+      (label: '网格', tone: QzChipTone.info),
+      (label: symbol, tone: QzChipTone.neutral),
+      (label: period, tone: QzChipTone.neutral),
+      (label: '现货', tone: QzChipTone.info),
+    ],
+    rules: <({String iff, String then})>[
+      (iff: '价格下穿任一网格线，且该网格尚未持仓', then: '分批买入 10% 仓位'),
+      (iff: '价格上穿对应网格线 (该格已有持仓)', then: '平该格仓位获利'),
+      (iff: '价格跌破区间下沿 ≥ 2%', then: '暂停网格 (等待人工恢复)'),
+    ],
+    execute: (
+      exchange: 'OKX',
+      symbol: symbol.replaceAll('/', ''),
+      period: period.toLowerCase(),
+      position: '10% / 格',
+      market: '现货',
+    ),
+    risks: <({String kind, String desc})>[
+      (kind: '区间', desc: '下沿 2,400 USDT / 上沿 3,000 USDT，共 10 格'),
+      (kind: '熔断', desc: '价格跌破区间下沿 2% → 暂停网格'),
+    ],
+    advice:
+        '该策略适合 ETH 在 2400-3000 区间震荡的行情。如出现单边趋势（尤其向下突破），'
+        '会持续被动接货并产生浮亏，务必关注风控提示。',
   );
 }
 

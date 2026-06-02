@@ -7,7 +7,10 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_step_bar.dart';
 
-Future<void> _pump(WidgetTester tester) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  Map<String, String>? params,
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   await tester.pumpWidget(
     MaterialApp(
@@ -17,7 +20,7 @@ Future<void> _pump(WidgetTester tester) async {
       theme: buildQzThemeData(
         const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
       ),
-      home: const AiConfirmPage(),
+      home: AiConfirmPage(params: params),
     ),
   );
   await tester.pump();
@@ -30,6 +33,35 @@ void main() {
     await _pump(tester);
     expect(find.text('合约 · 5x'), findsOneWidget);
     expect(find.text('合约 · 1x'), findsNothing);
+  });
+
+  testWidgets('默认 BTC 确认页 Hero 标题为策略身份而非 symbol+category（#2132）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    expect(find.text('BTC 趋势 · 双均线'), findsOneWidget);
+    expect(find.text('BTC/USDT 趋势跟踪'), findsNothing);
+  });
+
+  testWidgets('ETH 网格场景按设计稿渲染策略身份与区间/熔断风控（#2132）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      params: const <String, String>{
+        'category': '网格',
+        'symbol': 'ETH/USDT',
+        'period': '1H',
+      },
+    );
+    expect(find.text('ETH 网格 · 区间震荡'), findsOneWidget);
+    // 现货市场 chip（网格无杠杆）。
+    expect(find.text('现货'), findsOneWidget);
+    // 区间 / 熔断风控告警条。
+    expect(find.text('风控 · 区间'), findsOneWidget);
+    expect(find.text('风控 · 熔断'), findsOneWidget);
+    // 不应出现 BTC 趋势文案。
+    expect(find.text('BTC 趋势 · 双均线'), findsNothing);
   });
 
   testWidgets('确认页顶栏下方展示 5 步流程条（#2130）', (WidgetTester tester) async {
