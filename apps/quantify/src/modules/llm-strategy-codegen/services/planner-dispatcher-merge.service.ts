@@ -2037,12 +2037,148 @@ export class PlannerDispatcherMergeService {
             },
       )
     }
-    merged.rules = this.dropDuplicateLifecycleRules(
-      this.dropDuplicateGridProgramRules(
-        this.dropRulesCoveredByStrongerComposite(next),
+    merged.rules = this.repairRelativeEntryPercentExitSideDrift(
+      this.dropDuplicateLifecycleRules(
+        this.dropDuplicateGridProgramRules(
+          this.dropRulesCoveredByStrongerComposite(next),
+        ),
       ),
+      userMessage,
     )
     this.clearLifecycleOnlyTopLevelPositionSizing(merged)
+  }
+
+  private repairRelativeEntryPercentExitSideDrift(
+    rules: readonly SemanticRule[],
+    userMessage: string,
+  ): SemanticRule[] {
+    const entrySide = this.inferSingleEntrySideFromRules(rules)
+    if (!entrySide) return [...rules]
+
+    const priceChangeKey = ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+    const stopLossKey = ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key
+    const closeActionKey = entrySide === 'short'
+      ? ATOM_CONTRACT_REGISTRY['action.close_short'].key
+      : ATOM_CONTRACT_REGISTRY['action.close_long'].key
+
+    const candidates = rules
+      .map((rule, index) => ({ rule, index, evidence: this.readLifecycleEvidenceText(rule) }))
+      .filter(({ rule, evidence }) => {
+        if (rule.phase !== 'exit') return false
+        if (!this.isRelativeEntryPercentCloseText(evidence ?? userMessage)) return false
+        return collectAtomLeaves(rule.condition).some(leaf => leaf.key === priceChangeKey || leaf.key === stopLossKey)
+      })
+    if (candidates.length === 0) return [...rules]
+
+    const groups = new Map<string, typeof candidates>()
+    for (const candidate of candidates) {
+      const key = candidate.evidence ?? '__user_message__'
+      groups.set(key, [...(groups.get(key) ?? []), candidate])
+    }
+
+    let mutated = false
+    const removeIndexes = new Set<number>()
+    const replacements = new Map<number, SemanticRule>()
+
+    for (const group of groups.values()) {
+      const percentSource = group.find(({ rule }) => collectAtomLeaves(rule.condition).some(leaf => leaf.key === priceChangeKey))
+      const riskSource = group.find(({ rule }) => collectAtomLeaves(rule.condition).some(leaf => leaf.key === stopLossKey))
+      const source = percentSource ?? riskSource
+      if (!source) continue
+      const percent = this.readRelativeEntryPercentExitValue(source.rule)
+      if (percent === null) continue
+
+      const direction = this.readRelativeEntryPercentExitDirection(source.rule, source.evidence ?? userMessage, entrySide)
+      const valuePct = direction === 'down' ? -Math.abs(percent) : Math.abs(percent)
+      const repairedCondition: AtomExprAtom = {
+        kind: 'atom',
+        key: priceChangeKey,
+        params: {
+          ...(collectAtomLeaves(source.rule.condition).find(leaf => leaf.key === priceChangeKey)?.params ?? {}),
+          basis: 'entry_avg_price',
+          direction,
+          valuePct,
+        },
+        ...(source.evidence ? { evidence: { text: source.evidence } } : {}),
+      }
+      const repairedRule: SemanticRule = {
+        ...source.rule,
+        sideScope: entrySide,
+        condition: repairedCondition,
+        effects: this.appendTypedRuleEffects(
+          this.emptyRuleEffects(),
+          [{ kind: 'atom', key: closeActionKey, params: {} }],
+        ),
+      }
+
+      replacements.set(source.index, repairedRule)
+      for (const candidate of group) {
+        if (candidate.index !== source.index) removeIndexes.add(candidate.index)
+      }
+      mutated = true
+    }
+
+    if (!mutated) return [...rules]
+    return rules
+      .map((rule, index) => replacements.get(index) ?? rule)
+      .filter((_rule, index) => !removeIndexes.has(index))
+  }
+
+  private inferSingleEntrySideFromRules(rules: readonly SemanticRule[]): 'long' | 'short' | null {
+    let hasOpenLong = false
+    let hasOpenShort = false
+    for (const rule of rules) {
+      if (rule.phase !== 'entry') continue
+      const effectKeys = listRuleEffects(rule.effects)
+        .flatMap(effect => collectAtomLeaves(effect))
+        .map(leaf => leaf.key)
+      hasOpenLong ||= effectKeys.includes(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+      hasOpenShort ||= effectKeys.includes(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+    }
+    if (hasOpenShort && !hasOpenLong) return 'short'
+    if (hasOpenLong && !hasOpenShort) return 'long'
+    return null
+  }
+
+  private readLifecycleEvidenceText(rule: SemanticRule): string | null {
+    return this.readEvidenceText(rule)
+      ?? collectAtomLeaves(rule.condition).map(leaf => this.readEvidenceText(leaf)).find((text): text is string => text !== null)
+      ?? listRuleEffects(rule.effects)
+        .flatMap(effect => collectAtomLeaves(effect))
+        .map(leaf => this.readEvidenceText(leaf))
+        .find((text): text is string => text !== null)
+      ?? null
+  }
+
+  private isRelativeEntryPercentCloseText(text: string): boolean {
+    return /(?:相对|基于|按|从)?(?:入场价|入场均价|开仓价|entry(?:\s+avg)?\s+price)/iu.test(text)
+      && /(?:下跌|上涨|跌|涨|回撤|盈利|亏损|%)\D{0,12}(?:平仓|平多|平空|止盈|退出|close)/iu.test(text)
+  }
+
+  private readRelativeEntryPercentExitValue(rule: SemanticRule): number | null {
+    const leaf = collectAtomLeaves(rule.condition).find(atom =>
+      atom.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+      || atom.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
+    )
+    if (!leaf) return null
+    const value = this.readNumericParam(leaf.params, 'valuePct')
+      ?? this.readNumericParam(leaf.params, 'pct')
+      ?? this.readNumericParam(leaf.params, 'thresholdPct')
+    return value === null ? null : Math.abs(value)
+  }
+
+  private readRelativeEntryPercentExitDirection(
+    rule: SemanticRule,
+    text: string,
+    entrySide: 'long' | 'short',
+  ): 'up' | 'down' {
+    const priceLeaf = collectAtomLeaves(rule.condition).find(atom => atom.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key)
+    const direction = this.readStringParam(priceLeaf?.params, 'direction')
+    if (direction === 'down' || direction === 'decrease' || direction === 'loss') return 'down'
+    if (direction === 'up' || direction === 'increase' || direction === 'profit') return 'up'
+    if (/下跌|跌破|跌|回撤|亏损|loss/iu.test(text)) return 'down'
+    if (/上涨|涨破|涨|盈利|止盈|profit/iu.test(text)) return 'up'
+    return entrySide === 'short' ? 'down' : 'up'
   }
 
   private clearLifecycleOnlyTopLevelPositionSizing(merged: InternalPlannerPatch): void {
