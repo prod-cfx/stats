@@ -73,7 +73,7 @@ describe('stage1 typed SemanticRule schema', () => {
     })
   })
 
-  it('gracefully preserves legacy effects arrays as actions compatibility role', () => {
+  it('gracefully assigns legacy effects arrays to typed roles by atom bucket', () => {
     const parsed = gracefulParseSemanticRule({
       id: 'legacy-effects-preserved',
       phase: 'entry',
@@ -81,6 +81,8 @@ describe('stage1 typed SemanticRule schema', () => {
       condition: atom('price.ema_above', { period: 20 }),
       effects: [
         atom('action.open_long'),
+        atom('risk.remembered_level_stop', { levelKey: 'breakout' }),
+        atom('position.sizing', { kind: 'ratio', value: 0.1 }),
         { kind: 'missing_key', params: {} },
       ],
     })
@@ -89,8 +91,8 @@ describe('stage1 typed SemanticRule schema', () => {
     if (!parsed.ok) return
     expect(parsed.rule.effects).toEqual({
       actions: [atom('action.open_long')],
-      risks: [],
-      positions: [],
+      risks: [atom('risk.remembered_level_stop', { levelKey: 'breakout' })],
+      positions: [atom('position.sizing', { kind: 'ratio', value: 0.1 })],
       orchestration: [],
       programs: [],
     })

@@ -963,7 +963,8 @@ export class SemanticStateMergeService {
       ...this.repairLifecycleActionsForRuleSide(this.repairLifecyclePhaseFromEvidence(rule)),
       condition: this.dropRedundantPriceChangeWhenRiskGuardExists(rule.condition),
     }))
-    const withPositionOnlyMerged = this.mergePositionOnlyEntryRulesIntoActionEntries(repaired)
+    const withRememberedLevelStops = this.moveStandaloneRememberedLevelStopsIntoEntryRisks(repaired)
+    const withPositionOnlyMerged = this.mergePositionOnlyEntryRulesIntoActionEntries(withRememberedLevelStops)
     const folded = this.foldDuplicateLifecycleRules(withPositionOnlyMerged)
     const foldedSubsets = this.foldCoveredLifecycleSubsetRules(folded)
     const withoutCoveredTakeProfitExits = this.dropTakeProfitExitRulesCoveredByEntryRisk(foldedSubsets)
@@ -973,6 +974,54 @@ export class SemanticStateMergeService {
     const withoutOrphans = this.dropCoveredActionlessLifecycleRules(withoutAlwaysOnOpenNoise)
     const withoutFallbackEntries = this.dropFallbackNoPositionEntries(withoutOrphans)
     return this.dropEntriesDuplicatingSameSideExitConditions(withoutFallbackEntries)
+  }
+
+  private moveStandaloneRememberedLevelStopsIntoEntryRisks(rules: readonly SemanticRule[]): readonly SemanticRule[] {
+    const next = rules.map(rule => ({
+      ...rule,
+      effects: this.normalizeRuleEffectsToTyped(rule.effects),
+    }))
+    const consumed = new Set<number>()
+
+    for (let i = 0; i < next.length; i++) {
+      const rule = next[i]
+      if (!rule || !this.isStandaloneRememberedLevelStopRule(rule)) continue
+      const targetIndex = this.findRememberedLevelStopEntryTarget(next, rule)
+      if (targetIndex === null) continue
+      const target = next[targetIndex]
+      if (!target) continue
+      const targetEffects = this.normalizeRuleEffectsToTyped(target.effects)
+      next[targetIndex] = {
+        ...target,
+        effects: {
+          ...targetEffects,
+          risks: [...targetEffects.risks, rule.condition],
+        },
+      }
+      consumed.add(i)
+    }
+
+    return next.filter((_rule, index) => !consumed.has(index))
+  }
+
+  private isStandaloneRememberedLevelStopRule(rule: SemanticRule): boolean {
+    const leaves = collectAtomLeaves(rule.condition)
+    if (leaves.length === 0 || leaves.some(leaf => leaf.key !== 'risk.remembered_level_stop')) return false
+    const effects = this.normalizeRuleEffectsToTyped(rule.effects)
+    return listRuleEffects(effects).length === 0
+  }
+
+  private findRememberedLevelStopEntryTarget(rules: readonly SemanticRule[], stopRule: SemanticRule): number | null {
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const candidate = rules[i]
+      if (!candidate || candidate === stopRule) continue
+      if (candidate.phase !== 'entry') continue
+      if (candidate.sideScope !== stopRule.sideScope && candidate.sideScope !== 'both' && stopRule.sideScope !== 'both') continue
+      const effects = this.normalizeRuleEffectsToTyped(candidate.effects)
+      const hasOpenAction = effects.actions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === 'action.open_long' || leaf.key === 'action.open_short' || leaf.key === 'open_long' || leaf.key === 'open_short'))
+      if (hasOpenAction) return i
+    }
+    return null
   }
 
   private dropRedundantPriceChangeWhenRiskGuardExists(condition: AtomExpr): AtomExpr {

@@ -41,7 +41,7 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
-import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
+import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
@@ -200,6 +200,7 @@ export class SemanticSeedStateBuilderService {
       ? (semanticPatch.rules as SemanticRule[]).filter((rule): rule is SemanticRule =>
           this.isRecord(rule) && typeof (rule as Record<string, unknown>).id === 'string')
       : []
+    const normalizedExplicitRules = this.normalizeExplicitRulesForMainflow(explicitRules)
 
     // Issue #1223 / #1446: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
     //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
@@ -305,7 +306,7 @@ export class SemanticSeedStateBuilderService {
     const positionUpdate = this.applySpotSideModeConstraint(positionUpdateRaw, contextSlots)
 
     if (
-      explicitRules.length === 0
+      normalizedExplicitRules.length === 0
       && !positionUpdate
       && !Object.values(contextSlots).some(Boolean)
     ) {
@@ -325,9 +326,94 @@ export class SemanticSeedStateBuilderService {
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
       // Issue #1395: 透传 rules[] 到 state，供 IR compiler (compileAtomExpr) 接表达式树
-      ...(explicitRules.length > 0 ? { rules: explicitRules } : {}),
+      ...(normalizedExplicitRules.length > 0 ? { rules: normalizedExplicitRules } : {}),
       ...(zodQuarantine ? { diagnostics: { zodQuarantine } } : {}),
     })
+  }
+
+  private normalizeExplicitRulesForMainflow(rules: readonly SemanticRule[]): SemanticRule[] {
+    const normalized = rules.map(rule => ({
+      ...rule,
+      effects: this.normalizeRuleEffectsToTyped(rule.effects),
+    }))
+    const consumed = new Set<number>()
+
+    for (let i = 0; i < normalized.length; i++) {
+      const rule = normalized[i]
+      if (!rule || !this.isStandaloneRememberedLevelStopRule(rule)) continue
+      const targetIndex = this.findRememberedLevelStopEntryTarget(normalized, rule)
+      if (targetIndex === null) continue
+      const target = normalized[targetIndex]
+      if (!target) continue
+      const targetEffects = this.normalizeRuleEffectsToTyped(target.effects)
+      normalized[targetIndex] = {
+        ...target,
+        effects: {
+          ...targetEffects,
+          risks: [...targetEffects.risks, rule.condition],
+        },
+      }
+      consumed.add(i)
+    }
+
+    return normalized.filter((_rule, index) => !consumed.has(index))
+  }
+
+  private normalizeRuleEffectsToTyped(effects: SemanticRule['effects']): RuleEffectsByRole {
+    const typed: Record<keyof RuleEffectsByRole, AtomExpr[]> = {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    }
+    const pushByRole = (role: keyof RuleEffectsByRole, effect: AtomExpr): void => {
+      typed[role].push(effect)
+    }
+    if (effects && typeof effects === 'object' && !Array.isArray(effects)) {
+      for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const) {
+        for (const effect of Array.isArray(effects[role]) ? effects[role] : []) {
+          pushByRole(this.resolveLegacyRuleEffectRole(effect), effect)
+        }
+      }
+      return typed
+    }
+    for (const effect of Array.isArray(effects) ? effects : []) {
+      pushByRole(this.resolveLegacyRuleEffectRole(effect), effect)
+    }
+    return typed
+  }
+
+  private resolveLegacyRuleEffectRole(effect: AtomExpr): keyof RuleEffectsByRole {
+    const leaves = collectAtomLeaves(effect)
+    if (leaves.some(leaf => leaf.key.startsWith('program.'))) return 'programs'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.'))) return 'risks'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'positionConstraint' || leaf.key.startsWith('position.'))) return 'positions'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'orchestration' || leaf.key.startsWith('orchestration.'))) return 'orchestration'
+    return 'actions'
+  }
+
+  private isStandaloneRememberedLevelStopRule(rule: SemanticRule): boolean {
+    const leaves = collectAtomLeaves(rule.condition)
+    if (leaves.length === 0 || leaves.some(leaf => leaf.key !== 'risk.remembered_level_stop')) return false
+    return listRuleEffects(this.normalizeRuleEffectsToTyped(rule.effects)).length === 0
+  }
+
+  private findRememberedLevelStopEntryTarget(rules: readonly SemanticRule[], stopRule: SemanticRule): number | null {
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const candidate = rules[i]
+      if (!candidate || candidate === stopRule) continue
+      if (candidate.phase !== 'entry') continue
+      if (candidate.sideScope !== stopRule.sideScope && candidate.sideScope !== 'both' && stopRule.sideScope !== 'both') continue
+      const effects = this.normalizeRuleEffectsToTyped(candidate.effects)
+      const hasOpenAction = effects.actions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === 'action.open_long' || leaf.key === 'action.open_short' || leaf.key === 'open_long' || leaf.key === 'open_short'))
+      if (hasOpenAction) return i
+    }
+    return null
+  }
+
+  private resolveAtomBucket(key: string): string | undefined {
+    return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
   }
 
   /**
