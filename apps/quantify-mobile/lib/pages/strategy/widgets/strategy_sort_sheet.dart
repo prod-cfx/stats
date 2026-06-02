@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../data/models/strategy_models.dart';
@@ -14,46 +15,52 @@ const Color _sheetShadow = Color(0x330F0B22);
 /// 排序键（#1565）：热门 / 收益 / Sharpe / 低回撤。
 enum StrategySortKey { hot, cagr, sharpe, mddLow }
 
-/// 「筛选 & 排序」底部 sheet 选择结果。
-class StrategySortFilterResult {
-  final StrategyCategory category;
-  final StrategySortKey sort;
-
-  const StrategySortFilterResult({required this.category, required this.sort});
-}
-
-/// 「筛选 & 排序」底部 sheet 内容（#1565）。
+/// 「筛选 & 排序」底部 sheet 内容（#1565 / #2128）。
 ///
-/// 设计为受控 child：父页面通过 [StrategySortSheet.show] 弹出，sheet 维护本地
-/// draft 选择状态，点击"查看 N 个结果"按钮才回传 [StrategySortFilterResult]。
-class StrategySortSheet extends StatefulWidget {
+/// 受控 child：不再维护本地 draft。对齐设计稿 `setTag`/`setSort` 模型——点击类型/
+/// 排序即时回调父页面，父页面更新筛选状态、列表与结果数实时变化。结果数与当前
+/// 选中态由父页面通过 [ValueListenable] 注入，sheet 内 [ValueListenableBuilder]
+/// 实时重绘；「查看 N 个结果」按钮只负责关闭 sheet，不再作为唯一提交入口。
+class StrategySortSheet extends StatelessWidget {
   const StrategySortSheet({
     super.key,
-    required this.initialCategory,
-    required this.initialSort,
+    required this.category,
+    required this.sort,
     required this.resultCount,
+    required this.onCategoryChanged,
+    required this.onSortChanged,
   });
 
-  final StrategyCategory initialCategory;
-  final StrategySortKey initialSort;
+  /// 当前选中类型（父页面实时值）。
+  final ValueListenable<StrategyCategory> category;
 
-  /// 用于按钮文案"查看 N 个结果"。父页传当前过滤下的结果计数；sheet 内部
-  /// 切换 draft 不实时联动该计数（避免要求父层提供回调），保持视觉简洁。
-  final int resultCount;
+  /// 当前选中排序（父页面实时值）。
+  final ValueListenable<StrategySortKey> sort;
 
-  /// 以设计稿专用外壳弹出 sheet 并回传选择结果。外壳规格见 [_sheetShadow]
-  /// 注释：20 顶部圆角、42×4 handle、padding `16/20/36`、上方阴影。
+  /// 当前条件下结果计数（父页面实时值），驱动「查看 N 个结果」文案。
+  final ValueListenable<int> resultCount;
+
+  final ValueChanged<StrategyCategory> onCategoryChanged;
+  final ValueChanged<StrategySortKey> onSortChanged;
+
+  /// 以设计稿专用外壳弹出 sheet。外壳规格见 [_sheetShadow] 注释：20 顶部圆角、
+  /// 42×4 handle、padding `16/20/36`、上方阴影。
+  ///
+  /// 受控 sheet：选中态/计数由 [ValueListenable] 实时注入，点击立即回调父页面，
+  /// 父页面 [Navigator.pop] 后本 Future 完成（无返回值）。
   ///
   /// Known limitation：外壳颜色在 builder 闭包外捕获 `context.qzScheme`，
   /// sheet 打开期间切换主题不会重绘外壳（与 [QzSheet] 一致，关闭重开即刷新）。
-  static Future<StrategySortFilterResult?> show({
+  static Future<void> show({
     required BuildContext context,
-    required StrategyCategory initialCategory,
-    required StrategySortKey initialSort,
-    required int resultCount,
+    required ValueListenable<StrategyCategory> category,
+    required ValueListenable<StrategySortKey> sort,
+    required ValueListenable<int> resultCount,
+    required ValueChanged<StrategyCategory> onCategoryChanged,
+    required ValueChanged<StrategySortKey> onSortChanged,
   }) {
     final QzColorScheme c = context.qzScheme;
-    return showModalBottomSheet<StrategySortFilterResult>(
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -87,9 +94,11 @@ class StrategySortSheet extends StatefulWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
               child: StrategySortSheet(
-                initialCategory: initialCategory,
-                initialSort: initialSort,
+                category: category,
+                sort: sort,
                 resultCount: resultCount,
+                onCategoryChanged: onCategoryChanged,
+                onSortChanged: onSortChanged,
               ),
             ),
           ),
@@ -97,14 +106,6 @@ class StrategySortSheet extends StatefulWidget {
       ),
     );
   }
-
-  @override
-  State<StrategySortSheet> createState() => _StrategySortSheetState();
-}
-
-class _StrategySortSheetState extends State<StrategySortSheet> {
-  late StrategyCategory _category = widget.initialCategory;
-  late StrategySortKey _sort = widget.initialSort;
 
   String _categoryLabel(BuildContext ctx, StrategyCategory c) {
     final AppLocalizations l10n = AppLocalizations.of(ctx);
@@ -163,18 +164,22 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
           style: TextStyle(color: c.textDim, fontSize: 11),
         ),
         const SizedBox(height: QzSpacing.xs),
-        Wrap(
-          spacing: QzSpacing.xs,
-          runSpacing: QzSpacing.xs,
-          children: <Widget>[
-            for (final StrategyCategory cat in StrategyCategory.values)
-              _PillChoice(
-                key: Key('strategy-sheet-cat-${cat.name}'),
-                label: _categoryLabel(context, cat),
-                selected: cat == _category,
-                onTap: () => setState(() => _category = cat),
-              ),
-          ],
+        // 选中态随父页面实时值重绘；点击立即回调，不维护本地 draft。
+        ValueListenableBuilder<StrategyCategory>(
+          valueListenable: category,
+          builder: (BuildContext ctx, StrategyCategory selected, _) => Wrap(
+            spacing: QzSpacing.xs,
+            runSpacing: QzSpacing.xs,
+            children: <Widget>[
+              for (final StrategyCategory cat in StrategyCategory.values)
+                _PillChoice(
+                  key: Key('strategy-sheet-cat-${cat.name}'),
+                  label: _categoryLabel(ctx, cat),
+                  selected: cat == selected,
+                  onTap: () => onCategoryChanged(cat),
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: QzSpacing.md),
         Text(
@@ -183,24 +188,27 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
         ),
         const SizedBox(height: QzSpacing.xs),
         // 设计稿 m-screens-2:804-815 两列网格，按钮 36 高 / 圆角 8。
-        GridView(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: QzSpacing.xs,
-            crossAxisSpacing: QzSpacing.xs,
-            mainAxisExtent: 36,
+        ValueListenableBuilder<StrategySortKey>(
+          valueListenable: sort,
+          builder: (BuildContext ctx, StrategySortKey selected, _) => GridView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: QzSpacing.xs,
+              crossAxisSpacing: QzSpacing.xs,
+              mainAxisExtent: 36,
+            ),
+            children: <Widget>[
+              for (final StrategySortKey k in StrategySortKey.values)
+                _SortChoice(
+                  key: Key('strategy-sheet-sort-${k.name}'),
+                  label: l10n.strategyHomeSortByOption(_sortLabel(ctx, k)),
+                  selected: k == selected,
+                  onTap: () => onSortChanged(k),
+                ),
+            ],
           ),
-          children: <Widget>[
-            for (final StrategySortKey k in StrategySortKey.values)
-              _SortChoice(
-                key: Key('strategy-sheet-sort-${k.name}'),
-                label: l10n.strategyHomeSortByOption(_sortLabel(context, k)),
-                selected: k == _sort,
-                onTap: () => setState(() => _sort = k),
-              ),
-          ],
         ),
         const SizedBox(height: QzSpacing.md),
         SizedBox(
@@ -224,16 +232,19 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
               child: InkWell(
                 key: const Key('strategy-sheet-apply-btn'),
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => Navigator.of(context).pop(
-                  StrategySortFilterResult(category: _category, sort: _sort),
-                ),
+                // 「查看 N 个结果」只负责关闭 sheet（#2128）；筛选已实时生效。
+                onTap: () => Navigator.of(context).pop(),
                 child: Center(
-                  child: Text(
-                    l10n.strategyHomeSheetApply(widget.resultCount),
-                    style: TextStyle(
-                      color: c.accentOn,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  // 文案随结果数实时联动，不再用打开时的静态计数。
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: resultCount,
+                    builder: (BuildContext ctx, int count, _) => Text(
+                      l10n.strategyHomeSheetApply(count),
+                      style: TextStyle(
+                        color: c.accentOn,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),

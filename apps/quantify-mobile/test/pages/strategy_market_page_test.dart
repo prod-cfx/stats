@@ -464,8 +464,18 @@ void main() {
     expect(find.text('按 热门 排序'), findsOneWidget);
     expect(find.text('按 低回撤 排序'), findsOneWidget);
 
+    // #2128：点排序即时生效——sheet 仍打开时排序行已切到 sharpe（active 箭头）。
     await tester.tap(find.byKey(const Key('strategy-sheet-sort-sharpe')));
     await tester.pump();
+    expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-sharpe')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+      findsOneWidget,
+    );
+    // 「查看 N 个结果」只负责关闭 sheet，不再是唯一提交入口。
     await tester.tap(find.byKey(const Key('strategy-sheet-apply-btn')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsNothing);
@@ -476,6 +486,47 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('筛选 sheet：点类型即时筛选列表 + 结果数实时联动 (#2128)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final StrategyCard nonTrend = mockFeaturedStrategies.firstWhere(
+      (StrategyCard s) => s.category != StrategyCategory.trend,
+    );
+
+    await tester.tap(find.byKey(const Key('strategy-filter-btn')));
+    await tester.pumpAndSettle();
+
+    // 「查看 N 个结果」文案携带实时计数（来自父页面 ValueListenable，非静态快照）。
+    int sheetCount() => int.parse(
+          RegExp(r'\d+')
+              .firstMatch(
+                tester
+                    .widget<Text>(
+                      find.descendant(
+                        of: find.byKey(const Key('strategy-sheet-apply-btn')),
+                        matching: find.byType(Text),
+                      ),
+                    )
+                    .data!,
+              )!
+              .group(0)!,
+        );
+    expect(sheetCount(), greaterThan(0));
+
+    // 点 sheet 内「趋势」类型 chip：底层列表即时收敛、sheet 不关闭。
+    await tester.tap(find.byKey(const Key('strategy-sheet-cat-trend')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
+    // 切换后 sheet 计数仍有效（实时跟随当前筛选，未停留在打开时的值）。
+    expect(sheetCount(), greaterThan(0));
+
+    // 关闭 sheet 后底层列表确实只剩 trend 类，证明点类型即时改了页面筛选。
+    await tester.tap(find.byKey(const Key('strategy-sheet-apply-btn')));
+    await tester.pumpAndSettle();
+    expect(find.text(nonTrend.name), findsNothing);
   });
 
   testWidgets('星标按钮：点击切换收藏状态 (#1565)',

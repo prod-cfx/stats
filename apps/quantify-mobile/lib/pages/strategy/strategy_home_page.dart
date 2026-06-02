@@ -53,6 +53,16 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   List<StrategyMarketItem> _items = <StrategyMarketItem>[];
   StrategyMarketItem? _featured;
 
+  /// sheet 实时联动通道（#2128）：sheet 在 modal route 内，无法随父页面 setState
+  /// 重绘，故用 [ValueNotifier] 把选中类型/排序/结果数推给 sheet。父页面状态变化时
+  /// 在 [_syncSheetState] 内同步这些 notifier，sheet 内 [ValueListenableBuilder]
+  /// 即时重绘，对齐设计稿 `setTag`/`setSort`/`filtered.length` 模型。
+  final ValueNotifier<StrategyCategory> _sheetCategory =
+      ValueNotifier<StrategyCategory>(StrategyCategory.all);
+  final ValueNotifier<StrategySortKey> _sheetSort =
+      ValueNotifier<StrategySortKey>(StrategySortKey.hot);
+  final ValueNotifier<int> _sheetResultCount = ValueNotifier<int>(0);
+
   /// 载入对话 toast：与设计稿 `fireToast`(#1596) 一致。
   /// 显示约 700ms 后跳到 `/ai?loadStrategy=$id`，dispose / 重复点击需安全取消。
   String? _toast;
@@ -76,6 +86,9 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     _scrollCtrl.dispose();
     _toastTimer?.cancel();
     _navTimer?.cancel();
+    _sheetCategory.dispose();
+    _sheetSort.dispose();
+    _sheetResultCount.dispose();
     super.dispose();
   }
 
@@ -209,6 +222,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
       _favOnly = false;
       _category = c;
     });
+    _sheetCategory.value = c;
     _reload();
   }
 
@@ -230,33 +244,32 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
       _sort = k;
       _items = _applySort(_items, k);
     });
+    _sheetSort.value = k;
   }
 
+  /// 打开「筛选 & 排序」sheet（#2128）。受控 sheet：点击类型/排序即时回调，
+  /// 复用 [_onCategoryChanged]/[_onSortChanged] 更新页面状态，列表与结果数实时
+  /// 变化；sheet 选中态/计数由 [_sheetCategory]/[_sheetSort]/[_sheetResultCount]
+  /// 实时注入。「查看 N 个结果」只负责关闭 sheet。
   Future<void> _openFilterSheet() async {
+    // 打开时把当前真值同步给 sheet 三通道，防止任何遗漏的状态分支造成初始态漂移。
+    // 收藏视图忽略分类，故类型选中态归一到 all，避免 pill 高亮某类与实际过滤不符。
+    _sheetCategory.value = _favOnly ? StrategyCategory.all : _category;
+    _sheetSort.value = _sort;
+    _sheetResultCount.value = _computeResultCount(
+      ref.read(strategyFavoritesProvider),
+    );
     setState(() => _filterSheetOpen = true);
-    final StrategySortFilterResult? res =
-        await StrategySortSheet.show(
+    await StrategySortSheet.show(
       context: context,
-      initialCategory: _category,
-      initialSort: _sort,
-      resultCount: _items.length,
+      category: _sheetCategory,
+      sort: _sheetSort,
+      resultCount: _sheetResultCount,
+      // sheet 内选类型：退出收藏视图（与列表 chip 同语义），重拉并实时刷新列表。
+      onCategoryChanged: _onCategoryChanged,
+      onSortChanged: _onSortChanged,
     );
     if (mounted) setState(() => _filterSheetOpen = false);
-    if (res == null || !mounted) return;
-    final bool catChanged = res.category != _category;
-    if (catChanged) {
-      setState(() {
-        _category = res.category;
-        _sort = res.sort;
-      });
-      _reload();
-    } else {
-      setState(() {
-        _category = res.category;
-        _sort = res.sort;
-        _items = _applySort(_items, _sort);
-      });
-    }
   }
 
   /// 打开全屏搜索 overlay（#1824）。overlay 自身负责 pop + 回调：
@@ -303,12 +316,29 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     return items.toList(growable: false);
   }
 
+  /// 当前条件下「查看 N 个结果」的计数真值（#2128）。
+  ///
+  /// 收藏视图反映过滤后条数（含 hero 已剔除项），非收藏态沿用既有排序行口径
+  /// `_items.length`，与排序行同一来源，避免计数语义分叉。
+  int _computeResultCount(Set<String> favorites) =>
+      _favOnly ? _computeListItems(favorites).length : _items.length;
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     final List<StrategyMarketItem> listItems = _computeListItems(favorites);
+    // 收藏视图下结果计数应反映过滤后的条数（含 hero 已剔除项）。
+    final int resultCount = _computeResultCount(favorites);
+    // 把实时计数推给已打开的 sheet（#2128）；仅 sheet 打开时调度，避免 sheet 关闭
+    // 时高频 rebuild（滚动分页 / 收藏切换）无意义排回调。post-frame 避免 build 内
+    // 改 notifier 触发同帧重入。
+    if (_filterSheetOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _sheetResultCount.value = resultCount;
+      });
+    }
     return Scaffold(
       appBar: QzTopBar(
         compact: true,
@@ -340,8 +370,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
           ),
           _SortRow(
             sort: _sort,
-            // 收藏视图下结果计数应反映过滤后的条数（含 hero 已剔除项）。
-            resultCount: _favOnly ? listItems.length : _items.length,
+            resultCount: resultCount,
             onChanged: _onSortChanged,
           ),
           const SizedBox(height: QzSpacing.xs),
