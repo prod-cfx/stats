@@ -8,14 +8,19 @@ import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 
-/// 交易详情顶部：大价格 + 涨跌 + 4 格 24H 统计（高/低/量/持仓量）。
+/// 交易详情顶部价格头，三行对齐设计稿 `m-screens-3.jsx`：
+/// 1. 大价格 + 涨跌额(%)
+/// 2. 4 格：指数价格 / 标记价格 / 资金费率 / 持仓量
+/// 3. 3 格：24H 高 / 24H 低 / 24H 量
 ///
 /// 数据来自 `Ticker` 单一来源；高低用 `price * (1 ± |changePct|/100)` 作 mock
 /// 推算（真实接口接入时由 backend 24h kline 聚合替换）；持仓量用
-/// `volume24h * 0.4` mock，符合行业大致量纲。
+/// `volume24h * 0.4` mock，符合行业大致量纲；指数/标记价格用 `price` 微偏移
+/// 占位，资金费率固定 0.00% 占位。
 ///
-/// TODO(follow-up)：在 `Ticker` 模型上引入 `high24h`/`low24h`/`openInterest`
-/// 字段后，把 widget 内的估算逻辑替换成直接读字段，移除 `math.max` 守护。
+/// TODO(follow-up)：在 `Ticker` 模型上引入 `high24h`/`low24h`/`openInterest`/
+/// `indexPrice`/`markPrice`/`fundingRate` 字段后，把 widget 内的估算逻辑替换
+/// 成直接读字段，移除 `math.max` 守护与占位常量。
 class MarketDetailStats extends StatelessWidget {
   const MarketDetailStats({
     super.key,
@@ -41,6 +46,11 @@ class MarketDetailStats extends StatelessWidget {
     final double volume = ticker.volume24h;
     // 持仓量 mock：取 24H 量的 40%。真实接入时换成 open-interest 聚合接口。
     final double openInterest = ticker.volume24h * 0.4;
+    // 指数/标记价格 mock：贴近最新价做微偏移占位（真实接入时读对应字段）。
+    final double indexPrice = ticker.price * 0.999;
+    final double markPrice = ticker.price * 1.0001;
+    // 资金费率 mock：固定 0.00% 占位（真实接入时读 funding-rate 接口）。
+    const double fundingRate = 0;
 
     final double changeAbs = ticker.price * ticker.changePercent / 100;
     final String changeAbsStr =
@@ -97,6 +107,29 @@ class MarketDetailStats extends StatelessWidget {
             ),
           ),
           const SizedBox(height: QzSpacing.sm),
+          // row 2：指数 / 标记 / 资金费率 / 持仓量
+          Row(
+            children: <Widget>[
+              _StatCell(
+                label: l10n.marketDetailIndexPrice,
+                value: _fmtPrice(indexPrice),
+              ),
+              _StatCell(
+                label: l10n.marketDetailMarkPrice,
+                value: _fmtPrice(markPrice),
+              ),
+              _StatCell(
+                label: l10n.marketDetailFundingRate,
+                value: _fmtPercent(fundingRate),
+              ),
+              _StatCell(
+                label: l10n.marketDetailOpenInterest,
+                value: _fmtCompact(openInterest),
+              ),
+            ],
+          ),
+          const SizedBox(height: QzSpacing.sm),
+          // row 3：24H 高 / 低 / 量
           Row(
             children: <Widget>[
               _StatCell(label: l10n.marketDetail24hHigh, value: _fmtPrice(high)),
@@ -105,10 +138,7 @@ class MarketDetailStats extends StatelessWidget {
                 label: l10n.marketDetail24hVolume,
                 value: _fmtCompact(volume),
               ),
-              _StatCell(
-                label: l10n.marketDetailOpenInterest,
-                value: _fmtCompact(openInterest),
-              ),
+              const Spacer(),
             ],
           ),
         ],
@@ -118,6 +148,10 @@ class MarketDetailStats extends StatelessWidget {
 
   static String _fmtPrice(double v) {
     return v.toStringAsFixed(2);
+  }
+
+  static String _fmtPercent(double v) {
+    return '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
   }
 
   static String _fmtCompact(double v) {

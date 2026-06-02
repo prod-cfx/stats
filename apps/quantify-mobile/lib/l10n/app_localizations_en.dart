@@ -1114,6 +1114,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailOpenInterest => 'Open Interest';
 
   @override
+  String get marketDetailIndexPrice => 'Index Price';
+
+  @override
+  String get marketDetailMarkPrice => 'Mark Price';
+
+  @override
+  String get marketDetailFundingRate => 'Funding Rate';
+
+  @override
   String get marketDetailPanelOrderbook => 'Order Book';
 
   @override

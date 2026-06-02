@@ -2124,6 +2124,24 @@ abstract class AppLocalizations {
   /// **'持仓量'**
   String get marketDetailOpenInterest;
 
+  /// No description provided for @marketDetailIndexPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'指数价格'**
+  String get marketDetailIndexPrice;
+
+  /// No description provided for @marketDetailMarkPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'标记价格'**
+  String get marketDetailMarkPrice;
+
+  /// No description provided for @marketDetailFundingRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'资金费率'**
+  String get marketDetailFundingRate;
+
   /// No description provided for @marketDetailPanelOrderbook.
   ///
   /// In zh, this message translates to:

@@ -135,16 +135,20 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('交易详情：顶部 4 格 24H 统计 + 副标题 + star/more 按钮', (
+  testWidgets('交易详情：价格头三行（指数/标记/资金费率/持仓量 + 24H 高/低/量）+ 副标题 + star/more 按钮', (
     WidgetTester tester,
   ) async {
     await _pump(tester);
 
-    // 4 格 24H 统计 label
+    // row2：指数价格 / 标记价格 / 资金费率 / 持仓量
+    expect(find.text('指数价格'), findsOneWidget);
+    expect(find.text('标记价格'), findsOneWidget);
+    expect(find.text('资金费率'), findsOneWidget);
+    expect(find.text('持仓量'), findsOneWidget);
+    // row3：24H 高 / 低 / 量
     expect(find.text('24H 高'), findsOneWidget);
     expect(find.text('24H 低'), findsOneWidget);
     expect(find.text('24H 量'), findsOneWidget);
-    expect(find.text('持仓量'), findsOneWidget);
     expect(find.byType(MarketDetailStats), findsOneWidget);
 
     // 顶栏副标题

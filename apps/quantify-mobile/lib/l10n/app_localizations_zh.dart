@@ -1070,6 +1070,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailOpenInterest => '持仓量';
 
   @override
+  String get marketDetailIndexPrice => '指数价格';
+
+  @override
+  String get marketDetailMarkPrice => '标记价格';
+
+  @override
+  String get marketDetailFundingRate => '资金费率';
+
+  @override
   String get marketDetailPanelOrderbook => '盘口';
 
   @override
