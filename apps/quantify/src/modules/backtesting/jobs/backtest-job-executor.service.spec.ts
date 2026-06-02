@@ -165,6 +165,28 @@ describe('BacktestJobExecutorService', () => {
     }))
   })
 
+  it('does not add diagnostic reason when result has an open trade', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const executor = new BacktestJobExecutorService(
+      { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 0, totalOpenTrades: 1 }, diagnostics: { compiledRulesCount: 1, signalTriggerCount: 1, fillCount: 0 }, equityCurve: [], trades: [], markers: [], bySymbol: [], openPositions: [{ symbol: 'BTCUSDT:PERP', qty: 1, avgEntryPrice: 100, unrealizedPnl: 0 }] }) } as never,
+      createMarketDataMock() as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+    )
+
+    await executor.execute('job-1', createInput(), createInputSummary())
+
+    expect(repository.markSucceeded).toHaveBeenCalledWith('job-1', expect.objectContaining({
+      result: expect.objectContaining({
+        summary: expect.not.objectContaining({ diagnosticReason: expect.any(String) }),
+      }),
+    }))
+  })
+
   it('persists diagnosticReason in lastBacktestRef for snapshot-bound live-only webhook runs', async () => {
     const repository = {
       markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: 'conv-1', status: 'running' }),
@@ -255,6 +277,126 @@ describe('BacktestJobExecutorService', () => {
       eventStreams: {
         'orderbook.imbalance': [{ id: 'book-1', ts: 1_900, payload: { bidDepth: 3, askDepth: 2 } }],
         open_interest: [{ id: 'oi-1', ts: 1_900, payload: { openInterest: 123 } }],
+      },
+    }))
+  })
+
+  it('hydrates webhook event streams from accepted historical signal events', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 2_000 }
+    input.strategy = {
+      ...input.strategy,
+      strategyInstanceId: 'instance-1',
+      astSnapshot: {
+        exprPool: [
+          {
+            id: 'expr_webhook_buy',
+            nodeType: 'predicate',
+            payload: {
+              kind: 'externalSignal',
+              params: { provider: 'webhook', signalId: 'TradingView webhook buy', sourceFeedId: 'webhook.TradingView webhook buy', ttlMs: 60_000 },
+            },
+          },
+        ],
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 2_000 }, appliedRange: { fromTs: 1_000, toTs: 2_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const signalGeneratorRepository = {
+      findActiveWebhookSignalSubscriptions: jest.fn().mockResolvedValue([{ signalId: 'TradingView webhook buy' }]),
+      findAcceptedWebhookRuntimeEvents: jest.fn().mockResolvedValue([
+        {
+          id: 'evt-1',
+          signalId: 'TradingView webhook buy',
+          payload: { side: 'buy' },
+          receivedAt: new Date(1_800),
+          sourceTimestamp: new Date(1_700),
+        },
+      ]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      undefined,
+      signalGeneratorRepository as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(signalGeneratorRepository.findActiveWebhookSignalSubscriptions).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      signalIds: ['TradingView webhook buy'],
+    })
+    expect(signalGeneratorRepository.findAcceptedWebhookRuntimeEvents).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      signalIds: ['TradingView webhook buy'],
+      since: new Date(1_000),
+      until: new Date(2_000),
+    })
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'webhook.TradingView webhook buy': [
+          { id: 'evt-1', ts: 1_700, payload: { side: 'buy', signalId: 'TradingView webhook buy' } },
+        ],
+      },
+    }))
+  })
+
+  it('injects synthetic webhook history when no accepted webhook events exist for backtest', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 4_000 }
+    input.strategy = {
+      ...input.strategy,
+      strategyInstanceId: 'instance-1',
+      astSnapshot: {
+        exprPool: [
+          {
+            id: 'expr_webhook_buy',
+            nodeType: 'predicate',
+            payload: {
+              kind: 'externalSignal',
+              params: { provider: 'webhook', signalId: 'TradingView webhook buy', sourceFeedId: 'webhook.TradingView webhook buy', ttlMs: 60_000 },
+            },
+          },
+        ],
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 4_000 }, appliedRange: { fromTs: 1_000, toTs: 4_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const signalGeneratorRepository = {
+      findActiveWebhookSignalSubscriptions: jest.fn().mockResolvedValue([]),
+      findAcceptedWebhookRuntimeEvents: jest.fn().mockResolvedValue([]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      undefined,
+      signalGeneratorRepository as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'webhook.TradingView webhook buy': expect.arrayContaining([
+          expect.objectContaining({ payload: expect.objectContaining({ signalId: 'TradingView webhook buy', side: 'buy' }) }),
+        ]),
       },
     }))
   })

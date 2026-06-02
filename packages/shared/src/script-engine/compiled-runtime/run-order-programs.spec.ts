@@ -80,6 +80,22 @@ describe('runOrderPrograms — orchestration program lifecycle (Phase 5 S4 T11)'
     expect(wo.levels?.length).toBe(3)
   })
 
+  it('active=true when activeWhenExprId references expr sourceRef instead of expr id', () => {
+    const program = makeProgram({ activeWhenExprId: 'grid_gate_source_ref' })
+    const state = runOrderPrograms(
+      ctx,
+      [],
+      { expr_04_grid_gate_source_ref: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+
+    expect(state.activeProgramIds).toEqual([program.id])
+    expect(state.workingOrders).toHaveLength(1)
+  })
+
   it('active=false + onDeactivate=cancel → cancelledProgramIds contains id, no workingOrders', () => {
     const program = makeProgram({ onDeactivate: 'cancel' })
     const state = runOrderPrograms(

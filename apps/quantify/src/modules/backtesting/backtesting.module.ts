@@ -5,6 +5,7 @@ import { EnvModule } from '@/common/modules/env.module'
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { MarketDataModule } from '@/modules/market-data/market-data.module'
+import { SignalGeneratorRepository } from '@/modules/strategy-signals/repositories/signal-generator.repository'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { BacktestingController } from './backtesting.controller'
 import { BacktestRunnerService } from './core/backtest-runner.service'
@@ -57,6 +58,7 @@ import { StateEngineService } from './state/state-engine.service'
     BacktestSymbolSupportService,
     AiQuantConversationsRepository,
     PublishedStrategySnapshotsRepository,
+    SignalGeneratorRepository,
   ],
   exports: [BacktestJobsService, BacktestJobExecutorService],
 })

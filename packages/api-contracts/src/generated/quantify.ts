@@ -124,6 +124,15 @@ const BacktestJobSummaryDto = z
     totalTrades: z.number(),
     totalOpenTrades: z.number().optional(),
     openPnl: z.number().optional(),
+    diagnosticReason: z
+      .enum([
+        'BACKTEST_NO_RULES_COMPILED',
+        'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE',
+        'BACKTEST_EVENT_STREAM_UNAVAILABLE',
+        'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE',
+        'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL',
+      ])
+      .optional(),
   })
   .passthrough()
 const BacktestEquityPointDto = z.object({ ts: z.number(), equity: z.number() }).passthrough()
@@ -1214,6 +1223,51 @@ const GridRuntimeFillDto = z
   })
   .passthrough()
 const GridRuntimeActionDto = z.object({ reason: z.string() }).partial().passthrough()
+const ExternalSignalWebhookSubscriptionResponseDto = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    strategyInstanceId: z.string(),
+    provider: z.string().nullish(),
+    signalId: z.string(),
+    secretVersion: z.number(),
+    status: z.string(),
+    lastAcceptedAt: z.string().nullish(),
+    rotatedAt: z.string().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    webhookUrl: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const CreateExternalSignalWebhookSubscriptionDto = z
+  .object({
+    provider: z.string().optional(),
+    signalId: z.string(),
+    metadata: z.object({}).partial().passthrough().optional(),
+  })
+  .passthrough()
+const ExternalSignalWebhookSubscriptionSecretResponseDto = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    strategyInstanceId: z.string(),
+    provider: z.string().nullish(),
+    signalId: z.string(),
+    secretVersion: z.number(),
+    status: z.string(),
+    lastAcceptedAt: z.string().nullish(),
+    rotatedAt: z.string().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    webhookUrl: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    secret: z.string(),
+  })
+  .passthrough()
+const ExternalSignalWebhookAcceptedResponseDto = z
+  .object({ accepted: z.boolean(), eventId: z.string() })
+  .passthrough()
 const StrategyLegDefinitionDto = z
   .object({
     id: z.string(),
@@ -1393,6 +1447,15 @@ const AiQuantConversationLastBacktestSummaryDto = z
     openTradeCount: z.number().optional(),
     openPnl: z.number().optional(),
     marketType: z.enum(['spot', 'perp']).optional(),
+    diagnosticReason: z
+      .enum([
+        'BACKTEST_EVENT_STREAM_UNAVAILABLE',
+        'BACKTEST_NO_RULES_COMPILED',
+        'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE',
+        'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE',
+        'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL',
+      ])
+      .optional(),
   })
   .passthrough()
 const AiQuantConversationLastBacktestRefDto = z
@@ -1615,51 +1678,6 @@ const LlmCodegenEngineTestResponseDto = z
     rejectReason: z.string().optional(),
   })
   .passthrough()
-const ExternalSignalWebhookSubscriptionResponseDto = z
-  .object({
-    id: z.string(),
-    userId: z.string(),
-    strategyInstanceId: z.string(),
-    provider: z.string().nullish(),
-    signalId: z.string(),
-    secretVersion: z.number(),
-    status: z.string(),
-    lastAcceptedAt: z.string().nullish(),
-    rotatedAt: z.string().nullish(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    webhookUrl: z.string(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough()
-const CreateExternalSignalWebhookSubscriptionDto = z
-  .object({
-    provider: z.string().optional(),
-    signalId: z.string(),
-    metadata: z.object({}).partial().passthrough().optional(),
-  })
-  .passthrough()
-const ExternalSignalWebhookSubscriptionSecretResponseDto = z
-  .object({
-    id: z.string(),
-    userId: z.string(),
-    strategyInstanceId: z.string(),
-    provider: z.string().nullish(),
-    signalId: z.string(),
-    secretVersion: z.number(),
-    status: z.string(),
-    lastAcceptedAt: z.string().nullish(),
-    rotatedAt: z.string().nullish(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    webhookUrl: z.string(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-    secret: z.string(),
-  })
-  .passthrough()
-const ExternalSignalWebhookAcceptedResponseDto = z
-  .object({ accepted: z.boolean(), eventId: z.string() })
-  .passthrough()
 const CreateSubscriptionDto = z
   .object({
     userId: z.string(),
@@ -1867,6 +1885,10 @@ export const schemas = {
   GridRuntimeOrderDto,
   GridRuntimeFillDto,
   GridRuntimeActionDto,
+  ExternalSignalWebhookSubscriptionResponseDto,
+  CreateExternalSignalWebhookSubscriptionDto,
+  ExternalSignalWebhookSubscriptionSecretResponseDto,
+  ExternalSignalWebhookAcceptedResponseDto,
   StrategyLegDefinitionDto,
   StrategyExecutionConfigDto,
   StrategyTemplateResponseDto,
@@ -1899,10 +1921,6 @@ export const schemas = {
   ContinueCodegenSessionDto,
   TestLlmCodegenEngineDto,
   LlmCodegenEngineTestResponseDto,
-  ExternalSignalWebhookSubscriptionResponseDto,
-  CreateExternalSignalWebhookSubscriptionDto,
-  ExternalSignalWebhookSubscriptionSecretResponseDto,
-  ExternalSignalWebhookAcceptedResponseDto,
   CreateSubscriptionDto,
   SubscriptionStatus,
   SubscriptionResponseDto,

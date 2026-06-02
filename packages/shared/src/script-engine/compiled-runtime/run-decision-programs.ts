@@ -551,7 +551,11 @@ function evaluatePositionLifecycle(
   const reverseMeta = program.metadata?.reversePosition
   if (reverseMeta) {
     const currentQty = readCurrentQty(ctx)
+    const openAction = findReverseOpenAction(program, reverseMeta.toSide)
     if (currentQty === 0) {
+      if (openAction) {
+        return buildDecision(openAction, ctx, program.id)
+      }
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.reverse.no_position`,
@@ -564,7 +568,6 @@ function evaluatePositionLifecycle(
       }
     }
 
-    const openAction = findReverseOpenAction(program, reverseMeta.toSide)
     const resolvedOpenQuantity = openAction
       ? resolveReverseOpenQuantity(openAction, ctx, Math.abs(currentQty), reverseMeta.sizingSource)
       : null

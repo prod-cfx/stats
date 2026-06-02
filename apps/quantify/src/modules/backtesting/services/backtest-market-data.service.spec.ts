@@ -318,7 +318,7 @@ describe('backtestMarketDataService', () => {
       dataRange: { fromTs: 1_500, toTs: 2_500 },
     })
 
-    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT', 'BTCUSDT:PERP', 'BTCUSDT:SPOT'])
+    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT', 'BTCUSDT:PERP', 'BTCUSDT:SPOT'], undefined)
     expect(bars).toEqual([
       expect.objectContaining({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2_000, close: 11.5 }),
     ])
@@ -811,7 +811,7 @@ describe('backtestMarketDataService', () => {
       },
     })
 
-    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT:PERP'])
+    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT:PERP'], 'OKX')
     expect(repository.aggregateCoverage).toHaveBeenCalledWith({
       symbolId: 'perp-id',
       timeframe: '15m',
@@ -850,7 +850,7 @@ describe('backtestMarketDataService', () => {
       },
     })
 
-    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT:PERP'])
+    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT:PERP'], 'OKX')
     expect(repository.findBars).toHaveBeenCalledWith({
       symbolId: 'perp-id',
       timeframe: '15m',

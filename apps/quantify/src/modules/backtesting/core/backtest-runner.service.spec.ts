@@ -409,6 +409,130 @@ describe('backtestRunnerService', () => {
     expect(report.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
   })
 
+  it('does not classify orchestration-only grid programs as no compiled rules', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'fixed-grid-orchestration-only',
+        params: { marketType: 'perp' },
+        specSnapshot: {
+          rules: [],
+          orchestration: {
+            programs: [
+              {
+                id: 'grid-1',
+                programKind: 'fixed_grid_gated',
+                gridParams: { lowerBound: 69800, upperBound: 82648, levelCount: 10, stepPct: 5 },
+              },
+            ],
+          },
+        },
+        fn: () => ({ type: 'NOOP', reason: 'grid.no_runtime_order_program' }),
+      },
+      dataRange: { fromTs: 900_000, toTs: 900_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 0, closeTime: 900_000, close: 76000 }),
+      ],
+    })
+
+    expect(report.diagnostics.compiledRulesCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_NO_SIGNAL_FIRED_IN_RANGE')
+  })
+
+  it('fills legacy fixed-grid orchestration working orders that expose sizing instead of quantity', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'legacy-fixed-grid-order-state',
+        params: { marketType: 'perp' },
+        specSnapshot: { orchestration: { programs: [{ id: 'grid-1' }] } },
+        fn: () => ({
+          action: 'NOOP',
+          reason: 'grid.active',
+          meta: {
+            orderState: {
+              workingOrders: [{
+                id: 'grid-1',
+                sourceRef: 'orchestration:program.fixed_grid_gated',
+                levels: [95],
+                payload: { sizing: { mode: 'fixed_pct', value: 10 } },
+              }],
+              activeProgramIds: ['grid-1'],
+              cancelledProgramIds: [],
+              closeProgramIds: [],
+            },
+          },
+        }),
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 1, open: 100, high: 101, low: 99, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 2, open: 100, high: 100, low: 94, close: 96 }),
+      ],
+    })
+
+    expect(report.summary.totalOpenTrades).toBe(1)
+    expect(report.openPositions?.[0]?.qty).toBeGreaterThan(0)
+  })
+
+  it('opens a short when compiled EMA20 crosses under EMA50 in the backtest loop', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'ema-cross-under-short',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'entry-short' }] },
+        fn: (ctx) => {
+          const values = evaluateExprPool(
+            ctx as never,
+            [
+              { id: 'close_15m', nodeType: 'series', payload: { kind: 'PRICE', field: 'close', timeframe: '15m' } },
+              { id: 'ema_20_15m', nodeType: 'series', deps: ['close_15m'], payload: { kind: 'EMA', inputs: ['close_15m'], params: { period: 20 } } },
+              { id: 'ema_50_15m', nodeType: 'series', deps: ['close_15m'], payload: { kind: 'EMA', inputs: ['close_15m'], params: { period: 50 } } },
+              { id: 'cross_under', nodeType: 'predicate', deps: ['ema_20_15m', 'ema_50_15m'], payload: { kind: 'CROSS_UNDER' } },
+            ],
+            ['close_15m', 'ema_20_15m', 'ema_50_15m', 'cross_under'],
+          )
+
+          return values.cross_under === true
+            ? { action: 'OPEN_SHORT', size: { mode: 'QUOTE', value: 1000 }, reason: 'ema.cross_under' } satisfies StrategyDecisionV1
+            : { action: 'NOOP', reason: 'ema.no_cross' } satisfies StrategyDecisionV1
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 120 },
+      bars: Array.from({ length: 120 }, (_, index) => {
+        const close = index < 55 ? 100 + index : Math.max(50, 155 - ((index - 54) * 3))
+        return createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: index + 1, close })
+      }),
+    })
+
+    expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+    expect(report.summary.totalOpenTrades).toBe(1)
+    expect(report.openPositions?.[0]?.qty).toBeLessThan(0)
+    expect(report.summary.diagnosticReason).toBeUndefined()
+  })
+
   it('injects matching webhook events into strategy context point-in-time', async () => {
     const runner = createRunner()
     const inboxes: unknown[] = []
@@ -1799,7 +1923,7 @@ describe('backtestRunnerService', () => {
       expect(report.diagnostics.fillCount).toBeGreaterThan(0)
     })
 
-    it('信号触发但仅 OPEN 未 CLOSE → fillCount=0 反映 SIGNAL_FIRED_BUT_NO_FILL 边界', async () => {
+    it('信号触发但仅 OPEN 未 CLOSE → open trade counts as effective fill for deployment gate', async () => {
       const runner = createRunner()
       const report = await runner.run({
         ...baseInput,
@@ -1814,6 +1938,8 @@ describe('backtestRunnerService', () => {
       expect(report.diagnostics.compiledRulesCount).toBe(1)
       expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
       expect(report.diagnostics.fillCount).toBe(0)
+      expect(report.summary.totalOpenTrades).toBe(1)
+      expect(report.summary.diagnosticReason).toBeUndefined()
     })
 
     // Issue #1708：V1 StrategyDecision { action: 'NOOP' } 不能被 signalTriggerCount 错算成 trigger，

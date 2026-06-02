@@ -84,6 +84,45 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(source).toContain('RulesMainflowReaderService')
   })
 
+  it('compiles fixed-grid program effect with default on_start condition as always-active gate', () => {
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      rules: [programRule({
+        kind: 'atom',
+        key: 'program.fixed_grid_gated',
+        params: {
+          lowerBound: 69800,
+          upperBound: 82648,
+          levelCount: 10,
+          stepPct: 5,
+          sizing: { mode: 'fixed_pct', value: 1 },
+          onDeactivate: 'cancel',
+        },
+      })],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback })
+    const program = compiled.ir.orchestrationPrograms?.[0]
+    const predicate = compiled.ir.signalCatalog.predicates.find(item => item.id === program?.activeWhenExprId)
+
+    expect(program).toEqual(expect.objectContaining({
+      programKind: 'fixed_grid_gated',
+      activeWhenExprId: expect.any(String),
+    }))
+    expect(predicate).toEqual(expect.objectContaining({
+      kind: 'EQ',
+      args: ['const_1', 'const_1'],
+    }))
+    expect(JSON.stringify(compiled.ir)).not.toContain('execution_on_start')
+    expect(JSON.stringify(compiled.ir)).not.toContain('bar_index')
+  })
+
   it('builds execution semantics from rule effects and ignores conflicting flat-only buckets', () => {
     const state = baseState({
       trigger: [{

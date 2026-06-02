@@ -1488,10 +1488,21 @@ export class CanonicalSpecBuilderService {
     const orchestrationProgramRuleIds = new Set(
       mainflow.byRole.program
         .filter(leaf => leaf.key === 'program.fixed_grid_gated')
+        .filter(leaf => !this.rulesMainflowGridOrderProgramOwnsRule(mainflow, leaf, state))
         .map(leaf => leaf.ruleId),
     )
+    const fallbackProgramLeaves = mainflow.byRole.program.filter(leaf => (
+      leaf.key === 'program.fixed_grid_gated'
+      && this.buildCanonicalFixedGridProgramFromRuleEffectLeaf(
+        this.atomLeafFromMainflowLeaf(leaf),
+        `semantic-order-program-probe-${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`,
+        leaf.path,
+        this.programGateIdForRuleEffectLeaf(leaf),
+      ) === null
+    ))
     const primary = [
       ...mainflow.byRole.program.filter(leaf => leaf.key === 'program.fixed_grid' && !orchestrationProgramRuleIds.has(leaf.ruleId)),
+      ...fallbackProgramLeaves,
       ...mainflow.byRole.condition.filter(leaf => leaf.key === 'grid.range_rebalance' && !orchestrationProgramRuleIds.has(leaf.ruleId)),
     ]
     const primaryRuleIds = new Set(primary.map(leaf => leaf.ruleId))
@@ -1716,7 +1727,7 @@ export class CanonicalSpecBuilderService {
         id: gateId,
         sourcePath: leaf.path,
         target: { phase: 'strategy' },
-        activeWhen: this.buildProgramGateConditionFromRule(rule),
+        activeWhen: this.buildProgramGateConditionFromRule(rule, leaf),
         effectWhenFalse: 'block_new_entries',
       })
     }
@@ -2007,7 +2018,17 @@ export class CanonicalSpecBuilderService {
     return gates.sort((a, b) => a.id.localeCompare(b.id))
   }
 
-  private buildProgramGateConditionFromRule(rule: SemanticRule): CanonicalConditionNode {
+  private buildProgramGateConditionFromRule(
+    rule: SemanticRule,
+    leaf?: RulesMainflowLeaf,
+  ): CanonicalConditionNode {
+    if (
+      leaf
+      && (leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated')
+      && this.isExecutionOnStartAtom(rule.condition)
+    ) {
+      return this.buildAlwaysActiveCondition()
+    }
     if (rule.phase === 'entry' || rule.phase === 'exit') {
       const condition = this.buildConditionFromSemanticRuleExpr(rule.condition, rule.phase, rule.sideScope, null)
       if (condition) return condition
@@ -2017,6 +2038,19 @@ export class CanonicalSpecBuilderService {
       key: 'execution.on_start',
       semanticScope: 'market',
     }
+  }
+
+  private buildAlwaysActiveCondition(): CanonicalConditionNode {
+    return {
+      kind: 'expression',
+      op: 'EQ',
+      left: { kind: 'constant', value: 1 },
+      right: { kind: 'constant', value: 1 },
+    }
+  }
+
+  private isExecutionOnStartAtom(expr: AtomExpr): boolean {
+    return expr.kind === 'atom' && expr.key === 'execution.on_start'
   }
 
   private programGateIdForRuleEffectLeaf(leaf: RulesMainflowLeaf): string {

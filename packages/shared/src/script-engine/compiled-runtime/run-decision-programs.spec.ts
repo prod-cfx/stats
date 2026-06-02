@@ -151,6 +151,49 @@ describe('partial take profit decision gate', () => {
   })
 })
 
+describe('reverse position decisions', () => {
+  it('opens the target side when reverse short fires with no existing long position', () => {
+    const program = {
+      id: 'program_reverse_short',
+      phase: 'entry' as const,
+      priority: 100,
+      when: 'predicate_reverse_short',
+      metadata: {
+        reversePosition: {
+          fromSide: 'long' as const,
+          toSide: 'short' as const,
+          sameBarPolicy: 'next_bar_only' as const,
+          sizingSource: 'fixed' as const,
+        },
+      },
+      actions: [
+        { kind: 'CLOSE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 100 } },
+        { kind: 'OPEN_SHORT' as const, quantity: { mode: 'pct_equity' as const, value: 10 } },
+      ],
+    }
+    const ctx = {
+      position: { qty: 0 },
+      currentPrice: 100,
+      accountEquity: 10000,
+      __compiledDecisionState: { previousPositionQty: 0, lastTriggeredByProgram: {}, barIndex: 0 },
+      semanticRuntimeState: {},
+    } as unknown as Ctx
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [program] as unknown as Programs,
+      { predicate_reverse_short: true },
+      baseGuard,
+      [program.id],
+    )
+
+    expect(decision).toMatchObject({
+      action: 'OPEN_SHORT',
+      size: { mode: 'RATIO', value: 0.1 },
+    })
+  })
+})
+
 describe('orchestration gate enforcement', () => {
   const OPEN_LONG_PROGRAM = {
     id: 'program_open_long',
