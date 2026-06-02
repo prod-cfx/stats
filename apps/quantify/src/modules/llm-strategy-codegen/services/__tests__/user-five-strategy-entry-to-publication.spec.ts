@@ -551,29 +551,102 @@ describe('user reported five strategies: entry -> middle -> publication generati
       programKind: 'fixed_grid_gated',
       onDeactivate: 'cancel',
     }))
+    expect(JSON.stringify(artifacts.ast.orchestrationPrograms[0])).toContain('50000')
+    expect(JSON.stringify(artifacts.ast.orchestrationPrograms[0])).toContain('60000')
     expect(artifacts.ast.orderPrograms).toHaveLength(0)
+    expect(artifacts.compiledScript).toContain('fixed_grid_gated')
   })
 
   it('用户复杂策略：反手做空保留 reversePosition metadata', async () => {
     const state = buildStateFromUserMessage('OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。')
     const artifacts = await createPublicationStage().generate({ semanticState: state })
     const reverseDecision = artifacts.ast.decisionPrograms.find(program => program.actions.some(action => action.kind === 'OPEN_SHORT'))
+    const script = artifacts.compiledScript
 
     expect(reverseDecision?.actions.map(action => action.kind)).toEqual(['CLOSE_LONG', 'OPEN_SHORT'])
     expect(reverseDecision?.metadata).toEqual(expect.objectContaining({
       reversePosition: expect.objectContaining({ fromSide: 'long', toSide: 'short' }),
     }))
+    expect(script).toContain('ema_20_15m')
+    expect(script).toContain('ema_50_15m')
+    expect(script).not.toContain('CROSS_UNDER","args":["close_15m","ema_20_15m"]')
   })
 
   it('用户复杂策略：TradingView webhook buy 不生成 REQUIRED_SIGNAL_ID 占位和重复开仓', async () => {
-    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，收到 TradingView webhook buy 信号 signalId 为 tv_buy 后开多，单笔 10% 仓位。跌破 EMA20 时平多。')
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，收到 TradingView webhook buy 信号后开多，单笔 10% 仓位。跌破 EMA20 时平多。')
     const artifacts = await createPublicationStage().generate({ semanticState: state })
     const openLongDecisions = artifacts.ast.decisionPrograms.filter(program => program.actions.some(action => action.kind === 'OPEN_LONG'))
     const script = artifacts.compiledScript
 
     expect(openLongDecisions).toHaveLength(1)
     expect(script).toContain('externalSignal')
-    expect(script).toContain('tv_buy')
+    expect(script).toContain('TradingView webhook buy')
     expect(script).not.toContain('REQUIRED_SIGNAL_ID')
+    expect(script).not.toContain('openSlots')
+    expect(script).not.toContain('IN_TIME_WINDOW')
+  })
+
+  it('用户复杂策略：top-level 仓位回填到网格 program rules 主数据流', () => {
+    const conversation = createConversationService()
+    const state = conversation.normalizeSemanticContractReadiness({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', status: 'locked', priority: 'context', value: 'okx', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', status: 'locked', priority: 'context', value: 'BTCUSDT', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', status: 'locked', priority: 'context', value: 'perp', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', status: 'locked', priority: 'context', value: '15m', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-06-02T00:00:00.000Z',
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+        source: 'user_explicit',
+        status: 'locked',
+        openSlots: [],
+        positionMode: 'long_only',
+      },
+      rules: [{
+        id: 'program-grid',
+        phase: 'program',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 50000, rangeUpper: 60000, levels: 10, stepPct: 5, perGridSizing: 0 } },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both' } }],
+          orchestration: [],
+          programs: [{ kind: 'atom', key: 'program.fixed_grid_gated', params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5 } }],
+        },
+      }, {
+        id: 'pos-sizing-10pct',
+        phase: 'program',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both' } },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: { mode: 'fixed_pct', value: 0.1 } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as SemanticState, { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION })
+
+    const sizingLeaves = factsByRole(state, 'position').filter(leaf => leaf.key === 'position.sizing')
+
+    expect(sizingLeaves).toHaveLength(1)
+    expect(state.rules?.map(rule => rule.id)).not.toContain('pos-sizing-10pct')
+    expect(sizingLeaves[0]?.params).toEqual(expect.objectContaining({
+      sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+    }))
   })
 })

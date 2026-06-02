@@ -826,7 +826,7 @@ export class CanonicalSpecBuilderService {
         }
         if (sizing.mode === 'QUOTE') return { mode: 'fixed_quote', value: sizing.value }
         if (sizing.mode === 'QTY') return { mode: 'fixed_base', value: sizing.value }
-        return { mode: 'fixed_pct', value: sizing.value }
+        return { mode: 'fixed_pct', value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(8)) : sizing.value }
       }
       if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
         continue
@@ -1485,15 +1485,14 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
   ): CanonicalOrderProgramIntent[] {
     const orderPrograms: CanonicalOrderProgramIntent[] = []
-    const hasFixedGridOrchestrationProgram = mainflow.byRole.program.some(
-      leaf => leaf.key === 'program.fixed_grid_gated',
+    const orchestrationProgramRuleIds = new Set(
+      mainflow.byRole.program
+        .filter(leaf => leaf.key === 'program.fixed_grid_gated')
+        .map(leaf => leaf.ruleId),
     )
-    if (hasFixedGridOrchestrationProgram) {
-      return orderPrograms
-    }
     const primary = [
-      ...mainflow.byRole.program.filter(leaf => leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated'),
-      ...mainflow.byRole.condition.filter(leaf => leaf.key === 'grid.range_rebalance'),
+      ...mainflow.byRole.program.filter(leaf => leaf.key === 'program.fixed_grid' && !orchestrationProgramRuleIds.has(leaf.ruleId)),
+      ...mainflow.byRole.condition.filter(leaf => leaf.key === 'grid.range_rebalance' && !orchestrationProgramRuleIds.has(leaf.ruleId)),
     ]
     const primaryRuleIds = new Set(primary.map(leaf => leaf.ruleId))
     // #1633 rules-only: grid.range_rebalance bucket=positionConstraint → effects.positions → role='position'.

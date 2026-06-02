@@ -67,6 +67,7 @@ const EXECUTABLE_CONTEXT_QUESTION_HINTS: Record<ExecutableContextField, string> 
   marketType: '请选择市场类型',
   timeframe: '请选择周期',
 }
+const POSITION_SIZING_ATOM_KEY = 'position.sizing'
 
 export type MissingSemanticContractRequirementKind = 'capability_missing' | 'timeframe_mismatch'
 
@@ -141,7 +142,8 @@ export class SemanticContractReadinessService {
     strategyVersion?: StrategyVersionInfo,
   ): SemanticContractReadinessNormalizationResult {
     const hasRules = Boolean(state.rules && state.rules.length > 0)
-    if (!hasRules) {
+    const hasLegacyFlatOwners = this.hasLegacyFlatOwners(state)
+    if (!hasRules && !hasLegacyFlatOwners) {
       const missingRequirements: MissingSemanticContractRequirement[] = [{
         ownerKind: 'position',
         ownerId: 'rules_tree',
@@ -158,11 +160,21 @@ export class SemanticContractReadinessService {
       }
     }
 
-    let materialized = this.materializeRulesMainflowState({
-      ...state,
-      rules: normalizeRulesForMainflowFacts(dedupeSemanticRulesForReadiness(state.rules ?? [])),
-    })
-    state = materialized.source
+    let materialized: ReadinessMaterializedState
+    if (hasRules) {
+      state = this.dropStandalonePositionSizingRules(
+        this.withTopLevelPositionSizingProjectedToRules(state),
+      )
+
+      materialized = this.materializeRulesMainflowState({
+        ...state,
+        rules: normalizeRulesForMainflowFacts(dedupeSemanticRulesForReadiness(state.rules ?? [])),
+      })
+      state = materialized.source
+    }
+    else {
+      materialized = this.materializeLegacyFlatState(state)
+    }
 
     const rulesReadinessForMissing = hasRules
       ? this.evaluateRulesReadiness(state.rules)
@@ -285,11 +297,62 @@ export class SemanticContractReadinessService {
           && rulesReady.hasExit
         )
       : flatReady
+    const resultState = this.withMaterializedFlatBuckets(nextState, nextMaterialized)
 
     return {
-      state: nextState,
+      state: resultState,
       ready,
       missingRequirements,
+    }
+  }
+
+  private withMaterializedFlatBuckets(
+    state: SemanticState,
+    materialized: ReadinessMaterializedState,
+  ): SemanticState {
+    return {
+      ...state,
+      trigger: materialized.trigger,
+      action: materialized.action,
+      risk: materialized.risk,
+      positionConstraint: materialized.positionConstraint,
+      orchestration: materialized.orchestration,
+    } as SemanticState
+  }
+
+  private hasLegacyFlatOwners(state: SemanticState): boolean {
+    const legacy = state as SemanticState & {
+      trigger?: unknown[]
+      action?: unknown[]
+      risk?: unknown[]
+      positionConstraint?: unknown[]
+      orchestration?: unknown[]
+    }
+    return Boolean(
+      legacy.trigger?.length
+      || legacy.action?.length
+      || legacy.risk?.length
+      || legacy.positionConstraint?.length
+      || legacy.orchestration?.length,
+    )
+  }
+
+  private materializeLegacyFlatState(state: SemanticState): ReadinessMaterializedState {
+    const legacy = state as SemanticState & {
+      trigger?: SemanticTriggerState[]
+      action?: SemanticActionState[]
+      risk?: SemanticRiskState[]
+      positionConstraint?: SemanticPositionConstraintState[]
+      orchestration?: SemanticOrchestrationNode[]
+    }
+    return {
+      source: state,
+      trigger: legacy.trigger ?? [],
+      action: legacy.action ?? [],
+      risk: legacy.risk ?? [],
+      position: state.position,
+      positionConstraint: legacy.positionConstraint ?? [],
+      orchestration: legacy.orchestration ?? [],
     }
   }
 
@@ -319,6 +382,55 @@ export class SemanticContractReadinessService {
       positionConstraint: positionFacts.map(fact => this.factToPositionConstraint(fact)),
       orchestration: orchestrationFacts.flatMap(fact => this.factToOrchestrationNodes(fact)),
     }
+  }
+
+  private withTopLevelPositionSizingProjectedToRules(state: SemanticState): SemanticState {
+    const sizing = state.position?.sizing
+    if (!sizing || !state.rules?.length) return state
+    if (state.rules.some(rule => !this.isStandalonePositionSizingRule(rule) && listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === POSITION_SIZING_ATOM_KEY)))) {
+      return state
+    }
+
+    const targetIndex = state.rules.findIndex(rule => rule.phase === 'entry' || rule.phase === 'program')
+    if (targetIndex < 0) return state
+
+    const rules = state.rules.map((rule, index) => {
+      if (index !== targetIndex || !isRuleEffectsByRole(rule.effects)) return rule
+      return {
+        ...rule,
+        effects: {
+          ...rule.effects,
+          positions: [
+            ...rule.effects.positions,
+            {
+              kind: 'atom' as const,
+              key: POSITION_SIZING_ATOM_KEY,
+              params: { sizing },
+            },
+          ],
+        },
+      }
+    })
+
+    return { ...state, rules }
+  }
+
+  private dropStandalonePositionSizingRules(state: SemanticState): SemanticState {
+    if (!state.position?.sizing || !state.rules?.length) return state
+    const rules = state.rules.filter(rule => !this.isStandalonePositionSizingRule(rule))
+    return rules.length === state.rules.length ? state : { ...state, rules }
+  }
+
+  private isStandalonePositionSizingRule(rule: SemanticRule): boolean {
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+    if (effectLeaves.length === 0 && /(?:^|[-_])(?:pos|position)[-_]?sizing(?:[-_]|$)/iu.test(rule.id)) return true
+    if (effectLeaves.length === 0) return false
+    if (!effectLeaves.every(leaf => leaf.key === POSITION_SIZING_ATOM_KEY)) return false
+    if (!isRuleEffectsByRole(rule.effects)) return true
+    return rule.effects.actions.length === 0
+      && rule.effects.risks.length === 0
+      && rule.effects.orchestration.length === 0
+      && rule.effects.programs.length === 0
   }
 
   private withConditionCombinationContracts(
@@ -434,6 +546,21 @@ export class SemanticContractReadinessService {
         scope: readEnum(fact.params.scope, ['portfolio', 'symbol', 'subStrategy'] as const) ?? 'portfolio',
         mode: readEnum(fact.params.mode, ['observe', 'enforce'] as const) ?? 'enforce',
         thresholdPct: readNumber(fact.params.thresholdPct) ?? readNumber(fact.params.pct),
+      }]
+    }
+
+    if (fact.key === 'scope.timeframe') {
+      const primaryTimeframe = readString(fact.params.primaryTimeframe)
+      const requiredTimeframes = Array.isArray(fact.params.requiredTimeframes)
+        ? fact.params.requiredTimeframes.filter((value): value is string => typeof value === 'string' && value.trim() !== '').map(value => value.trim()).filter(value => value !== primaryTimeframe)
+        : []
+      if (primaryTimeframe && requiredTimeframes.length === 0) return []
+      return [{
+        ...base,
+        timeframeScopeKind: readEnum(fact.params.timeframeScopeKind, ['timeframe'] as const) ?? 'timeframe',
+        ...(primaryTimeframe ? { primaryTimeframe } : {}),
+        requiredTimeframes,
+        alignmentPolicy: readEnum(fact.params.alignmentPolicy, ['strict', 'tolerant'] as const) ?? 'strict',
       }]
     }
 
@@ -1773,6 +1900,7 @@ function isSupportedTimeframeScope(
 
   const required = node.requiredTimeframes
   if (!Array.isArray(required) || required.length < 1 || required.length > 8) return false
+  if (typeof node.primaryTimeframe !== 'string') return false
 
   const requiredMsList: number[] = []
   const dedupedRequired = new Set<string>()
@@ -1784,11 +1912,14 @@ function isSupportedTimeframeScope(
     dedupedRequired.add(tf)
     requiredMsList.push(ms)
   }
-  if (typeof node.primaryTimeframe !== 'string') return false
-  if (dedupedRequired.has(node.primaryTimeframe)) return false
+  if (dedupedRequired.has(node.primaryTimeframe)) {
+    dedupedRequired.delete(node.primaryTimeframe)
+    const primaryIndex = required.findIndex(tf => tf === node.primaryTimeframe)
+    if (primaryIndex >= 0) requiredMsList.splice(primaryIndex, 1)
+  }
 
   // primary 粒度严格细于所有 required
-  if (primaryMs >= Math.min(...requiredMsList)) return false
+  if (requiredMsList.length > 0 && primaryMs >= Math.min(...requiredMsList)) return false
 
   if (node.alignmentPolicy !== 'strict' && node.alignmentPolicy !== 'tolerant') return false
 
@@ -1805,7 +1936,7 @@ function isSupportedTimeframeScope(
   for (const other of otherLockedScopes) {
     if (typeof other.primaryTimeframe !== 'string' || !Array.isArray(other.requiredTimeframes)) continue
     const otherKey = JSON.stringify([other.primaryTimeframe, [...other.requiredTimeframes].sort()])
-    if (otherKey === myKey) return false
+    if (otherKey === myKey) continue
   }
 
   const contract = registry.getContractByKey('scope.timeframe')

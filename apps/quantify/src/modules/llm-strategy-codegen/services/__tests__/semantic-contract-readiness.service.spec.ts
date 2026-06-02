@@ -4,6 +4,187 @@ import type { SemanticOrchestrationNode, SemanticState } from '../../types/seman
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
 describe('SemanticContractReadinessService', () => {
+  it('projects top-level sizing into program rule before dropping standalone sizing rules', () => {
+    const state = createSemanticState({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [
+        {
+          id: 'program-fixed-grid',
+          phase: 'program',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'grid.range_rebalance',
+            params: { sideMode: 'both' },
+          },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{ kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both' } }],
+            orchestration: [],
+            programs: [{ kind: 'atom', key: 'program.fixed_grid_gated', params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5 } }],
+          },
+        },
+        {
+          id: 'pos-sizing-10pct',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state, { deployedAtSemanticVersion: '2026.05.W02' })
+    const programRule = result.state.rules?.find(rule => rule.id === 'program-fixed-grid')
+
+    expect(result.ready).toBe(true)
+    expect(result.state.rules?.map(rule => rule.id)).toEqual(['program-fixed-grid'])
+    expect(programRule?.effects).toEqual(expect.objectContaining({
+      positions: expect.arrayContaining([
+        expect.objectContaining({ key: 'position.sizing' }),
+      ]),
+    }))
+  })
+
+  it('accepts rules-first fixed grid with duplicated same-timeframe scopes', () => {
+    const state = createSemanticState({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [
+        {
+          id: 'dispatcher-typed-rule-1',
+          phase: 'gate',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'trend.direction', params: { value: 'up' } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            programs: [],
+            orchestration: [{
+              kind: 'atom',
+              key: 'scope.timeframe',
+              params: { primaryTimeframe: '15m', requiredTimeframes: ['15m'], alignmentPolicy: 'tolerant', timeframeScopeKind: 'timeframe' },
+            }],
+          },
+        },
+        {
+          id: 'program-fixed-grid-range-50000-60000-10-5pct',
+          phase: 'program',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'grid.range_rebalance',
+            params: { rangeLower: 50000, rangeUpper: 60000, levels: 10, stepPct: 5, sideMode: 'both', breakoutAction: 'continue' },
+          },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [
+              { kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both', recycle: 'true' } },
+              { kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } },
+            ],
+            programs: [
+              { kind: 'atom', key: 'program.fixed_grid_gated', params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, programKind: 'fixed_grid_gated', onDeactivate: 'cancel' } },
+            ],
+            orchestration: [{
+              kind: 'atom',
+              key: 'scope.timeframe',
+              params: { primaryTimeframe: '15m', requiredTimeframes: ['15m'], alignmentPolicy: 'tolerant', timeframeScopeKind: 'timeframe' },
+            }],
+          },
+        },
+      ],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state, { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+  })
+
+  it('accepts rules-first funding rate condition with price crossing EMA', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [
+        {
+          id: 'entry-long-funding-positive-ema20-crossup',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'fundingRate.condition', params: { operator: 'GT', value: 0, threshold: 0, dataSource: 'funding' } },
+              { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', period: 20, fastPeriod: 20, priceCross: true } },
+            ],
+          },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.01 } } }],
+            programs: [],
+            orchestration: [],
+          },
+        },
+        {
+          id: 'exit-close-long-ema20-crossdown',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', period: 20, fastPeriod: 20, priceCross: true } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [],
+            programs: [],
+            orchestration: [],
+          },
+        },
+      ],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state, { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+  })
+
   it('accepts supported contracts with explicit empty substrate arrays', () => {
     const state = createSemanticState({
       trigger: [{

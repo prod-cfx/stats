@@ -1743,7 +1743,7 @@ export class CanonicalSpecV2IrCompilerService {
         const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], NaN)
         const fastPeriod = this.readNumber([atom.params?.fastPeriod], NaN)
         const slowPeriod = this.readNumber([atom.params?.slowPeriod], NaN)
-        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
           const referencePeriod = Number.isFinite(period) ? period : fastPeriod
           const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'sma' ? 'SMA' : 'EMA'
           const closeRef = this.ensurePriceSeries(context, 'close')

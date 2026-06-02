@@ -37,4 +37,8 @@ export const STAGING31_CASES: readonly Staging31Case[] = [
   { index: 29, sessionId: 'cmpc8czl44oli0cqsoiovp6yn', input: 'BTC 1h 突破前高开多，盈利 3% 后加仓 50%，最多加 3 层', expected: 'pass' },
   { index: 30, sessionId: 'cmpc8ekc84qoy0cqskzvu03py', input: 'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT', expected: 'pass' },
   { index: 31, sessionId: 'cmpc8g3hy4sq50cqs2atwtzwb', input: 'SOL 现货，30 分钟。价格在最近 24 小时区间的 0.3–0.7 分位之间运行时，启用自适应波动率网格；价格突破区间上沿则停止网格并平仓。', expected: 'pass' },
+  { index: 32, sessionId: 'staging31-user-grid-trend-up', input: 'OKX 合约 BTCUSDT 15m，在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用。', expected: 'pass' },
+  { index: 33, sessionId: 'staging31-user-reverse-short', input: 'OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。', expected: 'pass' },
+  { index: 34, sessionId: 'staging31-user-webhook-buy', input: 'OKX 合约 BTCUSDT 15m，收到 TradingView webhook buy 信号后开多，单笔 10% 仓位。跌破 EMA20 时平多。', expected: 'pass' },
+  { index: 35, sessionId: 'staging31-user-funding-ema20', input: 'OKX 永续合约 BTCUSDT 15m。资金费率为正并且 EMA20 上穿时开多，单笔仓位 1%。跌破 EMA20 时平多。', expected: 'pass' },
 ] as const

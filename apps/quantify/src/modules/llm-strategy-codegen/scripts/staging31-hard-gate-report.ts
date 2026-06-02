@@ -864,6 +864,11 @@ function collectActionKeys(effects: unknown, sideScope?: unknown): string[] {
       if (sideScope === 'both') return ['ADD_LONG', 'ADD_SHORT']
       return ['ADD_LONG']
     }
+    if (key === 'action.reverse_position') {
+      if (sideScope === 'short') return ['CLOSE_LONG', 'OPEN_SHORT']
+      if (sideScope === 'long') return ['CLOSE_SHORT', 'OPEN_LONG']
+      return ['CLOSE_LONG', 'OPEN_SHORT', 'CLOSE_SHORT', 'OPEN_LONG']
+    }
     return [key]
   })
     .filter((key): key is string => typeof key === 'string')
@@ -934,6 +939,9 @@ function collectUiGraphSemanticActions(uiSummaryOrGraph: unknown): string[] {
         if (typeof text === 'string' && isUiAddPositionActionText(text)) {
           return inferUiAddActions(items)
         }
+        if (typeof text === 'string' && text.includes('反手')) {
+          return inferUiReverseActions(items)
+        }
         return [toCanonicalAction(text)]
       })
       .filter((key): key is string => typeof key === 'string')
@@ -946,6 +954,17 @@ function collectUiGraphSemanticActions(uiSummaryOrGraph: unknown): string[] {
       : blockActions
   })
   return uniqueSorted(actions)
+}
+
+function inferUiReverseActions(items: unknown[]): string[] {
+  const texts = items
+    .map(item => (item as { text?: unknown }).text)
+    .filter((text): text is string => typeof text === 'string')
+  const toShort = texts.some(text => /开空|做空|空头/u.test(text))
+  const toLong = texts.some(text => /开多|做多|多头/u.test(text))
+  if (toShort && !toLong) return ['CLOSE_LONG', 'OPEN_SHORT']
+  if (toLong && !toShort) return ['CLOSE_SHORT', 'OPEN_LONG']
+  return ['CLOSE_LONG', 'OPEN_SHORT', 'CLOSE_SHORT', 'OPEN_LONG']
 }
 
 function inferUiRiskCloseActions(items: unknown[]): string[] {
@@ -1444,8 +1463,9 @@ function summarize(cases: Staging31CaseReport[]): Staging31FullReport['summary']
 }
 
 export function isStaging31HardGatePassing(summary: Staging31HardGateSummary): boolean {
-  return summary.total === 31
-    && summary.pass === 31
+  const expectedTotal = STAGING31_CASES.length
+  return summary.total === expectedTotal
+    && summary.pass === expectedTotal
     && summary.needsClarification === 0
     && summary.unsupported === 0
     && summary.fail === 0

@@ -65,6 +65,8 @@ export class CapabilityEvidenceIndex {
       pushSynthesizedSizingEvidence(entries, fact, mount)
     }
 
+    pushLegacyFlatOwnerEvidence(entries, state)
+
     if (state.position?.contracts) {
       for (const contract of state.position.contracts) {
         for (const capability of contract.capabilities) {
@@ -93,6 +95,52 @@ export class CapabilityEvidenceIndex {
 
   all(): readonly CapabilityEvidence[] {
     return this.allList
+  }
+}
+
+function pushLegacyFlatOwnerEvidence(entries: CapabilityEvidence[], state: SemanticState): void {
+  const legacy = state as SemanticState & {
+    action?: LegacyCapabilityOwner[]
+    risk?: LegacyCapabilityOwner[]
+    positionConstraint?: LegacyCapabilityOwner[]
+  }
+  for (const owner of legacy.action ?? []) {
+    pushLegacyOwnerContracts(entries, owner, 'action')
+  }
+  for (const owner of legacy.risk ?? []) {
+    pushLegacyOwnerContracts(entries, owner, 'risk')
+  }
+  for (const owner of legacy.positionConstraint ?? []) {
+    pushLegacyOwnerContracts(entries, owner, 'position_constraint')
+  }
+}
+
+interface LegacyCapabilityOwner {
+  readonly id: string
+  readonly key: string
+  readonly status: SemanticNodeStatus
+  readonly contracts?: ReadonlyArray<{
+    readonly id: string
+    readonly capabilities: readonly SemanticCapability[]
+  }>
+}
+
+function pushLegacyOwnerContracts(
+  entries: CapabilityEvidence[],
+  owner: LegacyCapabilityOwner,
+  mount: CapabilityMountKind,
+): void {
+  for (const contract of owner.contracts ?? []) {
+    for (const capability of contract.capabilities) {
+      entries.push({
+        mount,
+        ownerId: owner.id,
+        ownerKey: owner.key,
+        ownerStatus: owner.status,
+        contractId: contract.id,
+        capability,
+      })
+    }
   }
 }
 

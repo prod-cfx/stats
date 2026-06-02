@@ -2040,7 +2040,9 @@ export class PlannerDispatcherMergeService {
     merged.rules = this.repairRelativeEntryPercentExitSideDrift(
       this.dropDuplicateLifecycleRules(
         this.dropDuplicateGridProgramRules(
-          this.dropRulesCoveredByStrongerComposite(next),
+          this.dropDuplicateExternalSignalLifecycleRules(
+            this.dropRulesCoveredByStrongerComposite(next),
+          ),
         ),
       ),
       userMessage,
@@ -2204,9 +2206,53 @@ export class PlannerDispatcherMergeService {
     })
     merged.rules = this.dropDuplicateLifecycleRules(
       this.dropDuplicateGridProgramRules(
-        this.dropRulesCoveredByStrongerComposite(next),
+        this.dropDuplicateExternalSignalLifecycleRules(
+          this.dropRulesCoveredByStrongerComposite(next),
+        ),
       ),
     )
+  }
+
+  private dropDuplicateExternalSignalLifecycleRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const bySignature = new Map<string, { index: number, rule: SemanticRule, score: number }>()
+    const kept: Array<SemanticRule | null> = []
+
+    for (const rule of rules) {
+      const signature = this.externalSignalLifecycleSignature(rule)
+      if (!signature) {
+        kept.push(rule)
+        continue
+      }
+      const score = this.externalSignalRuleStrength(rule)
+      const existing = bySignature.get(signature)
+      if (!existing) {
+        bySignature.set(signature, { index: kept.length, rule, score })
+        kept.push(rule)
+        continue
+      }
+      if (score > existing.score) {
+        kept[existing.index] = rule
+        bySignature.set(signature, { index: existing.index, rule, score })
+      }
+    }
+
+    return kept.filter((rule): rule is SemanticRule => rule !== null)
+  }
+
+  private externalSignalLifecycleSignature(rule: SemanticRule): string | null {
+    const conditionLeaves = collectAtomLeaves(rule.condition)
+    if (!conditionLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)) return null
+    const actionKeys = this.lifecycleActionKeys(rule)
+    if (actionKeys.size === 0) return null
+    return [rule.phase, rule.sideScope, [...actionKeys].sort().join(',')].join('|')
+  }
+
+  private externalSignalRuleStrength(rule: SemanticRule): number {
+    const signal = collectAtomLeaves(rule.condition).find(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
+    const signalId = this.readStringParam(signal?.params, 'signalId')
+    if (!signalId) return 0
+    if (/^(?:TBD|REQUIRED_SIGNAL_ID|openSlots)$/iu.test(signalId)) return 1
+    return 2
   }
 
   private repairMissingRsiReclaimSequence(
@@ -2727,7 +2773,48 @@ export class PlannerDispatcherMergeService {
       }
       : effects.map(normalize)
 
-    return this.removeRiskEffectsCoveredByExitCondition(normalized, condition)
+    return this.removeRiskEffectsCoveredByExitCondition(
+      this.removeOpenActionsCoveredByReversePosition(normalized),
+      condition,
+    )
+  }
+
+  private removeOpenActionsCoveredByReversePosition(effects: RuleEffects): RuleEffects {
+    const openKeysCoveredByReverse = this.resolveOpenKeysCoveredByReversePosition(listRuleEffects(effects))
+    if (openKeysCoveredByReverse.size === 0) return effects
+    const isCoveredOpen = (effect: AtomExpr): boolean => effect.kind === 'atom' && openKeysCoveredByReverse.has(effect.key)
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.filter(effect => !isCoveredOpen(effect)),
+        risks: effects.risks,
+        positions: effects.positions,
+        orchestration: effects.orchestration,
+        programs: effects.programs,
+      }
+    }
+    return effects.filter(effect => !isCoveredOpen(effect))
+  }
+
+  private resolveOpenKeysCoveredByReversePosition(effects: ReadonlyArray<AtomExpr>): Set<string> {
+    const covered = new Set<string>()
+    for (const leaf of effects.flatMap(effect => collectAtomLeaves(effect))) {
+      if (leaf.key !== ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) continue
+      const toSide = this.readStringParam(leaf.params, 'toSide')
+      const fromSide = this.readStringParam(leaf.params, 'fromSide')
+      const leafSideScope = typeof (leaf as { sideScope?: unknown }).sideScope === 'string'
+        ? (leaf as { sideScope: string }).sideScope
+        : null
+      const inferredToSide = toSide ?? (leafSideScope === 'long' || leafSideScope === 'short'
+        ? leafSideScope
+        : fromSide === 'long'
+          ? 'short'
+          : fromSide === 'short'
+            ? 'long'
+            : null)
+      if (inferredToSide === 'long') covered.add(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+      if (inferredToSide === 'short') covered.add(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+    }
+    return covered
   }
 
   private removeRiskEffectsCoveredByExitCondition(
@@ -2814,6 +2901,22 @@ export class PlannerDispatcherMergeService {
       if (params.indicator === 'macd') {
         if (params.value === 0) delete params.value
         if (params.period === 0) delete params.period
+      }
+      else if (this.isMovingAverageIndicator(params.indicator)) {
+        const period = this.readNumericParam(params, 'period') ?? this.readNumericParam(params, 'value')
+        const fastPeriod = this.readNumericParam(params, 'fastPeriod')
+        const slowPeriod = this.readNumericParam(params, 'slowPeriod')
+        const hasSinglePeriod = period !== null && period > 0
+        const hasMissingSlowPeriod = slowPeriod === null || slowPeriod === 0
+        const hasSinglePeriodShape = hasMissingSlowPeriod && (fastPeriod === null || fastPeriod === 0 || fastPeriod === period)
+        if (hasSinglePeriod && hasSinglePeriodShape) {
+          params.priceCross = true
+          params.period = period
+          params.fastPeriod = period
+          delete params.slowPeriod
+          delete params.value
+          if (params.signalPeriod === 0) delete params.signalPeriod
+        }
       }
     }
     return { ...atom, params }
@@ -4462,6 +4565,20 @@ export class PlannerDispatcherMergeService {
 
     const candidate = candidates.find(params => this.isMovingAverageIndicator(params.indicator))
     if (!candidate) return base
+
+    if (candidate.priceCross === true) {
+      const period = this.readPositiveNumberParam(candidate, 'period')
+        ?? this.readPositiveNumberParam(candidate, 'fastPeriod')
+      if (period === null) return base
+      const next: Record<string, unknown> = {
+        ...base,
+        priceCross: true,
+        period: this.isZeroPlaceholder(base.period) ? period : base.period,
+        fastPeriod: this.isZeroPlaceholder(base.fastPeriod) ? period : base.fastPeriod,
+      }
+      delete next.slowPeriod
+      return next
+    }
 
     const fastPeriod = this.readPositiveNumberParam(candidate, 'fastPeriod')
     const slowPeriod = this.readPositiveNumberParam(candidate, 'slowPeriod')

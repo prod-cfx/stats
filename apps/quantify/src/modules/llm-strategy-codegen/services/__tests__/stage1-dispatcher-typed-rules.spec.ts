@@ -131,6 +131,28 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(effects.map(effect => effect.key)).not.toContain('position.sizing')
   })
 
+  it('treats single EMA cross wording as price crossing that EMA when combined with funding rate', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTCUSDT 15m。资金费率为正并且 EMA20 上穿时开多。跌破 EMA20 时平多。')
+    const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
+    const leaves = entryRule ? collectAtomLeaves(entryRule.condition) : []
+    const cross = leaves.find(leaf => leaf.key === 'indicator.cross_over')
+
+    expect(entryRule).toBeDefined()
+    expect(leaves.map(leaf => leaf.key)).toContain('fundingRate.condition')
+    expect(cross).toEqual(expect.objectContaining({
+      key: 'indicator.cross_over',
+      params: expect.objectContaining({
+        indicator: 'ema',
+        period: 20,
+        fastPeriod: 20,
+        priceCross: true,
+      }),
+    }))
+    expect(cross?.params).not.toEqual(expect.objectContaining({ slowPeriod: 14 }))
+    expect(cross?.params).not.toEqual(expect.objectContaining({ period: 0 }))
+    expect(ruleEffectKeys(entryRule!)).toContain('action.open_long')
+  })
+
   it('keeps explicit fixed-ratio sizing for on-start spot strategy 6', () => {
     const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-006-ordi-spot-on-start')!.text
     const patch = new GenericSeedDispatcher().dispatch(text)

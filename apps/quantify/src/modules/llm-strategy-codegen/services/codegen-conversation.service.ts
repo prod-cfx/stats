@@ -1302,6 +1302,12 @@ export class CodegenConversationService {
     if (!plan.diagnostics) {
       return undefined
     }
+    const entry = plan.diagnostics.entry && typeof plan.diagnostics.entry === 'object' && !Array.isArray(plan.diagnostics.entry)
+      ? plan.diagnostics.entry as Record<string, unknown>
+      : {}
+    if (entry.result === 'recovered') {
+      return undefined
+    }
     const errors = this.buildPlannerValidationErrors(plan.diagnostics)
     const warnings = this.readPlannerValidationWarnings(plan.diagnostics)
     return {
@@ -2950,10 +2956,21 @@ export class CodegenConversationService {
     session: PersistedConversationSessionForContinue,
     dto: ContinueCodegenSessionDto,
   ): boolean {
-    if (session.status !== 'CONFIRM_GATE' || dto.confirmGenerate === true) {
+    if (dto.confirmGenerate === true) {
       return false
     }
     if (dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0) {
+      return false
+    }
+
+    const confirmationReady = session.status === 'CONFIRM_GATE'
+      || (
+        session.status === 'DRAFTING'
+        && session.latestSpecDesc !== null
+        && session.latestSpecDesc !== undefined
+        && this.readClarificationState(session.clarificationState).status === 'CLEAR'
+      )
+    if (!confirmationReady) {
       return false
     }
 

@@ -188,9 +188,57 @@ export class SemanticExecutableSemanticsService {
    * trigger.phase 字面相等，用于执行语义闭环判定。
    */
   anyAtomFulfillsPhase(state: SemanticState, phase: StrategyPhase): boolean {
-    const fulfills = (key: string): boolean => this.lookupFulfillsPhase(key).includes(phase)
+    const fulfills = (fact: RulesMainflowAtomFact): boolean => {
+      if (!this.lookupFulfillsPhase(fact.key).includes(phase)) return false
+      if (phase !== 'sizing') return true
+      return this.hasPositiveSizingEvidence(fact)
+    }
 
-    return this.rulesMainflowReader.readFacts(state).some(fact => fulfills(fact.key))
+    return this.rulesMainflowReader.readFacts(state).some(fact => fulfills(fact))
+  }
+
+  private hasPositiveSizingEvidence(fact: RulesMainflowAtomFact): boolean {
+    const params = fact.params
+    const contract = fact.key in ATOM_CONTRACT_REGISTRY
+      ? ATOM_CONTRACT_REGISTRY[fact.key as AtomContractKey]
+      : null
+    const paramSource = contract?.sizingEvidence?.paramSource
+    if (paramSource && this.readPositiveNumberParam(params, paramSource) !== null) return true
+
+    return this.readPositiveNumberParam(params, 'perGridSizing') !== null
+      || this.readPositiveNumberParam(params, 'perOrderSizing') !== null
+      || this.readPositiveNumberParam(params, 'layerSizing') !== null
+      || this.readPositiveNumberParam(params, 'valuePct') !== null
+      || this.readNestedPositiveNumberParam(params, ['sizing', 'value']) !== null
+      || this.readNestedPositiveNumberParam(params, ['params', 'sizing', 'value']) !== null
+  }
+
+  private readPositiveNumberParam(params: Record<string, unknown>, key: string): number | null {
+    const value = params[key]
+    return this.toPositiveNumber(value)
+  }
+
+  private readNestedPositiveNumberParam(params: Record<string, unknown>, path: readonly string[]): number | null {
+    let current: unknown = params
+    for (const key of path) {
+      if (typeof current !== 'object' || current === null || Array.isArray(current)) return null
+      current = (current as Record<string, unknown>)[key]
+    }
+    return this.toPositiveNumber(current)
+  }
+
+  private toPositiveNumber(value: unknown): number | null {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) && value > 0 ? value : null
+    }
+    if (typeof value === 'string') {
+      const numeric = Number(value.trim().match(/-?\d+(?:\.\d+)?/u)?.[0])
+      return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+    }
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      return this.toPositiveNumber((value as Record<string, unknown>).value)
+    }
+    return null
   }
 
   /**
