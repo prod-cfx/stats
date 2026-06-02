@@ -376,6 +376,40 @@ void main() {
     expect(detailPage.symbol, expectedSymbol);
   });
 
+  testWidgets('行情列表不继承 MediaQuery 顶部 inset，列头与首行无留白', (
+    WidgetTester tester,
+  ) async {
+    // 复现条件：外层注入顶部 padding（状态栏/刘海 inset）。修复前 ListView
+    // 默认继承该 inset，会在列头与首行（BTC）间留出空白。
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await tester.binding.setSurfaceSize(const Size(420, 3000));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          tickerRepositoryProvider.overrideWithValue(repo),
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(QzTheme.fallback),
+          home: const MediaQuery(
+            data: MediaQueryData(padding: EdgeInsets.only(top: 64)),
+            child: Scaffold(body: MarketHomeBody()),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final ListView list = tester.widget<ListView>(find.byType(ListView));
+    expect(list.padding, EdgeInsets.zero);
+  });
+
   testWidgets('搜索框 placeholder 为「搜索」（#2030）', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);

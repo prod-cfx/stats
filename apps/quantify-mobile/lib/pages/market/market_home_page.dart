@@ -271,6 +271,9 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
                             return QzEmptyState(title: title);
                           }
                           return ListView.separated(
+                            // 不继承 MediaQuery 顶部 inset（刘海/状态栏），否则
+                            // 列头与首行间被注入空白（issue: 行情列表顶部留白）。
+                            padding: EdgeInsets.zero,
                             itemCount: visible.length,
                             separatorBuilder:
                                 (BuildContext context, int index) =>
