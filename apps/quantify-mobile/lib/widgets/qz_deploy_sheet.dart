@@ -1,5 +1,7 @@
 import 'dart:async';
 
+// ignore_for_file: unused_element, unused_field, prefer_final_fields
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,9 +18,8 @@ import 'qz_sheet.dart';
 
 /// 「一键部署」底部弹层。
 ///
-/// 单 widget 内承载 6 步状态机
-/// （`pickExchange → authorize → allocate → preflight → deploying → done`，
-/// #1772 在 #1653 的 4 步上补齐资金配置 / 预检查）。
+/// 单 widget 内承载 3 段状态机
+/// （`confirm → deploying → success`，#2064 对齐新版部署设计）。
 /// 拆成多个 Widget 反而要把 step 状态外挂或层层 callback，按 KISS 内聚在一处。
 ///
 /// 真后端尚未接入：交易所列表读 `apiKeysProvider`；部署进度用一次性链式
@@ -26,12 +27,8 @@ import 'qz_sheet.dart';
 /// 把 `DeploymentResult` 返回给调用方（`AiHomePage` 据此在对话流追加系统消息 +
 /// 弹出 toast）。
 ///
-/// issue #1653：补齐设计稿引导流程。
-/// - 选择交易所步：风控 banner + 内置交易所目录（已配置 / 未授权 / 链上 tag）
-///   + 底部安全提示。
-/// - 选择「未授权」交易所：authorize 步显示 3 步授权引导 + 提币权限警告 +
-///   合规 checkbox，确认后直接打开 API 配置表单（取代跳 `/me/api` 列表）。
-/// - 选择「已配置」交易所：authorize 步保持原权限授权 → 「同意并部署」。
+/// 交易所 / 市场 / 资金由 AI 对话上下文决定，部署页只做只读账单确认 +
+/// 部署前检查。未绑定 API 时在检查失败项内提供 API 绑定入口。
 class QzDeploySheet extends ConsumerStatefulWidget {
   const QzDeploySheet({super.key});
 
@@ -87,12 +84,14 @@ const List<_ExchangeCatalogEntry> _kExchangeCatalog = <_ExchangeCatalogEntry>[
 class _DeployTarget {
   const _DeployTarget({
     required this.catalog,
+    required this.accounts,
     required this.apiKey,
   });
 
   final _ExchangeCatalogEntry catalog;
-  final ExchangeApiKey? apiKey; // 非空即已配置
-  bool get authorized => apiKey != null;
+  final List<ExchangeApiKey> accounts;
+  final ExchangeApiKey? apiKey;
+  bool get authorized => accounts.isNotEmpty && apiKey != null;
 }
 
 class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
@@ -101,10 +100,10 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   static const int _defaultPerTradePct = 20;
   static const int _defaultMaxDailyLossPct = 10;
 
-  DeployStep _step = DeployStep.pickExchange;
-  _DeployTarget? _selected;
+  DeployStep _step = DeployStep.confirm;
+  _DeployTarget? _deployingTarget;
   DeploymentResult? _result;
-  bool _consent = false;
+  String? _selectedAccountId;
 
   // #1772 资金配置状态。
   double _amount = _defaultAmount;
@@ -115,36 +114,23 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   bool _notifyClose = true;
   bool _notifyStopLoss = true;
 
-  /// 选中交易所 → 授权步；授权/未授权变体由 `_buildBody` 按 `authorized` 分流。
-  void _pickTarget(_DeployTarget t) {
+  /// 预检查通过「确认部署」→ 部署中。
+  /// 实际部署结果在分步动画跑完后由 `_onDeployingDone` 回填。
+  void _confirmDeploy(_DeployTarget target) {
+    if (!target.authorized) return;
     setState(() {
-      _selected = t;
-      _consent = false;
-      _step = DeployStep.authorize;
+      _deployingTarget = target;
+      _step = DeployStep.deploying;
     });
   }
 
-  /// authorize「同意并部署」→ 进入资金配置（#1772）。
-  void _confirmAuthorize() {
-    if (_selected?.apiKey == null) return;
-    setState(() => _step = DeployStep.allocate);
-  }
-
-  /// 资金配置「下一步」→ 部署前预检查（#1772）。
-  void _goPreflight() => setState(() => _step = DeployStep.preflight);
-
-  void _backToAllocate() => setState(() => _step = DeployStep.allocate);
-
-  /// 预检查通过「确认部署」→ 部署中（#1772）。
-  /// 实际部署结果在分步动画跑完后由 `_onDeployingDone` 回填。
-  void _confirmDeploy() => setState(() => _step = DeployStep.deploying);
-
   /// 部署分步动画跑完 → 用资金配置快照回填 `DeploymentResult` → done。
   void _onDeployingDone() {
-    if (!mounted || _selected?.apiKey == null) return;
+    final _DeployTarget? target = _deployingTarget;
+    if (!mounted || target?.apiKey == null) return;
     final DateTime now = DateTime.now();
     final DeploymentResult result = DeploymentResult(
-      exchange: _selected!.apiKey!.exchange,
+      exchange: target!.apiKey!.exchange,
       instanceId: 'inst-${now.microsecondsSinceEpoch}',
       deployedAt: now,
       strategyId:
@@ -156,23 +142,8 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     );
     setState(() {
       _result = result;
-      _step = DeployStep.done;
+      _step = DeployStep.success;
     });
-  }
-
-  /// 未授权流程：勾选 consent 后打开 API 表单 bottom sheet。
-  /// 先 pop 当前 deploy sheet 避免栈错位 + barrier 叠加；
-  /// `Navigator.pop(null)` 表示用户中断本次部署。
-  Future<void> _openApiForm() async {
-    if (!_consent || _selected == null) return;
-    final BuildContext ctx = context;
-    final String exchangeName = _selected!.catalog.name;
-    Navigator.of(ctx).pop();
-    if (!ctx.mounted) return;
-    final bool? saved = await showApiFormSheet(ctx, exchange: exchangeName);
-    if (saved == true && ctx.mounted) {
-      ref.invalidate(apiKeysProvider);
-    }
   }
 
   /// 兼容旧入口（空列表场景），等价于打开 Binance API 表单。
@@ -186,16 +157,32 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     }
   }
 
-  void _backToPick() {
-    setState(() {
-      _selected = null;
-      _consent = false;
-      _step = DeployStep.pickExchange;
-    });
-  }
-
   void _finish() {
     Navigator.of(context).pop(_result);
+  }
+
+  _DeployTarget _targetFromKeys(List<ExchangeApiKey> keys) {
+    final _ExchangeCatalogEntry catalog = _kExchangeCatalog[0];
+    final List<ExchangeApiKey> accounts = keys
+        .where(
+          (ExchangeApiKey k) => k.exchange.toLowerCase() == catalog.code,
+        )
+        .toList(growable: false);
+    final ExchangeApiKey? selected = accounts.isEmpty
+        ? null
+        : accounts.firstWhere(
+            (ExchangeApiKey k) => k.id == _selectedAccountId,
+            orElse: () => accounts.first,
+          );
+    return _DeployTarget(
+      catalog: catalog,
+      accounts: accounts,
+      apiKey: selected,
+    );
+  }
+
+  void _selectAccount(String accountId) {
+    setState(() => _selectedAccountId = accountId);
   }
 
   @override
@@ -203,101 +190,82 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final String title = switch (_step) {
-      DeployStep.pickExchange => l10n.deploySheetTitleExchange,
-      DeployStep.authorize => l10n.deploySheetTitleAuthorize,
-      DeployStep.allocate => l10n.deploySheetTitleAllocate,
-      DeployStep.preflight => l10n.deploySheetTitlePreflight,
+      DeployStep.confirm => l10n.deploySheetTitlePreflight,
       DeployStep.deploying => l10n.deploySheetTitleDeploying,
-      DeployStep.done => l10n.deploySheetTitleDone,
+      DeployStep.success => l10n.deploySheetTitleDone,
     };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        QzSpacing.lg,
-        0,
-        QzSpacing.lg,
-        QzSpacing.lg,
+    final AsyncValue<List<ExchangeApiKey>> keys = ref.watch(apiKeysProvider);
+    return keys.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: QzSpacing.lg),
+        child: Center(child: CircularProgressIndicator()),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Row(
+      error: (Object e, _) => Padding(
+        padding: const EdgeInsets.all(QzSpacing.lg),
+        child: Text(
+          '${l10n.commonLoadError}: $e',
+          style: TextStyle(color: c.textDim, fontSize: 13),
+        ),
+      ),
+      data: (List<ExchangeApiKey> list) {
+        final _DeployTarget target = _targetFromKeys(list);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            QzSpacing.lg,
+            0,
+            QzSpacing.lg,
+            QzSpacing.lg,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  _StepIndicator(step: _step, scheme: c, l10n: l10n),
+                ],
               ),
-              _StepIndicator(step: _step, scheme: c, l10n: l10n),
+              const SizedBox(height: QzSpacing.md),
+              _buildBody(c, l10n, target),
             ],
           ),
-          const SizedBox(height: QzSpacing.md),
-          _buildBody(c, l10n),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildBody(QzColorScheme c, AppLocalizations l10n) {
+  Widget _buildBody(
+    QzColorScheme c,
+    AppLocalizations l10n,
+    _DeployTarget target,
+  ) {
     switch (_step) {
-      case DeployStep.pickExchange:
-        return _ExchangePicker(
-          onPick: _pickTarget,
-          onGoConfigure: _goConfigureApi,
-        );
-      case DeployStep.authorize:
-        final _DeployTarget t = _selected!;
-        if (t.authorized) {
-          return _AuthorizePane(
-            apiKey: t.apiKey!,
-            onConfirm: _confirmAuthorize,
-          );
-        }
-        return _UnauthorizedPane(
-          target: t,
-          consent: _consent,
-          onConsentChanged: (bool v) => setState(() => _consent = v),
-          onCancel: _backToPick,
-          onOpenApiForm: _openApiForm,
-        );
-      case DeployStep.allocate:
-        return _AllocatePane(
-          target: _selected!,
-          amount: _amount,
-          perTradePct: _perTradePct,
-          maxDailyLossPct: _maxDailyLossPct,
-          notifyOpen: _notifyOpen,
-          notifyClose: _notifyClose,
-          notifyStopLoss: _notifyStopLoss,
-          onAmountChanged: (double v) => setState(() => _amount = v),
-          onPerTradeChanged: (int v) => setState(() => _perTradePct = v),
-          onMaxDailyLossChanged: (int v) =>
-              setState(() => _maxDailyLossPct = v),
-          onNotifyOpenChanged: (bool v) => setState(() => _notifyOpen = v),
-          onNotifyCloseChanged: (bool v) => setState(() => _notifyClose = v),
-          onNotifyStopLossChanged: (bool v) =>
-              setState(() => _notifyStopLoss = v),
-          onNext: _goPreflight,
-        );
-      case DeployStep.preflight:
+      case DeployStep.confirm:
         return _PreflightPane(
-          target: _selected!,
+          target: target,
           amount: _amount,
-          onBack: _backToAllocate,
-          onConfirm: _confirmDeploy,
+          onAccountChanged: _selectAccount,
+          onGoConfigure: _goConfigureApi,
+          onConfirm: () => _confirmDeploy(target),
         );
       case DeployStep.deploying:
+        final _DeployTarget active = _deployingTarget ?? target;
         return _DeployingPane(
           scheme: c,
-          exchangeName: _selected!.catalog.name,
+          exchangeName: active.catalog.name,
           onDone: _onDeployingDone,
         );
-      case DeployStep.done:
+      case DeployStep.success:
         return _DonePane(
           result: _result!,
           onFinish: _finish,
@@ -306,8 +274,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   }
 }
 
-/// sheet 顶部轻量步骤指示（替代设计稿整页 5 步 StepBar，KISS）。
-/// pickExchange 不计步；authorize/allocate/preflight/deploying/done = 1..5。
+/// sheet 顶部轻量步骤指示：confirm/deploying/success = 1..3。
 class _StepIndicator extends StatelessWidget {
   const _StepIndicator({
     required this.step,
@@ -319,19 +286,15 @@ class _StepIndicator extends StatelessWidget {
   final QzColorScheme scheme;
   final AppLocalizations l10n;
 
-  static const int _total = 5;
+  static const int _total = 3;
 
   @override
   Widget build(BuildContext context) {
     final int current = switch (step) {
-      DeployStep.pickExchange => 0,
-      DeployStep.authorize => 1,
-      DeployStep.allocate => 2,
-      DeployStep.preflight => 3,
-      DeployStep.deploying => 4,
-      DeployStep.done => 5,
+      DeployStep.confirm => 1,
+      DeployStep.deploying => 2,
+      DeployStep.success => 3,
     };
-    if (current == 0) return const SizedBox.shrink();
     return Container(
       key: const Key('deploy-step-indicator'),
       padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm, vertical: 2),
@@ -379,14 +342,22 @@ class _ExchangePicker extends ConsumerWidget {
         // 合并目录与用户密钥；目录里命中 ExchangeApiKey 的项标 authorized。
         final List<_DeployTarget> targets = _kExchangeCatalog
             .map<_DeployTarget>(
-              (_ExchangeCatalogEntry e) => _DeployTarget(
-                catalog: e,
-                apiKey: list.cast<ExchangeApiKey?>().firstWhere(
+              (_ExchangeCatalogEntry e) {
+                final ExchangeApiKey? account = list
+                    .cast<ExchangeApiKey?>()
+                    .firstWhere(
                       (ExchangeApiKey? k) =>
                           k?.exchange.toLowerCase() == e.code,
                       orElse: () => null,
-                    ),
-              ),
+                    );
+                return _DeployTarget(
+                  catalog: e,
+                  accounts: account == null
+                      ? <ExchangeApiKey>[]
+                      : <ExchangeApiKey>[account],
+                  apiKey: account,
+                );
+              },
             )
             .toList(growable: false);
         // 兜底：所有都未授权 + 用户从未配过任何 key → 引导按钮。
@@ -1816,13 +1787,15 @@ class _PreflightPane extends StatefulWidget {
   const _PreflightPane({
     required this.target,
     required this.amount,
-    required this.onBack,
+    required this.onAccountChanged,
+    required this.onGoConfigure,
     required this.onConfirm,
   });
 
   final _DeployTarget target;
   final double amount;
-  final VoidCallback onBack;
+  final ValueChanged<String> onAccountChanged;
+  final VoidCallback onGoConfigure;
   final VoidCallback onConfirm;
 
   @override
@@ -1841,30 +1814,30 @@ class _PreflightPaneState extends State<_PreflightPane> {
 
   List<PreflightCheck> _checks(AppLocalizations l10n) => <PreflightCheck>[
         PreflightCheck(
-          ok: _recovered,
-          title: _recovered
+          ok: widget.target.authorized && _recovered,
+          title: widget.target.authorized && _recovered
               ? l10n.deployPreflightApiOkTitle(widget.target.catalog.name)
               : l10n.deployPreflightApiFailTitle,
-          sub: _recovered
+          sub: widget.target.authorized && _recovered
               ? l10n.deployPreflightApiOkSub
               : l10n.deployPreflightApiFailSub,
-          actionable: !_recovered,
+          actionable: !widget.target.authorized || !_recovered,
         ),
         PreflightCheck(
-          ok: _recovered,
-          title: _recovered
+          ok: widget.target.authorized && _recovered,
+          title: widget.target.authorized && _recovered
               ? l10n.deployPreflightBalanceOkTitle
               : l10n.deployPreflightBalanceFailTitle,
-          sub: _recovered
+          sub: widget.target.authorized && _recovered
               ? l10n.deployPreflightBalanceOkSub
               : l10n.deployPreflightBalanceFailSub,
         ),
         PreflightCheck(
-          ok: _recovered,
-          title: _recovered
+          ok: widget.target.authorized && _recovered,
+          title: widget.target.authorized && _recovered
               ? l10n.deployPreflightLatencyOkTitle
               : l10n.deployPreflightLatencyFailTitle,
-          sub: _recovered
+          sub: widget.target.authorized && _recovered
               ? l10n.deployPreflightLatencyOkSub
               : l10n.deployPreflightLatencyFailSub,
         ),
@@ -1897,7 +1870,7 @@ class _PreflightPaneState extends State<_PreflightPane> {
   void _recheck() {
     setState(() {
       _rechecking = true;
-      _recovered = true; // 复检：mock 视作问题已处理 → 全 pass。
+      _recovered = widget.target.authorized; // 复检：已绑定账户才 mock 全 pass。
       _scanned = 0;
     });
     _startScan();
@@ -1980,11 +1953,13 @@ class _PreflightPaneState extends State<_PreflightPane> {
                 value: l10n.deployConfirmMarketPerp,
                 scheme: c,
               ),
-              _DetailRow(
-                label: l10n.deployConfirmFieldAccount,
-                value:
-                    widget.target.apiKey?.label ?? widget.target.catalog.name,
+              _AccountSelectRow(
+                accounts: widget.target.accounts,
+                selected: widget.target.apiKey,
                 scheme: c,
+                label: l10n.deployConfirmFieldAccount,
+                emptyText: widget.target.catalog.name,
+                onChanged: widget.onAccountChanged,
               ),
               _DetailRow(
                 label: l10n.deployConfirmFieldLeverage,
@@ -2057,16 +2032,18 @@ class _PreflightPaneState extends State<_PreflightPane> {
             checking: i >= _scanned,
             scheme: c,
           ),
+        if (!widget.target.authorized) ...<Widget>[
+          const SizedBox(height: QzSpacing.sm),
+          QzButton(
+            key: const Key('deploy-go-configure'),
+            label: l10n.deployGoConfigureButton,
+            variant: QzButtonVariant.accent,
+            onPressed: widget.onGoConfigure,
+          ),
+        ],
         const SizedBox(height: QzSpacing.lg),
         Row(
           children: <Widget>[
-            QzButton(
-              key: const Key('deploy-preflight-back'),
-              label: l10n.deployPreflightBackButton,
-              variant: QzButtonVariant.ghost,
-              onPressed: widget.onBack,
-            ),
-            const SizedBox(width: QzSpacing.sm),
             Expanded(
               child: QzButton(
                 key: const Key('deploy-preflight-confirm'),
@@ -2078,6 +2055,80 @@ class _PreflightPaneState extends State<_PreflightPane> {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _AccountSelectRow extends StatelessWidget {
+  const _AccountSelectRow({
+    required this.accounts,
+    required this.selected,
+    required this.scheme,
+    required this.label,
+    required this.emptyText,
+    required this.onChanged,
+  });
+
+  final List<ExchangeApiKey> accounts;
+  final ExchangeApiKey? selected;
+  final QzColorScheme scheme;
+  final String label;
+  final String emptyText;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = scheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: c.textDim, fontSize: 12),
+            ),
+          ),
+          if (accounts.isEmpty)
+            Text(
+              emptyText,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  key: const Key('deploy-account-select'),
+                  value: selected?.id,
+                  isDense: true,
+                  alignment: AlignmentDirectional.centerEnd,
+                  dropdownColor: c.bgSoft,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  items: accounts
+                      .map<DropdownMenuItem<String>>(
+                        (ExchangeApiKey account) => DropdownMenuItem<String>(
+                          value: account.id,
+                          child: Text(account.label),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (String? value) {
+                    if (value != null) onChanged(value);
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

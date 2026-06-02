@@ -742,7 +742,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deployConfirmFootnote =>
-      'The above is read-only confirmation; the live strategy will deploy per this plan';
+      'Exchange, market, and leverage are decided in the AI chat; account can switch among bound accounts on the same exchange. The live strategy will deploy per this plan.';
 
   @override
   String deployingTitle(Object exchange) {

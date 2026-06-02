@@ -706,7 +706,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployConfirmMarketPerp => '永续合约';
 
   @override
-  String get deployConfirmFootnote => '以上为只读确认信息，确认后将按此方案部署实盘';
+  String get deployConfirmFootnote =>
+      '交易所 / 市场 / 杠杆由 AI 对话决定；账户可在同交易所已绑定账户间切换，确认后将按此方案部署实盘';
 
   @override
   String deployingTitle(Object exchange) {

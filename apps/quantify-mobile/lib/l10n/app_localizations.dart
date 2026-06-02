@@ -1425,7 +1425,7 @@ abstract class AppLocalizations {
   /// No description provided for @deployConfirmFootnote.
   ///
   /// In zh, this message translates to:
-  /// **'以上为只读确认信息，确认后将按此方案部署实盘'**
+  /// **'交易所 / 市场 / 杠杆由 AI 对话决定；账户可在同交易所已绑定账户间切换，确认后将按此方案部署实盘'**
   String get deployConfirmFootnote;
 
   /// No description provided for @deployingTitle.

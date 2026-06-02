@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-06-02 · AI 量化部署主流程：方案 A 对齐新版 receipt（Issues #2064 / #2065）
+
+**背景**：设计稿 `design/project/mobile/m-screens-deploy.jsx` 的新版 `ScreenDeploy` 主流程为 `confirm → deploying → success`。`DpConfirm` 是部署前账单 receipt：交易所 / 市场 / 资金 / 杠杆由 AI 对话过程决定，部署页只做最终确认和部署前检查。旧 `DpSelect` / `DpAllocate` 已退化为 canvas-only wrapper。Flutter app 此前 `QzDeploySheet` 仍是 6 步状态机 `pickExchange → authorize → allocate → preflight → deploying → done`，与新版设计稿主流程不一致。#2065 进一步指出 confirm 账单中的「选择账户」是可编辑下拉，而不是只读字段。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 对齐新版设计稿（采纳） | `QzDeploySheet` 主流程收敛为 `confirm → deploying → success`；交易所固定为 AI 对话上下文中的 Binance mock；资金 / 市场 / 杠杆只读展示；未绑定 API 降级为 confirm 页部署前检查失败项 + API 绑定入口；「选择账户」可在同交易所已绑定账户间下拉切换 | 与当前设计真源一致；消除旧选所 / 授权 / 资金配置主流程；#2065 可直接落在 confirm receipt 上；保持 API 绑定入口可达 |
+| B. 保留旧 6 步 | 继续保留选交易所 / 授权 / 资金配置，并把新版 receipt 标 future | 与 #2064 标题和新版设计稿主流程冲突；继续保留结构性差异；#2065 账户下拉仍要挂在将被重构的 pane 上 |
+
+**判定**：**采纳方案 A**。部署弹层主流程改为 `confirm → deploying → success`。确认页保留只读账单、风险 summary、部署前检查；交易所 / 市场类型 / 部署杠杆维持只读；「选择账户」改为可点下拉，只列出同交易所已绑定账户，切换后回写部署上下文。无已绑定账户时不进入旧授权步骤，在 confirm 页展示检查失败并提供 `showApiFormSheet` 绑定入口。
+
+**落地范围**：
+
+- `lib/data/models/deploy_models.dart`：`DeployStep` 收敛为 `confirm / deploying / success`。
+- `lib/widgets/qz_deploy_sheet.dart`：首屏直接渲染 `_PreflightPane`；部署成功仍返回 `DeploymentResult`；账户字段改下拉；无账户时显示 `deploy-go-configure`。
+- `lib/l10n/app_zh.arb` / `app_en.arb`：确认页 footnote 改为说明交易所 / 市场 / 杠杆由 AI 决定，账户可在同交易所已绑定账户间切换。
+- `test/widgets/qz_deploy_sheet_test.dart`：覆盖三段主流程、账户切换、无账户 API 绑定入口、预检查禁用/复检/部署成功路径。
+
+**对齐结论（对应 #2064 / #2065 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| #2064 [1] 产品在 A/B 间明确结论并记入 decisions.md | 已满足。结论＝方案 A | 本节 |
+| #2064 [2] 主流程为 `confirm → deploying → success`；confirm 为只读账单 + 部署前检查；未授权走检查失败项 + 去绑定入口 | 已满足 | `QzDeploySheet` + widget test |
+| #2064 [4] `flutter analyze` / `flutter test` | 见 PR 验证段 | 验证段 |
+| #2065 [1] 「选择账户」为可点下拉，列出同交易所已绑定账户，可切换并回写上下文 | 已满足 | `deploy-account-select` widget test |
+| #2065 [2] 交易所 / 市场类型 / 部署杠杆维持只读 | 已满足 | confirm bill 仅账户使用下拉，其余仍 `_DetailRow` |
+| #2065 [3] widget test 覆盖账户切换；`flutter analyze` / `flutter test` | 已满足 | `qz_deploy_sheet_test.dart` + 验证段 |
+
+**不变项**：部署中分步动画和部署成功详情卡维持既有 mock 展示；真实交易所 / 资金 / 策略上下文接入仍等待 #1679/#1682 后续真实数据通道。
+
+---
+
 ## 2026-06-01 · 聚合持仓量 tab 排序按钮：方案 A 移除、对齐设计稿（Issue #1919）
 
 **背景**：`apps/quantify-mobile/lib/pages/market/widgets/agg_open_interest_tab.dart:134-152` 在币种 chips 旁渲染了一个可见排序 `OutlinedButton`（`agg-oi-sort-button`）+ 排序抽屉（`agg-oi-sort-*`，6 指标 desc/asc/none 三态循环）。但设计真源 `design/project/mobile/m-screens-data.jsx` 的 `OpenInterestTab`（`:1245`）渲染层（`return` JSX，`:1285-1318`）**只有币种 chips + 表格**——其 `sortKey/sortDir/sortOpen` state（`:1249-1251`）+ `SORT_OPTS` + `filteredRows` 排序逻辑在设计稿中是**未渲染触发器的死代码**（无任何按钮/抽屉消费它）。即 Flutter 在持仓量 tab **多出**了设计稿未呈现的排序入口。issue 引用的「币股屏 `ScreenCoinStocks` 有完整筛选&排序 sheet」是**另一屏**（且该 sheet 在设计稿中真实渲染），不构成持仓量 tab 保留排序的先例。

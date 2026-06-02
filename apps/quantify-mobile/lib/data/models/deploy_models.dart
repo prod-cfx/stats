@@ -1,15 +1,11 @@
 /// AI 对话「一键部署」相关模型。
 ///
 /// 仅 UI 侧使用，后端尚未接入。当前由 `QzDeploySheet` 用 mock 计时驱动
-/// `pickExchange → authorize → allocate → preflight → deploying → done`
-/// 状态流（#1772 补齐资金配置 / 预检查 / 部署步骤详情）。
+/// `confirm → deploying → success` 状态流（#2064 对齐新版部署设计）。
 enum DeployStep {
-  pickExchange,
-  authorize,
-  allocate,
-  preflight,
+  confirm,
   deploying,
-  done,
+  success,
 }
 
 /// 资金配置（#1772 DpAllocate）。

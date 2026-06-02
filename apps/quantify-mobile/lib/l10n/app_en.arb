@@ -235,7 +235,7 @@
   "deployConfirmFieldAccount": "Account",
   "deployConfirmFieldLeverage": "Deploy leverage",
   "deployConfirmMarketPerp": "Perpetual",
-  "deployConfirmFootnote": "The above is read-only confirmation; the live strategy will deploy per this plan",
+  "deployConfirmFootnote": "Exchange, market, and leverage are decided in the AI chat; account can switch among bound accounts on the same exchange. The live strategy will deploy per this plan.",
   "deployingTitle": "Deploying to {exchange}",
   "@deployingTitle": { "placeholders": { "exchange": {} } },
   "deployingCaption": "Please keep this page open, usually 3-5 seconds",

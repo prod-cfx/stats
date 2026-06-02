@@ -238,7 +238,7 @@
   "deployConfirmFieldAccount": "选择账户",
   "deployConfirmFieldLeverage": "部署杠杆",
   "deployConfirmMarketPerp": "永续合约",
-  "deployConfirmFootnote": "以上为只读确认信息，确认后将按此方案部署实盘",
+  "deployConfirmFootnote": "交易所 / 市场 / 杠杆由 AI 对话决定；账户可在同交易所已绑定账户间切换，确认后将按此方案部署实盘",
   "deployingTitle": "正在部署到 {exchange}",
   "@deployingTitle": { "placeholders": { "exchange": {} } },
   "deployingCaption": "请勿关闭页面，通常需要 3-5 秒",
