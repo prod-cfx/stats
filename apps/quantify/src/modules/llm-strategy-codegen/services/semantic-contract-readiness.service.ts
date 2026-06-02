@@ -4,6 +4,7 @@ import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
+import { CURRENT_SEMANTIC_VERSION } from '../nl-gateway/version-gate/version-gate'
 import type {
   SemanticAtomContract,
   SemanticActionState,
@@ -32,7 +33,7 @@ import { SemanticContractShapeNormalizerService } from './semantic-contract-shap
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
-import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, getAtomFulfillsStrategyPhase } from '../atom-contracts/atom-contract-registry'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
@@ -926,8 +927,8 @@ export class SemanticContractReadinessService {
 
       const effectKeys = new Set(effectLeaves.map(l => l.key))
       const fulfillsPhase = (leaf: AtomExprAtom, phase: 'entry' | 'exit'): boolean => {
-        const contract = ATOM_CONTRACT_REGISTRY[leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY]
-        return contract?.fulfillsStrategyPhase?.includes(phase) === true
+        if (!(leaf.key in ATOM_CONTRACT_REGISTRY)) return false
+        return getAtomFulfillsStrategyPhase(leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY).includes(phase)
       }
       const entryCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'entry'))
       const exitCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'exit'))
@@ -1500,6 +1501,7 @@ function normalizePhase0Orchestration(
   //   Pass 3: scope.leg 节点二轮（pairedLegId 见 Pass 2 leg 状态）
   //   Pass 4: gate/program/portfolioRisk 维持 S2 原 single-pass 行为
   const initialNodes = orchestration
+  const effectiveStrategyVersion = strategyVersion ?? { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION }
   /* eslint-disable atom-keys/no-atom-key-literal -- scope.leg / scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
   const isLegScopeNode = (n: SemanticOrchestrationNode): boolean =>
     n.kind === 'scope' && (n.key === 'scope.leg' || n.legScopeKind === 'leg')
@@ -1526,7 +1528,7 @@ function normalizePhase0Orchestration(
     // scope.symbol 与 scope.leg 已在前 passes 收敛，跳过；
     // 其它（含 scope.timeframe、scope.dataSource、未支持 scope kinds、gate/program/portfolioRisk）走最后 pass。
     if (isSymbolScopeNode(node) || isLegScopeNode(node)) return node
-    return applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass2)
+    return applyOrchestrationReadinessForNode(node, registry, effectiveStrategyVersion, afterLegPass2)
   })
 
   let changed = false

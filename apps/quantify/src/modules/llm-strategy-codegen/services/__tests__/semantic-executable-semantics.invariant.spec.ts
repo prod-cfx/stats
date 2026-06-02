@@ -221,6 +221,31 @@ describe('SemanticExecutableSemanticsService — fulfillsStrategyPhase invariant
   })
 
   describe('rules-native facts', () => {
+    it('detects complete order program semantics from orchestration program atoms', () => {
+      const state: SemanticState = {
+        ...emptyState(),
+        rules: [{
+          id: 'fixed-grid-gated',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: { kind: 'atom', key: 'trend.direction', params: { value: 'up' } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [{
+              kind: 'atom',
+              key: 'program.fixed_grid_gated',
+              params: { levelCount: 10, stepPct: 5, sizing: { mode: 'fixed_pct', value: 10 } },
+            }],
+          },
+        }],
+      }
+
+      expect(service.hasCompleteOrderProgramSemantics(state)).toBe(true)
+    })
+
     it('detects executable entry/exit/sizing semantics from rules-only DCA schedule leaves', () => {
       const state: SemanticState = {
         ...emptyState(),

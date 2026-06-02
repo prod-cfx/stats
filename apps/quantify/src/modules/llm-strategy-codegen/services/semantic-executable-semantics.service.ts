@@ -129,7 +129,7 @@ export class SemanticExecutableSemanticsService {
    */
   hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
     return this.collectLockedAtoms(state).some((atom) => {
-      if (atom.bucket !== 'positionConstraint') return false
+      if (atom.bucket !== 'positionConstraint' && atom.bucket !== 'orchestration') return false
       const phases = this.lookupFulfillsPhase(atom.key)
       return phases.includes('entry') && phases.includes('exit')
     })

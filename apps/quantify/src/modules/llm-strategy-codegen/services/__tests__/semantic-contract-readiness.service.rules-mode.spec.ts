@@ -30,8 +30,8 @@ function sequence(...steps: AtomExpr[]): AtomExpr {
   return { kind: 'sequence', steps }
 }
 
-function hasLegacyBucket(state: SemanticState, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(state, key)
+function stateContainsSerializedValue(state: SemanticState, value: string): boolean {
+  return JSON.stringify(state).includes(value)
 }
 
 function rule(partial: Partial<SemanticRule> & { id: string; condition: AtomExpr }): SemanticRule {
@@ -310,7 +310,43 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     } as SemanticState)
 
     expect(result.ready).toBe(true)
-    expect(hasLegacyBucket(result.state, 'action')).toBe(false)
+    expect(stateContainsSerializedValue(result.state, 'stale-flat-action')).toBe(false)
+  })
+
+  it('normalize accepts self-contained fixed grid program effects without open/close action rules', () => {
+    const service = new SemanticContractReadinessService()
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'fixed-grid-gated',
+        phase: 'entry',
+        sideScope: 'both',
+        condition: atom('trend.direction', { value: 'up' }),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [atom('program.fixed_grid_gated', {
+            lowerBound: 50000,
+            upperBound: 60000,
+            levelCount: 10,
+            stepPct: 5,
+            onDeactivate: 'cancel',
+            programKind: 'fixed_grid_gated',
+            sizing: { mode: 'fixed_pct', value: 10 },
+          })],
+        },
+      }),
+    ]
+
+    const result = service.normalize({
+      ...stateWithRules(rules),
+      position: null,
+      positionConstraint: [],
+    } as SemanticState)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
   })
 
   it('mainflow rejects empty rules instead of falling back to flat buckets', () => {
@@ -727,7 +763,7 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
     ]), CURRENT_VERSION)
 
     expect(result.ready).toBe(false)
-    expect(hasLegacyBucket(result.state, 'orchestration')).toBe(false)
+    expect(stateContainsSerializedValue(result.state, 'flat-orchestration')).toBe(false)
   })
 
   it('routes program effect readiness slot fieldPath through typed rule effects path', () => {
@@ -761,7 +797,7 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
     ]), CURRENT_VERSION)
 
     expect(result.ready).toBe(false)
-    expect(hasLegacyBucket(result.state, 'orchestration')).toBe(false)
+    expect(stateContainsSerializedValue(result.state, 'flat-orchestration')).toBe(false)
   })
 
   it('treats an explicit sibling exit rule as satisfying position.dca_schedule dca_exit_rule', () => {

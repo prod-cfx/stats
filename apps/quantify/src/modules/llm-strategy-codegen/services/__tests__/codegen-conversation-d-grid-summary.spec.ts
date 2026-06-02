@@ -281,12 +281,26 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
 
   describe('B. evaluateCanonicalCompileability 在 spec.orderPrograms 非空时视为 entry+exit 自洽', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
-    const evaluate = (spec: { rules: Array<{ phase: string, actions: Array<{ type: string }> }>, orderPrograms?: unknown[] }) =>
+    const evaluate = (spec: {
+      rules: Array<{ phase: string, actions: Array<{ type: string }> }>
+      orderPrograms?: unknown[]
+      orchestration?: { programs?: unknown[] }
+    }) =>
       (service as unknown as { evaluateCanonicalCompileability: typeof CodegenConversationService.prototype['evaluateCanonicalCompileability'] })
-        .evaluateCanonicalCompileability(spec)
+        .evaluateCanonicalCompileability(spec as never)
 
     it('rules 为空 + orderPrograms 非空 → canCompile=true（grid orchestration 路径）', () => {
       const report = evaluate({ rules: [], orderPrograms: [{ programKind: 'fixed_grid_gated' } as unknown]})
+      expect(report.canCompile).toBe(true)
+      expect(report.reasons).toEqual([])
+    })
+
+    it('rules 为空 + orchestration.programs 非空 → canCompile=true（canonical v2 grid 路径）', () => {
+      const report = evaluate({
+        rules: [],
+        orchestration: { programs: [{ programKind: 'fixed_grid_gated' }] },
+      })
+
       expect(report.canCompile).toBe(true)
       expect(report.reasons).toEqual([])
     })
