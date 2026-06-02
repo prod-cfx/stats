@@ -319,7 +319,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
           IconButton(
             key: const Key('strategy-filter-btn'),
             tooltip: l10n.strategyHomeFilterButton,
-            icon: const Icon(Icons.tune),
+            icon: const Icon(Icons.filter_alt),
             onPressed: _openFilterSheet,
           ),
         ],

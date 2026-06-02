@@ -205,6 +205,20 @@ void main() {
     // 右上搜索 + 筛选按钮
     expect(find.byKey(const Key('strategy-search-btn')), findsOneWidget);
     expect(find.byKey(const Key('strategy-filter-btn')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-filter-btn')),
+        matching: find.byIcon(Icons.filter_alt),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-filter-btn')),
+        matching: find.byIcon(Icons.tune),
+      ),
+      findsNothing,
+    );
     // 7 个分类 chip key
     expect(find.byKey(const Key('strategy-chip-all')), findsOneWidget);
     expect(find.byKey(const Key('strategy-chip-trend')), findsOneWidget);
