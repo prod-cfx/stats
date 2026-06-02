@@ -25,7 +25,8 @@ import 'widgets/strategy_sort_sheet.dart';
 ///
 /// 顶部：搜索栏 + 分类 chip 条 + 排序行 + 筛选 sheet
 /// 中部：featured hero（仅当 category=all 且无 query 时显示） + 列表
-/// 底部：分页 loading 指示
+///   列表容器对齐设计稿 padding '10px 16px 100px'；分页加载保留业务逻辑，
+///   底部仅以轻量 spinner 占位，不破坏设计稿布局。
 class StrategyHomePage extends ConsumerStatefulWidget {
   const StrategyHomePage({super.key});
 
@@ -398,8 +399,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                           return ListView.builder(
                           controller: _scrollCtrl,
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: QzSpacing.lg),
+                          // 设计稿 m-screens-2:644 列表容器 padding '10px 16px 100px'：
+                          // 顶 10、左右 16、底 100（为底部导航/sticky 区留白）。
+                          padding: const EdgeInsets.fromLTRB(
+                              QzSpacing.lg, 10, QzSpacing.lg, 100),
                           itemCount: listItems.length +
                               (_showFeatured ? 1 : 0) +
                               (_loadingMore ? 1 : 0),
@@ -417,9 +420,12 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                               i -= 1;
                             }
                             if (i >= listItems.length) {
+                              // 分页 loading：设计稿列表区无底部 spinner，故收敛为
+                              // 不破坏布局的轻量占位——小尺寸、低高度，落在底部留白内，
+                              // 仍保留分页业务逻辑（_loadMore）。
                               return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(child: QzSpinner()),
+                                padding: EdgeInsets.only(top: QzSpacing.sm),
+                                child: Center(child: QzSpinner(size: 18)),
                               );
                             }
                             final StrategyMarketItem item = listItems[i];

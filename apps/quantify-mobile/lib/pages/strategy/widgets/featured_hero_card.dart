@@ -27,7 +27,8 @@ class FeaturedHeroCard extends StatelessWidget {
     final StrategyCard card = item.card;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: QzSpacing.md),
+      // 设计稿 m-screens-2:649 hero marginBottom:14，与列表卡 gap:12 区分层级。
+      padding: const EdgeInsets.only(bottom: 14),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
