@@ -135,24 +135,37 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
           SizedBox(
             width: double.infinity,
             height: 46,
-            child: ElevatedButton(
-              key: const Key('strategy-sheet-apply-btn'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: c.accent,
-                foregroundColor: c.accentOn,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(QzRadii.card),
-                ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: c.accentGrad,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x527C5CFF),
+                    blurRadius: 20,
+                    offset: Offset(0, 6),
+                  ),
+                ],
               ),
-              onPressed: () => Navigator.of(context).pop(
-                StrategySortFilterResult(category: _category, sort: _sort),
-              ),
-              child: Text(
-                l10n.strategyHomeSheetApply(widget.resultCount),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  key: const Key('strategy-sheet-apply-btn'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.of(context).pop(
+                    StrategySortFilterResult(category: _category, sort: _sort),
+                  ),
+                  child: Center(
+                    child: Text(
+                      l10n.strategyHomeSheetApply(widget.resultCount),
+                      style: TextStyle(
+                        color: c.accentOn,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

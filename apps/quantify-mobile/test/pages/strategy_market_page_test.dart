@@ -367,9 +367,40 @@ void main() {
     expect(find.byKey(const Key('strategy-sheet-cat-all')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sheet-sort-hot')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
+    final Finder applyDecoration = find.ancestor(
+      of: find.byKey(const Key('strategy-sheet-apply-btn')),
+      matching: find.byWidgetPredicate((Widget w) {
+        if (w is! Container) return false;
+        final Decoration? decoration = w.decoration;
+        if (decoration is! BoxDecoration) return false;
+        final List<BoxShadow> shadows = decoration.boxShadow ?? <BoxShadow>[];
+        return decoration.gradient is LinearGradient &&
+            decoration.borderRadius == BorderRadius.circular(12) &&
+            shadows.any(
+              (BoxShadow s) =>
+                  s.color == const Color(0x527C5CFF) &&
+                  s.blurRadius == 20 &&
+                  s.offset == const Offset(0, 6),
+            );
+      }),
+    );
+    expect(applyDecoration, findsOneWidget);
     // 排序选项文案对齐设计稿「按 {label} 排序」（#1888）
     expect(find.text('按 热门 排序'), findsOneWidget);
     expect(find.text('按 低回撤 排序'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('strategy-sheet-sort-sharpe')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('strategy-sheet-apply-btn')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-sharpe')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('星标按钮：点击切换收藏状态 (#1565)',
