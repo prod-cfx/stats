@@ -377,6 +377,21 @@
         "description": "启动 Quantify 生产服务"
       }
     },
+    "quantify-backtest-worker": {
+      "skipEnvValidation": true,
+      "development": {
+        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run dev:worker:backtest",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "启动 Quantify 回测 Worker 开发服务"
+      },
+      "production": {
+        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run start:worker:backtest",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "启动 Quantify 回测 Worker 生产服务"
+      }
+    },
     "front": {
       "development": {
         "command": "npx nx dev front",
@@ -426,7 +441,7 @@
       "stack": {
         "ecosystemConfig": "ecosystem.config.cjs",
         "pm2Bin": "pnpm pm2",
-        "services": ["backend", "front", "admin", "quantify"],
+        "services": ["backend", "front", "admin", "quantify", "quantify-backtest-worker"],
         "preflight": {
           "pm2Reset": true,
           "killPorts": [3000, 3001, 3500, 3010],
