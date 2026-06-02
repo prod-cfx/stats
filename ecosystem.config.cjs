@@ -201,6 +201,57 @@ function createQuantifyConfig() {
   }
 }
 
+/**
+ * 创建 Quantify 回测 Worker 配置
+ */
+function createQuantifyBacktestWorkerConfig() {
+  if (isProduction) {
+    return {
+      name: 'quantify-backtest-worker',
+      cwd: projectRoot,
+      script: 'apps/quantify/dist/apps/quantify/src/worker.backtest.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+        APP_ENV: 'production',
+      },
+      max_memory_restart: '2G',
+      error_file: path.join(projectRoot, 'logs/pm2-prod/quantify-backtest-worker-error.log'),
+      out_file: path.join(projectRoot, 'logs/pm2-prod/quantify-backtest-worker-out.log'),
+      merge_logs: true,
+      autorestart: true,
+      watch: false,
+    }
+  }
+
+  return {
+    name: 'quantify-backtest-worker',
+    cwd: projectRoot,
+    script: 'scripts/pm2/run-dx.cjs',
+    args: 'start quantify-backtest-worker --dev',
+    env: {
+      NODE_ENV: 'development',
+      APP_ENV: 'development',
+      CHOKIDAR_USEPOLLING: '',
+      WATCHPACK_POLLING: 'false',
+      CHOKIDAR_INTERVAL: '',
+    },
+    max_memory_restart: '1G',
+    error_file: './logs/pm2/quantify-backtest-worker-error.log',
+    out_file: './logs/pm2/quantify-backtest-worker-out.log',
+    merge_logs: true,
+    autorestart: true,
+    watch: false,
+  }
+}
+
 module.exports = {
-  apps: [createBackendConfig(), createFrontConfig(), createAdminConfig(), createQuantifyConfig()],
+  apps: [
+    createBackendConfig(),
+    createFrontConfig(),
+    createAdminConfig(),
+    createQuantifyConfig(),
+    createQuantifyBacktestWorkerConfig(),
+  ],
 }

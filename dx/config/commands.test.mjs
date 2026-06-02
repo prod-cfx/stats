@@ -6,6 +6,7 @@ const [commands, rootPackage] = await Promise.all([
   readJson(new URL('./commands.json', import.meta.url)),
   readJson(new URL('../../package.json', import.meta.url)),
 ])
+const localEcosystem = await import('../../ecosystem.config.cjs')
 
 const EXPECTED_UNIT_ALL_TARGETS = [
   'backend',
@@ -117,6 +118,20 @@ describe('dx command config', () => {
       'dx test unit quantify must route through quantify-launcher.cjs so env mapping is applied',
     )
     assert.match(commands.test.unit.quantify.command, /npx nx test quantify/)
+  })
+
+  it('starts the backtest worker with the local pm2 stack', () => {
+    assert.ok(
+      commands.start.stack.stack.services.includes('quantify-backtest-worker'),
+      'dx start stack must include the backtest worker so queued backtest jobs are consumed locally',
+    )
+
+    const appNames = localEcosystem.default.apps.map(app => app.name)
+    assert.ok(appNames.includes('quantify'), 'local PM2 ecosystem must include quantify API')
+    assert.ok(
+      appNames.includes('quantify-backtest-worker'),
+      'local PM2 ecosystem must include quantify-backtest-worker',
+    )
   })
 
   it('documents dx test usage in help output config', () => {
