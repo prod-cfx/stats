@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { GridRuntimeModule } from '@/modules/grid-runtime/grid-runtime.module'
+import { ExternalSignalWebhooksModule } from '@/modules/external-signal-webhooks/external-signal-webhooks.module'
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { MarketDataModule } from '@/modules/market-data/market-data.module'
 import { PositionsModule } from '@/modules/positions/positions.module'
@@ -13,7 +14,7 @@ import { AccountStrategyCallerIdentityService } from './services/account-strateg
 import { AccountStrategyViewService } from './services/account-strategy-view.service'
 
 @Module({
-  imports: [PrismaModule, StrategyInstancesModule, MarketDataModule, TradingModule, StrategySignalsGenerationModule, PositionsModule, GridRuntimeModule],
+  imports: [PrismaModule, StrategyInstancesModule, MarketDataModule, TradingModule, StrategySignalsGenerationModule, PositionsModule, GridRuntimeModule, ExternalSignalWebhooksModule],
   controllers: [AccountStrategyViewController],
   providers: [
     AccountStrategyViewService,

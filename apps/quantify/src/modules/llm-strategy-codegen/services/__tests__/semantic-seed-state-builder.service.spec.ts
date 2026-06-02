@@ -506,6 +506,48 @@ describe('SemanticSeedStateBuilderService — rules-only seed input', () => {
 
     expect(state).toBeNull()
   })
+
+  it('projects grid condition perGridSizing into position sizing through rules mainflow', () => {
+    const service = new SemanticSeedStateBuilderService()
+
+    const state = service.build({
+      context: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      },
+      rules: [{
+        id: 'program-fixed-grid-range-50000-60000-10-5pct-uptrend-enable',
+        phase: 'program',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: {
+            levels: 10,
+            stepPct: 5,
+            sideMode: 'both',
+            rangeLower: 50000,
+            rangeUpper: 60000,
+            perGridSizing: 1,
+            breakoutAction: 'continue',
+          },
+        },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both', recycle: 'true' } }],
+          orchestration: [],
+          programs: [{ kind: 'atom', key: 'program.fixed_grid_gated', params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'cancel', programKind: 'fixed_grid_gated' } }],
+        },
+      }],
+    })
+
+    expect(state?.position?.sizing).toEqual({ kind: 'ratio', value: 1, unit: 'ratio' })
+    expect(state?.position?.status).toBe('locked')
+    expect(state?.position?.openSlots).toEqual([])
+  })
 })
 
 describe.skip('SemanticSeedStateBuilderService legacy flat bucket fixtures', () => {

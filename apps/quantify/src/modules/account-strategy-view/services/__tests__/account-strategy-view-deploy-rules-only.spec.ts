@@ -193,6 +193,9 @@ function createService(snapshot: Record<string, unknown>) {
   const snapshotsRepository = {
     findByIdForUser: jest.fn().mockResolvedValue(snapshot),
   }
+  const externalSignalWebhooksService = {
+    ensureSubscriptionsForStrategy: jest.fn().mockResolvedValue([]),
+  }
   const service = new AccountStrategyViewService(
     repo as any,
     { calculateBatchStats: jest.fn() } as any,
@@ -203,9 +206,14 @@ function createService(snapshot: Record<string, unknown>) {
     { getLeverageConstraints: jest.fn().mockResolvedValue({ minLeverage: 1, maxLeverage: 5 }) } as any,
     snapshotsRepository as any,
     runtimeExecutionStateService as any,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    externalSignalWebhooksService as any,
   )
   service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
-  return { service, repo, runtimeExecutionStateService }
+  return { service, repo, runtimeExecutionStateService, externalSignalWebhooksService }
 }
 
 describe('accountStrategyViewService deploy rules-only snapshot truth', () => {
@@ -254,6 +262,54 @@ describe('accountStrategyViewService deploy rules-only snapshot truth', () => {
       publishedSnapshotId: 'snap-rules-only-1',
       snapshotHash: 'sha256:snap-rules-only-1',
       snapshot,
+    })
+  })
+
+  it('auto-configures live webhook subscriptions from compiled externalSignal event streams', async () => {
+    const truth = createCompiledTruthFixture()
+    const snapshot = createDeploySnapshot({
+      ...truth,
+      astSnapshot: {
+        ...truth.astSnapshot,
+        exprPool: [
+          ...(truth.astSnapshot.exprPool ?? []),
+          {
+            id: 'expr_webhook_buy',
+            nodeType: 'predicate',
+            payload: {
+              kind: 'externalSignal',
+              params: {
+                provider: 'webhook',
+                signalId: 'tradingview_buy',
+                sourceFeedId: 'webhook.tradingview_buy',
+                ttlMs: 60_000,
+              },
+            },
+          },
+        ],
+      },
+    })
+    const { service, externalSignalWebhooksService } = createService(snapshot)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'rules only strategy',
+      publishedSnapshotId: 'snap-rules-only-1',
+      deployRequestId: 'deploy-req-webhook-1',
+      exchangeAccountId: 'exchange-account-1',
+      mode: 'LIVE',
+    } as any)
+
+    expect(externalSignalWebhooksService.ensureSubscriptionsForStrategy).toHaveBeenCalledWith({
+      userId: 'user-1',
+      strategyInstanceId: 'inst-1',
+      requirements: [{
+        provider: 'webhook',
+        signalId: 'tradingview_buy',
+        sourceFeedId: 'webhook.tradingview_buy',
+        ttlMs: 60_000,
+        schemaRef: 'webhook_event',
+      }],
     })
   })
 

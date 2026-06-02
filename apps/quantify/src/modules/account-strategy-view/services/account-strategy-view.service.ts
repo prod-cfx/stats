@@ -27,6 +27,7 @@ import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { GridRuntimeService } from '@/modules/grid-runtime/services/grid-runtime.service'
+import { ExternalSignalWebhooksService } from '@/modules/external-signal-webhooks/services/external-signal-webhooks.service'
 // Phase 5 S3 (#1109): scope.timeframe live publication-time gate
 import { ScopeTimeframeLiveUnsupportedException } from '@/modules/llm-strategy-codegen/exceptions/scope-timeframe-live-unsupported.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -47,6 +48,7 @@ import { StrategyInstanceStatsService } from '@/modules/strategy-instances/servi
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
+import { readEventStreamsFromExprPool } from '@/modules/strategy-runtime/runtime-data-plan.resolver'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import {
   resolveStrategyFundingFromExchangeBalance,
@@ -130,6 +132,7 @@ export class AccountStrategyViewService {
     // 注入靠后是为了不打乱已有大量按位置 mock 的 spec；deleteStrategy 用 withTransaction
     // 把归档写操作包成事务，把 tradingService 远程 I/O 留在事务外。
     @Optional() private readonly txHost?: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    @Optional() private readonly externalSignalWebhooksService?: ExternalSignalWebhooksService,
   ) {}
 
   async listStrategies(
@@ -1299,6 +1302,12 @@ export class AccountStrategyViewService {
       strategyInstanceIdForBinding = deployResult.strategyInstanceId
       deployedStrategyInstanceId = deployResult.strategyInstanceId
 
+      await this.ensureExternalSignalSubscriptionsForDeploy({
+        userId: dto.userId,
+        strategyInstanceId: deployResult.strategyInstanceId,
+        snapshot: resolvedDeploy.snapshot,
+      })
+
       const riskProfile = this.buildRiskProfileSnapshot(dto)
       await this.repo.upsertRiskProfile({
         strategyInstanceId: deployResult.strategyInstanceId,
@@ -1357,6 +1366,33 @@ export class AccountStrategyViewService {
     }
 
     return this.getStrategyDetail(dto.userId, deployedStrategyInstanceId!)
+  }
+
+  private async ensureExternalSignalSubscriptionsForDeploy(input: {
+    userId: string
+    strategyInstanceId: string
+    snapshot: unknown
+  }): Promise<void> {
+    if (!this.externalSignalWebhooksService) return
+    const snapshot = this.readRecord(input.snapshot)
+    const requirements = [
+      ...readEventStreamsFromExprPool(this.readRecord(snapshot?.astSnapshot)?.exprPool),
+      ...readEventStreamsFromExprPool(this.readRecord(snapshot?.irSnapshot)?.exprPool),
+      ...readEventStreamsFromExprPool(this.readRecord(snapshot?.specSnapshot)?.exprPool),
+    ]
+    const webhookRequirements = requirements.filter(requirement => requirement.provider === 'webhook')
+    if (webhookRequirements.length === 0) return
+
+    const bySignalId = new Map<string, (typeof webhookRequirements)[number]>()
+    webhookRequirements.forEach((requirement) => {
+      if (!bySignalId.has(requirement.signalId)) bySignalId.set(requirement.signalId, requirement)
+    })
+
+    await this.externalSignalWebhooksService.ensureSubscriptionsForStrategy({
+      userId: input.userId,
+      strategyInstanceId: input.strategyInstanceId,
+      requirements: [...bySignalId.values()],
+    })
   }
 
   async getDeployResult(userId: string, deployRequestId: string): Promise<AccountStrategyDetailResponseDto | null> {

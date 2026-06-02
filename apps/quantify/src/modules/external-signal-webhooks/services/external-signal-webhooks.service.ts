@@ -1,4 +1,5 @@
 import type { Request } from 'express'
+import type { RuntimeEventStreamRequirement } from '@/modules/strategy-runtime/runtime-data-plan'
 import type { WebhookSignalSubscription } from '@/prisma/prisma.types'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import { createHash, randomBytes } from 'node:crypto'
@@ -77,6 +78,57 @@ export class ExternalSignalWebhooksService {
       }
       throw error
     }
+  }
+
+  async ensureSubscriptionsForStrategy(input: {
+    userId: string
+    strategyInstanceId: string
+    requirements: RuntimeEventStreamRequirement[]
+  }): Promise<ExternalSignalWebhookSubscriptionResponseDto[]> {
+    await this.assertOwner(input.userId, input.strategyInstanceId)
+    const results: ExternalSignalWebhookSubscriptionResponseDto[] = []
+    const seenSignalIds = new Set<string>()
+    for (const requirement of input.requirements) {
+      if (requirement.provider !== 'webhook') continue
+      const signalId = requirement.signalId.trim()
+      if (!signalId || seenSignalIds.has(signalId)) continue
+      seenSignalIds.add(signalId)
+
+      const existingSubscription = await this.repo.findActiveSubscription(input.strategyInstanceId, signalId)
+      if (existingSubscription) {
+        results.push(this.toSubscriptionResponse(existingSubscription))
+        continue
+      }
+
+      const secret = this.generateSecret()
+      try {
+        const created = await this.repo.createSubscription({
+          userId: input.userId,
+          strategyInstanceId: input.strategyInstanceId,
+          provider: 'webhook',
+          signalId,
+          secretCiphertext: this.crypto.encryptConfig<SecretEnvelope>({ secret }),
+          metadata: this.toJsonObject({
+            autoCreated: true,
+            sourceFeedId: requirement.sourceFeedId,
+            schemaRef: requirement.schemaRef,
+            ...(requirement.ttlMs ? { ttlMs: requirement.ttlMs } : {}),
+          }),
+        })
+        results.push(this.toSubscriptionResponse(created))
+      }
+      catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          const existing = await this.repo.findActiveSubscription(input.strategyInstanceId, signalId)
+          if (existing) {
+            results.push(this.toSubscriptionResponse(existing))
+            continue
+          }
+        }
+        throw error
+      }
+    }
+    return results
   }
 
   async listSubscriptions(

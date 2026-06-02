@@ -811,6 +811,7 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
               openTradeCount: 1,
               openPnl: 12.34,
               marketType: 'spot',
+              diagnosticReason: ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE,
             },
             completedAt,
           },
@@ -848,6 +849,7 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
         openTradeCount: 1,
         openPnl: 12.34,
         marketType: 'spot',
+        diagnosticReason: ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE,
       },
       completedAt: new Date(completedAt),
     })

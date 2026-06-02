@@ -238,6 +238,11 @@ export class BacktestingCreateJobRequestDto {
   @ValidateNested({ each: true })
   @Type(() => BacktestingCreateJobBarDto)
   bars?: BacktestingCreateJobBarDto[]
+
+  @ApiPropertyOptional({ type: Object, additionalProperties: true })
+  @IsOptional()
+  @IsObject()
+  eventStreams?: Record<string, Array<Record<string, unknown>>>
 }
 
 export class BacktestingCreateJobErrorDetailsDto {

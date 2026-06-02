@@ -1,7 +1,7 @@
 import type { MutableRefObject } from 'react'
 
 import type { ConversationState } from './ai-quant-page-conversation'
-import type { BacktestJob } from '@/components/ai-quant/backtest-job-client'
+import type { BacktestJob, CreateBacktestJobPayload } from '@/components/ai-quant/backtest-job-client'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
   buildLocalizedBacktestErrorMessage,
@@ -36,6 +36,88 @@ import {
 
 export const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
 export const BACKTEST_JOB_TIMEOUT_MS = 180_000
+
+type BacktestEventStreams = NonNullable<CreateBacktestJobPayload['eventStreams']>
+
+export function buildSyntheticWebhookEventStreamsFromScript(
+  scriptCode: string | null | undefined,
+  eventTs: number,
+): BacktestEventStreams {
+  if (!scriptCode || !Number.isFinite(eventTs)) return {}
+  const exprPool = readCompiledExprPool(scriptCode)
+  if (!Array.isArray(exprPool)) return {}
+
+  const streams: BacktestEventStreams = {}
+  for (const node of exprPool) {
+    const record = readRecord(node)
+    const payload = readRecord(record?.payload)
+    if (payload?.kind !== 'externalSignal') continue
+    const params = readRecord(payload.params)
+    const provider = typeof params?.provider === 'string' && params.provider.trim()
+      ? params.provider.trim()
+      : 'webhook'
+    if (provider !== 'webhook') continue
+    const signalId = typeof params?.signalId === 'string' ? params.signalId.trim() : ''
+    if (!signalId || signalId === 'REQUIRED_SIGNAL_ID') continue
+    const sourceFeedId = typeof params?.sourceFeedId === 'string' && params.sourceFeedId.trim()
+      ? params.sourceFeedId.trim()
+      : `webhook.${signalId}`
+    if (!sourceFeedId.startsWith('webhook.') || streams[sourceFeedId]) continue
+
+    streams[sourceFeedId] = [{
+      id: `synthetic-${sourceFeedId.replace(/[^a-zA-Z0-9]+/g, '-')}-${Math.trunc(eventTs)}`,
+      ts: Math.trunc(eventTs),
+      payload: { signalId },
+    }]
+  }
+  return streams
+}
+
+function readCompiledExprPool(scriptCode: string): unknown {
+  const marker = 'const EXPR_POOL ='
+  const markerIndex = scriptCode.indexOf(marker)
+  if (markerIndex < 0) return null
+  const arrayStart = scriptCode.indexOf('[', markerIndex + marker.length)
+  if (arrayStart < 0) return null
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = arrayStart; index < scriptCode.length; index += 1) {
+    const char = scriptCode[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (char === '"') {
+      inString = true
+      continue
+    }
+    if (char === '[') depth += 1
+    if (char === ']') {
+      depth -= 1
+      if (depth === 0) {
+        try {
+          return JSON.parse(scriptCode.slice(arrayStart, index + 1))
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
@@ -388,6 +470,13 @@ export async function runAiQuantBacktest(args: {
       range: resolveBacktestRangeInput(activeConversation.paramValues),
       allowPartial: executionConfig.allowPartial,
     })
+    const eventStreams = buildSyntheticWebhookEventStreamsFromScript(
+      activeConversation.publishedScriptCode,
+      payload.dataRange.fromTs,
+    )
+    if (Object.keys(eventStreams).length > 0) {
+      payload.eventStreams = eventStreams
+    }
     backtestDraftConfig = buildBacktestDraftConfigFromValues(activeConversation.paramValues)
   } catch (error) {
     releaseMutex()

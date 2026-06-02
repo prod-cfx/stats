@@ -287,6 +287,7 @@ export class BacktestJobExecutorService {
             ...(typeof result.summary.openPnl === 'number'
               ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
               : {}),
+            ...(result.summary.diagnosticReason ? { diagnosticReason: result.summary.diagnosticReason } : {}),
             marketType,
           },
           completedAt,

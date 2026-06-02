@@ -3329,6 +3329,47 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
     expect(result.missing).toEqual([])
   })
 
+  it('treats grid condition perGridSizing as executable sizing when effect carries only lifecycle params', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [{
+        id: 'program-fixed-grid-range-50000-60000-10-5pct-uptrend-enable',
+        phase: 'program',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: {
+            levels: 10,
+            stepPct: 5,
+            sideMode: 'both',
+            rangeLower: 50000,
+            rangeUpper: 60000,
+            perGridSizing: 1,
+            breakoutAction: 'continue',
+          },
+        },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both', recycle: 'true' } }],
+          orchestration: [],
+          programs: [{ kind: 'atom', key: 'program.fixed_grid_gated', params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'cancel', programKind: 'fixed_grid_gated' } }],
+        },
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state, { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(result.ready).toBe(true)
+    expect(result.state.position?.openSlots ?? []).not.toContainEqual(expect.objectContaining({ slotKey: 'position.sizing' }))
+  })
+
   it('skips timeframe mismatch for indicator.above HTF filter trigger with timeframeOverride', () => {
     // 执行 TF=15m，HTF filter trigger 使用 1h EMA，带 timeframeOverride=true，应豁免
     const state = createSemanticState({
