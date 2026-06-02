@@ -253,6 +253,34 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-hot')),
+        matching: find.byWidgetPredicate(
+          (Widget w) => w is SizedBox && w.height == 24,
+        ),
+      ),
+      findsOneWidget,
+    );
+    final Container hotContainer = tester.widget<Container>(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-hot')),
+        matching: find.byWidgetPredicate(
+          (Widget w) => w is Container && w.decoration is BoxDecoration,
+        ),
+      ),
+    );
+    expect(
+      hotContainer.padding,
+      const EdgeInsets.symmetric(horizontal: 10),
+    );
+    final Icon hotArrow = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('strategy-sort-hot')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
+    );
+    expect(hotArrow.size, 10);
     // 未选中 cagr：无箭头
     expect(
       find.descendant(
