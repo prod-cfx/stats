@@ -177,7 +177,7 @@ void main() {
     expect(find.byType(TradesPanel), findsOneWidget);
     expect(find.byType(OrderbookView), findsNothing);
     // 表头三列 + 至少 30 行成交
-    expect(find.text('时间'), findsOneWidget);
+    expect(find.text('成交时间'), findsOneWidget);
     expect(find.text('价格(USDT)'), findsOneWidget);
     expect(find.text('数量(BTC)'), findsOneWidget);
   });

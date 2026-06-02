@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -320,6 +321,8 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                     },
                   ),
                 ),
+                const SizedBox(height: QzSpacing.md),
+                _CumulativeStatsRow(ticker: _priceSnapshot!),
                 const SizedBox(height: QzSpacing.md),
                 _PanelTabBar(
                   panel: _panel,
@@ -717,6 +720,125 @@ class _MoreActionTile extends StatelessWidget {
               style: TextStyle(color: c.textDim, fontSize: 12),
             ),
       onTap: onTap,
+    );
+  }
+}
+
+/// K 线下方 flat 4 格累计统计行（#2101）：累计成交额 / 累计净流入 / 最高 / 最低。
+///
+/// `累计成交额`/`累计净流入` 暂无真实接口：成交额用 `volume24h * price` 估算；
+/// 净流入用 `成交额 * changePercent/100` 作占位（涨则净流入为正、跌为负），仅用于
+/// 视觉对齐设计稿 m-screens-3。高/低沿用 `MarketDetailStats` 同款 mock 推算
+/// （`price * (1 ± |changePct|/100)`），保证两处展示一致。
+///
+/// TODO(follow-up)：接入真实 24H 聚合接口（turnover / net-inflow / high / low）
+/// 后移除本 widget 内估算逻辑，直接读字段。
+class _CumulativeStatsRow extends StatelessWidget {
+  const _CumulativeStatsRow({required this.ticker});
+
+  final Ticker ticker;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
+    final double absPct = ticker.changePercent.abs() / 100;
+    final double high = ticker.price * (1 + absPct);
+    final double low = math.max(0, ticker.price * (1 - absPct));
+    final double turnover = ticker.volume24h * ticker.price;
+    final double netInflow = turnover * ticker.changePercent / 100;
+    final bool inflowDown = netInflow < 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: c.borderSoft),
+          bottom: BorderSide(color: c.borderSoft),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.lg,
+        vertical: QzSpacing.md,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _CumStatCell(
+            label: l10n.marketDetailCumTurnover,
+            value: _fmtCompact(turnover),
+          ),
+          _CumStatCell(
+            label: l10n.marketDetailCumNetInflow,
+            value: _fmtSignedCompact(netInflow),
+            valueColor: inflowDown ? c.marketDown : c.marketUp,
+          ),
+          _CumStatCell(
+            label: l10n.marketDetailCumHigh,
+            value: high.toStringAsFixed(2),
+          ),
+          _CumStatCell(
+            label: l10n.marketDetailCumLow,
+            value: low.toStringAsFixed(2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmtCompact(double v) {
+    final double abs = v.abs();
+    if (abs >= 1e9) return '${(v / 1e9).toStringAsFixed(2)}B';
+    if (abs >= 1e6) return '${(v / 1e6).toStringAsFixed(2)}M';
+    if (abs >= 1e3) return '${(v / 1e3).toStringAsFixed(2)}K';
+    return v.toStringAsFixed(2);
+  }
+
+  static String _fmtSignedCompact(double v) {
+    final String sign = v < 0 ? '-' : '+';
+    return '$sign${_fmtCompact(v.abs())}';
+  }
+}
+
+class _CumStatCell extends StatelessWidget {
+  const _CumStatCell({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: c.textDim, fontSize: 10.5),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: valueColor ?? c.text,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

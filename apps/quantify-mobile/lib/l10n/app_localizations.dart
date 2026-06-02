@@ -2124,6 +2124,30 @@ abstract class AppLocalizations {
   /// **'持仓量'**
   String get marketDetailOpenInterest;
 
+  /// No description provided for @marketDetailCumTurnover.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计成交额(\$)'**
+  String get marketDetailCumTurnover;
+
+  /// No description provided for @marketDetailCumNetInflow.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计净流入(\$)'**
+  String get marketDetailCumNetInflow;
+
+  /// No description provided for @marketDetailCumHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'最高'**
+  String get marketDetailCumHigh;
+
+  /// No description provided for @marketDetailCumLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'最低'**
+  String get marketDetailCumLow;
+
   /// No description provided for @marketDetailIndexPrice.
   ///
   /// In zh, this message translates to:

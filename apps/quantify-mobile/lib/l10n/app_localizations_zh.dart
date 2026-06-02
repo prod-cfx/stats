@@ -1070,6 +1070,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailOpenInterest => '持仓量';
 
   @override
+  String get marketDetailCumTurnover => '累计成交额(\$)';
+
+  @override
+  String get marketDetailCumNetInflow => '累计净流入(\$)';
+
+  @override
+  String get marketDetailCumHigh => '最高';
+
+  @override
+  String get marketDetailCumLow => '最低';
+
+  @override
   String get marketDetailIndexPrice => '指数价格';
 
   @override

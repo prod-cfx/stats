@@ -24,6 +24,7 @@ import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/orderbook_view.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
+import 'package:quantify_mobile/theme/theme_context.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_kline_chart.dart';
@@ -512,6 +513,46 @@ void main() {
       'BTCUSDT',
     );
     expect(find.text('已复制交易对'), findsOneWidget);
+  });
+
+  // #2101 K 线下方 4 格累计统计行：4 个标签齐全。
+  testWidgets('MarketDetailPage 渲染累计统计行 4 格标签', (WidgetTester tester) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    expect(find.text('累计成交额(\$)'), findsOneWidget);
+    expect(find.text('累计净流入(\$)'), findsOneWidget);
+    expect(find.text('最高'), findsOneWidget);
+    expect(find.text('最低'), findsOneWidget);
+  });
+
+  // #2101 净流入为正（BTCUSDT changePercent +1.82）使用涨色，且带 + 号。
+  testWidgets('MarketDetailPage 累计净流入正值用涨色', (WidgetTester tester) async {
+    await _pump(tester, _FakeOrderbookRepository(), symbol: 'BTCUSDT');
+
+    final BuildContext ctx = tester.element(find.text('累计净流入(\$)'));
+    final Text inflow = tester.widget<Text>(
+      find.textContaining(RegExp(r'^\+.*[BMK]$')),
+    );
+    expect(
+      inflow.style?.color,
+      ctx.qzScheme.marketUp,
+      reason: '正净流入应使用涨色',
+    );
+  });
+
+  // #2101 净流入为负（ETHUSDT changePercent -0.74）使用跌色，且带 - 号。
+  testWidgets('MarketDetailPage 累计净流入负值用跌色', (WidgetTester tester) async {
+    await _pump(tester, _FakeOrderbookRepository(), symbol: 'ETHUSDT');
+
+    final BuildContext ctx = tester.element(find.text('累计净流入(\$)'));
+    final Text inflow = tester.widget<Text>(
+      find.textContaining(RegExp(r'^-.*[BMK]$')),
+    );
+    expect(
+      inflow.style?.color,
+      ctx.qzScheme.marketDown,
+      reason: '负净流入应使用跌色',
+    );
   });
 
   // #2105 TopBar 标题：标准交易对展示 BASE / QUOTE 分隔格式。
