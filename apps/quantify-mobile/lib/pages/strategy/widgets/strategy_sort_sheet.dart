@@ -279,20 +279,26 @@ class _PillChoice extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(QzRadii.pill),
-        child: Container(
-          height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+        child: DecoratedBox(
           decoration: BoxDecoration(
             color: selected ? c.accent : c.bgSoft,
             borderRadius: BorderRadius.circular(QzRadii.pill),
           ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? c.accentOn : c.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+          child: SizedBox(
+            height: 30,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+              child: Center(
+                widthFactor: 1,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? c.accentOn : c.text,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

@@ -346,15 +346,24 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         title: l10n.strategyHomeTitle,
         subtitle: l10n.strategyHomeSubtitle,
         actions: <Widget>[
-          _SearchButton(
-            active: _query.isNotEmpty,
-            tooltip: l10n.strategySearchButton,
-            onPressed: _openSearchOverlay,
-          ),
-          _FilterButton(
-            active: _filterSheetOpen,
-            tooltip: l10n.strategyHomeFilterButton,
-            onPressed: _openFilterSheet,
+          Padding(
+            padding: const EdgeInsets.only(right: QzSpacing.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _SearchButton(
+                  active: _query.isNotEmpty,
+                  tooltip: l10n.strategySearchButton,
+                  onPressed: _openSearchOverlay,
+                ),
+                const SizedBox(width: QzSpacing.sm),
+                _FilterButton(
+                  active: _filterSheetOpen,
+                  tooltip: l10n.strategyHomeFilterButton,
+                  onPressed: _openFilterSheet,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -485,33 +494,36 @@ class _SearchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final Widget icon = Icon(
-      Icons.search,
-      size: 20,
-      color: active ? c.accent : c.textMid,
-    );
-    return IconButton(
+    return Tooltip(
       key: const Key('strategy-search-btn'),
-      tooltip: tooltip,
-      onPressed: onPressed,
-      // 设计稿 m-screens-2:566 操作按钮 36×36 圆形。
-      iconSize: 20,
-      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-      padding: EdgeInsets.zero,
-      icon: active
-          ? Stack(
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.all(8),
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: SizedBox(
+          // 设计稿 m-screens-2:566 操作按钮 36×36 圆形。
+          width: 36,
+          height: 36,
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: c.accentSoft,
+                    color: active ? c.accentSoft : Colors.transparent,
                     shape: BoxShape.circle,
                   ),
-                  child: icon,
                 ),
+              ),
+              Center(
+                child: Icon(
+                  Icons.search,
+                  size: 20,
+                  color: active ? c.accent : c.textMid,
+                ),
+              ),
+              if (active)
                 Positioned(
-                  // 设计稿 m-screens-2:584 红点 7×7，定位 top:6 right:6，accent 紫。
+                  // 设计稿 m-screens-2:584 红点 7×7，定位 top:6 right:6。
                   right: 6,
                   top: 6,
                   child: Container(
@@ -524,17 +536,18 @@ class _SearchButton extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
-            )
-          : icon,
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
 /// 顶部「筛选 & 排序」按钮（设计稿 m-screens-2:578-583）。
 ///
-/// sheet 打开时（[active]）呈激活态：36×36 accentSoft 圆底 + accent 图标；
-/// 关闭后恢复普通态（透明底 + `textMid` 图标）。
+/// 图标样式对齐「实盘策略」顶部排序入口：使用 tune 线性滑杆图标，
+/// 不使用漏斗图标。
 class _FilterButton extends StatelessWidget {
   const _FilterButton({
     required this.active,
@@ -549,29 +562,31 @@ class _FilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final Widget icon = Icon(
-      Icons.filter_alt,
-      size: 20,
-      color: active ? c.accent : c.textMid,
-    );
-    return IconButton(
+    return Tooltip(
       key: const Key('strategy-filter-btn'),
-      tooltip: tooltip,
-      onPressed: onPressed,
-      // 设计稿操作按钮统一 36×36 圆形、图标 20。
-      iconSize: 20,
-      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-      padding: EdgeInsets.zero,
-      icon: active
-          ? Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: c.accentSoft,
-                shape: BoxShape.circle,
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: SizedBox(
+          // 设计稿操作按钮统一 36×36 圆形、图标 20。
+          width: 36,
+          height: 36,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: active ? c.accentSoft : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Icon(
+                Icons.tune,
+                size: 20,
+                color: active ? c.accent : c.textMid,
               ),
-              child: icon,
-            )
-          : icon,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

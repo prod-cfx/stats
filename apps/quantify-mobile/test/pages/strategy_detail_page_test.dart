@@ -259,6 +259,7 @@ void main() {
       (WidgetTester tester) async {
     // st-grid-btc：category=grid、period=30D
     await _pumpDetail(tester);
+    expect(_paramValue(tester, '交易品种'), 'BTCUSDT');
     // 「交易周期」行的值取 card.period（30D，与 equity tab 同名故按行定位）
     expect(_paramValue(tester, '交易周期'), '30D');
     expect(_paramValue(tester, '杠杆'), '1×');
@@ -429,7 +430,7 @@ void main() {
   testWidgets('bottom-sheet 视觉：圆角顶 + 拖拽 handle + 顶部留白（#1820）',
       (WidgetTester tester) async {
     await _pumpDetail(tester);
-    // sheet 顶部留 48px scrim + 圆角顶 ClipRRect
+    // sheet 顶部留出安全区 + 圆角顶 ClipRRect
     expect(find.byType(ClipRRect), findsWidgets);
     // 头部 star / close 按钮存在
     expect(find.byKey(const Key('strategy-detail-star-btn')), findsOneWidget);

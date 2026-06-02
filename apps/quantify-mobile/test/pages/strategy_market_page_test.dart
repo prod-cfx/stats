@@ -208,14 +208,14 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const Key('strategy-filter-btn')),
-        matching: find.byIcon(Icons.filter_alt),
+        matching: find.byIcon(Icons.tune),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: find.byKey(const Key('strategy-filter-btn')),
-        matching: find.byIcon(Icons.tune),
+        matching: find.byIcon(Icons.filter_alt),
       ),
       findsNothing,
     );
@@ -397,16 +397,20 @@ void main() {
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
     final QzColorScheme scheme = qzColors(QzBg.light, QzAccent.violet);
     final BoxDecoration catDecoration = tester
-        .widget<Container>(
+        .widget<DecoratedBox>(
           find.descendant(
             of: find.byKey(const Key('strategy-sheet-cat-all')),
             matching: find.byWidgetPredicate(
-              (Widget w) => w is Container && w.decoration is BoxDecoration,
+              (Widget w) => w is DecoratedBox && w.decoration is BoxDecoration,
             ),
           ),
         )
         .decoration! as BoxDecoration;
     expect(catDecoration.color, scheme.accent);
+    expect(
+      tester.getSize(find.byKey(const Key('strategy-sheet-cat-all'))).width,
+      lessThan(90),
+    );
     expect(
       tester
           .widget<Text>(

@@ -152,13 +152,13 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     final bool starred = favorites.contains(id);
 
-    // 对齐设计稿 StratDetail：bottom-sheet 形态——顶部留 48px scrim，
+    // 对齐设计稿 StratDetail：bottom-sheet 形态——顶部避开灵动岛，
     // 圆角顶 + 拖拽 handle + bgElev 头部。整页路由保留（深链 /strategy/:id
     // 不变），仅视觉改造为从底部升起的 sheet。
     return Scaffold(
       backgroundColor: c.scrim,
       body: Padding(
-        padding: const EdgeInsets.only(top: 48),
+        padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 12),
         child: ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           child: ColoredBox(
@@ -189,15 +189,13 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
               QzSpacing.lg,
+              14,
               QzSpacing.lg,
-              QzSpacing.lg,
-              // 给底部订阅栏留出空间，避免最后一条信号被遮挡
-              80,
+              100,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const SizedBox(height: QzSpacing.sm),
                 // equity 卡：左上大号 +CAGR% +「{period} 累计收益」+ 时间 tab
                 // （对齐设计稿 StratDetail equity 卡，#1825）。
                 _EquityCard(
@@ -207,7 +205,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                       setState(() => _tf = v),
                   curve: _EquitySection(id: id, tf: tf),
                 ),
-                const SizedBox(height: QzSpacing.lg),
+                const SizedBox(height: QzSpacing.md),
                 // 6 格指标：Sharpe / 最大回撤 / 胜率 / 盈亏比 / 交易次数 / 使用人数
                 // （对齐设计稿 StratDetail stats grid，#1825）。
                 _MetricGrid(
@@ -239,7 +237,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: QzSpacing.lg),
+                const SizedBox(height: QzSpacing.md),
                 Text(
                   l10n.strategyDetailParamsTitle,
                   style: TextStyle(
@@ -250,7 +248,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                 ),
                 const SizedBox(height: QzSpacing.sm),
                 _ParamsSection(card: d.card),
-                const SizedBox(height: QzSpacing.lg),
+                const SizedBox(height: QzSpacing.md),
                 Text(
                   l10n.strategyDetailDescriptionTitle,
                   style: TextStyle(
@@ -744,6 +742,9 @@ class _ParamsSection extends StatelessWidget {
   }
 
   String _symbol() {
+    if (card.pair.trim().isNotEmpty) {
+      return card.pair.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    }
     // 仅取明显是交易对的 tag（按报价单位后缀匹配），
     // 避免把 grid / dca / momentum 等策略类型误判成交易对。
     for (final String t in card.tags) {
@@ -782,7 +783,7 @@ class _ParamsSection extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: c.bgElev,
-        border: Border.all(color: c.border),
+        border: Border.all(color: c.borderSoft),
         borderRadius: BorderRadius.circular(QzRadii.card),
       ),
       padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
@@ -858,7 +859,7 @@ class _EquityCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: c.bgElev,
-        border: Border.all(color: c.border),
+        border: Border.all(color: c.borderSoft),
         borderRadius: BorderRadius.circular(QzRadii.card),
       ),
       padding: const EdgeInsets.all(QzSpacing.md),
@@ -929,7 +930,7 @@ class _DescriptionSection extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: c.bgElev,
-        border: Border.all(color: c.border),
+        border: Border.all(color: c.borderSoft),
         borderRadius: BorderRadius.circular(QzRadii.card),
       ),
       padding: const EdgeInsets.all(QzSpacing.md),
