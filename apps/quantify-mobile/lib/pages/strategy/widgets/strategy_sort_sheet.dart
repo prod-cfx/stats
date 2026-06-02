@@ -127,6 +127,7 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
                   key: Key('strategy-sheet-sort-${k.name}'),
                   label: l10n.strategyHomeSortByOption(_sortLabel(context, k)),
                   selected: k == _sort,
+                  softSelected: true,
                   onTap: () => setState(() => _sort = k),
                 ),
             ],
@@ -182,15 +183,19 @@ class _PillChoice extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.softSelected = false,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final bool softSelected;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    final Color selectedBg = softSelected ? c.accentSoft : c.accent;
+    final Color selectedFg = softSelected ? c.accent : c.accentOn;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -200,14 +205,14 @@ class _PillChoice extends StatelessWidget {
           padding: const EdgeInsets.symmetric(
               horizontal: QzSpacing.md, vertical: 6),
           decoration: BoxDecoration(
-            color: selected ? c.accent : c.bgSoft,
+            color: selected ? selectedBg : c.bgSoft,
             borderRadius: BorderRadius.circular(QzRadii.pill),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? c.accentOn : c.text,
+              color: selected ? selectedFg : c.text,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),

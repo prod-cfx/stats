@@ -367,6 +367,53 @@ void main() {
     expect(find.byKey(const Key('strategy-sheet-cat-all')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sheet-sort-hot')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
+    final QzColorScheme scheme = qzColors(QzBg.light, QzAccent.violet);
+    final BoxDecoration catDecoration = tester
+        .widget<Container>(
+          find.descendant(
+            of: find.byKey(const Key('strategy-sheet-cat-all')),
+            matching: find.byWidgetPredicate(
+              (Widget w) => w is Container && w.decoration is BoxDecoration,
+            ),
+          ),
+        )
+        .decoration! as BoxDecoration;
+    expect(catDecoration.color, scheme.accent);
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(const Key('strategy-sheet-cat-all')),
+              matching: find.text('全部'),
+            ),
+          )
+          .style
+          ?.color,
+      scheme.accentOn,
+    );
+    final BoxDecoration sortDecoration = tester
+        .widget<Container>(
+          find.descendant(
+            of: find.byKey(const Key('strategy-sheet-sort-hot')),
+            matching: find.byWidgetPredicate(
+              (Widget w) => w is Container && w.decoration is BoxDecoration,
+            ),
+          ),
+        )
+        .decoration! as BoxDecoration;
+    expect(sortDecoration.color, scheme.accentSoft);
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(const Key('strategy-sheet-sort-hot')),
+              matching: find.text('按 热门 排序'),
+            ),
+          )
+          .style
+          ?.color,
+      scheme.accent,
+    );
     final Finder applyDecoration = find.ancestor(
       of: find.byKey(const Key('strategy-sheet-apply-btn')),
       matching: find.byWidgetPredicate((Widget w) {
