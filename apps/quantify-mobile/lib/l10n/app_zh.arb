@@ -1157,6 +1157,7 @@
   "whaleLiveWinSortDesc": "胜率降序",
   "whaleLiveWinSortAsc": "胜率升序",
   "klineLoadError": "K 线加载失败",
+  "klineMoreIntervalsEmpty": "暂无更多周期",
   "tabMarket": "数据",
   "tabWhale": "巨鲸",
   "tabStrategy": "策略",

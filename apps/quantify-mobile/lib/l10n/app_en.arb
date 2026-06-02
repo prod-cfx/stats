@@ -1139,6 +1139,7 @@
   "whaleLiveWinSortDesc": "Win rate: descending",
   "whaleLiveWinSortAsc": "Win rate: ascending",
   "klineLoadError": "K-line load failed",
+  "klineMoreIntervalsEmpty": "No more intervals yet",
   "tabMarket": "Data",
   "tabWhale": "Whale",
   "tabStrategy": "Strategy",

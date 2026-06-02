@@ -3049,6 +3049,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get klineLoadError => 'K-line load failed';
 
   @override
+  String get klineMoreIntervalsEmpty => 'No more intervals yet';
+
+  @override
   String get tabMarket => 'Data';
 
   @override

@@ -5832,6 +5832,12 @@ abstract class AppLocalizations {
   /// **'K 线加载失败'**
   String get klineLoadError;
 
+  /// No description provided for @klineMoreIntervalsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无更多周期'**
+  String get klineMoreIntervalsEmpty;
+
   /// No description provided for @tabMarket.
   ///
   /// In zh, this message translates to:

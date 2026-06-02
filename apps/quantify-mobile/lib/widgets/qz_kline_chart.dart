@@ -8,12 +8,15 @@ import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
 import 'qz_card.dart';
 import 'qz_segmented_tabs.dart';
+import 'qz_sheet.dart';
 import 'qz_spinner.dart';
 
 /// 真实 K 线图表。
 ///
 /// 取代 `QzKlinePlaceholder`，封装 `k_chart_plus` 的 `KChartWidget`：
-/// - 顶部 `QzSegmentedTabs` 切换 6 个周期（1m / 5m / 15m / 1h / 4h / 1d）
+/// - 顶部 `QzSegmentedTabs` 切换 5 个周期（1m / 15m / 1H / 4H / 1D）+ `更多`
+///   入口（对齐设计稿 `m-screens-3.jsx`）
+/// - 周期 tab 下方一行 OHLC 文本（O 用常规色、H 用涨色、L/C 用跌色）
 /// - 中部 `KChartWidget` 渲染蜡烛 + 成交量；缩放 / 拖动 / 长按十字光标
 ///   由 `KChartWidget` 内置状态机（`isScale` / `isDrag` / `isLongPress`）处理
 /// - 涨跌色绑定主题 `statusOk` / `statusDanger`，背景用 `bgSoft`
@@ -31,15 +34,20 @@ class QzKlineChart extends StatelessWidget {
   });
 
   /// 周期 label 与枚举的固定映射，UI 顺序 = 业务顺序。
+  /// 文案严格对齐设计稿 `m-screens-3.jsx`：`1m / 15m / 1H / 4H / 1D`
+  /// （去掉 `5m`，大小写统一为 `1H / 4H / 1D`）。
   static const List<({String label, KlineInterval value})> intervalOptions =
       <({String label, KlineInterval value})>[
     (label: '1m', value: KlineInterval.m1),
-    (label: '5m', value: KlineInterval.m5),
     (label: '15m', value: KlineInterval.m15),
-    (label: '1h', value: KlineInterval.h1),
-    (label: '4h', value: KlineInterval.h4),
-    (label: '1d', value: KlineInterval.d1),
+    (label: '1H', value: KlineInterval.h1),
+    (label: '4H', value: KlineInterval.h4),
+    (label: '1D', value: KlineInterval.d1),
   ];
+
+  /// `更多` 入口 label。它不是真实周期，点击时弹出更多周期选择 sheet，
+  /// 不参与 `intervalOptions` 的选中态映射。
+  static const String moreLabel = '更多';
 
   static const double chartHeight = 320;
 
@@ -61,6 +69,7 @@ class QzKlineChart extends StatelessWidget {
     final String currentLabel = _labelOf(interval);
     final List<String> labels = <String>[
       for (final option in intervalOptions) option.label,
+      moreLabel,
     ];
 
     return QzCard(
@@ -71,11 +80,17 @@ class QzKlineChart extends StatelessWidget {
             options: labels,
             value: currentLabel,
             onChanged: (String label) {
+              if (label == moreLabel) {
+                _showMoreIntervals(context, c, l10n);
+                return;
+              }
               final KlineInterval next = _intervalOf(label);
               if (next != interval) onIntervalChanged(next);
             },
           ),
-          const SizedBox(height: QzSpacing.md),
+          const SizedBox(height: QzSpacing.sm),
+          _buildOhlcRow(c),
+          const SizedBox(height: QzSpacing.sm),
           SizedBox(
             height: chartHeight,
             child: DecoratedBox(
@@ -90,6 +105,84 @@ class QzKlineChart extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// K 线上方 OHLC 行（对齐设计稿 `m-screens-3.jsx` candle 上方 OHLC 块）。
+  /// 取最新一根蜡烛：O 用常规文本色，H 用涨色，L 用跌色，C 按收盘相对开盘
+  /// 着色（涨用涨色、跌/平用跌色，与设计稿默认收跌着色一致）。
+  /// 无数据时各值用占位符 `--`，保持布局稳定不报错。
+  Widget _buildOhlcRow(QzColorScheme c) {
+    final Candle? last = candles.isEmpty ? null : candles.last;
+    final Color closeColor = (last != null && last.close >= last.open)
+        ? c.statusOk
+        : c.statusDanger;
+    return Row(
+      children: <Widget>[
+        _ohlcItem(c, 'O', _fmt(last?.open), c.text),
+        const SizedBox(width: QzSpacing.md),
+        _ohlcItem(c, 'H', _fmt(last?.high), c.statusOk),
+        const SizedBox(width: QzSpacing.md),
+        _ohlcItem(c, 'L', _fmt(last?.low), c.statusDanger),
+        const SizedBox(width: QzSpacing.md),
+        _ohlcItem(c, 'C', _fmt(last?.close), closeColor),
+      ],
+    );
+  }
+
+  Widget _ohlcItem(QzColorScheme c, String label, String value, Color valueColor) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          label,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _fmt(double? value) =>
+      value == null ? '--' : value.toStringAsFixed(2);
+
+  /// `更多` 周期入口：当前无更多档位，弹出占位反馈 sheet（满足"无更多周期时
+  /// 至少不报错且有占位反馈"的验收要求）。后续接入新周期时在此扩展列表。
+  void _showMoreIntervals(
+    BuildContext context,
+    QzColorScheme c,
+    AppLocalizations l10n,
+  ) {
+    QzSheet.show<void>(
+      context: context,
+      builder: (BuildContext ctx) => Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: QzSpacing.lg,
+          vertical: QzSpacing.xl,
+        ),
+        child: Text(
+          l10n.klineMoreIntervalsEmpty,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }

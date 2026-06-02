@@ -2994,6 +2994,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get klineLoadError => 'K 线加载失败';
 
   @override
+  String get klineMoreIntervalsEmpty => '暂无更多周期';
+
+  @override
   String get tabMarket => '数据';
 
   @override
