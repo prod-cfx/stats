@@ -379,6 +379,7 @@
   "marketDetailColTime": "Time",
   "marketDetailColPrice": "Price",
   "marketDetailColQty": "Qty",
+  "marketDetailColTradeTime": "Trade Time",
   "marketDetailDepthBid": "BID",
   "marketDetailDepthSpread": "SPREAD",
   "marketDetailDepthAsk": "ASK",

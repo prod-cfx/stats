@@ -382,6 +382,7 @@
   "marketDetailColTime": "时间",
   "marketDetailColPrice": "价格",
   "marketDetailColQty": "数量",
+  "marketDetailColTradeTime": "成交时间",
   "marketDetailDepthBid": "BID",
   "marketDetailDepthSpread": "SPREAD",
   "marketDetailDepthAsk": "ASK",

@@ -2178,6 +2178,12 @@ abstract class AppLocalizations {
   /// **'数量'**
   String get marketDetailColQty;
 
+  /// No description provided for @marketDetailColTradeTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交时间'**
+  String get marketDetailColTradeTime;
+
   /// No description provided for @marketDetailDepthBid.
   ///
   /// In zh, this message translates to:

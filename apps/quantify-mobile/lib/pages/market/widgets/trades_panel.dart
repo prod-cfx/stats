@@ -85,21 +85,9 @@ class _TradesPanelState extends State<TradesPanel> {
           child: Row(
             children: <Widget>[
               Expanded(
-                child: Text(
-                  l10n.marketDetailColTime,
-                  style: TextStyle(
-                    color: c.textDim,
-                    fontSize: 10,
-                    fontFamily: QzFont.mono,
-                    fontFamilyFallback: QzFont.monoFallback,
-                  ),
-                ),
-              ),
-              Expanded(
                 flex: 2,
                 child: Text(
                   '${l10n.marketDetailColPrice}($quote)',
-                  textAlign: TextAlign.right,
                   style: TextStyle(
                     color: c.textDim,
                     fontSize: 10,
@@ -111,6 +99,18 @@ class _TradesPanelState extends State<TradesPanel> {
               Expanded(
                 child: Text(
                   '${l10n.marketDetailColQty}($base)',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: c.textDim,
+                    fontSize: 10,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  l10n.marketDetailColTradeTime,
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     color: c.textDim,
@@ -220,21 +220,9 @@ class _TradeRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: Text(
-              _fmtTime(trade.time),
-              style: TextStyle(
-                color: c.textMid,
-                fontSize: 12,
-                fontFamily: QzFont.mono,
-                fontFamilyFallback: QzFont.monoFallback,
-              ),
-            ),
-          ),
-          Expanded(
             flex: 2,
             child: Text(
               trade.price.toStringAsFixed(2),
-              textAlign: TextAlign.right,
               style: TextStyle(
                 color: priceColor,
                 fontSize: 12,
@@ -250,6 +238,18 @@ class _TradeRow extends StatelessWidget {
               textAlign: TextAlign.right,
               style: TextStyle(
                 color: c.text,
+                fontSize: 12,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              _fmtTime(trade.time),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: c.textMid,
                 fontSize: 12,
                 fontFamily: QzFont.mono,
                 fontFamilyFallback: QzFont.monoFallback,

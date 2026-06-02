@@ -56,6 +56,25 @@ void main() {
     });
   });
 
+  testWidgets('列头按设计稿顺序：价格 / 数量 / 成交时间', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    final Finder price = find.text('价格(USDT)');
+    final Finder qty = find.text('数量(BTC)');
+    final Finder tradeTime = find.text('成交时间');
+    expect(price, findsOneWidget);
+    expect(qty, findsOneWidget);
+    expect(tradeTime, findsOneWidget);
+    expect(find.text('时间'), findsNothing);
+
+    final double priceDx = tester.getTopLeft(price).dx;
+    final double qtyDx = tester.getTopLeft(qty).dx;
+    final double timeDx = tester.getTopLeft(tradeTime).dx;
+    expect(priceDx < qtyDx, isTrue);
+    expect(qtyDx < timeDx, isTrue);
+  });
+
   testWidgets('默认最新成交显示全部行，切大额成交行数减少', (
     WidgetTester tester,
   ) async {

@@ -1097,6 +1097,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailColQty => '数量';
 
   @override
+  String get marketDetailColTradeTime => '成交时间';
+
+  @override
   String get marketDetailDepthBid => 'BID';
 
   @override

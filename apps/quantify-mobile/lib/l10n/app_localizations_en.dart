@@ -1141,6 +1141,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailColQty => 'Qty';
 
   @override
+  String get marketDetailColTradeTime => 'Trade Time';
+
+  @override
   String get marketDetailDepthBid => 'BID';
 
   @override
