@@ -483,6 +483,64 @@ jobs:
           unset NO_COLOR
           npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy quantify "$DX_ENV_FLAG"
 
+      - name: 启动并校验 quantify backtest worker
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          case "$DEPLOY_ENV" in
+            "prod")
+              APP_ENV_NAME="production"
+              ;;
+            "staging")
+              APP_ENV_NAME="staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          ssh -p "$PORT" "$USER@$HOST" "APP_ENV_NAME=${APP_ENV_NAME} bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/work/quantify/current
+
+          ENV_FILE=".env.${APP_ENV_NAME}"
+          ENV_LOCAL_FILE=".env.${APP_ENV_NAME}.local"
+          DOTENV_BIN="node_modules/.bin/dotenv"
+          if [ ! -x "$DOTENV_BIN" ]; then
+            echo "[ERROR] missing dotenv binary: $DOTENV_BIN" >&2
+            exit 1
+          fi
+          if [ ! -f "$ENV_FILE" ] || [ ! -f "$ENV_LOCAL_FILE" ]; then
+            echo "[ERROR] missing quantify env files for APP_ENV=${APP_ENV_NAME}" >&2
+            exit 1
+          fi
+
+          APP_ENV="$APP_ENV_NAME" NODE_ENV="production" \
+            "$DOTENV_BIN" -o -e "$ENV_FILE" -e "$ENV_LOCAL_FILE" -- \
+            pm2 startOrReload ./ecosystem.quantify.config.cjs --only quantify-backtest-worker --update-env
+          pm2 save
+
+          node - <<'NODE'
+          const { execFileSync } = require('node:child_process')
+          const apps = JSON.parse(execFileSync('pm2', ['jlist'], { encoding: 'utf8' }))
+          const app = apps.find(item => item?.name === 'quantify-backtest-worker')
+          if (!app) throw new Error('quantify-backtest-worker pm2 process missing')
+          if (app.pm2_env?.APP_ENV !== process.env.APP_ENV_NAME) {
+            throw new Error(`quantify-backtest-worker APP_ENV mismatch: ${app.pm2_env?.APP_ENV || '<empty>'}`)
+          }
+          if (app.pm2_env?.NODE_ENV !== 'production') {
+            throw new Error(`quantify-backtest-worker NODE_ENV mismatch: ${app.pm2_env?.NODE_ENV || '<empty>'}`)
+          }
+          console.log(`[INFO] quantify-backtest-worker status=${app.pm2_env?.status || '<unknown>'}`)
+          NODE
+          REMOTE
+
       - name: 校验 quantify 当前运行产物包含 @ai/shared 兜底修复
         env:
           HOST: ${{ secrets.AWS_SSH_HOST }}
