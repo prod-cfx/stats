@@ -27,6 +27,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_kline_chart.dart';
+import 'package:quantify_mobile/widgets/qz_top_bar.dart';
 
 class _FakeTickerRepository implements TickerRepository {
   @override
@@ -144,6 +145,7 @@ Future<_FakeKlineRepository> _pump(
   QzTheme theme = QzTheme.fallback,
   _FakeKlineRepository? klineRepo,
   Map<String, Object>? prefsSeed,
+  String symbol = 'BTCUSDT',
 }) async {
   final _FakeKlineRepository repo = klineRepo ?? _FakeKlineRepository();
   // 注册 teardown 关闭 broadcast controller，避免 flutter_test 警告资源泄漏。
@@ -152,7 +154,7 @@ Future<_FakeKlineRepository> _pump(
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   final GoRouter router = GoRouter(
-    initialLocation: '/market/BTCUSDT',
+    initialLocation: '/market/$symbol',
     routes: <RouteBase>[
       GoRoute(
         path: r'/market/:symbol([A-Z0-9-]{2,})',
@@ -510,5 +512,33 @@ void main() {
       'BTCUSDT',
     );
     expect(find.text('已复制交易对'), findsOneWidget);
+  });
+
+  // #2105 TopBar 标题：标准交易对展示 BASE / QUOTE 分隔格式。
+  testWidgets('MarketDetailPage TopBar 标题展示 BTC / USDT 分隔格式', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    expect(find.text('BTC / USDT'), findsOneWidget);
+    expect(find.text('BTCUSDT'), findsNothing);
+  });
+
+  // #2105 TopBar 标题：非标准交易对（无法解析 quote）回退展示原 symbol，不崩溃。
+  testWidgets('MarketDetailPage TopBar 非标准 symbol 回退展示原文', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, _FakeOrderbookRepository(), symbol: 'FOOBAR');
+
+    expect(tester.takeException(), isNull);
+    // TopBar 标题回退展示原 symbol（FOOBAR 也出现在 not-found 空态，故用
+    // QzTopBar 内 descendant 精确定位标题，避免 findsOneWidget 误判）。
+    expect(
+      find.descendant(
+        of: find.byType(QzTopBar),
+        matching: find.text('FOOBAR'),
+      ),
+      findsOneWidget,
+    );
   });
 }

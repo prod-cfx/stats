@@ -245,7 +245,7 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
         ref.watch(marketFavoritesProvider).contains(widget.symbol);
     return Scaffold(
       appBar: QzTopBar(
-        title: widget.symbol,
+        title: _topBarTitle(widget.symbol),
         subtitle: l10nForBar.marketDetailSubtitlePerpBinance,
         onBack: () => context.pop(),
         actions: <Widget>[
@@ -368,6 +368,16 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
       ),
     );
   }
+}
+
+/// TopBar 标题格式化：`BTCUSDT` → `BTC / USDT`（对齐设计稿 m-screens-3）。
+///
+/// 用 `splitSymbolAssets` 解析 base/quote；无法解析（quote 为空）时回退展示
+/// 原 symbol，避免非标准交易对崩溃或出现孤立分隔符。
+String _topBarTitle(String symbol) {
+  final (String base, String quote) = splitSymbolAssets(symbol);
+  if (quote.isEmpty) return symbol;
+  return '$base / $quote';
 }
 
 /// 3 段 underline panel tab：盘口 / 成交 / 深度图（#1563）。
