@@ -235,6 +235,56 @@ strategy
     ]))
   })
 
+  it('treats fixed grid orchestration programs as long-short exposure during consistency checks', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'okx' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'perp' as const,
+        timeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      orchestration: {
+        programs: [{
+          id: 'fixed-grid-1',
+          programKind: 'fixed_grid_gated' as const,
+          lowerBound: 50000,
+          upperBound: 60000,
+          levelCount: 10,
+          stepPct: 5,
+          sideMode: 'both' as const,
+          onDeactivate: 'cancel' as const,
+          rebuildPolicy: 'out_of_range' as const,
+          sizing: { mode: 'fixed_pct' as const, value: 1 },
+        }],
+      },
+      rules: [],
+    }
+    const { script } = compileCanonicalSpec(canonicalSpec, 'long_short')
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      key: 'compiler_consistency.execution_envelope.position_mode',
+      expected: 'long_short',
+      actual: 'long_short',
+      status: 'passed',
+    }))
+  })
+
   it('passes consistency for mixed EMA and SMA crossover atoms in one generated script', () => {
     const canonicalSpec = {
       version: 2 as const,
