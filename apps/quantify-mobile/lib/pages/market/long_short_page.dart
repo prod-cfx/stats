@@ -14,6 +14,7 @@ import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import 'widgets/exchange_long_short_tile.dart';
 import 'widgets/long_short_hero_card.dart';
+import 'widgets/long_short_search_overlay.dart';
 
 class LongShortBody extends ConsumerStatefulWidget {
   const LongShortBody({super.key});
@@ -72,26 +73,52 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
     setState(() => _period = picked);
   }
 
+  void _onSymbolChanged(String value) {
+    if (value == _symbol) return;
+    setState(() => _symbol = value);
+    _load();
+  }
+
+  /// 打开全屏币种搜索（设计稿 `LSCoinTabs` 搜索按钮 → `SearchOverlay`）。
+  Future<void> _openSearch(List<String> symbols) async {
+    final String? picked = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        fullscreenDialog: true,
+        builder: (BuildContext context) =>
+            LongShortSearchOverlay(symbols: symbols),
+      ),
+    );
+    if (picked != null) _onSymbolChanged(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<String> symbols = mockTickers
         .map((ticker) => ticker.symbol)
         .take(8)
         .toList();
+    // coin tabs 固定在顶部（设计稿 LSCoinTabs 为 sticky 头），仅下方内容滚动。
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _CoinTabs(
+          symbols: symbols,
+          selected: _symbol,
+          onChanged: _onSymbolChanged,
+          onSearch: () => _openSearch(symbols),
+        ),
+        Expanded(child: _buildScrollBody()),
+      ],
+    );
+  }
+
+  Widget _buildScrollBody() {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _CoinTabs(
-            symbols: symbols,
-            selected: _symbol,
-            onChanged: (String value) {
-              setState(() => _symbol = value);
-              _load();
-            },
-          ),
           const SizedBox(height: QzSpacing.md),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
@@ -136,11 +163,13 @@ class _CoinTabs extends StatelessWidget {
     required this.symbols,
     required this.selected,
     required this.onChanged,
+    required this.onSearch,
   });
 
   final List<String> symbols;
   final String selected;
   final ValueChanged<String> onChanged;
+  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +231,7 @@ class _CoinTabs extends StatelessWidget {
                   colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
                 ),
               ),
-              child: _SearchButton(colorScheme: c),
+              child: _SearchButton(colorScheme: c, onPressed: onSearch),
             ),
           ),
         ],
@@ -212,9 +241,10 @@ class _CoinTabs extends StatelessWidget {
 }
 
 class _SearchButton extends StatelessWidget {
-  const _SearchButton({required this.colorScheme});
+  const _SearchButton({required this.colorScheme, required this.onPressed});
 
   final QzColorScheme colorScheme;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -233,7 +263,7 @@ class _SearchButton extends StatelessWidget {
             side: BorderSide(color: colorScheme.borderSoft),
           ),
         ),
-        onPressed: () {},
+        onPressed: onPressed,
       ),
     );
   }

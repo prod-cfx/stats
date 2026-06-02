@@ -115,4 +115,62 @@ void main() {
     expect(find.text('15分钟'), findsOneWidget);
     expect(find.byKey(const Key('long-short-period-sheet')), findsNothing);
   });
+
+  testWidgets('点搜索打开 overlay：热门 + 历史；输入过滤；选中回填币种', (
+    WidgetTester tester,
+  ) async {
+    await _pumpBody(tester);
+
+    // 打开全屏搜索，空查询态显示热门币种 + 搜索历史。
+    await tester.tap(find.byKey(const Key('long-short-coin-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('long-short-search-input')), findsOneWidget);
+    expect(find.byKey(const Key('long-short-search-hot-BTC')), findsOneWidget);
+    expect(find.byKey(const Key('long-short-search-hot-ETH')), findsOneWidget);
+    expect(find.text('搜索历史'), findsOneWidget);
+
+    // 输入过滤：仅命中 ETH 结果行，BTC 结果行消失。
+    await tester.enterText(
+      find.byKey(const Key('long-short-search-input')),
+      'eth',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('long-short-search-result-ETH')), findsOneWidget);
+    expect(find.byKey(const Key('long-short-search-result-BTC')), findsNothing);
+
+    // 选中结果 → pop overlay 并把 symbol 回填到 tab（ETH chip 选中）。
+    await tester.tap(find.byKey(const Key('long-short-search-result-ETH')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('long-short-search-input')), findsNothing);
+    final LongShortBody body =
+        tester.widget<LongShortBody>(find.byType(LongShortBody));
+    expect(body, isNotNull);
+    expect(
+      find.byKey(const Key('long-short-symbol-chip-ETHUSDT')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('搜索空态与历史清空', (WidgetTester tester) async {
+    await _pumpBody(tester);
+
+    await tester.tap(find.byKey(const Key('long-short-coin-search')));
+    await tester.pumpAndSettle();
+
+    // 无命中查询 → 空态文案。
+    await tester.enterText(
+      find.byKey(const Key('long-short-search-input')),
+      'zzz',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('long-short-search-empty')), findsOneWidget);
+
+    // 清空查询回到热门态，清空历史按钮移除历史区。
+    await tester.tap(find.byKey(const Key('long-short-search-clear-input')));
+    await tester.pumpAndSettle();
+    expect(find.text('搜索历史'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('long-short-search-clear-history')));
+    await tester.pumpAndSettle();
+    expect(find.text('搜索历史'), findsNothing);
+  });
 }
