@@ -1919,6 +1919,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConfirmSubtitle => 'Review params before backtesting';
 
   @override
+  String get aiStepConfirm => 'Confirm';
+
+  @override
+  String get aiStepScript => 'Script';
+
+  @override
+  String get aiStepBacktestConfig => 'Config';
+
+  @override
+  String get aiStepBacktest => 'Backtest';
+
+  @override
+  String get aiStepDeploy => 'Deploy';
+
+  @override
   String get aiConfirmCancel => 'Cancel';
 
   @override

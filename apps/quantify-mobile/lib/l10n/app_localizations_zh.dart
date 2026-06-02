@@ -1870,6 +1870,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConfirmSubtitle => '检查参数无误后开始回测';
 
   @override
+  String get aiStepConfirm => '确认策略';
+
+  @override
+  String get aiStepScript => '策略脚本';
+
+  @override
+  String get aiStepBacktestConfig => '回测设置';
+
+  @override
+  String get aiStepBacktest => '回测';
+
+  @override
+  String get aiStepDeploy => '部署';
+
+  @override
   String get aiConfirmCancel => '取消';
 
   @override

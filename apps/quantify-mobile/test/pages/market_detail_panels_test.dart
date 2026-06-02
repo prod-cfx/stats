@@ -151,8 +151,8 @@ void main() {
     expect(find.text('24H 量'), findsOneWidget);
     expect(find.byType(MarketDetailStats), findsOneWidget);
 
-    // 顶栏副标题
-    expect(find.text('永续 · Binance'), findsOneWidget);
+    // 顶栏副标题：默认数据源为聚合（#2113 起 _source 默认 aggregated）。
+    expect(find.text('永续 · 聚合'), findsOneWidget);
 
     // 顶栏 star / more 按钮（按 tooltip 命中）
     expect(find.byTooltip('收藏'), findsOneWidget);

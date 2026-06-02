@@ -7,6 +7,7 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_card.dart';
+import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 
 /// AI 量化「确认策略」屏 — route `/ai/confirm`（#1832 / 内容对齐 #1891）。
@@ -19,8 +20,10 @@ import '../../widgets/qz_top_bar.dart';
 ///   - AI 提示框（紫底 + bot icon）+ 免责声明条（shield）
 ///   - 底部双按钮「返回对话」/「下一步：策略脚本」，顶栏右侧「取消」
 ///
-/// 形态决策（#1890 方案 B）：维持对话中心形态，**不引入 StepBar**；设计稿里的
-/// `<BtcStepBar/>` 显式不落地。脚本预览块下沉到「策略脚本」目标屏（拆分 #1892）。
+/// 流程条（#2130）：顶栏下方展示设计稿统一 [QzStepBar]，对齐
+/// `m-screens-confirm.jsx` 的 `<BtcStepBar active={0} done={[]}/>`——确认页为
+/// 第 1 步 active、done 为空。后续向导页（script / btconfig / ...）复用同组件
+/// 推进 active/done。脚本预览块仍下沉到「策略脚本」目标屏（拆分 #1892）。
 ///
 /// 入参：当前会话参数经 `extra` 透传（`Map<String, String>`）。缺省时回退
 /// [_fallbackParams]，保证深链 / widget test 直接打开不崩。
@@ -73,6 +76,16 @@ class AiConfirmPage extends StatelessWidget {
         top: false,
         child: Column(
           children: <Widget>[
+            QzStepBar(
+              steps: <String>[
+                l10n.aiStepConfirm,
+                l10n.aiStepScript,
+                l10n.aiStepBacktestConfig,
+                l10n.aiStepBacktest,
+                l10n.aiStepDeploy,
+              ],
+              active: 0,
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(QzSpacing.lg),

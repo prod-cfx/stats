@@ -3654,6 +3654,36 @@ abstract class AppLocalizations {
   /// **'检查参数无误后开始回测'**
   String get aiConfirmSubtitle;
 
+  /// No description provided for @aiStepConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认策略'**
+  String get aiStepConfirm;
+
+  /// No description provided for @aiStepScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略脚本'**
+  String get aiStepScript;
+
+  /// No description provided for @aiStepBacktestConfig.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测设置'**
+  String get aiStepBacktestConfig;
+
+  /// No description provided for @aiStepBacktest.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测'**
+  String get aiStepBacktest;
+
+  /// No description provided for @aiStepDeploy.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署'**
+  String get aiStepDeploy;
+
   /// No description provided for @aiConfirmCancel.
   ///
   /// In zh, this message translates to:

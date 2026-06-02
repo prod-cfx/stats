@@ -24,6 +24,7 @@ export 'qz_segmented_tabs.dart';
 export 'qz_sheet.dart';
 export 'qz_spinner.dart';
 export 'qz_stat_chip.dart';
+export 'qz_step_bar.dart';
 export 'qz_toast.dart';
 export 'qz_top_bar.dart';
 export 'qz_typing_indicator.dart';
