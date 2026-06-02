@@ -1102,6 +1102,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailSubtitlePerpBinance => 'Perp · Binance';
 
   @override
+  String get marketDetailSubtitlePerpAggregated => 'Perp · Aggregated';
+
+  @override
+  String marketDetailSubtitlePerpExchange(Object exchange) {
+    return 'Perp · $exchange';
+  }
+
+  @override
+  String get marketDetailSourceAggregated => 'Aggregated';
+
+  @override
+  String get marketDetailSourceAggregatedFull => 'Aggregate all exchanges';
+
+  @override
+  String get marketDetailSourceSheetTitle => 'Data source';
+
+  @override
   String get marketDetail24hHigh => '24H High';
 
   @override

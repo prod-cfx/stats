@@ -2100,6 +2100,36 @@ abstract class AppLocalizations {
   /// **'永续 · Binance'**
   String get marketDetailSubtitlePerpBinance;
 
+  /// No description provided for @marketDetailSubtitlePerpAggregated.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续 · 聚合'**
+  String get marketDetailSubtitlePerpAggregated;
+
+  /// No description provided for @marketDetailSubtitlePerpExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续 · {exchange}'**
+  String marketDetailSubtitlePerpExchange(Object exchange);
+
+  /// No description provided for @marketDetailSourceAggregated.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合'**
+  String get marketDetailSourceAggregated;
+
+  /// No description provided for @marketDetailSourceAggregatedFull.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合所有交易所'**
+  String get marketDetailSourceAggregatedFull;
+
+  /// No description provided for @marketDetailSourceSheetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据来源'**
+  String get marketDetailSourceSheetTitle;
+
   /// No description provided for @marketDetail24hHigh.
   ///
   /// In zh, this message translates to:

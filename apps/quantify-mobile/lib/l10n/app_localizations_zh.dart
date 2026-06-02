@@ -1058,6 +1058,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailSubtitlePerpBinance => '永续 · Binance';
 
   @override
+  String get marketDetailSubtitlePerpAggregated => '永续 · 聚合';
+
+  @override
+  String marketDetailSubtitlePerpExchange(Object exchange) {
+    return '永续 · $exchange';
+  }
+
+  @override
+  String get marketDetailSourceAggregated => '聚合';
+
+  @override
+  String get marketDetailSourceAggregatedFull => '聚合所有交易所';
+
+  @override
+  String get marketDetailSourceSheetTitle => '数据来源';
+
+  @override
   String get marketDetail24hHigh => '24H 高';
 
   @override

@@ -444,8 +444,8 @@ void main() {
     expect(find.text('已移出自选'), findsOneWidget);
   });
 
-  // #1755 更多菜单：打开后含可用「复制交易对」与禁用项「即将上线」。
-  testWidgets('MarketDetailPage 更多按钮打开菜单：复制可用 + 三项禁用', (
+  // #1755 / #2099 更多菜单：复制 + 切换交易所可用，分享 / 提醒禁用。
+  testWidgets('MarketDetailPage 更多按钮打开菜单：复制+切换可用 + 两项禁用', (
     WidgetTester tester,
   ) async {
     await _pump(tester, _FakeOrderbookRepository());
@@ -462,21 +462,92 @@ void main() {
       findsOneWidget,
     );
 
-    // 三个禁用项都展示「即将上线」，且 ListTile.enabled == false
-    expect(find.text('即将上线'), findsNWidgets(3));
+    // 分享 / 提醒仍禁用并展示「即将上线」；切换交易所改为可用（#2099）。
+    expect(find.text('即将上线'), findsNWidgets(2));
     for (final Key key in <Key>[
       const Key('market-more-share'),
       const Key('market-more-alert'),
-      const Key('market-more-switch-exchange'),
     ]) {
       final ListTile tile = tester.widget<ListTile>(
-        find.descendant(
-          of: find.byKey(key),
-          matching: find.byType(ListTile),
-        ),
+        find.descendant(of: find.byKey(key), matching: find.byType(ListTile)),
       );
       expect(tile.enabled, isFalse, reason: '$key 应禁用');
     }
+    final ListTile switchTile = tester.widget<ListTile>(
+      find.descendant(
+        of: find.byKey(const Key('market-more-switch-exchange')),
+        matching: find.byType(ListTile),
+      ),
+    );
+    expect(switchTile.enabled, isTrue, reason: '切换交易所应可用');
+  });
+
+  // #2099 周期 tab 行右侧渲染 SourcePicker，默认聚合态。
+  testWidgets('MarketDetailPage 周期行右侧渲染 SourcePicker（默认聚合）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    expect(
+      find.byKey(const Key('market-detail-source-picker')),
+      findsOneWidget,
+    );
+    // QzKlineChart.trailing 即 SourcePicker，验证落在同一行。
+    final QzKlineChart chart = tester.widget<QzKlineChart>(
+      find.byType(QzKlineChart),
+    );
+    expect(chart.trailing, isNotNull);
+    // 默认聚合：副标题 + pill label 均为「聚合」。
+    expect(find.text('永续 · 聚合'), findsOneWidget);
+    expect(find.text('聚合'), findsOneWidget);
+  });
+
+  // #2099 点击 SourcePicker 弹出数据来源抽屉，选 OKX 后副标题联动。
+  testWidgets('MarketDetailPage SourcePicker 选 OKX：抽屉单选 + 副标题联动', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    await tester.tap(find.byKey(const Key('market-detail-source-picker')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('数据来源'), findsOneWidget);
+    expect(find.text('聚合所有交易所'), findsOneWidget);
+    expect(
+      find.byKey(const Key('market-detail-source-option-binance')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('market-detail-source-option-okx')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('market-detail-source-option-okx')),
+    );
+    await tester.pumpAndSettle();
+
+    // 抽屉关闭，副标题与 pill 切到 OKX。
+    expect(find.text('数据来源'), findsNothing);
+    expect(find.text('永续 · OKX'), findsOneWidget);
+    expect(find.text('OKX'), findsOneWidget);
+  });
+
+  // #2099 「更多」中「切换交易所」跳转数据来源抽屉。
+  testWidgets('MarketDetailPage 更多→切换交易所：打开数据来源抽屉', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    await tester.tap(find.byKey(const Key('market-detail-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('market-more-switch-exchange')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('数据来源'), findsOneWidget);
+    expect(find.text('聚合所有交易所'), findsOneWidget);
   });
 
   // #1755 复制交易对：点击关闭菜单并写入剪贴板 + 提示。

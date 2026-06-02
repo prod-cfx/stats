@@ -31,6 +31,7 @@ class QzKlineChart extends StatelessWidget {
     required this.onIntervalChanged,
     this.hasError = false,
     this.onRetry,
+    this.trailing,
   });
 
   /// 周期 label 与枚举的固定映射，UI 顺序 = 业务顺序。
@@ -62,6 +63,10 @@ class QzKlineChart extends StatelessWidget {
   /// 错误状态下的重试回调；为 null 时仅展示文案不显示按钮。
   final VoidCallback? onRetry;
 
+  /// 周期 tab 行右侧的可选挂件（#2099：交易详情的数据来源 picker）。
+  /// 为 null 时该行仅渲染周期 tab。
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -76,17 +81,27 @@ class QzKlineChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          QzSegmentedTabs(
-            options: labels,
-            value: currentLabel,
-            onChanged: (String label) {
-              if (label == moreLabel) {
-                _showMoreIntervals(context, c, l10n);
-                return;
-              }
-              final KlineInterval next = _intervalOf(label);
-              if (next != interval) onIntervalChanged(next);
-            },
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: QzSegmentedTabs(
+                  options: labels,
+                  value: currentLabel,
+                  onChanged: (String label) {
+                    if (label == moreLabel) {
+                      _showMoreIntervals(context, c, l10n);
+                      return;
+                    }
+                    final KlineInterval next = _intervalOf(label);
+                    if (next != interval) onIntervalChanged(next);
+                  },
+                ),
+              ),
+              if (trailing != null) ...<Widget>[
+                const SizedBox(width: QzSpacing.sm),
+                trailing!,
+              ],
+            ],
           ),
           const SizedBox(height: QzSpacing.sm),
           _buildOhlcRow(c),

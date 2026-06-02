@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/models/kline_models.dart';
 import '../../data/models/long_short_models.dart';
+import '../../data/models/market_source.dart';
 import '../../data/models/ticker_models.dart';
 import '../../data/models/trade_models.dart';
 import '../../data/mock/fixtures/trades.dart' as trade_fixtures;
@@ -27,6 +28,7 @@ import 'widgets/depth_panel.dart';
 import 'widgets/long_short_bar.dart';
 import 'widgets/market_detail_stats.dart';
 import 'widgets/orderbook_view.dart';
+import 'widgets/source_picker.dart';
 import 'widgets/trades_panel.dart';
 
 /// Panel 选项：盘口 / 成交 / 深度图（#1563）。
@@ -45,6 +47,7 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   static const int _klineHistoryLimit = 200;
 
   KlineInterval _interval = KlineInterval.h1;
+  MarketSource _source = MarketSource.aggregated;
   Ticker? _priceSnapshot;
   LongShortRatio? _longShort;
   List<Candle> _candles = const <Candle>[];
@@ -222,8 +225,19 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
       builder: (BuildContext sheetCtx) => _MoreActionsSheet(
         symbol: widget.symbol,
         onCopySymbol: _copySymbol,
+        onSwitchSource: _openSourceSheet,
       ),
     );
+  }
+
+  /// 「更多」中「切换交易所」入口：复用 [DataSourceSheet] 单选数据来源。
+  Future<void> _openSourceSheet() async {
+    final MarketSource? next = await QzSheet.show<MarketSource>(
+      context: context,
+      builder: (BuildContext ctx) => DataSourceSheet(current: _source),
+    );
+    if (!mounted || next == null || next == _source) return;
+    setState(() => _source = next);
   }
 
   Future<void> _copySymbol() async {
@@ -247,7 +261,9 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
     return Scaffold(
       appBar: QzTopBar(
         title: _topBarTitle(widget.symbol),
-        subtitle: l10nForBar.marketDetailSubtitlePerpBinance,
+        subtitle: _source.isAggregated
+            ? l10nForBar.marketDetailSubtitlePerpAggregated
+            : l10nForBar.marketDetailSubtitlePerpExchange(_source.exchangeName!),
         onBack: () => context.pop(),
         actions: <Widget>[
           IconButton(
@@ -302,6 +318,13 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                   child: QzKlineChart(
                     candles: _candles,
                     interval: _interval,
+                    trailing: SourcePicker(
+                      source: _source,
+                      onChanged: (MarketSource next) {
+                        if (next == _source) return;
+                        setState(() => _source = next);
+                      },
+                    ),
                     hasError: _klineError,
                     onRetry: _klineError
                         ? () {
@@ -624,13 +647,18 @@ class _ActionButton extends StatelessWidget {
 
 /// 行情详情「更多」底部菜单（#1755）。
 ///
-/// 「复制交易对」是当前阶段唯一可用项；分享 / 提醒 / 切换交易所标注
-/// 「即将上线」并禁用点击，避免空回调造成已实现错觉。
+/// 「复制交易对」「切换交易所」为可用项（后者跳转数据来源抽屉，#2099）；
+/// 分享 / 提醒标注「即将上线」并禁用点击，避免空回调造成已实现错觉。
 class _MoreActionsSheet extends StatelessWidget {
-  const _MoreActionsSheet({required this.symbol, required this.onCopySymbol});
+  const _MoreActionsSheet({
+    required this.symbol,
+    required this.onCopySymbol,
+    required this.onSwitchSource,
+  });
 
   final String symbol;
   final Future<void> Function() onCopySymbol;
+  final Future<void> Function() onSwitchSource;
 
   @override
   Widget build(BuildContext context) {
@@ -681,7 +709,10 @@ class _MoreActionsSheet extends StatelessWidget {
           key: const Key('market-more-switch-exchange'),
           icon: Icons.swap_horiz_rounded,
           label: l10n.marketDetailMoreSwitchExchange,
-          disabledNote: l10n.marketDetailMoreComingSoon,
+          onTap: () {
+            Navigator.of(context).pop();
+            unawaited(onSwitchSource());
+          },
         ),
       ],
     );
