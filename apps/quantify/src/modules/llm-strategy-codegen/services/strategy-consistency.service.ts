@@ -25,6 +25,12 @@ import { CompiledScriptParserService } from './compiled-script-parser.service'
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
 import { normalizeStrategySemanticProfile } from './strategy-semantic-profile-normalizer'
 
+const GRID_ORCHESTRATION_PROGRAM_KINDS = new Set([
+  'fixed_grid_gated',
+  'dynamic_grid',
+  'adaptive_volatility_grid',
+])
+
 @Injectable()
 export class StrategyConsistencyService {
   constructor(
@@ -1279,6 +1285,10 @@ export class StrategyConsistencyService {
     spec: CanonicalStrategySpec,
   ): 'long_only' | 'short_only' | 'long_short' {
     if (spec.version === 2) {
+      if (this.hasGridOrchestrationProgram(spec.orchestration?.programs ?? [])) {
+        return spec.market.marketType === 'perp' ? 'long_short' : 'long_only'
+      }
+
       const orderProgramMode = this.resolveOrderProgramPositionMode(spec.orderPrograms ?? [])
       const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_LONG'
@@ -1625,6 +1635,10 @@ export class StrategyConsistencyService {
   private resolveExpectedPositionModeFromIr(
     ir: CanonicalStrategyIrV1,
   ): 'long_only' | 'short_only' | 'long_short' {
+    if (this.hasGridOrchestrationProgram(ir.orchestrationPrograms)) {
+      return ir.market.instrumentType === 'perpetual' ? 'long_short' : 'long_only'
+    }
+
     const orderProgramMode = this.resolveIrOrderProgramPositionMode(ir.orderPrograms)
     const hasLongExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
       action.kind === 'OPEN_LONG'
@@ -1644,6 +1658,15 @@ export class StrategyConsistencyService {
     if (orderProgramMode) return orderProgramMode
     if (hasShortExposure) return 'short_only'
     return 'long_only'
+  }
+
+  private hasGridOrchestrationProgram(
+    programs: readonly { programKind?: unknown }[],
+  ): boolean {
+    return programs.some(program => (
+      typeof program.programKind === 'string'
+      && GRID_ORCHESTRATION_PROGRAM_KINDS.has(program.programKind)
+    ))
   }
 
   private resolveOrderProgramPositionMode(

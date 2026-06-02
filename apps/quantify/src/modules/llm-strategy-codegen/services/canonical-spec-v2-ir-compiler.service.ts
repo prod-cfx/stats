@@ -328,7 +328,7 @@ export class CanonicalSpecV2IrCompilerService {
       ...this.compileOrchestrationPortfolioRisks(input.canonicalSpec, context),
       ...rulePortfolioRisks,
     ]
-    const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
+    const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates, context)
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
     // Issue #1437：网格策略走 orchestration.programs（dynamic_grid / fixed_grid_gated /
@@ -1206,6 +1206,7 @@ export class CanonicalSpecV2IrCompilerService {
   private compileOrchestrationPrograms(
     spec: CanonicalStrategySpecV2,
     irGates: readonly IrOrchestrationGate[],
+    context: CompileContext,
   ): IrOrchestrationProgram[] {
     const programs = spec.orchestration?.programs ?? []
     if (programs.length === 0) {
@@ -1214,7 +1215,7 @@ export class CanonicalSpecV2IrCompilerService {
     const gateRefToExprId = new Map(irGates.map(gate => [gate.id, gate.exprId]))
     const result: IrOrchestrationProgram[] = []
     for (const program of programs as readonly CanonicalOrchestrationProgram[]) {
-      const exprId = gateRefToExprId.get(program.activeWhenRef)
+      const exprId = this.resolveOrchestrationProgramActiveExprId(program, gateRefToExprId, context)
       if (exprId === undefined) {
         continue
       }
@@ -1310,6 +1311,24 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
     return result
+  }
+
+  private resolveOrchestrationProgramActiveExprId(
+    program: CanonicalOrchestrationProgram,
+    gateRefToExprId: ReadonlyMap<string, string>,
+    context: CompileContext,
+  ): string | undefined {
+    if (typeof program.activeWhenRef === 'string' && program.activeWhenRef.trim().length > 0) {
+      return gateRefToExprId.get(program.activeWhenRef)
+    }
+
+    const one = this.ensureConstSeries(context, 1)
+    return this.upsertPredicate(
+      context.predicateMap,
+      `orchestration_program_${program.id}_always_active`,
+      'EQ',
+      [one, one],
+    )
   }
 
   private compileExpressionCondition(
@@ -1743,7 +1762,7 @@ export class CanonicalSpecV2IrCompilerService {
         const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], NaN)
         const fastPeriod = this.readNumber([atom.params?.fastPeriod], NaN)
         const slowPeriod = this.readNumber([atom.params?.slowPeriod], NaN)
-        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
           const referencePeriod = Number.isFinite(period) ? period : fastPeriod
           const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'sma' ? 'SMA' : 'EMA'
           const closeRef = this.ensurePriceSeries(context, 'close')

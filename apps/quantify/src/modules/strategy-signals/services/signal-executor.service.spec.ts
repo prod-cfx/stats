@@ -799,6 +799,165 @@ describe('signalExecutorService', () => {
     )
   })
 
+  it('submits runtime limit order metadata through trading execution intent', async () => {
+    const service = createService()
+    const tradingExecution = (service as any).tradingExecution
+
+    const filledOrder = {
+      id: 'ord-limit-execution-1',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'limit',
+      status: 'closed',
+      amount: 0.01,
+      filled: 0.01,
+      price: 65000,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-limit-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.01,
+        price: 65100,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(651),
+      reserveReference: 'reserve-limit-1',
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
+
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-limit-1',
+        normalizedAmount: '0.01',
+        exchangeSize: '0.01',
+        request: {
+          symbol: 'BTC/USDT',
+          marketType: 'spot',
+          side: 'buy',
+          type: 'limit',
+          amount: 0.01,
+          price: 65000,
+          timeInForce: 'GTC',
+          clientOrderId: 'sig-limit-1',
+        },
+        constraints: {},
+      },
+      order: filledOrder,
+    })
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-limit-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+        metadata: {
+          runtimeOrder: {
+            orderType: 'limit',
+            limitPrice: 65000,
+            timeInForce: 'gtc',
+          },
+        },
+      } as any,
+      { id: 'acct-limit-1', userId: 'user-limit-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('executed')
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'signal',
+      sourceId: 'exec-limit-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.01,
+      price: 65000,
+      timeInForce: 'GTC',
+      reduceOnly: false,
+      role: 'spot_buy',
+    }))
+  })
+
+  it('fails closed when runtime order metadata requires an unsupported conditional trigger', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(100)
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-conditional-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        side: 'sell',
+        amount: 0.01,
+        price: 65000,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference: 'reserve-conditional-1',
+    })
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-conditional-1',
+        direction: 'SELL',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+        metadata: {
+          runtimeOrder: {
+            orderType: 'market',
+            triggerConditionRef: 'rules[0].condition',
+          },
+        },
+      } as any,
+      { id: 'acct-conditional-1', userId: 'user-conditional-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markFailed).toHaveBeenCalledWith(
+      'exec-conditional-1',
+      'RUNTIME_CONDITIONAL_ORDER_UNSUPPORTED',
+    )
+    expect(releaseReservation).toHaveBeenCalledWith(
+      'acct-conditional-1',
+      reservedQuote,
+      'reserve-conditional-1',
+    )
+    expect(tradingExecution.prepareIntent).not.toHaveBeenCalled()
+    expect(tradingExecution.submitPrepared).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['CLOSE_LONG', 'sell', 'close_long'],
     ['CLOSE_SHORT', 'buy', 'close_short'],

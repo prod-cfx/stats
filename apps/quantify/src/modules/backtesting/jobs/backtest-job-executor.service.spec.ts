@@ -165,6 +165,56 @@ describe('BacktestJobExecutorService', () => {
     }))
   })
 
+  it('persists diagnosticReason in lastBacktestRef for snapshot-bound live-only webhook runs', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: 'conv-1', status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const conversations = { updateLastBacktestRef: jest.fn().mockResolvedValue(undefined) }
+    const executor = new BacktestJobExecutorService(
+      { run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 0,
+          netProfitPct: 0,
+          maxDrawdownPct: 0,
+          winRate: 0,
+          profitFactor: null,
+          totalTrades: 0,
+          diagnosticReason: ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE,
+        },
+        diagnostics: {
+          compiledRulesCount: 2,
+          signalTriggerCount: 1,
+          fillCount: 0,
+          dataRequirementMissingCount: 0,
+          eventStreamMissingCount: 1,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }) } as never,
+      createMarketDataMock() as never,
+      conversations as never,
+      repository as never,
+    )
+
+    await executor.execute('job-1', createInput(), createInputSummary())
+
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'conv-1',
+      userId: 'user-1',
+      lastBacktestRef: expect.objectContaining({
+        publishedSnapshotId: 'snapshot-1',
+        summary: expect.objectContaining({
+          tradeCount: 0,
+          diagnosticReason: ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE,
+        }),
+      }),
+    }))
+  })
+
   it('hydrates orderbook and open interest event streams for upgraded atom backtests', async () => {
     const repository = {
       markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),

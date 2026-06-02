@@ -211,6 +211,7 @@ jobs:
         env:
           AWS_SSH_HOST: ${{ secrets.AWS_SSH_HOST }}
           AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+          AWS_SSH_KNOWN_HOSTS: ${{ secrets.AWS_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           bash scripts/ci/preheat-ssh-known-hosts.sh
@@ -355,6 +356,7 @@ jobs:
         env:
           AWS_SSH_HOST: ${{ secrets.AWS_SSH_HOST }}
           AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+          AWS_SSH_KNOWN_HOSTS: ${{ secrets.AWS_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           bash scripts/ci/preheat-ssh-known-hosts.sh

@@ -95,6 +95,26 @@ function createGridOrderProgramAstSnapshot() {
   }
 }
 
+function createGenericExecutionOrderProgramAstSnapshot() {
+  return {
+    astVersion: 'csa.v1',
+    manifest: { compileVersion: 'compiler.v1' },
+    runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+    orderPrograms: [{
+      id: 'order_01_program_twap',
+      sourceRef: 'program-twap',
+      payload: {
+        id: 'program_twap',
+        kind: 'TWAP',
+        totalSize: { mode: 'fixed_quote', value: 1000, asset: 'USDT' },
+        sliceCount: 10,
+        durationMs: 3_600_000,
+      },
+    }],
+    exprPool: [],
+  }
+}
+
 function createCombinationDecisionAstSnapshot() {
   return new CanonicalStrategyAstCompilerService().compile(createDeployCombinationIrFixture())
 }
@@ -306,7 +326,7 @@ function createDeployCombinationIrFixture(): CanonicalStrategyIrV1 {
 }
 
 describe('accountStrategyViewService.deployStrategy', () => {
-  it('routes deploys with AST orderPrograms to grid runtime instead of signal runtime states', async () => {
+  it('routes deploys with grid AST orderPrograms to grid runtime instead of signal runtime states', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-grid-1', mode: 'TESTNET' }),
       findStrategyForUser: jest.fn().mockResolvedValue(null),
@@ -486,6 +506,87 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith(expect.objectContaining({
       strategyInstanceId: 'inst-mixed-1',
       publishedSnapshotId: 'snapshot-mixed-1',
+    }))
+  })
+
+  it('keeps exclusive non-grid order program snapshots on the signal runtime path', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-twap-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-twap-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const runtimeExecutionStateService = createRuntimeExecutionStateService()
+    const gridRuntimeService = { createFromDeployment: jest.fn() }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
+        id: 'snapshot-twap-1',
+        snapshotHash: 'snapshot-twap-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          marketType: 'perp',
+          positionSizing: { mode: 'fixed_quote', value: 1000, asset: 'USDT' },
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-twap-1',
+        strategyTemplateId: 'template-twap-1',
+        astSnapshot: createGenericExecutionOrderProgramAstSnapshot(),
+      })),
+    }
+    const tradingService = {
+      getLeverageConstraints: jest.fn().mockResolvedValue({ minLeverage: 1, maxLeverage: 5 }),
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 1000, locked: 0, total: 1000 },
+      ]),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
+      undefined,
+      undefined,
+      gridRuntimeService as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-twap-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX BTC TWAP',
+      publishedSnapshotId: 'snapshot-twap-1',
+      deployRequestId: 'deploy-req-twap-1',
+      exchangeAccountId: 'acct-twap-1',
+      mode: 'TESTNET',
+    } as any)
+
+    expect(gridRuntimeService.createFromDeployment).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith(expect.objectContaining({
+      strategyInstanceId: 'inst-twap-1',
+      publishedSnapshotId: 'snapshot-twap-1',
     }))
   })
 

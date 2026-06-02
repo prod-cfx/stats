@@ -119,6 +119,19 @@ export const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 export const AI_QUANT_PERSISTED_SCHEMA_VERSION = 2
 export const STALE_CONVERSATION_RECOVERY_MESSAGE_KEY = 'aiQuant.messages.staleConversationRecovered'
 
+function normalizeBacktestDiagnosticReason(value: unknown): BacktestResult['diagnosticReason'] | undefined {
+  if (
+    value === 'BACKTEST_EVENT_STREAM_UNAVAILABLE'
+    || value === 'BACKTEST_NO_RULES_COMPILED'
+    || value === 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE'
+    || value === 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE'
+    || value === 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
+  ) {
+    return value
+  }
+  return undefined
+}
+
 interface PersistedConversationEnvelope {
   version: string
   conversations: ConversationState[]
@@ -1083,6 +1096,7 @@ function normalizeLastBacktestRef(
   if (!config) {
     return null
   }
+  const diagnosticReason = normalizeBacktestDiagnosticReason(summary.diagnosticReason)
 
   return {
     jobId: candidate.jobId.trim(),
@@ -1095,6 +1109,7 @@ function normalizeLastBacktestRef(
       tradeCount: summary.tradeCount,
       ...(typeof summary.openTradeCount === 'number' ? { openTradeCount: summary.openTradeCount } : {}),
       ...(typeof summary.openPnl === 'number' ? { openPnl: summary.openPnl } : {}),
+      ...(diagnosticReason ? { diagnosticReason } : {}),
       ...(summary.marketType === 'spot' || summary.marketType === 'perp'
         ? { marketType: summary.marketType }
         : {}),
@@ -1828,9 +1843,11 @@ export function buildBacktestSummaryResult(
     totalTrades: number
     totalOpenTrades?: number
     openPnl?: number
+    diagnosticReason?: BacktestResult['diagnosticReason']
   },
 ): BacktestResult {
   const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
+  const diagnosticReason = summary.diagnosticReason ?? previous.diagnosticReason
   return {
     ...previous,
     maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
@@ -1839,6 +1856,7 @@ export function buildBacktestSummaryResult(
     tradeCount: summary.totalTrades,
     openTradeCount: typeof summary.totalOpenTrades === 'number' ? summary.totalOpenTrades : previous.openTradeCount,
     openPnl: typeof summary.openPnl === 'number' ? Number(summary.openPnl.toFixed(2)) : previous.openPnl,
+    ...(diagnosticReason ? { diagnosticReason } : {}),
   }
 }
 
@@ -1850,6 +1868,7 @@ export function isOpenOnlyBacktestResult(result: BacktestResult | null | undefin
 export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {
   if (!result) return false
   if (result.recoveryStatus === 'config_changed') return false
+  if (result.diagnosticReason === 'BACKTEST_EVENT_STREAM_UNAVAILABLE') return result.maxDrawdownPct <= 20
   return (result.tradeCount > 0 || (result.openTradeCount ?? 0) > 0) && result.maxDrawdownPct <= 20
 }
 

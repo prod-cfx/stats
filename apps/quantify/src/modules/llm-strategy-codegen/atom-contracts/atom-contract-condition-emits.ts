@@ -522,7 +522,7 @@ export const CONDITION_ATOM_EMITS = {
       ], NaN)
       const fastPeriod = helpers.readNumber([atom.params?.fastPeriod], NaN)
       const slowPeriod = helpers.readNumber([atom.params?.slowPeriod], NaN)
-      if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+      if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
         const referencePeriod = Number.isFinite(period) ? period : fastPeriod
         const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'ema' ? 'EMA' : 'SMA'
         const ref = helpers.ensureIndicatorSeries(c, kind, referencePeriod, c.timeframe)
@@ -554,7 +554,7 @@ export const CONDITION_ATOM_EMITS = {
       ], NaN)
       const fastPeriod = helpers.readNumber([atom.params?.fastPeriod], NaN)
       const slowPeriod = helpers.readNumber([atom.params?.slowPeriod], NaN)
-      if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+      if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
         const referencePeriod = Number.isFinite(period) ? period : fastPeriod
         const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'ema' ? 'EMA' : 'SMA'
         const ref = helpers.ensureIndicatorSeries(c, kind, referencePeriod, c.timeframe)

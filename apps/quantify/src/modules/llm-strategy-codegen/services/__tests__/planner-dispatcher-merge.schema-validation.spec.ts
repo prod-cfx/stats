@@ -130,6 +130,142 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }))
   })
 
+  it('repairs noisy EMA0 cross params with dispatcher single EMA price cross', () => {
+    const text = 'BTCUSDT 15m。资金费率为正并且 EMA20 上穿时开多。跌破 EMA20 时平多。'
+    const planner = {
+      rules: [{
+        id: 'entry-long-funding-positive-ema20-cross',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'fundingRate.condition', params: { operator: 'GT', value: 0 }, evidence: { text: '资金费率为正' } },
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 0, slowPeriod: 14, period: 0 }, evidence: { text: 'EMA20 上穿时开多' } },
+          ],
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+      }],
+    }
+    const dispatcher = {
+      rules: [{
+        id: 'dispatcher-entry-long-funding-ema20-cross',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'fundingRate.condition', params: { operator: 'GT', value: 0 }, evidence: { text: '资金费率为正' } },
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', period: 20, fastPeriod: 20, priceCross: true }, evidence: { text: 'EMA20 上穿时开多' } },
+          ],
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+      }],
+    }
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner as never, dispatcher as never, text)
+    const entryRule = merged?.rules?.find(rule => rule.phase === 'entry')
+    const cross = entryRule ? collectAtomLeaves(entryRule.condition).find(leaf => leaf.key === 'indicator.cross_over') : undefined
+
+    expect(cross?.params).toEqual(expect.objectContaining({
+      indicator: 'ema',
+      period: 20,
+      fastPeriod: 20,
+      priceCross: true,
+    }))
+    expect(cross?.params).not.toEqual(expect.objectContaining({ slowPeriod: 14 }))
+    expect(cross?.params).not.toEqual(expect.objectContaining({ period: 0 }))
+  })
+
+  it('repairs single EMA cross params when fastPeriod is present but slowPeriod is missing', () => {
+    const text = 'BTCUSDT 15m。资金费率为正并且 EMA20 上穿时开多。跌破 EMA20 时平多。'
+    const planner = {
+      rules: [{
+        id: 'entry-long-funding-positive-ema20-cross',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'fundingRate.condition', params: { operator: 'GT', value: 0 } },
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', period: 20, fastPeriod: 20 } },
+          ],
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+      }],
+    }
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner as never, null as never, text)
+    const entryRule = merged?.rules?.find(rule => rule.phase === 'entry')
+    const cross = entryRule ? collectAtomLeaves(entryRule.condition).find(leaf => leaf.key === 'indicator.cross_over') : undefined
+
+    expect(cross?.params).toEqual(expect.objectContaining({
+      indicator: 'ema',
+      period: 20,
+      fastPeriod: 20,
+      priceCross: true,
+    }))
+    expect(cross?.params).not.toEqual(expect.objectContaining({ slowPeriod: expect.anything() }))
+  })
+
+
+  it('dedupes open action covered by reverse position in the same rule', () => {
+    const text = 'OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。'
+    const planner = {
+      rules: [{
+        id: 'entry-reverse-long-to-short-ema20-ema50',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+        effects: typedEffects({
+          actions: [
+            { kind: 'atom', key: 'action.open_short', params: { quantityPct: 10 } },
+            { kind: 'atom', key: 'action.reverse_position', params: { sizingSource: 'fixed', sameBarPolicy: 'next_bar_only', quantityPct: 10 }, sideScope: 'short' },
+          ],
+        }),
+      }],
+    }
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner as never, null as never, text)
+    const entryRule = merged?.rules?.find(rule => rule.phase === 'entry')
+    const actionKeys = listRuleEffects(entryRule?.effects).flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key))
+
+    expect(actionKeys).toContain('action.reverse_position')
+    expect(actionKeys).not.toContain('action.open_short')
+  })
+
+  it('dedupes placeholder external signal lifecycle rules in favor of concrete signal id', () => {
+    const text = 'OKX 合约 BTCUSDT 15m，收到 TradingView webhook buy 信号后开多，单笔 10% 仓位。跌破 EMA20 时平多。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-webhook-placeholder',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'external.signal', params: { provider: 'webhook', signalId: 'openSlots' }, evidence: { text: '收到 TradingView webhook buy 信号后开多' } },
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: { quantityPct: 10 } }] }),
+        },
+        {
+          id: 'entry-webhook-buy',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'external.signal', params: { provider: 'webhook', signalId: 'TradingView webhook buy' }, evidence: { text: '收到 TradingView webhook buy 信号后开多' } },
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: { quantityPct: 10 } }] }),
+        },
+      ],
+    }
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner as never, null as never, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const signalIds = entryRules
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+      .filter(leaf => leaf.key === 'external.signal')
+      .map(leaf => leaf.params.signalId)
+
+    expect(entryRules).toHaveLength(1)
+    expect(signalIds).toEqual(['TradingView webhook buy'])
+  })
+
   it('rejects legacy flat atoms[] form (no rules[])', () => {
     const patch = {
       atoms: [

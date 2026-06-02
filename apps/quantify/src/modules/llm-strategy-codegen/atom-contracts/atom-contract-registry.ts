@@ -807,14 +807,7 @@ function createMarketDataPredicateShell(
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: {
-      supportStatus: 'unsupported_data_source_missing_public_beta_unsupported',
-      unsupportedMeta: {
-        reasonCode: 'data_source_missing',
-        publicReasonZh: '缺少运行时市场数据源绑定',
-        publicReasonEn: 'Runtime market data source binding is missing',
-      },
-    },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES[key],
       paramRenderers: {

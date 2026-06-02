@@ -185,6 +185,22 @@ describe('backtest-payload-builder', () => {
     expect('allowPartial' in withoutPartial).toBe(false)
   })
 
+  it('includes synthetic event streams when supplied by published script requirements', () => {
+    const eventStreams = {
+      'webhook.tradingview_buy': [
+        {
+          id: 'synthetic-webhook-tradingview-buy-1710000000000',
+          ts: 1710000000000,
+          payload: { signalId: 'tradingview_buy' },
+        },
+      ],
+    }
+
+    const payload = buildBacktestPayload(createInput({ eventStreams }), now)
+
+    expect(payload.eventStreams).toEqual(eventStreams)
+  })
+
   it('throws when published snapshot id is missing', () => {
     expectBuildErrorCode(() => {
       buildBacktestPayload(createInput({

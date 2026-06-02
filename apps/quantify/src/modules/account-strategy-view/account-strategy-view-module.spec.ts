@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing'
+import { ConfigCryptoService } from '@/common/services/config-crypto.service'
 import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
 import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'
 import { AccountStrategyViewModule } from './account-strategy-view.module'
@@ -23,6 +24,11 @@ jest.mock('@/modules/trading/trading.module', () => ({
 describe('accountStrategyViewModule', () => {
   it('should wire deploy-facing module imports with runtime execution state service available', async () => {
     const mod = await Test.createTestingModule({ imports: [AccountStrategyViewModule] })
+      .overrideProvider(ConfigCryptoService)
+      .useValue({
+        encryptConfig: jest.fn(value => JSON.stringify(value)),
+        decryptConfig: jest.fn(value => JSON.parse(String(value))),
+      })
       .overrideProvider(SignalGeneratorService)
       .useValue({})
       .useMocker((token) => {

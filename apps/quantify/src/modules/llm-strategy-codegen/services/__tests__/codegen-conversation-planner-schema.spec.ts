@@ -71,6 +71,23 @@ function readEntryRejectReasons(
 }
 
 describe('CodegenConversation planner schema diagnostics', () => {
+  it('does not surface recovered schema reject diagnostics as blocking validation report', () => {
+    const svc = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+    const report = (svc as unknown as {
+      buildPlannerValidationReport: (plan: { diagnostics?: Record<string, unknown> }) => CodegenSessionResponseDto['validationReport'] | undefined
+    }).buildPlannerValidationReport({
+      diagnostics: {
+        gate: 'RulesTreeEntryGate',
+        entry: {
+          rejectReasons: ['rule_shape_invalid'],
+          result: 'recovered',
+        },
+      },
+    })
+
+    expect(report).toBeUndefined()
+  })
+
   it('persists diagnostics and does not return CLEAR clarification for empty planner rules', async () => {
     const createdSessions: CreatedSessionData[] = []
     const plannerDispatcherMerge = new PlannerDispatcherMergeService()

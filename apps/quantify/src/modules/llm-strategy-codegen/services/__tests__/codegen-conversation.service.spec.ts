@@ -2513,6 +2513,90 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }
     }
 
+    it('treats short natural confirmation on CLEAR DRAFTING rules session as code generation', async () => {
+      const sessionId = 's-clear-drafting-natural-confirm'
+      const semanticState = withReportedExecutionContext({
+        version: 1,
+        families: [],
+        trigger: [],
+        action: [],
+        risk: [],
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        contextSlots: {},
+        normalizationNotes: [],
+        updatedAt: '2026-06-02T00:00:00.000Z',
+        rules: [
+          {
+            id: 'entry-ema-cross-over',
+            phase: 'entry',
+            sideScope: 'long',
+            evidence: { text: 'EMA7 上穿 EMA21 时开多' },
+            condition: {
+              kind: 'atom',
+              key: 'indicator.cross_over',
+              params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+              evidence: { text: 'EMA7 上穿 EMA21 时开多' },
+            },
+            effects: {
+              actions: [{ kind: 'atom', key: 'action.open_long', params: {}, evidence: { text: '开多' } }],
+              risks: [],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          },
+          {
+            id: 'exit-ema-cross-under',
+            phase: 'exit',
+            sideScope: 'long',
+            evidence: { text: 'EMA7 下穿 EMA21 时平多' },
+            condition: {
+              kind: 'atom',
+              key: 'indicator.cross_under',
+              params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+              evidence: { text: 'EMA7 下穿 EMA21 时平多' },
+            },
+            effects: {
+              actions: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: '平多' } }],
+              risks: [],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          },
+        ],
+      }, {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      })
+      mockRepo.findById.mockResolvedValueOnce(buildSemanticEraSessionFixture({
+        id: sessionId,
+        semanticState,
+        status: 'DRAFTING',
+        clarificationState: { status: 'CLEAR', items: [], summary: null },
+      }))
+
+      const result = await service.continueSession(sessionId, {
+        userId: 'u1',
+        message: '确认生成',
+      })
+
+      expect(result.status).toBe('GENERATING')
+      expect(mockAi.chat).not.toHaveBeenCalled()
+    })
+
     it('does not duplicate MACD cross rules with dispatcher fallback on first turn', async () => {
       const initialMessage = 'OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出'
       mockAi.chat.mockResolvedValue({

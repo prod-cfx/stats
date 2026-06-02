@@ -106,6 +106,13 @@ describe('backtestingProxyController', () => {
       },
       allowPartial: false,
       conversationId: 'conversation-1',
+      eventStreams: {
+        'webhook.tradingview_buy': [{
+          id: 'synthetic-webhook-tradingview-buy-1',
+          ts: 1,
+          payload: { signalId: 'tradingview_buy' },
+        }],
+      },
     })
 
     await controller.createJob('user-1', 'Bearer token-1', 'req-1', body)
@@ -138,6 +145,13 @@ describe('backtestingProxyController', () => {
       }),
       allowPartial: false,
       conversationId: 'conversation-1',
+      eventStreams: {
+        'webhook.tradingview_buy': [{
+          id: 'synthetic-webhook-tradingview-buy-1',
+          ts: 1,
+          payload: { signalId: 'tradingview_buy' },
+        }],
+      },
     }), 'req-1')
   })
 })

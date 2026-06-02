@@ -4,6 +4,7 @@ import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
+import { CURRENT_SEMANTIC_VERSION } from '../nl-gateway/version-gate/version-gate'
 import type {
   SemanticAtomContract,
   SemanticActionState,
@@ -13,6 +14,7 @@ import type {
   SemanticNodeStatus,
   SemanticOrderRequirement,
   SemanticPositionConstraintState,
+  SemanticPositionSizingContract,
   SemanticPositionState,
   SemanticPriority,
   SemanticRequirement,
@@ -32,7 +34,7 @@ import { SemanticContractShapeNormalizerService } from './semantic-contract-shap
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
-import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, getAtomFulfillsStrategyPhase } from '../atom-contracts/atom-contract-registry'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
@@ -67,6 +69,7 @@ const EXECUTABLE_CONTEXT_QUESTION_HINTS: Record<ExecutableContextField, string> 
   marketType: '请选择市场类型',
   timeframe: '请选择周期',
 }
+const POSITION_SIZING_ATOM_KEY = 'position.sizing'
 
 export type MissingSemanticContractRequirementKind = 'capability_missing' | 'timeframe_mismatch'
 
@@ -141,7 +144,8 @@ export class SemanticContractReadinessService {
     strategyVersion?: StrategyVersionInfo,
   ): SemanticContractReadinessNormalizationResult {
     const hasRules = Boolean(state.rules && state.rules.length > 0)
-    if (!hasRules) {
+    const hasLegacyFlatOwners = this.hasLegacyFlatOwners(state)
+    if (!hasRules && !hasLegacyFlatOwners) {
       const missingRequirements: MissingSemanticContractRequirement[] = [{
         ownerKind: 'position',
         ownerId: 'rules_tree',
@@ -158,11 +162,23 @@ export class SemanticContractReadinessService {
       }
     }
 
-    let materialized = this.materializeRulesMainflowState({
-      ...state,
-      rules: normalizeRulesForMainflowFacts(dedupeSemanticRulesForReadiness(state.rules ?? [])),
-    })
-    state = materialized.source
+    let materialized: ReadinessMaterializedState
+    if (hasRules) {
+      state = this.withGridSizingProjectedToProgramRules(
+        this.dropStandalonePositionSizingRules(
+          this.withTopLevelPositionSizingProjectedToRules(state),
+        ),
+      )
+
+      materialized = this.materializeRulesMainflowState({
+        ...state,
+        rules: normalizeRulesForMainflowFacts(dedupeSemanticRulesForReadiness(state.rules ?? [])),
+      })
+      state = materialized.source
+    }
+    else {
+      materialized = this.materializeLegacyFlatState(state)
+    }
 
     const rulesReadinessForMissing = hasRules
       ? this.evaluateRulesReadiness(state.rules)
@@ -285,11 +301,62 @@ export class SemanticContractReadinessService {
           && rulesReady.hasExit
         )
       : flatReady
+    const resultState = this.withMaterializedFlatBuckets(nextState, nextMaterialized)
 
     return {
-      state: nextState,
+      state: resultState,
       ready,
       missingRequirements,
+    }
+  }
+
+  private withMaterializedFlatBuckets(
+    state: SemanticState,
+    materialized: ReadinessMaterializedState,
+  ): SemanticState {
+    return {
+      ...state,
+      trigger: materialized.trigger,
+      action: materialized.action,
+      risk: materialized.risk,
+      positionConstraint: materialized.positionConstraint,
+      orchestration: materialized.orchestration,
+    } as SemanticState
+  }
+
+  private hasLegacyFlatOwners(state: SemanticState): boolean {
+    const legacy = state as SemanticState & {
+      trigger?: unknown[]
+      action?: unknown[]
+      risk?: unknown[]
+      positionConstraint?: unknown[]
+      orchestration?: unknown[]
+    }
+    return Boolean(
+      legacy.trigger?.length
+      || legacy.action?.length
+      || legacy.risk?.length
+      || legacy.positionConstraint?.length
+      || legacy.orchestration?.length,
+    )
+  }
+
+  private materializeLegacyFlatState(state: SemanticState): ReadinessMaterializedState {
+    const legacy = state as SemanticState & {
+      trigger?: SemanticTriggerState[]
+      action?: SemanticActionState[]
+      risk?: SemanticRiskState[]
+      positionConstraint?: SemanticPositionConstraintState[]
+      orchestration?: SemanticOrchestrationNode[]
+    }
+    return {
+      source: state,
+      trigger: legacy.trigger ?? [],
+      action: legacy.action ?? [],
+      risk: legacy.risk ?? [],
+      position: state.position,
+      positionConstraint: legacy.positionConstraint ?? [],
+      orchestration: legacy.orchestration ?? [],
     }
   }
 
@@ -319,6 +386,124 @@ export class SemanticContractReadinessService {
       positionConstraint: positionFacts.map(fact => this.factToPositionConstraint(fact)),
       orchestration: orchestrationFacts.flatMap(fact => this.factToOrchestrationNodes(fact)),
     }
+  }
+
+  private withTopLevelPositionSizingProjectedToRules(state: SemanticState): SemanticState {
+    const sizing = state.position?.sizing
+    if (!sizing || !state.rules?.length) return state
+    if (state.rules.some(rule => !this.isStandalonePositionSizingRule(rule) && listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === POSITION_SIZING_ATOM_KEY)))) {
+      return state
+    }
+
+    const targetIndex = state.rules.findIndex(rule => rule.phase === 'entry' || rule.phase === 'program')
+    if (targetIndex < 0) return state
+
+    const rules = state.rules.map((rule, index) => {
+      if (index !== targetIndex || !isRuleEffectsByRole(rule.effects)) return rule
+      return {
+        ...rule,
+        effects: {
+          ...rule.effects,
+          positions: [
+            ...rule.effects.positions,
+            {
+              kind: 'atom' as const,
+              key: POSITION_SIZING_ATOM_KEY,
+              params: { sizing },
+            },
+          ],
+          programs: rule.effects.programs.map(effect => this.withProgramSizingFromPosition(effect, sizing)),
+        },
+      }
+    })
+
+    return { ...state, rules }
+  }
+
+  private withGridSizingProjectedToProgramRules(state: SemanticState): SemanticState {
+    if (!state.rules?.length) return state
+    const rules = state.rules.map((rule) => {
+      if (!isRuleEffectsByRole(rule.effects)) return rule
+      const sizing = this.resolveRuleGridProgramSizing(rule)
+      if (!sizing) return rule
+      return {
+        ...rule,
+        effects: {
+          ...rule.effects,
+          programs: rule.effects.programs.map(effect => this.withProgramSizing(effect, sizing)),
+        },
+      }
+    })
+    return { ...state, rules }
+  }
+
+  private resolveRuleGridProgramSizing(rule: SemanticRule): SemanticOrchestrationNode['sizing'] | undefined {
+    const leaves = [
+      ...collectAtomLeaves(rule.condition),
+      ...(isRuleEffectsByRole(rule.effects)
+        ? [...rule.effects.positions, ...rule.effects.programs].flatMap(effect => collectAtomLeaves(effect))
+        : []),
+    ]
+    for (const leaf of leaves) {
+      if (leaf.key === POSITION_SIZING_ATOM_KEY) {
+        const sizing = readPositionSizingParam(leaf.params?.sizing)
+        const programSizing = sizing ? programSizingFromPositionSizing(sizing) : undefined
+        if (programSizing) return programSizing
+      }
+      if (leaf.key !== 'grid.range_rebalance' && leaf.key !== 'program.fixed_grid_gated') continue
+      const direct = normalizeProgramSizing(leaf.params?.sizing) ?? normalizeProgramSizing(leaf.params ?? {})
+      if (direct) return direct
+      const perGridSizing = readNumber(leaf.params?.perGridSizing) ?? readNumber(leaf.params?.perOrderSizing)
+      if (perGridSizing !== undefined && perGridSizing > 0) {
+        return { mode: 'fixed_pct', value: perGridSizing <= 1 ? Number((perGridSizing * 100).toFixed(8)) : perGridSizing }
+      }
+    }
+    return undefined
+  }
+
+  private withProgramSizing(effect: AtomExpr, sizing: SemanticOrchestrationNode['sizing']): AtomExpr {
+    if (effect.kind !== 'atom') return effect
+    if (effect.key !== 'program.fixed_grid_gated') return effect
+    const existing = normalizeProgramSizing(effect.params?.sizing) ?? normalizeProgramSizing(effect.params ?? {})
+    if (existing) return effect
+    return {
+      ...effect,
+      params: {
+        ...(effect.params ?? {}),
+        sizing,
+      },
+    }
+  }
+
+  private withProgramSizingFromPosition(effect: AtomExpr, sizing: SemanticPositionSizingContract): AtomExpr {
+    if (effect.kind !== 'atom') return effect
+    if (effect.key !== 'program.fixed_grid_gated') return effect
+    const existing = normalizeProgramSizing(effect.params?.sizing) ?? normalizeProgramSizing(effect.params ?? {})
+    if (existing) return effect
+    const programSizing = programSizingFromPositionSizing(sizing)
+    if (!programSizing) return effect
+    return this.withProgramSizing(effect, programSizing)
+  }
+
+  private dropStandalonePositionSizingRules(state: SemanticState): SemanticState {
+    if (!state.position?.sizing || !state.rules?.length) return state
+    const rules = state.rules.filter(rule => !this.isStandalonePositionSizingRule(rule))
+    return rules.length === state.rules.length ? state : { ...state, rules }
+  }
+
+  private isStandalonePositionSizingRule(rule: SemanticRule): boolean {
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+    const materialEffectLeaves = effectLeaves.filter(leaf => leaf.key !== 'scope.timeframe')
+    if (effectLeaves.length === 0 && /(?:^|[-_])(?:pos|position)[-_]?sizing(?:[-_]|$)/iu.test(rule.id)) return true
+    if (materialEffectLeaves.length === 0) return false
+    if (!materialEffectLeaves.every(leaf => leaf.key === POSITION_SIZING_ATOM_KEY)) return false
+    if (!isRuleEffectsByRole(rule.effects)) return true
+    const orchestrationLeaves = rule.effects.orchestration.flatMap(effect => collectAtomLeaves(effect))
+    const hasOnlyTimeframeScopeOrchestration = orchestrationLeaves.every(leaf => leaf.key === 'scope.timeframe')
+    return rule.effects.actions.length === 0
+      && rule.effects.risks.length === 0
+      && hasOnlyTimeframeScopeOrchestration
+      && rule.effects.programs.length === 0
   }
 
   private withConditionCombinationContracts(
@@ -437,8 +622,24 @@ export class SemanticContractReadinessService {
       }]
     }
 
+    if (fact.key === 'scope.timeframe') {
+      const primaryTimeframe = readString(fact.params.primaryTimeframe)
+      const requiredTimeframes = Array.isArray(fact.params.requiredTimeframes)
+        ? fact.params.requiredTimeframes.filter((value): value is string => typeof value === 'string' && value.trim() !== '').map(value => value.trim()).filter(value => value !== primaryTimeframe)
+        : []
+      if (primaryTimeframe && requiredTimeframes.length === 0) return []
+      return [{
+        ...base,
+        timeframeScopeKind: readEnum(fact.params.timeframeScopeKind, ['timeframe'] as const) ?? 'timeframe',
+        ...(primaryTimeframe ? { primaryTimeframe } : {}),
+        requiredTimeframes,
+        alignmentPolicy: readEnum(fact.params.alignmentPolicy, ['strict', 'tolerant'] as const) ?? 'strict',
+      }]
+    }
+
     if (fact.key === 'program.fixed_grid_gated') {
       const activeWhenRef = readString(fact.params.activeWhenRef)
+      const sizing = normalizeProgramSizing(fact.params.sizing) ?? normalizeProgramSizing(fact.params)
       return [{
         ...base,
         programKind: 'fixed_grid_gated',
@@ -446,7 +647,7 @@ export class SemanticContractReadinessService {
         onDeactivate: readEnum(fact.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
         rebuildPolicy: 'static',
         gridParams: normalizeFixedGridParams(fact.params),
-        sizing: normalizeProgramSizing(fact.params.sizing) ?? normalizeProgramSizing(fact.params) ?? { mode: 'fixed_pct', value: 10 },
+        ...(sizing ? { sizing } : {}),
       }]
     }
 
@@ -799,8 +1000,8 @@ export class SemanticContractReadinessService {
 
       const effectKeys = new Set(effectLeaves.map(l => l.key))
       const fulfillsPhase = (leaf: AtomExprAtom, phase: 'entry' | 'exit'): boolean => {
-        const contract = ATOM_CONTRACT_REGISTRY[leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY]
-        return contract?.fulfillsStrategyPhase?.includes(phase) === true
+        if (!(leaf.key in ATOM_CONTRACT_REGISTRY)) return false
+        return getAtomFulfillsStrategyPhase(leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY).includes(phase)
       }
       const entryCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'entry'))
       const exitCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'exit'))
@@ -1155,6 +1356,33 @@ function normalizeProgramSizing(value: unknown): SemanticOrchestrationNode['sizi
   return { mode, value: amount }
 }
 
+function programSizingFromPositionSizing(sizing: SemanticPositionSizingContract): SemanticOrchestrationNode['sizing'] | undefined {
+  if (sizing.kind === 'ratio') {
+    const pct = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
+    return pct > 0 ? { mode: 'fixed_pct', value: pct } : undefined
+  }
+  if (sizing.kind === 'quote') return { mode: 'fixed_quote', value: sizing.value }
+  if (sizing.kind === 'base') return { mode: 'fixed_base', value: sizing.value }
+  return undefined
+}
+
+function readPositionSizingParam(value: unknown): SemanticPositionSizingContract | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const amount = readNumber(record.value)
+  if (amount === undefined || amount <= 0) return undefined
+  if (record.kind === 'ratio' && (record.unit === 'ratio' || record.unit === 'percent')) {
+    return { kind: 'ratio', value: amount, unit: record.unit }
+  }
+  if (record.kind === 'quote' && (record.asset === 'USDT' || record.asset === 'USDC' || record.asset === 'USD')) {
+    return { kind: 'quote', value: amount, asset: record.asset }
+  }
+  if (record.kind === 'base' && typeof record.asset === 'string' && record.asset.trim() !== '') {
+    return { kind: 'base', value: amount, asset: record.asset.trim() }
+  }
+  return undefined
+}
+
 function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {
   const seen = new Set<string>()
   const out: SemanticRule[] = []
@@ -1373,6 +1601,7 @@ function normalizePhase0Orchestration(
   //   Pass 3: scope.leg 节点二轮（pairedLegId 见 Pass 2 leg 状态）
   //   Pass 4: gate/program/portfolioRisk 维持 S2 原 single-pass 行为
   const initialNodes = orchestration
+  const effectiveStrategyVersion = strategyVersion ?? { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION }
   /* eslint-disable atom-keys/no-atom-key-literal -- scope.leg / scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
   const isLegScopeNode = (n: SemanticOrchestrationNode): boolean =>
     n.kind === 'scope' && (n.key === 'scope.leg' || n.legScopeKind === 'leg')
@@ -1399,7 +1628,7 @@ function normalizePhase0Orchestration(
     // scope.symbol 与 scope.leg 已在前 passes 收敛，跳过；
     // 其它（含 scope.timeframe、scope.dataSource、未支持 scope kinds、gate/program/portfolioRisk）走最后 pass。
     if (isSymbolScopeNode(node) || isLegScopeNode(node)) return node
-    return applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass2)
+    return applyOrchestrationReadinessForNode(node, registry, effectiveStrategyVersion, afterLegPass2)
   })
 
   let changed = false
@@ -1773,6 +2002,7 @@ function isSupportedTimeframeScope(
 
   const required = node.requiredTimeframes
   if (!Array.isArray(required) || required.length < 1 || required.length > 8) return false
+  if (typeof node.primaryTimeframe !== 'string') return false
 
   const requiredMsList: number[] = []
   const dedupedRequired = new Set<string>()
@@ -1784,11 +2014,14 @@ function isSupportedTimeframeScope(
     dedupedRequired.add(tf)
     requiredMsList.push(ms)
   }
-  if (typeof node.primaryTimeframe !== 'string') return false
-  if (dedupedRequired.has(node.primaryTimeframe)) return false
+  if (dedupedRequired.has(node.primaryTimeframe)) {
+    dedupedRequired.delete(node.primaryTimeframe)
+    const primaryIndex = required.findIndex(tf => tf === node.primaryTimeframe)
+    if (primaryIndex >= 0) requiredMsList.splice(primaryIndex, 1)
+  }
 
   // primary 粒度严格细于所有 required
-  if (primaryMs >= Math.min(...requiredMsList)) return false
+  if (requiredMsList.length > 0 && primaryMs >= Math.min(...requiredMsList)) return false
 
   if (node.alignmentPolicy !== 'strict' && node.alignmentPolicy !== 'tolerant') return false
 
@@ -1805,7 +2038,7 @@ function isSupportedTimeframeScope(
   for (const other of otherLockedScopes) {
     if (typeof other.primaryTimeframe !== 'string' || !Array.isArray(other.requiredTimeframes)) continue
     const otherKey = JSON.stringify([other.primaryTimeframe, [...other.requiredTimeframes].sort()])
-    if (otherKey === myKey) return false
+    if (otherKey === myKey) continue
   }
 
   const contract = registry.getContractByKey('scope.timeframe')

@@ -73,9 +73,13 @@ function positionOpenSlotState(state: SemanticState): SemanticState {
   }
 }
 
-function ruleWithEffect(key: string, effectRole: keyof Extract<SemanticRule['effects'], Record<string, unknown>> = 'positions'): SemanticRule {
+function ruleWithEffect(
+  key: string,
+  effectRole: keyof Extract<SemanticRule['effects'], Record<string, unknown>> = 'positions',
+  params: Record<string, unknown> = {},
+): SemanticRule {
   const effects = { actions: [], risks: [], positions: [], orchestration: [], programs: [] }
-  effects[effectRole] = [{ kind: 'atom', key, params: {} }]
+  effects[effectRole] = [{ kind: 'atom', key, params }]
   return {
     id: `rule-${key}`,
     phase: key.startsWith('program.') ? 'program' : 'entry',
@@ -113,7 +117,7 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
     it('rules.effects.positions 含 grid.range_rebalance → true（registry 声明 sizing）', () => {
       const state = {
         ...emptyState(),
-        rules: [ruleWithEffect('grid.range_rebalance', 'positions')],
+        rules: [ruleWithEffect('grid.range_rebalance', 'positions', { perGridSizing: 10 })],
       } as unknown as SemanticState
       expect(executableSemantics.anyAtomFulfillsPhase(state, 'sizing')).toBe(true)
     })
@@ -121,7 +125,7 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
     it('rules.effects.positions 含 position.dca_schedule → true（registry 同声明 sizing，未来 DCA 策略复用同一通道）', () => {
       const state = {
         ...emptyState(),
-        rules: [ruleWithEffect('position.dca_schedule', 'positions')],
+        rules: [ruleWithEffect('position.dca_schedule', 'positions', { perOrderSizing: 10 })],
       } as unknown as SemanticState
       expect(executableSemantics.anyAtomFulfillsPhase(state, 'sizing')).toBe(true)
     })
@@ -129,7 +133,7 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
     it('rules.effects.programs 含 program.dynamic_grid → true（registry 声明 sizing）', () => {
       const state = {
         ...emptyState(),
-        rules: [ruleWithEffect('program.dynamic_grid', 'programs')],
+        rules: [ruleWithEffect('program.dynamic_grid', 'programs', { sizing: { value: 10 } })],
       } as unknown as SemanticState
       expect(executableSemantics.anyAtomFulfillsPhase(state, 'sizing')).toBe(true)
     })
@@ -137,7 +141,7 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
     it('rules.effects.programs 含 program.fixed_grid_gated → true', () => {
       const state = {
         ...emptyState(),
-        rules: [ruleWithEffect('program.fixed_grid_gated', 'programs')],
+        rules: [ruleWithEffect('program.fixed_grid_gated', 'programs', { sizing: { value: 10 } })],
       } as unknown as SemanticState
       expect(executableSemantics.anyAtomFulfillsPhase(state, 'sizing')).toBe(true)
     })
@@ -153,7 +157,7 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
           effects: {
             actions: [],
             risks: [],
-            positions: [{ kind: 'atom' as const, key: 'grid.range_rebalance', params: {} }],
+            positions: [{ kind: 'atom' as const, key: 'grid.range_rebalance', params: { perGridSizing: 10 } }],
             orchestration: [],
             programs: [],
           },
@@ -192,10 +196,19 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
     it('rules.effects.positions=grid.range_rebalance + position 有 sizing open slot → 不返回 position 追问', () => {
       const gridState = positionOpenSlotState({
         ...emptyState(),
-        rules: [ruleWithEffect('grid.range_rebalance', 'positions')],
+        rules: [ruleWithEffect('grid.range_rebalance', 'positions', { perGridSizing: 10 })],
       })
       const result = findNextOpen(gridState) as { slotKey?: string } | null
       expect(result?.slotKey).not.toBe('position.sizing')
+    })
+
+    it('rules.effects.positions=grid.range_rebalance 但 perGridSizing=0 → 仍返回 position 追问', () => {
+      const gridState = positionOpenSlotState({
+        ...emptyState(),
+        rules: [ruleWithEffect('grid.range_rebalance', 'positions', { perGridSizing: 0 })],
+      })
+      const result = findNextOpen(gridState) as { slotKey?: string } | null
+      expect(result?.slotKey).toBe('position.sizing')
     })
 
     it('无 sizing 源 + position 有 sizing open slot → 仍返回 position 追问（行为不变）', () => {
@@ -209,10 +222,19 @@ describe('CodegenConversationService — sizing 旁路（#1403 子故障 A，通
     it('rules.effects.programs=program.dynamic_grid + position 有 sizing open slot → list 不含 position.sizing', () => {
       const gridState = positionOpenSlotState({
         ...emptyState(),
-        rules: [ruleWithEffect('program.dynamic_grid', 'programs')],
+        rules: [ruleWithEffect('program.dynamic_grid', 'programs', { perGridSizing: 10 })],
       })
       const slots = listOpen(gridState)
       expect(slots.find(s => s.slotKey === 'position.sizing')).toBeUndefined()
+    })
+
+    it('rules.effects.programs=program.dynamic_grid 但 perGridSizing=0 → list 保留 position.sizing', () => {
+      const gridState = positionOpenSlotState({
+        ...emptyState(),
+        rules: [ruleWithEffect('program.dynamic_grid', 'programs', { perGridSizing: 0 })],
+      })
+      const slots = listOpen(gridState)
+      expect(slots.find(s => s.slotKey === 'position.sizing')).toBeDefined()
     })
   })
 })

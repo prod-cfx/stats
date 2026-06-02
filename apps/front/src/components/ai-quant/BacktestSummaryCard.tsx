@@ -29,6 +29,7 @@ export interface BacktestResult {
   startAt?: string
   endAt?: string
   recoveryStatus?: 'config_changed'
+  diagnosticReason?: 'BACKTEST_EVENT_STREAM_UNAVAILABLE' | 'BACKTEST_NO_RULES_COMPILED' | 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE' | 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE' | 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
 }
 
 export function BacktestSummaryCard({

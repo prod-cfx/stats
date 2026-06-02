@@ -1,8 +1,8 @@
 import { assertStaging31ReportShape, hasUiAstScriptMismatch, inferClarificationAnswer, isStaging31HardGatePassing, listStaging31Cases, parseArgs, type Staging31CaseReport } from '../../scripts/staging31-hard-gate-report'
 
 describe('staging31 hard gate report contract', () => {
-  it('contains all 31 cases', () => {
-    expect(listStaging31Cases()).toHaveLength(31)
+  it('contains all hard gate cases', () => {
+    expect(listStaging31Cases()).toHaveLength(35)
   })
 
   it('requires full pipeline fields', () => {
@@ -154,6 +154,37 @@ describe('staging31 hard gate report contract', () => {
     })).toBe(false)
   })
 
+  it('treats reverse_position as its close-and-open executable pair', () => {
+    expect(hasUiAstScriptMismatch({
+      rulesTree: [{
+        sideScope: 'short',
+        condition: { key: 'indicator.cross_under' },
+        effects: {
+          actions: [{ key: 'action.reverse_position' }],
+          positions: [{ key: 'position.sizing' }],
+        },
+      }],
+      uiSummaryOrGraph: {
+        graph: {
+          blocks: [{
+            items: [
+              { kind: 'condition', text: 'EMA20 下穿 EMA50 时做空开仓' },
+              { kind: 'action', text: '反手' },
+              { kind: 'action', text: '单笔仓位 10%' },
+            ],
+          }],
+        },
+      },
+      ast: {
+        decisionPrograms: [{ actions: [{ kind: 'CLOSE_LONG' }, { kind: 'OPEN_SHORT' }] }],
+        guards: [],
+      },
+      scriptOrError: {
+        script: 'const DECISION_PROGRAMS = [{"actions":[{"kind":"CLOSE_LONG"},{"kind":"OPEN_SHORT"}]}] as const',
+      },
+    })).toBe(false)
+  })
+
   it('does not infer long add action from 最多 in short-side UI text', () => {
     expect(hasUiAstScriptMismatch({
       rulesTree: [{
@@ -174,10 +205,10 @@ describe('staging31 hard gate report contract', () => {
     })).toBe(false)
   })
 
-  it('fails the hard gate unless all 31 real cases pass cleanly', () => {
+  it('fails the hard gate unless all real cases pass cleanly', () => {
     const clean = {
-      total: 31,
-      pass: 31,
+      total: 35,
+      pass: 35,
       needsClarification: 0,
       unsupported: 0,
       fail: 0,
@@ -191,7 +222,7 @@ describe('staging31 hard gate report contract', () => {
     }
 
     expect(isStaging31HardGatePassing(clean)).toBe(true)
-    expect(isStaging31HardGatePassing({ ...clean, pass: 30, fail: 1 })).toBe(false)
+    expect(isStaging31HardGatePassing({ ...clean, pass: 34, fail: 1 })).toBe(false)
     expect(isStaging31HardGatePassing({ ...clean, uiScriptMismatch: 1 })).toBe(false)
     expect(isStaging31HardGatePassing({ ...clean, strategyScriptMismatch: 1 })).toBe(false)
     expect(isStaging31HardGatePassing({ ...clean, dispatcherFallbackUsed: 1 })).toBe(false)

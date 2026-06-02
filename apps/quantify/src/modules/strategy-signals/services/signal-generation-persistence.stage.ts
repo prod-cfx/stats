@@ -131,6 +131,7 @@ export class SignalGenerationPersistenceStage {
             ...runtimeProvenance,
             timeframe: reverseMapTimeframe(group.timeframe),
           },
+          ...this.buildRuntimeOrderMetadata(aiPayload.order),
         },
       })
 
@@ -237,6 +238,7 @@ export class SignalGenerationPersistenceStage {
             ...runtimeProvenance,
             timeframe: execution.timeframe,
           },
+          ...this.buildRuntimeOrderMetadata(aiPayload.order),
         },
       })
 
@@ -255,6 +257,23 @@ export class SignalGenerationPersistenceStage {
 
   private shouldApplyCooldown(payload: Pick<AiSignalPayload, 'signalType'>): boolean {
     return payload.signalType !== 'EXIT'
+  }
+
+  private buildRuntimeOrderMetadata(order: AiSignalPayload['order']): { runtimeOrder?: Prisma.JsonObject } {
+    if (!order || typeof order !== 'object' || Array.isArray(order)) return {}
+    if (order.orderType !== 'market' && order.orderType !== 'limit') return {}
+
+    const runtimeOrder: Prisma.JsonObject = { orderType: order.orderType }
+    if (typeof order.limitPrice === 'number' && Number.isFinite(order.limitPrice) && order.limitPrice > 0) {
+      runtimeOrder.limitPrice = order.limitPrice
+    }
+    if (order.timeInForce === 'gtc' || order.timeInForce === 'ioc' || order.timeInForce === 'fok') {
+      runtimeOrder.timeInForce = order.timeInForce
+    }
+    if (typeof order.triggerConditionRef === 'string' && order.triggerConditionRef.trim()) {
+      runtimeOrder.triggerConditionRef = order.triggerConditionRef.trim()
+    }
+    return { runtimeOrder }
   }
 
   private shouldApplyEntryAdmission(payload: Pick<AiSignalPayload, 'signalType' | 'direction'>): boolean {

@@ -37,6 +37,7 @@ export interface AiQuantConversationLastBacktestRefRecord {
     openTradeCount?: number
     openPnl?: number
     marketType?: 'spot' | 'perp'
+    diagnosticReason?: 'BACKTEST_EVENT_STREAM_UNAVAILABLE' | 'BACKTEST_NO_RULES_COMPILED' | 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE' | 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE' | 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
   }
   completedAt: Date
 }
@@ -445,11 +446,13 @@ export class AiQuantConversationsRepository {
     const openTradeCount = this.readOptionalFiniteNumber(value.openTradeCount)
     const openPnl = this.readOptionalFiniteNumber(value.openPnl)
     const marketType = this.parseMarketType(value.marketType)
+    const diagnosticReason = this.parseBacktestDiagnosticReason(value.diagnosticReason)
 
     if (
       (value.openTradeCount !== undefined && value.openTradeCount !== null && openTradeCount === null)
       || (value.openPnl !== undefined && value.openPnl !== null && openPnl === null)
       || (value.marketType !== undefined && value.marketType !== null && marketType === null)
+      || (value.diagnosticReason !== undefined && value.diagnosticReason !== null && diagnosticReason === null)
     ) {
       return null
     }
@@ -462,7 +465,24 @@ export class AiQuantConversationsRepository {
       ...(openTradeCount !== undefined ? { openTradeCount } : {}),
       ...(openPnl !== undefined ? { openPnl } : {}),
       ...(marketType ? { marketType } : {}),
+      ...(diagnosticReason ? { diagnosticReason } : {}),
     }
+  }
+
+  private parseBacktestDiagnosticReason(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationLastBacktestRefRecord['summary']['diagnosticReason'] | null | undefined {
+    if (value === undefined || value === null) return undefined
+    if (
+      value === 'BACKTEST_EVENT_STREAM_UNAVAILABLE'
+      || value === 'BACKTEST_NO_RULES_COMPILED'
+      || value === 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE'
+      || value === 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE'
+      || value === 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
+    ) {
+      return value
+    }
+    return null
   }
 
   private parseMarketType(

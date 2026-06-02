@@ -41,6 +41,7 @@ export interface BuildBacktestPayloadInput {
   sessionId?: string | null
   range: BacktestRangeInput
   allowPartial?: boolean
+  eventStreams?: CreateBacktestJobPayload['eventStreams']
 }
 
 export function buildBacktestPayload(
@@ -124,6 +125,10 @@ export function buildBacktestPayload(
 
   if (input.allowPartial === true) {
     payload.allowPartial = true
+  }
+
+  if (input.eventStreams && Object.keys(input.eventStreams).length > 0) {
+    payload.eventStreams = input.eventStreams
   }
 
   return payload

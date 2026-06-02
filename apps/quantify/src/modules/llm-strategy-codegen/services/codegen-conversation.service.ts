@@ -1302,6 +1302,12 @@ export class CodegenConversationService {
     if (!plan.diagnostics) {
       return undefined
     }
+    const entry = plan.diagnostics.entry && typeof plan.diagnostics.entry === 'object' && !Array.isArray(plan.diagnostics.entry)
+      ? plan.diagnostics.entry as Record<string, unknown>
+      : {}
+    if (entry.result === 'recovered') {
+      return undefined
+    }
     const errors = this.buildPlannerValidationErrors(plan.diagnostics)
     const warnings = this.readPlannerValidationWarnings(plan.diagnostics)
     return {
@@ -2950,10 +2956,21 @@ export class CodegenConversationService {
     session: PersistedConversationSessionForContinue,
     dto: ContinueCodegenSessionDto,
   ): boolean {
-    if (session.status !== 'CONFIRM_GATE' || dto.confirmGenerate === true) {
+    if (dto.confirmGenerate === true) {
       return false
     }
     if (dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0) {
+      return false
+    }
+
+    const confirmationReady = session.status === 'CONFIRM_GATE'
+      || (
+        session.status === 'DRAFTING'
+        && session.latestSpecDesc !== null
+        && session.latestSpecDesc !== undefined
+        && this.readClarificationState(session.clarificationState).status === 'CLEAR'
+      )
+    if (!confirmationReady) {
       return false
     }
 
@@ -6104,12 +6121,13 @@ export class CodegenConversationService {
     //   平仓边界」的双向语义，不再通过 rules[].actions 暴露 OPEN_*/CLOSE_*。
     //   未在此字段判断时，纯 orchestration grid 策略会被误报「不能稳定投影到可执行入场规则」。
     orderPrograms?: unknown[]
+    orchestration?: { programs?: unknown[] }
   }): CanonicalCompileabilityReport {
-    // 早返回：orderPrograms 非空（program.fixed_grid_gated / dynamic_grid / adaptive_volatility_grid /
-    //   event_listener 等）→ 自洽程序覆盖 entry+exit；与下方 hasProjectedGridRules
-    //   line 6145 同源——这里前置进入 compileability 主路径而不是只做兜底检查，
-    //   保持「只要 program 已闭环就视作可编译」的语义。
-    const hasOrderPrograms = Array.isArray(spec.orderPrograms) && spec.orderPrograms.length > 0
+    // 早返回：orderPrograms 或 orchestration.programs 非空（program.fixed_grid_gated /
+    //   dynamic_grid / adaptive_volatility_grid / event_listener 等）→ 自洽程序覆盖
+    //   entry+exit；canonical v2 的 grid 主路径落在 orchestration.programs。
+    const hasOrderPrograms = (Array.isArray(spec.orderPrograms) && spec.orderPrograms.length > 0)
+      || (Array.isArray(spec.orchestration?.programs) && spec.orchestration.programs.length > 0)
 
     const entryRuleCount = spec.rules.filter(rule =>
       rule.phase === 'entry'

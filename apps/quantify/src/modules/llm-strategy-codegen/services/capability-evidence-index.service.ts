@@ -59,11 +59,13 @@ export class CapabilityEvidenceIndex {
     const entries: CapabilityEvidence[] = []
 
     for (const fact of RULES_MAINFLOW_READER.readFacts(state)) {
-      const mount = mountFromFactRole(fact.role)
+      const mount = mountFromFact(fact)
       if (!mount) continue
       pushContractEvidence(entries, fact, mount)
       pushSynthesizedSizingEvidence(entries, fact, mount)
     }
+
+    pushLegacyFlatOwnerEvidence(entries, state)
 
     if (state.position?.contracts) {
       for (const contract of state.position.contracts) {
@@ -96,10 +98,59 @@ export class CapabilityEvidenceIndex {
   }
 }
 
-function mountFromFactRole(role: MainflowLeafRole): CapabilityMountKind | null {
-  if (role === 'action') return 'action'
-  if (role === 'position') return 'position_constraint'
-  if (role === 'risk') return 'risk'
+function pushLegacyFlatOwnerEvidence(entries: CapabilityEvidence[], state: SemanticState): void {
+  const legacy = state as SemanticState & {
+    action?: LegacyCapabilityOwner[]
+    risk?: LegacyCapabilityOwner[]
+    positionConstraint?: LegacyCapabilityOwner[]
+  }
+  for (const owner of legacy.action ?? []) {
+    pushLegacyOwnerContracts(entries, owner, 'action')
+  }
+  for (const owner of legacy.risk ?? []) {
+    pushLegacyOwnerContracts(entries, owner, 'risk')
+  }
+  for (const owner of legacy.positionConstraint ?? []) {
+    pushLegacyOwnerContracts(entries, owner, 'position_constraint')
+  }
+}
+
+interface LegacyCapabilityOwner {
+  readonly id: string
+  readonly key: string
+  readonly status: SemanticNodeStatus
+  readonly contracts?: ReadonlyArray<{
+    readonly id: string
+    readonly capabilities: readonly SemanticCapability[]
+  }>
+}
+
+function pushLegacyOwnerContracts(
+  entries: CapabilityEvidence[],
+  owner: LegacyCapabilityOwner,
+  mount: CapabilityMountKind,
+): void {
+  for (const contract of owner.contracts ?? []) {
+    for (const capability of contract.capabilities) {
+      entries.push({
+        mount,
+        ownerId: owner.id,
+        ownerKey: owner.key,
+        ownerStatus: owner.status,
+        contractId: contract.id,
+        capability,
+      })
+    }
+  }
+}
+
+function mountFromFact(fact: RulesMainflowAtomFact): CapabilityMountKind | null {
+  if (fact.role === 'action') return 'action'
+  if (fact.role === 'position') return 'position_constraint'
+  if (fact.role === 'risk') return 'risk'
+  if (fact.role === 'condition' && fact.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
+    return 'position_constraint'
+  }
   return null
 }
 
@@ -167,7 +218,14 @@ function readSizingShape(fact: RulesMainflowAtomFact): SemanticCapability['shape
   const paramSource = contract?.sizingEvidence?.paramSource
   if (!paramSource) return null
   const value = fact.params[paramSource]
-  return isRecord(value) ? value : null
+  if (isRecord(value)) return value
+  if (fact.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
+    && typeof value === 'number'
+    && Number.isFinite(value)
+    && value > 0) {
+    return { kind: 'ratio', value, unit: 'ratio' }
+  }
+  return null
 }
 
 function ownerIdForFact(fact: RulesMainflowAtomFact, mount: CapabilityMountKind): string {

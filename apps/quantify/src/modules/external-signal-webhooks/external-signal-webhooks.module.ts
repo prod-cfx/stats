@@ -28,5 +28,6 @@ import { ExternalSignalWebhooksService } from './services/external-signal-webhoo
     ExternalSignalWebhookSignatureService,
     ExternalSignalWebhooksService,
   ],
+  exports: [ExternalSignalWebhooksService],
 })
 export class ExternalSignalWebhooksModule {}

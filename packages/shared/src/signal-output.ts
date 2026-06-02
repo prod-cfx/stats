@@ -1,5 +1,12 @@
 import { SignalDirection, SignalType } from './generated/prisma-enums'
 
+export interface RuntimeSignalOrderIntent {
+  orderType: 'market' | 'limit'
+  limitPrice?: number
+  timeInForce?: 'gtc' | 'ioc' | 'fok'
+  triggerConditionRef?: string
+}
+
 export interface AiSignalPayload {
   direction: SignalDirection
   signalType: SignalType
@@ -10,6 +17,7 @@ export interface AiSignalPayload {
   reasoning?: string
   positionSizeQuote?: number
   positionSizeRatio?: number
+  order?: RuntimeSignalOrderIntent
 }
 
 const SUPPORTED_DIRECTIONS: Record<string, SignalDirection> = {
@@ -162,4 +170,3 @@ export function fillPromptTemplate(
     },
   )
 }
-

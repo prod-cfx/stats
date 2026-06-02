@@ -78,6 +78,26 @@ describe('ai-quant-page-conversation', () => {
     })).toBe(false)
   })
 
+  it('treats webhook event-stream-unavailable backtests as live-only deployable while keeping no-signal blocked', () => {
+    expect(isDeployableBacktestResult({
+      id: 'bt-webhook-live-only',
+      maxDrawdownPct: 0,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+      diagnosticReason: 'BACKTEST_EVENT_STREAM_UNAVAILABLE',
+    })).toBe(true)
+
+    expect(isDeployableBacktestResult({
+      id: 'bt-no-signal',
+      maxDrawdownPct: 0,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+      diagnosticReason: 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE',
+    })).toBe(false)
+  })
+
   it('preserves open-trade summary fields when building a backtest summary result', () => {
     expect(buildBacktestSummaryResult({
       id: 'bt-open-only',

@@ -4917,6 +4917,43 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(irProgram0.sizing).toEqual({ mode: 'fixed_quote', value: 100 })
   })
 
+  it('compiles a grid program without activeWhenRef as always active', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      programs: [
+        {
+          id: 'program-grid-always-active',
+          programKind: 'fixed_grid_gated',
+          onDeactivate: 'cancel',
+          rebuildPolicy: 'static',
+          gridParams: {
+            lowerBound: 50000,
+            upperBound: 60000,
+            levelCount: 10,
+            stepPct: 5,
+          },
+          sizing: { mode: 'fixed_pct', value: 1 },
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const programs = result.ir.orchestrationPrograms ?? []
+    expect(programs).toHaveLength(1)
+    expect(programs[0]).toEqual(expect.objectContaining({
+      id: 'program-grid-always-active',
+      programKind: 'fixed_grid_gated',
+      activeWhenExprId: expect.stringContaining('always_active'),
+    }))
+    expect(result.ir.signalCatalog.predicates).toContainEqual(expect.objectContaining({
+      id: programs[0].activeWhenExprId,
+      kind: 'EQ',
+      args: ['const_1', 'const_1'],
+    }))
+    expect(result.ir.portfolio.positionMode).toBe('long_short')
+  })
+
   // Issue #1437：grid orchestration program 应让 IR.portfolio.positionMode = 'long_short'
   //   网格 program 在 runtime 双向挂单，rules.actions 无 OPEN_LONG/SHORT，原 resolvePositionMode
   //   只看 orderPrograms + rules.actions → 落 long_only，与 publication-gate 三方不一致
