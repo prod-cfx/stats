@@ -198,6 +198,16 @@ void main() {
     expect(find.text('BID'), findsOneWidget);
     expect(find.text('ASK'), findsOneWidget);
     expect(find.text('SPREAD'), findsOneWidget);
+    // SPREAD 双值格式：`绝对值 / 百分比%`，对齐设计稿 `0.10 / 0.0001%`。
+    expect(
+      find.byWidgetPredicate(
+        (Widget w) =>
+            w is Text &&
+            w.data != null &&
+            RegExp(r'^\d+\.\d{2} / \d+\.\d{4}%$').hasMatch(w.data!),
+      ),
+      findsOneWidget,
+    );
     // CustomPaint 存在（深度曲线）
     expect(find.byType(CustomPaint), findsWidgets);
     expect(tester.takeException(), isNull);

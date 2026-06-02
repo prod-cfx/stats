@@ -110,6 +110,8 @@ class _DepthChart extends StatelessWidget {
     final double spread = asks.isNotEmpty && bids.isNotEmpty
         ? (asks.first.price - bids.first.price).abs()
         : 0;
+    // 百分比 = spread / mid * 100；mid<=0（异常/crossed book）兜底 0 防除零。
+    final double spreadPct = mid > 0 ? spread / mid * 100 : 0;
     final (String baseAsset, _) = splitSymbolAssets(snapshot.symbol);
 
     return Column(
@@ -134,7 +136,8 @@ class _DepthChart extends StatelessWidget {
               Expanded(
                 child: _Legend(
                   label: l10n.marketDetailDepthSpread,
-                  value: spread.toStringAsFixed(2),
+                  value:
+                      '${spread.toStringAsFixed(2)} / ${spreadPct.toStringAsFixed(4)}%',
                   color: c.text,
                   align: TextAlign.center,
                 ),
