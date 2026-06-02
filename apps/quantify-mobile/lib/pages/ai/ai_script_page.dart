@@ -19,7 +19,7 @@ const Map<String, String> kStratFallbackParams = <String, String>{
   'fast_ma': '5',
   'slow_ma': '20',
   'stop_loss': '2.0%',
-  'leverage': '1x',
+  'leverage': '5x',
 };
 
 /// 由策略字段派生脚本文件名（验收项 6：不再写死 `strategy.js`）。
@@ -104,8 +104,8 @@ class _AiScriptPageState extends State<AiScriptPage> {
 
   Map<String, String> get _params =>
       (widget.params != null && widget.params!.isNotEmpty)
-          ? widget.params!
-          : kStratFallbackParams;
+      ? widget.params!
+      : kStratFallbackParams;
 
   String get _script => buildStratScript(_params);
   String get _fileName => stratFileName(_params);
@@ -486,8 +486,9 @@ class _ScriptViewer extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final List<String> lines = script.split('\n');
     final bool hasMore = lines.length > collapsedLines;
-    final List<String> shown =
-        expanded ? lines : lines.take(collapsedLines).toList(growable: false);
+    final List<String> shown = expanded
+        ? lines
+        : lines.take(collapsedLines).toList(growable: false);
     return Container(
       decoration: BoxDecoration(
         color: _codeBg,
@@ -663,9 +664,29 @@ List<InlineSpan> _highlight(String line) {
   const Color keyword = Color(0xFFC4B5FD);
   const Color number = Color(0xFFF0B96B);
   const Set<String> kw = <String>{
-    'import', 'from', 'export', 'default', 'class', 'extends', 'static',
-    'constructor', 'return', 'if', 'else', 'new', 'this', 'true', 'false',
-    'null', 'undefined', 'const', 'let', 'var', 'async', 'await', 'function',
+    'import',
+    'from',
+    'export',
+    'default',
+    'class',
+    'extends',
+    'static',
+    'constructor',
+    'return',
+    'if',
+    'else',
+    'new',
+    'this',
+    'true',
+    'false',
+    'null',
+    'undefined',
+    'const',
+    'let',
+    'var',
+    'async',
+    'await',
+    'function',
   };
 
   // 整行注释（以 // 开头，忽略前导空白）。脚本模板里注释均独占行或行尾，
@@ -680,10 +701,7 @@ List<InlineSpan> _highlight(String line) {
         ..._highlightCode(before, kw, keyword, number),
         TextSpan(
           text: line.substring(slash),
-          style: const TextStyle(
-            color: comment,
-            fontStyle: FontStyle.italic,
-          ),
+          style: const TextStyle(color: comment, fontStyle: FontStyle.italic),
         ),
       ];
     }
@@ -700,18 +718,22 @@ List<InlineSpan> _highlightCode(
   Color stringColor = const Color(0xFF86E1A0),
 }) {
   final List<InlineSpan> spans = <InlineSpan>[];
-  final RegExp str =
-      RegExp(r'''(`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')''');
+  final RegExp str = RegExp(
+    r'''(`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')''',
+  );
   int last = 0;
   for (final RegExpMatch m in str.allMatches(s)) {
     if (m.start > last) {
       spans.addAll(
-          _highlightTokens(s.substring(last, m.start), kw, keyword, number));
+        _highlightTokens(s.substring(last, m.start), kw, keyword, number),
+      );
     }
-    spans.add(TextSpan(
-      text: m.group(0),
-      style: TextStyle(color: stringColor),
-    ));
+    spans.add(
+      TextSpan(
+        text: m.group(0),
+        style: TextStyle(color: stringColor),
+      ),
+    );
     last = m.end;
   }
   if (last < s.length) {
@@ -734,12 +756,19 @@ List<InlineSpan> _highlightTokens(
     if (m.start > last) spans.add(TextSpan(text: s.substring(last, m.start)));
     final String t = m.group(0)!;
     if (kw.contains(t)) {
-      spans.add(TextSpan(
-        text: t,
-        style: TextStyle(color: keyword, fontWeight: FontWeight.w600),
-      ));
+      spans.add(
+        TextSpan(
+          text: t,
+          style: TextStyle(color: keyword, fontWeight: FontWeight.w600),
+        ),
+      );
     } else if (RegExp(r'^\d').hasMatch(t)) {
-      spans.add(TextSpan(text: t, style: TextStyle(color: number)));
+      spans.add(
+        TextSpan(
+          text: t,
+          style: TextStyle(color: number),
+        ),
+      );
     } else {
       spans.add(TextSpan(text: t));
     }
@@ -754,10 +783,10 @@ class _Dot extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
+    width: 10,
+    height: 10,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
 }
 
 /// 底部行动条：上一步 + 下一步（仅就绪态可点）。

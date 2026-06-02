@@ -67,10 +67,7 @@ class QzAiSessionDrawer extends StatelessWidget {
                             const SizedBox(height: QzSpacing.xxs),
                             Text(
                               l10n.aiSessionDrawerSubtitle,
-                              style: TextStyle(
-                                color: c.textDim,
-                                fontSize: 11,
-                              ),
+                              style: TextStyle(color: c.textDim, fontSize: 11),
                             ),
                           ],
                         ),
@@ -113,9 +110,8 @@ class QzAiSessionDrawer extends StatelessWidget {
                         vertical: QzSpacing.sm,
                       ),
                       itemCount: sessions.length,
-                      separatorBuilder:
-                          (BuildContext _, int _) =>
-                              const SizedBox(height: 4),
+                      separatorBuilder: (BuildContext _, int _) =>
+                          const SizedBox(height: 4),
                       itemBuilder: (BuildContext ctx, int i) {
                         final AiSession s = sessions[i];
                         return _SessionTile(
@@ -126,6 +122,32 @@ class QzAiSessionDrawer extends StatelessWidget {
                         );
                       },
                     ),
+            ),
+            Divider(height: 1, color: c.border),
+            Padding(
+              key: const Key('ai-session-privacy-footer'),
+              padding: const EdgeInsets.fromLTRB(
+                QzSpacing.lg,
+                QzSpacing.sm,
+                QzSpacing.lg,
+                QzSpacing.md,
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.shield_outlined, size: 14, color: c.textFaint),
+                  const SizedBox(width: QzSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      l10n.aiSessionPrivacyFooter,
+                      style: TextStyle(
+                        color: c.textFaint,
+                        fontSize: 10,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -150,6 +172,8 @@ class _SessionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isDeployed = session.deployedTo != null;
     return InkWell(
       key: Key('ai-session-tile-${session.id}'),
       onTap: onTap,
@@ -162,7 +186,9 @@ class _SessionTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: isCurrent ? c.accentSoft : Colors.transparent,
           border: Border.all(
-            color: isCurrent ? c.accent.withValues(alpha: 0.3) : Colors.transparent,
+            color: isCurrent
+                ? c.accent.withValues(alpha: 0.3)
+                : Colors.transparent,
           ),
           borderRadius: BorderRadius.circular(QzRadii.input),
         ),
@@ -203,6 +229,13 @@ class _SessionTile extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(width: QzSpacing.xs),
+                      _StatusBadge(
+                        label: isDeployed
+                            ? l10n.aiSessionStatusLive
+                            : l10n.aiSessionStatusPending,
+                        color: isDeployed ? c.marketUp : c.statusWarn,
+                      ),
                       if (session.cagrLabel != null) ...<Widget>[
                         const SizedBox(width: QzSpacing.xs),
                         Container(
@@ -237,7 +270,14 @@ class _SessionTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    '${session.messages.length} 条消息',
+                    _previewText(session),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: c.textFaint, fontSize: 10),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _formatUpdatedAt(session.updatedAt),
                     style: TextStyle(color: c.textFaint, fontSize: 10),
                   ),
                 ],
@@ -248,14 +288,64 @@ class _SessionTile extends StatelessWidget {
                 key: Key('ai-session-delete-${session.id}'),
                 onPressed: onDelete,
                 visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  Icons.delete_outline,
-                  size: 16,
-                  color: c.textDim,
-                ),
+                icon: Icon(Icons.delete_outline, size: 16, color: c.textDim),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _previewText(AiSession session) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      if (turn.content.trim().isNotEmpty) return turn.content.trim();
+    }
+    return '${session.messages.length} 条消息';
+  }
+
+  String _formatUpdatedAt(DateTime updatedAt) {
+    final Duration diff = DateTime.now().difference(updatedAt);
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
+    if (diff.inDays < 1) return '${diff.inHours} 小时前';
+    if (diff.inDays == 1) return '昨天';
+    return '${diff.inDays} 天前';
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ),
+          ),
+        ],
       ),
     );
   }

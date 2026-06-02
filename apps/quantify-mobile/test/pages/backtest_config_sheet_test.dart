@@ -17,7 +17,7 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// - 交易市场 现货/合约 segmented + 杠杆 chips，20x/50x 高杠杆告警 (#1893)
 /// - 「本次回测设定」summary 卡 5 行回显 (#1893)
 /// - sheet 视觉：顶部圆角 24、固定 top:120 scrim
-/// - footer 贴底（不在滚动内）：滚动后「确认并开始回测」依然可见
+/// - footer 贴底（不在滚动内）：滚动后「开始回测」依然可见
 /// - scrim 点击关闭
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
@@ -68,8 +68,9 @@ void main() {
     expect(fee.controller!.text, '2');
   });
 
-  testWidgets('成交价来源 segmented：含 开盘价/收盘价/中间价 三档 (#1893)',
-      (WidgetTester tester) async {
+  testWidgets('成交价来源 segmented：含 开盘价/收盘价/中间价 三档 (#1893)', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     // 改用 segmented：三个选项各有一个 backtest-seg-<key>
     expect(find.byKey(const Key('backtest-seg-open')), findsOneWidget);
@@ -96,34 +97,32 @@ void main() {
 
   testWidgets('顶部策略 recap 条显示 (#1893)', (WidgetTester tester) async {
     await _pump(tester);
-    expect(
-      find.textContaining('配置回测参数'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('配置回测参数'), findsOneWidget);
     expect(find.textContaining('BTC 趋势 · 双均线'), findsOneWidget);
   });
 
-  testWidgets('区间回显：默认 30D 显示「数据范围」(#1893)',
-      (WidgetTester tester) async {
+  testWidgets('区间回显：默认 30D 显示「数据范围」(#1893)', (WidgetTester tester) async {
     await _pump(tester);
-    final Text echo =
-        tester.widget<Text>(find.byKey(const Key('backtest-range-echo')));
+    final Text echo = tester.widget<Text>(
+      find.byKey(const Key('backtest-range-echo')),
+    );
     expect(echo.data, contains('数据范围'));
   });
 
-  testWidgets('自定义区间显示「共 N 天 · N 根 15m K 线」(#1893)',
-      (WidgetTester tester) async {
+  testWidgets('自定义区间显示「共 N 天 · N 根 15m K 线」(#1893)', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('backtest-range-custom')));
     await tester.pumpAndSettle();
-    final Text echo =
-        tester.widget<Text>(find.byKey(const Key('backtest-range-echo')));
+    final Text echo = tester.widget<Text>(
+      find.byKey(const Key('backtest-range-echo')),
+    );
     expect(echo.data, contains('天'));
     expect(echo.data, contains('15m K 线'));
   });
 
-  testWidgets('初始资金快捷预设：点 10k 写入 10000 (#1893)',
-      (WidgetTester tester) async {
+  testWidgets('初始资金快捷预设：点 10k 写入 10000 (#1893)', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('backtest-capital-50k')));
     await tester.pumpAndSettle();
@@ -136,8 +135,9 @@ void main() {
     expect(cap.controller!.text, '50000');
   });
 
-  testWidgets('交易市场默认合约：显示杠杆 chips；切现货后隐藏 (#1893)',
-      (WidgetTester tester) async {
+  testWidgets('交易市场默认合约：显示杠杆 chips；切现货后隐藏 (#1893)', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     // 默认合约 → 杠杆 chips 可见
     expect(find.byKey(const Key('backtest-leverage-5x')), findsOneWidget);
@@ -148,8 +148,9 @@ void main() {
     expect(find.byKey(const Key('backtest-leverage-5x')), findsNothing);
   });
 
-  testWidgets('高杠杆告警：选 20x/50x 出现告警，回到 5x 消失 (#1893)',
-      (WidgetTester tester) async {
+  testWidgets('高杠杆告警：选 20x/50x 出现告警，回到 5x 消失 (#1893)', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     // 默认 5x 无告警
     expect(find.byKey(const Key('backtest-leverage-warn')), findsNothing);
@@ -166,8 +167,7 @@ void main() {
     expect(find.byKey(const Key('backtest-leverage-warn')), findsNothing);
   });
 
-  testWidgets('本次回测设定 summary 卡显示 5 行 (#1893)',
-      (WidgetTester tester) async {
+  testWidgets('本次回测设定 summary 卡显示 5 行 (#1893)', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.byKey(const Key('backtest-summary')), findsOneWidget);
     expect(find.text('本次回测设定'), findsOneWidget);
@@ -184,7 +184,9 @@ void main() {
     }
   });
 
-  testWidgets('sheet 顶部约 120px 是 scrim；点击 scrim 关闭', (WidgetTester tester) async {
+  testWidgets('sheet 顶部约 120px 是 scrim；点击 scrim 关闭', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     expect(find.text('回测参数'), findsOneWidget);
 
@@ -200,8 +202,9 @@ void main() {
     expect(find.text('回测参数'), findsNothing);
   });
 
-  testWidgets('footer 贴底：滚动后「确认并开始回测」按钮位置不变（不在滚动内容里）',
-      (WidgetTester tester) async {
+  testWidgets('footer 贴底：滚动后「开始回测」按钮位置不变（不在滚动内容里）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     final Finder submit = find.byKey(const Key('backtest-submit'));
     final Offset before = tester.getTopLeft(submit);
@@ -217,11 +220,20 @@ void main() {
     expect(after.dy, before.dy);
   });
 
+  testWidgets('footer 文案对齐设计稿：上一步 + 开始回测（#2067）', (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.text('上一步'), findsOneWidget);
+    expect(find.text('开始回测'), findsOneWidget);
+    expect(find.text('收起'), findsNothing);
+    expect(find.text('确认并开始回测'), findsNothing);
+  });
+
   testWidgets('sheet 顶部圆角 = 24', (WidgetTester tester) async {
     await _pump(tester);
     // 找到 sheet 容器：圆角 24 + 装饰 color，是 sheet 主体
-    final Iterable<Container> containers =
-        tester.widgetList<Container>(find.byType(Container));
+    final Iterable<Container> containers = tester.widgetList<Container>(
+      find.byType(Container),
+    );
     final Container sheet = containers.firstWhere((Container co) {
       final Decoration? d = co.decoration;
       if (d is! BoxDecoration) return false;

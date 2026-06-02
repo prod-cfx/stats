@@ -248,6 +248,24 @@ abstract class AppLocalizations {
   /// **'暂无会话，点击「新建方案」开始一个策略对话。'**
   String get aiSessionEmptyHint;
 
+  /// No description provided for @aiSessionStatusLive.
+  ///
+  /// In zh, this message translates to:
+  /// **'实盘'**
+  String get aiSessionStatusLive;
+
+  /// No description provided for @aiSessionStatusPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'待部署'**
+  String get aiSessionStatusPending;
+
+  /// No description provided for @aiSessionPrivacyFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'方案之间上下文隔离 · 不会互相干扰'**
+  String get aiSessionPrivacyFooter;
+
   /// No description provided for @aiSessionUntitled.
   ///
   /// In zh, this message translates to:
@@ -359,13 +377,13 @@ abstract class AppLocalizations {
   /// No description provided for @backtestCollapseButton.
   ///
   /// In zh, this message translates to:
-  /// **'收起'**
+  /// **'上一步'**
   String get backtestCollapseButton;
 
   /// No description provided for @backtestStartButton.
   ///
   /// In zh, this message translates to:
-  /// **'确认并开始回测'**
+  /// **'开始回测'**
   String get backtestStartButton;
 
   /// No description provided for @backtestErrorInvalidDate.

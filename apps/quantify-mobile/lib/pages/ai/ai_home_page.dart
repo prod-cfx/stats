@@ -87,7 +87,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     setState(() {
       _sessions
         ..clear()
-        ..addEntries(list.map((AiSession s) => MapEntry<String, AiSession>(s.id, s)));
+        ..addEntries(
+          list.map((AiSession s) => MapEntry<String, AiSession>(s.id, s)),
+        );
       _order
         ..clear()
         ..addAll(list.map((AiSession s) => s.id));
@@ -118,7 +120,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   Future<void> _createSession() async {
     final AiChatRepository repo = ref.read(aiChatRepositoryProvider);
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AiSession fresh = await repo.createSession(title: l10n.aiSessionUntitled);
+    final AiSession fresh = await repo.createSession(
+      title: l10n.aiSessionUntitled,
+    );
     if (!mounted) return;
     setState(() {
       _sessions[fresh.id] = fresh;
@@ -285,9 +289,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   }
 
   List<AiSession> get _orderedSessions => <AiSession>[
-        for (final String id in _order)
-          if (_sessions[id] != null) _sessions[id]!,
-      ];
+    for (final String id in _order)
+      if (_sessions[id] != null) _sessions[id]!,
+  ];
 
   /// 处理 `?loadStrategy=<id>` query：拉策略详情 → 选/建会话 → 注入预设消息。
   ///
@@ -299,8 +303,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   ///   （symbol/period 暂从 tags / category 派生，模型无此字段时回退 mock 默认）。
   Future<void> _handleLoadStrategy(String id) async {
     if (!_initialized) return;
-    final StrategyRepository repo =
-        ref.read(strategyRepositoryProvider);
+    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
     StrategyDetail detail;
     try {
       detail = await repo.getStrategyDetail(id);
@@ -313,17 +316,18 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
 
     String targetId;
-    final AiSession? cur =
-        _currentId == null ? null : _sessions[_currentId!];
+    final AiSession? cur = _currentId == null ? null : _sessions[_currentId!];
     // greeting-only 会话视为空：仅 1 条 assistant 消息
-    final bool curIsEmpty = cur != null &&
+    final bool curIsEmpty =
+        cur != null &&
         cur.messages.length <= 1 &&
         cur.messages.every((ChatTurn t) => t.role == 'assistant');
     if (cur != null && curIsEmpty) {
       targetId = cur.id;
     } else {
-      final AiSession fresh =
-          await chatRepo.createSession(title: detail.card.name);
+      final AiSession fresh = await chatRepo.createSession(
+        title: detail.card.name,
+      );
       if (!mounted) return;
       setState(() {
         _sessions[fresh.id] = fresh;
@@ -358,12 +362,11 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       timestamp: now.add(const Duration(milliseconds: 1)),
       kind: ChatTurnKind.params,
       params: <String, String>{
-        'strategy_id': detail.card.id,
-        'name': detail.card.name,
         'category': detail.card.category.name,
-        'tags': tagsStr,
-        'return_7d': '${detail.return7d.toStringAsFixed(2)}%',
-        'max_drawdown': '${detail.maxDrawdown.toStringAsFixed(2)}%',
+        'fast_ma': '5',
+        'slow_ma': '20',
+        'stop_loss': '2.0%',
+        'position': '100%',
       },
     );
 
@@ -382,14 +385,15 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AiSession? current =
-        _currentId == null ? null : _sessions[_currentId!];
+    final AiSession? current = _currentId == null
+        ? null
+        : _sessions[_currentId!];
 
     // 处理 `?loadStrategy=<id>` query — 必须在初始化完成后才动手。
     // GoRouterState 在 shell 内分支也能读到当前 location 的 uri。
-    final String? loadStrategyId = GoRouterState.of(context)
-        .uri
-        .queryParameters['loadStrategy'];
+    final String? loadStrategyId = GoRouterState.of(
+      context,
+    ).uri.queryParameters['loadStrategy'];
     if (_initialized &&
         loadStrategyId != null &&
         loadStrategyId.isNotEmpty &&
@@ -440,52 +444,57 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
               child: !_initialized
                   ? const Center(child: CircularProgressIndicator())
                   : current == null
-                      ? _Empty(scheme: c, onCreate: _createSession)
-                      : ListView.separated(
-                          controller: _scroll,
-                          padding: const EdgeInsets.all(QzSpacing.lg),
-                          itemCount: itemCount,
-                          separatorBuilder:
-                              (BuildContext context, int index) =>
-                                  const SizedBox(height: QzSpacing.md),
-                          itemBuilder: (BuildContext ctx, int i) {
-                            if (i < messages.length) {
-                              final ChatTurn t = messages[i];
-                              final QzChatRole role = switch (t.role) {
-                                'user' => QzChatRole.user,
-                                'system' => QzChatRole.system,
-                                _ => QzChatRole.assistant,
-                              };
-                              final bool isDeployed =
-                                  t.kind == ChatTurnKind.deployed;
-                              return QzChatBubble(
-                                role: role,
-                                content: t.content,
-                                time: role == QzChatRole.system ? null : t.timestamp,
-                                params: t.kind == ChatTurnKind.params ? t.params : null,
-                                // 「确认策略」CTA（#1831 接线 → #1832 落地）：
-                                // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
-                                onConfirm: t.kind == ChatTurnKind.params
-                                    ? () => _openConfirm(t.params)
-                                    : null,
-                                // 已部署锁定态（#1834）：会话 `deployedTo != null`
-                                // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。
-                                locked: current.deployedTo != null,
-                                // 部署终态富气泡（#1833）：传交易所 / 实例 ID +
-                                // 「查看实盘策略」CTA（跳 `/me/live`），气泡内渲染
-                                // ✓ + 运行中状态 + 归档话术。
-                                deployedExchange:
-                                    isDeployed ? t.deployedExchange : null,
-                                deployedInstanceId:
-                                    isDeployed ? t.deployedInstanceId : null,
-                                onViewLive: isDeployed
-                                    ? () => context.push('/me/live')
-                                    : null,
-                              );
-                            }
-                            return const QzTypingIndicator();
-                          },
-                        ),
+                  ? _Empty(scheme: c, onCreate: _createSession)
+                  : ListView.separated(
+                      controller: _scroll,
+                      padding: const EdgeInsets.all(QzSpacing.lg),
+                      itemCount: itemCount,
+                      separatorBuilder: (BuildContext context, int index) =>
+                          const SizedBox(height: QzSpacing.md),
+                      itemBuilder: (BuildContext ctx, int i) {
+                        if (i < messages.length) {
+                          final ChatTurn t = messages[i];
+                          final QzChatRole role = switch (t.role) {
+                            'user' => QzChatRole.user,
+                            'system' => QzChatRole.system,
+                            _ => QzChatRole.assistant,
+                          };
+                          final bool isDeployed =
+                              t.kind == ChatTurnKind.deployed;
+                          return QzChatBubble(
+                            role: role,
+                            content: t.content,
+                            time: role == QzChatRole.system
+                                ? null
+                                : t.timestamp,
+                            params: t.kind == ChatTurnKind.params
+                                ? t.params
+                                : null,
+                            // 「确认策略」CTA（#1831 接线 → #1832 落地）：
+                            // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
+                            onConfirm: t.kind == ChatTurnKind.params
+                                ? () => _openConfirm(t.params)
+                                : null,
+                            // 已部署锁定态（#1834）：会话 `deployedTo != null`
+                            // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。
+                            locked: current.deployedTo != null,
+                            // 部署终态富气泡（#1833）：传交易所 / 实例 ID +
+                            // 「查看实盘策略」CTA（跳 `/me/live`），气泡内渲染
+                            // ✓ + 运行中状态 + 归档话术。
+                            deployedExchange: isDeployed
+                                ? t.deployedExchange
+                                : null,
+                            deployedInstanceId: isDeployed
+                                ? t.deployedInstanceId
+                                : null,
+                            onViewLive: isDeployed
+                                ? () => context.push('/me/live')
+                                : null,
+                          );
+                        }
+                        return const QzTypingIndicator();
+                      },
+                    ),
             ),
             if (_initialized && current != null)
               QzQuickReplyChips(
@@ -676,6 +685,7 @@ class _SendIconButton extends StatelessWidget {
 
   /// 视觉启用（有文本输入），驱动渐变 + accent 阴影。
   final bool enabled;
+
   /// 是否响应 tap（会话存在且未在发送中）。
   final bool tappable;
   final bool loading;

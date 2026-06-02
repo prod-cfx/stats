@@ -45,9 +45,7 @@ Future<void> _pump(WidgetTester tester) async {
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
+      overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -66,8 +64,7 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('策略卡：右下角存在「载入对话」按钮（验收 1）',
-      (WidgetTester tester) async {
+  testWidgets('策略卡：右下角存在「载入对话」按钮（验收 1）', (WidgetTester tester) async {
     await _pump(tester);
     // 至少首屏第一条策略带 load button
     expect(
@@ -77,8 +74,7 @@ void main() {
     expect(find.text('载入对话'), findsAtLeastNWidgets(1));
   });
 
-  testWidgets('策略详情：底部存在「载入到对话」按钮（验收 2）',
-      (WidgetTester tester) async {
+  testWidgets('策略详情：底部存在「载入到对话」按钮（验收 2）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('strategy-tile-st-grid-btc')));
     await tester.pump();
@@ -94,9 +90,9 @@ void main() {
     expect(find.text('载入到对话'), findsOneWidget);
   });
 
-  testWidgets(
-      '点击策略卡载入对话 → 跳到 /ai → 注入用户消息 + assistant params 气泡（验收 3-5）',
-      (WidgetTester tester) async {
+  testWidgets('点击策略卡载入对话 → 跳到 /ai → 注入用户消息 + assistant params 气泡（验收 3-5）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     await tester.tap(
       find.byKey(const Key('strategy-card-load-chat-st-grid-btc')),
@@ -115,10 +111,17 @@ void main() {
     expect(find.textContaining('请基于策略'), findsAtLeastNWidgets(1));
     // params 气泡（assistant kind=params）：QzChatBubble 用 `ai-bubble-params` key
     expect(find.byKey(const Key('ai-bubble-params')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-param-fast_ma')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-param-slow_ma')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-param-stop_loss')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-param-position')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-param-return_7d')), findsNothing);
+    expect(find.byKey(const Key('ai-bubble-param-max_drawdown')), findsNothing);
   });
 
-  testWidgets('从策略详情点击载入到对话 → 跳到 /ai 并注入（验收 2 + 3-5）',
-      (WidgetTester tester) async {
+  testWidgets('从策略详情点击载入到对话 → 跳到 /ai 并注入（验收 2 + 3-5）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('strategy-tile-st-grid-btc')));
     await tester.pump();

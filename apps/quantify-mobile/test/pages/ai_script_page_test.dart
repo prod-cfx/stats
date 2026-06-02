@@ -7,10 +7,7 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
 /// #1892 验收：「策略脚本」独立步骤屏，覆盖 生成中 → 就绪 两态。
-Future<void> _pump(
-  WidgetTester tester, {
-  Map<String, String>? params,
-}) async {
+Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   await tester.pumpWidget(
     MaterialApp(
@@ -27,8 +24,9 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('生成中态：显示 spinner + 文案，CTA 禁用（验收 2、5）',
-      (WidgetTester tester) async {
+  testWidgets('生成中态：显示 spinner + 文案，CTA 禁用（验收 2、5）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     expect(find.byKey(const Key('ai-script-generating')), findsOneWidget);
     expect(find.text('正在生成策略脚本'), findsOneWidget);
@@ -43,8 +41,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1600));
   });
 
-  testWidgets('就绪态：READY badge + 行号 + 成功提示，CTA 可点（验收 3、5）',
-      (WidgetTester tester) async {
+  testWidgets('就绪态：READY badge + 行号 + 成功提示，CTA 可点（验收 3、5）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     await tester.pump(const Duration(milliseconds: 1600));
 
@@ -59,8 +58,7 @@ void main() {
     expect(next.onPressed, isNotNull, reason: '就绪态「下一步」可点');
   });
 
-  testWidgets('长脚本：展开折叠切换文案「查看全部 N 行 / 收起」（验收 4）',
-      (WidgetTester tester) async {
+  testWidgets('长脚本：展开折叠切换文案「查看全部 N 行 / 收起」（验收 4）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.pump(const Duration(milliseconds: 1600));
 
@@ -73,12 +71,16 @@ void main() {
     expect(find.text('收起'), findsOneWidget);
   });
 
-  testWidgets('文件名取自 strat.file，不写死 strategy.js（验收 6）',
-      (WidgetTester tester) async {
-    await _pump(tester, params: <String, String>{
-      'symbol': 'ETH/USDT',
-      'file': 'eth_range_grid.js',
-    });
+  testWidgets('文件名取自 strat.file，不写死 strategy.js（验收 6）', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      params: <String, String>{
+        'symbol': 'ETH/USDT',
+        'file': 'eth_range_grid.js',
+      },
+    );
     await tester.pump(const Duration(milliseconds: 1600));
 
     // recap badge + 终端头部均显示真实文件名。
@@ -86,10 +88,13 @@ void main() {
     expect(find.text('strategy.js'), findsNothing);
   });
 
-  testWidgets('无 file 字段时由 symbol 派生文件名（验收 6）',
-      (WidgetTester tester) async {
+  testWidgets('无 file 字段时由 symbol 派生文件名（验收 6）', (WidgetTester tester) async {
     await _pump(tester, params: <String, String>{'symbol': 'BTC/USDT'});
     await tester.pump(const Duration(milliseconds: 1600));
     expect(find.text('btc_trend_ma.js'), findsWidgets);
+  });
+
+  test('脚本页 fallback 杠杆默认 5x（#2066）', () {
+    expect(kStratFallbackParams['leverage'], '5x');
   });
 }

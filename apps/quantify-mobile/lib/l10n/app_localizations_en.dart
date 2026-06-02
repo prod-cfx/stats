@@ -86,6 +86,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'No sessions yet. Tap \"New Strategy\" to begin.';
 
   @override
+  String get aiSessionStatusLive => 'Live';
+
+  @override
+  String get aiSessionStatusPending => 'Pending';
+
+  @override
+  String get aiSessionPrivacyFooter =>
+      'Strategy contexts are isolated and never interfere';
+
+  @override
   String get aiSessionUntitled => 'Untitled';
 
   @override
@@ -142,10 +152,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Backtest results are for reference only and not investment advice. Strategy parameters stay tied to this chat — edit the conversation to change them.';
 
   @override
-  String get backtestCollapseButton => 'Collapse';
+  String get backtestCollapseButton => 'Back';
 
   @override
-  String get backtestStartButton => 'Confirm & Run';
+  String get backtestStartButton => 'Start Backtest';
 
   @override
   String get backtestErrorInvalidDate =>

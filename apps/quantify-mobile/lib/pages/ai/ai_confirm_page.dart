@@ -39,14 +39,15 @@ class AiConfirmPage extends StatelessWidget {
     'fast_ma': '5',
     'slow_ma': '20',
     'stop_loss': '2.0%',
-    'leverage': '1x',
+    'leverage': '5x',
   };
 
   Map<String, String> get _params =>
       (params != null && params!.isNotEmpty) ? params! : _fallbackParams;
 
   // #1892 已落地 `/ai/script` 屏，「下一步：策略脚本」直接路由过去并透传会话参数。
-  void _next(BuildContext context) => context.push('/ai/script', extra: _params);
+  void _next(BuildContext context) =>
+      context.push('/ai/script', extra: _params);
 
   void _backToChat(BuildContext context) => context.pop();
 
@@ -96,7 +97,10 @@ class AiConfirmPage extends StatelessWidget {
                   const SizedBox(height: QzSpacing.lg),
                   _ExecuteBlock(view: view),
                   const SizedBox(height: QzSpacing.lg),
-                  _AiAdviceBox(title: l10n.aiConfirmAdviceTitle, text: view.advice),
+                  _AiAdviceBox(
+                    title: l10n.aiConfirmAdviceTitle,
+                    text: view.advice,
+                  ),
                   const SizedBox(height: QzSpacing.md),
                   _DisclaimerBar(text: l10n.aiConfirmDisclaimer),
                 ],
@@ -135,7 +139,8 @@ class StrategyConfirmView {
     String period,
     String position,
     String market,
-  }) execute;
+  })
+  execute;
   final List<({String kind, String desc})> risks;
   final String advice;
 }
@@ -181,7 +186,8 @@ StrategyConfirmView confirmStrategyView(
       (kind: '止损', desc: '价格相对入场均价下跌 $stop% → 强制平仓'),
       (kind: '止盈', desc: '价格相对入场均价上涨 0.6% → 平仓'),
     ],
-    advice: '该策略在 $symbol $period 周期上历史表现稳定，但在区间震荡市场可能出现频繁假突破。'
+    advice:
+        '该策略在 $symbol $period 周期上历史表现稳定，但在区间震荡市场可能出现频繁假突破。'
         '建议同时开启「ATR 过滤」减少噪音。',
   );
 }
@@ -406,14 +412,14 @@ class _RuleBlock extends StatelessWidget {
   }
 
   Widget _label(String text, Color color) => Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
-        ),
-      );
+    text,
+    style: TextStyle(
+      color: color,
+      fontSize: 10,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.2,
+    ),
+  );
 }
 
 /// 规则间分隔（「AND AT THEN」）。
@@ -493,8 +499,13 @@ class _ExecuteBlock extends StatelessWidget {
             ],
           ),
           const SizedBox(height: QzSpacing.sm),
-          for (final ({String kind, String desc}) risk in view.risks) ...<Widget>[
-            _RiskBar(kind: risk.kind, desc: risk.desc, badge: l10n.aiConfirmRiskBadge),
+          for (final ({String kind, String desc}) risk
+              in view.risks) ...<Widget>[
+            _RiskBar(
+              kind: risk.kind,
+              desc: risk.desc,
+              badge: l10n.aiConfirmRiskBadge,
+            ),
             const SizedBox(height: QzSpacing.xs),
           ],
         ],
@@ -514,7 +525,10 @@ class _MonoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: QzSpacing.xxs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: QzSpacing.xxs,
+      ),
       decoration: BoxDecoration(
         color: c.bgSoft,
         border: Border.all(color: c.borderSoft),
@@ -528,7 +542,10 @@ class _MonoChip extends StatelessWidget {
             fontFamilyFallback: QzFont.monoFallback,
           ),
           children: <InlineSpan>[
-            TextSpan(text: '$label: ', style: TextStyle(color: c.textDim)),
+            TextSpan(
+              text: '$label: ',
+              style: TextStyle(color: c.textDim),
+            ),
             TextSpan(
               text: value,
               style: TextStyle(color: c.text, fontWeight: FontWeight.w600),
@@ -553,7 +570,10 @@ class _RiskBar extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: QzSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: QzSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: c.statusWarn.withValues(alpha: 0.06),
         border: Border.all(color: c.statusWarn.withValues(alpha: 0.20)),
@@ -563,7 +583,10 @@ class _RiskBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: QzSpacing.xs, vertical: 1),
+            padding: const EdgeInsets.symmetric(
+              horizontal: QzSpacing.xs,
+              vertical: 1,
+            ),
             decoration: BoxDecoration(
               color: c.statusWarn.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(4),
@@ -604,7 +627,10 @@ class _AiAdviceBox extends StatelessWidget {
     return Container(
       key: const Key('ai-confirm-advice'),
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: QzSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: QzSpacing.md,
+      ),
       decoration: BoxDecoration(
         color: c.accentSoft,
         borderRadius: BorderRadius.circular(QzRadii.card),

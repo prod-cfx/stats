@@ -1,8 +1,7 @@
 import '../../models/ai_chat_models.dart';
 
 /// AI 助手欢迎语；新会话默认插入这一条。
-const String mockGreeting =
-    '告诉我你的交易想法，我会帮你生成策略并回测。回测最大回撤需 ≤ 20% 才能一键部署。';
+const String mockGreeting = '告诉我你的交易想法，我会帮你生成策略并回测。回测最大回撤需 ≤ 20% 才能一键部署。';
 
 /// 默认 3 条 mock 会话（对齐原型 `__qfChatSessions`）：BTC 趋势 / ETH 反转 / SOL 网格。
 List<AiSession> buildMockSessions() {
@@ -40,7 +39,7 @@ List<AiSession> buildMockSessions() {
             'fast_ma': '5',
             'slow_ma': '20',
             'stop_loss': '2.0%',
-            'leverage': '1x',
+            'leverage': '5x',
           },
         ),
       ],

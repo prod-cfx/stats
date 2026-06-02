@@ -84,6 +84,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiSessionEmptyHint => '暂无会话，点击「新建方案」开始一个策略对话。';
 
   @override
+  String get aiSessionStatusLive => '实盘';
+
+  @override
+  String get aiSessionStatusPending => '待部署';
+
+  @override
+  String get aiSessionPrivacyFooter => '方案之间上下文隔离 · 不会互相干扰';
+
+  @override
   String get aiSessionUntitled => '新方案';
 
   @override
@@ -139,10 +148,10 @@ class AppLocalizationsZh extends AppLocalizations {
       '回测结果仅供参考，不构成投资建议；AI 会保留当前对话的策略参数，想换参数请回到对话修改。';
 
   @override
-  String get backtestCollapseButton => '收起';
+  String get backtestCollapseButton => '上一步';
 
   @override
-  String get backtestStartButton => '确认并开始回测';
+  String get backtestStartButton => '开始回测';
 
   @override
   String get backtestErrorInvalidDate => '请输入正确的起止时间（YYYY-MM-DD）';

@@ -152,11 +152,7 @@ class QzChatBubble extends StatelessWidget {
                 if (content.isNotEmpty)
                   Text(
                     content,
-                    style: TextStyle(
-                      color: fg,
-                      fontSize: 14,
-                      height: 1.4,
-                    ),
+                    style: TextStyle(color: fg, fontSize: 14, height: 1.4),
                   ),
                 if (params != null && params!.isNotEmpty) ...<Widget>[
                   // 已部署锁定态横幅（#1834 / #1897，设计稿 m-screens-1.jsx:403、1135）：
@@ -217,8 +213,7 @@ class QzChatBubble extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: c.accentSoft,
-                            borderRadius:
-                                BorderRadius.circular(QzRadii.pill),
+                            borderRadius: BorderRadius.circular(QzRadii.pill),
                           ),
                           child: Text(
                             params!['category']!,
@@ -244,8 +239,7 @@ class QzChatBubble extends StatelessWidget {
                     padding: const EdgeInsets.all(QzSpacing.sm),
                     decoration: BoxDecoration(
                       color: c.border.withValues(alpha: 0.4),
-                      borderRadius:
-                          BorderRadius.circular(QzRadii.input),
+                      borderRadius: BorderRadius.circular(QzRadii.input),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,8 +248,8 @@ class QzChatBubble extends StatelessWidget {
                         for (final MapEntry<String, String> e
                             in params!.entries)
                           Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: 2),
+                            key: Key('ai-bubble-param-${e.key}'),
+                            padding: const EdgeInsets.only(bottom: 2),
                             child: RichText(
                               text: TextSpan(
                                 style: TextStyle(
@@ -298,15 +292,15 @@ class QzChatBubble extends StatelessWidget {
                       onPressed: onConfirm,
                     ),
                   ],
-                ] else if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
+                ] else if (codeBlock != null &&
+                    codeBlock!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: QzSpacing.sm),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(QzSpacing.sm),
                     decoration: BoxDecoration(
                       color: c.border.withValues(alpha: 0.4),
-                      borderRadius:
-                          BorderRadius.circular(QzRadii.input),
+                      borderRadius: BorderRadius.circular(QzRadii.input),
                     ),
                     child: Text(
                       codeBlock!,
@@ -333,10 +327,7 @@ class QzChatBubble extends StatelessWidget {
         );
 
         if (isUser) {
-          return Align(
-            alignment: Alignment.centerRight,
-            child: bubble,
-          );
+          return Align(alignment: Alignment.centerRight, child: bubble);
         }
         // assistant: Row(左侧 bot icon + 气泡)，与设计稿一致。
         return Align(
@@ -471,11 +462,7 @@ class QzChatBubble extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: QzSpacing.xs),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: c.accentOn,
-                    ),
+                    Icon(Icons.chevron_right, size: 16, color: c.accentOn),
                   ],
                 ),
               ),

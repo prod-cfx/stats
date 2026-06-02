@@ -25,7 +25,7 @@ import '../../widgets/qz_button.dart';
 ///   - 交易市场 现货/合约 segmented + 杠杆 1x–50x（20x/50x 高杠杆告警）
 ///   - 撮合参数：滑点 / 手续费（带 hint）+ 成交价来源 / 数据缺失策略 segmented
 ///   - 「本次回测设定」summary 卡（区间 / 资金 / 市场 / 撮合 / 数据 5 行回显）
-///   - 底部 shield 提示 banner + 双按钮：「收起」+「确认并开始回测」
+///   - 底部 shield 提示 banner + 双按钮：「上一步」+「开始回测」
 ///
 /// symbol / period 仍由 AI 对话上下文推断（mock 默认）；market / leverage 现已
 /// 在本页显式选择并随 `BacktestRequest.params` 提交。提交时 `BacktestResult`
@@ -42,23 +42,23 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   /// 历史区间预设。值为「相对今天往前推的天数」；0 = 自定义。
   static const List<({String key, int days})> _ranges =
       <({String key, int days})>[
-    (key: '7D', days: 7),
-    (key: '30D', days: 30),
-    (key: '90D', days: 90),
-    (key: '1Y', days: 365),
-    (key: '3Y', days: 1095),
-    (key: 'custom', days: 0),
-  ];
+        (key: '7D', days: 7),
+        (key: '30D', days: 30),
+        (key: '90D', days: 90),
+        (key: '1Y', days: 365),
+        (key: '3Y', days: 1095),
+        (key: 'custom', days: 0),
+      ];
 
   /// 初始资金快捷预设（对齐设计稿：1k/5k/10k/50k/100k）。
   static const List<({String label, int value})> _capitalPresets =
       <({String label, int value})>[
-    (label: '1k', value: 1000),
-    (label: '5k', value: 5000),
-    (label: '10k', value: 10000),
-    (label: '50k', value: 50000),
-    (label: '100k', value: 100000),
-  ];
+        (label: '1k', value: 1000),
+        (label: '5k', value: 5000),
+        (label: '10k', value: 10000),
+        (label: '50k', value: 50000),
+        (label: '100k', value: 100000),
+      ];
 
   /// 杠杆预设（对齐设计稿：1x–50x；20x/50x 触发高杠杆告警）。
   static const List<String> _leverages = <String>[
@@ -73,8 +73,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   static const Set<String> _highLeverages = <String>{'20x', '50x'};
 
   String _rangeKey = '30D';
-  final TextEditingController _capital =
-      TextEditingController(text: '10000');
+  final TextEditingController _capital = TextEditingController(text: '10000');
   final TextEditingController _slippage = TextEditingController(text: '5');
   final TextEditingController _fee = TextEditingController(text: '2');
   String _fillSource = 'close';
@@ -84,10 +83,12 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   String _leverage = '5x';
 
   /// 仅自定义模式启用。
-  final TextEditingController _start =
-      TextEditingController(text: _isoDate(DateTime.now().subtract(const Duration(days: 30))));
-  final TextEditingController _end =
-      TextEditingController(text: _isoDate(DateTime.now()));
+  final TextEditingController _start = TextEditingController(
+    text: _isoDate(DateTime.now().subtract(const Duration(days: 30))),
+  );
+  final TextEditingController _end = TextEditingController(
+    text: _isoDate(DateTime.now()),
+  );
 
   bool _submitting = false;
   String? _error;
@@ -125,12 +126,15 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   /// 数值字段白名单：仅允许 0-9 + 单个小数点（拦截负号 / 字母 / 多余点）。
   static final List<TextInputFormatter> _numericFormatters =
       <TextInputFormatter>[
-    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-    TextInputFormatter.withFunction((TextEditingValue oldV, TextEditingValue newV) {
-      final int dots = '.'.allMatches(newV.text).length;
-      return dots > 1 ? oldV : newV;
-    }),
-  ];
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+        TextInputFormatter.withFunction((
+          TextEditingValue oldV,
+          TextEditingValue newV,
+        ) {
+          final int dots = '.'.allMatches(newV.text).length;
+          return dots > 1 ? oldV : newV;
+        }),
+      ];
 
   static String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -140,7 +144,8 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   ///   - `range == null && error != null`：自定义模式校验失败，error 是对应 i18n key 取值
   ///   - 预设区间永远成功；key 不在 `_ranges` 时直接抛 StateError（开发期暴露不变量被破坏）
   ({({DateTime start, DateTime end})? range, String? error}) _resolveRange(
-      AppLocalizations l10n) {
+    AppLocalizations l10n,
+  ) {
     if (_rangeKey == 'custom') {
       final DateTime? s = DateTime.tryParse(_start.text.trim());
       final DateTime? e = DateTime.tryParse(_end.text.trim());
@@ -185,8 +190,9 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     if (_rangeKey == 'custom') {
       final DateTime? s = DateTime.tryParse(_start.text.trim());
       final DateTime? e = DateTime.tryParse(_end.text.trim());
-      final int days =
-          (s == null || e == null) ? 0 : e.difference(s).inDays.clamp(0, 1 << 30);
+      final int days = (s == null || e == null)
+          ? 0
+          : e.difference(s).inDays.clamp(0, 1 << 30);
       return l10n.backtestRangeCustomSummary(
         days.toString(),
         (days * 96).toString(),
@@ -387,242 +393,289 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                      _RecapStrip(
-                        scheme: c,
-                        text: l10n.backtestRecap('BTC 趋势 · 双均线'),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _FieldLabel(label: l10n.backtestFieldRange, scheme: c),
-                      const SizedBox(height: QzSpacing.xs),
-                      _RangeChips(
-                        ranges: _ranges,
-                        value: _rangeKey,
-                        l10n: l10n,
-                        scheme: c,
-                        onChanged: (String v) => setState(() => _rangeKey = v),
-                      ),
-                      if (_rangeKey == 'custom') ...<Widget>[
-                        const SizedBox(height: QzSpacing.md),
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  _FieldLabel(label: l10n.commonStart, scheme: c),
-                                  const SizedBox(height: QzSpacing.xs),
-                                  _TextInput(
-                                    key: const Key('backtest-start'),
-                                    controller: _start,
-                                    scheme: c,
-                                    onChanged: (_) => _clearError(),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: QzSpacing.md),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  _FieldLabel(label: l10n.commonEnd, scheme: c),
-                                  const SizedBox(height: QzSpacing.xs),
-                                  _TextInput(
-                                    key: const Key('backtest-end'),
-                                    controller: _end,
-                                    scheme: c,
-                                    onChanged: (_) => _clearError(),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: QzSpacing.xs),
-                      Text(
-                        key: const Key('backtest-range-echo'),
-                        _rangeEchoText(l10n),
-                        style: TextStyle(
-                          color: c.textDim,
-                          fontSize: 11,
-                          fontFeatures: const <FontFeature>[
-                            FontFeature.tabularFigures(),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _FieldLabel(label: l10n.backtestFieldCapital, scheme: c),
-                      const SizedBox(height: QzSpacing.xs),
-                      _TextInput(
-                        key: const Key('backtest-capital'),
-                        controller: _capital,
-                        scheme: c,
-                        keyboard: const TextInputType.numberWithOptions(decimal: true),
-                        suffix: 'USDT',
-                        inputFormatters: _numericFormatters,
-                        onChanged: (_) => _clearError(),
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      _CapitalPresets(
-                        presets: _capitalPresets,
-                        scheme: c,
-                        onPick: (int v) {
-                          _capital.text = v.toString();
-                          _clearError();
-                        },
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      Text(
-                        l10n.backtestCapitalPresetHint,
-                        style: TextStyle(color: c.textDim, fontSize: 11),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _FieldLabel(label: l10n.backtestFieldMarket, scheme: c),
-                      const SizedBox(height: QzSpacing.xs),
-                      _Segmented(
-                        key: const Key('backtest-market'),
-                        scheme: c,
-                        value: _futures ? 'futures' : 'spot',
-                        options: <({String key, String label})>[
-                          (key: 'spot', label: l10n.backtestMarketSpot),
-                          (key: 'futures', label: l10n.backtestMarketFutures),
-                        ],
-                        onChanged: (String v) =>
-                            setState(() => _futures = v == 'futures'),
-                      ),
-                      if (_futures) ...<Widget>[
-                        const SizedBox(height: QzSpacing.md),
-                        _LeveragePicker(
-                          leverages: _leverages,
-                          value: _leverage,
-                          scheme: c,
-                          label: l10n.backtestFieldLeverage,
-                          hint: l10n.backtestLeverageHint,
-                          onChanged: (String v) =>
-                              setState(() => _leverage = v),
-                        ),
-                        if (_highLeverages.contains(_leverage)) ...<Widget>[
-                          const SizedBox(height: QzSpacing.xs),
-                          _WarnBanner(
-                            key: const Key('backtest-leverage-warn'),
+                          _RecapStrip(
                             scheme: c,
-                            text: l10n.backtestLeverageWarn,
+                            text: l10n.backtestRecap('BTC 趋势 · 双均线'),
                           ),
-                        ],
-                      ],
-                      const SizedBox(height: QzSpacing.md),
-                      _SectionTitle(
-                        scheme: c,
-                        title: l10n.backtestSectionMatching,
-                        right: l10n.backtestSectionMatchingRight,
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      _FieldLabel(label: l10n.backtestFieldSlippage, scheme: c),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.backtestHintSlippage,
-                        style: TextStyle(color: c.textDim, fontSize: 11),
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      _TextInput(
-                        key: const Key('backtest-slippage'),
-                        controller: _slippage,
-                        scheme: c,
-                        keyboard: const TextInputType.numberWithOptions(decimal: true),
-                        suffix: 'bps',
-                        inputFormatters: _numericFormatters,
-                        onChanged: (_) => _clearError(),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _FieldLabel(label: l10n.backtestFieldFee, scheme: c),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.backtestHintFee,
-                        style: TextStyle(color: c.textDim, fontSize: 11),
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      _TextInput(
-                        key: const Key('backtest-fee'),
-                        controller: _fee,
-                        scheme: c,
-                        keyboard: const TextInputType.numberWithOptions(decimal: true),
-                        suffix: 'bps',
-                        inputFormatters: _numericFormatters,
-                        onChanged: (_) => _clearError(),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _FieldLabel(label: l10n.backtestFieldFillSource, scheme: c),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.backtestHintFillSource,
-                        style: TextStyle(color: c.textDim, fontSize: 11),
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      _Segmented(
-                        key: const Key('backtest-fill-source'),
-                        scheme: c,
-                        value: _fillSource,
-                        options: <({String key, String label})>[
-                          (key: 'open', label: l10n.backtestFillOpen),
-                          (key: 'close', label: l10n.backtestFillClose),
-                          (key: 'mid', label: l10n.backtestFillMid),
-                        ],
-                        onChanged: (String v) =>
-                            setState(() => _fillSource = v),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _FieldLabel(
-                          label: l10n.backtestFieldPartialData, scheme: c),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.backtestHintPartialData,
-                        style: TextStyle(color: c.textDim, fontSize: 11),
-                      ),
-                      const SizedBox(height: QzSpacing.xs),
-                      _Segmented(
-                        key: const Key('backtest-partial-data'),
-                        scheme: c,
-                        value: _partialData ? 'yes' : 'no',
-                        options: <({String key, String label})>[
-                          (key: 'yes', label: l10n.backtestPartialAllow),
-                          (key: 'no', label: l10n.backtestPartialDisallow),
-                        ],
-                        onChanged: (String v) =>
-                            setState(() => _partialData = v == 'yes'),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _SummaryCard(
-                        scheme: c,
-                        title: l10n.backtestSummaryTitle,
-                        rows: <({String k, String v})>[
-                          (k: l10n.backtestSummaryRange, v: _summaryRangeValue()),
-                          (k: l10n.backtestSummaryCapital, v: _summaryCapitalValue()),
-                          (k: l10n.backtestSummaryMarket, v: _summaryMarketValue(l10n)),
-                          (k: l10n.backtestSummaryMatching, v: _summaryMatchingValue(l10n)),
-                          (
-                            k: l10n.backtestSummaryData,
-                            v: _partialData
-                                ? l10n.backtestSummaryDataAllow
-                                : l10n.backtestSummaryDataStrict,
+                          const SizedBox(height: QzSpacing.md),
+                          _FieldLabel(
+                            label: l10n.backtestFieldRange,
+                            scheme: c,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: QzSpacing.lg),
-                      _ShieldBanner(
-                        scheme: c,
-                        text: l10n.backtestShieldHint,
-                      ),
-                      if (_error != null) ...<Widget>[
-                        const SizedBox(height: QzSpacing.sm),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: c.statusDanger,
-                            fontSize: 12,
+                          const SizedBox(height: QzSpacing.xs),
+                          _RangeChips(
+                            ranges: _ranges,
+                            value: _rangeKey,
+                            l10n: l10n,
+                            scheme: c,
+                            onChanged: (String v) =>
+                                setState(() => _rangeKey = v),
                           ),
-                        ),
-                      ],
+                          if (_rangeKey == 'custom') ...<Widget>[
+                            const SizedBox(height: QzSpacing.md),
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      _FieldLabel(
+                                        label: l10n.commonStart,
+                                        scheme: c,
+                                      ),
+                                      const SizedBox(height: QzSpacing.xs),
+                                      _TextInput(
+                                        key: const Key('backtest-start'),
+                                        controller: _start,
+                                        scheme: c,
+                                        onChanged: (_) => _clearError(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: QzSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      _FieldLabel(
+                                        label: l10n.commonEnd,
+                                        scheme: c,
+                                      ),
+                                      const SizedBox(height: QzSpacing.xs),
+                                      _TextInput(
+                                        key: const Key('backtest-end'),
+                                        controller: _end,
+                                        scheme: c,
+                                        onChanged: (_) => _clearError(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: QzSpacing.xs),
+                          Text(
+                            key: const Key('backtest-range-echo'),
+                            _rangeEchoText(l10n),
+                            style: TextStyle(
+                              color: c.textDim,
+                              fontSize: 11,
+                              fontFeatures: const <FontFeature>[
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _FieldLabel(
+                            label: l10n.backtestFieldCapital,
+                            scheme: c,
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _TextInput(
+                            key: const Key('backtest-capital'),
+                            controller: _capital,
+                            scheme: c,
+                            keyboard: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            suffix: 'USDT',
+                            inputFormatters: _numericFormatters,
+                            onChanged: (_) => _clearError(),
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _CapitalPresets(
+                            presets: _capitalPresets,
+                            scheme: c,
+                            onPick: (int v) {
+                              _capital.text = v.toString();
+                              _clearError();
+                            },
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          Text(
+                            l10n.backtestCapitalPresetHint,
+                            style: TextStyle(color: c.textDim, fontSize: 11),
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _FieldLabel(
+                            label: l10n.backtestFieldMarket,
+                            scheme: c,
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _Segmented(
+                            key: const Key('backtest-market'),
+                            scheme: c,
+                            value: _futures ? 'futures' : 'spot',
+                            options: <({String key, String label})>[
+                              (key: 'spot', label: l10n.backtestMarketSpot),
+                              (
+                                key: 'futures',
+                                label: l10n.backtestMarketFutures,
+                              ),
+                            ],
+                            onChanged: (String v) =>
+                                setState(() => _futures = v == 'futures'),
+                          ),
+                          if (_futures) ...<Widget>[
+                            const SizedBox(height: QzSpacing.md),
+                            _LeveragePicker(
+                              leverages: _leverages,
+                              value: _leverage,
+                              scheme: c,
+                              label: l10n.backtestFieldLeverage,
+                              hint: l10n.backtestLeverageHint,
+                              onChanged: (String v) =>
+                                  setState(() => _leverage = v),
+                            ),
+                            if (_highLeverages.contains(_leverage)) ...<Widget>[
+                              const SizedBox(height: QzSpacing.xs),
+                              _WarnBanner(
+                                key: const Key('backtest-leverage-warn'),
+                                scheme: c,
+                                text: l10n.backtestLeverageWarn,
+                              ),
+                            ],
+                          ],
+                          const SizedBox(height: QzSpacing.md),
+                          _SectionTitle(
+                            scheme: c,
+                            title: l10n.backtestSectionMatching,
+                            right: l10n.backtestSectionMatchingRight,
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _FieldLabel(
+                            label: l10n.backtestFieldSlippage,
+                            scheme: c,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.backtestHintSlippage,
+                            style: TextStyle(color: c.textDim, fontSize: 11),
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _TextInput(
+                            key: const Key('backtest-slippage'),
+                            controller: _slippage,
+                            scheme: c,
+                            keyboard: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            suffix: 'bps',
+                            inputFormatters: _numericFormatters,
+                            onChanged: (_) => _clearError(),
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _FieldLabel(label: l10n.backtestFieldFee, scheme: c),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.backtestHintFee,
+                            style: TextStyle(color: c.textDim, fontSize: 11),
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _TextInput(
+                            key: const Key('backtest-fee'),
+                            controller: _fee,
+                            scheme: c,
+                            keyboard: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            suffix: 'bps',
+                            inputFormatters: _numericFormatters,
+                            onChanged: (_) => _clearError(),
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _FieldLabel(
+                            label: l10n.backtestFieldFillSource,
+                            scheme: c,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.backtestHintFillSource,
+                            style: TextStyle(color: c.textDim, fontSize: 11),
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _Segmented(
+                            key: const Key('backtest-fill-source'),
+                            scheme: c,
+                            value: _fillSource,
+                            options: <({String key, String label})>[
+                              (key: 'open', label: l10n.backtestFillOpen),
+                              (key: 'close', label: l10n.backtestFillClose),
+                              (key: 'mid', label: l10n.backtestFillMid),
+                            ],
+                            onChanged: (String v) =>
+                                setState(() => _fillSource = v),
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _FieldLabel(
+                            label: l10n.backtestFieldPartialData,
+                            scheme: c,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.backtestHintPartialData,
+                            style: TextStyle(color: c.textDim, fontSize: 11),
+                          ),
+                          const SizedBox(height: QzSpacing.xs),
+                          _Segmented(
+                            key: const Key('backtest-partial-data'),
+                            scheme: c,
+                            value: _partialData ? 'yes' : 'no',
+                            options: <({String key, String label})>[
+                              (key: 'yes', label: l10n.backtestPartialAllow),
+                              (key: 'no', label: l10n.backtestPartialDisallow),
+                            ],
+                            onChanged: (String v) =>
+                                setState(() => _partialData = v == 'yes'),
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _SummaryCard(
+                            scheme: c,
+                            title: l10n.backtestSummaryTitle,
+                            rows: <({String k, String v})>[
+                              (
+                                k: l10n.backtestSummaryRange,
+                                v: _summaryRangeValue(),
+                              ),
+                              (
+                                k: l10n.backtestSummaryCapital,
+                                v: _summaryCapitalValue(),
+                              ),
+                              (
+                                k: l10n.backtestSummaryMarket,
+                                v: _summaryMarketValue(l10n),
+                              ),
+                              (
+                                k: l10n.backtestSummaryMatching,
+                                v: _summaryMatchingValue(l10n),
+                              ),
+                              (
+                                k: l10n.backtestSummaryData,
+                                v: _partialData
+                                    ? l10n.backtestSummaryDataAllow
+                                    : l10n.backtestSummaryDataStrict,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: QzSpacing.lg),
+                          _ShieldBanner(
+                            scheme: c,
+                            text: l10n.backtestShieldHint,
+                          ),
+                          if (_error != null) ...<Widget>[
+                            const SizedBox(height: QzSpacing.sm),
+                            Text(
+                              _error!,
+                              style: TextStyle(
+                                color: c.statusDanger,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -630,9 +683,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                   // Footer：贴底固定，键盘弹起时 padding 顶起避免被遮挡。
                   Container(
                     decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: c.border),
-                      ),
+                      border: Border(top: BorderSide(color: c.border)),
                     ),
                     padding: EdgeInsets.fromLTRB(
                       QzSpacing.lg,
@@ -758,11 +809,7 @@ class _RecapStrip extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: TextStyle(
-                color: scheme.accent,
-                fontSize: 12,
-                height: 1.5,
-              ),
+              style: TextStyle(color: scheme.accent, fontSize: 12, height: 1.5),
             ),
           ),
         ],
@@ -861,8 +908,9 @@ class _Segmented extends StatelessWidget {
                     o.label,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight:
-                          o.key == value ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: o.key == value
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                       color: o.key == value ? scheme.accent : scheme.textMid,
                     ),
                   ),
@@ -924,9 +972,7 @@ class _LeveragePicker extends StatelessWidget {
                 color: scheme.accent,
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                fontFeatures: const <FontFeature>[
-                  FontFeature.tabularFigures(),
-                ],
+                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
               ),
             ),
           ],
@@ -1031,10 +1077,7 @@ class _SectionTitle extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        Text(
-          right,
-          style: TextStyle(color: scheme.textDim, fontSize: 11),
-        ),
+        Text(right, style: TextStyle(color: scheme.textDim, fontSize: 11)),
       ],
     );
   }
@@ -1116,8 +1159,7 @@ class _ShieldBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: scheme.accentSoft,
         borderRadius: BorderRadius.circular(10),
@@ -1149,10 +1191,7 @@ class _FieldLabel extends StatelessWidget {
   final QzColorScheme scheme;
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: TextStyle(color: scheme.textMid, fontSize: 12),
-    );
+    return Text(label, style: TextStyle(color: scheme.textMid, fontSize: 12));
   }
 }
 
