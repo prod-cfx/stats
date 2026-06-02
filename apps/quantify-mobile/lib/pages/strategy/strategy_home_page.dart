@@ -308,6 +308,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     final List<StrategyMarketItem> listItems = _computeListItems(favorites);
     return Scaffold(
       appBar: QzTopBar(
+        compact: true,
         title: l10n.strategyHomeTitle,
         subtitle: l10n.strategyHomeSubtitle,
         actions: <Widget>[
@@ -319,6 +320,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
           IconButton(
             key: const Key('strategy-filter-btn'),
             tooltip: l10n.strategyHomeFilterButton,
+            // 设计稿操作按钮统一 36×36 圆形、图标 20。
+            iconSize: 20,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            padding: EdgeInsets.zero,
             icon: const Icon(Icons.filter_alt),
             onPressed: _openFilterSheet,
           ),
@@ -449,18 +454,23 @@ class _SearchButton extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final Widget icon = Icon(
       Icons.search,
-      color: active ? c.accent : null,
+      size: 20,
+      color: active ? c.accent : c.textMid,
     );
     return IconButton(
       key: const Key('strategy-search-btn'),
       tooltip: tooltip,
       onPressed: onPressed,
+      // 设计稿 m-screens-2:566 操作按钮 36×36 圆形。
+      iconSize: 20,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
       icon: active
           ? Stack(
               clipBehavior: Clip.none,
               children: <Widget>[
                 Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: c.accentSoft,
                     shape: BoxShape.circle,
@@ -468,14 +478,15 @@ class _SearchButton extends StatelessWidget {
                   child: icon,
                 ),
                 Positioned(
-                  right: -1,
-                  top: -1,
+                  // 设计稿 m-screens-2:584 红点 7×7，定位 top:6 right:6，accent 紫。
+                  right: 6,
+                  top: 6,
                   child: Container(
                     key: const Key('strategy-search-btn-dot'),
-                    width: 8,
-                    height: 8,
+                    width: 7,
+                    height: 7,
                     decoration: BoxDecoration(
-                      color: c.statusDanger,
+                      color: c.accent,
                       shape: BoxShape.circle,
                     ),
                   ),

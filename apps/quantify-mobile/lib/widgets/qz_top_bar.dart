@@ -26,6 +26,7 @@ class QzTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions = const <Widget>[],
     this.onBack,
     this.transparent = false,
+    this.compact = false,
   }) : assert(
           onBack == null || leading == null,
           'QzTopBar: provide either onBack or leading, not both',
@@ -39,6 +40,10 @@ class QzTopBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget> actions;
   final VoidCallback? onBack;
   final bool transparent;
+
+  /// 紧凑变体（设计稿 `MTopBar compact`：标题 14 / 副标题 11 / 间距 1）。
+  /// 策略广场等二级页使用。
+  final bool compact;
 
   @override
   Size get preferredSize => const Size.fromHeight(_toolbarHeight);
@@ -95,20 +100,20 @@ class QzTopBar extends StatelessWidget implements PreferredSizeWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: c.text,
-                            fontSize: 17,
+                            fontSize: compact ? 14 : 17,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.2,
                           ),
                         ),
                         if (subtitle != null) ...<Widget>[
-                          const SizedBox(height: 2),
+                          SizedBox(height: compact ? 1 : 2),
                           Text(
                             subtitle!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: c.textDim,
-                              fontSize: 12,
+                              fontSize: compact ? 11 : 12,
                             ),
                           ),
                         ],
