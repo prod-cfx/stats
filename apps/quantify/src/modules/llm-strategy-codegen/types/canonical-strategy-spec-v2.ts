@@ -274,11 +274,25 @@ export interface CanonicalEventListenerProgram {
   expirationPolicy: SemanticOrchestrationProgramExpirationPolicy
 }
 
+export type CanonicalExecutionProgramKind = 'twap' | 'dca' | 'martingale' | 'rebalance' | 'iceberg'
+
+export interface CanonicalExecutionProgram {
+  id: string
+  sourcePath?: string
+  sourceAtomKey?: string
+  programKind: CanonicalExecutionProgramKind
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'static'
+  params: Record<string, unknown>
+}
+
 export type CanonicalOrchestrationProgram =
   | CanonicalFixedGridGatedProgram
   | CanonicalDynamicGridProgram
   | CanonicalAdaptiveVolatilityGridProgram
   | CanonicalEventListenerProgram
+  | CanonicalExecutionProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate
 export interface CanonicalSymbolScope {

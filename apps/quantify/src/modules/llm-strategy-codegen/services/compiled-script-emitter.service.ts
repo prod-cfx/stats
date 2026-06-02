@@ -75,6 +75,28 @@ export const FIXED_STRATEGY_WRAPPER = [
   'export default strategy',
 ].join('\n')
 
+export function buildStrategyWrapperWithScopeArgs(
+  orchestrationScopesArg: 'undefined' | 'ORCHESTRATION_SCOPES',
+  orchestrationLegScopesArg: 'undefined' | 'ORCHESTRATION_LEG_SCOPES',
+): string {
+  return FIXED_STRATEGY_WRAPPER.replace(
+    [
+      '      TOPOLOGY.decisionOrder,',
+      '      undefined,',
+      '      portfolioRiskState,',
+      '    )',
+    ].join('\n'),
+    [
+      '      TOPOLOGY.decisionOrder,',
+      '      undefined,',
+      '      portfolioRiskState,',
+      `      ${orchestrationScopesArg},`,
+      `      ${orchestrationLegScopesArg},`,
+      '    )',
+    ].join('\n'),
+  )
+}
+
 export interface EmitCompiledScriptInput {
   ast: StrategyAstV1
   executionEnvelope: CompiledScriptExecutionEnvelope
@@ -123,7 +145,7 @@ export class CompiledScriptEmitterService {
       ...(orchestrationLegScopesLine ? [orchestrationLegScopesLine] : []),
       this.emitConst('TOPOLOGY', projection.topology),
       '',
-      FIXED_STRATEGY_WRAPPER,
+      this.buildStrategyWrapper(projection),
       '',
     ].join('\n')
   }
@@ -161,6 +183,16 @@ export class CompiledScriptEmitterService {
         : {}),
       topology: input.ast.topology,
     }
+  }
+
+  private buildStrategyWrapper(projection: CompiledScriptProjection): string {
+    const hasScopes = (projection.orchestrationScopes ?? []).length > 0
+    const hasLegScopes = (projection.orchestrationLegScopes ?? []).length > 0
+    if (!hasScopes && !hasLegScopes) return FIXED_STRATEGY_WRAPPER
+    return buildStrategyWrapperWithScopeArgs(
+      hasScopes ? 'ORCHESTRATION_SCOPES' : 'undefined',
+      hasLegScopes ? 'ORCHESTRATION_LEG_SCOPES' : 'undefined',
+    )
   }
 
   private buildCompiledManifest(

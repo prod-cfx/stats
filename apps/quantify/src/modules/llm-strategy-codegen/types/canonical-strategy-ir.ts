@@ -273,6 +273,12 @@ export interface ActionDef {
     | 'REDUCE_LONG' | 'REDUCE_SHORT'
     | 'ADD_LONG' | 'ADD_SHORT'
   quantity: QuantityDef
+  order?: {
+    orderType: 'market' | 'limit'
+    limitPrice?: number
+    timeInForce?: 'gtc' | 'ioc' | 'fok'
+    triggerConditionRef?: string
+  }
 }
 
 interface OrderProgramBaseDef {
@@ -449,11 +455,24 @@ export interface IrEventListenerProgram {
   expirationPolicy: SemanticOrchestrationProgramExpirationPolicy
 }
 
+export type IrExecutionProgramKind = 'twap' | 'dca' | 'martingale' | 'rebalance' | 'iceberg'
+
+export interface IrExecutionProgram {
+  id: string
+  sourcePath?: string
+  programKind: IrExecutionProgramKind
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'static'
+  params: Record<string, unknown>
+}
+
 export type IrOrchestrationProgram =
   | IrFixedGridGatedProgram
   | IrDynamicGridProgram
   | IrAdaptiveVolatilityGridProgram
   | IrEventListenerProgram
+  | IrExecutionProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate IR
 export interface IrSymbolScope {

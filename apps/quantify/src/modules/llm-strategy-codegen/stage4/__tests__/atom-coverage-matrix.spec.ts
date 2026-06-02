@@ -93,6 +93,23 @@ const pr2MarketDataPredicateKeys = [
   'event.externalSignal',
 ] as const
 
+const runtimeVerifiedPr2FollowUpAtomKeys = [
+  'action.reduce_position',
+  'action.conditional_order',
+  'action.limit_order',
+  'program.twap',
+  'program.dca',
+  'program.martingale',
+  'program.rebalance',
+  'program.iceberg',
+  'orchestration.multi_leg',
+  'predicate.foundation.indicator_boundary',
+  'risk.foundation.atr_stop',
+  'position.foundation.fixed_notional',
+] as const
+
+const unverifiedPr2FollowUpAtomKeys = [] as const
+
 describe('Stage 4 atom coverage matrix', () => {
   const pr3Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr3-risk-position')
   const pr4Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr4-action-program')
@@ -132,6 +149,34 @@ describe('Stage 4 atom coverage matrix', () => {
       STAGE4_DEPLOY_READY_STATUSES.includes(row.status)
       && (!row.reachesBacktest || !row.reachesDeployPayload),
     )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('marks only runtime-verified PR2 follow-up atoms deploy-ready', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+    const invalidRows = runtimeVerifiedPr2FollowUpAtomKeys.flatMap((key) => {
+      const row = rowsByKey.get(key)
+      if (!row) return [{ key, issue: 'missing_row' }]
+      if (!isStage4DeployReadyAtom(row)) return [{ key, issue: 'not_deploy_ready' }]
+      if (row.unsupportedReason !== null) return [{ key, issue: 'still_has_blocker' }]
+      if (!row.reachesBacktest || !row.reachesDeployPayload) return [{ key, issue: 'missing_runtime_closure' }]
+      return []
+    })
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('keeps unverified PR2 follow-up atoms out of deploy-ready until real backtest and live payload close', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+    const invalidRows = unverifiedPr2FollowUpAtomKeys.flatMap((key) => {
+      const row = rowsByKey.get(key)
+      if (!row) return [{ key, issue: 'missing_row' }]
+      if (isStage4DeployReadyAtom(row)) return [{ key, issue: 'unexpected_deploy_ready' }]
+      if (row.unsupportedReason === null) return [{ key, issue: 'missing_blocker' }]
+      if (row.reachesBacktest || row.reachesDeployPayload) return [{ key, issue: 'claims_partial_runtime_closure' }]
+      return []
+    })
 
     expect(invalidRows).toEqual([])
   })
@@ -306,8 +351,8 @@ describe('Stage 4 atom coverage matrix', () => {
 
     expect(dcaProgram?.family).toBe('program')
     expect(dcaProgram?.rulePath).toBe('rules[].effects.programs')
-    expect(dcaProgram?.unsupportedReason).toBe('program_dca_lifecycle_deploy_binding_missing')
-    expect(isStage4DeployReadyAtom(dcaProgram!)).toBe(false)
+    expect(dcaProgram?.unsupportedReason).toBe(null)
+    expect(isStage4DeployReadyAtom(dcaProgram!)).toBe(true)
     expect(dcaPosition?.family).toBe('position')
     expect(dcaPosition?.rulePath).toBe('rules[].effects.positions')
   })

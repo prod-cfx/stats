@@ -104,11 +104,23 @@ export interface CompiledEventListenerProgram {
   expirationPolicy: 'drop' | 'escalate'
 }
 
+export type CompiledExecutionProgramKind = 'twap' | 'dca' | 'martingale' | 'rebalance' | 'iceberg'
+
+export interface CompiledExecutionProgram {
+  id: string
+  programKind: CompiledExecutionProgramKind
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'static'
+  params: Record<string, unknown>
+}
+
 export type CompiledOrchestrationProgram =
   | CompiledFixedGridGatedProgram
   | CompiledDynamicGridProgram
   | CompiledAdaptiveVolatilityGridProgram
   | CompiledEventListenerProgram
+  | CompiledExecutionProgram
 
 export function isFixedGridGatedProgram(
   program: CompiledOrchestrationProgram,
@@ -132,6 +144,16 @@ export function isEventListenerProgram(
   program: CompiledOrchestrationProgram,
 ): program is CompiledEventListenerProgram {
   return program.programKind === 'event_listener'
+}
+
+export function isExecutionProgram(
+  program: CompiledOrchestrationProgram,
+): program is CompiledExecutionProgram {
+  return program.programKind === 'twap'
+    || program.programKind === 'dca'
+    || program.programKind === 'martingale'
+    || program.programKind === 'rebalance'
+    || program.programKind === 'iceberg'
 }
 
 /**

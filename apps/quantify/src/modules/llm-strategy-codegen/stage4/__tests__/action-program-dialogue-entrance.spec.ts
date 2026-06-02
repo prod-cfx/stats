@@ -70,10 +70,11 @@ describe('Stage 4 PR4 action and program dialogue entrance', () => {
     ['program.martingale', '亏损后按 2 倍 martingale 加码，最多 3 层。'],
     ['program.rebalance', 'BTC 和 ETH 每天再平衡到 50% 50%。'],
     ['program.iceberg', '用 iceberg 订单把 10 BTC 拆成每次 0.5 BTC 卖出。'],
-  ])('keeps unsupported %s program gap out of typed roles on attempt-1', (expectedKey, utterance) => {
+  ])('attempt-1 routes %s utterance into rules[].effects.programs only', (expectedKey, utterance) => {
     const patch = dispatcher.dispatch(utterance)
 
-    expectNoRolePollution(patch, expectedKey)
+    expectTypedRules(patch)
+    expectOnlyRole(patch, expectedKey, 'programs')
   })
 
   it('does not duplicate entry or exit rules when action and position appear together', () => {

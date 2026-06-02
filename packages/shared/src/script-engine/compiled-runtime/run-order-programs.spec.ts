@@ -411,6 +411,34 @@ describe('runOrderPrograms — program lifecycle substrate (Phase 5 S0a)', () =>
   })
 })
 
+describe('runOrderPrograms — execution program atoms', () => {
+  const genericKinds = ['twap', 'dca', 'martingale', 'rebalance', 'iceberg'] as const
+
+  it.each(genericKinds)('%s active=true writes lifecycle state and working order payload', (programKind) => {
+    const program = {
+      id: `program_${programKind}`,
+      programKind,
+      activeWhenExprId: 'expr_gate_regime',
+      onDeactivate: 'cancel',
+      rebuildPolicy: 'static',
+      params: { totalSize: 1000, sliceCount: 10, sourcePath: `rules[0].effects.programs.${programKind}` },
+    }
+
+    const state = runOrderPrograms(ctx, [], { expr_gate_regime: true }, guard, [], undefined, [program] as never)
+
+    expect(state.activeProgramIds).toEqual([program.id])
+    expect(state.cancelledProgramIds).toEqual([])
+    expect(state.workingOrders).toEqual([
+      expect.objectContaining({
+        id: program.id,
+        sourceRef: `orchestration:program.${programKind}`,
+        payload: expect.objectContaining({ programKind, params: program.params }),
+      }),
+    ])
+    expect(state.programLifecycleStateNext[program.id]).toEqual({ kind: programKind, status: 'active' })
+  })
+})
+
 // ============================================================================
 // Phase 5 S5（#984）：dynamic_grid 7 路径 evaluator + 锁公式 + 深 freeze + 确定性 now
 // ============================================================================

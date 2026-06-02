@@ -5,6 +5,7 @@ import type {
   CompiledAdaptiveVolatilityGridProgram,
   CompiledDynamicGridProgram,
   CompiledEventListenerProgram,
+  CompiledExecutionProgram,
   CompiledFixedGridGatedProgram,
   CompiledOrchestrationProgram,
 } from './compiled-orchestration-program'
@@ -12,6 +13,7 @@ import {
   EVENT_LISTENER_DEDUP_BUFFER_CAPACITY,
   isValidAdaptiveVolatilityGrid,
   isValidEventListener,
+  isExecutionProgram,
 } from './compiled-orchestration-program'
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
@@ -128,6 +130,19 @@ export function runOrderPrograms(
         })
         continue
       }
+      if (isExecutionProgram(program)) {
+        runExecutionProgram({
+          program,
+          exprValues,
+          guardState,
+          orchWorkingOrders,
+          orchActiveIds,
+          orchCancelledIds,
+          orchCloseIds,
+          programLifecycleStateNext,
+        })
+        continue
+      }
     }
   }
 
@@ -157,6 +172,95 @@ export function runOrderPrograms(
     closeProgramIds: Object.freeze([...orchCloseIds]),
     programLifecycleStateNext: Object.freeze(programLifecycleStateNext),
   })
+}
+
+interface ExecutionProgramRunArgs {
+  program: CompiledExecutionProgram
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>
+  guardState: Readonly<CompiledGuardState>
+  orchWorkingOrders: Array<{
+    id: string
+    sourceRef: string
+    payload?: Record<string, unknown>
+    levels?: readonly number[]
+  }>
+  orchActiveIds: string[]
+  orchCancelledIds: string[]
+  orchCloseIds: string[]
+  programLifecycleStateNext: Record<string, ProgramLifecycleState>
+}
+
+function runExecutionProgram(args: ExecutionProgramRunArgs): void {
+  const {
+    program,
+    exprValues,
+    guardState,
+    orchWorkingOrders,
+    orchActiveIds,
+    orchCancelledIds,
+    orchCloseIds,
+    programLifecycleStateNext,
+  } = args
+  if (guardState.cancelOrderPrograms) {
+    orchCancelledIds.push(program.id)
+    programLifecycleStateNext[program.id] = { kind: program.programKind, status: 'cancelled' }
+    return
+  }
+  if (!isValidExecutionProgram(program)) {
+    orchCancelledIds.push(program.id)
+    programLifecycleStateNext[program.id] = { kind: program.programKind, status: 'cancelled' }
+    return
+  }
+
+  const isActive = exprValues[program.activeWhenExprId] === true
+  if (isActive) {
+    orchActiveIds.push(program.id)
+    orchWorkingOrders.push({
+      id: program.id,
+      sourceRef: `orchestration:program.${program.programKind}`,
+      payload: {
+        programKind: program.programKind,
+        activeWhen: program.activeWhenExprId,
+        params: freezeRecord(program.params),
+      },
+    })
+    programLifecycleStateNext[program.id] = { kind: program.programKind, status: 'active' }
+    return
+  }
+
+  switch (program.onDeactivate) {
+    case 'cancel':
+      orchCancelledIds.push(program.id)
+      programLifecycleStateNext[program.id] = { kind: program.programKind, status: 'cancelled' }
+      break
+    case 'keep':
+      orchWorkingOrders.push({
+        id: program.id,
+        sourceRef: `orchestration:program.${program.programKind}`,
+        payload: {
+          programKind: program.programKind,
+          activeWhen: program.activeWhenExprId,
+          params: freezeRecord(program.params),
+        },
+      })
+      programLifecycleStateNext[program.id] = { kind: program.programKind, status: 'inactive' }
+      break
+    case 'close':
+      orchCloseIds.push(program.id)
+      programLifecycleStateNext[program.id] = { kind: program.programKind, status: 'closed' }
+      break
+  }
+}
+
+function isValidExecutionProgram(program: CompiledExecutionProgram): boolean {
+  if (typeof program.activeWhenExprId !== 'string' || program.activeWhenExprId.length === 0) return false
+  if (program.rebuildPolicy !== 'static') return false
+  if (program.onDeactivate !== 'cancel' && program.onDeactivate !== 'keep' && program.onDeactivate !== 'close') return false
+  return program.params !== null && typeof program.params === 'object' && !Array.isArray(program.params)
+}
+
+function freezeRecord(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.freeze({ ...input })
 }
 
 // ----------- fixed_grid_gated 分支（S4，逐字段保持） -----------

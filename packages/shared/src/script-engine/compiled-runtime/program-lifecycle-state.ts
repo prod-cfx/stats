@@ -21,6 +21,10 @@
 export type ProgramLifecycleState =
   | { readonly kind: 'fixed_grid_gated' }
   | {
+      readonly kind: 'twap' | 'dca' | 'martingale' | 'rebalance' | 'iceberg'
+      readonly status: 'active' | 'inactive' | 'cancelled' | 'closed'
+    }
+  | {
       readonly kind: 'dynamic_grid'
       readonly lastBuildAnchor: number
       readonly lastBuildAt: number

@@ -2,6 +2,12 @@ import type { StrategyDecisionV1 } from '@ai/shared'
 
 type RuntimeSignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
 type RuntimeSignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT'
+type RuntimeSignalOrderIntent = {
+  orderType: 'market' | 'limit'
+  limitPrice?: number
+  timeInForce?: 'gtc' | 'ioc' | 'fok'
+  triggerConditionRef?: string
+}
 
 export type RuntimeSignalIntentResult =
   | {
@@ -16,6 +22,7 @@ export type RuntimeSignalIntentResult =
         confidence?: number
         stopLoss?: number
         takeProfit?: number
+        order?: RuntimeSignalOrderIntent
       }
     }
   | { kind: 'noop'; reason: string }
@@ -71,6 +78,7 @@ export class RuntimeSignalIntentAdapter {
           ...(decision.size.mode === 'QUOTE' ? { positionSizeQuote: decision.size.value } : {}),
           ...(decision.size.mode === 'RATIO' ? { positionSizeRatio: decision.size.value } : {}),
           ...this.buildOptionalSignalFields(decision),
+          ...this.buildOrderSignalField(decision),
         },
       }
     }
@@ -87,6 +95,7 @@ export class RuntimeSignalIntentAdapter {
         entryPrice: ctx.referencePrice,
         reasoning: reason,
         ...this.buildOptionalSignalFields(decision),
+        ...this.buildOrderSignalField(decision),
       },
     }
   }
@@ -133,6 +142,7 @@ export class RuntimeSignalIntentAdapter {
         reasoning: reason,
         positionSizeQuote: Math.abs(deltaQty) * ctx.referencePrice,
         ...this.buildOptionalSignalFields(decision),
+        ...this.buildOrderSignalField(decision),
       },
     }
   }
@@ -176,6 +186,30 @@ export class RuntimeSignalIntentAdapter {
     }
 
     return optionalFields
+  }
+
+  private buildOrderSignalField(decision: StrategyDecisionV1): { order?: RuntimeSignalOrderIntent } {
+    const raw = decision.meta?.order
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+    const order = raw as Record<string, unknown>
+    const orderType = order.orderType === 'limit' ? 'limit' : order.orderType === 'market' ? 'market' : null
+    if (!orderType) return {}
+    const limitPrice = this.isFinitePositiveNumber(order.limitPrice) ? order.limitPrice : undefined
+    const timeInForce = order.timeInForce === 'gtc' || order.timeInForce === 'ioc' || order.timeInForce === 'fok'
+      ? order.timeInForce
+      : undefined
+    const triggerConditionRef = typeof order.triggerConditionRef === 'string' && order.triggerConditionRef.trim()
+      ? order.triggerConditionRef.trim()
+      : undefined
+
+    return {
+      order: {
+        orderType,
+        ...(limitPrice !== undefined ? { limitPrice } : {}),
+        ...(timeInForce ? { timeInForce } : {}),
+        ...(triggerConditionRef ? { triggerConditionRef } : {}),
+      },
+    }
   }
 
   private isFinitePositiveNumber(value: unknown): value is number {

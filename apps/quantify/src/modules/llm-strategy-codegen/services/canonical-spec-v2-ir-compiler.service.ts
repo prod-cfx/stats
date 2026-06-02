@@ -1290,6 +1290,24 @@ export class CanonicalSpecV2IrCompilerService {
         })
         continue
       }
+      if (
+        program.programKind === 'twap'
+        || program.programKind === 'dca'
+        || program.programKind === 'martingale'
+        || program.programKind === 'rebalance'
+        || program.programKind === 'iceberg'
+      ) {
+        result.push({
+          id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
+          programKind: program.programKind,
+          activeWhenExprId: exprId,
+          onDeactivate: program.onDeactivate,
+          rebuildPolicy: 'static',
+          params: { ...program.params },
+        })
+        continue
+      }
     }
     return result
   }
@@ -1762,6 +1780,57 @@ export class CanonicalSpecV2IrCompilerService {
           atom.key === 'indicator.above' ? 'GTE' : 'LTE',
           [leftRef, rightRef],
         )
+      }
+
+      case 'price.detect.indicator_boundary': {
+        const indicator = this.readNestedParam(atom.params, 'indicator', 'name') ?? atom.params?.indicator
+        if (typeof indicator !== 'string' || indicator.toLowerCase() !== 'bollinger') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:indicator`)
+        }
+        const boundaryRole = this.readStringParam(atom.params?.boundaryRole)
+          ?? this.readStringParam(atom.params?.boundary)
+        const confirmationMode = this.readStringParam(atom.params?.confirmationMode)
+        const period = this.readOptionalNumber(this.readNestedParam(atom.params, 'indicator', 'period'))
+          ?? this.readOptionalNumber(atom.params?.period)
+        const stdDev = this.readOptionalNumber(this.readNestedParam(atom.params, 'indicator', 'stdDev'))
+          ?? this.readOptionalNumber(atom.params?.stdDev)
+          ?? this.readOptionalNumber(atom.params?.multiplier)
+        const bandParams = {
+          ...(period !== null ? { period } : {}),
+          ...(stdDev !== null ? { stdDev } : {}),
+          ...(confirmationMode ? { confirmationMode } : {}),
+        }
+        context.runtimeRequirements.helpers.add('bollinger')
+        if (boundaryRole === 'upper' || boundaryRole === 'lower') {
+          const direction: BandTouchDirection = boundaryRole
+          const bandRef = direction === 'upper'
+            ? this.ensureBollingerSeries(context, 'UPPER_BAND', bandParams)
+            : this.ensureBollingerSeries(context, 'LOWER_BAND', bandParams)
+          const rawMode = readBandTouchConfirmationMode(bandParams)
+          const mode = rawMode ?? (atom.op === undefined ? 'touch' : undefined)
+          return compileBandTouchPredicate({
+            direction,
+            confirmationMode: mode,
+            bandRef,
+            priceRefs: {
+              close: closeRef,
+              high: mode === 'touch' && direction === 'upper' ? this.ensurePriceSeries(context, 'high') : closeRef,
+              low: mode === 'touch' && direction === 'lower' ? this.ensurePriceSeries(context, 'low') : closeRef,
+            },
+            defaultOp: atom.op,
+            predicateMap: context.predicateMap,
+            seed: `${seed}_${atom.key.replace(/\./g, '_')}_${boundaryRole}`,
+            upsertPredicate: (predicateMap, baseId, kind, args, params) =>
+              this.upsertPredicate(predicateMap, baseId, kind, args, params),
+          })
+        }
+        if (boundaryRole === 'middle') {
+          const midRef = this.ensureBollingerSeries(context, 'MID_BAND', bandParams)
+          const over = this.upsertPredicate(context.predicateMap, `${seed}_indicator_boundary_middle_over`, 'CROSS_OVER', [closeRef, midRef])
+          const under = this.upsertPredicate(context.predicateMap, `${seed}_indicator_boundary_middle_under`, 'CROSS_UNDER', [closeRef, midRef])
+          return this.upsertPredicate(context.predicateMap, `${seed}_indicator_boundary_middle`, 'OR', [over, under])
+        }
+        throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:boundaryRole`)
       }
 
       case 'volume.relative_average': {
@@ -4317,7 +4386,7 @@ export class CanonicalSpecV2IrCompilerService {
           actions.push(...emitted)
           continue
         }
-        if (atomKey.startsWith('action.')) {
+        if (atomKey.startsWith('action.') && atomKey !== 'action.limit_order' && atomKey !== 'action.conditional_order') {
           throw new Error(
             `[#1313 PR6] action atomKey '${atomKey}' did not resolve to a pr3e-action shape `
             + `(entry=${entry ? 'present' : 'missing'}, capabilityStatus=${emit?.capabilityStatus ?? 'undefined'}). `
@@ -4334,6 +4403,7 @@ export class CanonicalSpecV2IrCompilerService {
           actions.push({
             kind: action.type,
             quantity: this.resolveActionQuantity(action, spec.sizing, fallbackPositionPct),
+            ...this.buildActionOrderMetadata(action, rule),
           })
           break
 
@@ -4342,6 +4412,7 @@ export class CanonicalSpecV2IrCompilerService {
           actions.push({
             kind: action.type,
             quantity: { mode: 'position_pct', value: 100 },
+            ...this.buildActionOrderMetadata(action, rule),
           })
           break
 
@@ -4352,6 +4423,7 @@ export class CanonicalSpecV2IrCompilerService {
             quantity: action.sizing
               ? this.resolveReduceActionQuantity(action, spec.sizing, fallbackPositionPct)
               : { mode: 'position_pct', value: 50 },
+            ...this.buildActionOrderMetadata(action, rule),
           })
           break
 
@@ -4368,6 +4440,38 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return actions
+  }
+
+  private buildActionOrderMetadata(
+    action: CanonicalRuleAction,
+    rule: CanonicalRuleV2,
+  ): Pick<ActionDef, 'order'> {
+    const limitPrice = this.readOptionalNumber(action.params?.limitPrice)
+    const rawTimeInForce = action.params?.timeInForce
+    const timeInForce = rawTimeInForce === 'ioc' || rawTimeInForce === 'fok' ? rawTimeInForce : 'gtc'
+    if (action.atomKey === 'action.limit_order') {
+      if (limitPrice === null) {
+        throw new Error(`codegen.canonical_spec_v2_action_limit_order_missing_limit_price:${rule.id}`)
+      }
+      return {
+        order: {
+          orderType: 'limit',
+          limitPrice,
+          timeInForce,
+        },
+      }
+    }
+    if (action.atomKey === 'action.conditional_order') {
+      return {
+        order: {
+          orderType: limitPrice !== null ? 'limit' : 'market',
+          ...(limitPrice !== null ? { limitPrice } : {}),
+          ...(limitPrice !== null ? { timeInForce } : {}),
+          triggerConditionRef: rule.metadata?.sourcePath ? `${rule.metadata.sourcePath}.condition` : rule.id,
+        },
+      }
+    }
+    return {}
   }
 
   /**

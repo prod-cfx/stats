@@ -76,6 +76,12 @@ interface DecisionProgramNode {
       mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
       value: number
     }
+    order?: {
+      orderType: 'market' | 'limit'
+      limitPrice?: number
+      timeInForce?: 'gtc' | 'ioc' | 'fok'
+      triggerConditionRef?: string
+    }
   }>
 }
 
@@ -1091,6 +1097,7 @@ function buildDecision(
         value: deltaQty,
       },
       reason: `compiled.${programId}`,
+      ...buildDecisionMeta(action),
     }
   }
 
@@ -1101,7 +1108,12 @@ function buildDecision(
       value: normalizeSizeValue(action.quantity.mode, action.quantity.value),
     },
     reason: `compiled.${programId}`,
+    ...buildDecisionMeta(action),
   }
+}
+
+function buildDecisionMeta(action: DecisionProgramNode['actions'][number]): Pick<StrategyDecisionV1, 'meta'> {
+  return action.order ? { meta: { order: { ...action.order } } } : {}
 }
 
 function resolveLifecycleAction(

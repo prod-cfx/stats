@@ -1730,7 +1730,16 @@ export class GenericSeedDispatcher {
 
   private hasProgramStrategySignal(userMessage: string): boolean {
     // Only gates phase fallback for texts with program-shaped workflows; atom roles still come from registry.
-    return /网格|webhook|自适应|grid/iu.test(userMessage)
+    return /网格|webhook|自适应|grid/iu.test(userMessage) || this.resolveGenericExecutionProgramKeyFromMessage(userMessage) !== null
+  }
+
+  private resolveGenericExecutionProgramKeyFromMessage(userMessage: string): string | null {
+    if (/\btwap\b|分\s*\d+\s*次|均匀(?:买入|卖出|执行)|分批均匀/iu.test(userMessage)) return 'program.twap'
+    if (/\bdca\b|定投|每(?:下跌|回撤)[^，。；;]{0,20}(?:做一次|买入|加仓)/iu.test(userMessage)) return 'program.dca'
+    if (/martingale|马丁|翻倍补单|按\s*\d+(?:\.\d+)?\s*倍[^，。；;]{0,20}(?:加码|补单)/iu.test(userMessage)) return 'program.martingale'
+    if (/rebalance|再平衡|再均衡|rebalanc(?:e|ing)|(?:BTC|ETH)[^，。；;]{0,40}(?:50%\s*50%|等权)/iu.test(userMessage)) return 'program.rebalance'
+    if (/iceberg|冰山|隐藏拆分|拆成每次/iu.test(userMessage)) return 'program.iceberg'
+    return null
   }
 
   private resolveRuleEffectRole(effect: AtomExpr): RuleEffectRole | null {
@@ -1790,6 +1799,15 @@ export class GenericSeedDispatcher {
       })
     }
     this.pushTypedLifecyclePredicates(out, flatPatch)
+    if (this.hasProgramStrategySignal(userMessage) && !out.some(item => this.normalizeTypedRulePhase(item.phase) === 'program')) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
+        phase: 'program',
+        sideScope: 'both',
+        params: {},
+        evidence: { text: userMessage.trim(), source: 'user_explicit' },
+      })
+    }
     // #1633 staging30 s18：用户说 "放量反弹 / 量能放大 / volume spike" 但未给出
     //   数值时，surface.intent.verbs (gte) 不命中 → volume.threshold 不被
     //   matchSurface 选中，导致 dispatcher typed-rule condition 缺少 volume 语义。
@@ -2065,6 +2083,7 @@ export class GenericSeedDispatcher {
       const atoms = flatPatch.atoms ?? []
       const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) && /网格|grid/iu.test(userMessage)
       const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
+      const genericExecutionProgramKey = this.resolveGenericExecutionProgramKeyFromMessage(userMessage)
       const explicitProgramEvidence = this.findEvidenceText(
         userMessage,
         '(?:事件监听|webhook\\s*监听|外部事件订阅|订阅[^，。；;]{0,20}(?:事件源|webhook))',
@@ -2077,7 +2096,7 @@ export class GenericSeedDispatcher {
             : ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
           : explicitProgramEvidence
             ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
-            : null
+            : genericExecutionProgramKey
       if (programKey) {
         const atomEvidence = atoms.find(atom =>
           (programKey === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)

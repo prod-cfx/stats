@@ -2177,8 +2177,33 @@ export class CanonicalSpecBuilderService {
         return this.buildCanonicalAdaptiveVolatilityGridProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
       case 'program.event_listener':
         return this.buildCanonicalEventListenerProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
+      case 'program.twap':
+      case 'program.dca':
+      case 'program.martingale':
+      case 'program.rebalance':
+      case 'program.iceberg':
+        return this.buildCanonicalExecutionProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
       default:
         throw new Error(`UnsupportedSemanticRuleProgramEffect: key=${leaf.key} sourcePath=${sourcePath}`)
+    }
+  }
+
+  private buildCanonicalExecutionProgramFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    id: string,
+    sourcePath: string,
+    activeWhenRef: string,
+  ): CanonicalOrchestrationProgram {
+    const programKind = leaf.key.slice('program.'.length) as 'twap' | 'dca' | 'martingale' | 'rebalance' | 'iceberg'
+    return {
+      id,
+      sourcePath,
+      sourceAtomKey: leaf.key,
+      programKind,
+      activeWhenRef,
+      onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
+      rebuildPolicy: 'static',
+      params: { ...leaf.params },
     }
   }
 

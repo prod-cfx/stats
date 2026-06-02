@@ -57,6 +57,20 @@ const envelope: CompiledScriptExecutionEnvelope = {
   fillAssumption: 'strict',
 }
 
+function buildAstWithLegs(): StrategyAstV1 {
+  return {
+    ...baseAst,
+    orchestrationScopes: [
+      { id: 's-btc', scopeKind: 'symbol', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' },
+      { id: 's-eth', scopeKind: 'symbol', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' },
+    ],
+    orchestrationLegScopes: [
+      { id: 'l-long-btc', scopeKind: 'leg', legId: 'leg.long.btc', direction: 'long', instrumentRef: 's-btc' },
+      { id: 'l-short-eth', scopeKind: 'leg', legId: 'leg.short.eth', direction: 'short', instrumentRef: 's-eth' },
+    ],
+  }
+}
+
 describe('compiled-script-emitter — scope.leg byte-equal snapshot (Phase 5 S11 #1112)', () => {
   const emitter = new CompiledScriptEmitterService()
   const parser = new CompiledScriptParserService()
@@ -67,17 +81,7 @@ describe('compiled-script-emitter — scope.leg byte-equal snapshot (Phase 5 S11
   })
 
   it('双 leg ast → emit 输出含 const ORCHESTRATION_LEG_SCOPES = [...] 紧邻 ORCHESTRATION_SCOPES 之后', () => {
-    const astWithLegs: StrategyAstV1 = {
-      ...baseAst,
-      orchestrationScopes: [
-        { id: 's-btc', scopeKind: 'symbol', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' },
-        { id: 's-eth', scopeKind: 'symbol', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' },
-      ],
-      orchestrationLegScopes: [
-        { id: 'l-long-btc', scopeKind: 'leg', legId: 'leg.long.btc', direction: 'long', instrumentRef: 's-btc' },
-        { id: 'l-short-eth', scopeKind: 'leg', legId: 'leg.short.eth', direction: 'short', instrumentRef: 's-eth' },
-      ],
-    }
+    const astWithLegs = buildAstWithLegs()
     const script = emitter.emit({ ast: astWithLegs, executionEnvelope: envelope })
     expect(script).toContain('const ORCHESTRATION_LEG_SCOPES')
     expect(script).toContain('"legId":"leg.long.btc"')
@@ -89,6 +93,18 @@ describe('compiled-script-emitter — scope.leg byte-equal snapshot (Phase 5 S11
     expect(scopesIdx).toBeGreaterThan(0)
     expect(legScopesIdx).toBeGreaterThan(scopesIdx)
     expect(topologyIdx).toBeGreaterThan(legScopesIdx)
+  })
+
+  it('双 leg ast → wrapper passes ORCHESTRATION_LEG_SCOPES into runDecisionPrograms live path', () => {
+    const script = emitter.emit({ ast: buildAstWithLegs(), executionEnvelope: envelope })
+
+    expect(script).toContain([
+      '      TOPOLOGY.decisionOrder,',
+      '      undefined,',
+      '      portfolioRiskState,',
+      '      ORCHESTRATION_SCOPES,',
+      '      ORCHESTRATION_LEG_SCOPES,',
+    ].join('\n'))
   })
 
   it('round-trip：无 leg emit → parse → projection.orchestrationLegScopes === undefined（不抛错）', () => {

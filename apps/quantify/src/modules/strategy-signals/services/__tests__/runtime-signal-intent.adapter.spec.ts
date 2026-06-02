@@ -77,6 +77,52 @@ describe('RuntimeSignalIntentAdapter', () => {
     }))
   })
 
+  it('carries limit order metadata from runtime decision into deploy signal intent', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'QUOTE', value: 100 },
+      reason: 'compiled.limit-entry',
+      meta: {
+        order: { orderType: 'limit', limitPrice: 65000, timeInForce: 'gtc' },
+      },
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      referencePrice: 65100,
+    })
+
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
+      direction: 'BUY',
+      signalType: 'ENTRY',
+      order: { orderType: 'limit', limitPrice: 65000, timeInForce: 'gtc' },
+    }))
+  })
+
+  it('carries conditional order metadata from runtime decision into deploy signal intent', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_SHORT',
+      size: { mode: 'RATIO', value: 0.2 },
+      reason: 'compiled.conditional-entry',
+      meta: {
+        order: { orderType: 'market', triggerConditionRef: 'rules[0].condition' },
+      },
+    }, {
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      referencePrice: 64800,
+    })
+
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
+      direction: 'SELL',
+      signalType: 'ENTRY',
+      order: { orderType: 'market', triggerConditionRef: 'rules[0].condition' },
+    }))
+  })
+
   it('drops invalid optional numeric signal fields', () => {
     const result = adapter.fromDecision({
       action: 'OPEN_LONG',
