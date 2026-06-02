@@ -86,44 +86,64 @@ class AiConfirmPage extends StatelessWidget {
               ],
               active: 0,
             ),
+            // 滚动区 + sticky 渐变操作区叠放（对齐设计稿 `position:absolute`）。
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(QzSpacing.lg),
+              child: Stack(
                 children: <Widget>[
-                  _HeroCard(view: view, subtitle: l10n.aiConfirmHeroSubtitle),
-                  const SizedBox(height: QzSpacing.lg),
-                  _SectionTitle(
-                    title: l10n.aiConfirmLogicTitle,
-                    actionLabel: l10n.aiConfirmEditInChat,
-                    onAction: () => context.pop(),
-                  ),
-                  const SizedBox(height: QzSpacing.sm),
-                  for (int i = 0; i < view.rules.length; i++) ...<Widget>[
-                    if (i > 0) _RuleSeparator(label: l10n.aiConfirmRuleSep),
-                    _RuleBlock(
-                      index: i,
-                      rule: view.rules[i],
-                      ifLabel: l10n.aiConfirmRuleIf,
-                      thenLabel: l10n.aiConfirmRuleThen,
+                  // 内容滚动区：顶 12 / 左右 16 / 底 100（给 sticky bar 留空间，
+                  // 滚动到底免责声明不被遮挡），对齐设计稿 `padding:12px 16px 100px`。
+                  ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      QzSpacing.lg,
+                      QzSpacing.md,
+                      QzSpacing.lg,
+                      100,
                     ),
-                  ],
-                  const SizedBox(height: QzSpacing.lg),
-                  _ExecuteBlock(view: view),
-                  const SizedBox(height: QzSpacing.lg),
-                  _AiAdviceBox(
-                    title: l10n.aiConfirmAdviceTitle,
-                    text: view.advice,
+                    children: <Widget>[
+                      _HeroCard(
+                        view: view,
+                        subtitle: l10n.aiConfirmHeroSubtitle,
+                      ),
+                      const SizedBox(height: QzSpacing.lg),
+                      _SectionTitle(
+                        title: l10n.aiConfirmLogicTitle,
+                        actionLabel: l10n.aiConfirmEditInChat,
+                        onAction: () => context.pop(),
+                      ),
+                      const SizedBox(height: QzSpacing.sm),
+                      for (int i = 0; i < view.rules.length; i++) ...<Widget>[
+                        if (i > 0) _RuleSeparator(label: l10n.aiConfirmRuleSep),
+                        _RuleBlock(
+                          index: i,
+                          rule: view.rules[i],
+                          ifLabel: l10n.aiConfirmRuleIf,
+                          thenLabel: l10n.aiConfirmRuleThen,
+                        ),
+                      ],
+                      const SizedBox(height: QzSpacing.lg),
+                      _ExecuteBlock(view: view),
+                      const SizedBox(height: QzSpacing.lg),
+                      _AiAdviceBox(
+                        title: l10n.aiConfirmAdviceTitle,
+                        text: view.advice,
+                      ),
+                      const SizedBox(height: QzSpacing.md),
+                      _DisclaimerBar(text: l10n.aiConfirmDisclaimer),
+                    ],
                   ),
-                  const SizedBox(height: QzSpacing.md),
-                  _DisclaimerBar(text: l10n.aiConfirmDisclaimer),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _BottomBar(
+                      backLabel: l10n.aiConfirmBackToChat,
+                      nextLabel: l10n.aiConfirmNextScript,
+                      onBack: () => _backToChat(context),
+                      onNext: () => _next(context),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            _BottomBar(
-              backLabel: l10n.aiConfirmBackToChat,
-              nextLabel: l10n.aiConfirmNextScript,
-              onBack: () => _backToChat(context),
-              onNext: () => _next(context),
             ),
           ],
         ),
@@ -716,7 +736,9 @@ class _DisclaimerBar extends StatelessWidget {
   }
 }
 
-/// 底部行动条：返回对话（ghost）+ 下一步：策略脚本（accent）。
+/// 底部 sticky 行动条：从透明到背景色的渐变覆盖层（对齐设计稿
+/// `linear-gradient(180deg, transparent, bg 30%)` + `padding:12px 16px 36px`），
+/// 次按钮「返回对话」(elev + border) + 主按钮「下一步：策略脚本」(紫色渐变 + 投影 + 箭头)。
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.backLabel,
@@ -733,47 +755,138 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    return Padding(
+    return Container(
+      // 渐变在 30% 处达到不透明背景色，避免遮挡上方内容又保证按钮区可读。
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
+          stops: const <double>[0, 0.3],
+        ),
+      ),
       padding: const EdgeInsets.fromLTRB(
         QzSpacing.lg,
-        QzSpacing.sm,
+        QzSpacing.md,
         QzSpacing.lg,
         QzSpacing.lg,
       ),
       child: Row(
         children: <Widget>[
           Expanded(
-            child: OutlinedButton(
-              key: const Key('ai-confirm-back-cta'),
-              onPressed: onBack,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                foregroundColor: c.text,
-                side: BorderSide(color: c.border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(QzRadii.card),
-                ),
-              ),
-              child: Text(backLabel),
+            child: _SecondaryCta(
+              label: backLabel,
+              onTap: onBack,
+              scheme: c,
             ),
           ),
           const SizedBox(width: QzSpacing.sm),
           Expanded(
             flex: 2,
-            child: FilledButton(
-              key: const Key('ai-confirm-next-cta'),
-              onPressed: onNext,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                backgroundColor: c.accent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(QzRadii.card),
-                ),
-              ),
-              child: Text(nextLabel),
+            child: _PrimaryCta(
+              label: nextLabel,
+              onTap: onNext,
+              scheme: c,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 次级按钮：elevated 背景 + 边框 + 中性文字色。
+class _SecondaryCta extends StatelessWidget {
+  const _SecondaryCta({
+    required this.label,
+    required this.onTap,
+    required this.scheme,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: scheme.bgElev,
+      borderRadius: BorderRadius.circular(QzRadii.card),
+      child: InkWell(
+        key: const Key('ai-confirm-back-cta'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(QzRadii.card),
+        child: Container(
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.border),
+            borderRadius: BorderRadius.circular(QzRadii.card),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: scheme.text,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 主按钮：紫色渐变 + 投影 + 白字 + 右侧箭头。
+class _PrimaryCta extends StatelessWidget {
+  const _PrimaryCta({
+    required this.label,
+    required this.onTap,
+    required this.scheme,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(QzRadii.card),
+      child: InkWell(
+        key: const Key('ai-confirm-next-cta'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(QzRadii.card),
+        child: Container(
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: scheme.accentGrad,
+            borderRadius: BorderRadius.circular(QzRadii.card),
+            boxShadow: <BoxShadow>[scheme.accentShadow],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  color: scheme.accentOn,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: QzSpacing.xs),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: scheme.accentOn,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
