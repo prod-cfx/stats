@@ -153,7 +153,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.missing).not.toContain('missing_risk')
   })
 
-  it('entry-only executable rules still require explicit exit semantics', () => {
+  it('entry-only executable rules can compile without explicit exit semantics', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'entry-only',
@@ -166,8 +166,8 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     const r = svc.evaluateRulesReadiness(rules)
 
     expect(r.hasEntry).toBe(true)
-    expect(r.hasExit).toBe(false)
-    expect(r.missing).toContain('missing_exit')
+    expect(r.hasExit).toBe(true)
+    expect(r.missing).not.toContain('missing_exit')
   })
 
   it('grid.range_rebalance with breakoutAction=stop 强化 exit', () => {
@@ -266,6 +266,54 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasEntry).toBe(true)
     expect(r.hasExit).toBe(true)
     expect(r.missing).toEqual([])
+  })
+
+  it.each(['program.dca', 'program.martingale', 'program.rebalance', 'program.iceberg'])('%s is a self-contained executable program and does not require a separate exit rule', (programKey) => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-program-lifecycle',
+        phase: 'program',
+        sideScope: 'long',
+        condition: atom('execution.on_start'),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [atom(programKey)],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateRulesReadiness(rules)
+
+    expect(r.hasEntry).toBe(true)
+    expect(r.hasExit).toBe(true)
+    expect(r.missing).not.toContain('missing_exit')
+  })
+
+  it('program.rebalance does not require single-order position sizing when allocation is program-defined', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'rebalance-program',
+        phase: 'program',
+        sideScope: 'long',
+        condition: atom('execution.on_start'),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [atom('position.sizing', { value: 0 })],
+          orchestration: [],
+          programs: [atom('program.rebalance')],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.ready).toBe(true)
+    expect(r.blockingReasons).toEqual([])
+    expect(r.openSlots).toEqual([])
   })
 
   it('normalize reads rules mainflow and drops stale legacy buckets', () => {

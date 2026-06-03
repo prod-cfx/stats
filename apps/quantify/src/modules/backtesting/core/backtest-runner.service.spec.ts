@@ -1937,7 +1937,7 @@ describe('backtestRunnerService', () => {
       })
       expect(report.diagnostics.compiledRulesCount).toBe(1)
       expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
-      expect(report.diagnostics.fillCount).toBe(0)
+      expect(report.diagnostics.fillCount).toBe(1)
       expect(report.summary.totalOpenTrades).toBe(1)
       expect(report.summary.diagnosticReason).toBeUndefined()
     })

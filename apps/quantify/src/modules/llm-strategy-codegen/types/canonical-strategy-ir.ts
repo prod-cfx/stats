@@ -273,6 +273,7 @@ export interface ActionDef {
     | 'REDUCE_LONG' | 'REDUCE_SHORT'
     | 'ADD_LONG' | 'ADD_SHORT'
   quantity: QuantityDef
+  sourcePath?: string
   order?: {
     orderType: 'market' | 'limit'
     limitPrice?: number

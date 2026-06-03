@@ -382,8 +382,8 @@ export class BacktestRunnerService {
       ...(pos.entryTimeframe ? { entryTimeframe: pos.entryTimeframe } : {}),
     }))
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
-    // fillCount 只数已完结撮合；有效成交判断另看 totalOpenTrades，避免开仓未平被部署门禁误挡。
-    diagnostics.fillCount = report.trades.length
+    // fillCount 表示有效成交数；未平仓开仓也算成交，避免开仓型策略被误报 no-fill。
+    diagnostics.fillCount = report.trades.length + openPositions.length
     const requiredRuntimeKeys = this.resolveRequiredRuntimeKeys(baseBars, requestedRuntimeTimeframes)
     diagnostics.dataRequirementMissingCount = requiredRuntimeKeys
       .filter(key => !availableRuntimeKeys.has(key))

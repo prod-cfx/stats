@@ -816,8 +816,7 @@ function normalizeLifecycleParams(
 
 function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
   const hasPriceSubject = /价格|price|close/iu.test(clause)
-  const hasCrossVerb = /上穿|下穿|突破|跌破|cross(?:es|ed|ing)?\s+(?:above|below|over|under)|breaks?\s+(?:above|below)/iu.test(clause)
-  if (!hasPriceSubject && !hasCrossVerb) return null
+  if (!hasPriceSubject) return null
   const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
   if (periodMatches.length !== 1) return null
   const period = Number(periodMatches[0]?.[1])
@@ -1959,7 +1958,7 @@ export class GenericSeedDispatcher {
       out.push({
         key: 'orderbook.spread_condition',
         phase: 'entry',
-        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        sideScope: this.hasLegScopeIntent(userMessage) ? 'both' : (/开空|做空|short/iu.test(userMessage) ? 'short' : 'long'),
         params: { operator: 'lt', valuePct: this.extractFirstNumber(userMessage, '(?:价差|spread)[^，。；;]{0,12}(\d+(?:\.\d+)?)\s*%') ?? 0.03 },
         evidence: { text: this.findEvidenceText(userMessage, '(?:价差|spread)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
       })
@@ -1968,7 +1967,7 @@ export class GenericSeedDispatcher {
       out.push({
         key: 'orderbook.depth_ratio',
         phase: 'entry',
-        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        sideScope: this.hasLegScopeIntent(userMessage) ? 'both' : (/开空|做空|short/iu.test(userMessage) ? 'short' : 'long'),
         params: { side: /卖一|ask/iu.test(userMessage) && !/买一|bid/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask', operator: 'gt', ratio: this.extractFirstNumber(userMessage, '(?:深度比|深度|depth)[^，。；;]{0,12}(\d+(?:\.\d+)?)') ?? 2 },
         evidence: { text: this.findEvidenceText(userMessage, '(?:深度比|买一卖一深度|depth\s*ratio)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
       })
@@ -2126,6 +2125,24 @@ export class GenericSeedDispatcher {
           key: ATOM_CONTRACT_REGISTRY['scope.leg'].key,
           params: { legScopeKind: 'leg', ...leg },
           evidence: { text: this.findEvidenceText(userMessage, '(?:多空双腿|对冲腿|策略腿|pair\\s*spread|leg)') ?? userMessage.trim() },
+        })
+      }
+      if (!out.some(effect => effect.kind === 'atom' && effect.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key)) {
+        pushAtom({
+          key: ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+          phase: 'entry',
+          sideScope: 'long',
+          params: {},
+          evidence: { text: this.findEvidenceText(userMessage, '(?:做多|开多|long)') ?? userMessage.trim() },
+        })
+      }
+      if (!out.some(effect => effect.kind === 'atom' && effect.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key)) {
+        pushAtom({
+          key: ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+          phase: 'entry',
+          sideScope: 'short',
+          params: {},
+          evidence: { text: this.findEvidenceText(userMessage, '(?:做空|开空|short)') ?? userMessage.trim() },
         })
       }
     }

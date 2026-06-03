@@ -45,6 +45,8 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'liquidity.sweep',
   'external.signal',
   'orderbook.imbalance',
+  'orderbook.spread_condition',
+  'orderbook.depth_ratio',
   'fundingRate.condition',
   'openInterest.condition',
   'liquidation.condition',

@@ -114,6 +114,59 @@ function createSizingCanonicalSpec(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it('compiles generic indicator boundary as external signal instead of self-compare truthy predicate', () => {
+    const canonicalSpec: CanonicalStrategySpecV2 = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'fixed_quote', value: 100, asset: 'USDT' },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: { requiredTimeframes: ['15m'] },
+      rules: [{
+        id: 'entry-generic-boundary',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'price.detect.indicator_boundary',
+          params: { indicator: 'channel', boundaryRole: 'lower', confirmationMode: 'touch' },
+        },
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'fixed_quote', value: 100, asset: 'USDT' } }],
+      }],
+    }
+
+    const result = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const predicate = findPredicate(result.ir.signalCatalog.predicates, item => item.id.includes('indicator_boundary_generic'))
+
+    expect(predicate.kind).toBe('externalSignal')
+    expect(predicate.args).toEqual([])
+    expect(predicate.params).toEqual(expect.objectContaining({
+      provider: 'indicator_boundary',
+      sourceFeedId: 'indicator.boundary',
+      signalId: 'indicator_boundary_touch',
+      indicator: 'channel',
+      boundaryRole: 'lower',
+      confirmationMode: 'touch',
+    }))
+  })
+
   it.each([
     'orderbook.imbalance',
     'fundingRate.condition',

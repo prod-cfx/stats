@@ -190,7 +190,8 @@ export class RulesMainflowReaderService {
       return
     }
 
-    switch (expr.kind) {
+    const kind = typeof expr.kind === 'string' ? expr.kind.toLowerCase() : expr.kind
+    switch (kind) {
       case 'atom':
         if (typeof expr.key !== 'string') {
           diagnostics.push(`${path}.key must be a string`)
@@ -225,7 +226,7 @@ export class RulesMainflowReaderService {
             rule,
             ruleIndex,
             role,
-            path: `${path}.${expr.kind}.children[${childIndex}]`,
+            path: `${path}.${kind}.children[${childIndex}]`,
             leaves,
             diagnostics,
           })

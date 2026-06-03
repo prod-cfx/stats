@@ -414,6 +414,45 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('passes when compiled action trace keeps original non-contiguous rules sourcePath', () => {
+    const input = fixture()
+    const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>
+    canonicalRules[0].actions = [
+      { type: 'OPEN_LONG', sourcePath: 'rules[0].effects.actions[3]' },
+    ]
+    input.rules[0] = {
+      id: 'rule-entry',
+      phase: 'entry',
+      condition: { kind: 'atom', key: 'price.above' },
+      effects: {
+        actions: [
+          { kind: 'atom', key: 'execution.post_only' },
+          { kind: 'atom', key: 'action.limit_order' },
+          { kind: 'atom', key: 'execution.reduce_only' },
+          { kind: 'atom', key: 'action.open_long' },
+        ],
+      },
+    }
+    input.ir.ruleBlocks[0]!.actions[0] = {
+      ...(input.ir.ruleBlocks[0]!.actions[0] as Record<string, unknown>),
+      sourcePath: 'rules[0].effects.actions[3]',
+    } as never
+    input.ast.decisionPrograms[0]!.actions[0] = {
+      ...(input.ast.decisionPrograms[0]!.actions[0] as Record<string, unknown>),
+      sourcePath: 'rules[0].effects.actions[3]',
+    } as never
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'trace.ir', passed: true }),
+      expect.objectContaining({ key: 'trace.ast', passed: true }),
+    ]))
+  })
+
   it('keeps unsupported PR4 program rows out of deploy-ready payload claims', () => {
     const unsupportedProgramRows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row =>
       row.prBatch === 'pr4-action-program'
@@ -421,9 +460,14 @@ describe('publication gate rules-only hash chain', () => {
       && !isStage4DeployReadyAtom(row),
     )
 
-    expect(unsupportedProgramRows.length).toBeGreaterThan(0)
-    expect(unsupportedProgramRows.map(row => row.unsupportedReason)).not.toContain(null)
-    expect(unsupportedProgramRows.every(row => !(row.reachesBacktest && row.reachesDeployPayload))).toBe(true)
+    if (unsupportedProgramRows.length > 0) {
+      expect(unsupportedProgramRows.map(row => row.unsupportedReason)).not.toContain(null)
+      expect(unsupportedProgramRows.every(row => !(row.reachesBacktest && row.reachesDeployPayload))).toBe(true)
+      return
+    }
+
+    expect(STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr4-action-program' && row.family === 'program')
+      .every(row => isStage4DeployReadyAtom(row))).toBe(true)
   })
 
   it('passes when canonical risk rules are traced through IR and AST risk predicates', () => {

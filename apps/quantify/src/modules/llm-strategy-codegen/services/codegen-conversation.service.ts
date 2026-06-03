@@ -2846,7 +2846,10 @@ export class CodegenConversationService {
       semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    const compileability = this.withRulesMainflowOpenOnlyCompileability(
+      reducedSemanticState,
+      this.evaluateCanonicalCompileability(canonicalSpec),
+    )
     if (
       !canonicalDigest
       || (confirmedCanonicalDigest !== canonicalDigest && confirmedCanonicalDigest !== confirmationViewDigest)
@@ -3756,17 +3759,20 @@ export class CodegenConversationService {
   ): SemanticState {
     const anchors = this.sizingResolver.resolve(state)
     const anyExecutionAnchored = [...anchors.values()].some(a => a.executionAnchored)
+    const hasProgramDefinedSizing = this.executableSemantics.hasCompleteOrderProgramSemantics(state)
+      || this.executableSemantics.anyAtomFulfillsPhase(state, 'sizing')
 
     if (
       options?.preserveLockedPositionSizing === true
       || anyExecutionAnchored
+      || hasProgramDefinedSizing
     ) {
       return state.position
         ? {
             ...state,
             position: {
               ...state.position,
-              openSlots: this.hasValidLockedPositionSizing(state.position)
+              openSlots: this.hasValidLockedPositionSizing(state.position) || hasProgramDefinedSizing
                 ? []
                 : (state.position.openSlots ?? []),
             },
@@ -6208,11 +6214,34 @@ export class CodegenConversationService {
     }
   }
 
+  private withRulesMainflowOpenOnlyCompileability(
+    semanticState: SemanticState,
+    report: CanonicalCompileabilityReport,
+  ): CanonicalCompileabilityReport {
+    if (!report.reasons.includes('canonical_projection_missing_exit_program')) return report
+    const mainflowReadiness = this.semanticContractReadiness.evaluateMainflowRulesReadiness(semanticState.rules)
+    if (!mainflowReadiness.ready) return report
+    const reasons = report.reasons.filter(reason => reason !== 'canonical_projection_missing_exit_program')
+    return {
+      ...report,
+      reasons,
+      canCompile: reasons.length === 0,
+    }
+  }
+
   private buildCanonicalSpecForConversation(
     semanticState: SemanticState,
     _normalization: NormalizationResult = this.buildNormalizationFromSemanticState(semanticState),
   ) {
-    return this.canonicalSpecBuilder.buildFromSemanticState(semanticState)
+    try {
+      return this.canonicalSpecBuilder.buildFromSemanticState(semanticState)
+    }
+    catch (error) {
+      if (error instanceof Error && error.message.includes('InvalidSemanticRulesMainflow: reason=rules_missing_or_empty')) {
+        return null
+      }
+      throw error
+    }
   }
 
   /**
@@ -7115,6 +7144,10 @@ export class CodegenConversationService {
   }): 'clarification' | 'decision' | 'normalization' | 'confirm_gate' | null {
     if (input.clarificationState.status === 'NEEDS_CLARIFICATION') {
       return 'clarification'
+    }
+
+    if (input.decisionKind === 'CONFIRM_INFERRED' && input.semanticReadyForGenerate && !input.normalization.blocked) {
+      return 'confirm_gate'
     }
 
     if (input.decisionKind === 'CONFIRM_INFERRED') {
@@ -8242,7 +8275,7 @@ export class CodegenConversationService {
       })
       return {
         related: true,
-        logicReady: false,
+        logicReady: true,
         assistantPrompt: this.localizedText(
           locale,
           'I have organized the strategy logic. Please confirm the logic graph.',
