@@ -440,7 +440,7 @@
       "description": "PM2 交互式服务栈（服务、端口清理、缓存清理均可配置）",
       "stack": {
         "ecosystemConfig": "ecosystem.config.cjs",
-        "pm2Bin": "pnpm pm2",
+        "pm2Bin": "PM2_HOME=$HOME/.pm2-stats pnpm pm2",
         "services": ["backend", "front", "admin", "quantify", "quantify-backtest-worker"],
         "preflight": {
           "pm2Reset": true,
