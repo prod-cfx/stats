@@ -238,9 +238,7 @@ export class BacktestingController {
   ): BacktestRunInput {
     const params = strategy.params as Record<string, unknown>
     const strategyStateTimeframes = (strategy as { stateTimeframes?: unknown }).stateTimeframes
-    const symbol = typeof params.symbol === 'string' && params.symbol.trim()
-      ? params.symbol.trim()
-      : dto.symbols[0]
+    const symbols = this.resolveSnapshotTruthSymbols(dto.symbols, strategy)
     const baseTimeframe = typeof params.timeframe === 'string' && params.timeframe.trim()
       ? params.timeframe.trim() as BacktestRunInput['baseTimeframe']
       : dto.baseTimeframe
@@ -250,12 +248,58 @@ export class BacktestingController {
 
     return {
       ...dto,
-      symbols: symbol ? [symbol] : dto.symbols,
+      symbols,
       baseTimeframe,
       stateTimeframes,
       strategy,
       bars: dto.bars ?? [],
     } as BacktestRunInput
+  }
+
+  private resolveSnapshotTruthSymbols(
+    requestedSymbols: readonly string[],
+    strategy: BacktestRunInput['strategy'],
+  ): string[] {
+    const params = strategy.params as Record<string, unknown>
+    const symbols = new Set<string>()
+    const add = (value: unknown) => {
+      if (typeof value !== 'string') return
+      const normalized = value.trim()
+      if (normalized) symbols.add(normalized)
+    }
+
+    add(params.symbol)
+    for (const symbol of this.readSymbolScopeSymbols(strategy.specSnapshot)) {
+      add(symbol)
+    }
+    if (symbols.size === 0) {
+      for (const symbol of requestedSymbols) add(symbol)
+    }
+
+    return [...symbols]
+  }
+
+  private readSymbolScopeSymbols(specSnapshot: BacktestRunInput['strategy']['specSnapshot']): string[] {
+    const spec = this.readRecord(specSnapshot)
+    const orchestration = this.readRecord(spec?.orchestration)
+    const scopes = Array.isArray(orchestration?.scopes) ? orchestration.scopes : []
+    const symbols: string[] = []
+
+    for (const scope of scopes) {
+      const record = this.readRecord(scope)
+      if (record?.scopeKind !== 'symbol' || !Array.isArray(record.symbols)) continue
+      for (const symbol of record.symbols) {
+        if (typeof symbol === 'string' && symbol.trim()) symbols.push(symbol.trim())
+      }
+    }
+
+    return symbols
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   }
 
   private normalizeStructuredBacktestDomainException(error: DomainException): DomainException {

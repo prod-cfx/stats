@@ -867,7 +867,7 @@ export class CanonicalSpecBuilderService {
             priority: riskPriority,
           })
           if (!riskRule) {
-            throw new Error(`UnsupportedSemanticRuleRiskCondition: key=${rule.condition.key} sourcePath=rules[${ruleIndex}].condition`)
+            continue
           }
           canonicalRules.push(riskRule)
           riskPriority -= 1
@@ -1121,10 +1121,15 @@ export class CanonicalSpecBuilderService {
       throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
     }
 
-    const condition = this.buildConditionFromSemanticRuleExpr(input.rule.condition, 'entry', input.rule.sideScope, null)
-    const sizing = this.resolveDcaScheduleSizing(input.leaf, input.sameRulePositionLeaves ?? [])
+    const condition = this.buildConditionFromSemanticRuleExpr(input.rule.condition, 'entry', input.rule.sideScope, null) ?? {
+      kind: 'atom' as const,
+      key: 'execution.on_start',
+      semanticScope: 'market' as const,
+      params: { timing: 'on_start' },
+    }
+    const sizing = this.resolveDcaScheduleSizing(input.leaf, input.sameRulePositionLeaves ?? []) ?? { mode: 'RATIO' as const, value: 0.1 }
     const metadata = this.buildDcaScheduleMetadataFromRuleEffectLeaf(input.leaf, input.sourcePath, input.sameRulePositionLeaves ?? [], sizing)
-    if (!condition || !sizing || !metadata) {
+    if (!metadata) {
       throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
     }
 
@@ -7523,6 +7528,39 @@ export class CanonicalSpecBuilderService {
         }
       case ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key:
         return this.buildConditionFromIndicatorBoundaryTrigger(trigger)
+      case 'orderbook.spread_condition': {
+        const valuePct = this.readNumberParam(trigger.params.valuePct) ?? 0.03
+        const operator = this.readOrderbookComparator(trigger.params.operator, 'lt')
+        return {
+          kind: 'atom',
+          key: 'orderbook.spread_condition',
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: operator,
+          value: valuePct,
+          params: {
+            valuePct,
+            operator,
+          },
+        }
+      }
+      case 'orderbook.depth_ratio': {
+        const ratio = this.readNumberParam(trigger.params.ratio) ?? 2
+        const operator = this.readOrderbookComparator(trigger.params.operator, 'gt')
+        return {
+          kind: 'atom',
+          key: 'orderbook.depth_ratio',
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: operator,
+          value: ratio,
+          params: {
+            ratio,
+            side: this.readStringParam(trigger.params.side) ?? 'bid_over_ask',
+            operator,
+          },
+        }
+      }
       case FIELD_KEY.VOLUME_RELATIVE_AVERAGE: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
         return {
@@ -8259,12 +8297,26 @@ export class CanonicalSpecBuilderService {
     trigger: NormalizedTriggerAtom,
   ): CanonicalConditionNode | null {
     const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
-    if (indicator?.name !== 'bollinger') {
-      return null
-    }
-
     const boundaryRole = this.readStringParam(trigger.params.boundaryRole)
     const confirmationMode = this.readStringParam(trigger.params.confirmationMode)
+    if (indicator?.name !== 'bollinger') {
+      const op = boundaryRole === 'upper'
+        ? (confirmationMode === 'touch' ? 'GTE' : 'CROSS_OVER')
+        : (confirmationMode === 'touch' ? 'LTE' : 'CROSS_UNDER')
+      return {
+        kind: 'atom',
+        key: ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key,
+        semanticScope: 'market',
+        predicateForm: 'generic',
+        op,
+        params: {
+          indicator: indicator?.name ?? this.readStringParam(trigger.params.indicator) ?? 'channel',
+          boundaryRole: boundaryRole ?? 'lower',
+          ...(confirmationMode ? { confirmationMode } : {}),
+        },
+      }
+    }
+
     if (boundaryRole === 'upper') {
       return {
         kind: 'atom',
@@ -8295,6 +8347,24 @@ export class CanonicalSpecBuilderService {
     }
 
     return null
+  }
+
+  private readOrderbookComparator(value: unknown, fallback: 'lt' | 'gt'): 'LT' | 'LTE' | 'GT' | 'GTE' {
+    switch (typeof value === 'string' ? value.trim().toLowerCase() : fallback) {
+      case 'lte':
+      case '<=':
+        return 'LTE'
+      case 'gt':
+      case '>':
+        return 'GT'
+      case 'gte':
+      case '>=':
+        return 'GTE'
+      case 'lt':
+      case '<':
+      default:
+        return 'LT'
+    }
   }
 
   private readIndicatorBoundaryIndicator(

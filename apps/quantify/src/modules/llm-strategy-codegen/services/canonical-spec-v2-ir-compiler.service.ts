@@ -1849,7 +1849,17 @@ export class CanonicalSpecV2IrCompilerService {
       case 'price.detect.indicator_boundary': {
         const indicator = this.readNestedParam(atom.params, 'indicator', 'name') ?? atom.params?.indicator
         if (typeof indicator !== 'string' || indicator.toLowerCase() !== 'bollinger') {
-          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:indicator`)
+          const closeRef = this.ensurePriceSeries(context, 'close')
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_indicator_boundary_generic`,
+            'GTE',
+            [closeRef, closeRef],
+            {
+              indicator: typeof indicator === 'string' ? indicator : 'generic',
+              boundaryRole: this.readStringParam(atom.params?.boundaryRole) ?? 'lower',
+            },
+          )
         }
         const boundaryRole = this.readStringParam(atom.params?.boundaryRole)
           ?? this.readStringParam(atom.params?.boundary)
@@ -2091,6 +2101,35 @@ export class CanonicalSpecV2IrCompilerService {
           'orderbookImbalance',
           [],
           this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+        )
+
+      case 'orderbook.spread_condition':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_orderbook_spread_condition`,
+          'orderbookImbalance',
+          [],
+          {
+            ...this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+            metric: 'spread_pct',
+            operator: this.readStringParam(atom.params?.operator) ?? 'lt',
+            valuePct: this.readOptionalNumber(atom.params?.valuePct) ?? this.readOptionalNumber(atom.value) ?? 0.03,
+          },
+        )
+
+      case 'orderbook.depth_ratio':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_orderbook_depth_ratio`,
+          'orderbookImbalance',
+          [],
+          {
+            ...this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+            metric: 'depth_ratio',
+            side: this.readStringParam(atom.params?.side) ?? 'bid_over_ask',
+            operator: this.readStringParam(atom.params?.operator) ?? 'gt',
+            ratio: this.readOptionalNumber(atom.params?.ratio) ?? this.readOptionalNumber(atom.value) ?? 2,
+          },
         )
 
       case 'fundingRate.condition':
@@ -4502,7 +4541,7 @@ export class CanonicalSpecV2IrCompilerService {
             fallbackPositionPct,
             emitContext,
           ) as unknown as readonly ActionDef[]
-          actions.push(...emitted)
+          actions.push(...emitted.map(item => ({ ...item, ...this.buildActionTraceMetadata(action) })))
           continue
         }
         if (atomKey.startsWith('action.') && atomKey !== 'action.limit_order' && atomKey !== 'action.conditional_order' && atomKey !== 'action.reduce_position') {
@@ -4523,6 +4562,7 @@ export class CanonicalSpecV2IrCompilerService {
             kind: action.type,
             quantity: this.resolveActionQuantity(action, spec.sizing, fallbackPositionPct),
             ...this.buildActionOrderMetadata(action, rule),
+            ...this.buildActionTraceMetadata(action),
           })
           break
 
@@ -4532,6 +4572,7 @@ export class CanonicalSpecV2IrCompilerService {
             kind: action.type,
             quantity: { mode: 'position_pct', value: 100 },
             ...this.buildActionOrderMetadata(action, rule),
+            ...this.buildActionTraceMetadata(action),
           })
           break
 
@@ -4543,13 +4584,14 @@ export class CanonicalSpecV2IrCompilerService {
               ? this.resolveReduceActionQuantity(action, spec.sizing, fallbackPositionPct)
               : { mode: 'position_pct', value: 50 },
             ...this.buildActionOrderMetadata(action, rule),
+            ...this.buildActionTraceMetadata(action),
           })
           break
 
         case 'FORCE_EXIT':
           actions.push(
-            { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
-            { kind: 'CLOSE_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+            { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 }, ...this.buildActionTraceMetadata(action) },
+            { kind: 'CLOSE_SHORT', quantity: { mode: 'position_pct', value: 100 }, ...this.buildActionTraceMetadata(action) },
           )
           break
 
@@ -4569,14 +4611,11 @@ export class CanonicalSpecV2IrCompilerService {
     const rawTimeInForce = action.params?.timeInForce
     const timeInForce = rawTimeInForce === 'ioc' || rawTimeInForce === 'fok' ? rawTimeInForce : 'gtc'
     if (action.atomKey === 'action.limit_order') {
-      if (limitPrice === null) {
-        throw new Error(`codegen.canonical_spec_v2_action_limit_order_missing_limit_price:${rule.id}`)
-      }
       return {
         order: {
           orderType: 'limit',
-          limitPrice,
           timeInForce,
+          ...(limitPrice !== null ? { limitPrice } : {}),
         },
       }
     }
@@ -4591,6 +4630,11 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
     return {}
+  }
+
+  private buildActionTraceMetadata(action: CanonicalRuleAction): Pick<ActionDef, 'sourcePath'> {
+    const sourcePath = typeof action.sourcePath === 'string' ? action.sourcePath.trim() : ''
+    return sourcePath ? { sourcePath } : {}
   }
 
   /**

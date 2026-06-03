@@ -107,6 +107,21 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     expect(triggerKeys).not.toContain('indicator.cross_over')
   })
 
+  it('单 EMA 上穿不应自动漂移成 priceCross，需保留缺慢线语义', () => {
+    const patch = dispatcher.dispatch('BTCUSDT 15m。EMA20 上穿开多，但需要 OKX orderbook imbalance 大于 60% 确认。')
+    const crossOverTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_over')
+    expect(crossOverTrigger).toBeDefined()
+    expect(crossOverTrigger!.params).toMatchObject({ indicator: 'ema', fastPeriod: 20 })
+    expect(crossOverTrigger!.params).not.toHaveProperty('priceCross')
+  })
+
+  it('明确价格主语时单 EMA 上穿才投影为 priceCross', () => {
+    const patch = dispatcher.dispatch('BTCUSDT 15m，价格上穿 EMA20 时开多')
+    const crossOverTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_over')
+    expect(crossOverTrigger).toBeDefined()
+    expect(crossOverTrigger!.params).toMatchObject({ indicator: 'ema', fastPeriod: 20, period: 20, priceCross: true })
+  })
+
   it('cross_over RSI 形态：period=14, value=70（与 fast/slow 位置语义对齐）', () => {
     const patch = dispatcher.dispatch('RSI14 上穿 70 时开多')
     const crossOverTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_over')

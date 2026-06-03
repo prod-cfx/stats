@@ -656,13 +656,27 @@ export class SemanticContractReadinessService {
 
   private readFactOpenSlots(fact: RulesMainflowAtomFact): SemanticSlotState[] {
     const openSlots = [...fact.openSlots]
+    if (this.isMovingAverageCrossMissingSlowPeriod(fact)) {
+      openSlots.push({
+        slotKey: `${fact.key}.slowPeriod`,
+        fieldPath: `${fact.path}.params.slowPeriod`,
+        status: 'open',
+        priority: 'core',
+        questionHint: '请确认长期/慢速均线周期，例如 EMA50。',
+        affectsExecution: true,
+        atomKey: fact.key,
+        paramSlotKey: 'slowPeriod',
+      })
+    }
     const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: { paramSlots?: Record<string, ParamSlotSchema> } } | undefined>)[fact.key]
     const paramSlots = entry?.surface?.paramSlots
     if (!paramSlots) return openSlots
 
     for (const [slotKey, schema] of Object.entries(paramSlots)) {
       if (!schema.required) continue
-      const value = fact.params[slotKey]
+      const value = fact.key === POSITION_SIZING_ATOM_KEY && slotKey === 'value'
+        ? readSizingValueFromParams(fact.params)
+        : readNestedParam(fact.params, slotKey)
       const missing = value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
       if (!missing) continue
       openSlots.push({
@@ -678,6 +692,15 @@ export class SemanticContractReadinessService {
     }
 
     return openSlots
+  }
+
+  private isMovingAverageCrossMissingSlowPeriod(fact: RulesMainflowAtomFact): boolean {
+    if (!isMovingAverageCrossAtomKey(fact.key)) return false
+    const indicator = typeof fact.params.indicator === 'string' ? fact.params.indicator.toLowerCase() : ''
+    if (indicator !== 'ma' && indicator !== 'ema' && indicator !== 'sma') return false
+    if (fact.params.priceCross === true) return false
+    const slowPeriod = readNumberParam(fact.params, 'slowPeriod')
+    return slowPeriod === null || slowPeriod <= 0
   }
 
   private buildRulesReadinessMissingRequirements(
@@ -1016,6 +1039,7 @@ export class SemanticContractReadinessService {
       if (rule.phase === 'entry' || rule.phase === 'gate') {
         if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || entryCapableEffect) {
           summary.hasEntry = true
+          summary.hasExit = true
         }
         if (exitCapableRiskEffect) {
           summary.hasExit = true
@@ -1062,6 +1086,12 @@ export class SemanticContractReadinessService {
       summary.hasPosition = true
     }
 
+    const mainflowReadiness = this.evaluateMainflowRulesReadiness(rules)
+    if (mainflowReadiness.ready) {
+      summary.hasEntry = true
+      summary.hasExit = true
+    }
+
     if (!summary.hasEntry) summary.missing.push('missing_entry')
     if (!summary.hasExit) summary.missing.push('missing_exit')
 
@@ -1078,8 +1108,16 @@ export class SemanticContractReadinessService {
       }
     }
 
+    const executableProgramRuleIndexes = new Set(
+      read.leaves
+        .filter(leaf => leaf.role === 'program' && leaf.key.startsWith('program.'))
+        .map(leaf => leaf.ruleIndex),
+    )
     const openSlots: SemanticSlotState[] = []
     for (const leaf of read.leaves) {
+      if (leaf.role === 'position' && leaf.key === POSITION_SIZING_ATOM_KEY && executableProgramRuleIndexes.has(leaf.ruleIndex)) {
+        continue
+      }
       const slot = buildMainflowRequiredParamSlot(leaf)
       if (slot) openSlots.push(slot)
     }
@@ -1110,6 +1148,7 @@ export class SemanticContractReadinessService {
         || (leaf.role === 'position' && leaf.key === 'position.dca_schedule')
         || leaf.role === 'program'
         || gridRuleIndexes.has(leaf.ruleIndex)
+        || executableProgramRuleIndexes.has(leaf.ruleIndex)
       ),
     )
     const hasExit = read.leaves.some(leaf =>
@@ -1117,12 +1156,19 @@ export class SemanticContractReadinessService {
       || (leaf.role === 'risk' && leaf.key.includes('stop'))
       || (leaf.role === 'risk' && leaf.key === 'risk.max_loss_per_trade')
       || (leaf.role === 'action' && leaf.key === 'action.reverse_position')
-      || gridRuleIndexes.has(leaf.ruleIndex),
+      || gridRuleIndexes.has(leaf.ruleIndex)
+      || executableProgramRuleIndexes.has(leaf.ruleIndex),
     )
+    const hasExecutableEntryLifecycle = hasEntry && read.leaves.some(leaf =>
+      entryRuleIndexes.has(leaf.ruleIndex)
+      && leaf.role === 'action'
+      && (leaf.key === 'action.open_long' || leaf.key === 'action.open_short' || leaf.key === 'action.add_position'),
+    )
+    const effectiveHasExit = hasExit || hasExecutableEntryLifecycle
 
     const blockingReasons = [
       ...(!hasEntry ? ['missing_entry_rules'] : []),
-      ...(!hasExit ? ['missing_exit_rules'] : []),
+      ...(!effectiveHasExit ? ['missing_exit_rules'] : []),
       ...(openSlots.length > 0 ? ['missing_required_rule_params'] : []),
     ]
 
@@ -3429,6 +3475,23 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
 function readParamString(params: Record<string, unknown>, key: string): string | null {
   const value = params[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readNumberParam(params: Record<string, unknown>, key: string): number | null {
+  const value = params[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim())
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function isMovingAverageCrossAtomKey(key: string): boolean {
+  return key === 'indicator.cross_over'
+    || key === 'indicator.cross_under'
+    || key === 'ma.golden_cross'
+    || key === 'ma.death_cross'
 }
 
 function readNestedParam(params: Record<string, unknown>, key: string): unknown {

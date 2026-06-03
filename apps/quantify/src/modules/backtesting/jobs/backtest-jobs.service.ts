@@ -208,9 +208,10 @@ export class BacktestJobsService {
     const symbol = typeof params.symbol === 'string' ? params.symbol : ''
     const baseTimeframe = typeof params.timeframe === 'string' ? params.timeframe : ''
     const marketType = params.marketType === 'spot' || params.marketType === 'perp' ? params.marketType : null
+    const symbols = input.symbols.map(item => item.trim()).filter(item => item.length > 0)
     const missingFields = [
       !exchange ? 'exchange' : null,
-      !symbol ? 'symbol' : null,
+      !symbol && symbols.length === 0 ? 'symbol' : null,
       !baseTimeframe ? 'timeframe' : null,
       !marketType ? 'marketType' : null,
     ].filter((field): field is string => field !== null)
@@ -225,27 +226,29 @@ export class BacktestJobsService {
         },
       })
     }
-    const availability = await this.symbolAvailabilityService.check({
-      exchange,
-      symbol,
-      baseTimeframe,
-      marketType,
-    })
-    if (availability.supported) {
-      return
-    }
+    for (const requestedSymbol of symbols.length > 0 ? symbols : [symbol]) {
+      const availability = await this.symbolAvailabilityService.check({
+        exchange,
+        symbol: requestedSymbol,
+        baseTimeframe,
+        marketType,
+      })
+      if (availability.supported) {
+        continue
+      }
 
-    const failure = availability as Extract<BacktestSymbolAvailabilityResult, { supported: false }>
-    const snapshotId = this.readStrategyMetadata(input.strategy, 'snapshotId')
-    throw new DomainException('backtesting.symbol_unavailable', {
-      code: ErrorCode.BAD_REQUEST,
-      status: HttpStatus.BAD_REQUEST,
-      args: {
-        ...(failure.args ?? {}),
-        reasonCode: failure.reasonCode,
-        ...(snapshotId ? { snapshotId } : {}),
-      },
-    })
+      const failure = availability as Extract<BacktestSymbolAvailabilityResult, { supported: false }>
+      const snapshotId = this.readStrategyMetadata(input.strategy, 'snapshotId')
+      throw new DomainException('backtesting.symbol_unavailable', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          ...(failure.args ?? {}),
+          reasonCode: failure.reasonCode,
+          ...(snapshotId ? { snapshotId } : {}),
+        },
+      })
+    }
   }
 
   async getJob(id: string, ownerUserId: string): Promise<BacktestJobView> {

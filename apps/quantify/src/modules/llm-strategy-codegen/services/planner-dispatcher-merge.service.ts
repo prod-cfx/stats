@@ -2909,9 +2909,15 @@ export class PlannerDispatcherMergeService {
         const hasSinglePeriod = period !== null && period > 0
         const hasMissingSlowPeriod = slowPeriod === null || slowPeriod === 0
         const hasSinglePeriodShape = hasMissingSlowPeriod && (fastPeriod === null || fastPeriod === 0 || fastPeriod === period)
-        if (hasSinglePeriod && hasSinglePeriodShape) {
+        if (hasSinglePeriod && hasSinglePeriodShape && this.hasExplicitPriceCrossSubject(atom)) {
           params.priceCross = true
           params.period = period
+          params.fastPeriod = period
+          delete params.slowPeriod
+          delete params.value
+          if (params.signalPeriod === 0) delete params.signalPeriod
+        }
+        else if (hasSinglePeriod && hasSinglePeriodShape) {
           params.fastPeriod = period
           delete params.slowPeriod
           delete params.value
@@ -2920,6 +2926,11 @@ export class PlannerDispatcherMergeService {
       }
     }
     return { ...atom, params }
+  }
+
+  private hasExplicitPriceCrossSubject(atom: AtomExprAtom): boolean {
+    const evidenceText = typeof atom.evidence?.text === 'string' ? atom.evidence.text : ''
+    return /价格|price|close/iu.test(evidenceText)
   }
 
   private extractExplicitPositionSizingFromText(text: string): {

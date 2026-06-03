@@ -3017,7 +3017,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         phase: 'entry',
         sideScope: 'long',
         condition: {
-          kind: 'and',
+          kind: 'AND' as never,
           children: [
             ema20Above('15m'),
             ema20Above('1h'),
@@ -3368,6 +3368,43 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
 
     expect(result.ready).toBe(true)
     expect(result.state.position?.openSlots ?? []).not.toContainEqual(expect.objectContaining({ slotKey: 'position.sizing' }))
+  })
+
+  it('does not reopen rules-first position.sizing when sizing value is nested', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [{
+        id: 'entry-ema-orderbook-confirm',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'AND' as never,
+          children: [
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50 } },
+            { kind: 'atom', key: 'orderbook.imbalance', params: { threshold: 0.6, dataSource: 'orderbook' } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state, { deployedAtSemanticVersion: '2026.05.W02' })
+    const sizingNode = result.state.positionConstraint.find(node => node.key === 'position.sizing')
+
+    expect(result.ready).toBe(true)
+    expect(sizingNode?.status).toBe('locked')
+    expect(sizingNode?.openSlots ?? []).not.toContainEqual(expect.objectContaining({ slotKey: 'position.sizing.value' }))
   })
 
   it('skips timeframe mismatch for indicator.above HTF filter trigger with timeframeOverride', () => {
@@ -3742,6 +3779,85 @@ describe('#1186 PR3 — multi-leg per_order_budget per-leg anchored', () => {
       )
       expect(capitalMissing).toHaveLength(0)
     })
+})
+
+describe('rules mainflow moving-average cross readiness', () => {
+  it('opens slowPeriod slot for ma.golden_cross alias when EMA cross lacks slow period', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [{
+        id: 'entry-ema20-cross-orderbook',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'ma.golden_cross', params: { indicator: 'ema', period: 20, fastPeriod: 20 } },
+            { kind: 'atom', key: 'orderbook.imbalance', params: { threshold: 0.6, dataSource: 'orderbook' } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: { sizing: { mode: 'RATIO', value: 0.1 } } }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+    const crossTrigger = result.state.trigger.find(trigger => trigger.key === 'ma.golden_cross')
+
+    expect(crossTrigger?.status).toBe('open')
+    expect(crossTrigger?.openSlots).toContainEqual(expect.objectContaining({
+      slotKey: 'ma.golden_cross.slowPeriod',
+      paramSlotKey: 'slowPeriod',
+      affectsExecution: true,
+    }))
+    expect(result.ready).toBe(false)
+  })
+
+  it('treats rules-mainflow open-only entry as ready after required MA cross params are closed', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', status: 'locked', value: 'okx', source: 'user_explicit' },
+        symbol: { slotKey: 'context.symbol', status: 'locked', value: 'BTCUSDT', source: 'user_explicit' },
+        marketType: { slotKey: 'context.marketType', status: 'locked', value: 'perp', source: 'user_explicit' },
+        timeframe: { slotKey: 'context.timeframe', status: 'locked', value: '15m', source: 'user_explicit' },
+      },
+      rules: [{
+        id: 'entry-ema20-cross-orderbook',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'ma.golden_cross', params: { indicator: 'ema', period: 20, fastPeriod: 20, slowPeriod: 50 } },
+            { kind: 'atom', key: 'orderbook.imbalance', params: { threshold: 0.6, dataSource: 'orderbook' } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: { sizing: { mode: 'RATIO', value: 0.1 } } }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const summary = new SemanticContractReadinessService().evaluateRulesReadiness(state.rules)
+
+    expect(summary.hasEntry).toBe(true)
+    expect(summary.hasExit).toBe(true)
+    expect(summary.missing).not.toContain('missing_exit')
+  })
 })
 
 function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {

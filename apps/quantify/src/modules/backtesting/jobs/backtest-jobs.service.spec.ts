@@ -473,8 +473,51 @@ describe('backtestJobsService', () => {
     expect(availability.check).toHaveBeenCalledWith({
       exchange: 'okx',
       marketType: 'spot',
-      symbol: 'ORDIUSDT',
+      symbol: 'BTCUSDT',
       baseTimeframe: '1h',
+    })
+  })
+
+  it('checks availability for every symbol requested from a strict published snapshot', async () => {
+    const prisma = createPrismaMock()
+    const availability = {
+      check: jest.fn().mockResolvedValue({ supported: true }),
+    }
+    const service = new BacktestJobsService(
+      availability as never,
+      createConversationsMock() as never,
+      createRepositoryMock(prisma as never) as never,
+      createQueueMock() as never,
+      createSnapshotLoaderMock() as never,
+      createConfigMock() as never,
+    )
+    const input = createInput()
+    input.symbols = ['BTCUSDT', 'ETHUSDT']
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.strategy.params = {
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+    }
+
+    await service.createJob(input, OWNER_USER_ID)
+
+    expect(availability.check).toHaveBeenCalledTimes(2)
+    expect(availability.check).toHaveBeenNthCalledWith(1, {
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+    })
+    expect(availability.check).toHaveBeenNthCalledWith(2, {
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
     })
   })
 

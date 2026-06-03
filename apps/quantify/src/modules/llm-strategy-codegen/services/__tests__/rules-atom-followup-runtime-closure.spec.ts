@@ -47,8 +47,8 @@ describe('rules atom follow-up runtime closure', () => {
     expect(ir.ruleBlocks[0]?.actions[0]).toEqual(expect.objectContaining({ order: expectedOrder }))
   })
 
-  it('action.limit_order fails closed when limitPrice is missing', () => {
-    expect(() => new CanonicalSpecV2IrCompilerService().compile({
+  it('action.limit_order without limitPrice compiles as signal-price limit order', () => {
+    const { ir } = new CanonicalSpecV2IrCompilerService().compile({
       canonicalSpec: baseSpec({
         rules: [{
           id: 'entry-limit-without-price',
@@ -60,7 +60,9 @@ describe('rules atom follow-up runtime closure', () => {
         }],
       }),
       fallback,
-    })).toThrow('codegen.canonical_spec_v2_action_limit_order_missing_limit_price:entry-limit-without-price')
+    })
+
+    expect(ir.ruleBlocks[0]?.actions[0]?.order).toEqual({ orderType: 'limit', timeInForce: 'gtc' })
   })
 
   it.each(['twap', 'dca', 'martingale', 'rebalance', 'iceberg'] as const)(
