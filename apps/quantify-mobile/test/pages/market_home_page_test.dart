@@ -259,6 +259,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('market-search-field')), findsOneWidget);
     expect(find.byKey(const Key('market-search-overlay')), findsOneWidget);
+    final TextField searchField = tester.widget<TextField>(
+      find.byKey(const Key('market-search-field')),
+    );
+    expect(searchField.decoration?.filled, isFalse);
     expect(find.text('搜索历史'), findsOneWidget);
     expect(find.text('热门搜索'), findsOneWidget);
     expect(find.text('· 24H 异动'), findsOneWidget);

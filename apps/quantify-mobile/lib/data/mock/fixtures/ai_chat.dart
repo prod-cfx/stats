@@ -3,9 +3,53 @@ import '../../models/ai_chat_models.dart';
 /// AI 助手欢迎语；新会话默认插入这一条。
 const String mockGreeting = '告诉我你的交易想法，我会帮你生成策略并回测。回测最大回撤需 ≤ 20% 才能一键部署。';
 
-/// 默认 3 条 mock 会话（对齐原型 `__qfChatSessions`）：BTC 趋势 / ETH 反转 / SOL 网格。
+/// 默认 mock 会话（对齐原型 `__qfChatSessions`）：BTC 实盘 / ETH / SOL /
+/// AVAX 待部署。
 List<AiSession> buildMockSessions() {
   return <AiSession>[
+    AiSession(
+      id: 's5',
+      title: 'AVAX 突破 · 待部署',
+      category: '突破',
+      pair: 'AVAX/USDT',
+      timeframe: '1H',
+      cagrLabel: null,
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(1_716_000_240_000),
+      messages: <ChatTurn>[
+        ChatTurn(
+          id: 's5-greet',
+          role: 'assistant',
+          content: mockGreeting,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_200_000),
+        ),
+        ChatTurn(
+          id: 's5-1',
+          role: 'user',
+          content: 'AVAX 1 小时，突破前 20 根 K 线高点开多，跌破 ATR 止损。',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_205_000),
+        ),
+        ChatTurn(
+          id: 's5-2',
+          role: 'assistant',
+          content: '已识别为 突破跟踪。建议加上「成交量过滤」减少假突破。',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_210_000),
+        ),
+        ChatTurn(
+          id: 's5-3',
+          role: 'assistant',
+          content: '',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_215_000),
+          kind: ChatTurnKind.params,
+          params: <String, String>{
+            'category': '趋势跟踪',
+            'fast_ma': '5',
+            'slow_ma': '20',
+            'stop_loss': '2.0%',
+            'position': '100%',
+          },
+        ),
+      ],
+    ),
     AiSession(
       id: 's1',
       title: 'BTC 趋势 · 双均线',
@@ -13,6 +57,7 @@ List<AiSession> buildMockSessions() {
       pair: 'BTC/USDT',
       timeframe: '15m',
       cagrLabel: '+31.6%',
+      deployedTo: 'QF-AY7K2P',
       updatedAt: DateTime.fromMillisecondsSinceEpoch(1_716_000_120_000),
       messages: <ChatTurn>[
         ChatTurn(
@@ -41,6 +86,15 @@ List<AiSession> buildMockSessions() {
             'stop_loss': '2.0%',
             'leverage': '5x',
           },
+        ),
+        ChatTurn(
+          id: 's1-deployed',
+          role: 'assistant',
+          content: '策略已部署到 Binance',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_120_000),
+          kind: ChatTurnKind.deployed,
+          deployedExchange: 'Binance',
+          deployedInstanceId: 'QF-AY7K2P',
         ),
       ],
     ),

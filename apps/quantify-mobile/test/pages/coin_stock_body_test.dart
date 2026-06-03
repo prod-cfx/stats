@@ -153,6 +153,10 @@ void main() {
     await tester.tap(find.byKey(const Key('coin-stock-search-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('coin-stock-search-input')), findsOneWidget);
+    final TextField searchField = tester.widget<TextField>(
+      find.byKey(const Key('coin-stock-search-input')),
+    );
+    expect(searchField.decoration?.filled, isFalse);
     // 热门标的 chip（取前 8 sym，fixtures 仅 3 个）。
     expect(find.byKey(const Key('coin-stock-search-hot-MSTR')), findsOneWidget);
     // 输入 HOOD → 命中结果行。
@@ -165,6 +169,19 @@ void main() {
       find.byKey(const Key('coin-stock-search-result-HOOD')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('搜索热门标的直接打开详情', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('coin-stock-search-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('coin-stock-search-hot-MSTR')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coin-stock-search-input')), findsNothing);
+    expect(find.byKey(const Key('coin-stock-detail-sheet')), findsOneWidget);
+    expect(find.text('前身 MicroStrategy。'), findsOneWidget);
   });
 
   testWidgets('搜索 overlay 空查询态对齐共享 SearchOverlay（#2047）', (

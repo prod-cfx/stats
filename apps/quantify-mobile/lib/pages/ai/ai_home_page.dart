@@ -210,6 +210,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
             timestamp: reply.timestamp,
             kind: reply.kind,
             params: reply.params,
+            deployedExchange: reply.deployedExchange,
+            deployedInstanceId: reply.deployedInstanceId,
           ),
         ],
       );
@@ -241,6 +243,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
           timestamp: reply.timestamp,
           kind: reply.kind,
           params: reply.params,
+          deployedExchange: reply.deployedExchange,
+          deployedInstanceId: reply.deployedInstanceId,
         );
         setState(() {
           _sessions[id] = s.copyWith(messages: msgs);
@@ -256,6 +260,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         timestamp: reply.timestamp,
         kind: reply.kind,
         params: reply.params,
+        deployedExchange: reply.deployedExchange,
+        deployedInstanceId: reply.deployedInstanceId,
       );
       setState(() => _sessions[id] = s.copyWith(messages: msgs));
       _scrollToBottom();
@@ -461,6 +467,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                           };
                           final bool isDeployed =
                               t.kind == ChatTurnKind.deployed;
+                          final String? liveId =
+                              t.deployedInstanceId ??
+                              (isDeployed ? current.deployedTo : null);
                           return QzChatBubble(
                             role: role,
                             content: t.content,
@@ -479,16 +488,14 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                             // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。
                             locked: current.deployedTo != null,
                             // 部署终态富气泡（#1833）：传交易所 / 实例 ID +
-                            // 「查看实盘策略」CTA（跳 `/me/live`），气泡内渲染
+                            // 「查看实盘策略」CTA（跳 `/me/live/:id`），气泡内渲染
                             // ✓ + 运行中状态 + 归档话术。
                             deployedExchange: isDeployed
                                 ? t.deployedExchange
                                 : null,
-                            deployedInstanceId: isDeployed
-                                ? t.deployedInstanceId
-                                : null,
-                            onViewLive: isDeployed
-                                ? () => context.push('/me/live')
+                            deployedInstanceId: isDeployed ? liveId : null,
+                            onViewLive: isDeployed && liveId != null
+                                ? () => context.push('/me/live/$liveId')
                                 : null,
                           );
                         }

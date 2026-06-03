@@ -10,10 +10,7 @@ void main() {
       expect(list.length, greaterThanOrEqualTo(3));
       // 倒序断言：相邻两条 updatedAt 单调不递增。
       for (int i = 1; i < list.length; i++) {
-        expect(
-          list[i - 1].updatedAt.isBefore(list[i].updatedAt),
-          isFalse,
-        );
+        expect(list[i - 1].updatedAt.isBefore(list[i].updatedAt), isFalse);
       }
     });
 
@@ -52,8 +49,7 @@ void main() {
       expect(reply.role, 'assistant');
       expect(reply.content, contains('你好'));
       final List<AiSession> after = await repo.listSessions();
-      final AiSession updated =
-          after.firstWhere((AiSession s) => s.id == id);
+      final AiSession updated = after.firstWhere((AiSession s) => s.id == id);
       expect(updated.messages.length, before + 2); // user + assistant
     });
 
@@ -67,11 +63,17 @@ void main() {
     test('markDeployed 回写 deployedTo 为实例 ID', () async {
       final MockAiChatRepository repo = MockAiChatRepository();
       final List<AiSession> list = await repo.listSessions();
-      final String id = list.first.id;
-      expect(list.first.deployedTo, isNull);
+      final AiSession target = list.firstWhere(
+        (AiSession session) => session.deployedTo == null,
+      );
+      final String id = target.id;
       final AiSession? updated = await repo.markDeployed(id, 'inst-42');
       expect(updated, isNotNull);
       expect(updated!.deployedTo, 'inst-42');
+      final ChatTurn deployedTurn = updated.messages.last;
+      expect(deployedTurn.kind, ChatTurnKind.deployed);
+      expect(deployedTurn.content, '策略已部署到 Binance');
+      expect(deployedTurn.deployedInstanceId, 'inst-42');
       // 列表中的会话同步回写。
       final List<AiSession> after = await repo.listSessions();
       expect(
@@ -89,12 +91,12 @@ void main() {
 
   group('AiSession 模型', () {
     AiSession base() => AiSession(
-          id: 's',
-          title: 't',
-          category: 'c',
-          updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
-          messages: const <ChatTurn>[],
-        );
+      id: 's',
+      title: 't',
+      category: 'c',
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+      messages: const <ChatTurn>[],
+    );
 
     test('deployedTo 默认 null；copyWith 可设置', () {
       final AiSession s = base();

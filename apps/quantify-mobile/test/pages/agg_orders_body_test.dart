@@ -6,6 +6,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/agg_orders_body.dart';
 import 'package:quantify_mobile/pages/market/widgets/agg_exchange_avatar.dart';
 import 'package:quantify_mobile/pages/market/widgets/agg_format.dart';
+import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/theme/tokens.dart';
@@ -231,6 +232,66 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('agg-volume-list')), findsOneWidget);
     expect(find.text('总计'), findsOneWidget);
+  });
+
+  testWidgets('持仓量搜索热门币种直接选中回填', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('agg-subtab-openInterest')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('agg-coin-search-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('agg-coin-search-field')), findsOneWidget);
+    final TextField searchField = tester.widget<TextField>(
+      find.byKey(const Key('agg-coin-search-field')),
+    );
+    expect(searchField.decoration?.filled, isFalse);
+    expect(find.byKey(const Key('agg-coin-search-hot-ETH')), findsOneWidget);
+    expect(
+      find.byKey(const Key('agg-coin-search-history-BTC')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('agg-coin-search-hot-ETH')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('agg-coin-search-field')), findsNothing);
+    final Container selectedChip = tester.widget<Container>(
+      find.descendant(
+        of: find.byKey(const Key('agg-coin-chip-ETH')),
+        matching: find.byType(Container),
+      ),
+    );
+    final BoxDecoration decoration = selectedChip.decoration! as BoxDecoration;
+    expect(
+      decoration.border?.top.color,
+      qzColors(QzBg.light, QzAccent.violet).accent,
+    );
+  });
+
+  testWidgets('成交量搜索热门币种直接选中回填', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('agg-subtab-volume')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('agg-coin-search-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('agg-coin-search-hot-ETH')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('agg-coin-search-hot-ETH')));
+    await tester.pumpAndSettle();
+
+    final Container selectedChip = tester.widget<Container>(
+      find.descendant(
+        of: find.byKey(const Key('agg-coin-chip-ETH')),
+        matching: find.byType(Container),
+      ),
+    );
+    final BoxDecoration decoration = selectedChip.decoration! as BoxDecoration;
+    expect(
+      decoration.border?.top.color,
+      qzColors(QzBg.light, QzAccent.violet).accent,
+    );
   });
 
   testWidgets('订单簿视图切换：双向→卖单仅显示 asks，含中价条（AC2）', (WidgetTester tester) async {

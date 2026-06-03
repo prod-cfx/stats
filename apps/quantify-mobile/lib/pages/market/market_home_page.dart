@@ -346,7 +346,8 @@ class _MarketSearchRouteState extends ConsumerState<_MarketSearchRoute> {
                       height: 38,
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                       decoration: BoxDecoration(
-                        color: c.bgSoft,
+                        color: c.bgInput,
+                        border: Border.all(color: c.border),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
@@ -361,6 +362,7 @@ class _MarketSearchRouteState extends ConsumerState<_MarketSearchRoute> {
                               textCapitalization: TextCapitalization.characters,
                               style: TextStyle(color: c.text, fontSize: 13),
                               decoration: InputDecoration(
+                                filled: false,
                                 border: InputBorder.none,
                                 isCollapsed: true,
                                 hintText: '搜索',

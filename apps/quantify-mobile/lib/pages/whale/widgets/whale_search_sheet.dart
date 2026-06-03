@@ -46,8 +46,9 @@ class _WhaleSearchBodyState extends ConsumerState<_WhaleSearchBody> {
 
   Future<void> _onChanged(String value) async {
     final String query = value.trim();
-    final List<WhaleSearchResult> results =
-        await ref.read(whaleWatchRepositoryProvider).search(value);
+    final List<WhaleSearchResult> results = await ref
+        .read(whaleWatchRepositoryProvider)
+        .search(value);
     // 丢弃过期请求：异步返回时输入已变化则不覆盖更新的结果。
     if (!mounted || _controller.text.trim() != query) return;
     setState(() {
@@ -71,22 +72,35 @@ class _WhaleSearchBodyState extends ConsumerState<_WhaleSearchBody> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            onChanged: _onChanged,
-            style: TextStyle(color: c.text, fontSize: 14),
-            decoration: InputDecoration(
-              prefixIcon: Icon(Icons.search, color: c.textMid, size: 18),
-              hintText: l10n.whaleSearchHint,
-              hintStyle: TextStyle(color: c.textDim, fontSize: 14),
-              filled: true,
-              fillColor: c.bgSoft,
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+            decoration: BoxDecoration(
+              color: c.bgInput,
+              border: Border.all(color: c.border),
+              borderRadius: BorderRadius.circular(QzRadii.pill),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.search, color: c.textMid, size: 18),
+                const SizedBox(width: QzSpacing.sm),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    onChanged: _onChanged,
+                    cursorColor: c.accent,
+                    style: TextStyle(color: c.text, fontSize: 14),
+                    decoration: InputDecoration(
+                      filled: false,
+                      border: InputBorder.none,
+                      isCollapsed: true,
+                      hintText: l10n.whaleSearchHint,
+                      hintStyle: TextStyle(color: c.textDim, fontSize: 14),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: QzSpacing.md),
@@ -117,18 +131,20 @@ class _WhaleSearchBodyState extends ConsumerState<_WhaleSearchBody> {
     AppLocalizations l10n,
     QzColorScheme c,
   ) {
-    final List<WhaleSearchResult> group =
-        _results.where((WhaleSearchResult r) => r.kind == kind).toList();
+    final List<WhaleSearchResult> group = _results
+        .where((WhaleSearchResult r) => r.kind == kind)
+        .toList();
     if (group.isEmpty) return const <Widget>[];
     return <Widget>[
       Padding(
         padding: const EdgeInsets.fromLTRB(2, QzSpacing.sm, 2, QzSpacing.xs),
         child: Text(
-          _kindLabel(kind, l10n),
+          _kindLabel(kind, l10n).toUpperCase(),
           style: TextStyle(
             color: c.textDim,
             fontSize: 11,
             fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
           ),
         ),
       ),
@@ -218,10 +234,7 @@ class _Hint extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: QzSpacing.xl),
       child: Center(
-        child: Text(
-          text,
-          style: TextStyle(color: c.textDim, fontSize: 13),
-        ),
+        child: Text(text, style: TextStyle(color: c.textDim, fontSize: 13)),
       ),
     );
   }

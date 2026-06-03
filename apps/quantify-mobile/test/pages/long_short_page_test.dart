@@ -116,15 +116,17 @@ void main() {
     expect(find.byKey(const Key('long-short-period-sheet')), findsNothing);
   });
 
-  testWidgets('点搜索打开 overlay：热门 + 历史；输入过滤；选中回填币种', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('点搜索打开 overlay：热门 + 历史；输入过滤；选中回填币种', (WidgetTester tester) async {
     await _pumpBody(tester);
 
     // 打开全屏搜索，空查询态显示热门币种 + 搜索历史。
     await tester.tap(find.byKey(const Key('long-short-coin-search')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('long-short-search-input')), findsOneWidget);
+    final TextField searchField = tester.widget<TextField>(
+      find.byKey(const Key('long-short-search-input')),
+    );
+    expect(searchField.decoration?.filled, isFalse);
     expect(find.byKey(const Key('long-short-search-hot-BTC')), findsOneWidget);
     expect(find.byKey(const Key('long-short-search-hot-ETH')), findsOneWidget);
     expect(find.text('搜索历史'), findsOneWidget);
@@ -135,16 +137,36 @@ void main() {
       'eth',
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('long-short-search-result-ETH')), findsOneWidget);
+    expect(
+      find.byKey(const Key('long-short-search-result-ETH')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('long-short-search-result-BTC')), findsNothing);
 
     // 选中结果 → pop overlay 并把 symbol 回填到 tab（ETH chip 选中）。
     await tester.tap(find.byKey(const Key('long-short-search-result-ETH')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('long-short-search-input')), findsNothing);
-    final LongShortBody body =
-        tester.widget<LongShortBody>(find.byType(LongShortBody));
+    final LongShortBody body = tester.widget<LongShortBody>(
+      find.byType(LongShortBody),
+    );
     expect(body, isNotNull);
+    expect(
+      find.byKey(const Key('long-short-symbol-chip-ETHUSDT')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('搜索 overlay 热门币种直接选中回填', (WidgetTester tester) async {
+    await _pumpBody(tester);
+
+    await tester.tap(find.byKey(const Key('long-short-coin-search')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('long-short-search-hot-ETH')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('long-short-search-input')), findsNothing);
     expect(
       find.byKey(const Key('long-short-symbol-chip-ETHUSDT')),
       findsOneWidget,

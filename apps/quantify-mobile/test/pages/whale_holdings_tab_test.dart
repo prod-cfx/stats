@@ -49,11 +49,15 @@ Future<void> _pump(WidgetTester tester) async {
 void main() {
   group('筛选纯函数', () {
     test('空筛选返回原序副本，不改入参', () {
-      final List<WhaleHoldingPosition> out =
-          filterWhaleHoldings(mockWhaleHoldings, const WhaleHoldingFilter());
+      final List<WhaleHoldingPosition> out = filterWhaleHoldings(
+        mockWhaleHoldings,
+        const WhaleHoldingFilter(),
+      );
       expect(out.length, mockWhaleHoldings.length);
-      expect(out.map((WhaleHoldingPosition e) => e.address),
-          mockWhaleHoldings.map((WhaleHoldingPosition e) => e.address));
+      expect(
+        out.map((WhaleHoldingPosition e) => e.address),
+        mockWhaleHoldings.map((WhaleHoldingPosition e) => e.address),
+      );
     });
 
     test('币种筛选：仅保留对应 symbol', () {
@@ -93,8 +97,10 @@ void main() {
         ),
       );
       expect(
-        out.every((WhaleHoldingPosition e) =>
-            e.symbol == 'BTC' && e.isLong && e.isProfit),
+        out.every(
+          (WhaleHoldingPosition e) =>
+              e.symbol == 'BTC' && e.isLong && e.isProfit,
+        ),
         isTrue,
       );
     });
@@ -114,10 +120,14 @@ void main() {
 
   group('排序纯函数', () {
     test('sort=null 返回原序副本，不改入参', () {
-      final List<WhaleHoldingPosition> out =
-          sortWhaleHoldings(mockWhaleHoldings, null);
-      expect(out.map((WhaleHoldingPosition e) => e.address),
-          mockWhaleHoldings.map((WhaleHoldingPosition e) => e.address));
+      final List<WhaleHoldingPosition> out = sortWhaleHoldings(
+        mockWhaleHoldings,
+        null,
+      );
+      expect(
+        out.map((WhaleHoldingPosition e) => e.address),
+        mockWhaleHoldings.map((WhaleHoldingPosition e) => e.address),
+      );
       expect(identical(out, mockWhaleHoldings), isFalse);
     });
 
@@ -276,13 +286,26 @@ void main() {
 
       await tester.tap(find.byKey(const Key('whaleHoldingsCoinSearch')));
       await tester.pumpAndSettle();
+      final TextField searchField = tester.widget<TextField>(
+        find.byKey(const Key('whaleHoldingsCoinSearchInput')),
+      );
+      expect(searchField.decoration?.filled, isFalse);
+      expect(
+        find.byKey(const Key('whaleHoldingsCoinSearchHot_ETH')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('whaleHoldingsCoinSearchHistory_ETH')),
+        findsOneWidget,
+      );
       await tester.enterText(
         find.byKey(const Key('whaleHoldingsCoinSearchInput')),
         'btc',
       );
       await tester.pumpAndSettle();
-      await tester
-          .tap(find.byKey(const Key('whaleHoldingsCoinSearchResult_BTC')));
+      await tester.tap(
+        find.byKey(const Key('whaleHoldingsCoinSearchResult_BTC')),
+      );
       await tester.pumpAndSettle();
 
       final List<String> btcOnly = _cardAddresses(tester);
@@ -293,8 +316,30 @@ void main() {
       expect(btcOnly.length, lessThan(total));
     });
 
-    testWidgets('Row1 渲染地址链接 / 复制按钮 / 「巨鲸」徽标 / 趋势按钮',
-        (WidgetTester tester) async {
+    testWidgets('币种搜索热门 chip 直接选中并过滤', (WidgetTester tester) async {
+      await _pump(tester);
+      final int total = _cardAddresses(tester).length;
+
+      await tester.tap(find.byKey(const Key('whaleHoldingsCoinSearch')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('whaleHoldingsCoinSearchHot_BTC')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('whaleHoldingsCoinSearchInput')),
+        findsNothing,
+      );
+      final List<String> btcOnly = _cardAddresses(tester);
+      final int btcCount = mockWhaleHoldings
+          .where((WhaleHoldingPosition e) => e.symbol == 'BTC')
+          .length;
+      expect(btcOnly.length, btcCount);
+      expect(btcOnly.length, lessThan(total));
+    });
+
+    testWidgets('Row1 渲染地址链接 / 复制按钮 / 「巨鲸」徽标 / 趋势按钮', (
+      WidgetTester tester,
+    ) async {
       await _pump(tester);
       expect(find.byType(WhaleAddressLink), findsWidgets);
       expect(find.byType(WhaleCopyButton), findsWidgets);

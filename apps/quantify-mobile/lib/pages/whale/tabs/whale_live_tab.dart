@@ -683,7 +683,8 @@ class _CoinSearchOverlayState extends State<_CoinSearchOverlay> {
                     height: 38,
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: c.bgSoft,
+                      color: c.bgInput,
+                      border: Border.all(color: c.border),
                       borderRadius: BorderRadius.circular(QzRadii.pill),
                     ),
                     child: Row(
@@ -696,7 +697,9 @@ class _CoinSearchOverlayState extends State<_CoinSearchOverlay> {
                             focusNode: _focusNode,
                             onChanged: (String value) =>
                                 setState(() => _query = value),
+                            cursorColor: c.accent,
                             decoration: const InputDecoration(
+                              filled: false,
                               hintText: '搜索币种',
                               border: InputBorder.none,
                               isDense: true,
@@ -866,11 +869,12 @@ class _SearchSectionTitle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
-        label,
+        label.toUpperCase(),
         style: TextStyle(
-          color: c.text,
-          fontSize: 14,
+          color: c.textDim,
+          fontSize: 11,
           fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
         ),
       ),
     );
@@ -892,7 +896,7 @@ class _SearchChip extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 62, minHeight: 30),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: c.accentSoft,
+            color: c.bgElev,
             borderRadius: BorderRadius.circular(QzRadii.pill),
           ),
           child: Padding(
@@ -903,7 +907,7 @@ class _SearchChip extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  color: c.text,
+                  color: c.textMid,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),

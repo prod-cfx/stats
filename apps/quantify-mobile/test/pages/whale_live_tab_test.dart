@@ -125,6 +125,20 @@ void main() {
     );
   });
 
+  testWidgets('币种搜索输入框不继承全局填充白底', (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    await tester.tap(find.byTooltip('搜索币种'));
+    await tester.pumpAndSettle();
+
+    final TextField searchField = tester.widget<TextField>(
+      find.byType(TextField),
+    );
+    expect(searchField.decoration?.filled, isFalse);
+  });
+
   testWidgets('默认 BTC chip 下所有 row 都是 BTC', (WidgetTester tester) async {
     final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
     await _pump(tester, repo);

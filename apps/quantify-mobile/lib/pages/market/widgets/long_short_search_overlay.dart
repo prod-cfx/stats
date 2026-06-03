@@ -112,7 +112,11 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
     );
   }
 
-  Widget _inputRow(BuildContext context, AppLocalizations l10n, QzColorScheme c) {
+  Widget _inputRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         QzSpacing.lg,
@@ -126,7 +130,8 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
             child: Container(
               height: 38,
               decoration: BoxDecoration(
-                color: c.bgSoft,
+                color: c.bgInput,
+                border: Border.all(color: c.border),
                 borderRadius: BorderRadius.circular(999),
               ),
               padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
@@ -145,6 +150,7 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
                       cursorColor: c.accent,
                       style: TextStyle(color: c.text, fontSize: 13),
                       decoration: InputDecoration(
+                        filled: false,
                         border: InputBorder.none,
                         isCollapsed: true,
                         hintText: l10n.aggCoinSearchHint,
@@ -195,11 +201,12 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
       ),
       children: <Widget>[
         Text(
-          l10n.aggCoinSearchHot,
+          l10n.aggCoinSearchHot.toUpperCase(),
           style: TextStyle(
-            color: c.text,
-            fontSize: 14,
+            color: c.textDim,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
           ),
         ),
         const SizedBox(height: QzSpacing.md),
@@ -217,11 +224,12 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  l10n.strategySearchHistoryLabel,
+                  l10n.strategySearchHistoryLabel.toUpperCase(),
                   style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
+                    color: c.textDim,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ),
@@ -252,22 +260,19 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
   Widget _chip(QzColorScheme c, String term, {required Key key}) {
     return GestureDetector(
       key: key,
-      onTap: () {
-        _remember(term);
-        _setQuery(term);
-      },
+      onTap: () => _pick(term),
       child: Container(
         constraints: const BoxConstraints(minWidth: 62),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         decoration: BoxDecoration(
-          color: c.accentSoft,
+          color: c.bgElev,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           term,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: c.text,
+            color: c.textMid,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),

@@ -361,115 +361,150 @@ class QzChatBubble extends StatelessWidget {
   }
 
   /// 部署终态富气泡（#1833）。对齐设计稿 m-screens-1.jsx:440 的 `deployed`
-  /// 分支：violetSoft 头部块（✓ + 部署交易所 + 「策略 ID … · 运行中」）+
-  /// 归档话术 + 满宽 violetGrad「查看实盘策略 →」CTA。
+  /// 分支：左侧 bot avatar + assistant 气泡，气泡内含 violetSoft 头部块
+  /// （✓ + 部署交易所 + 「策略 ID … · 运行中」）+ 归档话术 + 满宽
+  /// violetGrad「查看实盘策略 →」CTA。
   Widget _buildDeployed(BuildContext context, QzColorScheme c) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final String id = deployedInstanceId ?? '';
-    return Container(
-      key: const Key('ai-bubble-deployed'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(QzSpacing.md),
-      decoration: BoxDecoration(
-        color: c.bgElev,
-        border: Border.all(color: c.borderSoft),
-        borderRadius: BorderRadius.circular(QzRadii.input),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          // 头部块：✓ 图标 + 部署交易所标题 + 「策略 ID … · 运行中」副行。
-          Container(
-            padding: const EdgeInsets.all(QzSpacing.sm),
+    return LayoutBuilder(
+      builder: (BuildContext ctx, BoxConstraints constraints) {
+        final double maxW = (constraints.maxWidth - 30 - QzSpacing.sm) * 0.82;
+        final Widget bubble = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxW),
+          child: Container(
+            key: const Key('ai-bubble-deployed'),
+            padding: const EdgeInsets.all(QzSpacing.md),
             decoration: BoxDecoration(
-              color: c.accentSoft,
-              borderRadius: BorderRadius.circular(QzRadii.input),
+              color: c.bgElev,
+              border: Border.all(color: c.borderSoft),
+              borderRadius: _assistantRadius,
             ),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Container(
-                  width: 30,
-                  height: 30,
+                  padding: const EdgeInsets.all(QzSpacing.sm),
                   decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: BorderRadius.circular(QzSpacing.sm),
+                    color: c.accentSoft,
+                    borderRadius: BorderRadius.circular(QzRadii.input),
                   ),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.check, size: 16, color: c.accentOn),
-                ),
-                const SizedBox(width: QzSpacing.sm),
-                Expanded(
-                  child: Column(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      Text(
-                        content,
-                        style: TextStyle(
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
                           color: c.accent,
-                          fontSize: 13,
-                          height: 1.3,
-                          fontWeight: FontWeight.w700,
+                          borderRadius: BorderRadius.circular(QzSpacing.sm),
                         ),
+                        alignment: Alignment.center,
+                        child: Icon(Icons.check, size: 16, color: c.accentOn),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.deployedBubbleStrategyId(id),
-                        style: TextStyle(
-                          color: c.textDim,
-                          fontSize: 11,
-                          height: 1.5,
+                      const SizedBox(width: QzSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text(
+                              content,
+                              style: TextStyle(
+                                color: c.accent,
+                                fontSize: 13,
+                                height: 1.3,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              l10n.deployedBubbleStrategyId(id),
+                              style: TextStyle(
+                                color: c.textDim,
+                                fontSize: 11,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: QzSpacing.sm),
+                Text(
+                  l10n.deployedBubbleArchivedNotice,
+                  style: TextStyle(color: c.text, fontSize: 13, height: 1.5),
+                ),
+                const SizedBox(height: QzSpacing.sm),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: const Key('ai-bubble-view-live'),
+                    onTap: onViewLive,
+                    borderRadius: BorderRadius.circular(QzRadii.input),
+                    child: Container(
+                      height: 38,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: c.accentGrad,
+                        borderRadius: BorderRadius.circular(QzRadii.input),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          Text(
+                            l10n.deployViewLiveStrategies,
+                            style: TextStyle(
+                              color: c.accentOn,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: QzSpacing.xs),
+                          Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: c.accentOn,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: QzSpacing.sm),
-          Text(
-            l10n.deployedBubbleArchivedNotice,
-            style: TextStyle(color: c.text, fontSize: 13, height: 1.5),
-          ),
-          const SizedBox(height: QzSpacing.sm),
-          // 满宽 violetGrad CTA：label + trailing caret。QzButton 无 trailing
-          // 槽位，这里就近自绘以贴合设计稿。
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              key: const Key('ai-bubble-view-live'),
-              onTap: onViewLive,
-              borderRadius: BorderRadius.circular(QzRadii.input),
-              child: Container(
-                height: 38,
-                width: double.infinity,
+        );
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                key: const Key('ai-bubble-bot-avatar'),
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
-                  gradient: c.accentGrad,
-                  borderRadius: BorderRadius.circular(QzRadii.input),
+                  color: c.accentSoft,
+                  borderRadius: BorderRadius.circular(QzSpacing.sm),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Text(
-                      l10n.deployViewLiveStrategies,
-                      style: TextStyle(
-                        color: c.accentOn,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: QzSpacing.xs),
-                    Icon(Icons.chevron_right, size: 16, color: c.accentOn),
-                  ],
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.smart_toy_outlined,
+                  size: 16,
+                  color: c.accent,
                 ),
               ),
-            ),
+              const SizedBox(width: QzSpacing.sm),
+              Flexible(child: bubble),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

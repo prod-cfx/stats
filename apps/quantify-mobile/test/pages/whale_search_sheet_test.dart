@@ -59,6 +59,10 @@ void main() {
   testWidgets('打开搜索 sheet：空 query 显示提示', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.byType(TextField), findsOneWidget);
+    final TextField searchField = tester.widget<TextField>(
+      find.byType(TextField),
+    );
+    expect(searchField.decoration?.filled, isFalse);
     expect(find.text('搜索地址、标签、资产、交易所或事件类型'), findsOneWidget);
   });
 
@@ -78,8 +82,7 @@ void main() {
     expect(find.text('未找到匹配结果'), findsOneWidget);
   });
 
-  testWidgets('点击地址结果：关闭 sheet 并跳转地址详情',
-      (WidgetTester tester) async {
+  testWidgets('点击地址结果：关闭 sheet 并跳转地址详情', (WidgetTester tester) async {
     await _pump(tester);
     await tester.enterText(find.byType(TextField), '0xa83');
     await tester.pumpAndSettle();

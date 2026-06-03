@@ -105,9 +105,31 @@ class MockAiChatRepository implements AiChatRepository {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     final int idx = _sessions.indexWhere((AiSession s) => s.id == sessionId);
     if (idx < 0) return null;
+    final DateTime now = DateTime.now();
+    final AiSession current = _sessions[idx];
+    final bool hasDeployedTurn = current.messages.any(
+      (ChatTurn turn) =>
+          turn.kind == ChatTurnKind.deployed &&
+          turn.deployedInstanceId == instanceId,
+    );
+    final List<ChatTurn> messages = hasDeployedTurn
+        ? current.messages
+        : <ChatTurn>[
+            ...current.messages,
+            ChatTurn(
+              id: 'deploy-${now.microsecondsSinceEpoch}',
+              role: 'assistant',
+              content: '策略已部署到 Binance',
+              timestamp: now,
+              kind: ChatTurnKind.deployed,
+              deployedExchange: 'Binance',
+              deployedInstanceId: instanceId,
+            ),
+          ];
     final AiSession updated = _sessions[idx].copyWith(
       deployedTo: instanceId,
-      updatedAt: DateTime.now(),
+      updatedAt: now,
+      messages: messages,
     );
     _sessions[idx] = updated;
     return updated;

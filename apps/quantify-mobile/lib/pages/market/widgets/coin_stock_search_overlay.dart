@@ -10,8 +10,8 @@ import '../../../theme/tokens.dart';
 ///
 /// 空查询态：热门标的 chips（取前 8 条 sym）。有查询态：按 `sym+cn+ex` 子串
 /// 匹配渲染结果行（首字母头像 + 代码 + 公司名 + 股价），无命中显示空态。
-/// 选中结果先 pop 自身，再回调 [onOpenStock]；点热门 chip 回填查询；键盘提交
-/// 把当前查询通过 [onApplyQuery] 应用到列表。
+/// 选中结果先 pop 自身，再回调 [onOpenStock]；点热门 chip 直接打开标的；
+/// 键盘提交把当前查询通过 [onApplyQuery] 应用到列表。
 class CoinStockSearchOverlay extends StatefulWidget {
   const CoinStockSearchOverlay({
     super.key,
@@ -84,6 +84,14 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
     });
   }
 
+  CoinStock? _stockBySym(String sym) {
+    final String value = sym.trim().toLowerCase();
+    for (final CoinStock r in widget.stocks) {
+      if (r.sym.toLowerCase() == value) return r;
+    }
+    return null;
+  }
+
   void _pick(CoinStock r) {
     _remember(r.sym);
     Navigator.of(context).pop();
@@ -134,7 +142,8 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
             child: Container(
               height: 38,
               decoration: BoxDecoration(
-                color: c.bgSoft,
+                color: c.bgInput,
+                border: Border.all(color: c.border),
                 borderRadius: BorderRadius.circular(999),
               ),
               padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
@@ -153,6 +162,7 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
                       cursorColor: c.accent,
                       style: TextStyle(color: c.text, fontSize: 13),
                       decoration: InputDecoration(
+                        filled: false,
                         border: InputBorder.none,
                         isCollapsed: true,
                         hintText: l10n.coinStockSearchHint,
@@ -203,11 +213,12 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
       ),
       children: <Widget>[
         Text(
-          l10n.coinStockSearchHotLabel,
+          l10n.coinStockSearchHotLabel.toUpperCase(),
           style: TextStyle(
-            color: c.text,
-            fontSize: 14,
+            color: c.textDim,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
           ),
         ),
         const SizedBox(height: QzSpacing.md),
@@ -225,11 +236,12 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  l10n.strategySearchHistoryLabel,
+                  l10n.strategySearchHistoryLabel.toUpperCase(),
                   style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
+                    color: c.textDim,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ),
@@ -261,21 +273,25 @@ class _CoinStockSearchOverlayState extends State<CoinStockSearchOverlay> {
     return GestureDetector(
       key: key,
       onTap: () {
-        _remember(term);
-        _setQuery(term);
+        final CoinStock? stock = _stockBySym(term);
+        if (stock == null) {
+          _setQuery(term);
+          return;
+        }
+        _pick(stock);
       },
       child: Container(
         constraints: const BoxConstraints(minWidth: 62),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         decoration: BoxDecoration(
-          color: c.accentSoft,
+          color: c.bgElev,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           term,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: c.text,
+            color: c.textMid,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),

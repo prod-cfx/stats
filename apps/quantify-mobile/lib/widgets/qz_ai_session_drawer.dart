@@ -234,7 +234,11 @@ class _SessionTile extends StatelessWidget {
                         label: isDeployed
                             ? l10n.aiSessionStatusLive
                             : l10n.aiSessionStatusPending,
-                        color: isDeployed ? c.marketUp : c.statusWarn,
+                        dotColor: isDeployed ? c.marketUp : c.statusWarn,
+                        textColor: isDeployed ? c.accent : c.statusWarn,
+                        bgColor: isDeployed
+                            ? c.accentSoft
+                            : c.statusWarn.withValues(alpha: 0.12),
                       ),
                       if (session.cagrLabel != null) ...<Widget>[
                         const SizedBox(width: QzSpacing.xs),
@@ -298,6 +302,7 @@ class _SessionTile extends StatelessWidget {
 
   String _previewText(AiSession session) {
     for (final ChatTurn turn in session.messages.reversed) {
+      if (turn.kind == ChatTurnKind.deployed) return '✓ 已部署 · 实盘运行中';
       if (turn.content.trim().isNotEmpty) return turn.content.trim();
     }
     return '${session.messages.length} 条消息';
@@ -314,17 +319,24 @@ class _SessionTile extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label, required this.color});
+  const _StatusBadge({
+    required this.label,
+    required this.dotColor,
+    required this.textColor,
+    required this.bgColor,
+  });
 
   final String label;
-  final Color color;
+  final Color dotColor;
+  final Color textColor;
+  final Color bgColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: bgColor,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -333,13 +345,23 @@ class _StatusBadge extends StatelessWidget {
           Container(
             width: 5,
             height: 5,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: dotColor.withValues(alpha: 0.18),
+                  spreadRadius: 2,
+                  blurRadius: 0,
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 3),
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: textColor,
               fontSize: 9,
               fontWeight: FontWeight.w700,
               height: 1.2,
