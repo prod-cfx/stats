@@ -47,11 +47,17 @@ void main() {
     test('永续持仓数值与展示串符号一致（pnlN<0 → display 带 -）', () {
       for (final WhalePerpHolding h in p.perpHoldings) {
         if (h.pnlN < 0) {
-          expect(h.pnlDisplay.startsWith('-'), isTrue,
-              reason: '${h.sym} pnlN<0 但 pnlDisplay 未带负号');
+          expect(
+            h.pnlDisplay.startsWith('-'),
+            isTrue,
+            reason: '${h.sym} pnlN<0 但 pnlDisplay 未带负号',
+          );
         } else {
-          expect(h.pnlDisplay.startsWith('-'), isFalse,
-              reason: '${h.sym} pnlN>=0 但 pnlDisplay 带负号');
+          expect(
+            h.pnlDisplay.startsWith('-'),
+            isFalse,
+            reason: '${h.sym} pnlN>=0 但 pnlDisplay 带负号',
+          );
         }
       }
     });
@@ -59,8 +65,11 @@ void main() {
     test('成交数值与展示串符号一致（pnlN>=0 → display 不带 -）', () {
       for (final WhaleRecentTrade t in p.recentTrades) {
         if (t.pnlN >= 0) {
-          expect(t.pnlDisplay.startsWith('-'), isFalse,
-              reason: '${t.id} pnlN>=0 但 pnlDisplay 带负号');
+          expect(
+            t.pnlDisplay.startsWith('-'),
+            isFalse,
+            reason: '${t.id} pnlN>=0 但 pnlDisplay 带负号',
+          );
         }
       }
     });
@@ -69,8 +78,11 @@ void main() {
   group('方向偏好守护（既有约定沿用）', () {
     test('stats.longPct + shortPct == 100', () {
       for (final WhaleProfile p in mockWhaleProfiles.values) {
-        expect(p.stats.longPct + p.stats.shortPct, 100,
-            reason: '${p.address} 方向偏好占比应和为 100');
+        expect(
+          p.stats.longPct + p.stats.shortPct,
+          100,
+          reason: '${p.address} 方向偏好占比应和为 100',
+        );
       }
     });
   });
@@ -88,6 +100,16 @@ void main() {
       expect(p.stats.positionPerf, isNotEmpty);
       expect(p.statCards, isNotNull);
       expect(p.perpSummary, isNotNull);
+    });
+
+    test('基本信息沿用设计稿 PnL 与 stat 卡', () {
+      expect(p.pnlCurve.length, 19);
+      expect(p.pnlTotalDisplay, '\$ -172.51K');
+      expect(p.statCards!.accountValueDisplay, '\$ 3.59M');
+      expect(p.statCards!.availableMarginDisplay, '\$ 404.74K');
+      expect(p.statCards!.positionValueDisplay, '\$ 16.29M');
+      expect(p.stats.winRatePct, 27.71);
+      expect(p.stats.maxDrawdownDisplay, '8202846.96%');
     });
   });
 }

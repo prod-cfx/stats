@@ -31,14 +31,17 @@ class QzPill extends StatelessWidget {
         color: background ?? c.accentSoft,
         borderRadius: BorderRadius.circular(QzRadii.pill),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: foreground ?? c.accent,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          height: 1.0,
+      child: Align(
+        widthFactor: 1,
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: foreground ?? c.accent,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            height: 1.0,
+          ),
         ),
       ),
     );

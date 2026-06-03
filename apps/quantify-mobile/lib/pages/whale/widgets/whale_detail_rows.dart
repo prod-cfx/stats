@@ -26,10 +26,7 @@ class _CoinHead extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: Color(colorHex),
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: Color(colorHex), shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Text(
         sym.isEmpty ? '?' : sym.substring(0, 1),
@@ -69,10 +66,7 @@ class _SideChip extends StatelessWidget {
           fontFamily: QzFont.mono,
           fontFamilyFallback: QzFont.monoFallback,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: children,
-        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: children),
       ),
     );
   }
@@ -97,8 +91,8 @@ class _Cell extends StatelessWidget {
     final TextAlign ta = align == CrossAxisAlignment.end
         ? TextAlign.right
         : align == CrossAxisAlignment.center
-            ? TextAlign.center
-            : TextAlign.left;
+        ? TextAlign.center
+        : TextAlign.left;
     return Column(
       crossAxisAlignment: align,
       children: <Widget>[
@@ -123,6 +117,51 @@ class _Cell extends StatelessWidget {
   }
 }
 
+class _AmountCell extends StatelessWidget {
+  const _AmountCell({
+    required this.label,
+    required this.amount,
+    required this.unit,
+  });
+
+  final String label;
+  final String amount;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(label, style: TextStyle(fontSize: 10.5, color: c.textDim)),
+        const SizedBox(height: 6),
+        RichText(
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          text: TextSpan(
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: c.text,
+              letterSpacing: -0.3,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+            children: <InlineSpan>[
+              TextSpan(text: amount),
+              TextSpan(
+                text: ' $unit',
+                style: TextStyle(color: c.textDim, fontFamily: null),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 3 列网格（左中右），不足补空。
 class _Grid extends StatelessWidget {
   const _Grid({required this.cells});
@@ -137,8 +176,12 @@ class _Grid extends StatelessWidget {
         Row(
           children: <Widget>[
             Expanded(child: cells[i]),
-            Expanded(child: i + 1 < cells.length ? cells[i + 1] : const SizedBox()),
-            Expanded(child: i + 2 < cells.length ? cells[i + 2] : const SizedBox()),
+            Expanded(
+              child: i + 1 < cells.length ? cells[i + 1] : const SizedBox(),
+            ),
+            Expanded(
+              child: i + 2 < cells.length ? cells[i + 2] : const SizedBox(),
+            ),
           ],
         ),
       );
@@ -201,6 +244,7 @@ class WhaleSpotRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       decoration: BoxDecoration(
+        color: c.bgElev,
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
       child: Column(
@@ -219,15 +263,14 @@ class WhaleSpotRow extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(h.chain, style: TextStyle(fontSize: 11, color: c.textDim)),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
+          const SizedBox(height: 14),
           Text(
-            l10n.whaleProfileColShare,
+            l10n.whaleProfileSpotAssetShare,
             style: TextStyle(fontSize: 11, color: c.textDim),
           ),
-          const SizedBox(height: QzSpacing.xs),
+          const SizedBox(height: 6),
           Row(
             children: <Widget>[
               SizedBox(
@@ -243,7 +286,7 @@ class WhaleSpotRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: QzSpacing.md),
+              const SizedBox(width: 12),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(99),
@@ -259,22 +302,22 @@ class WhaleSpotRow extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
+          const SizedBox(height: 16),
           Row(
             children: <Widget>[
               Expanded(
                 flex: 5,
-                child: _Cell(
-                  label: l10n.whaleProfileColQty,
-                  value: h.qtyDisplay,
-                  align: CrossAxisAlignment.start,
+                child: _AmountCell(
+                  label: l10n.whaleProfileSortAmount,
+                  amount: h.qtyDisplay,
+                  unit: h.sym,
                 ),
               ),
               Expanded(
                 flex: 3,
                 child: _Cell(
                   label: l10n.whaleProfileColPrice,
-                  value: h.priceDisplay,
+                  value: '\$ ${h.priceDisplay}',
                   align: CrossAxisAlignment.center,
                 ),
               ),
@@ -282,7 +325,7 @@ class WhaleSpotRow extends StatelessWidget {
                 flex: 4,
                 child: _Cell(
                   label: l10n.whaleProfileColValue,
-                  value: h.valueDisplay,
+                  value: '\$ ${h.valueDisplay}',
                   align: CrossAxisAlignment.end,
                 ),
               ),
@@ -549,8 +592,8 @@ class WhaleHistRow extends StatelessWidget {
     final Color statusColor = o.status == '已成交'
         ? c.marketUp
         : o.status == '撤单'
-            ? c.textDim
-            : c.text;
+        ? c.textDim
+        : c.text;
     return _RowShell(
       head: Row(
         children: <Widget>[

@@ -993,6 +993,7 @@
   "whaleProfileTabTrades": "Recent trades",
   "whaleProfileTabHistory": "Order history",
   "whaleProfileColShare": "Share",
+  "whaleProfileSpotAssetShare": "Asset share",
   "whaleProfileColQty": "Qty",
   "whaleProfileColPrice": "Price",
   "whaleProfileColValue": "Value",

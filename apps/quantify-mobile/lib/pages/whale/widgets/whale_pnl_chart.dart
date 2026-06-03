@@ -26,10 +26,7 @@ class WhalePnlChart extends StatelessWidget {
       return SizedBox(
         height: 140,
         child: Center(
-          child: Text(
-            '—',
-            style: TextStyle(color: c.textFaint, fontSize: 12),
-          ),
+          child: Text('—', style: TextStyle(color: c.textFaint, fontSize: 12)),
         ),
       );
     }
@@ -74,22 +71,29 @@ class _ChartBody extends StatelessWidget {
     final QzColorScheme c = scheme;
     return SizedBox(
       height: 140,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Expanded(
-            child: CustomPaint(
-              painter: _PnlPainter(
-                points: points,
-                line: tone,
-                grid: c.borderSoft,
-                axis: c.border,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          const double labelWidth = 30;
+          return Stack(
+            children: <Widget>[
+              Positioned(
+                left: 0,
+                right: labelWidth,
+                top: 0,
+                bottom: 0,
+                child: CustomPaint(
+                  painter: _PnlPainter(
+                    points: points,
+                    line: tone,
+                    grid: c.borderSoft,
+                    axis: c.border,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: QzSpacing.xs),
-          _AxisLabels(color: c.textFaint),
-        ],
+              _AxisLabels(color: c.textFaint, height: constraints.maxHeight),
+            ],
+          );
+        },
       ),
     );
   }
@@ -97,22 +101,35 @@ class _ChartBody extends StatelessWidget {
 
 /// 右侧 Y 轴刻度（与网格线对齐）。
 class _AxisLabels extends StatelessWidget {
-  const _AxisLabels({required this.color});
+  const _AxisLabels({required this.color, required this.height});
   final Color color;
+  final double height;
 
-  static const List<int> _ticks = <int>[400, 300, 200, 100, 0, -100, -200, -300];
+  static const List<int> _ticks = <int>[
+    400,
+    300,
+    200,
+    100,
+    0,
+    -100,
+    -200,
+    -300,
+  ];
+  static const double _top = 400;
+  static const double _span = 700;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 30,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: <Widget>[
-          for (final int t in _ticks)
-            Text(
+    return Stack(
+      children: <Widget>[
+        for (final int t in _ticks)
+          Positioned(
+            right: 0,
+            top: (((_top - t) / _span) * height) - 5,
+            width: 30,
+            child: Text(
               t == 0 ? '0' : '${t}K',
+              textAlign: TextAlign.right,
               style: TextStyle(
                 color: color,
                 fontSize: 9,
@@ -120,8 +137,8 @@ class _AxisLabels extends StatelessWidget {
                 fontFamilyFallback: QzFont.monoFallback,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -148,7 +165,16 @@ class _PnlPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // 横向虚线网格（与右侧刻度同步）。
-    const List<double> ticks = <double>[400, 300, 200, 100, 0, -100, -200, -300];
+    const List<double> ticks = <double>[
+      400,
+      300,
+      200,
+      100,
+      0,
+      -100,
+      -200,
+      -300,
+    ];
     for (final double v in ticks) {
       final double y = _y(v, size.height);
       final Paint g = Paint()

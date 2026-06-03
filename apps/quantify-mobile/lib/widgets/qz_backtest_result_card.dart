@@ -7,7 +7,6 @@ import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
 import 'qz_card.dart';
 import 'qz_chip.dart';
-import 'qz_segmented_tabs.dart';
 
 /// 回测结果卡，内联渲染在 AI 对话流中，对齐设计稿 `ScreenBacktestResult`：
 ///
@@ -43,8 +42,7 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
   String _rangeLabel() {
     final DateTime s = widget.result.rangeStart;
     final DateTime e = widget.result.rangeEnd;
-    String ym(DateTime d) =>
-        '${d.year}-${d.month.toString().padLeft(2, '0')}';
+    String ym(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
     return '${ym(s)} → ${ym(e)}';
   }
 
@@ -63,10 +61,7 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
           // 状态行
           Row(
             children: <Widget>[
-              QzChip(
-                tone: QzChipTone.ok,
-                label: l10n.backtestResultStatusDone,
-              ),
+              QzChip(tone: QzChipTone.ok, label: l10n.backtestResultStatusDone),
               const SizedBox(width: QzSpacing.sm),
               Expanded(
                 child: Text(
@@ -151,7 +146,7 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
           _MetricsGrid(result: r),
           const SizedBox(height: QzSpacing.md),
           // Tab 切换
-          QzSegmentedTabs(
+          _ResultSegmentedTabs(
             options: <String>[
               l10n.backtestResultTabMonthly,
               l10n.backtestResultTabTrades,
@@ -183,6 +178,74 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
           const SizedBox(height: QzSpacing.md),
           // AI 评估条
           _AiAssessmentBar(text: r.aiAssessment),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultSegmentedTabs extends StatelessWidget {
+  const _ResultSegmentedTabs({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<String> options;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      key: const Key('backtest-result-tabs'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: c.bgInput,
+        border: Border.all(color: c.borderSoft),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: <Widget>[
+          for (final String opt in options)
+            Expanded(
+              child: GestureDetector(
+                key: Key('backtest-result-tab-$opt'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged(opt),
+                child: Container(
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: opt == value ? c.bgElev : Colors.transparent,
+                    borderRadius: BorderRadius.circular(7),
+                    boxShadow: opt == value
+                        ? <BoxShadow>[
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    opt,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: opt == value ? c.accent : c.textMid,
+                      fontSize: 12,
+                      fontWeight: opt == value
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -274,8 +337,7 @@ class _MetricsGrid extends StatelessWidget {
       ),
       _Metric(
         label: l10n.backtestResultMetricTotalTrades,
-        value:
-            '${result.totalTrades}${l10n.backtestResultTradesSuffix}',
+        value: '${result.totalTrades}${l10n.backtestResultTradesSuffix}',
         sub: l10n.backtestResultMetricTotalTradesSub,
         color: c.text,
       ),
@@ -344,10 +406,7 @@ class _MetricCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            metric.label,
-            style: TextStyle(color: c.textDim, fontSize: 11),
-          ),
+          Text(metric.label, style: TextStyle(color: c.textDim, fontSize: 11)),
           const SizedBox(height: QzSpacing.xxs),
           Text(
             metric.value,
@@ -355,16 +414,11 @@ class _MetricCell extends StatelessWidget {
               color: metric.color,
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              fontFeatures: const <FontFeature>[
-                FontFeature.tabularFigures(),
-              ],
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            metric.sub,
-            style: TextStyle(color: c.textDim, fontSize: 10),
-          ),
+          Text(metric.sub, style: TextStyle(color: c.textDim, fontSize: 10)),
         ],
       ),
     );
@@ -462,8 +516,10 @@ class _MonthlyHeatmap extends StatelessWidget {
               ),
               Row(
                 children: <Widget>[
-                  Text('-15%',
-                      style: TextStyle(color: c.marketDown, fontSize: 10)),
+                  Text(
+                    '-15%',
+                    style: TextStyle(color: c.marketDown, fontSize: 10),
+                  ),
                   const SizedBox(width: QzSpacing.xs),
                   Container(
                     width: 64,
@@ -481,8 +537,10 @@ class _MonthlyHeatmap extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: QzSpacing.xs),
-                  Text('+20%',
-                      style: TextStyle(color: c.marketUp, fontSize: 10)),
+                  Text(
+                    '+20%',
+                    style: TextStyle(color: c.marketUp, fontSize: 10),
+                  ),
                 ],
               ),
             ],
@@ -565,9 +623,10 @@ class _TradeList extends StatelessWidget {
                               _fmtPrice(trades[i].entry),
                               style: TextStyle(color: c.text, fontSize: 12),
                             ),
-                            Text(' → ',
-                                style:
-                                    TextStyle(color: c.textDim, fontSize: 12)),
+                            Text(
+                              ' → ',
+                              style: TextStyle(color: c.textDim, fontSize: 12),
+                            ),
                             Text(
                               _fmtPrice(trades[i].exit),
                               style: TextStyle(color: c.text, fontSize: 12),
@@ -704,11 +763,7 @@ class _AiAssessmentBar extends StatelessWidget {
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: TextStyle(
-                  color: c.accent,
-                  fontSize: 12,
-                  height: 1.5,
-                ),
+                style: TextStyle(color: c.accent, fontSize: 12, height: 1.5),
                 children: <InlineSpan>[
                   TextSpan(
                     text: l10n.backtestResultAiPrefix,

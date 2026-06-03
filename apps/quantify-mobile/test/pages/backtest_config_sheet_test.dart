@@ -16,9 +16,8 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// - 初始资金快捷预设 1k/5k/10k/50k/100k + 模拟资金提示 (#1893)
 /// - 交易市场 现货/合约 segmented + 杠杆 chips，20x/50x 高杠杆告警 (#1893)
 /// - 「本次回测设定」summary 卡 5 行回显 (#1893)
-/// - sheet 视觉：顶部圆角 24、固定 top:120 scrim
+/// - 整屏向导页视觉：顶部 QzTopBar + 统一 5 步 StepBar
 /// - footer 贴底（不在滚动内）：滚动后「开始回测」依然可见
-/// - scrim 点击关闭
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   final GoRouter router = GoRouter(
@@ -184,21 +183,22 @@ void main() {
     }
   });
 
-  testWidgets('sheet 顶部约 120px 是 scrim；点击 scrim 关闭', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('整屏向导页顶部：回测设置 + 统一 5 步条', (WidgetTester tester) async {
     await _pump(tester);
-    expect(find.text('回测参数'), findsOneWidget);
-
-    final Finder scrim = find.byKey(const Key('backtest-sheet-scrim'));
-    expect(scrim, findsOneWidget);
-    // scrim 顶部 y=0，高度 120
-    final Rect r = tester.getRect(scrim);
-    expect(r.top, 0);
-    expect(r.height, 120);
-
-    await tester.tap(scrim);
-    await tester.pumpAndSettle();
+    expect(find.text('回测设置'), findsWidgets);
+    expect(find.text('设置如何回测这条策略'), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    for (final String step in <String>['确认策略', '策略脚本', '回测设置', '回测', '部署']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('qz-step-bar')),
+          matching: find.text(step),
+        ),
+        findsOneWidget,
+      );
+    }
+    expect(find.text('03'), findsOneWidget);
+    expect(find.byKey(const Key('backtest-sheet-scrim')), findsNothing);
     expect(find.text('回测参数'), findsNothing);
   });
 
@@ -228,22 +228,21 @@ void main() {
     expect(find.text('确认并开始回测'), findsNothing);
   });
 
-  testWidgets('sheet 顶部圆角 = 24', (WidgetTester tester) async {
+  testWidgets('整屏页不再渲染旧 sheet 圆角主体', (WidgetTester tester) async {
     await _pump(tester);
-    // 找到 sheet 容器：圆角 24 + 装饰 color，是 sheet 主体
     final Iterable<Container> containers = tester.widgetList<Container>(
       find.byType(Container),
     );
-    final Container sheet = containers.firstWhere((Container co) {
+    final bool hasOldSheetRadius = containers.any((Container co) {
       final Decoration? d = co.decoration;
       if (d is! BoxDecoration) return false;
       final BorderRadiusGeometry? br = d.borderRadius;
       if (br is! BorderRadius) return false;
-      return br.topLeft.x == 24 && br.topRight.x == 24;
+      return br.topLeft.x == 24 &&
+          br.topRight.x == 24 &&
+          br.bottomLeft.x == 0 &&
+          br.bottomRight.x == 0;
     });
-    final BoxDecoration deco = sheet.decoration! as BoxDecoration;
-    final BorderRadius br = deco.borderRadius! as BorderRadius;
-    expect(br.topLeft, const Radius.circular(24));
-    expect(br.topRight, const Radius.circular(24));
+    expect(hasOldSheetRadius, isFalse);
   });
 }

@@ -86,7 +86,9 @@ Future<void> _openTab(WidgetTester tester, String label) async {
 }
 
 void main() {
-  testWidgets('入口：点击地址行 push 详情页，渲染地址 + 标签', (WidgetTester tester) async {
+  testWidgets('入口：点击地址行 push 详情页，header 后直接渲染 tabs', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester, initial: '/home');
     await tester.tap(find.text('open'));
     await tester.pump();
@@ -95,7 +97,8 @@ void main() {
 
     expect(find.byType(WhaleProfilePage), findsOneWidget);
     expect(find.text(_knownAddress), findsWidgets);
-    expect(find.text('机构'), findsWidgets);
+    expect(find.text('基本信息'), findsOneWidget);
+    expect(find.text('机构'), findsNothing);
   });
 
   testWidgets('基本信息 tab：默认渲染 P&L 图 + stat 卡 + 永续总价值', (
@@ -119,9 +122,7 @@ void main() {
     expect(find.text('永续合约总价值'), findsOneWidget);
   });
 
-  testWidgets('明细 tab：切换现货/永续/挂单/成交/历史渲染核心字段', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('明细 tab：切换现货/永续/挂单/成交/历史渲染核心字段', (WidgetTester tester) async {
     await _pump(
       tester,
       initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
@@ -144,28 +145,15 @@ void main() {
     expect(find.text(p.histOrders.first.id), findsOneWidget);
   });
 
-  testWidgets('统计弹窗入口保留：点击 topbar 交易统计按钮打开弹窗', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('详情页严格对齐设计稿：不渲染旧 topbar 交易统计入口', (WidgetTester tester) async {
     await _pump(
       tester,
       initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
     );
-    // topbar「交易统计」按钮（#1859 弹窗唯一入口）。
-    await tester.tap(find.text('交易统计').first);
-    await tester.pumpAndSettle();
-
-    final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
-    expect(
-      find.text('${p.stats.winRatePct.toStringAsFixed(2)}%'),
-      findsWidgets,
-    );
-    expect(find.text('按资产的表现'), findsOneWidget);
+    expect(find.text('交易统计'), findsNothing);
   });
 
-  testWidgets('header：一键监控按钮存在且点击打开 watch 规则弹窗', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('header：一键监控按钮存在且点击打开 watch 规则弹窗', (WidgetTester tester) async {
     await _pump(
       tester,
       initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
@@ -268,9 +256,7 @@ void main() {
     expect(find.byType(WhaleProfilePage), findsNothing);
   });
 
-  testWidgets('基本信息 tab：折线图顶部渲染总盈亏金额（正负色）', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('基本信息 tab：折线图顶部渲染总盈亏金额（正负色）', (WidgetTester tester) async {
     await _pump(
       tester,
       initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',

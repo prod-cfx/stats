@@ -85,14 +85,17 @@ class _Segment extends StatelessWidget {
             ),
             borderRadius: radius,
           ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? scheme.accent : scheme.textMid,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              height: 1.0,
+          child: Align(
+            widthFactor: 1,
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? scheme.accent : scheme.textMid,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.0,
+              ),
             ),
           ),
         ),

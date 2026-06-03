@@ -9,7 +9,6 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_toast.dart';
 import 'widgets/whale_chart_filter_sheet.dart';
@@ -18,7 +17,6 @@ import 'widgets/whale_detail_sort.dart';
 import 'widgets/whale_perp_summary_card.dart';
 import 'widgets/whale_pnl_chart.dart';
 import 'widgets/whale_stat_cards.dart';
-import 'widgets/whale_trade_stats_sheet.dart';
 import 'widgets/whale_watch_rule_sheet.dart';
 
 /// 巨鲸地址详情页（#1791，`/whale/profile/:address`）。
@@ -58,13 +56,13 @@ class WhaleProfilePage extends ConsumerWidget {
     );
 
     Widget header({String? tagTone}) => _ProfileHeader(
-          address: address,
-          tagTone: tagTone,
-          onBack: () => context.pop(),
-          onCopy: () => _copyAddress(context, l10n),
-          onWatch: () => _openWatch(context),
-          onRefresh: () => _refresh(ref),
-        );
+      address: address,
+      tagTone: tagTone,
+      onBack: () => context.pop(),
+      onCopy: () => _copyAddress(context, l10n),
+      onWatch: () => _openWatch(context),
+      onRefresh: () => _refresh(ref),
+    );
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -133,17 +131,24 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
           top: true,
           bottom: false,
           child: SizedBox(
-            height: 56,
+            height: 44,
             child: Row(
               children: <Widget>[
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                  color: c.text,
-                  onPressed: onBack,
-                  tooltip: 'Back',
+                const SizedBox(width: 14),
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                    color: c.text,
+                    onPressed: onBack,
+                    tooltip: 'Back',
+                  ),
                 ),
+                const SizedBox(width: 10),
                 _TierAvatar(seed: address, tagTone: tagTone),
-                const SizedBox(width: QzSpacing.sm),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     address,
@@ -159,21 +164,39 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 18),
-                  color: c.textMid,
-                  tooltip: l10n.whaleProfileCopyTooltip,
-                  onPressed: onCopy,
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.copy, size: 15),
+                    color: c.textMid,
+                    tooltip: l10n.whaleProfileCopyTooltip,
+                    onPressed: onCopy,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 _WatchButton(label: l10n.whaleProfileWatch, onTap: onWatch),
-                const SizedBox(width: QzSpacing.xs),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 18),
-                  color: c.textMid,
-                  tooltip: l10n.whaleProfileRefreshTooltip,
-                  onPressed: onRefresh,
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.refresh, size: 14),
+                    color: c.textMid,
+                    tooltip: l10n.whaleProfileRefreshTooltip,
+                    onPressed: onRefresh,
+                    style: IconButton.styleFrom(
+                      backgroundColor: c.bgElev,
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: c.border),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: QzSpacing.sm),
+                const SizedBox(width: 14),
               ],
             ),
           ),
@@ -200,11 +223,11 @@ class _TierAvatar extends StatelessWidget {
       'info' => c.statusInfo,
       'warn' => c.statusWarn,
       _ => HSLColor.fromAHSL(
-          1,
-          (seed.codeUnits.fold<int>(0, (int a, int b) => a + b) * 17) % 360,
-          0.55,
-          0.62,
-        ).toColor(),
+        1,
+        (seed.codeUnits.fold<int>(0, (int a, int b) => a + b) * 17) % 360,
+        0.55,
+        0.62,
+      ).toColor(),
     };
     final String glyph = _glyph(seed);
     return Container(
@@ -226,13 +249,15 @@ class _TierAvatar extends StatelessWidget {
 
   // 取地址 '0x' 之后的两位字符（无则回退首两位），与设计稿 av 短标一致。
   String _glyph(String s) {
-    final String body = s.startsWith('0x') && s.length >= 4 ? s.substring(2) : s;
+    final String body = s.startsWith('0x') && s.length >= 4
+        ? s.substring(2)
+        : s;
     final String picked = body.length >= 2 ? body.substring(0, 2) : body;
     return picked.toUpperCase();
   }
 }
 
-/// 绿底「一键监控」按钮（设计稿 violet 实底胶囊，jsx:659-665）。
+/// 「一键监控」按钮（设计稿 violet soft 背景，jsx:659-665）。
 class _WatchButton extends StatelessWidget {
   const _WatchButton({required this.label, required this.onTap});
   final String label;
@@ -248,28 +273,13 @@ class _WatchButton extends StatelessWidget {
         foregroundColor: c.accent,
         minimumSize: const Size(0, 30),
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: Text(
         label,
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
-  }
-}
-
-QzChipTone _chipTone(String tone) {
-  switch (tone) {
-    case 'accent':
-      return QzChipTone.accent;
-    case 'info':
-      return QzChipTone.info;
-    case 'warn':
-      return QzChipTone.warn;
-    default:
-      return QzChipTone.neutral;
   }
 }
 
@@ -286,17 +296,31 @@ class _Detail extends StatelessWidget {
       child: Column(
         children: <Widget>[
           header,
-          _Hero(profile: profile),
           _TabBar(profile: profile),
           Expanded(
             child: TabBarView(
               children: <Widget>[
                 _BasicTab(profile: profile),
-                _SpotTab(items: profile.spotHoldings, empty: l10n.whaleProfileEmptySpot),
-                _PerpTab(items: profile.perpHoldings, empty: l10n.whaleProfileEmptyPerp),
-                _OrderTab(items: profile.openOrders, empty: l10n.whaleProfileEmptyOrders),
-                _TradeTab(items: profile.recentTrades, empty: l10n.whaleProfileEmptyTrades),
-                _HistTab(items: profile.histOrders, empty: l10n.whaleProfileEmptyHistory),
+                _SpotTab(
+                  items: profile.spotHoldings,
+                  empty: l10n.whaleProfileEmptySpot,
+                ),
+                _PerpTab(
+                  items: profile.perpHoldings,
+                  empty: l10n.whaleProfileEmptyPerp,
+                ),
+                _OrderTab(
+                  items: profile.openOrders,
+                  empty: l10n.whaleProfileEmptyOrders,
+                ),
+                _TradeTab(
+                  items: profile.recentTrades,
+                  empty: l10n.whaleProfileEmptyTrades,
+                ),
+                _HistTab(
+                  items: profile.histOrders,
+                  empty: l10n.whaleProfileEmptyHistory,
+                ),
               ],
             ),
           ),
@@ -327,16 +351,41 @@ class _TabBar extends StatelessWidget {
         indicatorColor: c.accent,
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
-        labelStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-        unselectedLabelStyle:
-            const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w500,
+        ),
         tabs: <Widget>[
           _CountTab(index: 0, label: l10n.whaleProfileTabBasic),
-          _CountTab(index: 1, label: l10n.whaleProfileTabSpot, count: profile.spotHoldings.length),
-          _CountTab(index: 2, label: l10n.whaleProfileTabPerp, count: profile.perpHoldings.length),
-          _CountTab(index: 3, label: l10n.whaleProfileTabOrders, count: profile.openOrders.length),
-          _CountTab(index: 4, label: l10n.whaleProfileTabTrades, count: profile.recentTrades.length),
-          _CountTab(index: 5, label: l10n.whaleProfileTabHistory, count: profile.histOrders.length),
+          _CountTab(
+            index: 1,
+            label: l10n.whaleProfileTabSpot,
+            count: profile.spotHoldings.length,
+          ),
+          _CountTab(
+            index: 2,
+            label: l10n.whaleProfileTabPerp,
+            count: profile.perpHoldings.length,
+          ),
+          _CountTab(
+            index: 3,
+            label: l10n.whaleProfileTabOrders,
+            count: profile.openOrders.length,
+          ),
+          _CountTab(
+            index: 4,
+            label: l10n.whaleProfileTabTrades,
+            count: profile.recentTrades.length,
+          ),
+          _CountTab(
+            index: 5,
+            label: l10n.whaleProfileTabHistory,
+            count: profile.histOrders.length,
+          ),
         ],
       ),
     );
@@ -468,7 +517,7 @@ class _BasicTabState extends State<_BasicTab> {
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
       children: <Widget>[
         Container(
-          padding: const EdgeInsets.all(QzSpacing.lg),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: c.bgElev,
             border: Border.all(color: c.borderSoft),
@@ -481,25 +530,42 @@ class _BasicTabState extends State<_BasicTab> {
                 l10n.whaleProfilePnlChartTitle(_period, _scope),
                 style: TextStyle(fontSize: 12, color: c.textMid),
               ),
+              const SizedBox(height: 4),
+              Text(
+                profile.pnlTotalDisplay ?? r'$ -172.51K',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: c.marketDown,
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
+                ),
+              ),
               const SizedBox(height: QzSpacing.sm),
               Wrap(
-                spacing: QzSpacing.xs,
+                spacing: 6,
                 runSpacing: QzSpacing.xs,
                 children: <Widget>[
-                  _FilterPill(text: _period, onTap: () => _pickPeriod(l10n)),
-                  _FilterPill(text: _scope, onTap: () => _pickScope(l10n)),
+                  _FilterPill(
+                    text: _period,
+                    minWidth: 64,
+                    onTap: () => _pickPeriod(l10n),
+                  ),
+                  _FilterPill(
+                    text: _scope,
+                    minWidth: 94,
+                    onTap: () => _pickScope(l10n),
+                  ),
                   _FilterPill(
                     text: _metric,
+                    minWidth: 78,
                     accent: true,
                     onTap: () => _pickMetric(l10n),
                   ),
                 ],
               ),
-              const SizedBox(height: QzSpacing.md),
-              WhalePnlChart(
-                points: profile.pnlCurve,
-                totalDisplay: profile.pnlTotalDisplay,
-              ),
+              const SizedBox(height: 10),
+              WhalePnlChart(points: profile.pnlCurve),
             ],
           ),
         ),
@@ -520,10 +586,12 @@ class _FilterPill extends StatelessWidget {
   const _FilterPill({
     required this.text,
     required this.onTap,
+    required this.minWidth,
     this.accent = false,
   });
   final String text;
   final VoidCallback onTap;
+  final double minWidth;
   final bool accent;
 
   @override
@@ -532,33 +600,42 @@ class _FilterPill extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: Container(
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: accent ? c.accent : c.bgElev,
-          border: Border.all(color: accent ? c.accent : c.border),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
-                color: accent ? c.accentOn : c.text,
-              ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: minWidth, minHeight: 28),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: accent ? c.accent : c.bgElev,
+            gradient: accent
+                ? LinearGradient(
+                    colors: <Color>[c.accent.withValues(alpha: 0.78), c.accent],
+                  )
+                : null,
+            border: Border.all(color: accent ? c.accent : c.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
+                    color: accent ? c.accentOn : c.text,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 10,
+                  color: accent ? c.accentOn : c.textMid,
+                ),
+              ],
             ),
-            const SizedBox(width: 2),
-            Icon(
-              Icons.keyboard_arrow_down,
-              size: 14,
-              color: accent ? c.accentOn : c.textMid,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -619,8 +696,11 @@ class _SortableTabState<T> extends State<_SortableTab<T>> {
   String _coin = '';
   bool _coinInit = false;
 
-  List<_SortKey<T>> get _allKeys =>
-      <_SortKey<T>>[...widget.leftKeys, ...widget.rightKeys, ...widget.moreSortKeys];
+  List<_SortKey<T>> get _allKeys => <_SortKey<T>>[
+    ...widget.leftKeys,
+    ...widget.rightKeys,
+    ...widget.moreSortKeys,
+  ];
 
   _SortKey<T>? _keyOf(String? k) {
     if (k == null) return null;
@@ -664,32 +744,42 @@ class _SortableTabState<T> extends State<_SortableTab<T>> {
       l10n.whaleProfileFilterAll,
       ...<String>{for (final T it in widget.items) widget.symOf(it)},
     ];
-    return Column(
-      children: <Widget>[
-        _Toolbar(
-          leftKeys: widget.leftKeys,
-          rightKeys: widget.rightKeys,
-          sort: _sort,
-          onSort: (String k) => setState(() => _sort = _sort.cycle(k)),
-          coin: _coin,
-          coinOptions: coinOptions,
-          filterLabel: widget.filterLabel,
-          onCoin: (String c) => setState(() => _coin = c),
-          moreSortKeys: widget.moreSortKeys,
-          onMoreSort: (WhaleSortState s) => setState(() => _sort = s),
-        ),
-        Expanded(
-          child: rows.isEmpty
-              ? WhaleDetailEmpty(text: widget.empty)
-              : ListView(
-                  padding: EdgeInsets.zero,
-                  children: <Widget>[
-                    for (final ({int idx, T item}) e in rows)
-                      widget.rowBuilder(e.item),
-                  ],
-                ),
-        ),
-      ],
+    final QzColorScheme c = context.qzScheme;
+    return ColoredBox(
+      color: c.bg,
+      child: Column(
+        children: <Widget>[
+          ColoredBox(
+            color: c.bgElev,
+            child: _Toolbar(
+              leftKeys: widget.leftKeys,
+              rightKeys: widget.rightKeys,
+              sort: _sort,
+              onSort: (String k) => setState(() => _sort = _sort.cycle(k)),
+              coin: _coin,
+              coinOptions: coinOptions,
+              filterLabel: widget.filterLabel,
+              onCoin: (String c) => setState(() => _coin = c),
+              moreSortKeys: widget.moreSortKeys,
+              onMoreSort: (WhaleSortState s) => setState(() => _sort = s),
+            ),
+          ),
+          Expanded(
+            child: ColoredBox(
+              color: c.bgElev,
+              child: rows.isEmpty
+                  ? WhaleDetailEmpty(text: widget.empty)
+                  : ListView(
+                      padding: EdgeInsets.zero,
+                      children: <Widget>[
+                        for (final ({int idx, T item}) e in rows)
+                          widget.rowBuilder(e.item),
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -730,7 +820,7 @@ class _Toolbar<T> extends StatelessWidget {
         color: c.bgElev,
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
       child: Row(
         children: <Widget>[
           for (final _SortKey<T> sk in leftKeys) ...<Widget>[
@@ -739,7 +829,7 @@ class _Toolbar<T> extends StatelessWidget {
               dir: _dirOf(sk.key),
               onTap: () => onSort(sk.key),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 30),
           ],
           const Spacer(),
           for (final _SortKey<T> sk in rightKeys) ...<Widget>[
@@ -748,7 +838,7 @@ class _Toolbar<T> extends StatelessWidget {
               dir: _dirOf(sk.key),
               onTap: () => onSort(sk.key),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 30),
           ],
           WhaleCoinFilterTrigger(
             value: coin,
@@ -788,14 +878,24 @@ class _SpotTab extends StatelessWidget {
       symOf: (WhaleSpotHolding h) => h.sym,
       filterLabel: l10n.whaleProfileFilterLabel,
       leftKeys: <_SortKey<WhaleSpotHolding>>[
-        _SortKey<WhaleSpotHolding>('value', l10n.whaleProfileSortValue,
-            numOf: (h) => h.valueN),
-        _SortKey<WhaleSpotHolding>('amount', l10n.whaleProfileSortAmount,
-            numOf: (h) => whaleSortNum(h.qtyDisplay)),
+        _SortKey<WhaleSpotHolding>(
+          'value',
+          l10n.whaleProfileSortValue,
+          numOf: (h) => h.valueN,
+        ),
+        _SortKey<WhaleSpotHolding>(
+          'amount',
+          l10n.whaleProfileSortAmount,
+          numOf: (h) => whaleSortNum(h.qtyDisplay),
+        ),
       ],
       rightKeys: <_SortKey<WhaleSpotHolding>>[
-        _SortKey<WhaleSpotHolding>('price', l10n.whaleProfileColPrice,
-            right: true, numOf: (h) => whaleSortNum(h.priceDisplay)),
+        _SortKey<WhaleSpotHolding>(
+          'price',
+          l10n.whaleProfileColPrice,
+          right: true,
+          numOf: (h) => whaleSortNum(h.priceDisplay),
+        ),
       ],
       rowBuilder: (WhaleSpotHolding h) => WhaleSpotRow(h: h),
     );
@@ -816,23 +916,44 @@ class _PerpTab extends StatelessWidget {
       empty: empty,
       symOf: (WhalePerpHolding h) => h.sym,
       leftKeys: <_SortKey<WhalePerpHolding>>[
-        _SortKey<WhalePerpHolding>('value', l10n.whaleProfileColPosValue,
-            numOf: (h) => h.valueN),
-        _SortKey<WhalePerpHolding>('pnl', l10n.whaleProfileColUnrealized,
-            numOf: (h) => h.pnlN),
+        _SortKey<WhalePerpHolding>(
+          'value',
+          l10n.whaleProfileColPosValue,
+          numOf: (h) => h.valueN,
+        ),
+        _SortKey<WhalePerpHolding>(
+          'pnl',
+          l10n.whaleProfileColUnrealized,
+          numOf: (h) => h.pnlN,
+        ),
       ],
       rightKeys: const <_SortKey<WhalePerpHolding>>[],
       moreSortKeys: <_SortKey<WhalePerpHolding>>[
-        _SortKey<WhalePerpHolding>('entry', l10n.whaleProfileColEntry,
-            numOf: (h) => whaleSortNum(h.entryDisplay)),
-        _SortKey<WhalePerpHolding>('mark', l10n.whaleProfileColMark,
-            numOf: (h) => whaleSortNum(h.markDisplay)),
-        _SortKey<WhalePerpHolding>('liq', l10n.whaleProfileColLiq,
-            numOf: (h) => whaleSortNum(h.liqDisplay)),
-        _SortKey<WhalePerpHolding>('margin', l10n.whaleProfileColMargin,
-            numOf: (h) => whaleSortNum(h.marginDisplay)),
-        _SortKey<WhalePerpHolding>('funding', l10n.whaleProfileColFunding,
-            numOf: (h) => h.fundingN),
+        _SortKey<WhalePerpHolding>(
+          'entry',
+          l10n.whaleProfileColEntry,
+          numOf: (h) => whaleSortNum(h.entryDisplay),
+        ),
+        _SortKey<WhalePerpHolding>(
+          'mark',
+          l10n.whaleProfileColMark,
+          numOf: (h) => whaleSortNum(h.markDisplay),
+        ),
+        _SortKey<WhalePerpHolding>(
+          'liq',
+          l10n.whaleProfileColLiq,
+          numOf: (h) => whaleSortNum(h.liqDisplay),
+        ),
+        _SortKey<WhalePerpHolding>(
+          'margin',
+          l10n.whaleProfileColMargin,
+          numOf: (h) => whaleSortNum(h.marginDisplay),
+        ),
+        _SortKey<WhalePerpHolding>(
+          'funding',
+          l10n.whaleProfileColFunding,
+          numOf: (h) => h.fundingN,
+        ),
       ],
       rowBuilder: (WhalePerpHolding h) => WhalePerpRow(h: h),
     );
@@ -854,12 +975,19 @@ class _OrderTab extends StatelessWidget {
       symOf: (WhaleOpenOrder o) => o.sym,
       leftKeys: <_SortKey<WhaleOpenOrder>>[
         _SortKey<WhaleOpenOrder>('time', l10n.whaleProfileColTime),
-        _SortKey<WhaleOpenOrder>('value', l10n.whaleProfileColValue,
-            numOf: (o) => whaleSortNum(o.valueDisplay)),
+        _SortKey<WhaleOpenOrder>(
+          'value',
+          l10n.whaleProfileColValue,
+          numOf: (o) => whaleSortNum(o.valueDisplay),
+        ),
       ],
       rightKeys: <_SortKey<WhaleOpenOrder>>[
-        _SortKey<WhaleOpenOrder>('qty', l10n.whaleProfileColQty,
-            right: true, numOf: (o) => whaleSortNum(o.qtyDisplay)),
+        _SortKey<WhaleOpenOrder>(
+          'qty',
+          l10n.whaleProfileColQty,
+          right: true,
+          numOf: (o) => whaleSortNum(o.qtyDisplay),
+        ),
       ],
       rowBuilder: (WhaleOpenOrder o) => WhaleOrderRow(o: o),
     );
@@ -881,19 +1009,34 @@ class _TradeTab extends StatelessWidget {
       symOf: (WhaleRecentTrade t) => t.sym,
       leftKeys: <_SortKey<WhaleRecentTrade>>[
         _SortKey<WhaleRecentTrade>('time', l10n.whaleProfileColTime),
-        _SortKey<WhaleRecentTrade>('qty', l10n.whaleProfileColQty,
-            numOf: (t) => whaleSortNum(t.qtyDisplay)),
+        _SortKey<WhaleRecentTrade>(
+          'qty',
+          l10n.whaleProfileColQty,
+          numOf: (t) => whaleSortNum(t.qtyDisplay),
+        ),
       ],
       rightKeys: const <_SortKey<WhaleRecentTrade>>[],
       moreSortKeys: <_SortKey<WhaleRecentTrade>>[
-        _SortKey<WhaleRecentTrade>('price', l10n.whaleProfileColPrice,
-            numOf: (t) => whaleSortNum(t.priceDisplay)),
-        _SortKey<WhaleRecentTrade>('pnl', l10n.whaleProfileColClosedPnl,
-            numOf: (t) => t.pnlN),
-        _SortKey<WhaleRecentTrade>('fee', l10n.whaleProfileColFee,
-            numOf: (t) => whaleSortNum(t.feeDisplay)),
-        _SortKey<WhaleRecentTrade>('start', l10n.whaleProfileColStart,
-            numOf: (t) => whaleSortNum(t.startDisplay)),
+        _SortKey<WhaleRecentTrade>(
+          'price',
+          l10n.whaleProfileColPrice,
+          numOf: (t) => whaleSortNum(t.priceDisplay),
+        ),
+        _SortKey<WhaleRecentTrade>(
+          'pnl',
+          l10n.whaleProfileColClosedPnl,
+          numOf: (t) => t.pnlN,
+        ),
+        _SortKey<WhaleRecentTrade>(
+          'fee',
+          l10n.whaleProfileColFee,
+          numOf: (t) => whaleSortNum(t.feeDisplay),
+        ),
+        _SortKey<WhaleRecentTrade>(
+          'start',
+          l10n.whaleProfileColStart,
+          numOf: (t) => whaleSortNum(t.startDisplay),
+        ),
       ],
       rowBuilder: (WhaleRecentTrade t) => WhaleTradeRow(t: t),
     );
@@ -915,91 +1058,21 @@ class _HistTab extends StatelessWidget {
       symOf: (WhaleHistOrder o) => o.sym,
       leftKeys: <_SortKey<WhaleHistOrder>>[
         _SortKey<WhaleHistOrder>('time', l10n.whaleProfileColTime),
-        _SortKey<WhaleHistOrder>('qty', l10n.whaleProfileColQty,
-            numOf: (o) => whaleSortNum(o.qtyDisplay)),
+        _SortKey<WhaleHistOrder>(
+          'qty',
+          l10n.whaleProfileColQty,
+          numOf: (o) => whaleSortNum(o.qtyDisplay),
+        ),
       ],
       rightKeys: <_SortKey<WhaleHistOrder>>[
-        _SortKey<WhaleHistOrder>('price', l10n.whaleProfileColPrice,
-            right: true, numOf: (o) => whaleSortNum(o.priceDisplay)),
+        _SortKey<WhaleHistOrder>(
+          'price',
+          l10n.whaleProfileColPrice,
+          right: true,
+          numOf: (o) => whaleSortNum(o.priceDisplay),
+        ),
       ],
       rowBuilder: (WhaleHistOrder o) => WhaleHistRow(o: o),
-    );
-  }
-}
-
-class _Hero extends StatelessWidget {
-  const _Hero({required this.profile});
-  final WhaleProfile profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.bgElev,
-        border: Border.all(color: c.borderSoft),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              QzChip(label: profile.tag, tone: _chipTone(profile.tagTone)),
-              const SizedBox(width: QzSpacing.sm),
-              Expanded(
-                child: Text(
-                  '${l10n.whaleProfileAssetSummaryPrefix}${profile.assetSummary}',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.textDim, fontSize: 11),
-                ),
-              ),
-              // 「交易统计」由卡片触发（设计稿不放 header），避免成为死代码。
-              TextButton(
-                onPressed: () => WhaleTradeStatsSheet.show(
-                  context,
-                  address: profile.address,
-                  stats: profile.stats,
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: c.accent,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 28),
-                ),
-                child: Text(
-                  l10n.whaleTradeStatsTitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: QzSpacing.md),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Text(
-                l10n.whaleProfileHoldingsValueLabel,
-                style: TextStyle(color: c.textDim, fontSize: 12),
-              ),
-              Text(
-                profile.holdingsValueDisplay,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

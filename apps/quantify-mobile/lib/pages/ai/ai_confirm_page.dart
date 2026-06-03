@@ -222,6 +222,7 @@ StrategyConfirmView confirmStrategyView(
 /// BTC 趋势 · 双均线场景（设计稿 `STRAT_SCENARIOS.btc`）。
 StrategyConfirmView _btcTrendView(Map<String, String> params) {
   final String symbol = params['symbol'] ?? 'BTC/USDT';
+  final String category = params['category'] ?? '趋势跟踪';
   final String period = params['period'] ?? '15m';
   final String fast = params['fast_ma'] ?? '5';
   final String slow = params['slow_ma'] ?? '20';
@@ -232,7 +233,7 @@ StrategyConfirmView _btcTrendView(Map<String, String> params) {
   return StrategyConfirmView(
     name: 'BTC 趋势 · 双均线',
     chips: <({String label, QzChipTone tone})>[
-      (label: '趋势跟踪', tone: QzChipTone.accent),
+      (label: category, tone: QzChipTone.accent),
       (label: symbol, tone: QzChipTone.neutral),
       (label: period, tone: QzChipTone.neutral),
       (label: market, tone: QzChipTone.info),

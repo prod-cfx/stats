@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,24 +38,24 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final WhaleHoldingDirFilter? picked =
         await _FilterSheet.show<WhaleHoldingDirFilter>(
-      context: context,
-      title: l10n.whaleHoldingsFilterDirTitle,
-      current: _filter.dir,
-      options: <_FilterOption<WhaleHoldingDirFilter>>[
-        _FilterOption<WhaleHoldingDirFilter>(
-          WhaleHoldingDirFilter.all,
-          l10n.whaleHoldingsDirAll,
-        ),
-        _FilterOption<WhaleHoldingDirFilter>(
-          WhaleHoldingDirFilter.long,
-          l10n.whaleHoldingsDirLong,
-        ),
-        _FilterOption<WhaleHoldingDirFilter>(
-          WhaleHoldingDirFilter.short,
-          l10n.whaleHoldingsDirShort,
-        ),
-      ],
-    );
+          context: context,
+          title: l10n.whaleHoldingsFilterDirTitle,
+          current: _filter.dir,
+          options: <_FilterOption<WhaleHoldingDirFilter>>[
+            _FilterOption<WhaleHoldingDirFilter>(
+              WhaleHoldingDirFilter.all,
+              l10n.whaleHoldingsDirAll,
+            ),
+            _FilterOption<WhaleHoldingDirFilter>(
+              WhaleHoldingDirFilter.long,
+              l10n.whaleHoldingsDirLong,
+            ),
+            _FilterOption<WhaleHoldingDirFilter>(
+              WhaleHoldingDirFilter.short,
+              l10n.whaleHoldingsDirShort,
+            ),
+          ],
+        );
     if (picked == null) return;
     setState(() => _filter = _filter.copyWith(dir: picked));
   }
@@ -62,24 +64,24 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final WhaleHoldingPnlFilter? picked =
         await _FilterSheet.show<WhaleHoldingPnlFilter>(
-      context: context,
-      title: l10n.whaleHoldingsFilterPnlTitle,
-      current: _filter.pnl,
-      options: <_FilterOption<WhaleHoldingPnlFilter>>[
-        _FilterOption<WhaleHoldingPnlFilter>(
-          WhaleHoldingPnlFilter.all,
-          l10n.whaleHoldingsPnlAll,
-        ),
-        _FilterOption<WhaleHoldingPnlFilter>(
-          WhaleHoldingPnlFilter.profit,
-          l10n.whaleHoldingsPnlProfit,
-        ),
-        _FilterOption<WhaleHoldingPnlFilter>(
-          WhaleHoldingPnlFilter.loss,
-          l10n.whaleHoldingsPnlLoss,
-        ),
-      ],
-    );
+          context: context,
+          title: l10n.whaleHoldingsFilterPnlTitle,
+          current: _filter.pnl,
+          options: <_FilterOption<WhaleHoldingPnlFilter>>[
+            _FilterOption<WhaleHoldingPnlFilter>(
+              WhaleHoldingPnlFilter.all,
+              l10n.whaleHoldingsPnlAll,
+            ),
+            _FilterOption<WhaleHoldingPnlFilter>(
+              WhaleHoldingPnlFilter.profit,
+              l10n.whaleHoldingsPnlProfit,
+            ),
+            _FilterOption<WhaleHoldingPnlFilter>(
+              WhaleHoldingPnlFilter.loss,
+              l10n.whaleHoldingsPnlLoss,
+            ),
+          ],
+        );
     if (picked == null) return;
     setState(() => _filter = _filter.copyWith(pnl: picked));
   }
@@ -125,8 +127,9 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final AsyncValue<List<WhaleHoldingPosition>> async =
-        ref.watch(whaleHoldingsProvider);
+    final AsyncValue<List<WhaleHoldingPosition>> async = ref.watch(
+      whaleHoldingsProvider,
+    );
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (Object e, StackTrace st) => Center(
@@ -137,8 +140,10 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
       ),
       data: (List<WhaleHoldingPosition> all) {
         final List<String> coins = whaleHoldingCoins(all);
-        final List<WhaleHoldingPosition> rows =
-            sortWhaleHoldings(filterWhaleHoldings(all, _filter), _sort);
+        final List<WhaleHoldingPosition> rows = sortWhaleHoldings(
+          filterWhaleHoldings(all, _filter),
+          _sort,
+        );
         return ListView(
           padding: const EdgeInsets.only(bottom: QzSpacing.lg),
           children: <Widget>[
@@ -288,11 +293,7 @@ class _CoinChips extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
+  const _Chip({required this.label, required this.active, required this.onTap});
 
   final String label;
   final bool active;
@@ -311,13 +312,16 @@ class _Chip extends StatelessWidget {
           color: active ? c.accent : c.bgSoft,
           borderRadius: BorderRadius.circular(QzRadii.pill),
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? c.accentOn : c.textMid,
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+        child: Align(
+          widthFactor: 1,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? c.accentOn : c.textMid,
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
         ),
       ),
@@ -555,9 +559,47 @@ class _SortSheet {
     required BuildContext context,
     required WhaleHoldingSort? current,
   }) {
-    return QzSheet.show<_SortResult>(
+    final QzColorScheme c = context.qzScheme;
+    return showModalBottomSheet<_SortResult>(
       context: context,
-      builder: (BuildContext ctx) => _SortSheetBody(current: current),
+      isScrollControlled: true,
+      backgroundColor: c.bgElev,
+      barrierColor: c.scrim,
+      sheetAnimationStyle: const AnimationStyle(
+        curve: QzCurves.sheetPanel,
+        duration: QzCurves.sheetPanelDuration,
+        reverseCurve: QzCurves.sheetPanel,
+        reverseDuration: QzCurves.sheetPanelDuration,
+      ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext ctx) {
+        final QzColorScheme sheetColors = ctx.qzScheme;
+        final double keyboardInset = MediaQuery.viewInsetsOf(ctx).bottom;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: math.max(28, keyboardInset)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const SizedBox(height: 10),
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: sheetColors.borderStrong,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _SortSheetBody(current: current),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -595,8 +637,9 @@ class _SortSheetBodyState extends State<_SortSheetBody> {
   }
 
   void _done() {
-    final WhaleHoldingSort? sort =
-        _dir == null ? null : WhaleHoldingSort(key: _key, dir: _dir!);
+    final WhaleHoldingSort? sort = _dir == null
+        ? null
+        : WhaleHoldingSort(key: _key, dir: _dir!);
     Navigator.of(context).pop(_SortResult(sort));
   }
 
@@ -605,12 +648,7 @@ class _SortSheetBodyState extends State<_SortSheetBody> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        QzSpacing.lg,
-        0,
-        QzSpacing.lg,
-        QzSpacing.lg,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -623,15 +661,15 @@ class _SortSheetBodyState extends State<_SortSheetBody> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: QzSpacing.md),
+          const SizedBox(height: 12),
           Text(
             l10n.whaleHoldingsSortSectionMetric,
             style: TextStyle(color: c.textMid, fontSize: 11),
           ),
-          const SizedBox(height: QzSpacing.sm),
+          const SizedBox(height: 6),
           Wrap(
-            spacing: QzSpacing.sm,
-            runSpacing: QzSpacing.sm,
+            spacing: 6,
+            runSpacing: 6,
             children: <Widget>[
               for (final WhaleHoldingSortKey key in WhaleHoldingSortKey.values)
                 _SortPill(
@@ -642,55 +680,67 @@ class _SortSheetBodyState extends State<_SortSheetBody> {
                 ),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
+          const SizedBox(height: 16),
           Text(
             l10n.whaleHoldingsSortSectionDir,
             style: TextStyle(color: c.textMid, fontSize: 11),
           ),
-          const SizedBox(height: QzSpacing.sm),
+          const SizedBox(height: 6),
           Row(
             children: <Widget>[
               Expanded(
                 child: _SortDirCell(
                   key: const Key('whaleHoldingsSortDirAsc'),
                   label: l10n.whaleHoldingsSortDirAsc,
-                  icon: Icons.arrow_upward,
+                  arrow: '↑',
                   active: _dir == WhaleHoldingSortDir.asc,
-                  onTap: () =>
-                      setState(() => _dir = WhaleHoldingSortDir.asc),
+                  onTap: () => setState(() => _dir = WhaleHoldingSortDir.asc),
                 ),
               ),
-              const SizedBox(width: QzSpacing.sm),
+              const SizedBox(width: 6),
               Expanded(
                 child: _SortDirCell(
                   key: const Key('whaleHoldingsSortDirDesc'),
                   label: l10n.whaleHoldingsSortDirDesc,
-                  icon: Icons.arrow_downward,
+                  arrow: '↓',
                   active: _dir == WhaleHoldingSortDir.desc,
-                  onTap: () =>
-                      setState(() => _dir = WhaleHoldingSortDir.desc),
+                  onTap: () => setState(() => _dir = WhaleHoldingSortDir.desc),
                 ),
               ),
-              const SizedBox(width: QzSpacing.sm),
+              const SizedBox(width: 6),
               Expanded(
                 child: _SortDirCell(
                   key: const Key('whaleHoldingsSortDirNone'),
                   label: l10n.whaleHoldingsSortDirNone,
-                  icon: null,
+                  arrow: '',
                   active: _dir == null,
                   onTap: () => setState(() => _dir = null),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: FilledButton(
-              key: const Key('whaleHoldingsSortDone'),
-              onPressed: _done,
-              child: Text(l10n.whaleHoldingsSortDone),
+          const SizedBox(height: 16),
+          GestureDetector(
+            key: const Key('whaleHoldingsSortDone'),
+            behavior: HitTestBehavior.opaque,
+            onTap: _done,
+            child: Container(
+              width: double.infinity,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                gradient: c.accentGrad,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: <BoxShadow>[c.accentShadow],
+              ),
+              child: Text(
+                l10n.whaleHoldingsSortDone,
+                style: const TextStyle(
+                  color: Color(0xFFFFFFFF),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ],
@@ -719,18 +769,21 @@ class _SortPill extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Container(
         height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: active ? c.accent : c.bgSoft,
           borderRadius: BorderRadius.circular(QzRadii.pill),
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? c.accentOn : c.text,
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+        child: Align(
+          widthFactor: 1,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? c.accentOn : c.text,
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
         ),
       ),
@@ -741,14 +794,14 @@ class _SortPill extends StatelessWidget {
 class _SortDirCell extends StatelessWidget {
   const _SortDirCell({
     required this.label,
-    required this.icon,
+    required this.arrow,
     required this.active,
     required this.onTap,
     super.key,
   });
 
   final String label;
-  final IconData? icon;
+  final String arrow;
   final bool active;
   final VoidCallback onTap;
 
@@ -762,7 +815,7 @@ class _SortDirCell extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           color: active ? c.accentSoft : c.bgSoft,
-          borderRadius: BorderRadius.circular(QzRadii.input),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: active ? c.accent : Colors.transparent),
         ),
         alignment: Alignment.center,
@@ -773,13 +826,20 @@ class _SortDirCell extends StatelessWidget {
               label,
               style: TextStyle(
                 color: active ? c.accent : c.text,
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
-            if (icon != null) ...<Widget>[
-              const SizedBox(width: 4),
-              Icon(icon, size: 14, color: active ? c.accent : c.textMid),
+            if (arrow.isNotEmpty) ...<Widget>[
+              const SizedBox(width: 5),
+              Text(
+                arrow,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: active ? c.accent : c.text,
+                ),
+              ),
             ],
           ],
         ),

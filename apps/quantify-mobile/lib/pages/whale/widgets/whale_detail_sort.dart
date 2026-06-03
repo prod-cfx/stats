@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'dart:math' as math;
+
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -45,8 +47,7 @@ class WhaleSortState {
 /// display 串 → 排序用数值。去逗号与货币/单位符号后 `double.tryParse`，
 /// 解析失败回退 0（不排序列不会调用，故无副作用）。
 double whaleSortNum(String display) {
-  final String cleaned =
-      display.replaceAll(RegExp(r'[^0-9.\-]'), '');
+  final String cleaned = display.replaceAll(RegExp(r'[^0-9.\-]'), '');
   return double.tryParse(cleaned) ?? 0;
 }
 
@@ -92,7 +93,11 @@ class WhaleSortLabel extends StatelessWidget {
 }
 
 class _SortCaret extends StatelessWidget {
-  const _SortCaret({required this.dir, required this.accent, required this.faint});
+  const _SortCaret({
+    required this.dir,
+    required this.accent,
+    required this.faint,
+  });
 
   final WhaleSortDir? dir;
   final Color accent;
@@ -100,23 +105,52 @@ class _SortCaret extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(
-          Icons.arrow_drop_up,
-          size: 12,
-          color: dir == WhaleSortDir.asc ? accent : faint,
+    return SizedBox(
+      width: 10,
+      height: 14,
+      child: CustomPaint(
+        painter: _SortCaretPainter(
+          up: dir == WhaleSortDir.asc ? accent : faint,
+          down: dir == WhaleSortDir.desc ? accent : faint,
         ),
-        const SizedBox(height: 0),
-        Icon(
-          Icons.arrow_drop_down,
-          size: 12,
-          color: dir == WhaleSortDir.desc ? accent : faint,
-        ),
-      ],
+      ),
     );
   }
+}
+
+class _SortCaretPainter extends CustomPainter {
+  const _SortCaretPainter({required this.up, required this.down});
+
+  final Color up;
+  final Color down;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()..style = PaintingStyle.fill;
+    final double cx = size.width / 2;
+    paint.color = up;
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx, 1)
+        ..lineTo(cx - 4, 6)
+        ..lineTo(cx + 4, 6)
+        ..close(),
+      paint,
+    );
+    paint.color = down;
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx - 4, 8)
+        ..lineTo(cx + 4, 8)
+        ..lineTo(cx, 13)
+        ..close(),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SortCaretPainter oldDelegate) =>
+      oldDelegate.up != up || oldDelegate.down != down;
 }
 
 /// 币种筛选触发器（文案 + 漏斗图标，active 紫色显示当前 sym）。
@@ -164,7 +198,7 @@ class WhaleCoinFilterTrigger extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.filter_list, size: 13, color: c.textDim),
+          Icon(Icons.filter_alt, size: 13, color: c.textFaint),
         ],
       ),
     );
@@ -292,8 +326,7 @@ class WhaleMoreSortTrigger extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool active =
-        sort.active && metrics.any((m) => m.key == sort.key);
+    final bool active = sort.active && metrics.any((m) => m.key == sort.key);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () async {
@@ -332,12 +365,47 @@ class WhaleMoreSortSheet {
     required WhaleSortState current,
     required List<({String key, String label})> metrics,
   }) {
-    return QzSheet.show<WhaleSortState>(
+    final QzColorScheme c = context.qzScheme;
+    return showModalBottomSheet<WhaleSortState>(
       context: context,
-      builder: (BuildContext ctx) => _MoreSortBody(
-        current: current,
-        metrics: metrics,
+      isScrollControlled: true,
+      backgroundColor: c.bgElev,
+      barrierColor: c.scrim,
+      sheetAnimationStyle: const AnimationStyle(
+        curve: QzCurves.sheetPanel,
+        duration: QzCurves.sheetPanelDuration,
+        reverseCurve: QzCurves.sheetPanel,
+        reverseDuration: QzCurves.sheetPanelDuration,
       ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext ctx) {
+        final QzColorScheme sheetColors = ctx.qzScheme;
+        final double keyboardInset = MediaQuery.viewInsetsOf(ctx).bottom;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: math.max(28, keyboardInset)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const SizedBox(height: 10),
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: sheetColors.borderStrong,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _MoreSortBody(current: current, metrics: metrics),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -357,10 +425,7 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
 
   void _pickMetric(String key) {
     setState(() {
-      _draft = WhaleSortState(
-        key: key,
-        dir: _draft.dir ?? WhaleSortDir.desc,
-      );
+      _draft = WhaleSortState(key: key, dir: _draft.dir ?? WhaleSortDir.desc);
     });
   }
 
@@ -382,7 +447,7 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, QzSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,15 +460,15 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
               color: c.text,
             ),
           ),
-          const SizedBox(height: QzSpacing.md),
+          const SizedBox(height: 12),
           Text(
             l10n.whaleProfileSortMetric,
             style: TextStyle(fontSize: 11, color: c.textMid),
           ),
-          const SizedBox(height: QzSpacing.xs),
+          const SizedBox(height: 6),
           Wrap(
-            spacing: QzSpacing.xs,
-            runSpacing: QzSpacing.xs,
+            spacing: 6,
+            runSpacing: 6,
             children: <Widget>[
               for (final ({String key, String label}) m in widget.metrics)
                 _MetricPill(
@@ -413,12 +478,12 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
                 ),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
+          const SizedBox(height: 16),
           Text(
             l10n.whaleProfileSortDirection,
             style: TextStyle(fontSize: 11, color: c.textMid),
           ),
-          const SizedBox(height: QzSpacing.xs),
+          const SizedBox(height: 6),
           Row(
             children: <Widget>[
               Expanded(
@@ -429,7 +494,7 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
                   onTap: () => _pickDir(WhaleSortDir.asc),
                 ),
               ),
-              const SizedBox(width: QzSpacing.xs),
+              const SizedBox(width: 6),
               Expanded(
                 child: _DirOption(
                   label: l10n.whaleProfileSortDesc,
@@ -438,7 +503,7 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
                   onTap: () => _pickDir(WhaleSortDir.desc),
                 ),
               ),
-              const SizedBox(width: QzSpacing.xs),
+              const SizedBox(width: 6),
               Expanded(
                 child: _DirOption(
                   label: l10n.whaleProfileSortNone,
@@ -449,22 +514,26 @@ class _MoreSortBodyState extends State<_MoreSortBody> {
               ),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: c.accent,
-                foregroundColor: c.accentOn,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pop(_draft),
+            child: Container(
+              width: double.infinity,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                gradient: c.accentGrad,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: <BoxShadow>[c.accentShadow],
               ),
-              onPressed: () => Navigator.of(context).pop(_draft),
               child: Text(
                 l10n.whaleProfileSortDone,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFFFFFFF),
+                ),
               ),
             ),
           ),
@@ -494,17 +563,20 @@ class _MetricPill extends StatelessWidget {
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? c.accent : c.bgSoft,
           borderRadius: BorderRadius.circular(QzRadii.pill),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? c.accentOn : c.text,
+        child: Align(
+          widthFactor: 1,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? c.accentOn : c.text,
+            ),
           ),
         ),
       ),
@@ -537,9 +609,7 @@ class _DirOption extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? c.accentSoft : c.bgSoft,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? c.accent : Colors.transparent,
-          ),
+          border: Border.all(color: selected ? c.accent : Colors.transparent),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

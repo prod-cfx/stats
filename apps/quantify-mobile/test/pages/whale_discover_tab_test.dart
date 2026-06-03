@@ -51,8 +51,9 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        whaleLeaderboardRepositoryProvider
-            .overrideWithValue(_FakeLeaderboardRepo()),
+        whaleLeaderboardRepositoryProvider.overrideWithValue(
+          _FakeLeaderboardRepo(),
+        ),
       ],
       child: MaterialApp.router(
         locale: const Locale('zh'),
@@ -70,10 +71,14 @@ Future<void> _pump(WidgetTester tester) async {
 void main() {
   group('排序纯函数', () {
     test('sort=null 返回原序副本，不改入参', () {
-      final List<WhaleLeaderEntry> out =
-          sortWhaleLeaders(mockWhaleLeaders, null);
-      expect(out.map((WhaleLeaderEntry e) => e.id),
-          mockWhaleLeaders.map((WhaleLeaderEntry e) => e.id));
+      final List<WhaleLeaderEntry> out = sortWhaleLeaders(
+        mockWhaleLeaders,
+        null,
+      );
+      expect(
+        out.map((WhaleLeaderEntry e) => e.id),
+        mockWhaleLeaders.map((WhaleLeaderEntry e) => e.id),
+      );
       expect(identical(out, mockWhaleLeaders), isFalse);
     });
 
@@ -130,9 +135,12 @@ void main() {
       final WhaleTradeStats s = whaleLeaderTradeStats(e);
       expect(s.pnlDisplay, e.pnlDisplay);
       expect(s.pnlTone, 'up');
-      expect(s.winRatePct, 74); // 73.81 四舍五入
+      expect(s.winRatePct, 73.81);
       expect(s.tradesTotal, e.trades);
-      expect(s.assetPerf, isEmpty);
+      expect(s.wins, 31);
+      expect(s.losses, 11);
+      expect(s.assetPerf.first.symbol, 'ZEC');
+      expect(s.positionPerf.first.sym, 'XMR');
     });
   });
 
@@ -148,9 +156,9 @@ void main() {
     testWidgets('排序条三档药丸均渲染', (WidgetTester tester) async {
       await _pump(tester);
       Finder pill(String label) => find.descendant(
-            of: find.byType(WhaleSortBar),
-            matching: find.text(label),
-          );
+        of: find.byType(WhaleSortBar),
+        matching: find.text(label),
+      );
       expect(pill('胜率'), findsOneWidget);
       expect(pill('账户总价值'), findsOneWidget);
       expect(pill('已实现盈亏'), findsOneWidget);
@@ -168,10 +176,12 @@ void main() {
       final List<String> before = _cardOrder(tester);
       expect(before, isNotEmpty);
 
-      await tester.tap(find.descendant(
-        of: find.byType(WhaleSortBar),
-        matching: find.text('账户总价值'),
-      ));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WhaleSortBar),
+          matching: find.text('账户总价值'),
+        ),
+      );
       await tester.pump();
 
       final List<String> after = _cardOrder(tester);
@@ -219,8 +229,7 @@ void main() {
       expect(find.text('PROFILE'), findsOneWidget);
     });
 
-    testWidgets('入口二：点列表卡卡片本体 → 打开交易统计弹窗',
-        (WidgetTester tester) async {
+    testWidgets('入口二：点列表卡卡片本体 → 打开交易统计弹窗', (WidgetTester tester) async {
       await _pump(tester);
       // 点卡片本体（InkWell），避开地址 / 复制 / 趋势子控件。
       await tester.tap(find.text('账户总价值').last);

@@ -8,6 +8,9 @@ import '../data/models/auth_models.dart';
 import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
 import '../pages/ai/ai_confirm_page.dart';
+import '../pages/ai/ai_backtest_result_page.dart';
+import '../pages/ai/ai_backtest_run_page.dart';
+import '../pages/ai/ai_deploy_page.dart';
 import '../pages/ai/ai_home_page.dart';
 import '../pages/ai/ai_script_page.dart';
 import '../pages/ai/backtest_config_sheet.dart';
@@ -188,6 +191,21 @@ GoRouter buildRouter({
         path: '/ai/backtest-config',
         builder: (BuildContext context, GoRouterState state) =>
             const BacktestConfigSheet(),
+      ),
+      GoRoute(
+        path: '/ai/backtest-run',
+        builder: (BuildContext context, GoRouterState state) =>
+            const AiBacktestRunPage(),
+      ),
+      GoRoute(
+        path: '/ai/backtest-result',
+        builder: (BuildContext context, GoRouterState state) =>
+            const AiBacktestResultPage(),
+      ),
+      GoRoute(
+        path: '/ai/deploy',
+        builder: (BuildContext context, GoRouterState state) =>
+            const AiDeployPage(),
       ),
       GoRoute(
         path: '/me/theme',

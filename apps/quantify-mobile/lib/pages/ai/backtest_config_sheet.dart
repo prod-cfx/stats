@@ -1,23 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/models/backtest_models.dart';
-import '../../data/providers.dart';
-import '../../data/repositories/backtest_repository.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_button.dart';
+import '../../widgets/qz_step_bar.dart';
+import '../../widgets/qz_top_bar.dart';
 
 /// Backtest configuration sheet — route `/ai/backtest-config` (#1566 / #1893)。
 ///
 /// 字段基准 = `design/project/mobile/m-screens-btconfig.jsx` ScreenBacktestConfig
-/// （整屏版字段集），但形态按 #1890 形态裁决（方案 B：维持对话中心/弹层形态）
-/// 落到当前 sheet，不引入整屏 StepBar/线性导航（StepBar 集成显式延后至 #1890
-/// future 工作）。字段对齐 (#1893)：
+/// （整屏版字段集）。当前按设计稿恢复为整屏向导页，顶部渲染统一 5 步
+/// StepBar：确认策略 / 策略脚本 / 回测设置 / 回测 / 部署。字段对齐 (#1893)：
 ///   - 顶部策略 recap 条
 ///   - 历史区间 chips（7D / 30D / 90D / 1Y / 3Y / 自定义）+ 区间回显
 ///     （非自定义：数据范围 start → end；自定义：共 N 天 · N 根 15m K 线）
@@ -27,18 +24,15 @@ import '../../widgets/qz_button.dart';
 ///   - 「本次回测设定」summary 卡（区间 / 资金 / 市场 / 撮合 / 数据 5 行回显）
 ///   - 底部 shield 提示 banner + 双按钮：「上一步」+「开始回测」
 ///
-/// symbol / period 仍由 AI 对话上下文推断（mock 默认）；market / leverage 现已
-/// 在本页显式选择并随 `BacktestRequest.params` 提交。提交时 `BacktestResult`
-/// 通过 `context.pop(result)` 回写到 AI 对话页。
-class BacktestConfigSheet extends ConsumerStatefulWidget {
+/// 点击「开始回测」进入 `/ai/backtest-run`，由回测中页自动推进到结果页。
+class BacktestConfigSheet extends StatefulWidget {
   const BacktestConfigSheet({super.key});
 
   @override
-  ConsumerState<BacktestConfigSheet> createState() =>
-      _BacktestConfigSheetState();
+  State<BacktestConfigSheet> createState() => _BacktestConfigSheetState();
 }
 
-class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
+class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
   /// 历史区间预设。值为「相对今天往前推的天数」；0 = 自定义。
   static const List<({String key, int days})> _ranges =
       <({String key, int days})>[
@@ -90,7 +84,6 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     text: _isoDate(DateTime.now()),
   );
 
-  bool _submitting = false;
   String? _error;
 
   @override
@@ -243,7 +236,6 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       setState(() => _error = parsed.error);
       return;
     }
-    final ({DateTime start, DateTime end}) range = parsed.range!;
     final double? capital = double.tryParse(_capital.text.trim());
     if (capital == null || capital <= 0) {
       setState(() => _error = l10n.backtestErrorInvalidCapital);
@@ -260,50 +252,12 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       return;
     }
 
-    setState(() {
-      _error = null;
-      _submitting = true;
-    });
-
-    final BacktestRepository repo = ref.read(backtestRepositoryProvider);
-    // symbol / period 仍由对话上下文推断 → mock 默认值；market / leverage
-    // 现已在本页显式选择（#1893），随 params 一并提交。
-    final int? leverage = _futures
-        ? int.tryParse(_leverage.replaceAll('x', ''))
-        : null;
-    final BacktestRequest req = BacktestRequest(
-      strategyId: 'mock-strategy',
-      symbol: 'BTCUSDT',
-      startTime: range.start,
-      endTime: range.end,
-      params: <String, dynamic>{
-        'capital': capital,
-        'slippageBps': slippageBps,
-        'feeBps': feeBps,
-        'fillSource': _fillSource,
-        'partialData': _partialData,
-        'market': _futures ? 'futures' : 'spot',
-        'leverage': ?leverage,
-      },
-    );
-
-    BacktestResult result;
-    try {
-      result = await repo.run(req);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _error = '${l10n.backtestErrorFailedPrefix}$e';
-      });
-      return;
-    }
     if (!mounted) return;
-    context.pop(result);
+    setState(() => _error = null);
+    context.push('/ai/backtest-run');
   }
 
   void _cancel() {
-    if (_submitting) return;
     context.pop();
   }
 
@@ -311,417 +265,318 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    // 设计稿 m-screens-2.jsx ScreenAIConfig：sheet 固定 top:120，圆角 24，
-    // body 滚动，footer 贴底；scrim 占据 sheet 上方 120px 区域，点击关闭。
     final double bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
-      backgroundColor: c.scrim,
+      backgroundColor: c.bg,
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: <Widget>[
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            height: 120,
-            child: GestureDetector(
-              key: const Key('backtest-sheet-scrim'),
-              behavior: HitTestBehavior.opaque,
-              onTap: _cancel,
-              child: const SizedBox.expand(),
+      appBar: QzTopBar(
+        title: '回测设置',
+        subtitle: '设置如何回测这条策略',
+        onBack: () => context.pop(),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: <Widget>[
+            QzStepBar(
+              steps: <String>[
+                l10n.aiStepConfirm,
+                l10n.aiStepScript,
+                l10n.aiStepBacktestConfig,
+                l10n.aiStepBacktest,
+                l10n.aiStepDeploy,
+              ],
+              active: 2,
+              done: const <int>[0, 1],
             ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 120,
-            bottom: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: c.bgElev,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
-              child: Column(
+            Expanded(
+              child: Stack(
                 children: <Widget>[
-                  const SizedBox(height: QzSpacing.sm),
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: c.borderStrong,
-                        borderRadius: BorderRadius.circular(QzRadii.pill),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      QzSpacing.lg,
-                      QzSpacing.md,
-                      QzSpacing.lg,
-                      QzSpacing.xs,
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.only(
+                      left: QzSpacing.lg,
+                      top: QzSpacing.md,
+                      right: QzSpacing.lg,
+                      bottom: 100,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(
-                          l10n.backtestSheetTitle,
-                          style: TextStyle(
-                            color: c.text,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
+                        _RecapStrip(
+                          scheme: c,
+                          text: l10n.backtestRecap('BTC 趋势 · 双均线'),
+                        ),
+                        const SizedBox(height: 14),
+                        _SectionTitle(
+                          scheme: c,
+                          title: l10n.backtestFieldRange,
+                        ),
+                        _SectionCard(
+                          scheme: c,
+                          marginBottom: 14,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              _RangeChips(
+                                ranges: _ranges,
+                                value: _rangeKey,
+                                l10n: l10n,
+                                scheme: c,
+                                onChanged: (String v) =>
+                                    setState(() => _rangeKey = v),
+                              ),
+                              if (_rangeKey == 'custom') ...<Widget>[
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: <Widget>[
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          _TinyLabel(
+                                            text: l10n.commonStart,
+                                            scheme: c,
+                                          ),
+                                          const SizedBox(height: 5),
+                                          _TextInput(
+                                            key: const Key('backtest-start'),
+                                            controller: _start,
+                                            scheme: c,
+                                            compact: true,
+                                            onChanged: (_) => _clearError(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: QzSpacing.xs,
+                                        right: QzSpacing.xs,
+                                        top: 18,
+                                      ),
+                                      child: Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 12,
+                                        color: c.textDim,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          _TinyLabel(
+                                            text: l10n.commonEnd,
+                                            scheme: c,
+                                          ),
+                                          const SizedBox(height: 5),
+                                          _TextInput(
+                                            key: const Key('backtest-end'),
+                                            controller: _end,
+                                            scheme: c,
+                                            compact: true,
+                                            onChanged: (_) => _clearError(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              Text(
+                                key: const Key('backtest-range-echo'),
+                                _rangeEchoText(l10n),
+                                style: TextStyle(
+                                  color: c.textDim,
+                                  fontSize: 11,
+                                  fontFeatures: const <FontFeature>[
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          l10n.backtestSheetSubtitle,
-                          style: TextStyle(color: c.textMid, fontSize: 12),
+                        _SectionTitle(
+                          scheme: c,
+                          title: l10n.backtestFieldCapital,
                         ),
+                        _CapitalCard(
+                          controller: _capital,
+                          presets: _capitalPresets,
+                          scheme: c,
+                          hint: l10n.backtestCapitalPresetHint,
+                          inputFormatters: _numericFormatters,
+                          onChanged: (_) => _clearError(),
+                          onPick: (int v) {
+                            _capital.text = v.toString();
+                            _clearError();
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        _SectionTitle(
+                          scheme: c,
+                          title: l10n.backtestFieldMarket,
+                        ),
+                        _SectionCard(
+                          scheme: c,
+                          marginBottom: 14,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              _Segmented(
+                                key: const Key('backtest-market'),
+                                scheme: c,
+                                value: _futures ? 'futures' : 'spot',
+                                options: <({String key, String label})>[
+                                  (key: 'spot', label: l10n.backtestMarketSpot),
+                                  (
+                                    key: 'futures',
+                                    label: l10n.backtestMarketFutures,
+                                  ),
+                                ],
+                                onChanged: (String v) =>
+                                    setState(() => _futures = v == 'futures'),
+                              ),
+                              if (_futures) ...<Widget>[
+                                const SizedBox(height: 14),
+                                _LeveragePicker(
+                                  leverages: _leverages,
+                                  value: _leverage,
+                                  scheme: c,
+                                  label: l10n.backtestFieldLeverage,
+                                  hint: l10n.backtestLeverageHint,
+                                  onChanged: (String v) =>
+                                      setState(() => _leverage = v),
+                                ),
+                                if (_highLeverages.contains(
+                                  _leverage,
+                                )) ...<Widget>[
+                                  const SizedBox(height: 10),
+                                  _WarnBanner(
+                                    key: const Key('backtest-leverage-warn'),
+                                    scheme: c,
+                                    text: l10n.backtestLeverageWarn,
+                                  ),
+                                ],
+                              ],
+                            ],
+                          ),
+                        ),
+                        _SectionTitle(
+                          scheme: c,
+                          title: l10n.backtestSectionMatching,
+                          right: l10n.backtestSectionMatchingRight,
+                        ),
+                        _MatchingCard(
+                          scheme: c,
+                          slippage: _slippage,
+                          fee: _fee,
+                          fillSource: _fillSource,
+                          partialData: _partialData,
+                          l10n: l10n,
+                          inputFormatters: _numericFormatters,
+                          onInputChanged: (_) => _clearError(),
+                          onFillSourceChanged: (String v) =>
+                              setState(() => _fillSource = v),
+                          onPartialDataChanged: (String v) =>
+                              setState(() => _partialData = v == 'yes'),
+                        ),
+                        const SizedBox(height: 14),
+                        _SummaryCard(
+                          scheme: c,
+                          title: l10n.backtestSummaryTitle,
+                          rows: <({String k, String v})>[
+                            (
+                              k: l10n.backtestSummaryRange,
+                              v: _summaryRangeValue(),
+                            ),
+                            (
+                              k: l10n.backtestSummaryCapital,
+                              v: _summaryCapitalValue(),
+                            ),
+                            (
+                              k: l10n.backtestSummaryMarket,
+                              v: _summaryMarketValue(l10n),
+                            ),
+                            (
+                              k: l10n.backtestSummaryMatching,
+                              v: _summaryMatchingValue(l10n),
+                            ),
+                            (
+                              k: l10n.backtestSummaryData,
+                              v: _partialData
+                                  ? l10n.backtestSummaryDataAllow
+                                  : l10n.backtestSummaryDataStrict,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: QzSpacing.lg),
+                        _ShieldBanner(scheme: c, text: l10n.backtestShieldHint),
+                        if (_error != null) ...<Widget>[
+                          const SizedBox(height: QzSpacing.sm),
+                          Text(
+                            _error!,
+                            style: TextStyle(
+                              color: c.statusDanger,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(
-                        QzSpacing.lg,
-                        QzSpacing.sm,
-                        QzSpacing.lg,
-                        QzSpacing.lg,
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      padding: EdgeInsets.fromLTRB(
+                        QzSpacing.lg,
+                        QzSpacing.md,
+                        QzSpacing.lg,
+                        QzSpacing.lg + bottomInset,
+                      ),
+                      child: Row(
                         children: <Widget>[
-                          _RecapStrip(
-                            scheme: c,
-                            text: l10n.backtestRecap('BTC 趋势 · 双均线'),
-                          ),
-                          const SizedBox(height: QzSpacing.md),
-                          _FieldLabel(
-                            label: l10n.backtestFieldRange,
-                            scheme: c,
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _RangeChips(
-                            ranges: _ranges,
-                            value: _rangeKey,
-                            l10n: l10n,
-                            scheme: c,
-                            onChanged: (String v) =>
-                                setState(() => _rangeKey = v),
-                          ),
-                          if (_rangeKey == 'custom') ...<Widget>[
-                            const SizedBox(height: QzSpacing.md),
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      _FieldLabel(
-                                        label: l10n.commonStart,
-                                        scheme: c,
-                                      ),
-                                      const SizedBox(height: QzSpacing.xs),
-                                      _TextInput(
-                                        key: const Key('backtest-start'),
-                                        controller: _start,
-                                        scheme: c,
-                                        onChanged: (_) => _clearError(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: QzSpacing.md),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      _FieldLabel(
-                                        label: l10n.commonEnd,
-                                        scheme: c,
-                                      ),
-                                      const SizedBox(height: QzSpacing.xs),
-                                      _TextInput(
-                                        key: const Key('backtest-end'),
-                                        controller: _end,
-                                        scheme: c,
-                                        onChanged: (_) => _clearError(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          const SizedBox(height: QzSpacing.xs),
-                          Text(
-                            key: const Key('backtest-range-echo'),
-                            _rangeEchoText(l10n),
-                            style: TextStyle(
-                              color: c.textDim,
-                              fontSize: 11,
-                              fontFeatures: const <FontFeature>[
-                                FontFeature.tabularFigures(),
-                              ],
+                          Expanded(
+                            child: QzButton(
+                              key: const Key('backtest-collapse'),
+                              label: l10n.backtestCollapseButton,
+                              variant: QzButtonVariant.ghost,
+                              onPressed: _cancel,
+                              expanded: true,
                             ),
                           ),
-                          const SizedBox(height: QzSpacing.md),
-                          _FieldLabel(
-                            label: l10n.backtestFieldCapital,
-                            scheme: c,
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _TextInput(
-                            key: const Key('backtest-capital'),
-                            controller: _capital,
-                            scheme: c,
-                            keyboard: const TextInputType.numberWithOptions(
-                              decimal: true,
+                          const SizedBox(width: QzSpacing.md),
+                          Expanded(
+                            flex: 2,
+                            child: QzButton(
+                              key: const Key('backtest-submit'),
+                              label: l10n.backtestStartButton,
+                              variant: QzButtonVariant.accent,
+                              onPressed: _submit,
+                              expanded: true,
                             ),
-                            suffix: 'USDT',
-                            inputFormatters: _numericFormatters,
-                            onChanged: (_) => _clearError(),
                           ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _CapitalPresets(
-                            presets: _capitalPresets,
-                            scheme: c,
-                            onPick: (int v) {
-                              _capital.text = v.toString();
-                              _clearError();
-                            },
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          Text(
-                            l10n.backtestCapitalPresetHint,
-                            style: TextStyle(color: c.textDim, fontSize: 11),
-                          ),
-                          const SizedBox(height: QzSpacing.md),
-                          _FieldLabel(
-                            label: l10n.backtestFieldMarket,
-                            scheme: c,
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _Segmented(
-                            key: const Key('backtest-market'),
-                            scheme: c,
-                            value: _futures ? 'futures' : 'spot',
-                            options: <({String key, String label})>[
-                              (key: 'spot', label: l10n.backtestMarketSpot),
-                              (
-                                key: 'futures',
-                                label: l10n.backtestMarketFutures,
-                              ),
-                            ],
-                            onChanged: (String v) =>
-                                setState(() => _futures = v == 'futures'),
-                          ),
-                          if (_futures) ...<Widget>[
-                            const SizedBox(height: QzSpacing.md),
-                            _LeveragePicker(
-                              leverages: _leverages,
-                              value: _leverage,
-                              scheme: c,
-                              label: l10n.backtestFieldLeverage,
-                              hint: l10n.backtestLeverageHint,
-                              onChanged: (String v) =>
-                                  setState(() => _leverage = v),
-                            ),
-                            if (_highLeverages.contains(_leverage)) ...<Widget>[
-                              const SizedBox(height: QzSpacing.xs),
-                              _WarnBanner(
-                                key: const Key('backtest-leverage-warn'),
-                                scheme: c,
-                                text: l10n.backtestLeverageWarn,
-                              ),
-                            ],
-                          ],
-                          const SizedBox(height: QzSpacing.md),
-                          _SectionTitle(
-                            scheme: c,
-                            title: l10n.backtestSectionMatching,
-                            right: l10n.backtestSectionMatchingRight,
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _FieldLabel(
-                            label: l10n.backtestFieldSlippage,
-                            scheme: c,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            l10n.backtestHintSlippage,
-                            style: TextStyle(color: c.textDim, fontSize: 11),
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _TextInput(
-                            key: const Key('backtest-slippage'),
-                            controller: _slippage,
-                            scheme: c,
-                            keyboard: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            suffix: 'bps',
-                            inputFormatters: _numericFormatters,
-                            onChanged: (_) => _clearError(),
-                          ),
-                          const SizedBox(height: QzSpacing.md),
-                          _FieldLabel(label: l10n.backtestFieldFee, scheme: c),
-                          const SizedBox(height: 2),
-                          Text(
-                            l10n.backtestHintFee,
-                            style: TextStyle(color: c.textDim, fontSize: 11),
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _TextInput(
-                            key: const Key('backtest-fee'),
-                            controller: _fee,
-                            scheme: c,
-                            keyboard: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            suffix: 'bps',
-                            inputFormatters: _numericFormatters,
-                            onChanged: (_) => _clearError(),
-                          ),
-                          const SizedBox(height: QzSpacing.md),
-                          _FieldLabel(
-                            label: l10n.backtestFieldFillSource,
-                            scheme: c,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            l10n.backtestHintFillSource,
-                            style: TextStyle(color: c.textDim, fontSize: 11),
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _Segmented(
-                            key: const Key('backtest-fill-source'),
-                            scheme: c,
-                            value: _fillSource,
-                            options: <({String key, String label})>[
-                              (key: 'open', label: l10n.backtestFillOpen),
-                              (key: 'close', label: l10n.backtestFillClose),
-                              (key: 'mid', label: l10n.backtestFillMid),
-                            ],
-                            onChanged: (String v) =>
-                                setState(() => _fillSource = v),
-                          ),
-                          const SizedBox(height: QzSpacing.md),
-                          _FieldLabel(
-                            label: l10n.backtestFieldPartialData,
-                            scheme: c,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            l10n.backtestHintPartialData,
-                            style: TextStyle(color: c.textDim, fontSize: 11),
-                          ),
-                          const SizedBox(height: QzSpacing.xs),
-                          _Segmented(
-                            key: const Key('backtest-partial-data'),
-                            scheme: c,
-                            value: _partialData ? 'yes' : 'no',
-                            options: <({String key, String label})>[
-                              (key: 'yes', label: l10n.backtestPartialAllow),
-                              (key: 'no', label: l10n.backtestPartialDisallow),
-                            ],
-                            onChanged: (String v) =>
-                                setState(() => _partialData = v == 'yes'),
-                          ),
-                          const SizedBox(height: QzSpacing.md),
-                          _SummaryCard(
-                            scheme: c,
-                            title: l10n.backtestSummaryTitle,
-                            rows: <({String k, String v})>[
-                              (
-                                k: l10n.backtestSummaryRange,
-                                v: _summaryRangeValue(),
-                              ),
-                              (
-                                k: l10n.backtestSummaryCapital,
-                                v: _summaryCapitalValue(),
-                              ),
-                              (
-                                k: l10n.backtestSummaryMarket,
-                                v: _summaryMarketValue(l10n),
-                              ),
-                              (
-                                k: l10n.backtestSummaryMatching,
-                                v: _summaryMatchingValue(l10n),
-                              ),
-                              (
-                                k: l10n.backtestSummaryData,
-                                v: _partialData
-                                    ? l10n.backtestSummaryDataAllow
-                                    : l10n.backtestSummaryDataStrict,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: QzSpacing.lg),
-                          _ShieldBanner(
-                            scheme: c,
-                            text: l10n.backtestShieldHint,
-                          ),
-                          if (_error != null) ...<Widget>[
-                            const SizedBox(height: QzSpacing.sm),
-                            Text(
-                              _error!,
-                              style: TextStyle(
-                                color: c.statusDanger,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
-                    ),
-                  ),
-                  // Footer：贴底固定，键盘弹起时 padding 顶起避免被遮挡。
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: c.border)),
-                    ),
-                    padding: EdgeInsets.fromLTRB(
-                      QzSpacing.lg,
-                      QzSpacing.md,
-                      QzSpacing.lg,
-                      QzSpacing.lg + bottomInset,
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: QzButton(
-                            key: const Key('backtest-collapse'),
-                            label: l10n.backtestCollapseButton,
-                            variant: QzButtonVariant.ghost,
-                            onPressed: _submitting ? null : _cancel,
-                            expanded: true,
-                          ),
-                        ),
-                        const SizedBox(width: QzSpacing.md),
-                        Expanded(
-                          flex: 2,
-                          child: QzButton(
-                            key: const Key('backtest-submit'),
-                            label: l10n.backtestStartButton,
-                            variant: QzButtonVariant.accent,
-                            onPressed: _submitting ? null : _submit,
-                            loading: _submitting,
-                            expanded: true,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -773,13 +628,18 @@ class _RangeChips extends StatelessWidget {
                 ),
                 borderRadius: BorderRadius.circular(QzRadii.pill),
               ),
-              alignment: Alignment.center,
-              child: Text(
-                _label(r.key),
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: r.key == value ? scheme.accent : scheme.textMid,
+              child: Align(
+                widthFactor: 1,
+                alignment: Alignment.center,
+                child: Text(
+                  _label(r.key),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: r.key == value
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    color: r.key == value ? scheme.accent : scheme.textMid,
+                  ),
                 ),
               ),
             ),
@@ -844,7 +704,6 @@ class _CapitalPresets extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: scheme.bgInput,
-                  border: Border.all(color: scheme.border),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Text(
@@ -864,6 +723,126 @@ class _CapitalPresets extends StatelessWidget {
   }
 }
 
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.scheme,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    this.marginBottom = 0,
+  });
+  final QzColorScheme scheme;
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double marginBottom;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.only(bottom: marginBottom),
+      padding: padding,
+      decoration: BoxDecoration(
+        color: scheme.bgElev,
+        border: Border.all(color: scheme.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _CapitalCard extends StatelessWidget {
+  const _CapitalCard({
+    required this.controller,
+    required this.presets,
+    required this.scheme,
+    required this.hint,
+    required this.inputFormatters,
+    required this.onChanged,
+    required this.onPick,
+  });
+  final TextEditingController controller;
+  final List<({String label, int value})> presets;
+  final QzColorScheme scheme;
+  final String hint;
+  final List<TextInputFormatter> inputFormatters;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<int> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      scheme: scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            key: const Key('backtest-capital'),
+            padding: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: scheme.borderSoft)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: <Widget>[
+                Text(
+                  r'$',
+                  style: TextStyle(
+                    color: scheme.textDim,
+                    fontSize: 14,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: QzSpacing.xs),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: inputFormatters,
+                    onChanged: onChanged,
+                    style: TextStyle(
+                      color: scheme.text,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const <FontFeature>[
+                        FontFeature.tabularFigures(),
+                      ],
+                    ),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+                Text(
+                  'USDT',
+                  style: TextStyle(
+                    color: scheme.textDim,
+                    fontSize: 13,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          _CapitalPresets(presets: presets, scheme: scheme, onPick: onPick),
+          const SizedBox(height: QzSpacing.sm),
+          Text(hint, style: TextStyle(color: scheme.textDim, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
 /// 通用 segmented 选择器（现货/合约、成交价来源、数据缺失策略共用）。
 class _Segmented extends StatelessWidget {
   const _Segmented({
@@ -872,11 +851,46 @@ class _Segmented extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.expanded = true,
   });
   final QzColorScheme scheme;
   final String value;
   final List<({String key, String label})> options;
   final ValueChanged<String> onChanged;
+  final bool expanded;
+
+  Widget _item(({String key, String label}) o) {
+    return GestureDetector(
+      key: Key('backtest-seg-${o.key}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(o.key),
+      child: Container(
+        height: expanded ? 34 : 28,
+        padding: expanded
+            ? EdgeInsets.zero
+            : const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
+        alignment: expanded ? Alignment.center : null,
+        decoration: BoxDecoration(
+          color: o.key == value ? scheme.bgElev : Colors.transparent,
+          borderRadius: BorderRadius.circular(expanded ? 8 : 6),
+          border: o.key == value ? Border.all(color: scheme.border) : null,
+        ),
+        child: Align(
+          widthFactor: expanded ? null : 1,
+          alignment: Alignment.center,
+          child: Text(
+            o.label,
+            style: TextStyle(
+              fontSize: expanded ? 13 : 11.5,
+              fontWeight: o.key == value ? FontWeight.w600 : FontWeight.w500,
+              color: o.key == value ? scheme.accent : scheme.textMid,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -887,36 +901,10 @@ class _Segmented extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
+        mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
         children: <Widget>[
           for (final o in options)
-            Expanded(
-              child: GestureDetector(
-                key: Key('backtest-seg-${o.key}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(o.key),
-                child: Container(
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: o.key == value ? scheme.bgElev : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: o.key == value
-                        ? Border.all(color: scheme.border)
-                        : null,
-                  ),
-                  child: Text(
-                    o.label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: o.key == value
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                      color: o.key == value ? scheme.accent : scheme.textMid,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            expanded ? Expanded(child: _item(o)) : _item(o),
         ],
       ),
     );
@@ -990,7 +978,6 @@ class _LeveragePicker extends StatelessWidget {
                 child: Container(
                   height: 30,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: l == value ? scheme.accentSoft : scheme.bgInput,
                     border: Border.all(
@@ -1000,15 +987,19 @@ class _LeveragePicker extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    l,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: l == value ? scheme.accent : scheme.textMid,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
+                  child: Align(
+                    widthFactor: 1,
+                    alignment: Alignment.center,
+                    child: Text(
+                      l,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: l == value ? scheme.accent : scheme.textMid,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1054,31 +1045,244 @@ class _WarnBanner extends StatelessWidget {
   }
 }
 
-/// 区块标题 + 右侧补充说明（撮合参数 · 影响成交模拟）。
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
+class _MatchingCard extends StatelessWidget {
+  const _MatchingCard({
     required this.scheme,
-    required this.title,
-    required this.right,
+    required this.slippage,
+    required this.fee,
+    required this.fillSource,
+    required this.partialData,
+    required this.l10n,
+    required this.inputFormatters,
+    required this.onInputChanged,
+    required this.onFillSourceChanged,
+    required this.onPartialDataChanged,
   });
   final QzColorScheme scheme;
-  final String title;
-  final String right;
+  final TextEditingController slippage;
+  final TextEditingController fee;
+  final String fillSource;
+  final bool partialData;
+  final AppLocalizations l10n;
+  final List<TextInputFormatter> inputFormatters;
+  final ValueChanged<String> onInputChanged;
+  final ValueChanged<String> onFillSourceChanged;
+  final ValueChanged<String> onPartialDataChanged;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: <Widget>[
-        Text(
-          title,
-          style: TextStyle(
-            color: scheme.textMid,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+    return _SectionCard(
+      scheme: scheme,
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: <Widget>[
+          _MatchingRow(
+            scheme: scheme,
+            label: l10n.backtestFieldSlippage,
+            hint: l10n.backtestHintSlippage,
+            right: _BpsInput(
+              key: const Key('backtest-slippage'),
+              controller: slippage,
+              scheme: scheme,
+              inputFormatters: inputFormatters,
+              onChanged: onInputChanged,
+            ),
+          ),
+          _MatchingRow(
+            scheme: scheme,
+            label: l10n.backtestFieldFee,
+            hint: l10n.backtestHintFee,
+            right: _BpsInput(
+              key: const Key('backtest-fee'),
+              controller: fee,
+              scheme: scheme,
+              inputFormatters: inputFormatters,
+              onChanged: onInputChanged,
+            ),
+          ),
+          _MatchingRow(
+            scheme: scheme,
+            label: l10n.backtestFieldFillSource,
+            hint: l10n.backtestHintFillSource,
+            right: _Segmented(
+              key: const Key('backtest-fill-source'),
+              scheme: scheme,
+              value: fillSource,
+              expanded: false,
+              options: <({String key, String label})>[
+                (key: 'open', label: l10n.backtestFillOpen),
+                (key: 'close', label: l10n.backtestFillClose),
+                (key: 'mid', label: l10n.backtestFillMid),
+              ],
+              onChanged: onFillSourceChanged,
+            ),
+          ),
+          _MatchingRow(
+            scheme: scheme,
+            label: l10n.backtestFieldPartialData,
+            hint: l10n.backtestHintPartialData,
+            last: true,
+            right: _Segmented(
+              key: const Key('backtest-partial-data'),
+              scheme: scheme,
+              value: partialData ? 'yes' : 'no',
+              expanded: false,
+              options: <({String key, String label})>[
+                (key: 'yes', label: l10n.backtestPartialAllow),
+                (key: 'no', label: l10n.backtestPartialDisallow),
+              ],
+              onChanged: onPartialDataChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MatchingRow extends StatelessWidget {
+  const _MatchingRow({
+    required this.scheme,
+    required this.label,
+    required this.hint,
+    required this.right,
+    this.last = false,
+  });
+  final QzColorScheme scheme;
+  final String label;
+  final String hint;
+  final Widget right;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: last ? Colors.transparent : scheme.borderSoft,
           ),
         ),
-        Text(right, style: TextStyle(color: scheme.textDim, fontSize: 11)),
-      ],
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: scheme.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hint,
+                  style: TextStyle(color: scheme.textDim, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: QzSpacing.md),
+          right,
+        ],
+      ),
+    );
+  }
+}
+
+class _BpsInput extends StatelessWidget {
+  const _BpsInput({
+    super.key,
+    required this.controller,
+    required this.scheme,
+    required this.inputFormatters,
+    required this.onChanged,
+  });
+  final TextEditingController controller;
+  final QzColorScheme scheme;
+  final List<TextInputFormatter> inputFormatters;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 118,
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: scheme.bgInput,
+        border: Border.all(color: scheme.borderSoft),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: inputFormatters,
+              onChanged: onChanged,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: scheme.text,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          const SizedBox(width: QzSpacing.xs),
+          Text(
+            'bps',
+            style: TextStyle(
+              color: scheme.textDim,
+              fontSize: 11,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 区块标题 + 右侧补充说明（撮合参数 · 影响成交模拟）。
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.scheme, required this.title, this.right});
+  final QzColorScheme scheme;
+  final String title;
+  final String? right;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Text(
+            title,
+            style: TextStyle(
+              color: scheme.textMid,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (right != null)
+            Text(right!, style: TextStyle(color: scheme.textDim, fontSize: 11)),
+        ],
+      ),
     );
   }
 }
@@ -1114,38 +1318,44 @@ class _SummaryCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: QzSpacing.xs),
-          for (final r in rows)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: <Widget>[
-                  SizedBox(
-                    width: 44,
-                    child: Text(
+          const SizedBox(height: QzSpacing.sm),
+          GridView.count(
+            crossAxisCount: 2,
+            childAspectRatio: 5.8,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            children: <Widget>[
+              for (final r in rows)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: <Widget>[
+                    Text(
                       r.k,
                       style: TextStyle(color: scheme.textDim, fontSize: 11),
                     ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      r.v,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        fontFeatures: const <FontFeature>[
-                          FontFeature.tabularFigures(),
-                        ],
+                    const SizedBox(width: QzSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        r.v,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.text,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -1185,13 +1395,13 @@ class _ShieldBanner extends StatelessWidget {
   }
 }
 
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel({required this.label, required this.scheme});
-  final String label;
+class _TinyLabel extends StatelessWidget {
+  const _TinyLabel({required this.text, required this.scheme});
+  final String text;
   final QzColorScheme scheme;
   @override
   Widget build(BuildContext context) {
-    return Text(label, style: TextStyle(color: scheme.textMid, fontSize: 12));
+    return Text(text, style: TextStyle(color: scheme.textDim, fontSize: 10));
   }
 }
 
@@ -1200,17 +1410,13 @@ class _TextInput extends StatelessWidget {
     super.key,
     required this.controller,
     required this.scheme,
-    this.keyboard,
-    this.suffix,
-    this.inputFormatters,
     this.onChanged,
+    this.compact = false,
   });
   final TextEditingController controller;
   final QzColorScheme scheme;
-  final TextInputType? keyboard;
-  final String? suffix;
-  final List<TextInputFormatter>? inputFormatters;
   final ValueChanged<String>? onChanged;
+  final bool compact;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1223,13 +1429,12 @@ class _TextInput extends StatelessWidget {
         horizontal: QzSpacing.md,
         vertical: QzSpacing.xs,
       ),
+      constraints: BoxConstraints(minHeight: compact ? 42 : 0),
       child: Row(
         children: <Widget>[
           Expanded(
             child: TextField(
               controller: controller,
-              keyboardType: keyboard,
-              inputFormatters: inputFormatters,
               onChanged: onChanged,
               style: TextStyle(color: scheme.text, fontSize: 14),
               decoration: const InputDecoration(
@@ -1238,14 +1443,6 @@ class _TextInput extends StatelessWidget {
               ),
             ),
           ),
-          if (suffix != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text(
-                suffix!,
-                style: TextStyle(color: scheme.textMid, fontSize: 12),
-              ),
-            ),
         ],
       ),
     );

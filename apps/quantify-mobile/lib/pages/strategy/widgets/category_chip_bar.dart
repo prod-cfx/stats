@@ -33,8 +33,8 @@ class CategoryChipBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<({StrategyCategory key, String label})> entries =
-        <({StrategyCategory key, String label})>[
+    final List<({StrategyCategory key, String label})>
+    entries = <({StrategyCategory key, String label})>[
       (key: StrategyCategory.all, label: l10n.commonAll),
       (key: StrategyCategory.trend, label: l10n.strategyCategoryTrend),
       (key: StrategyCategory.grid, label: l10n.strategyCategoryGrid),
@@ -50,8 +50,7 @@ class CategoryChipBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
         // +1 给行头的「收藏」toggle。
         itemCount: entries.length + 1,
-        separatorBuilder: (_, int _) =>
-            const SizedBox(width: QzSpacing.sm),
+        separatorBuilder: (_, int _) => const SizedBox(width: QzSpacing.sm),
         itemBuilder: (BuildContext context, int i) {
           if (i == 0) {
             return Center(
@@ -165,18 +164,21 @@ class _CategoryChip extends StatelessWidget {
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: on ? c.text : c.bgElev,
           borderRadius: BorderRadius.circular(QzRadii.pill),
           border: Border.all(color: on ? Colors.transparent : c.border),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: on ? c.bgElev : c.textMid,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+        child: Align(
+          widthFactor: 1,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: on ? c.bgElev : c.textMid,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ),

@@ -5142,6 +5142,12 @@ abstract class AppLocalizations {
   /// **'占比'**
   String get whaleProfileColShare;
 
+  /// No description provided for @whaleProfileSpotAssetShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'资产份额'**
+  String get whaleProfileSpotAssetShare;
+
   /// No description provided for @whaleProfileColQty.
   ///
   /// In zh, this message translates to:

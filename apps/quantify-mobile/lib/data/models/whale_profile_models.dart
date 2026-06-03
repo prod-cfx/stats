@@ -124,7 +124,7 @@ class WhaleTradeStats {
 
   final String pnlDisplay; // 总盈亏，例如 '+$8.4M'
   final String pnlTone; // 'up' | 'dn'
-  final int winRatePct; // 胜率 0..100
+  final num winRatePct; // 胜率 0..100，保留设计稿两位小数
   final String realizedDisplay; // 已实现盈亏
   final String unrealizedDisplay; // 未实现盈亏
 

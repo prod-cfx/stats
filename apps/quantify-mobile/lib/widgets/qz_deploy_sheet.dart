@@ -30,7 +30,9 @@ import 'qz_sheet.dart';
 /// 交易所 / 市场 / 资金由 AI 对话上下文决定，部署页只做只读账单确认 +
 /// 部署前检查。未绑定 API 时在检查失败项内提供 API 绑定入口。
 class QzDeploySheet extends ConsumerStatefulWidget {
-  const QzDeploySheet({super.key});
+  const QzDeploySheet({super.key, this.showHeader = true});
+
+  final bool showHeader;
 
   /// 调起入口；返回的 `DeploymentResult` 表示部署成功，null 表示用户取消 /
   /// 关闭。
@@ -164,9 +166,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   _DeployTarget _targetFromKeys(List<ExchangeApiKey> keys) {
     final _ExchangeCatalogEntry catalog = _kExchangeCatalog[0];
     final List<ExchangeApiKey> accounts = keys
-        .where(
-          (ExchangeApiKey k) => k.exchange.toLowerCase() == catalog.code,
-        )
+        .where((ExchangeApiKey k) => k.exchange.toLowerCase() == catalog.code)
         .toList(growable: false);
     final ExchangeApiKey? selected = accounts.isEmpty
         ? null
@@ -220,22 +220,24 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+              if (widget.showHeader) ...<Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  _StepIndicator(step: _step, scheme: c, l10n: l10n),
-                ],
-              ),
-              const SizedBox(height: QzSpacing.md),
+                    _StepIndicator(step: _step, scheme: c, l10n: l10n),
+                  ],
+                ),
+                const SizedBox(height: QzSpacing.md),
+              ],
               _buildBody(c, l10n, target),
             ],
           ),
@@ -266,10 +268,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           onDone: _onDeployingDone,
         );
       case DeployStep.success:
-        return _DonePane(
-          result: _result!,
-          onFinish: _finish,
-        );
+        return _DonePane(result: _result!, onFinish: _finish);
     }
   }
 }
@@ -297,7 +296,10 @@ class _StepIndicator extends StatelessWidget {
     };
     return Container(
       key: const Key('deploy-step-indicator'),
-      padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color: scheme.accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(QzRadii.pill),
@@ -315,18 +317,14 @@ class _StepIndicator extends StatelessWidget {
 }
 
 class _ExchangePicker extends ConsumerWidget {
-  const _ExchangePicker({
-    required this.onPick,
-    required this.onGoConfigure,
-  });
+  const _ExchangePicker({required this.onPick, required this.onGoConfigure});
 
   final void Function(_DeployTarget) onPick;
   final VoidCallback onGoConfigure;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<List<ExchangeApiKey>> keys =
-        ref.watch(apiKeysProvider);
+    final AsyncValue<List<ExchangeApiKey>> keys = ref.watch(apiKeysProvider);
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     return keys.when(
@@ -341,27 +339,26 @@ class _ExchangePicker extends ConsumerWidget {
       data: (List<ExchangeApiKey> list) {
         // 合并目录与用户密钥；目录里命中 ExchangeApiKey 的项标 authorized。
         final List<_DeployTarget> targets = _kExchangeCatalog
-            .map<_DeployTarget>(
-              (_ExchangeCatalogEntry e) {
-                final ExchangeApiKey? account = list
-                    .cast<ExchangeApiKey?>()
-                    .firstWhere(
-                      (ExchangeApiKey? k) =>
-                          k?.exchange.toLowerCase() == e.code,
-                      orElse: () => null,
-                    );
-                return _DeployTarget(
-                  catalog: e,
-                  accounts: account == null
-                      ? <ExchangeApiKey>[]
-                      : <ExchangeApiKey>[account],
-                  apiKey: account,
-                );
-              },
-            )
+            .map<_DeployTarget>((_ExchangeCatalogEntry e) {
+              final ExchangeApiKey? account = list
+                  .cast<ExchangeApiKey?>()
+                  .firstWhere(
+                    (ExchangeApiKey? k) => k?.exchange.toLowerCase() == e.code,
+                    orElse: () => null,
+                  );
+              return _DeployTarget(
+                catalog: e,
+                accounts: account == null
+                    ? <ExchangeApiKey>[]
+                    : <ExchangeApiKey>[account],
+                apiKey: account,
+              );
+            })
             .toList(growable: false);
         // 兜底：所有都未授权 + 用户从未配过任何 key → 引导按钮。
-        final bool anyConfigured = targets.any((_DeployTarget t) => t.authorized);
+        final bool anyConfigured = targets.any(
+          (_DeployTarget t) => t.authorized,
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -371,10 +368,7 @@ class _ExchangePicker extends ConsumerWidget {
             for (final _DeployTarget t in targets)
               Padding(
                 padding: const EdgeInsets.only(bottom: QzSpacing.sm),
-                child: _ExchangeRow(
-                  target: t,
-                  onTap: () => onPick(t),
-                ),
+                child: _ExchangeRow(target: t, onTap: () => onPick(t)),
               ),
             const SizedBox(height: QzSpacing.sm),
             _SafetyFooter(scheme: c, text: l10n.deployFooterSafety),
@@ -445,11 +439,7 @@ class _SafetyFooter extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: TextStyle(
-              color: scheme.textDim,
-              fontSize: 11,
-              height: 1.5,
-            ),
+            style: TextStyle(color: scheme.textDim, fontSize: 11, height: 1.5),
           ),
         ),
       ],
@@ -560,19 +550,13 @@ class _MiniTag extends StatelessWidget {
         color: scheme.border.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(QzRadii.pill),
       ),
-      child: Text(
-        text,
-        style: TextStyle(color: scheme.textDim, fontSize: 10),
-      ),
+      child: Text(text, style: TextStyle(color: scheme.textDim, fontSize: 10)),
     );
   }
 }
 
 class _AuthorizePane extends StatelessWidget {
-  const _AuthorizePane({
-    required this.apiKey,
-    required this.onConfirm,
-  });
+  const _AuthorizePane({required this.apiKey, required this.onConfirm});
 
   final ExchangeApiKey apiKey;
   final VoidCallback onConfirm;
@@ -736,8 +720,7 @@ class _UnauthorizedPane extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Icon(Icons.warning_amber_outlined,
-                  size: 16, color: c.marketDown),
+              Icon(Icons.warning_amber_outlined, size: 16, color: c.marketDown),
               const SizedBox(width: QzSpacing.xs),
               Expanded(
                 child: Text(
@@ -901,27 +884,27 @@ class _DeployingPane extends StatefulWidget {
   static const int _stepCount = 5;
 
   static List<DeployingStep> _steps(AppLocalizations l10n) => <DeployingStep>[
-        DeployingStep(
-          label: l10n.deployingStepAuthTitle,
-          sub: l10n.deployingStepAuthSub,
-        ),
-        DeployingStep(
-          label: l10n.deployingStepPushTitle,
-          sub: l10n.deployingStepPushSub,
-        ),
-        DeployingStep(
-          label: l10n.deployingStepNodeTitle,
-          sub: l10n.deployingStepNodeSub,
-        ),
-        DeployingStep(
-          label: l10n.deployingStepFeedTitle,
-          sub: l10n.deployingStepFeedSub,
-        ),
-        DeployingStep(
-          label: l10n.deployingStepReadyTitle,
-          sub: l10n.deployingStepReadySub,
-        ),
-      ];
+    DeployingStep(
+      label: l10n.deployingStepAuthTitle,
+      sub: l10n.deployingStepAuthSub,
+    ),
+    DeployingStep(
+      label: l10n.deployingStepPushTitle,
+      sub: l10n.deployingStepPushSub,
+    ),
+    DeployingStep(
+      label: l10n.deployingStepNodeTitle,
+      sub: l10n.deployingStepNodeSub,
+    ),
+    DeployingStep(
+      label: l10n.deployingStepFeedTitle,
+      sub: l10n.deployingStepFeedSub,
+    ),
+    DeployingStep(
+      label: l10n.deployingStepReadyTitle,
+      sub: l10n.deployingStepReadySub,
+    ),
+  ];
 
   @override
   State<_DeployingPane> createState() => _DeployingPaneState();
@@ -1045,15 +1028,15 @@ class _DeployingStepRow extends StatelessWidget {
               child: done
                   ? const Icon(Icons.check, size: 13, color: Colors.white)
                   : (active
-                      ? SizedBox(
-                          width: 11,
-                          height: 11,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: c.accent,
-                          ),
-                        )
-                      : null),
+                        ? SizedBox(
+                            width: 11,
+                            height: 11,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: c.accent,
+                            ),
+                          )
+                        : null),
             ),
             const SizedBox(width: QzSpacing.sm),
             Expanded(
@@ -1302,10 +1285,7 @@ class _SummaryCell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(color: scheme.textDim, fontSize: 11),
-          ),
+          Text(label, style: TextStyle(color: scheme.textDim, fontSize: 11)),
         ],
       ),
     );
@@ -1371,10 +1351,7 @@ class _NextStepRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      sub,
-                      style: TextStyle(color: c.textDim, fontSize: 11),
-                    ),
+                    Text(sub, style: TextStyle(color: c.textDim, fontSize: 11)),
                   ],
                 ),
               ),
@@ -1474,16 +1451,14 @@ class _AllocatePane extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: InkWell(
                           key: Key('deploy-allocate-pct-$pct'),
-                          onTap: () =>
-                              onAmountChanged(_available * pct / 100),
+                          onTap: () => onAmountChanged(_available * pct / 100),
                           borderRadius: BorderRadius.circular(QzRadii.card),
                           child: Container(
                             height: 30,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: c.border.withValues(alpha: 0.3),
-                              borderRadius:
-                                  BorderRadius.circular(QzRadii.card),
+                              borderRadius: BorderRadius.circular(QzRadii.card),
                             ),
                             child: Text(
                               pct == 100 ? 'MAX' : '$pct%',
@@ -1695,18 +1670,14 @@ class _AllocateSliderRow extends StatelessWidget {
               max: max.toDouble(),
               divisions: divisions,
               label: valueLabel,
-              onChanged: (double v) =>
-                  onChanged(v.round().clamp(min, max)),
+              onChanged: (double v) => onChanged(v.round().clamp(min, max)),
             ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
               for (final String t in ticks)
-                Text(
-                  t,
-                  style: TextStyle(color: c.textDim, fontSize: 10),
-                ),
+                Text(t, style: TextStyle(color: c.textDim, fontSize: 10)),
             ],
           ),
         ],
@@ -1763,10 +1734,7 @@ class _NotifyRow extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                Text(
-                  caption,
-                  style: TextStyle(color: c.textDim, fontSize: 11),
-                ),
+                Text(caption, style: TextStyle(color: c.textDim, fontSize: 11)),
               ],
             ),
           ),
@@ -1813,35 +1781,35 @@ class _PreflightPaneState extends State<_PreflightPane> {
   Timer? _timer;
 
   List<PreflightCheck> _checks(AppLocalizations l10n) => <PreflightCheck>[
-        PreflightCheck(
-          ok: widget.target.authorized && _recovered,
-          title: widget.target.authorized && _recovered
-              ? l10n.deployPreflightApiOkTitle(widget.target.catalog.name)
-              : l10n.deployPreflightApiFailTitle,
-          sub: widget.target.authorized && _recovered
-              ? l10n.deployPreflightApiOkSub
-              : l10n.deployPreflightApiFailSub,
-          actionable: !widget.target.authorized || !_recovered,
-        ),
-        PreflightCheck(
-          ok: widget.target.authorized && _recovered,
-          title: widget.target.authorized && _recovered
-              ? l10n.deployPreflightBalanceOkTitle
-              : l10n.deployPreflightBalanceFailTitle,
-          sub: widget.target.authorized && _recovered
-              ? l10n.deployPreflightBalanceOkSub
-              : l10n.deployPreflightBalanceFailSub,
-        ),
-        PreflightCheck(
-          ok: widget.target.authorized && _recovered,
-          title: widget.target.authorized && _recovered
-              ? l10n.deployPreflightLatencyOkTitle
-              : l10n.deployPreflightLatencyFailTitle,
-          sub: widget.target.authorized && _recovered
-              ? l10n.deployPreflightLatencyOkSub
-              : l10n.deployPreflightLatencyFailSub,
-        ),
-      ];
+    PreflightCheck(
+      ok: widget.target.authorized && _recovered,
+      title: widget.target.authorized && _recovered
+          ? l10n.deployPreflightApiOkTitle(widget.target.catalog.name)
+          : l10n.deployPreflightApiFailTitle,
+      sub: widget.target.authorized && _recovered
+          ? l10n.deployPreflightApiOkSub
+          : l10n.deployPreflightApiFailSub,
+      actionable: !widget.target.authorized || !_recovered,
+    ),
+    PreflightCheck(
+      ok: widget.target.authorized && _recovered,
+      title: widget.target.authorized && _recovered
+          ? l10n.deployPreflightBalanceOkTitle
+          : l10n.deployPreflightBalanceFailTitle,
+      sub: widget.target.authorized && _recovered
+          ? l10n.deployPreflightBalanceOkSub
+          : l10n.deployPreflightBalanceFailSub,
+    ),
+    PreflightCheck(
+      ok: widget.target.authorized && _recovered,
+      title: widget.target.authorized && _recovered
+          ? l10n.deployPreflightLatencyOkTitle
+          : l10n.deployPreflightLatencyFailTitle,
+      sub: widget.target.authorized && _recovered
+          ? l10n.deployPreflightLatencyOkSub
+          : l10n.deployPreflightLatencyFailSub,
+    ),
+  ];
 
   @override
   void initState() {
@@ -1975,63 +1943,31 @@ class _PreflightPaneState extends State<_PreflightPane> {
           ),
         ),
         const SizedBox(height: QzSpacing.md),
-        // checks header
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                l10n.deploySheetTitlePreflight,
-                style: TextStyle(
-                  color: c.textDim,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+        _PreflightChecksCard(
+          scheme: c,
+          title: l10n.deploySheetTitlePreflight,
+          status: scanning
+              ? l10n.deployPreflightScanning(_scanned, checks.length)
+              : (allPass
+                    ? l10n.deployPreflightPassed(pass, checks.length)
+                    : l10n.deployPreflightFailed(fail, checks.length)),
+          allPass: allPass,
+          scanning: scanning,
+          recheckLabel: _rechecking
+              ? l10n.deployPreflightRechecking
+              : l10n.deployPreflightRecheck,
+          showRecheck: !allPass && !scanning,
+          onRecheck: _rechecking ? null : _recheck,
+          rows: <Widget>[
+            for (int i = 0; i < checks.length; i++)
+              _PreflightRow(
+                index: i,
+                check: checks[i],
+                checking: i >= _scanned,
+                scheme: c,
               ),
-            ),
-            if (!allPass && !scanning)
-              QzButton(
-                key: const Key('deploy-preflight-recheck'),
-                label: _rechecking
-                    ? l10n.deployPreflightRechecking
-                    : l10n.deployPreflightRecheck,
-                variant: QzButtonVariant.ghost,
-                onPressed: _rechecking ? null : _recheck,
-              ),
-            Container(
-              key: const Key('deploy-preflight-status'),
-              padding: const EdgeInsets.symmetric(
-                horizontal: QzSpacing.sm,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: allPass
-                    ? c.marketUp.withValues(alpha: 0.15)
-                    : c.marketDown.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(QzRadii.pill),
-              ),
-              child: Text(
-                scanning
-                    ? l10n.deployPreflightScanning(_scanned, checks.length)
-                    : (allPass
-                        ? l10n.deployPreflightPassed(pass, checks.length)
-                        : l10n.deployPreflightFailed(fail, checks.length)),
-                style: TextStyle(
-                  color: allPass ? c.marketUp : c.marketDown,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
           ],
         ),
-        const SizedBox(height: QzSpacing.sm),
-        for (int i = 0; i < checks.length; i++)
-          _PreflightRow(
-            index: i,
-            check: checks[i],
-            checking: i >= _scanned,
-            scheme: c,
-          ),
         if (!widget.target.authorized) ...<Widget>[
           const SizedBox(height: QzSpacing.sm),
           QzButton(
@@ -2133,6 +2069,201 @@ class _AccountSelectRow extends StatelessWidget {
   }
 }
 
+class _PreflightChecksCard extends StatelessWidget {
+  const _PreflightChecksCard({
+    required this.scheme,
+    required this.title,
+    required this.status,
+    required this.allPass,
+    required this.scanning,
+    required this.recheckLabel,
+    required this.showRecheck,
+    required this.onRecheck,
+    required this.rows,
+  });
+
+  final QzColorScheme scheme;
+  final String title;
+  final String status;
+  final bool allPass;
+  final bool scanning;
+  final String recheckLabel;
+  final bool showRecheck;
+  final VoidCallback? onRecheck;
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color statusColor = allPass ? scheme.marketUp : scheme.marketDown;
+    final Color statusBg = statusColor.withValues(alpha: 0.15);
+    final Color headerBg = allPass
+        ? scheme.bgInput
+        : scheme.marketDown.withValues(alpha: 0.06);
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.bgElev,
+        border: Border.all(
+          color: allPass
+              ? scheme.borderSoft
+              : scheme.marketDown.withValues(alpha: 0.3),
+        ),
+        borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: headerBg,
+              border: Border(bottom: BorderSide(color: scheme.borderSoft)),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: allPass ? scheme.textDim : scheme.marketDown,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+                if (showRecheck) ...<Widget>[
+                  _PreflightRecheckButton(
+                    label: recheckLabel,
+                    scheme: scheme,
+                    onTap: onRecheck,
+                  ),
+                  const SizedBox(width: QzSpacing.sm),
+                ],
+                _PreflightStatusChip(
+                  label: status,
+                  color: scanning ? scheme.textDim : statusColor,
+                  background: scanning ? scheme.bgInput : statusBg,
+                  spinning: scanning,
+                ),
+              ],
+            ),
+          ),
+          for (int i = 0; i < rows.length; i++) ...<Widget>[
+            if (i > 0) Divider(height: 1, color: scheme.borderSoft),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreflightRecheckButton extends StatelessWidget {
+  const _PreflightRecheckButton({
+    required this.label,
+    required this.scheme,
+    required this.onTap,
+  });
+
+  final String label;
+  final QzColorScheme scheme;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      key: const Key('deploy-preflight-recheck'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.7 : 1,
+        child: Container(
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            border: Border.all(color: scheme.marketDown),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.refresh_rounded, size: 12, color: scheme.marketDown),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: scheme.marketDown,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreflightStatusChip extends StatelessWidget {
+  const _PreflightStatusChip({
+    required this.label,
+    required this.color,
+    required this.background,
+    required this.spinning,
+  });
+
+  final String label;
+  final Color color;
+  final Color background;
+  final bool spinning;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('deploy-preflight-status'),
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (spinning) ...<Widget>[
+            SizedBox(
+              width: 11,
+              height: 11,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            ),
+            const SizedBox(width: 4),
+          ] else ...<Widget>[
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PreflightRow extends StatelessWidget {
   const _PreflightRow({
     required this.index,
@@ -2150,9 +2281,14 @@ class _PreflightRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = scheme;
     final Color statusColor = check.ok ? c.marketUp : c.marketDown;
-    return Padding(
+    return Container(
       key: Key('deploy-preflight-row-$index'),
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      color: checking
+          ? c.bgInput
+          : (check.ok
+                ? Colors.transparent
+                : c.marketDown.withValues(alpha: 0.04)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -2175,7 +2311,9 @@ class _PreflightRow extends StatelessWidget {
                 Text(
                   check.title,
                   style: TextStyle(
-                    color: checking ? c.textDim : (check.ok ? c.text : statusColor),
+                    color: checking
+                        ? c.textDim
+                        : (check.ok ? c.text : statusColor),
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),

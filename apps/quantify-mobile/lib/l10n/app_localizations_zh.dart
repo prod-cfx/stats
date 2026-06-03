@@ -2644,6 +2644,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileColShare => '占比';
 
   @override
+  String get whaleProfileSpotAssetShare => '资产份额';
+
+  @override
   String get whaleProfileColQty => '数量';
 
   @override

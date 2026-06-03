@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
+import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 
 /// 默认参数（直接深链 `/ai/script` 无 extra 时回退），对齐设计稿 BTC 双均线。
@@ -163,9 +164,28 @@ class _AiScriptPageState extends State<AiScriptPage> {
         top: false,
         child: Column(
           children: <Widget>[
+            QzStepBar(
+              steps: <String>[
+                l10n.aiStepConfirm,
+                l10n.aiStepScript,
+                l10n.aiStepBacktestConfig,
+                l10n.aiStepBacktest,
+                l10n.aiStepDeploy,
+              ],
+              active: 1,
+              done: const <int>[0],
+              onStepTap: (int i) {
+                if (i == 0) context.pop();
+              },
+            ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(QzSpacing.lg),
+                padding: const EdgeInsets.fromLTRB(
+                  QzSpacing.lg,
+                  QzSpacing.md,
+                  QzSpacing.lg,
+                  QzSpacing.lg,
+                ),
                 children: <Widget>[
                   _RecapCard(params: _params, fileName: _fileName),
                   const SizedBox(height: QzSpacing.lg),

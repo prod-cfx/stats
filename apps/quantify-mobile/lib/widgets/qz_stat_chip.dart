@@ -29,9 +29,9 @@ class QzStatChip extends StatelessWidget {
     this.height,
     this.radius,
   }) : assert(
-          decimals >= 0 && decimals <= 20,
-          'QzStatChip.decimals must satisfy 0 <= decimals <= 20',
-        );
+         decimals >= 0 && decimals <= 20,
+         'QzStatChip.decimals must satisfy 0 <= decimals <= 20',
+       );
 
   final double value;
   final bool showSign;
@@ -66,10 +66,7 @@ class QzStatChip extends StatelessWidget {
       if (value > 0) {
         palette = (bg: c.marketUp.withValues(alpha: 0.14), fg: c.marketUp);
       } else if (value < 0) {
-        palette = (
-          bg: c.marketDown.withValues(alpha: 0.14),
-          fg: c.marketDown,
-        );
+        palette = (bg: c.marketDown.withValues(alpha: 0.14), fg: c.marketDown);
       } else {
         palette = (bg: c.bgSoft, fg: c.textMid);
       }
@@ -79,8 +76,8 @@ class QzStatChip extends StatelessWidget {
     final String sign = !showSign || value == 0
         ? ''
         : value > 0
-            ? '+'
-            : '-';
+        ? '+'
+        : '-';
     final String text = '$sign$formatted%';
 
     return Container(
@@ -93,16 +90,19 @@ class QzStatChip extends StatelessWidget {
         color: palette.bg,
         borderRadius: BorderRadius.circular(r),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        text,
-        style: TextStyle(
-          color: palette.fg,
-          fontSize: solid ? 13 : 11,
-          fontWeight: FontWeight.w600,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-          height: 1.0,
+      child: Align(
+        widthFactor: 1,
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          style: TextStyle(
+            color: palette.fg,
+            fontSize: solid ? 13 : 11,
+            fontWeight: FontWeight.w600,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
+            height: 1.0,
+          ),
         ),
       ),
     );
@@ -121,14 +121,17 @@ class QzStatChip extends StatelessWidget {
         color: c.bgSoft,
         borderRadius: BorderRadius.circular(r),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        '--',
-        style: TextStyle(
-          color: c.textDim,
-          fontSize: variant == QzStatChipVariant.solid ? 13 : 11,
-          fontWeight: FontWeight.w600,
-          height: 1.0,
+      child: Align(
+        widthFactor: 1,
+        alignment: Alignment.center,
+        child: Text(
+          '--',
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: variant == QzStatChipVariant.solid ? 13 : 11,
+            fontWeight: FontWeight.w600,
+            height: 1.0,
+          ),
         ),
       ),
     );

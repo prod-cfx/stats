@@ -1011,6 +1011,7 @@
   "whaleProfileTabTrades": "最近成交",
   "whaleProfileTabHistory": "历史委托",
   "whaleProfileColShare": "占比",
+  "whaleProfileSpotAssetShare": "资产份额",
   "whaleProfileColQty": "数量",
   "whaleProfileColPrice": "价格",
   "whaleProfileColValue": "价值",

@@ -7,7 +7,6 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
-import '../../../widgets/qz_sheet.dart';
 
 /// 交易统计弹窗（issue #1859）。
 ///
@@ -38,14 +37,30 @@ class WhaleTradeStatsSheet extends StatefulWidget {
     String? avatarGlyph,
     int? avatarColorHex,
   }) {
-    return QzSheet.show<void>(
+    final QzColorScheme c = context.qzScheme;
+    return showModalBottomSheet<void>(
       context: context,
-      builder: (BuildContext ctx) => WhaleTradeStatsSheet(
-        address: address,
-        stats: stats,
-        avatarGlyph: avatarGlyph,
-        avatarColorHex: avatarColorHex,
+      isDismissible: true,
+      isScrollControlled: true,
+      backgroundColor: c.bg,
+      barrierColor: c.scrim,
+      sheetAnimationStyle: const AnimationStyle(
+        curve: QzCurves.sheetPanel,
+        duration: QzCurves.sheetPanelDuration,
+        reverseCurve: QzCurves.sheetPanel,
+        reverseDuration: QzCurves.sheetPanelDuration,
       ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext ctx) {
+        return WhaleTradeStatsSheet(
+          address: address,
+          stats: stats,
+          avatarGlyph: avatarGlyph,
+          avatarColorHex: avatarColorHex,
+        );
+      },
     );
   }
 
@@ -66,38 +81,34 @@ class _WhaleTradeStatsSheetState extends State<WhaleTradeStatsSheet> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final WhaleTradeStats s = widget.stats;
-    final double maxH = MediaQuery.sizeOf(context).height * 0.88;
+    final Size viewport = MediaQuery.sizeOf(context);
+    final double keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final double panelHeight = viewport.height * 0.88;
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxH),
+    return SizedBox(
+      height: panelHeight,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _Header(title: l10n.whaleTradeStatsTitle, onClose: () {
-            Navigator.of(context).pop();
-          }),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Padding(
-            padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg,
-              0,
-              QzSpacing.lg,
-              QzSpacing.md,
-            ),
+          _Header(
+            title: l10n.whaleTradeStatsTitle,
+            onClose: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Row(
               children: <Widget>[
-                _AddressChip(
-                  address: widget.address,
-                  glyph: widget.avatarGlyph,
-                  colorHex: widget.avatarColorHex,
+                Flexible(
+                  child: _AddressChip(
+                    address: widget.address,
+                    glyph: widget.avatarGlyph,
+                    colorHex: widget.avatarColorHex,
+                  ),
                 ),
                 const Spacer(),
+                const SizedBox(width: 8),
                 _PeriodSelect(
                   value: _period,
                   onChanged: (_Period p) => setState(() => _period = p),
@@ -106,13 +117,13 @@ class _WhaleTradeStatsSheetState extends State<WhaleTradeStatsSheet> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Expanded(child: _WinRateCard(stats: s)),
-                  const SizedBox(width: QzSpacing.sm),
+                  const SizedBox(width: 8),
                   Expanded(child: _TradeCountCard(stats: s)),
                 ],
               ),
@@ -138,9 +149,10 @@ class _WhaleTradeStatsSheetState extends State<WhaleTradeStatsSheet> {
             value: _tab,
             onChanged: (_PerfTab t) => setState(() => _tab = t),
           ),
-          _PerfList(stats: s, tab: _tab),
-                ],
-              ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: math.max(20, keyboardInset)),
+              child: _PerfList(stats: s, tab: _tab),
             ),
           ),
         ],
@@ -171,10 +183,15 @@ class _Header extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            color: c.textMid,
-            onPressed: onClose,
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.close, size: 18),
+              color: c.textMid,
+              onPressed: onClose,
+            ),
           ),
         ],
       ),
@@ -183,11 +200,7 @@ class _Header extends StatelessWidget {
 }
 
 class _AddressChip extends StatelessWidget {
-  const _AddressChip({
-    required this.address,
-    this.glyph,
-    this.colorHex,
-  });
+  const _AddressChip({required this.address, this.glyph, this.colorHex});
   final String address;
   final String? glyph;
   final int? colorHex;
@@ -196,8 +209,9 @@ class _AddressChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final Color avatarColor = colorHex != null ? Color(colorHex!) : c.accent;
-    final String letter =
-        (glyph != null && glyph!.isNotEmpty) ? glyph! : _firstChar(address);
+    final String letter = (glyph != null && glyph!.isNotEmpty)
+        ? glyph!
+        : _firstChar(address);
     return Container(
       padding: const EdgeInsets.fromLTRB(5, 5, 10, 5),
       decoration: BoxDecoration(
@@ -226,13 +240,17 @@ class _AddressChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            address,
-            style: TextStyle(
-              color: c.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              fontFamily: QzFont.mono,
+          Flexible(
+            child: Text(
+              address,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                fontFamily: QzFont.mono,
+              ),
             ),
           ),
         ],
@@ -388,7 +406,8 @@ class _WinRateCard extends StatelessWidget {
                 const SizedBox(height: 9),
                 _MiniMetric(
                   label: l10n.whaleTradeStatsFeeAdjusted,
-                  value: stats.feeAdjustedPnlDisplay ??
+                  value:
+                      stats.feeAdjustedPnlDisplay ??
                       stats.closedPnlDisplay ??
                       stats.pnlDisplay,
                   color: c.text,
@@ -420,11 +439,7 @@ class _MiniMetric extends StatelessWidget {
       children: <Widget>[
         Text(
           label,
-          style: TextStyle(
-            color: c.textDim,
-            fontSize: 9.5,
-            letterSpacing: 0.2,
-          ),
+          style: TextStyle(color: c.textDim, fontSize: 9.5, letterSpacing: 0.2),
         ),
         const SizedBox(height: 2),
         Text(
@@ -669,8 +684,9 @@ class _PerfTabs extends StatelessWidget {
                     style: TextStyle(
                       color: t.$1 == value ? c.accent : c.textMid,
                       fontSize: 12,
-                      fontWeight:
-                          t.$1 == value ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: t.$1 == value
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -694,8 +710,7 @@ class _PerfList extends StatelessWidget {
     // 设计稿 jsx:2334：tradesTotal==0 || winRate<0.01（winRate 为分数 0..1，
     // 对应此处 winRatePct 为整数百分比 0..100，winRate<0.01 即 winRatePct<1）
     // → 视为无有效成交，展示空态。
-    final bool empty =
-        (stats.tradesTotal ?? 0) == 0 || stats.winRatePct < 1;
+    final bool empty = (stats.tradesTotal ?? 0) == 0 || stats.winRatePct < 1;
     if (empty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -814,9 +829,7 @@ class _PerfRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: isLast ? Colors.transparent : c.borderSoft,
-          ),
+          bottom: BorderSide(color: isLast ? Colors.transparent : c.borderSoft),
         ),
       ),
       child: Column(
@@ -937,11 +950,7 @@ class _SidePill extends StatelessWidget {
       ),
       child: Text(
         side,
-        style: TextStyle(
-          color: fg,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -963,8 +972,9 @@ class _PerfMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     return Column(
-      crossAxisAlignment:
-          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: alignEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: <Widget>[
         Text(label, style: TextStyle(color: c.textDim, fontSize: 11.5)),
         const SizedBox(height: 4),

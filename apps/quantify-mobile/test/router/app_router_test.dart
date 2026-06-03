@@ -18,6 +18,9 @@ import 'package:quantify_mobile/main.dart';
 import 'package:quantify_mobile/pages/_dev/components_preview_page.dart';
 import 'package:quantify_mobile/pages/_dev/theme_preview_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
+import 'package:quantify_mobile/pages/ai/ai_backtest_result_page.dart';
+import 'package:quantify_mobile/pages/ai/ai_backtest_run_page.dart';
+import 'package:quantify_mobile/pages/ai/ai_deploy_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/pages/auth/login_sheet.dart';
@@ -260,6 +263,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(BacktestConfigSheet), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.text('回测设置'), findsWidgets);
+  });
+
+  testWidgets('/ai/backtest-run resolves to AiBacktestRunPage', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push('/ai/backtest-run');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byType(AiBacktestRunPage), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.text('回测进行中'), findsWidgets);
+  });
+
+  testWidgets('/ai/backtest-result resolves to AiBacktestResultPage', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push('/ai/backtest-result');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiBacktestResultPage), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.text('回测结果'), findsOneWidget);
+  });
+
+  testWidgets('/ai/deploy resolves to AiDeployPage', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push('/ai/deploy');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiDeployPage), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.text('部署策略'), findsWidgets);
+    expect(find.byKey(const Key('deploy-step-indicator')), findsNothing);
   });
 
   testWidgets('/ai/confirm resolves to AiConfirmPage（#1832 确认策略屏）', (
@@ -302,7 +345,7 @@ void main() {
     GoRouter.of(ctx).push(
       '/ai/confirm',
       extra: const <String, String>{
-        'category': '网格',
+        'category': '均线突破',
         'symbol': 'BTC/USDT',
         'fast_ma': '7',
         'slow_ma': '30',
@@ -312,7 +355,7 @@ void main() {
 
     expect(find.byType(AiConfirmPage), findsOneWidget);
     // extra 透传的 category 进 Hero chip，断言非 mock 兜底值「趋势跟踪」。
-    expect(find.text('网格'), findsWidgets);
+    expect(find.text('均线突破'), findsWidgets);
     expect(find.text('趋势跟踪'), findsNothing);
     // 规则文案由 fast_ma/slow_ma 派生（如「MA7 上穿 MA30」），断言透传值落地。
     final Finder rule0 = find.byKey(const Key('ai-confirm-rule-0'));

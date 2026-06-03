@@ -40,12 +40,10 @@ class CoinStockSortSheet extends StatefulWidget {
     return showModalBottomSheet<CoinStockSortResult>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CoinStockSortSheet(
-        sort: sort,
-        dir: dir,
-        resultCount: resultCount,
-      ),
+      builder: (_) =>
+          CoinStockSortSheet(sort: sort, dir: dir, resultCount: resultCount),
     );
   }
 
@@ -104,13 +102,17 @@ class _CoinStockSortSheetState extends State<CoinStockSortSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(l10n.coinStockSortMetricLabel,
-              style: TextStyle(fontSize: 11, color: c.textMid)),
+          Text(
+            l10n.coinStockSortMetricLabel,
+            style: TextStyle(fontSize: 11, color: c.textMid),
+          ),
           const SizedBox(height: 6),
           _metricPills(c, l10n),
           const SizedBox(height: 16),
-          Text(l10n.coinStockSortDirectionLabel,
-              style: TextStyle(fontSize: 11, color: c.textMid)),
+          Text(
+            l10n.coinStockSortDirectionLabel,
+            style: TextStyle(fontSize: 11, color: c.textMid),
+          ),
           const SizedBox(height: 6),
           _directionRow(c, l10n),
           const SizedBox(height: 16),
@@ -154,17 +156,20 @@ class _CoinStockSortSheetState extends State<CoinStockSortSheet> {
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? c.accent : c.bgSoft,
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? c.accentOn : c.text,
+        child: Align(
+          widthFactor: 1,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? c.accentOn : c.text,
+            ),
           ),
         ),
       ),
@@ -197,9 +202,7 @@ class _CoinStockSortSheetState extends State<CoinStockSortSheet> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? c.accentSoft : c.bgSoft,
-          border: Border.all(
-            color: selected ? c.accent : Colors.transparent,
-          ),
+          border: Border.all(color: selected ? c.accent : Colors.transparent),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -247,8 +250,8 @@ class _CoinStockSortSheetState extends State<CoinStockSortSheet> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          onPressed: () => Navigator.of(context)
-              .pop(CoinStockSortResult(_sort, _dir)),
+          onPressed: () =>
+              Navigator.of(context).pop(CoinStockSortResult(_sort, _dir)),
           child: Text(
             l10n.coinStockSortApply(widget.resultCount),
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),

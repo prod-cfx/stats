@@ -2699,6 +2699,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileColShare => 'Share';
 
   @override
+  String get whaleProfileSpotAssetShare => 'Asset share';
+
+  @override
   String get whaleProfileColQty => 'Qty';
 
   @override

@@ -90,8 +90,8 @@ class _Step extends StatelessWidget {
     final Color labelColor = active
         ? c.text
         : done
-            ? c.textMid
-            : c.textDim;
+        ? c.textMid
+        : c.textDim;
     final Color numColor = active || done ? c.accent : c.textFaint;
 
     return GestureDetector(
@@ -139,7 +139,7 @@ class _Step extends StatelessWidget {
                 fontSize: 11.5,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 color: labelColor,
-                letterSpacing: -0.1,
+                letterSpacing: 0,
               ),
             ),
           ],

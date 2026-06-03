@@ -24,33 +24,50 @@ class WhaleStatCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: QzSpacing.sm,
-      crossAxisSpacing: QzSpacing.sm,
-      childAspectRatio: 1.12,
+    return Column(
       children: <Widget>[
-        _StatCard(
-          label: l10n.whaleProfileStatAccountValue,
-          value: cards.accountValueDisplay,
-          extras: cards.accountExtras,
-          donut: cards.accountDonut,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Expanded(
+                child: _StatCard(
+                  label: l10n.whaleProfileStatAccountValue,
+                  value: cards.accountValueDisplay,
+                  extras: cards.accountExtras,
+                  donut: cards.accountDonut,
+                ),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Expanded(
+                child: _StatCard(
+                  label: l10n.whaleProfileStatAvailMargin,
+                  value: cards.availableMarginDisplay,
+                  extras: cards.marginExtras,
+                  donut: cards.marginDonut,
+                ),
+              ),
+            ],
+          ),
         ),
-        _StatCard(
-          label: l10n.whaleProfileStatAvailMargin,
-          value: cards.availableMarginDisplay,
-          extras: cards.marginExtras,
-          donut: cards.marginDonut,
+        const SizedBox(height: QzSpacing.sm),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Expanded(
+                child: _StatCard(
+                  label: l10n.whaleProfileStatPositionValue,
+                  value: cards.positionValueDisplay,
+                  extras: cards.positionExtras,
+                  donut: cards.positionDonut,
+                ),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Expanded(child: _PerfCard(stats: stats)),
+            ],
+          ),
         ),
-        _StatCard(
-          label: l10n.whaleProfileStatPositionValue,
-          value: cards.positionValueDisplay,
-          extras: cards.positionExtras,
-          donut: cards.positionDonut,
-        ),
-        _PerfCard(stats: stats),
       ],
     );
   }
@@ -147,7 +164,7 @@ class _ExtraRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 5),
-          Flexible(
+          Expanded(
             child: Text(
               extra.label,
               overflow: TextOverflow.ellipsis,
@@ -158,9 +175,10 @@ class _ExtraRow extends StatelessWidget {
             const SizedBox(width: 3),
             Icon(Icons.info_outline, size: 9, color: c.textFaint),
           ],
-          const Spacer(),
+          const SizedBox(width: 6),
           Text(
             extra.valueDisplay,
+            textAlign: TextAlign.right,
             style: TextStyle(
               fontSize: 11,
               color: c.text,
@@ -190,27 +208,42 @@ class _PerfCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            l10n.whaleProfilePerfTitle,
-            style: TextStyle(fontSize: 11, color: c.textMid),
+          Row(
+            children: <Widget>[
+              Text(
+                l10n.whaleProfilePerfTitle,
+                style: TextStyle(fontSize: 11, color: c.textMid),
+              ),
+              Text(
+                ' (${l10n.whaleProfilePeriodWeek})',
+                style: TextStyle(fontSize: 11, color: c.textDim),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _StackMetric(
+                  label: l10n.whaleProfileStatWinRate,
+                  value: '${stats.winRatePct.toStringAsFixed(2)} %',
+                ),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Expanded(
+                child: _StackMetric(
+                  label: l10n.whaleProfileMaxDrawdown,
+                  value: stats.maxDrawdownDisplay ?? '-',
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: QzSpacing.sm),
-          _Metric(
-            label: l10n.whaleProfileStatWinRate,
-            value: '${stats.winRatePct.toStringAsFixed(2)}%',
-          ),
-          const SizedBox(height: QzSpacing.xs),
-          _Metric(
-            label: l10n.whaleProfileMaxDrawdown,
-            value: stats.maxDrawdownDisplay ?? '-',
-          ),
-          const SizedBox(height: QzSpacing.xs),
-          _Metric(
+          _PerfExtraRow(
             label: l10n.whaleProfileFilledOrders,
             value: '${stats.filledOrders ?? 0}',
           ),
-          const SizedBox(height: QzSpacing.xs),
-          _Metric(
+          _PerfExtraRow(
             label: l10n.whaleProfileClosedCount,
             value: '${stats.closedCount ?? 0}',
           ),
@@ -220,20 +253,23 @@ class _PerfCard extends StatelessWidget {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
+class _StackMetric extends StatelessWidget {
+  const _StackMetric({required this.label, required this.value});
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(label, style: TextStyle(fontSize: 10.5, color: c.textDim)),
+        Text(label, style: TextStyle(fontSize: 10, color: c.textDim)),
+        const SizedBox(height: 2),
         Text(
           value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -244,6 +280,50 @@ class _Metric extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PerfExtraRow extends StatelessWidget {
+  const _PerfExtraRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10.5, color: c.textMid),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              color: c.text,
+              fontWeight: FontWeight.w500,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
