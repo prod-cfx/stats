@@ -109,9 +109,42 @@ export interface CryptoCoverageReport {
     readonly weightedBCoveragePct: number
     readonly unsupportedCCount: number
   }
+  readonly taxonomy: CryptoCoverageTaxonomyEvidence
   readonly cases: readonly CryptoCaseEvidence[]
   readonly atoms: readonly CryptoAtomEvidence[]
   readonly failures: readonly CryptoCoverageFailure[]
   readonly backlog: readonly CryptoCoverageBacklogItem[]
   readonly unsupported: readonly CryptoUnsupportedIntent[]
+}
+
+export interface CryptoCoverageTaxonomyEvidence {
+  readonly targetCoveragePct: number
+  readonly achievedCoveragePct: number
+  readonly denominator: 'B_supported_strategy_families'
+  readonly weightSource: string
+  readonly corpusSource: string
+  readonly sourceLimitations: readonly string[]
+  readonly families: readonly CryptoCoverageTaxonomyFamilyEvidence[]
+  readonly caseMappings: readonly CryptoCoverageTaxonomyCaseMapping[]
+}
+
+export interface CryptoCoverageTaxonomyFamilyEvidence {
+  readonly familyId: string
+  readonly name: string
+  readonly scope: CryptoCoverageScope
+  readonly weightPct: number
+  readonly weightSource: string
+  readonly corpusCaseIds: readonly string[]
+  readonly passedCaseIds: readonly string[]
+  readonly covered: boolean
+  readonly denominatorIncluded: boolean
+}
+
+export interface CryptoCoverageTaxonomyCaseMapping {
+  readonly caseId: string
+  readonly scope: CryptoCoverageScope
+  readonly labels: readonly string[]
+  readonly familyIds: readonly string[]
+  readonly source: 'stage4_real_strategy_corpus' | 'p1_crypto_extension_corpus'
+  readonly passed: boolean
 }

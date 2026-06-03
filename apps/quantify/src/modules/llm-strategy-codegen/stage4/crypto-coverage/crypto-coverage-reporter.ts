@@ -8,6 +8,7 @@ import type {
   CryptoCoverageReport,
   CryptoUnsupportedIntent,
 } from './crypto-coverage-types'
+import { buildCryptoCoverageTaxonomyEvidence } from './crypto-coverage-evidence'
 import { isBCoverageSupportedStatus } from './crypto-coverage-taxonomy'
 
 const FAILURE_LAYER: Readonly<Record<CryptoCoverageFailureKind, CryptoCoverageLayer>> = {
@@ -72,6 +73,7 @@ export function buildCryptoCoverageReport(input: {
       weightedBCoveragePct: pct(supportedWeight, totalWeight),
       unsupportedCCount: input.unsupported.length,
     },
+    taxonomy: buildCryptoCoverageTaxonomyEvidence(input.cases),
     cases: input.cases,
     atoms: input.atoms,
     failures,
