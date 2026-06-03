@@ -25,7 +25,7 @@ function DataHubTitle({ current }) {
           color: M.text, fontSize: 17, fontWeight: 700, fontFamily: 'inherit',
           letterSpacing: -0.2, whiteSpace: 'nowrap'
         }}>
-
+        
         {item.label}
         <span style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -41,7 +41,7 @@ function DataHubTitle({ current }) {
           <div
           onClick={() => setOpen(false)}
           style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-
+        
           <div style={{
           position: 'absolute', top: 34, left: -6, zIndex: 61, minWidth: 178,
           background: M.elev, border: `1px solid ${M.border}`, borderRadius: 14,
@@ -66,7 +66,7 @@ function DataHubTitle({ current }) {
                   textAlign: 'left', fontFamily: 'inherit',
                   overflow: 'hidden'
                 }}>
-
+                
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: on ? 600 : 500 }}>{it.label}</div>
                     <div style={{
@@ -98,7 +98,7 @@ function DataHubBell({ onClick }) {
         border: `1px solid ${M.border}`, color: M.mid, cursor: 'pointer', padding: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
-
+      
       <Ico d={ICONS.bell} w={18} />
     </button>);
 
@@ -1080,7 +1080,7 @@ function OpenInterestTab() {
               background: 'transparent', color: M.text,
               fontSize: 12, fontFamily: 'inherit'
             }} />
-
+          
           {search &&
           <button onClick={() => setSearch('')} aria-label="清除" style={{
             width: 16, height: 16, padding: 0, border: 0, background: 'transparent',
@@ -1368,7 +1368,7 @@ function AggVolumeTab() {
           total={data.total}
           color={VOL_COLOR.TOTAL}
           isTotal />
-
+        
           {/* exchange rows — bar scaled to total */}
           {data.rows.map((r) =>
         <VolumeRow
@@ -1827,7 +1827,7 @@ function ScreenCoinStocks() {
                 flex: 1, height: '100%', background: 'transparent', border: 0, outline: 0,
                 color: M.text, fontSize: 13, fontFamily: 'inherit'
               }} />
-
+            
             {q &&
             <button onClick={() => setQ('')} style={{
               width: 22, height: 22, borderRadius: 11, border: 0, background: M.soft,
@@ -1976,7 +1976,7 @@ function CStockCard({ r, onClick }) {
         padding: '12px 12px 10px', borderRadius: 12, background: M.elev,
         border: `1px solid ${M.border}`, cursor: 'pointer'
       }}>
-
+      
       {/* top row: coin · ticker / name · change badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Av sym={r.coin === 'OTHER' ? '?' : r.coin.slice(0, 1)} bg={c} size={30} />
@@ -2047,7 +2047,7 @@ function CompanyInfoSheet({ r, onClose }) {
         background: 'rgba(8,10,20,0.55)', backdropFilter: 'blur(2px)',
         display: 'flex', alignItems: 'flex-end'
       }}>
-
+      
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -2055,7 +2055,7 @@ function CompanyInfoSheet({ r, onClose }) {
           boxShadow: '0 -12px 40px -10px rgba(0,0,0,0.28)',
           maxHeight: '82%', overflowY: 'auto', paddingBottom: 24
         }}>
-
+        
         {/* drag handle */}
         <div style={{ padding: '10px 0 4px', display: 'flex', justifyContent: 'center' }}>
           <span style={{ width: 38, height: 4, borderRadius: 2, background: M.borderSoft }} />

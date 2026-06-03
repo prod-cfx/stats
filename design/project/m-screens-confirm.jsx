@@ -241,7 +241,7 @@ function ScreenStratConfirm() {
           color: M.mid, fontSize: 12, fontWeight: 500, cursor: 'pointer'
         }}>取消</button>
         } />
-
+      
 
       {/* steps indicator (5 steps) */}
       <BtcStepBar active={0} done={[]} />
@@ -737,7 +737,7 @@ function ScreenStratScript() {
           color: M.mid, fontSize: 12, fontWeight: 500, cursor: 'pointer'
         }}>取消</button>
         } />
-
+      
       <BtcStepBar active={1} done={[0]} />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 100px' }}>

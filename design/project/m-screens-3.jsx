@@ -62,7 +62,7 @@ function ScreenTradingDetail() {
             <button style={iconBtn}><Ico d={ICONS.more} w={18} sw={2.5} /></button>
           </div>
         } />
-
+      
       {/* scrollable region — sits beneath the fixed top bar, above the sticky buy/sell + tab bar */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', paddingBottom: 158 }}>
       <div style={{ padding: '12px 16px 10px', background: M.elev }}>

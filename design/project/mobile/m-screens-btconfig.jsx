@@ -45,7 +45,7 @@ function ScreenBacktestConfig() {
         <BtcSectTitle>历史回测区间</BtcSectTitle>
         <Card p="14px 16px" style={{marginBottom:14}}>
           <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
-            {['7D','30D','90D','1Y','3Y','自定义'].map(r => {
+            {['7D','30D','90D','1Y','自定义'].map(r => {
               const on = r === range;
               return (
                 <button key={r} onClick={() => setRange(r)} style={{
@@ -172,21 +172,36 @@ function ScreenBacktestConfig() {
                   whiteSpace:'nowrap',
                 }}>{lev}</div>
               </div>
-              <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
-                {['1x','2x','3x','5x','10x','20x','50x'].map(l => {
-                  const on = l === lev;
-                  return (
-                    <button key={l} onClick={() => setLev(l)} style={{
-                      height:30, padding:'0 12px', borderRadius:8,
-                      fontFamily:M.mono, fontSize:12, fontWeight:600, cursor:'pointer',
-                      background: on ? M.violetSoft : M.elev,
-                      color: on ? M.violet : M.mid,
-                      border:`1px solid ${on ? 'rgba(124,92,255,0.3)' : M.border}`,
-                    }}>{l}</button>
-                  );
-                })}
+              <div style={{
+                display:'flex', alignItems:'center', gap:8,
+              }}>
+                <div style={{
+                  display:'flex', alignItems:'center', gap:4,
+                  flex:1, height:36, padding:'0 12px', borderRadius:9,
+                  background:M.soft, border:`1px solid ${M.borderSoft}`,
+                }}>
+                  <input type="text" inputMode="numeric"
+                    value={lev.replace('x','')}
+                    placeholder="自定义"
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      let n = e.target.value.replace(/[^\d]/g,'');
+                      if (n === '') { setLev('x'); return; }
+                      n = Math.min(100, parseInt(n,10));
+                      setLev(n + 'x');
+                    }}
+                    style={{
+                      flex:1, border:0, outline:0, background:'transparent',
+                      fontFamily:M.mono, fontSize:15, fontWeight:700, color:M.text,
+                      padding:0, minWidth:0,
+                    }}/>
+                  <span style={{fontFamily:M.mono, fontSize:13, color:M.dim}}>x</span>
+                </div>
+                <div style={{fontSize:11, color:M.dim, whiteSpace:'nowrap'}}>
+                  最大 100 倍
+                </div>
               </div>
-              {(lev === '50x' || lev === '20x') && (
+              {(parseInt(lev,10) >= 20) && (
                 <div style={{
                   marginTop:10, padding:'8px 10px', borderRadius:8,
                   background:M.warnSoft, color:M.warn,
@@ -273,7 +288,6 @@ function rangeToText(r) {
     '30D':'2026-04-26 → 2026-05-26',
     '90D':'2026-02-26 → 2026-05-26',
     '1Y':'2025-05-26 → 2026-05-26',
-    '3Y':'2023-05-26 → 2026-05-26',
     '自定义':'选择起止日期',
   }[r] || '';
 }

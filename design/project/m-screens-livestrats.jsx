@@ -289,7 +289,7 @@ function ScreenLiveStrats() {
             <Ico d={ICONS.filter} w={16} sw={1.8} />
           </button>
         } />
-
+      
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 100px' }}>
         {/* aggregate summary */}
@@ -455,7 +455,7 @@ function ScreenLiveStrats() {
         stopped={confirmDel?.status === 'stopped'}
         onCancel={() => setConfirmDel(null)}
         onConfirm={() => onDelete(confirmDel)} />
-
+      
     </div>);
 
 }
@@ -711,13 +711,13 @@ function LsStratCard({ s, onView, onToggle, onOpenMenu, menuOpen, onAskDelete })
           icon={isStopped ? RESTORE_D : canStart ? ICONS.play : PAUSE_D}
           tone={canStart || isStopped ? 'ok' : null}
           title={isStopped ? '恢复' : canStart ? '开启' : '暂停'} />
-
+        
         <LsActionBtn
           onClick={(e) => {e.stopPropagation();onOpenMenu && onOpenMenu();}}
           icon={ICONS.more}
           active={menuOpen}
           title="更多" />
-
+        
       </div>
 
       {/* action menu popover */}
@@ -1188,7 +1188,7 @@ function ScreenLiveStratDetail() {
             <Ico d="M12 5h.01M12 12h.01M12 19h.01" w={16} fill="none" sw={2.4} />
           </button>
         } />
-
+      
 
       {/* top-right action menu */}
       {menuOpen &&
@@ -1424,7 +1424,7 @@ function ScreenLiveStratDetail() {
         stopped={isStopped}
         onCancel={() => setConfirmDel(false)}
         onConfirm={onDelete} />
-
+      
     </div>);
 
 }
@@ -1766,7 +1766,7 @@ function LsScriptSheet({ s, onClose }) {
         }
         </button>
       }>
-
+      
       <div style={{ padding: '12px 16px' }}>
         <div style={{
           background: '#1a1530', borderRadius: 12,

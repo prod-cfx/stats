@@ -159,7 +159,7 @@ function MTopBar({ title, sub, left, right, onBack, backTo, transparent, dark, s
       {left}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: -0.2,
-          color: dark ? '#fff' : M.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-comment-anchor="f2b5fa6c39-div-161-9">{title}</div>
+          color: dark ? '#fff' : M.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
         {sub && <div style={{ fontSize: 12, color: dark ? 'rgba(255,255,255,0.6)' : M.dim, marginTop: 2,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}
       </div>

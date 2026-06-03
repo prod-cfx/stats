@@ -278,8 +278,12 @@ function SearchOverlay({ open, onClose, placeholder='搜索', hotLabel='热门�
   const results = q && renderResults ? renderResults(q, pick) : [];
   const chipStyle = {
     minWidth:62, padding:'7px 16px', borderRadius:999, border:0,
-    background:M.violetSoft, color:M.text, cursor:'pointer',
+    background:M.elev, color:M.mid, cursor:'pointer',
     fontSize:13, fontWeight:500, fontFamily:M.sans,
+  };
+  const sectionLabel = {
+    fontSize:11, fontWeight:600, color:M.dim, letterSpacing:0.4,
+    textTransform:'uppercase', margin:'18px 0 10px',
   };
   return (
     <div style={{ position:'absolute', inset:0, zIndex:80, background:M.bg, display:'flex', flexDirection:'column' }}>
@@ -287,7 +291,7 @@ function SearchOverlay({ open, onClose, placeholder='搜索', hotLabel='热门�
       {/* input row */}
       <div style={{ padding:'62px 16px 8px', display:'flex', alignItems:'center', gap:12 }}>
         <div style={{
-          flex:1, height:38, background:M.soft, borderRadius:999,
+          flex:1, height:38, background:M.elev, border:`1px solid ${M.border}`, borderRadius:999,
           padding:'0 14px', display:'flex', alignItems:'center', gap:8,
         }}>
           <Ico d={ICONS.search} w={16} sw={1.8}/>
@@ -321,7 +325,7 @@ function SearchOverlay({ open, onClose, placeholder='搜索', hotLabel='热门�
           <React.Fragment>
             {hot.length > 0 && (
               <React.Fragment>
-                <div style={{ fontSize:14, fontWeight:600, color:M.text, margin:'8px 0 12px' }}>{hotLabel}</div>
+                <div style={{ ...sectionLabel, marginTop:8 }}>{hotLabel}</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:'10px 10px' }}>
                   {hot.map(c => <button key={c} onClick={()=>pick(c)} style={chipStyle}>{c}</button>)}
                 </div>
@@ -329,8 +333,8 @@ function SearchOverlay({ open, onClose, placeholder='搜索', hotLabel='热门�
             )}
             {history.length > 0 && (
               <React.Fragment>
-                <div style={{ display:'flex', alignItems:'center', margin:'26px 0 12px' }}>
-                  <div style={{ flex:1, fontSize:14, fontWeight:600, color:M.text }}>搜索历史</div>
+                <div style={{ ...sectionLabel, display:'flex', alignItems:'center' }}>
+                  <div style={{ flex:1 }}>搜索历史</div>
                   <button aria-label="清空搜索历史" onClick={()=>setHistory([])} style={{
                     border:0, background:'transparent', color:M.dim, cursor:'pointer',
                     padding:4, display:'flex', alignItems:'center',

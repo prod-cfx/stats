@@ -441,8 +441,8 @@ function ScreenWhale({ route }) {
             </svg>
             {unread > 0 && (
               <span style={{
-                position:'absolute', top:1, right:1,
-                minWidth:16, height:16, padding:'0 3px', borderRadius:8,
+                position:'absolute', top:-2, right:-4,
+                minWidth:18, height:18, padding:'0 4px', borderRadius:9,
                 background:'#E5484D', color:'#fff',
                 fontSize:10, fontWeight:700, fontFamily:M.mono,
                 display:'flex', alignItems:'center', justifyContent:'center',

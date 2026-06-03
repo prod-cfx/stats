@@ -49,7 +49,7 @@ function ScreenDeploy({ initialStage = 'confirm' } = {}) {
         onBack={stage === 'confirm'}
         backTo="btres"
         right={stage !== 'deploying' && stage !== 'success' && (
-          <button data-back="btres" style={{
+          <button data-back="ai" style={{
             height:30, padding:'0 12px', borderRadius:8,
             border:`1px solid ${M.border}`, background:M.elev,
             color:M.mid, fontSize:12, fontWeight:500, cursor:'pointer',
@@ -254,12 +254,91 @@ function DpFormField({ label, value, options, onChange }) {
   );
 }
 
+const DP_ACCOUNTS = ['主账户', '子账户 A', '子账户 B'];
+
+/* read-only / selectable label→value row inside the strategy receipt card */
+function DpPlanRow({ label, value, options, onChange, last }) {
+  const [open, setOpen] = React.useState(false);
+  const selectable = !!options && !!onChange;
+  return (
+    <div style={{position:'relative'}}>
+      <div style={{
+        display:'flex', alignItems:'center', gap:12,
+        padding:'11px 0',
+        borderBottom: last ? 'none' : `1px solid ${M.borderSoft}`,
+      }}>
+        <span style={{fontSize:12.5, color:M.mid, flex:1, minWidth:0}}>{label}</span>
+        {selectable ? (
+          <button onClick={()=>setOpen(v=>!v)} style={{
+            display:'inline-flex', alignItems:'center', gap:5,
+            border:0, background:'transparent', cursor:'pointer',
+            padding:0, fontFamily:'inherit',
+            fontSize:13, fontWeight:600, color:M.text, whiteSpace:'nowrap',
+          }}>
+            {value}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+              style={{
+                transform: open ? 'rotate(180deg)' : 'none',
+                transition:'transform 160ms', color:M.dim, flexShrink:0,
+              }}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        ) : (
+          <span style={{
+            fontSize:13, fontWeight:600, color:M.text, whiteSpace:'nowrap',
+          }}>{value}</span>
+        )}
+      </div>
+      {open && selectable && (
+        <React.Fragment>
+          <div onClick={()=>setOpen(false)} style={{position:'fixed', inset:0, zIndex:40}}/>
+          <div style={{
+            position:'absolute', top:'calc(100% - 2px)', right:0, zIndex:41, minWidth:148,
+            background:M.elev, border:`1px solid ${M.border}`, borderRadius:10,
+            boxShadow:'0 14px 32px -10px rgba(15,22,35,0.22)',
+            padding:4, display:'flex', flexDirection:'column',
+          }}>
+            {options.map(o => {
+              const on = o === value;
+              return (
+                <button key={o}
+                  onClick={()=>{ onChange(o); setOpen(false); }}
+                  style={{
+                    padding:'9px 10px', border:0, cursor:'pointer',
+                    background: on ? M.violetSoft : 'transparent',
+                    color: M.text, borderRadius:7, textAlign:'left',
+                    fontFamily:'inherit',
+                    display:'flex', alignItems:'center', gap:8,
+                    fontSize:13, fontWeight: on ? 700 : 500,
+                  }}>
+                  <span style={{
+                    width:14, flexShrink:0,
+                    display:'inline-flex', alignItems:'center', justifyContent:'center',
+                    color: on ? M.violet : 'transparent',
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12l5 5L20 7"/>
+                    </svg>
+                  </span>
+                  <span style={{flex:1, minWidth:0, whiteSpace:'nowrap'}}>{o}</span>
+                </button>
+              );
+            })}
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
 function DpConfirm({ ex, amount, perTrade, maxDailyLoss, onDeploy }) {
-  const [fmExchange,   setFmExchange]   = React.useState('OKX');
-  const [fmMarketType, setFmMarketType] = React.useState('永续');
-  const fmAccounts = DP_FORM_ACCOUNTS[fmExchange] || [];
-  const [fmAccount,    setFmAccount]    = React.useState(fmAccounts[0] || 'okx-test-api');
-  const [fmLeverage,   setFmLeverage]   = React.useState('1x');
+  const [fmExchange,   setFmExchange]   = React.useState('Binance');
+  const [fmMarketType, setFmMarketType] = React.useState('永续合约');
+  const [fmAccount,    setFmAccount]    = React.useState('主账户');
+  const [fmLeverage,   setFmLeverage]   = React.useState('5x · 全仓');
   // demo state: pass / fail
   const [demoFail, setDemoFail] = React.useState(false);
   // re-check (refresh): re-fetch balance + exchange latency after user fixes
@@ -275,67 +354,52 @@ function DpConfirm({ ex, amount, perTrade, maxDailyLoss, onDeploy }) {
     }, 1400);
   }, [rechecking]);
   React.useEffect(() => {
-    const list = DP_FORM_ACCOUNTS[fmExchange] || [];
-    if (list.length && !list.includes(fmAccount)) setFmAccount(list[0]);
+    if (!DP_ACCOUNTS.includes(fmAccount)) setFmAccount(DP_ACCOUNTS[0]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fmExchange]);
   return (
     <React.Fragment>
-      <div style={{flex:1, overflowY:'auto', padding:'10px 16px 130px'}}>
-        {/* strategy + risk check */}
-        <Card p="14px 16px" style={{marginBottom:12}}>
-          <div style={{display:'flex', alignItems:'center', gap:10}}>
-            <div style={{
-              width:36, height:36, borderRadius:10, background:M.violetSoft,
-              color:M.violet, display:'flex', alignItems:'center', justifyContent:'center',
-              flexShrink:0,
-            }}>
-              <Ico d={ICONS.spark} w={18} sw={1.8}/>
-            </div>
-            <div style={{flex:1, minWidth:0}}>
-              <div style={{fontSize:14, fontWeight:700, color:M.text, letterSpacing:-0.2}}>
-                BTC 趋势 · 双均线
-              </div>
-              <div style={{fontSize:11, color:M.dim, marginTop:2, fontFamily:M.mono}}>
-                BTC/USDT · 15m · 永续 · 5x
-              </div>
-            </div>
-            <Chip tone="violet" style={{whiteSpace:'nowrap'}}>趋势跟踪</Chip>
+      <div style={{flex:1, overflowY:'auto', padding:'14px 16px 130px'}}>
+        {/* strategy receipt — summary + stats + AI-decided plan rows */}
+        <Card p="18px 18px 16px" style={{marginBottom:14}}>
+          <div style={{fontSize:15, fontWeight:700, color:M.text, letterSpacing:-0.2}}>
+            BTC 趋势 · 双均线
           </div>
+          <div style={{fontSize:11.5, color:M.dim, marginTop:3, fontFamily:M.mono}}>
+            BTC/USDT · 15m · 永续 · 5x
+          </div>
+
+          {/* headline stats */}
           <div style={{
             display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8,
-            marginTop:12, padding:'10px 0 0', borderTop:`1px dashed ${M.borderSoft}`,
+            margin:'16px 0 4px',
           }}>
-            <CfStat label="累计净值"   value="+312.4%" tone={M.up}/>
-            <CfStat label="Sharpe"   value="1.78"/>
-            <CfStat label="最大回撤"   value="-12.4%"  tone={M.dn}/>
+            <CfStat label="累计净值"  value="+38.2%" tone={M.up}/>
+            <CfStat label="Sharpe"  value="1.86"/>
+            <CfStat label="最大回撤"  value="-12.4%"  tone={M.dn}/>
+          </div>
+
+          {/* AI-decided deployment plan */}
+          <div style={{
+            marginTop:16, paddingTop:6, borderTop:`1px solid ${M.borderSoft}`,
+          }}>
+            <DpPlanRow label="交易所"   value={fmExchange}/>
+            <DpPlanRow label="市场类型" value={fmMarketType}/>
+            <DpPlanRow label="选择账户"
+              value={fmAccount} options={DP_ACCOUNTS} onChange={setFmAccount}/>
+            <DpPlanRow label="部署杠杆" value={fmLeverage} last/>
+          </div>
+
+          <div style={{
+            marginTop:14, fontSize:11.5, color:M.dim, lineHeight:1.6,
+          }}>
+            交易所 / 市场 / 杠杆由 AI 对话决定;账户可在同交易所已绑定账户间切换,确认后将按此方案部署实盘
           </div>
         </Card>
 
         {/* preflight checks — make sure the strategy can actually run */}
         <PreflightChecks ex={ex} amount={amount} failMode={demoFail}
           rechecking={rechecking} onRecheck={handleRecheck}/>
-
-        {/* deploy form — exchange / market / leverage locked from previous step;
-            only 选择账户 is editable here */}
-        <div style={{
-          padding:'14px', borderRadius:14, marginBottom:14,
-          background:M.elev, border:`1px solid ${M.borderSoft}`,
-        }}>
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14}}>
-            <DpFormReadonly label="交易所"   value={fmExchange}/>
-            <DpFormReadonly label="市场类型" value={fmMarketType}/>
-          </div>
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
-            <DpFormField     label="选择账户" value={fmAccount} options={fmAccounts} onChange={setFmAccount}/>
-            <DpFormReadonly label="部署杠杆" value={fmLeverage}/>
-          </div>
-        </div>
-
-        {/* tiny footnote */}
-        <div style={{fontSize:11, color:M.dim, lineHeight:1.6, padding:'0 4px'}}>
-          以上信息均由 AI 对话过程中已决定。如需调整,请返回对话或回测设置重新生成。
-        </div>
       </div>
 
       {/* sticky action bar */}
@@ -499,7 +563,7 @@ function PreflightChecks({ ex, amount, failMode, rechecking, onRecheck }) {
         )}
         <span style={{
           display:'inline-flex', alignItems:'center', gap:4,
-          fontSize:11, fontWeight:600, fontFamily:M.mono,
+          fontSize:11, fontWeight:600, fontFamily:M.mono, whiteSpace:'nowrap',
           padding:'2px 8px', borderRadius:5,
           background: scanning ? M.soft : chipBg, color: scanning ? M.dim : chipColor,
         }}>
@@ -583,9 +647,9 @@ function PreflightChecks({ ex, amount, failMode, rechecking, onRecheck }) {
 function CfStat({ label, value, tone }) {
   return (
     <div style={{minWidth:0}}>
-      <div style={{fontSize:10, color:M.dim, marginBottom:3}}>{label}</div>
-      <div style={{fontSize:14, fontWeight:700, color:tone || M.text, fontFamily:M.mono,
-        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{value}</div>
+      <div style={{fontSize:15, fontWeight:700, color:tone || M.text, fontFamily:M.mono,
+        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', letterSpacing:-0.2}}>{value}</div>
+      <div style={{fontSize:10.5, color:M.dim, marginTop:4}}>{label}</div>
     </div>
   );
 }
