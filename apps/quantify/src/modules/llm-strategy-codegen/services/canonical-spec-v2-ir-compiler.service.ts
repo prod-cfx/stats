@@ -1849,15 +1849,18 @@ export class CanonicalSpecV2IrCompilerService {
       case 'price.detect.indicator_boundary': {
         const indicator = this.readNestedParam(atom.params, 'indicator', 'name') ?? atom.params?.indicator
         if (typeof indicator !== 'string' || indicator.toLowerCase() !== 'bollinger') {
-          const closeRef = this.ensurePriceSeries(context, 'close')
           return this.upsertPredicate(
             context.predicateMap,
             `${seed}_indicator_boundary_generic`,
-            'GTE',
-            [closeRef, closeRef],
+            'externalSignal',
+            [],
             {
+              provider: 'indicator_boundary',
+              sourceFeedId: 'indicator.boundary',
+              signalId: 'indicator_boundary_touch',
               indicator: typeof indicator === 'string' ? indicator : 'generic',
               boundaryRole: this.readStringParam(atom.params?.boundaryRole) ?? 'lower',
+              confirmationMode: this.readStringParam(atom.params?.confirmationMode) ?? 'touch',
             },
           )
         }
