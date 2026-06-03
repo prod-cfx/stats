@@ -77,11 +77,11 @@ void main() {
 
   testWidgets('footer 展示 ID · 运行 · 笔数 · 胜率', (WidgetTester tester) async {
     await _pump(tester, _strategy(winRate: 62, trades: 48));
-    // mono meta：胜率整数不带小数
-    expect(
-      find.text('QF-TEST01 · 运行 14 天 · 48 笔 · 胜率 62%'),
-      findsOneWidget,
-    );
+    // mono meta：胜率整数不带小数；footer 按设计稿拆成可换行片段。
+    expect(find.text('QF-TEST01'), findsOneWidget);
+    expect(find.text('运行 14 天'), findsOneWidget);
+    expect(find.text('48 笔'), findsOneWidget);
+    expect(find.text('胜率 62%'), findsOneWidget);
   });
 
   testWidgets('胜率含小数保留一位', (WidgetTester tester) async {
@@ -89,8 +89,9 @@ void main() {
     expect(find.textContaining('胜率 58.5%'), findsOneWidget);
   });
 
-  testWidgets('running 卡 footer 显示暂停按钮，点击触发 onToggle',
-      (WidgetTester tester) async {
+  testWidgets('running 卡 footer 显示暂停按钮，点击触发 onToggle', (
+    WidgetTester tester,
+  ) async {
     bool toggled = false;
     await _pump(
       tester,
@@ -104,11 +105,7 @@ void main() {
 
   testWidgets('菜单按钮点击触发 onOpenMenu', (WidgetTester tester) async {
     bool opened = false;
-    await _pump(
-      tester,
-      _strategy(),
-      onOpenMenu: () => opened = true,
-    );
+    await _pump(tester, _strategy(), onOpenMenu: () => opened = true);
     await tester.tap(find.byKey(const Key('live-card-menu')));
     await tester.pumpAndSettle();
     expect(opened, isTrue);

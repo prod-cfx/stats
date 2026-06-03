@@ -37,7 +37,7 @@ class LiveStrategyCard extends StatelessWidget {
     final BorderRadius radius = BorderRadius.circular(QzRadii.card);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: QzSpacing.md),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -72,84 +72,84 @@ class _ClickableBody extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final LiveStatusStyle st = liveStatusStyle(strategy.status, c, l10n);
-    final bool totalUp = strategy.totalPnl >= 0;
-    final bool todayUp = strategy.todayPnl >= 0;
+    final bool totalUp = strategy.totalPct >= 0;
+    final bool todayUp = strategy.todayPct >= 0;
 
     final Widget body = Padding(
-      padding: const EdgeInsets.all(QzSpacing.lg),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _ExchangeGlyph(strategy: strategy),
-              const SizedBox(width: QzSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            strategy.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: c.text,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _ExchangeGlyph(strategy: strategy),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              strategy.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: c.text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: QzSpacing.sm),
-                        _StatusBadge(style: st, status: strategy.status),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${strategy.pair} · ${strategy.timeframe} · '
-                      '${strategy.market} · ${strategy.runFor}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: c.textDim,
-                        fontSize: 11,
-                        fontFamily: QzFont.mono,
-                        fontFamilyFallback: QzFont.monoFallback,
+                          const SizedBox(width: QzSpacing.xs),
+                          _StatusBadge(style: st, status: strategy.status),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      _MetaLine(strategy: strategy),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: QzSpacing.md),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
-              Expanded(
-                child: _PnlCell(
-                  label: l10n.liveListTodayPnl,
-                  value: _money(strategy.todayPnl),
-                  pct: strategy.todayPct,
-                  color: strategy.todayPnl == 0
-                      ? c.text
-                      : (todayUp ? c.marketUp : c.marketDown),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Expanded(
+                  child: _PnlCell(
+                    label: _shortLabel(context, zh: '今日', en: 'Today'),
+                    pnl: strategy.todayPnl,
+                    pct: strategy.todayPct,
+                    amountDecimals: 2,
+                    color: strategy.todayPct == 0
+                        ? c.textMid
+                        : (todayUp ? c.marketUp : c.marketDown),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _PnlCell(
-                  label: l10n.liveListTotalPnl,
-                  value: _money(strategy.totalPnl),
-                  pct: strategy.totalPct,
-                  color: totalUp ? c.marketUp : c.marketDown,
+                const SizedBox(width: QzSpacing.md),
+                Expanded(
+                  child: _PnlCell(
+                    label: _shortLabel(context, zh: '累计', en: 'Total'),
+                    pnl: strategy.totalPnl,
+                    pct: strategy.totalPct,
+                    amountDecimals: 0,
+                    color: totalUp ? c.marketUp : c.marketDown,
+                  ),
                 ),
-              ),
-              LiveSparkline(points: strategy.spark, up: totalUp),
-            ],
+                const SizedBox(width: QzSpacing.md),
+                LiveSparkline(points: strategy.spark, up: totalUp),
+              ],
+            ),
           ),
+          if (strategy.statusNote != null)
+            _StatusNote(style: st, note: strategy.statusNote!),
         ],
       ),
     );
@@ -160,20 +160,99 @@ class _ClickableBody extends StatelessWidget {
       child: InkWell(onTap: onTap, child: body),
     );
   }
+}
 
-  static String _money(double v) {
-    final String sign = v >= 0 ? '+' : '-';
-    return '$sign\$${v.abs().toStringAsFixed(2)}';
+String _shortLabel(
+  BuildContext context, {
+  required String zh,
+  required String en,
+}) {
+  return Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
+}
+
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.strategy});
+  final LiveStrategy strategy;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final List<String> parts = <String>[
+      strategy.pair,
+      strategy.timeframe,
+      strategy.market,
+      strategy.exchange,
+    ];
+    return Wrap(
+      spacing: 6,
+      runSpacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        for (int i = 0; i < parts.length; i++) ...<Widget>[
+          if (i > 0)
+            Text(
+              '·',
+              style: TextStyle(
+                color: c.textFaint,
+                fontSize: 11,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
+              ),
+            ),
+          Text(
+            parts[i],
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 11,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StatusNote extends StatelessWidget {
+  const _StatusNote({required this.style, required this.note});
+  final LiveStatusStyle style;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: style.bg,
+        border: Border(top: BorderSide(color: c.borderSoft)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.shield_outlined, size: 11, color: style.fg),
+          const SizedBox(width: QzSpacing.xs),
+          Expanded(
+            child: Text(
+              note,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: style.fg,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 /// 底部 footer：分割线 + 浅灰底，左 meta，右 暂停/开启 + 更多。
 class _Footer extends StatelessWidget {
-  const _Footer({
-    required this.strategy,
-    this.onToggle,
-    this.onOpenMenu,
-  });
+  const _Footer({required this.strategy, this.onToggle, this.onOpenMenu});
   final LiveStrategy strategy;
   final VoidCallback? onToggle;
   final VoidCallback? onOpenMenu;
@@ -184,11 +263,13 @@ class _Footer extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
 
     final bool stopped = strategy.status == LiveStrategyStatus.stopped;
-    final bool canStart = strategy.status == LiveStrategyStatus.paused ||
+    final bool canStart =
+        strategy.status == LiveStrategyStatus.paused ||
         strategy.status == LiveStrategyStatus.warning;
     final bool ok = stopped || canStart;
-    final IconData toggleIcon =
-        ok ? Icons.play_arrow_rounded : Icons.pause_rounded;
+    final IconData toggleIcon = ok
+        ? Icons.play_arrow_rounded
+        : Icons.pause_rounded;
     final String toggleTooltip = stopped
         ? l10n.liveActionResume
         : (canStart ? l10n.liveActionStart : l10n.liveActionPause);
@@ -198,10 +279,7 @@ class _Footer extends StatelessWidget {
         : strategy.winRate.toStringAsFixed(1);
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: QzSpacing.lg,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: c.bgSoft,
         border: Border(top: BorderSide(color: c.borderSoft)),
@@ -209,19 +287,13 @@ class _Footer extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: Text(
-              '${strategy.id} · '
-              '${l10n.liveCardRunFor(strategy.runFor)} · '
-              '${l10n.liveCardTrades(strategy.trades)} · '
-              '${l10n.liveCardWinRate(winRate)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: c.textDim,
-                fontSize: 10,
-                fontFamily: QzFont.mono,
-                fontFamilyFallback: QzFont.monoFallback,
-              ),
+            child: _FooterMeta(
+              parts: <String>[
+                strategy.id,
+                l10n.liveCardRunFor(strategy.runFor),
+                l10n.liveCardTrades(strategy.trades),
+                l10n.liveCardWinRate(winRate),
+              ],
             ),
           ),
           const SizedBox(width: QzSpacing.sm),
@@ -264,16 +336,22 @@ class _ActionBtn extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     return Material(
       color: c.bgElev,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Tooltip(
-          message: tooltip,
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: Icon(icon, size: 17, color: color),
+      borderRadius: BorderRadius.circular(7),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(7),
+          child: Tooltip(
+            message: tooltip,
+            child: SizedBox(
+              width: 30,
+              height: 30,
+              child: Icon(icon, size: 16, color: color),
+            ),
           ),
         ),
       ),
@@ -287,22 +365,27 @@ class _ExchangeGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
+    final Color bg = switch (strategy.exchange) {
+      'Binance' => const Color(0xFF181A20),
+      'OKX' => Colors.black,
+      _ => const Color(0xFFF8F9FC),
+    };
+    final Color fg = switch (strategy.exchange) {
+      'Binance' => const Color(0xFFF3BA2F),
+      'OKX' => Colors.white,
+      _ => const Color(0xFF7C5CFF),
+    };
     return Container(
-      width: 40,
-      height: 40,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
-        color: c.bgSoft,
-        borderRadius: BorderRadius.circular(11),
+        color: bg,
+        borderRadius: BorderRadius.circular(9),
       ),
       alignment: Alignment.center,
       child: Text(
         strategy.exchangeGlyph,
-        style: TextStyle(
-          color: c.accent,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
+        style: TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -316,7 +399,8 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      height: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
         color: style.bg,
         borderRadius: BorderRadius.circular(5),
@@ -327,7 +411,18 @@ class _StatusBadge extends StatelessWidget {
           Container(
             width: 5,
             height: 5,
-            decoration: BoxDecoration(color: style.dot, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: style.dot,
+              shape: BoxShape.circle,
+              boxShadow: status == LiveStrategyStatus.running
+                  ? <BoxShadow>[
+                      BoxShadow(
+                        color: style.dot.withValues(alpha: 0.2),
+                        spreadRadius: 3,
+                      ),
+                    ]
+                  : null,
+            ),
           ),
           const SizedBox(width: 4),
           Text(
@@ -347,36 +442,90 @@ class _StatusBadge extends StatelessWidget {
 class _PnlCell extends StatelessWidget {
   const _PnlCell({
     required this.label,
-    required this.value,
+    required this.pnl,
     required this.pct,
+    required this.amountDecimals,
     required this.color,
   });
   final String label;
-  final String value;
+  final double pnl;
   final double pct;
+  final int amountDecimals;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final String pctStr = '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%';
+    final String pnlStr =
+        '${pnl >= 0 ? '+' : ''}\$${pnl.abs().toStringAsFixed(amountDecimals)}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(label, style: TextStyle(color: c.textDim, fontSize: 11)),
+        Text(label, style: TextStyle(color: c.textDim, fontSize: 10)),
         const SizedBox(height: 3),
         Text(
-          '$value · $pctStr',
+          pctStr,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: color,
-            fontSize: 13,
+            fontSize: 16,
             fontWeight: FontWeight.w700,
             fontFamily: QzFont.mono,
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),
+        const SizedBox(height: 2),
+        Text(
+          pnlStr,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: c.textDim,
+            fontSize: 10,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FooterMeta extends StatelessWidget {
+  const _FooterMeta({required this.parts});
+  final List<String> parts;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        for (int i = 0; i < parts.length; i++) ...<Widget>[
+          if (i > 0)
+            Text(
+              '·',
+              style: TextStyle(
+                color: c.textFaint,
+                fontSize: 10,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
+              ),
+            ),
+          Text(
+            parts[i],
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 10,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+        ],
       ],
     );
   }

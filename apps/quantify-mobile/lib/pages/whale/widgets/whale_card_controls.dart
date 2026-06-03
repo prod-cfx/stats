@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
 
 /// 发现 tab 卡片复用控件（issue #1860）。
 ///
@@ -44,6 +45,8 @@ class WhaleAddressLink extends StatelessWidget {
                     color: c.accent,
                     fontSize: fontSize,
                     fontWeight: FontWeight.w600,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
                   ),
                 ),
               ),
@@ -79,7 +82,7 @@ class WhaleCopyButton extends StatelessWidget {
       tooltip: l10n.whaleLeaderCopyTooltip,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      constraints: const BoxConstraints.tightFor(width: 18, height: 18),
     );
   }
 }
@@ -108,11 +111,46 @@ class WhaleTrendButton extends StatelessWidget {
             border: Border.all(color: c.borderSoft),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(Icons.trending_up, size: 15, color: c.accent),
+          child: CustomPaint(
+            size: const Size(15, 15),
+            painter: _TrendIconPainter(color: c.accent),
+          ),
         ),
       ),
     );
   }
+}
+
+class _TrendIconPainter extends CustomPainter {
+  const _TrendIconPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double sx = size.width / 24;
+    final double sy = size.height / 24;
+    final Paint paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    Offset p(double x, double y) => Offset(x * sx, y * sy);
+    final Path line = Path()
+      ..moveTo(p(4, 17).dx, p(4, 17).dy)
+      ..lineTo(p(10, 11).dx, p(10, 11).dy)
+      ..lineTo(p(14, 15).dx, p(14, 15).dy)
+      ..lineTo(p(20, 9).dx, p(20, 9).dy);
+    canvas.drawPath(line, paint);
+    canvas.drawLine(p(20, 9), p(20, 5), paint);
+    canvas.drawLine(p(20, 5), p(16, 5), paint);
+  }
+
+  @override
+  bool shouldRepaint(_TrendIconPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 /// 单层紫色虚线下划线（对齐设计 `1px dashed violet66`）。

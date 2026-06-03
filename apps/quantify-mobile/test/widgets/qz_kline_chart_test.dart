@@ -8,7 +8,6 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_kline_chart.dart';
-import 'package:quantify_mobile/widgets/qz_segmented_tabs.dart';
 import 'package:quantify_mobile/widgets/qz_spinner.dart';
 
 import '../helpers/golden_harness.dart';
@@ -28,12 +27,15 @@ void main() {
       surfaceSize: const Size(420, 700),
     );
 
-    expect(find.byType(QzSegmentedTabs), findsOneWidget);
-    // 文案严格对齐设计稿：1m / 15m / 1H / 4H / 1D
-    expect(
-      QzKlineChart.intervalOptions.map((o) => o.label).toList(),
-      <String>['1m', '15m', '1H', '4H', '1D'],
-    );
+    // 文案严格对齐设计稿：1m / 15m / 1H / 4H / 1D。
+    // 这里不再断言 QzSegmentedTabs：设计稿是平铺 underline tab，非胶囊分段控件。
+    expect(QzKlineChart.intervalOptions.map((o) => o.label).toList(), <String>[
+      '1m',
+      '15m',
+      '1H',
+      '4H',
+      '1D',
+    ]);
     for (final option in QzKlineChart.intervalOptions) {
       expect(find.text(option.label), findsOneWidget);
     }

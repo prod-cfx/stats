@@ -405,7 +405,7 @@ void main() {
             ),
           ),
         )
-        .decoration! as BoxDecoration;
+        .decoration as BoxDecoration;
     expect(catDecoration.color, scheme.accent);
     expect(
       tester.getSize(find.byKey(const Key('strategy-sheet-cat-all'))).width,

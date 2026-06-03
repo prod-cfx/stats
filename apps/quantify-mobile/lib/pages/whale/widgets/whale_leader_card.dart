@@ -8,12 +8,13 @@ import '../../../theme/tokens.dart';
 import 'whale_card_controls.dart';
 
 /// AI 标签 chip 配色（对齐设计稿 AI_TAG_COLOR）。
-const Map<String, ({int fg, int bg})> _aiTagColors = <String, ({int fg, int bg})>{
-  '金库管家': (fg: 0xFF92400E, bg: 0xFFFEF3C7),
-  '多头战神': (fg: 0xFF1E40AF, bg: 0xFFDBEAFE),
-  '波段之王': (fg: 0xFF6D28D9, bg: 0xFFEDE9FE),
-  '聪明交易者': (fg: 0xFF92400E, bg: 0xFFFEF3C7),
-};
+const Map<String, ({int fg, int bg})> _aiTagColors =
+    <String, ({int fg, int bg})>{
+      '金库管家': (fg: 0xFF92400E, bg: 0xFFFEF3C7),
+      '多头战神': (fg: 0xFF1E40AF, bg: 0xFFDBEAFE),
+      '波段之王': (fg: 0xFF6D28D9, bg: 0xFFEDE9FE),
+      '聪明交易者': (fg: 0xFF92400E, bg: 0xFFFEF3C7),
+    };
 
 /// 发现 tab 巨鲸列表卡（issue #1789 / #1860）。地址（复制 / chevron）+ 账户总价值
 /// + 盈亏/持仓/胜率 + AI 标签 chip 行 + 右上趋势按钮。
@@ -44,10 +45,11 @@ class WhaleLeaderCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onStats,
         child: Container(
-          padding: const EdgeInsets.all(QzSpacing.lg),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
+            color: c.bgElev,
             border: Border.all(color: c.borderSoft),
-            borderRadius: BorderRadius.circular(QzRadii.card),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,6 +65,8 @@ class WhaleLeaderCard extends StatelessWidget {
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.3,
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
                 ),
               ),
               const SizedBox(height: QzSpacing.md),
@@ -165,8 +169,8 @@ class _StatCell extends StatelessWidget {
     final TextAlign textAlign = align == CrossAxisAlignment.start
         ? TextAlign.left
         : align == CrossAxisAlignment.end
-            ? TextAlign.right
-            : TextAlign.center;
+        ? TextAlign.right
+        : TextAlign.center;
     return Column(
       crossAxisAlignment: align,
       children: <Widget>[
@@ -183,6 +187,8 @@ class _StatCell extends StatelessWidget {
             color: valueColor,
             fontSize: 13,
             fontWeight: FontWeight.w700,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
           ),
         ),
       ],

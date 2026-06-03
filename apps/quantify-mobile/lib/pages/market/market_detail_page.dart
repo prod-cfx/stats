@@ -139,10 +139,10 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
       _candleSub = klineRepo
           .watchCandles(symbol: widget.symbol, interval: interval)
           .listen((Candle next) {
-        if (!mounted || requestId != _klineRequestId) return;
-        // 当前阶段：append-only。同 openTime upsert 留待真实 WS 接入时补。
-        setState(() => _candles = <Candle>[..._candles, next]);
-      });
+            if (!mounted || requestId != _klineRequestId) return;
+            // 当前阶段：append-only。同 openTime upsert 留待真实 WS 接入时补。
+            setState(() => _candles = <Candle>[..._candles, next]);
+          });
     } catch (_) {
       if (!mounted || requestId != _klineRequestId) return;
       setState(() {
@@ -198,8 +198,9 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   Future<void> _toggleFavorite() async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool wasFavorite =
-        ref.read(marketFavoritesProvider).contains(widget.symbol);
+    final bool wasFavorite = ref
+        .read(marketFavoritesProvider)
+        .contains(widget.symbol);
     try {
       await ref.read(marketFavoritesProvider.notifier).toggle(widget.symbol);
     } catch (_) {
@@ -256,14 +257,17 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10nForBar = AppLocalizations.of(context);
-    final bool isFavorite =
-        ref.watch(marketFavoritesProvider).contains(widget.symbol);
+    final bool isFavorite = ref
+        .watch(marketFavoritesProvider)
+        .contains(widget.symbol);
     return Scaffold(
       appBar: QzTopBar(
         title: _topBarTitle(widget.symbol),
         subtitle: _source.isAggregated
             ? l10nForBar.marketDetailSubtitlePerpAggregated
-            : l10nForBar.marketDetailSubtitlePerpExchange(_source.exchangeName!),
+            : l10nForBar.marketDetailSubtitlePerpExchange(
+                _source.exchangeName!,
+              ),
         onBack: () => context.pop(),
         actions: <Widget>[
           IconButton(
@@ -295,7 +299,9 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
           final AppLocalizations l10n = AppLocalizations.of(context);
           if (_loading) return const Center(child: QzSpinner());
           if (_error != null) {
-            return QzEmptyState(title: '${widget.symbol} ${l10n.commonLoadError}');
+            return QzEmptyState(
+              title: '${widget.symbol} ${l10n.commonLoadError}',
+            );
           }
           if (_priceSnapshot == null) {
             return QzEmptyState(
@@ -307,15 +313,12 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                MarketDetailStats(
-                  displaySymbol: widget.symbol,
-                  ticker: _priceSnapshot!,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: QzSpacing.lg,
+                _MarketChartSection(
+                  stats: MarketDetailStats(
+                    displaySymbol: widget.symbol,
+                    ticker: _priceSnapshot!,
                   ),
-                  child: QzKlineChart(
+                  chart: QzKlineChart(
                     candles: _candles,
                     interval: _interval,
                     trailing: SourcePicker(
@@ -344,31 +347,29 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                     },
                   ),
                 ),
-                const SizedBox(height: QzSpacing.md),
                 _CumulativeStatsRow(ticker: _priceSnapshot!),
-                const SizedBox(height: QzSpacing.md),
-                _PanelTabBar(
-                  panel: _panel,
-                  onChanged: (_DetailPanel next) {
-                    if (next == _panel) return;
-                    setState(() => _panel = next);
-                  },
-                ),
-                _PanelBody(
-                  panel: _panel,
-                  symbol: widget.symbol,
-                  mid: _priceSnapshot!.price,
-                  changePercent: _priceSnapshot!.changePercent,
-                  trades: _trades ??= trade_fixtures.buildMockTrades(
+                _PanelSection(
+                  tabBar: _PanelTabBar(
+                    panel: _panel,
+                    onChanged: (_DetailPanel next) {
+                      if (next == _panel) return;
+                      setState(() => _panel = next);
+                    },
+                  ),
+                  body: _PanelBody(
+                    panel: _panel,
                     symbol: widget.symbol,
                     mid: _priceSnapshot!.price,
+                    changePercent: _priceSnapshot!.changePercent,
+                    trades: _trades ??= trade_fixtures.buildMockTrades(
+                      symbol: widget.symbol,
+                      mid: _priceSnapshot!.price,
+                    ),
                   ),
                 ),
                 const SizedBox(height: QzSpacing.md),
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: QzSpacing.lg,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
                   child: QzCard(
                     onTap: () => context.push('/market/long-short'),
                     child: Column(
@@ -407,7 +408,49 @@ String _topBarTitle(String symbol) {
   return '$base / $quote';
 }
 
+class _MarketChartSection extends StatelessWidget {
+  const _MarketChartSection({required this.stats, required this.chart});
+
+  final Widget stats;
+  final Widget chart;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(color: c.bgElev),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[stats, chart],
+      ),
+    );
+  }
+}
+
 /// 3 段 underline panel tab：盘口 / 成交 / 深度图（#1563）。
+class _PanelSection extends StatelessWidget {
+  const _PanelSection({required this.tabBar, required this.body});
+
+  final Widget tabBar;
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      padding: const EdgeInsets.only(bottom: QzSpacing.xxl),
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border(top: BorderSide(color: c.bg, width: 6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[tabBar, body],
+      ),
+    );
+  }
+}
+
 class _PanelTabBar extends StatelessWidget {
   const _PanelTabBar({required this.panel, required this.onChanged});
 
@@ -508,18 +551,10 @@ class _PanelBody extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (panel) {
       case _DetailPanel.book:
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            QzSpacing.lg,
-            QzSpacing.md,
-            QzSpacing.lg,
-            0,
-          ),
-          child: OrderbookView(
-            symbol: symbol,
-            mid: mid,
-            changePercent: changePercent,
-          ),
+        return OrderbookView(
+          symbol: symbol,
+          mid: mid,
+          changePercent: changePercent,
         );
       case _DetailPanel.trades:
         return TradesPanel(symbol: symbol, mid: mid, trades: trades);
@@ -745,11 +780,7 @@ class _MoreActionTile extends StatelessWidget {
       leading: Icon(icon, size: 20, color: fg),
       title: Text(
         label,
-        style: TextStyle(
-          color: fg,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
+        style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w500),
       ),
       trailing: disabledNote == null
           ? null
@@ -790,8 +821,9 @@ class _CumulativeStatsRow extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
+        color: c.bgElev,
         border: Border(
-          top: BorderSide(color: c.borderSoft),
+          top: BorderSide(color: c.bg, width: 6),
           bottom: BorderSide(color: c.borderSoft),
         ),
       ),
@@ -899,4 +931,3 @@ class _SectionTitle extends StatelessWidget {
     );
   }
 }
-

@@ -34,7 +34,12 @@
 - 构建期：Next.js 用 `NEXT_PUBLIC_LOG_LEVEL`
 - 运行期临时覆盖：`localStorage.logLevel`（优先级最高）
 
-## 5) Seed（最小约定）
+## 5) Flutter mobile（开发运行）
+
+- 发现移动端有更新时，优先复用已有 `flutter run` 会话，在该会话中发送 `r` 触发热重载。
+- 不要每次重新编译；只有确认没有可复用 `flutter run` 会话时，才启动新的 `flutter run`。
+
+## 6) Seed（最小约定）
 
 - 入口与目录：`apps/backend/prisma/seed.ts`、`apps/backend/prisma/seed/`
 - Quantify 入口：`apps/quantify/prisma/seed.ts`

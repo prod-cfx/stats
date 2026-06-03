@@ -11,11 +11,7 @@ import '../../../theme/tokens.dart';
 /// 点击循环：非该 key → (key, desc)；(key, desc) → (key, asc)；
 /// (key, asc) → null（恢复原序）。激活药丸高亮当前方向三角。
 class WhaleSortBar extends StatelessWidget {
-  const WhaleSortBar({
-    required this.sort,
-    required this.onChanged,
-    super.key,
-  });
+  const WhaleSortBar({required this.sort, required this.onChanged, super.key});
 
   final WhaleLeaderSort? sort;
   final void Function(WhaleLeaderSort?) onChanged;
@@ -36,10 +32,10 @@ class WhaleSortBar extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final List<(WhaleLeaderSortKey, String)> opts =
         <(WhaleLeaderSortKey, String)>[
-      (WhaleLeaderSortKey.winRate, l10n.whaleSortWinRate),
-      (WhaleLeaderSortKey.aum, l10n.whaleSortAum),
-      (WhaleLeaderSortKey.pnl, l10n.whaleSortPnl),
-    ];
+          (WhaleLeaderSortKey.winRate, l10n.whaleSortWinRate),
+          (WhaleLeaderSortKey.aum, l10n.whaleSortAum),
+          (WhaleLeaderSortKey.pnl, l10n.whaleSortPnl),
+        ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(
@@ -99,7 +95,8 @@ class _SortPill extends StatelessWidget {
         height: 28,
         padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
         decoration: BoxDecoration(
-          color: active ? c.accent : Colors.transparent,
+          color: active ? null : Colors.transparent,
+          gradient: active ? c.accentGrad : null,
           borderRadius: BorderRadius.circular(QzRadii.pill),
         ),
         child: Row(

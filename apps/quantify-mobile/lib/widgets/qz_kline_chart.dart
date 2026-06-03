@@ -6,8 +6,6 @@ import '../l10n/app_localizations.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
-import 'qz_card.dart';
-import 'qz_segmented_tabs.dart';
 import 'qz_sheet.dart';
 import 'qz_spinner.dart';
 
@@ -39,18 +37,18 @@ class QzKlineChart extends StatelessWidget {
   /// （去掉 `5m`，大小写统一为 `1H / 4H / 1D`）。
   static const List<({String label, KlineInterval value})> intervalOptions =
       <({String label, KlineInterval value})>[
-    (label: '1m', value: KlineInterval.m1),
-    (label: '15m', value: KlineInterval.m15),
-    (label: '1H', value: KlineInterval.h1),
-    (label: '4H', value: KlineInterval.h4),
-    (label: '1D', value: KlineInterval.d1),
-  ];
+        (label: '1m', value: KlineInterval.m1),
+        (label: '15m', value: KlineInterval.m15),
+        (label: '1H', value: KlineInterval.h1),
+        (label: '4H', value: KlineInterval.h4),
+        (label: '1D', value: KlineInterval.d1),
+      ];
 
   /// `更多` 入口 label。它不是真实周期，点击时弹出更多周期选择 sheet，
   /// 不参与 `intervalOptions` 的选中态映射。
   static const String moreLabel = '更多';
 
-  static const double chartHeight = 320;
+  static const double chartHeight = 200;
 
   final List<Candle> candles;
   final KlineInterval interval;
@@ -77,50 +75,81 @@ class QzKlineChart extends StatelessWidget {
       moreLabel,
     ];
 
-    return QzCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Container(
+          decoration: BoxDecoration(
+            color: c.bgElev,
+            border: Border(top: BorderSide(color: c.borderSoft)),
+          ),
+          padding: const EdgeInsets.fromLTRB(
+            QzSpacing.lg,
+            QzSpacing.sm,
+            QzSpacing.lg,
+            0,
+          ),
+          child: _buildIntervalBar(context, c, l10n, labels, currentLabel),
+        ),
+        Container(
+          color: c.bgElev,
+          padding: const EdgeInsets.only(bottom: QzSpacing.xs),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Expanded(
-                child: QzSegmentedTabs(
-                  options: labels,
-                  value: currentLabel,
-                  onChanged: (String label) {
-                    if (label == moreLabel) {
-                      _showMoreIntervals(context, c, l10n);
-                      return;
-                    }
-                    final KlineInterval next = _intervalOf(label);
-                    if (next != interval) onIntervalChanged(next);
-                  },
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: QzSpacing.lg,
+                  vertical: QzSpacing.xs,
                 ),
+                child: _buildOhlcRow(c),
               ),
-              if (trailing != null) ...<Widget>[
-                const SizedBox(width: QzSpacing.sm),
-                trailing!,
-              ],
+              SizedBox(height: chartHeight, child: _buildBody(c, l10n)),
             ],
           ),
-          const SizedBox(height: QzSpacing.sm),
-          _buildOhlcRow(c),
-          const SizedBox(height: QzSpacing.sm),
-          SizedBox(
-            height: chartHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: c.bgSoft,
-                borderRadius: BorderRadius.circular(QzRadii.card),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(QzRadii.card),
-                child: _buildBody(c, l10n),
-              ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIntervalBar(
+    BuildContext context,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    List<String> labels,
+    String currentLabel,
+  ) {
+    return Row(
+      children: <Widget>[
+        Flexible(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: <Widget>[
+                for (int i = 0; i < labels.length; i++) ...<Widget>[
+                  _IntervalTab(
+                    label: labels[i],
+                    selected: labels[i] == currentLabel,
+                    onTap: () {
+                      if (labels[i] == moreLabel) {
+                        _showMoreIntervals(context, c, l10n);
+                        return;
+                      }
+                      final KlineInterval next = _intervalOf(labels[i]);
+                      if (next != interval) onIntervalChanged(next);
+                    },
+                  ),
+                  if (i != labels.length - 1)
+                    const SizedBox(width: QzSpacing.md),
+                ],
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: QzSpacing.md),
+        ?trailing,
+      ],
     );
   }
 
@@ -136,17 +165,22 @@ class QzKlineChart extends StatelessWidget {
     return Row(
       children: <Widget>[
         _ohlcItem(c, 'O', _fmt(last?.open), c.text),
-        const SizedBox(width: QzSpacing.md),
+        const SizedBox(width: 10),
         _ohlcItem(c, 'H', _fmt(last?.high), c.statusOk),
-        const SizedBox(width: QzSpacing.md),
+        const SizedBox(width: 10),
         _ohlcItem(c, 'L', _fmt(last?.low), c.statusDanger),
-        const SizedBox(width: QzSpacing.md),
+        const SizedBox(width: 10),
         _ohlcItem(c, 'C', _fmt(last?.close), closeColor),
       ],
     );
   }
 
-  Widget _ohlcItem(QzColorScheme c, String label, String value, Color valueColor) {
+  Widget _ohlcItem(
+    QzColorScheme c,
+    String label,
+    String value,
+    Color valueColor,
+  ) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -309,7 +343,7 @@ class QzKlineChart extends StatelessWidget {
   /// 必须一次性把所有需要的颜色传进去。
   static KChartColors _buildColors(QzColorScheme c) {
     return KChartColors(
-      bgColor: c.bgSoft,
+      bgColor: c.bgElev,
       upColor: c.statusOk,
       dnColor: c.statusDanger,
       volUpColor: c.statusOk,
@@ -347,5 +381,50 @@ class QzKlineChart extends StatelessWidget {
     }
     // fallback 与 _labelOf 保持对称：均回退到 intervalOptions.first
     return intervalOptions.first.value;
+  }
+}
+
+class _IntervalTab extends StatelessWidget {
+  const _IntervalTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: QzSpacing.xs),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? c.text : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            style: TextStyle(
+              color: selected ? c.text : c.textMid,
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              height: 1.0,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

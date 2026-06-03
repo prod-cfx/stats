@@ -83,9 +83,9 @@ void main() {
   testWidgets('盘口默认双向显示买卖两侧', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.byType(OrderbookView), findsOneWidget);
-    expect(find.text('双向'), findsOneWidget);
-    expect(find.text('卖单'), findsOneWidget);
-    expect(find.text('买单'), findsOneWidget);
+    expect(find.byKey(const Key('orderbook-view-both')), findsOneWidget);
+    expect(find.byKey(const Key('orderbook-view-asks')), findsOneWidget);
+    expect(find.byKey(const Key('orderbook-view-bids')), findsOneWidget);
   });
 
   testWidgets('双向视图渲染列头与 mid 行', (WidgetTester tester) async {
@@ -101,7 +101,7 @@ void main() {
 
   testWidgets('切到卖单视图无异常且无 mid 行', (WidgetTester tester) async {
     await _pump(tester);
-    await tester.tap(find.text('卖单'));
+    await tester.tap(find.byKey(const Key('orderbook-view-asks')));
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(find.byType(OrderbookView), findsOneWidget);

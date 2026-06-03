@@ -75,20 +75,23 @@ class _WhaleTopSlideshowState extends State<WhaleTopSlideshow> {
     return Column(
       children: <Widget>[
         SizedBox(
-          height: 176,
+          height: 164,
           child: PageView.builder(
             controller: _controller,
             itemCount: widget.top3.length,
             onPageChanged: (int i) => setState(() => _index = i),
             itemBuilder: (BuildContext context, int i) {
               final WhaleLeaderEntry e = widget.top3[i];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
-                child: WhaleTopCard(
-                  entry: e,
-                  onOpen: () => widget.onOpen(e),
-                  onStats: () => widget.onStats(e),
-                  onCopy: () => widget.onCopy(e),
+              return Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
+                  child: WhaleTopCard(
+                    entry: e,
+                    onOpen: () => widget.onOpen(e),
+                    onStats: () => widget.onStats(e),
+                    onCopy: () => widget.onCopy(e),
+                  ),
                 ),
               );
             },
@@ -144,8 +147,9 @@ class WhaleTopCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final Color tint =
-        entry.avatarBgHex != null ? Color(entry.avatarBgHex!) : c.accent;
+    final Color tint = entry.avatarBgHex != null
+        ? Color(entry.avatarBgHex!)
+        : c.accent;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -211,6 +215,8 @@ class WhaleTopCard extends StatelessWidget {
                   : Colors.white,
               fontSize: 13,
               fontWeight: FontWeight.w700,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
             ),
           ),
         ),
@@ -247,8 +253,9 @@ class WhaleTopCard extends StatelessWidget {
 
   /// tier 两段渲染：圆点 + 金额（tierAmt）+ 词（tierWord），对齐设计 `:347`。
   Widget _tierRow(QzColorScheme c, Color tint) {
-    final RegExpMatch? m =
-        RegExp(r'^(\$[\d.]+[A-Z]?\+?)\s+(.+)$').firstMatch(entry.tier!);
+    final RegExpMatch? m = RegExp(
+      r'^(\$[\d.]+[A-Z]?\+?)\s+(.+)$',
+    ).firstMatch(entry.tier!);
     final String tierAmt = m != null ? m.group(1)! : entry.tier!;
     final String tierWord = m != null ? m.group(2)! : '';
     return Row(
@@ -267,6 +274,8 @@ class WhaleTopCard extends StatelessWidget {
             fontSize: 9,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.4,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
           ),
         ),
         if (tierWord.isNotEmpty) ...<Widget>[
@@ -297,10 +306,7 @@ class WhaleTopCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
-            Text(
-              '账户总价值',
-              style: TextStyle(color: c.textDim, fontSize: 10),
-            ),
+            Text('账户总价值', style: TextStyle(color: c.textDim, fontSize: 10)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
@@ -326,6 +332,8 @@ class WhaleTopCard extends StatelessWidget {
             fontSize: 17,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.4,
+            fontFamily: QzFont.mono,
+            fontFamilyFallback: QzFont.monoFallback,
           ),
         ),
       ],
@@ -390,6 +398,8 @@ class _MiniStat extends StatelessWidget {
               color: highlight ? c.marketUp : c.text,
               fontSize: 12,
               fontWeight: FontWeight.w700,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
             ),
           ),
         ],
@@ -398,8 +408,8 @@ class _MiniStat extends StatelessWidget {
   }
 
   TextAlign get _textAlign => switch (align) {
-        CrossAxisAlignment.start => TextAlign.left,
-        CrossAxisAlignment.end => TextAlign.right,
-        _ => TextAlign.center,
-      };
+    CrossAxisAlignment.start => TextAlign.left,
+    CrossAxisAlignment.end => TextAlign.right,
+    _ => TextAlign.center,
+  };
 }

@@ -10,7 +10,6 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
 import '../../widgets/qz_chip.dart';
-import '../../widgets/qz_segmented_tabs.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import 'widgets/live_close_with_position_sheet.dart';
@@ -48,8 +47,9 @@ class _LiveStrategyDetailPageState
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<LiveStrategy> strategy =
-        ref.watch(liveStrategyDetailProvider(widget.id));
+    final AsyncValue<LiveStrategy> strategy = ref.watch(
+      liveStrategyDetailProvider(widget.id),
+    );
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -98,7 +98,7 @@ class _LiveStrategyDetailPageState
                 children: <Widget>[
                   _Hero(strategy: s),
                   const SizedBox(height: QzSpacing.md),
-                  QzSegmentedTabs(
+                  _DetailTabs(
                     options: <String>[
                       l10n.liveTabOverview,
                       l10n.liveTabPositions,
@@ -158,6 +158,88 @@ class _LiveStrategyDetailPageState
     if (label == l10n.liveTabHistory) return 'history';
     if (label == l10n.liveTabParams) return 'params';
     return 'overview';
+  }
+}
+
+class _DetailTabs extends StatelessWidget {
+  const _DetailTabs({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<String> options;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: c.bgSoft,
+        border: Border.all(color: c.borderSoft),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: <Widget>[
+          for (final String opt in options)
+            Expanded(
+              child: _DetailTabButton(
+                label: opt,
+                selected: opt == value,
+                onTap: () => onChanged(opt),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailTabButton extends StatelessWidget {
+  const _DetailTabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final BorderRadius radius = BorderRadius.circular(7);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Container(
+          height: 32,
+          decoration: BoxDecoration(
+            color: selected ? c.bgElev : Colors.transparent,
+            borderRadius: radius,
+            boxShadow: selected ? QzShadow.lightSm : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: selected ? c.accent : c.textMid,
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -357,7 +439,11 @@ class _OverviewTab extends StatelessWidget {
         '${strategy.totalPct >= 0 ? '+' : ''}${strategy.totalPct.toStringAsFixed(2)}%',
         strategy.totalPct >= 0 ? c.marketUp : c.marketDown,
       ),
-      (l10n.liveStatCapital, '\$${strategy.capital.toStringAsFixed(0)}', c.text),
+      (
+        l10n.liveStatCapital,
+        '\$${strategy.capital.toStringAsFixed(0)}',
+        c.text,
+      ),
       (
         l10n.liveStatTrades,
         '${strategy.trades} ${l10n.liveStatTradesUnit}'.trim(),
@@ -543,9 +629,9 @@ class _ArchiveRow extends StatelessWidget {
       borderRadius: radius,
       child: InkWell(
         // 脚本/回测/部署档案依赖真实部署数据（future），本迭代保持禁用占位。
-        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.liveArchiveComingSoon)),
-        ),
+        onTap: () => ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.liveArchiveComingSoon))),
         borderRadius: radius,
         child: Container(
           decoration: BoxDecoration(
@@ -587,10 +673,7 @@ class _ArchiveRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      sub,
-                      style: TextStyle(color: c.textDim, fontSize: 11),
-                    ),
+                    Text(sub, style: TextStyle(color: c.textDim, fontSize: 11)),
                   ],
                 ),
               ),
@@ -611,8 +694,9 @@ class _PositionsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<LiveStrategyPosition?> pos =
-        ref.watch(liveStrategyPositionProvider(id));
+    final AsyncValue<LiveStrategyPosition?> pos = ref.watch(
+      liveStrategyPositionProvider(id),
+    );
     return pos.when(
       loading: () => const Center(child: QzSpinner()),
       error: (Object e, StackTrace _) => const SizedBox.shrink(),
@@ -671,8 +755,9 @@ class _PositionCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (long ? c.marketUp : c.marketDown)
-                      .withValues(alpha: 0.14),
+                  color: (long ? c.marketUp : c.marketDown).withValues(
+                    alpha: 0.14,
+                  ),
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
@@ -805,8 +890,8 @@ class _PriceCell extends StatelessWidget {
     final TextAlign ta = align == CrossAxisAlignment.start
         ? TextAlign.left
         : align == CrossAxisAlignment.end
-            ? TextAlign.right
-            : TextAlign.center;
+        ? TextAlign.right
+        : TextAlign.center;
     return Column(
       crossAxisAlignment: align,
       children: <Widget>[
@@ -836,8 +921,9 @@ class _HistoryTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<List<LiveStrategyTrade>> trades =
-        ref.watch(liveStrategyTradesProvider(id));
+    final AsyncValue<List<LiveStrategyTrade>> trades = ref.watch(
+      liveStrategyTradesProvider(id),
+    );
     return trades.when(
       loading: () => const Center(child: QzSpinner()),
       error: (Object e, StackTrace _) => const SizedBox.shrink(),
@@ -882,8 +968,9 @@ class _TradeRow extends StatelessWidget {
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: (trade.win ? c.marketUp : c.marketDown)
-                .withValues(alpha: 0.14),
+            color: (trade.win ? c.marketUp : c.marketDown).withValues(
+              alpha: 0.14,
+            ),
             borderRadius: BorderRadius.circular(6),
           ),
           alignment: Alignment.center,
@@ -947,8 +1034,9 @@ class _ParamsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<List<LiveStrategyParam>> params =
-        ref.watch(liveStrategyParamsProvider(id));
+    final AsyncValue<List<LiveStrategyParam>> params = ref.watch(
+      liveStrategyParamsProvider(id),
+    );
     return params.when(
       loading: () => const Center(child: QzSpinner()),
       error: (Object e, StackTrace _) => const SizedBox.shrink(),
@@ -1046,13 +1134,14 @@ class _StickyAction extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final LiveStrategyStatus status = strategy.status;
     final bool stopped = status == LiveStrategyStatus.stopped;
-    final bool canStart = status == LiveStrategyStatus.paused ||
+    final bool canStart =
+        status == LiveStrategyStatus.paused ||
         status == LiveStrategyStatus.warning;
     final String primary = stopped
         ? l10n.liveActionResume
         : canStart
-            ? l10n.liveActionStart
-            : l10n.liveActionPause;
+        ? l10n.liveActionStart
+        : l10n.liveActionPause;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(
@@ -1079,7 +1168,9 @@ class _StickyAction extends ConsumerWidget {
                 side: BorderSide(color: c.statusDanger.withValues(alpha: 0.4)),
               ),
               child: Text(
-                stopped ? l10n.liveActionDeletePermanent : l10n.liveActionDelete,
+                stopped
+                    ? l10n.liveActionDeletePermanent
+                    : l10n.liveActionDelete,
                 style: TextStyle(color: c.statusDanger),
               ),
             ),
@@ -1103,8 +1194,9 @@ class _StickyAction extends ConsumerWidget {
   }
 
   Future<void> _onPrimary(BuildContext context, WidgetRef ref) async {
-    final LiveStrategyStore store =
-        ref.read(liveStrategyStoreProvider.notifier);
+    final LiveStrategyStore store = ref.read(
+      liveStrategyStoreProvider.notifier,
+    );
     switch (strategy.status) {
       case LiveStrategyStatus.paused:
       case LiveStrategyStatus.warning:
@@ -1120,8 +1212,9 @@ class _StickyAction extends ConsumerWidget {
     WidgetRef ref,
     LiveStrategyStore store,
   ) async {
-    final LiveStrategyPosition? position =
-        await ref.read(liveStrategyPositionProvider(strategy.id).future);
+    final LiveStrategyPosition? position = await ref.read(
+      liveStrategyPositionProvider(strategy.id).future,
+    );
     if (!context.mounted) return;
     if (position == null) {
       store.pause(strategy.id);
@@ -1137,8 +1230,9 @@ class _StickyAction extends ConsumerWidget {
   }
 
   Future<void> _onDelete(BuildContext context, WidgetRef ref) async {
-    final LiveStrategyStore store =
-        ref.read(liveStrategyStoreProvider.notifier);
+    final LiveStrategyStore store = ref.read(
+      liveStrategyStoreProvider.notifier,
+    );
     if (strategy.status == LiveStrategyStatus.running) {
       final bool? goPause = await LiveNeedPauseSheet.show(
         context,

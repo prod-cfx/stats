@@ -15,10 +15,7 @@ GoRouter _router() {
   return GoRouter(
     initialLocation: '/me/live',
     routes: <RouteBase>[
-      GoRoute(
-        path: '/me/live',
-        builder: (_, _) => const LiveStrategiesPage(),
-      ),
+      GoRoute(path: '/me/live', builder: (_, _) => const LiveStrategiesPage()),
       GoRoute(
         path: '/me/live/:id',
         builder: (BuildContext _, GoRouterState s) => Scaffold(
@@ -35,9 +32,7 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final ProviderContainer container = ProviderContainer(
-    overrides: <Override>[
-      sharedPreferencesProvider.overrideWithValue(prefs),
-    ],
+    overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -81,8 +76,29 @@ void main() {
     expect(find.text('detail QF-AY7K2P'), findsOneWidget);
   });
 
-  testWidgets('已停止筛选展示 stopped 策略 + 保留提示',
-      (WidgetTester tester) async {
+  testWidgets('更多按钮打开动作菜单，查看详情进入详情页', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('live-card-menu')).first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('live-action-view')), findsOneWidget);
+    expect(find.byKey(const Key('live-action-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('live-action-delete')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('live-action-view')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-stub')), findsOneWidget);
+    expect(find.text('detail QF-AY7K2P'), findsOneWidget);
+  });
+
+  testWidgets('暂停按钮按设计稿打开持仓处理 sheet', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('live-card-toggle')).first);
+    await tester.pumpAndSettle();
+    expect(find.text('暂停策略'), findsWidgets);
+    expect(find.textContaining('BTC 趋势 · 双均线'), findsWidgets);
+  });
+
+  testWidgets('已停止筛选展示 stopped 策略 + 保留提示', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.text('已停止 1'));
     await tester.pumpAndSettle();
@@ -96,13 +112,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('筛选 & 排序'), findsOneWidget);
     expect(find.byKey(const Key('live-sort-apply')), findsOneWidget);
+    expect(find.byKey(const Key('live-sort-status-all')), findsOneWidget);
+    expect(find.byKey(const Key('live-sort-status-stopped')), findsOneWidget);
     // 6 个排序指标可选
     expect(find.byKey(const Key('live-sort-metric-todayPnl')), findsOneWidget);
     expect(find.byKey(const Key('live-sort-metric-winRate')), findsOneWidget);
   });
 
-  testWidgets('排序生效：按累计盈亏升序后首卡为最小盈亏策略',
-      (WidgetTester tester) async {
+  testWidgets('排序 sheet 状态筛选生效：选择已停止展示 stopped 策略', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('live-sort-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('live-sort-status-stopped')));
+    await tester.pumpAndSettle();
+    expect(find.text('查看 1 个策略'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('live-sort-apply')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('live-card-QF-5J1RT8')), findsOneWidget);
+    expect(find.byKey(const Key('live-card-QF-AY7K2P')), findsNothing);
+  });
+
+  testWidgets('排序生效：按累计盈亏升序后首卡为最小盈亏策略', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('live-sort-button')));
     await tester.pumpAndSettle();
@@ -114,10 +146,12 @@ void main() {
     await tester.tap(find.byKey(const Key('live-sort-apply')));
     await tester.pumpAndSettle();
     // all 过滤排除 stopped；活跃 4 条累计盈亏最小为 QF-DK4F71（+20.80）
-    final Offset first =
-        tester.getTopLeft(find.byKey(const Key('live-card-QF-DK4F71')));
-    final Offset btc =
-        tester.getTopLeft(find.byKey(const Key('live-card-QF-AY7K2P')));
+    final Offset first = tester.getTopLeft(
+      find.byKey(const Key('live-card-QF-DK4F71')),
+    );
+    final Offset btc = tester.getTopLeft(
+      find.byKey(const Key('live-card-QF-AY7K2P')),
+    );
     expect(first.dy, lessThan(btc.dy));
   });
 }

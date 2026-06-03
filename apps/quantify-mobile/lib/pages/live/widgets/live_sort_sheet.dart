@@ -8,9 +8,39 @@ import '../../../theme/tokens.dart';
 
 /// 排序选择结果（#1773）。
 class LiveSortSelection {
-  const LiveSortSelection(this.metric, this.direction);
+  const LiveSortSelection(this.metric, this.direction, this.status);
   final LiveSortMetric? metric;
   final LiveSortDirection direction;
+  final LiveSortStatus status;
+}
+
+enum LiveSortStatus { all, running, paused, stopped }
+
+class LiveSortStatusCounts {
+  const LiveSortStatusCounts({
+    required this.all,
+    required this.running,
+    required this.paused,
+    required this.stopped,
+  });
+
+  final int all;
+  final int running;
+  final int paused;
+  final int stopped;
+
+  int countOf(LiveSortStatus status) {
+    switch (status) {
+      case LiveSortStatus.all:
+        return all;
+      case LiveSortStatus.running:
+        return running;
+      case LiveSortStatus.paused:
+        return paused;
+      case LiveSortStatus.stopped:
+        return stopped;
+    }
+  }
 }
 
 /// 筛选 & 排序 bottom sheet（#1773）。
@@ -23,19 +53,22 @@ class LiveSortSheet extends StatefulWidget {
     super.key,
     required this.metric,
     required this.direction,
-    required this.resultCount,
+    required this.status,
+    required this.statusCounts,
   });
 
   final LiveSortMetric? metric;
   final LiveSortDirection direction;
-  final int resultCount;
+  final LiveSortStatus status;
+  final LiveSortStatusCounts statusCounts;
 
   /// 打开 sheet 并返回选择结果；用户取消返回 null。
   static Future<LiveSortSelection?> show(
     BuildContext context, {
     required LiveSortMetric? metric,
     required LiveSortDirection direction,
-    required int resultCount,
+    required LiveSortStatus status,
+    required LiveSortStatusCounts statusCounts,
   }) {
     return showModalBottomSheet<LiveSortSelection>(
       context: context,
@@ -44,7 +77,8 @@ class LiveSortSheet extends StatefulWidget {
       builder: (BuildContext ctx) => LiveSortSheet(
         metric: metric,
         direction: direction,
-        resultCount: resultCount,
+        status: status,
+        statusCounts: statusCounts,
       ),
     );
   }
@@ -56,6 +90,9 @@ class LiveSortSheet extends StatefulWidget {
 class _LiveSortSheetState extends State<LiveSortSheet> {
   late LiveSortMetric? _metric = widget.metric;
   late LiveSortDirection _direction = widget.direction;
+  late LiveSortStatus _status = widget.status;
+
+  int get _resultCount => widget.statusCounts.countOf(_status);
 
   void _selectMetric(LiveSortMetric m) {
     setState(() {
@@ -92,6 +129,19 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
     }
   }
 
+  String _statusLabel(LiveSortStatus status, AppLocalizations l10n) {
+    switch (status) {
+      case LiveSortStatus.all:
+        return l10n.liveFilterAll;
+      case LiveSortStatus.running:
+        return l10n.liveFilterRunning;
+      case LiveSortStatus.paused:
+        return l10n.liveFilterPaused;
+      case LiveSortStatus.stopped:
+        return l10n.liveFilterStopped;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -102,13 +152,9 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
       decoration: BoxDecoration(
         color: c.bgElev,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: QzShadow.lightLg,
       ),
-      padding: EdgeInsets.fromLTRB(
-        QzSpacing.lg,
-        QzSpacing.sm,
-        QzSpacing.lg,
-        QzSpacing.xl + safe.bottom,
-      ),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 28 + safe.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,7 +163,7 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
             child: Container(
               width: 42,
               height: 4,
-              margin: const EdgeInsets.only(bottom: QzSpacing.md),
+              margin: const EdgeInsets.only(top: 10, bottom: 14),
               decoration: BoxDecoration(
                 color: c.border,
                 borderRadius: BorderRadius.circular(2),
@@ -132,7 +178,28 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: QzSpacing.md),
+          const SizedBox(height: 12),
+          Text(
+            l10n.liveSortStatusLabel,
+            style: TextStyle(color: c.textMid, fontSize: 11),
+          ),
+          const SizedBox(height: QzSpacing.xs),
+          Wrap(
+            spacing: QzSpacing.xs,
+            runSpacing: QzSpacing.xs,
+            children: <Widget>[
+              for (final LiveSortStatus status in LiveSortStatus.values)
+                _StatusPill(
+                  key: Key('live-sort-status-${status.name}'),
+                  label: _statusLabel(status, l10n),
+                  count: widget.statusCounts.countOf(status),
+                  selected: _status == status,
+                  scheme: c,
+                  onTap: () => setState(() => _status = status),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
           Text(
             l10n.liveSortMetricLabel,
             style: TextStyle(color: c.textMid, fontSize: 11),
@@ -152,7 +219,7 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
                 ),
             ],
           ),
-          const SizedBox(height: QzSpacing.md),
+          const SizedBox(height: 16),
           Text(
             l10n.liveSortDirectionLabel,
             style: TextStyle(color: c.textMid, fontSize: 11),
@@ -185,19 +252,79 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
               ),
             ],
           ),
-          const SizedBox(height: QzSpacing.lg),
-          FilledButton(
+          const SizedBox(height: 16),
+          _ApplyButton(
             key: const Key('live-sort-apply'),
-            onPressed: () => Navigator.of(context).pop(
-              LiveSortSelection(_metric, _direction),
-            ),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(46),
-              backgroundColor: c.accent,
-            ),
-            child: Text(l10n.liveSortApply(widget.resultCount)),
+            label: l10n.liveSortApply(_resultCount),
+            onTap: () => Navigator.of(
+              context,
+            ).pop(LiveSortSelection(_metric, _direction, _status)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    super.key,
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.scheme,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool selected;
+  final QzColorScheme scheme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final BorderRadius radius = BorderRadius.circular(QzRadii.pill);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          decoration: BoxDecoration(
+            color: selected ? scheme.accent : scheme.bgSoft,
+            borderRadius: radius,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : scheme.text,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '$count',
+                style: TextStyle(
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.75)
+                      : scheme.textDim,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: QzFont.mono,
+                  fontFamilyFallback: QzFont.monoFallback,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -226,21 +353,60 @@ class _SortPill extends StatelessWidget {
         borderRadius: radius,
         child: Container(
           height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: selected ? scheme.accentSoft : scheme.bgSoft,
-            border: Border.all(
-              color: selected ? scheme.accentRing : Colors.transparent,
-            ),
+            color: selected ? scheme.accent : scheme.bgSoft,
             borderRadius: radius,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : scheme.text,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ApplyButton extends StatelessWidget {
+  const _ApplyButton({super.key, required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 46,
+          decoration: BoxDecoration(
+            gradient: c.accentGrad,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: <BoxShadow>[c.accentShadow],
           ),
           alignment: Alignment.center,
           child: Text(
             label,
-            style: TextStyle(
-              color: selected ? scheme.accent : scheme.text,
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

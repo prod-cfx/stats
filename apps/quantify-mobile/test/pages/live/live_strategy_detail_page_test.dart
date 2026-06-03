@@ -45,9 +45,7 @@ Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final ProviderContainer container = ProviderContainer(
-    overrides: <Override>[
-      sharedPreferencesProvider.overrideWithValue(prefs),
-    ],
+    overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -84,6 +82,17 @@ void main() {
     expect(find.text('策略档案'), findsOneWidget);
   });
 
+  testWidgets('详情 tabs 单行四等分对齐设计稿', (WidgetTester tester) async {
+    await _pump(tester, 'QF-AY7K2P');
+    final double overviewY = tester.getTopLeft(find.text('概览')).dy;
+    final double positionsY = tester.getTopLeft(find.text('持仓')).dy;
+    final double historyY = tester.getTopLeft(find.text('交易记录')).dy;
+    final double paramsY = tester.getTopLeft(find.text('参数')).dy;
+    expect(positionsY, overviewY);
+    expect(historyY, overviewY);
+    expect(paramsY, overviewY);
+  });
+
   testWidgets('切到持仓 tab：running 策略展示持仓', (WidgetTester tester) async {
     await _pump(tester, 'QF-AY7K2P');
     await tester.tap(find.text('持仓'));
@@ -115,8 +124,7 @@ void main() {
     expect(find.text('leverage'), findsOneWidget);
   });
 
-  testWidgets('running 暂停：弹持仓处理对话框，确认后转已暂停',
-      (WidgetTester tester) async {
+  testWidgets('running 暂停：弹持仓处理对话框，确认后转已暂停', (WidgetTester tester) async {
     await _pump(tester, 'QF-AY7K2P');
     // 主操作 = 暂停（running）
     await tester.tap(find.byKey(const Key('live-primary-action')));

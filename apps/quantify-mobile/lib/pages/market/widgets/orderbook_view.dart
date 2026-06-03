@@ -37,12 +37,17 @@ List<OrderbookLevel> aggregateLevels(
         : (lvl.price / precision).ceilToDouble() * precision;
     buckets[bucket] = (buckets[bucket] ?? 0) + lvl.quantity;
   }
-  final List<OrderbookLevel> out = buckets.entries
-      .map((MapEntry<double, double> e) =>
-          OrderbookLevel(price: e.key, quantity: e.value))
-      .toList()
-    ..sort((OrderbookLevel a, OrderbookLevel b) =>
-        isBid ? b.price.compareTo(a.price) : a.price.compareTo(b.price));
+  final List<OrderbookLevel> out =
+      buckets.entries
+          .map(
+            (MapEntry<double, double> e) =>
+                OrderbookLevel(price: e.key, quantity: e.value),
+          )
+          .toList()
+        ..sort(
+          (OrderbookLevel a, OrderbookLevel b) =>
+              isBid ? b.price.compareTo(a.price) : a.price.compareTo(b.price),
+        );
   return out;
 }
 
@@ -175,13 +180,21 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: QzSpinner());
     if (_error != null || _snapshot == null) {
-      return QzEmptyState(title: AppLocalizations.of(context).orderbookLoadError);
+      return QzEmptyState(
+        title: AppLocalizations.of(context).orderbookLoadError,
+      );
     }
     final OrderbookSnapshot snap = _snapshot!;
-    final List<OrderbookLevel> bids =
-        aggregateLevels(snap.bids, _precision, true).take(10).toList();
-    final List<OrderbookLevel> asks =
-        aggregateLevels(snap.asks, _precision, false).take(10).toList();
+    final List<OrderbookLevel> bids = aggregateLevels(
+      snap.bids,
+      _precision,
+      true,
+    ).take(10).toList();
+    final List<OrderbookLevel> asks = aggregateLevels(
+      snap.asks,
+      _precision,
+      false,
+    ).take(10).toList();
 
     // 累计量：从 mid 向外累加。bid 价高在前（近 mid），ask 价低在前（近 mid）。
     final List<double> bidCum = _cumulative(bids);
@@ -204,7 +217,6 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
           onViewChanged: (ObView v) => setState(() => _view = v),
           onPrecisionTap: _openPrecisionSheet,
         ),
-        const SizedBox(height: QzSpacing.sm),
         _Header(base: base, quote: quote),
         _body(bids, asks, bidCum, askCum, maxCum, mid),
       ],
@@ -242,9 +254,10 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
     final bool showAsks = _view != ObView.bids;
     final bool showBids = _view != ObView.asks;
     // ask 渲染需价高在上：列表近 mid 在前，倒序后高价落顶部。
-    final List<int> askOrder = List<int>.generate(asks.length, (int i) => i)
-        .reversed
-        .toList();
+    final List<int> askOrder = List<int>.generate(
+      asks.length,
+      (int i) => i,
+    ).reversed.toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -256,7 +269,8 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
               maxCum: maxCum,
               isBid: false,
             ),
-        if (_view == ObView.both) _MidRow(mid: mid, changePercent: widget.changePercent),
+        if (_view == ObView.both)
+          _MidRow(mid: mid, changePercent: widget.changePercent),
         if (showBids)
           for (int i = 0; i < bids.length; i++)
             _OrderRow(
@@ -293,49 +307,98 @@ class _Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    return Row(
-      children: <Widget>[
-        IconButton(
-          tooltip: l10n.orderbookRefreshFuture,
-          icon: const Icon(Icons.refresh, size: 16),
-          color: c.textDim,
-          onPressed: null, // future（#1682/#1683 真实数据接入后启用）
-        ),
-        _ViewSegmented(view: view, onChanged: onViewChanged),
-        IconButton(
-          tooltip: l10n.orderbookSortFuture,
-          icon: const Icon(Icons.swap_vert, size: 16),
-          color: c.textDim,
-          onPressed: null, // future
-        ),
-        const Spacer(),
-        OutlinedButton(
-          onPressed: onPrecisionTap,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(0, 28),
-            padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
-            side: BorderSide(color: c.border),
-            foregroundColor: c.text,
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.lg,
+        vertical: QzSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border(bottom: BorderSide(color: c.borderSoft)),
+      ),
+      child: Row(
+        children: <Widget>[
+          _ToolbarIconButton(
+            tooltip: l10n.orderbookRefreshFuture,
+            icon: Icons.refresh,
+            onTap: null, // future（#1682/#1683 真实数据接入后启用）
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                _fmtPrecision(precision),
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: QzFont.mono,
-                  fontFamilyFallback: QzFont.monoFallback,
+          const SizedBox(width: QzSpacing.xs),
+          _ViewSegmented(view: view, onChanged: onViewChanged),
+          const SizedBox(width: QzSpacing.xs),
+          _ToolbarIconButton(
+            tooltip: l10n.orderbookSortFuture,
+            icon: Icons.swap_vert,
+            onTap: null, // future
+          ),
+          const Spacer(),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPrecisionTap,
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                height: 24,
+                padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
+                decoration: BoxDecoration(
+                  color: c.bgElev,
+                  border: Border.all(color: c.border),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      _fmtPrecision(precision),
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: QzFont.mono,
+                        fontFamilyFallback: QzFont.monoFallback,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.keyboard_arrow_down, size: 12, color: c.textMid),
+                  ],
                 ),
               ),
-              const SizedBox(width: 2),
-              Icon(Icons.keyboard_arrow_down, size: 14, color: c.textMid),
-            ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarIconButton extends StatelessWidget {
+  const _ToolbarIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            width: 26,
+            height: 24,
+            child: Icon(icon, size: 14, color: c.textDim),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -350,11 +413,24 @@ class _ViewSegmented extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<(ObView, String)> items = <(ObView, String)>[
-      (ObView.both, l10n.orderbookViewBoth),
-      (ObView.asks, l10n.orderbookViewAsks),
-      (ObView.bids, l10n.orderbookViewBids),
-    ];
+    final List<({ObView view, String label, Key key})> items =
+        <({ObView view, String label, Key key})>[
+          (
+            view: ObView.both,
+            label: l10n.orderbookViewBoth,
+            key: const Key('orderbook-view-both'),
+          ),
+          (
+            view: ObView.asks,
+            label: l10n.orderbookViewAsks,
+            key: const Key('orderbook-view-asks'),
+          ),
+          (
+            view: ObView.bids,
+            label: l10n.orderbookViewBids,
+            key: const Key('orderbook-view-bids'),
+          ),
+        ];
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
@@ -365,30 +441,70 @@ class _ViewSegmented extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          for (final (ObView, String) item in items)
-            GestureDetector(
-              onTap: () => onChanged(item.$1),
+          for (final item in items)
+            Tooltip(
+              message: item.label,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: QzSpacing.sm,
-                  vertical: 4,
-                ),
+                key: item.key,
                 decoration: BoxDecoration(
-                  color: view == item.$1 ? c.bgElev : Colors.transparent,
+                  color: view == item.view ? c.bgElev : Colors.transparent,
                   borderRadius: BorderRadius.circular(5),
                 ),
-                child: Text(
-                  item.$2,
-                  style: TextStyle(
-                    color: view == item.$1 ? c.accent : c.textMid,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                child: GestureDetector(
+                  onTap: () => onChanged(item.view),
+                  child: SizedBox(
+                    width: 26,
+                    height: 22,
+                    child: Center(
+                      child: _ObViewIcon(
+                        view: item.view,
+                        color: view == item.view ? c.accent : c.textMid,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _ObViewIcon extends StatelessWidget {
+  const _ObViewIcon({required this.view, required this.color});
+
+  final ObView view;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<double> widths = switch (view) {
+      ObView.asks => <double>[12, 9, 6],
+      ObView.bids => <double>[6, 9, 12],
+      ObView.both => <double>[11, 8, 11],
+    };
+    final List<double> opacities = switch (view) {
+      ObView.asks => <double>[0.9, 0.7, 0.5],
+      ObView.bids => <double>[0.5, 0.7, 0.9],
+      ObView.both => <double>[0.85, 0.85, 0.55],
+    };
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        for (int i = 0; i < widths.length; i++) ...<Widget>[
+          Container(
+            width: widths[i],
+            height: 1.8,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: opacities[i]),
+              borderRadius: BorderRadius.circular(0.5),
+            ),
+          ),
+          if (i != widths.length - 1) const SizedBox(height: 3),
+        ],
+      ],
     );
   }
 }
@@ -405,13 +521,16 @@ class _Header extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     TextStyle style() => TextStyle(
-          color: c.textDim,
-          fontSize: 10,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        );
+      color: c.textDim,
+      fontSize: 10,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.lg,
+        vertical: 6,
+      ),
       child: Row(
         children: <Widget>[
           Expanded(child: Text(l10n.orderbookColPrice(quote), style: style())),
@@ -453,16 +572,17 @@ class _OrderRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final Color color = isBid ? c.marketUp : c.marketDown;
-    final double widthFactor =
-        maxCum > 0 ? (cum / maxCum).clamp(0.0, 1.0) : 0.0;
+    final double widthFactor = maxCum > 0
+        ? (cum / maxCum).clamp(0.0, 1.0)
+        : 0.0;
     // 委托额 = 价格 × 累计数量（notional），设计稿口径。
     final double notional = level.price * cum;
     TextStyle mono(Color col) => TextStyle(
-          color: col,
-          fontSize: 12,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        );
+      color: col,
+      fontSize: 12,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
     return Stack(
       children: <Widget>[
         Positioned.fill(
@@ -475,14 +595,14 @@ class _OrderRow extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
+          padding: const EdgeInsets.symmetric(
+            horizontal: QzSpacing.lg,
+            vertical: 5,
+          ),
           child: Row(
             children: <Widget>[
               Expanded(
-                child: Text(
-                  level.price.toStringAsFixed(2),
-                  style: mono(color),
-                ),
+                child: Text(level.price.toStringAsFixed(2), style: mono(color)),
               ),
               Expanded(
                 child: Text(
@@ -517,11 +637,10 @@ class _MidRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final double? pct = changePercent;
-    final Color pctColor =
-        pct == null || pct >= 0 ? c.marketUp : c.marketDown;
+    final Color pctColor = pct == null || pct >= 0 ? c.marketUp : c.marketDown;
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: QzSpacing.sm,
+        horizontal: QzSpacing.lg,
         vertical: 10,
       ),
       decoration: BoxDecoration(
