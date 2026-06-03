@@ -9,6 +9,12 @@ export function renderCryptoCoverageMarkdown(report: CryptoCoverageReport): stri
   const unsupportedRows = report.unsupported
     .map(item => `| ${item.caseId} | ${item.matchedPhrase} | ${item.publicReason} |`)
     .join('\n')
+  const taxonomyRows = report.taxonomy.families
+    .map(item => `| ${item.familyId} | ${item.scope} | ${item.weightPct}% | ${item.covered ? 'yes' : 'no'} | ${item.corpusCaseIds.length} | ${item.weightSource} |`)
+    .join('\n')
+  const caseRows = report.taxonomy.caseMappings
+    .map((item, index) => `| ${index + 1} | ${item.caseId} | ${item.scope} | ${item.labels.join(', ')} | ${item.familyIds.join(', ')} | ${item.source} | ${item.passed ? 'passed' : 'failed'} |`)
+    .join('\n')
 
   return [
     '# Crypto Strategy Coverage Report',
@@ -18,6 +24,28 @@ export function renderCryptoCoverageMarkdown(report: CryptoCoverageReport): stri
     `- Pass rate: ${report.summary.passPct}%`,
     `- Weighted B coverage: ${report.summary.weightedBCoveragePct}%`,
     `- C-scope unsupported: ${report.summary.unsupportedCCount}`,
+    `- Taxonomy target: ${report.taxonomy.targetCoveragePct}%`,
+    `- Taxonomy achieved: ${report.taxonomy.achievedCoveragePct}%`,
+    `- Taxonomy denominator: ${report.taxonomy.denominator}`,
+    `- Taxonomy corpus: ${report.taxonomy.corpusSource}`,
+    '',
+    '## Taxonomy Evidence',
+    '',
+    `Weight source: ${report.taxonomy.weightSource}`,
+    '',
+    'Limitations:',
+    '',
+    ...report.taxonomy.sourceLimitations.map(item => `- ${item}`),
+    '',
+    '| Family | Scope | Weight | Covered | Cases | Weight source |',
+    '| --- | --- | --- | --- | ---: | --- |',
+    taxonomyRows || '| none | none | 0% | no | 0 | none |',
+    '',
+    '## Corpus Case Mapping',
+    '',
+    '| No. | Case | Scope | Labels | Taxonomy families | Source | Status |',
+    '| ---: | --- | --- | --- | --- | --- | --- |',
+    caseRows || '| 0 | none | none | none | none | none | none |',
     '',
     '## Atom Backlog',
     '',

@@ -42,6 +42,37 @@ describe('crypto coverage reporter', () => {
     expect(report.summary.unsupportedCCount).toBe(1)
     expect(report.failures).toHaveLength(1)
   })
+
+  it('keeps taxonomy B denominator weighted to 100 and excludes unsupported C families', () => {
+    const cases: CryptoCaseEvidence[] = [
+      { id: 'stage4-simple-trend-ema-cross-stop-sizing', labels: ['simple_trend'], scope: 'B', passed: true, expectedAtomKeys: ['indicator.cross_over'], observedAtomKeys: ['indicator.cross_over'], failures: [] },
+      { id: 'crypto-c-hft-market-making', labels: ['unsupported', 'hft'], scope: 'C', passed: true, expectedAtomKeys: ['unsupported.hft_market_making'], observedAtomKeys: ['unsupported.hft_market_making'], failures: [] },
+    ]
+    const report = buildCryptoCoverageReport({ atoms: [], cases, unsupported: [{ caseId: 'crypto-c-hft-market-making', matchedPhrase: 'HFT', status: 'unsupported_out_of_scope', publicReason: 'hft_market_making_out_of_scope' }] })
+    const bFamilies = report.taxonomy.families.filter(item => item.denominatorIncluded)
+    const cFamilies = report.taxonomy.families.filter(item => item.scope === 'C')
+
+    expect(bFamilies.reduce((sum, item) => sum + item.weightPct, 0)).toBe(100)
+    expect(cFamilies.every(item => item.weightPct === 0 && !item.denominatorIncluded)).toBe(true)
+    expect(report.taxonomy.denominator).toBe('B_supported_strategy_families')
+    expect(report.taxonomy.sourceLimitations).toContain('Evidence proves repository corpus coverage, not market-share coverage from an external user dataset.')
+  })
+
+  it('maps all 50 corpus cases to taxonomy proof entries', async () => {
+    const results = await Promise.all(CRYPTO_STRATEGY_COVERAGE_CORPUS.map(async caseItem => runCryptoCoverageCase(caseItem)))
+    const report = buildCryptoCoverageReport({
+      cases: results.map(item => item.caseEvidence),
+      atoms: results.flatMap(item => item.atomEvidence),
+      unsupported: results.flatMap(item => item.unsupported),
+    })
+    const unmapped = report.taxonomy.caseMappings.filter(item => item.familyIds.length === 0)
+    const uncoveredBFamilies = report.taxonomy.families.filter(item => item.denominatorIncluded && !item.covered)
+
+    expect(report.taxonomy.caseMappings).toHaveLength(50)
+    expect(unmapped).toEqual([])
+    expect(uncoveredBFamilies).toEqual([])
+    expect(report.taxonomy.achievedCoveragePct).toBeGreaterThanOrEqual(90)
+  })
 })
 
 describe('crypto coverage runner helpers', () => {
