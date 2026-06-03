@@ -623,7 +623,7 @@ export class CanonicalSpecBuilderService {
           ?? { mode: 'RATIO' as const, value: 0.1 }
         )
     const orderPrograms = this.buildOrderProgramsFromSemanticRulesMainflow(mainflow, state)
-    const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing)
+    const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing, market.defaultTimeframe)
     const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow, state)
     const orchestrationGates = this.buildOrchestrationGatesFromSemanticRulesMainflow(mainflow, orchestrationPrograms)
     const orchestrationScopes = [
@@ -847,10 +847,10 @@ export class CanonicalSpecBuilderService {
   private buildCanonicalRulesFromSemanticRulesMainflow(
     mainflow: RulesMainflowView,
     sizing: CanonicalStrategySpecV2['sizing'],
+    defaultTimeframe: string | null,
   ): CanonicalRuleV2[] {
     const canonicalRules: CanonicalRuleV2[] = []
     let riskPriority = 120
-    const defaultTimeframe = null
 
     for (const [ruleIndex, rule] of mainflow.rules.entries()) {
       if (rule.phase === 'entry' || rule.phase === 'exit') {
@@ -1031,6 +1031,33 @@ export class CanonicalSpecBuilderService {
           sameRulePositionLeaves,
         }))
       }
+
+      for (const leaf of mainflow.byRole.position.filter(leaf => leaf.ruleId === rule.id && leaf.key === 'position.max_concurrent_positions')) {
+        const count = this.readFiniteNumber(leaf.params.count)
+        if (count === null || count <= 0) {
+          throw new Error(`InvalidSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        }
+        canonicalRules.push({
+          id: `semantic-max-concurrent-${rule.id}-${this.stableRulesPathId(leaf.path)}`,
+          phase: 'gate',
+          sideScope: 'both',
+          priority: riskPriority,
+          condition: {
+            kind: 'atom',
+            key: leaf.key,
+            semanticScope: 'portfolio',
+            op: 'LT',
+            value: count,
+            params: { count },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY', atomKey: leaf.key, sourcePath: leaf.path }],
+          metadata: {
+            semanticKey: leaf.key,
+            sourcePath: leaf.path,
+          },
+        })
+        riskPriority -= 1
+      }
     }
 
     return canonicalRules
@@ -1065,6 +1092,7 @@ export class CanonicalSpecBuilderService {
     return key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
       || key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
       || key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
+      || key === 'risk.kill_switch'
   }
 
   private ruleConditionReferencesPreviousExtrema(condition: AtomExpr): boolean {
@@ -1353,9 +1381,41 @@ export class CanonicalSpecBuilderService {
         },
       }
     }
+    if (input.leaf.key === 'risk.daily_loss_limit') {
+      const rawValuePct = this.readFiniteNumber(input.leaf.params.valuePct)
+      const valuePct = rawValuePct === null ? null : Math.abs(rawValuePct)
+      if (valuePct === null || valuePct <= 0 || valuePct >= 100) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: 'both',
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: 'risk.daily_loss_limit',
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+          params: { valuePct },
+        },
+        actions: [{ type: 'BLOCK_NEW_ENTRY', atomKey: input.leaf.key, sourcePath: input.sourcePath }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
+    if (input.leaf.key === 'risk.kill_switch') {
+      return null
+    }
     if (input.leaf.key === FIELD_KEY.RISK_COOLDOWN) {
       const durationBars = this.readFiniteNumber(input.leaf.params.durationBars)
-      if (durationBars === null || !Number.isInteger(durationBars) || durationBars <= 0) return null
+        ?? this.readFiniteNumber(input.leaf.params.durationMinutes)
+        ?? (this.readFiniteNumber(input.leaf.params.durationMs) !== null
+          ? Math.max(1, Math.ceil((this.readFiniteNumber(input.leaf.params.durationMs) ?? 0) / 60_000))
+          : null)
+      const bars = durationBars === null ? 1 : durationBars
+      if (!Number.isInteger(bars) || bars <= 0) return null
       return {
         id: `semantic-risk-${input.rule.id}-${input.priority}`,
         phase: 'risk',
@@ -1365,7 +1425,7 @@ export class CanonicalSpecBuilderService {
           kind: 'atom',
           key: FIELD_KEY.RISK_COOLDOWN_BARS,
           semanticScope: 'market',
-          params: { bars: durationBars },
+          params: { bars },
         },
         actions: [{ type: 'BLOCK_NEW_ENTRY' }],
         metadata: {
@@ -1809,11 +1869,14 @@ export class CanonicalSpecBuilderService {
           ? leaf.params.symbols.filter((symbol): symbol is string => typeof symbol === 'string' && symbol.trim() !== '').map(symbol => symbol.trim()).sort()
           : []
         if (symbols.length === 0) return null
+        const scopeId = typeof leaf.params.scopeId === 'string' && leaf.params.scopeId.trim() !== ''
+          ? leaf.params.scopeId.trim()
+          : id
         const primarySymbol = typeof leaf.params.primarySymbol === 'string' && leaf.params.primarySymbol.trim() !== ''
           ? leaf.params.primarySymbol.trim()
           : undefined
         return {
-          id,
+          id: scopeId,
           scopeKind: 'symbol',
           symbols,
           ...(primarySymbol ? { primarySymbol } : {}),
@@ -2448,6 +2511,7 @@ export class CanonicalSpecBuilderService {
         leaf.key === 'position.dca_schedule'
         || leaf.key === 'position.pyramiding_limit'
         || leaf.key === FIELD_KEY.POSITION_MAX_EXPOSURE_PCT
+        || leaf.key === 'position.max_concurrent_positions'
         || leaf.key === FIELD_KEY.POSITION_BUDGET_CAP
         || leaf.key === FIELD_KEY.POSITION_LEVERAGE
         || leaf.key === 'grid.range_rebalance'
@@ -2455,10 +2519,12 @@ export class CanonicalSpecBuilderService {
         continue
       }
       if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
-        if (leaf.key !== FIELD_KEY.POSITION_SIZING) {
+        if (leaf.key !== FIELD_KEY.POSITION_SIZING && leaf.key !== 'position.fixed_notional') {
           throw new Error(`UnsupportedSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
         }
-        const sizing = this.resolveSemanticRulePositionSizing(leaf)
+        const sizing = leaf.key === 'position.fixed_notional'
+          ? this.resolveSemanticActionSizing({ kind: 'quote', value: leaf.params.value, asset: leaf.params.asset })
+          : this.resolveSemanticRulePositionSizing(leaf)
         if (!sizing) {
           continue
         }
@@ -4718,6 +4784,26 @@ export class CanonicalSpecBuilderService {
         return phase === 'exit' ? [{ type: 'CLOSE_LONG', atomKey: leaf.key }] : []
       case ATOM_CONTRACT_REGISTRY['action.close_short'].key:
         return phase === 'exit' ? [{ type: 'CLOSE_SHORT', atomKey: leaf.key }] : []
+      case 'action.reduce_position': {
+        if (phase !== 'exit') return []
+        const reducePct = this.readFiniteNumber(leaf.params.reducePct) ?? 50
+        return [{
+          type: leaf.sideScope === 'short' ? 'REDUCE_SHORT' : 'REDUCE_LONG',
+          sizing: { mode: 'RATIO', value: reducePct },
+          atomKey: leaf.key,
+        }]
+      }
+      case 'action.conditional_order': {
+        const fallbackType = phase === 'exit'
+          ? (leaf.sideScope === 'short' ? 'CLOSE_SHORT' : 'CLOSE_LONG')
+          : (leaf.sideScope === 'short' ? 'OPEN_SHORT' : 'OPEN_LONG')
+        return [{ type: fallbackType, atomKey: leaf.key }]
+      }
+      case 'action.limit_order':
+      case 'execution.post_only':
+      case 'execution.reduce_only':
+      case 'execution.limit_chase':
+        return []
       case ATOM_CONTRACT_REGISTRY['action.add_position'].key:
         const addPositionSideScope = this.readActionSideScope(leaf.params) ?? leaf.sideScope ?? (sourcePath ? undefined : 'long')
         if (addPositionSideScope !== 'long' && addPositionSideScope !== 'short') {
@@ -4776,6 +4862,12 @@ export class CanonicalSpecBuilderService {
       || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
       || key === ATOM_CONTRACT_REGISTRY['action.add_position'].key
       || key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key
+      || key === 'action.limit_order'
+      || key === 'action.reduce_position'
+      || key === 'action.conditional_order'
+      || key === 'execution.post_only'
+      || key === 'execution.reduce_only'
+      || key === 'execution.limit_chase'
   }
 
   private actionMatchesRuleSideScope(

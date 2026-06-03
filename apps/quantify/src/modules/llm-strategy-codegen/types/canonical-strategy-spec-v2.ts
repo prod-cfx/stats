@@ -147,6 +147,7 @@ export interface CanonicalOrchestrationGate {
 export interface CanonicalPortfolioDrawdownRisk {
   id: string
   scope: 'portfolio'
+  metric?: 'drawdown_pct' | 'daily_loss_pct'
   mode: 'observe' | 'enforce'
   thresholdPct: number
   effectWhenTriggered: 'block_new_entries'

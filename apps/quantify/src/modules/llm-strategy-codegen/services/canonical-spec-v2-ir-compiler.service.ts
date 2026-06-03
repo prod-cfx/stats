@@ -223,6 +223,7 @@ export class CanonicalSpecV2IrCompilerService {
     const guards: RiskGuard[] = []
     const riskPredicates: RiskPredicateDef[] = []
     const rulePortfolioRisks: IrOrchestrationPortfolioRisk[] = []
+    let maxConcurrentPositions = hasOrderPrograms ? orderProgramLevelCount : 1
 
     // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
@@ -264,6 +265,18 @@ export class CanonicalSpecV2IrCompilerService {
       const maxDrawdownRisk = this.tryCompileRiskMaxDrawdownPct(rule)
       if (maxDrawdownRisk) {
         rulePortfolioRisks.push(this.withRuleSourcePath(maxDrawdownRisk, rule))
+        continue
+      }
+
+      const dailyLossRisk = this.tryCompileRiskDailyLossLimit(rule)
+      if (dailyLossRisk) {
+        rulePortfolioRisks.push(this.withRuleSourcePath(dailyLossRisk, rule))
+        continue
+      }
+
+      const maxConcurrent = this.tryReadMaxConcurrentPositions(rule)
+      if (maxConcurrent !== null) {
+        maxConcurrentPositions = maxConcurrent
         continue
       }
 
@@ -373,7 +386,7 @@ export class CanonicalSpecV2IrCompilerService {
       portfolio: {
         positionMode,
         sizing: this.resolvePortfolioSizing(input.canonicalSpec, input.fallback.positionPct),
-        maxConcurrentPositions: hasOrderPrograms ? orderProgramLevelCount : 1,
+        maxConcurrentPositions,
         allowPyramiding: hasOrderPrograms || lifecyclePyramiding.allow,
         maxPyramidingLayers: hasOrderPrograms ? orderProgramLevelCount : lifecyclePyramiding.maxLayers,
       },
@@ -1084,6 +1097,26 @@ export class CanonicalSpecV2IrCompilerService {
             ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
               ? { primarySymbol: scope.primarySymbol.trim() }
               : {}),
+          }
+        case 'leg':
+          return {
+            id: scope.id,
+            scopeKind: 'leg',
+            legId: scope.legId,
+            direction: scope.direction,
+            instrumentRef: scope.instrumentRef,
+            ...(scope.legSizing
+              ? {
+                  legSizing: {
+                    mode: scope.legSizing.mode,
+                    value: scope.legSizing.value,
+                    ...(typeof scope.legSizing.pairedLegId === 'string' && scope.legSizing.pairedLegId.trim() !== ''
+                      ? { pairedLegId: scope.legSizing.pairedLegId.trim() }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(scope.syncTriggerRequired === true ? { syncTriggerRequired: true } : {}),
           }
         case 'timeframe':
           return {
@@ -3842,6 +3875,53 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+  private tryCompileRiskDailyLossLimit(
+    rule: CanonicalRuleV2,
+  ): IrOrchestrationPortfolioRisk | null {
+    if (
+      rule.phase !== 'risk'
+      || rule.condition.kind !== 'atom'
+      || rule.condition.key !== 'risk.daily_loss_limit'
+    ) {
+      return null
+    }
+
+    const rawValue = this.readNumber([rule.condition.value], Number.NaN)
+    const thresholdPct = Number.isFinite(rawValue) && rawValue <= 1
+      ? Number((rawValue * 100).toFixed(4))
+      : rawValue
+
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      throw new Error(
+        `codegen.canonical_spec_v2_daily_loss_invalid_pct:${rule.id}:${thresholdPct}`,
+      )
+    }
+
+    return {
+      id: rule.id,
+      scope: 'portfolio',
+      metric: 'daily_loss_pct',
+      mode: 'enforce',
+      thresholdPct,
+      effectWhenTriggered: 'block_new_entries',
+    }
+  }
+
+  private tryReadMaxConcurrentPositions(rule: CanonicalRuleV2): number | null {
+    if (
+      rule.phase !== 'gate'
+      || rule.condition.kind !== 'atom'
+      || rule.condition.key !== 'position.max_concurrent_positions'
+    ) {
+      return null
+    }
+    const count = this.readNumber([rule.condition.params?.count, rule.condition.value], Number.NaN)
+    if (!Number.isFinite(count) || count <= 0) {
+      throw new Error(`codegen.canonical_spec_v2_max_concurrent_positions_invalid_count:${rule.id}:${count}`)
+    }
+    return Math.max(1, Math.floor(count))
+  }
+
   private tryCompileActionReversePosition(
     rule: CanonicalRuleV2,
     spec: CanonicalStrategySpecV2,
@@ -4405,7 +4485,7 @@ export class CanonicalSpecV2IrCompilerService {
           actions.push(...emitted)
           continue
         }
-        if (atomKey.startsWith('action.') && atomKey !== 'action.limit_order' && atomKey !== 'action.conditional_order') {
+        if (atomKey.startsWith('action.') && atomKey !== 'action.limit_order' && atomKey !== 'action.conditional_order' && atomKey !== 'action.reduce_position') {
           throw new Error(
             `[#1313 PR6] action atomKey '${atomKey}' did not resolve to a pr3e-action shape `
             + `(entry=${entry ? 'present' : 'missing'}, capabilityStatus=${emit?.capabilityStatus ?? 'undefined'}). `

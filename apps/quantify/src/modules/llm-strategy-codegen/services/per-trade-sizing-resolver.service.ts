@@ -137,12 +137,24 @@ function resolveAxisFromPositionSizing(sizing: SemanticPositionSizingContract): 
  * Any shape without a recognised explicit kind is ignored (no unit/asset heuristics).
  * Note: risk_budget axis is only produced via the capability shape path (PR4+ atoms can emit it).
  */
-function readSizingShapeFromParams(params: unknown): { axis: SizingAxis; value: number } | null {
+function readSizingShapeFromParams(params: unknown): { axis: SizingAxis; value: number; asset?: string } | null {
   if (!params || typeof params !== 'object') return null
   const bag = params as Record<string, unknown>
   // perOrderSizing wins for backward compat; sizing is the dispatcher path.
   // 若 perOrderSizing 畸形（缺 kind / value 非数字）→ 回退尝试 sizing，避免合法 sizing 被静默吞掉。
   return tryReadSizingShape(bag['perOrderSizing']) ?? tryReadSizingShape(bag['sizing'])
+}
+
+function readSizingShapeFromPositionFact(pc: RulesMainflowAtomFact): { axis: SizingAxis; value: number; asset?: string } | null {
+  const nested = readSizingShapeFromParams(pc.params)
+  if (nested) return nested
+  if (pc.key !== 'position.fixed_notional') return null
+  const value = typeof pc.params.value === 'number' ? pc.params.value : Number.NaN
+  if (!Number.isFinite(value) || value <= 0) return null
+  const asset = typeof pc.params.asset === 'string' && pc.params.asset.trim() !== ''
+    ? pc.params.asset.trim().toUpperCase()
+    : 'USDT'
+  return { axis: 'notional_quote', value, asset }
 }
 
 function tryReadSizingShape(raw: unknown): { axis: SizingAxis; value: number } | null {
@@ -270,7 +282,7 @@ function anchorFromPositionConstraintCapability(
 
 function anchorFromParamsSizing(
   pc: RulesMainflowAtomFact,
-  resolved: { axis: SizingAxis; value: number },
+  resolved: { axis: SizingAxis; value: number; asset?: string },
 ): SizingAnchor {
   const scope: SizingScope = { kind: 'position_constraint', ownerKey: pc.key }
   const { axis, value } = resolved
@@ -281,7 +293,7 @@ function anchorFromParamsSizing(
     scope,
     executionAnchored: anchored,
     fullySpecified,
-    normalized: anchored ? { axis, value, needsRuntimeResolution: axisNeedsRuntimeResolution(axis) } : undefined,
+    normalized: anchored ? { axis, value, needsRuntimeResolution: axisNeedsRuntimeResolution(axis), asset: resolved.asset } : undefined,
     source: 'position_constraint_params_fallback',
   }
 }
@@ -339,7 +351,7 @@ export class PerTradeSizingResolver {
     for (const pc of this.rulesMainflowReader.readFactsByRole(state, 'position')) {
       const sk = scopeKey({ kind: 'position_constraint', ownerKey: pc.key })
       if (out.has(sk)) continue // capability main path already placed — skip fallback
-      const resolved = readSizingShapeFromParams(pc.params)
+      const resolved = readSizingShapeFromPositionFact(pc)
       if (!resolved) continue
       const anchor = anchorFromParamsSizing(pc, resolved)
       if (anchor.executionAnchored) {

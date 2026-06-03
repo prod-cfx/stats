@@ -25,8 +25,9 @@ import type { OrchestrationGateState } from './evaluate-orchestration-gates'
 export interface CompiledPortfolioDrawdownRisk {
   id: string
   scope: 'portfolio'
+  metric?: 'drawdown_pct' | 'daily_loss_pct'
   mode: 'observe' | 'enforce'
-  thresholdPct: number // 0..100 浮点（"10" 表 10%），与 ctx.drawdownPct 同单位
+  thresholdPct: number // 0..100 浮点（"10" 表 10%），与 ctx.drawdownPct / ctx.dailyLossPct 同单位
   effectWhenTriggered: 'block_new_entries'
 }
 
@@ -58,6 +59,7 @@ export type CompiledOrchestrationPortfolioRisk =
 
 export interface PortfolioRuntimeContext {
   drawdownPct?: number // 0..100 正数；equity 增长时 0 或负
+  dailyLossPct?: number // 0..100 正数；当日账户亏损百分比
   // Phase 5 S8 #1119: 名义敞口聚合（按 scope id 索引）
   exposureNotionalBySymbolScope?: Readonly<Record<string, number>>
   exposureNotionalBySubStrategyScope?: Readonly<Record<string, number>>
@@ -89,7 +91,8 @@ function handlePortfolioDrawdown(
     out.blockShort = true
     return
   }
-  const dd = ctx.drawdownPct
+  const metric = risk.metric ?? 'drawdown_pct'
+  const dd = metric === 'daily_loss_pct' ? ctx.dailyLossPct : ctx.drawdownPct
   if (!Number.isFinite(dd)) {
     // 无 evidence：enforce → fail-closed；observe → 完全 no-op
     if (risk.mode === 'enforce') {

@@ -236,6 +236,12 @@ const ATOM_BUCKETS = {
   'price.range_position_gte': 'trigger',
   'action.add_position': 'action',
   'action.reverse_position': 'action',
+  'action.limit_order': 'action',
+  'action.reduce_position': 'action',
+  'action.conditional_order': 'action',
+  'execution.post_only': 'action',
+  'execution.reduce_only': 'action',
+  'execution.limit_chase': 'action',
   'action.open_long': 'action',
   'action.close_long': 'action',
   'action.open_short': 'action',
@@ -248,13 +254,17 @@ const ATOM_BUCKETS = {
   'risk.max_drawdown_pct': 'risk',
   'risk.cooldown': 'risk',
   'risk.max_loss_per_trade': 'risk',
+  'risk.daily_loss_limit': 'risk',
+  'risk.kill_switch': 'risk',
   'portfolioRisk.drawdown_block': 'orchestration',
   'position.sizing': 'positionConstraint',
+  'position.fixed_notional': 'positionConstraint',
   'position.dca_schedule': 'positionConstraint',
   'position.pyramiding_limit': 'positionConstraint',
   'position.budget_cap': 'positionConstraint',
   'position.leverage': 'positionConstraint',
   'position.max_exposure_pct': 'positionConstraint',
+  'position.max_concurrent_positions': 'positionConstraint',
   'grid.range_rebalance': 'positionConstraint',
   // ── orchestration / scope（#1329 follow-up：从 legacy-presentation-data.ts PRESENTATIONS 迁入）──
   'gate.regime': 'orchestration',
@@ -264,6 +274,11 @@ const ATOM_BUCKETS = {
   'program.fixed_grid_gated': 'orchestration',
   'program.adaptive_volatility_grid': 'orchestration',
   'program.event_listener': 'orchestration',
+  'program.twap': 'orchestration',
+  'program.dca': 'orchestration',
+  'program.martingale': 'orchestration',
+  'program.rebalance': 'orchestration',
+  'program.iceberg': 'orchestration',
   'scope.symbol': 'orchestration',
   'scope.leg': 'orchestration',
   'scope.timeframe': 'orchestration',
@@ -287,6 +302,8 @@ const ATOM_BUCKETS = {
   'volume.confirmation': 'trigger',
   'time.cooldown_window': 'trigger',
   'orderbook.imbalance': 'trigger',
+  'orderbook.spread_condition': 'trigger',
+  'orderbook.depth_ratio': 'trigger',
   'fundingRate.condition': 'trigger',
   'openInterest.condition': 'trigger',
   'liquidation.condition': 'trigger',
@@ -337,6 +354,12 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   // ── actions ──
   'action.add_position': ['entry'],
   'action.reverse_position': ['entry', 'exit'],
+  'action.limit_order': ['entry', 'exit'],
+  'action.reduce_position': ['exit'],
+  'action.conditional_order': ['entry', 'exit'],
+  'execution.post_only': ['entry', 'exit'],
+  'execution.reduce_only': ['exit'],
+  'execution.limit_chase': ['entry', 'exit'],
   'action.open_long': ['entry'],
   'action.close_long': ['exit'],
   'action.open_short': ['entry'],
@@ -350,17 +373,21 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'risk.max_drawdown_pct': ['risk'],
   'risk.cooldown': ['risk'],
   'risk.max_loss_per_trade': ['risk', 'exit'],
+  'risk.daily_loss_limit': ['risk'],
+  'risk.kill_switch': ['risk'],
   // ── portfolio / drawdown 护栏：不直接满足 entry/exit/risk 任一阶段（只是阻断） ──
   'portfolioRisk.drawdown_block': [],
   // ── positionConstraint ──
   // Issue #1383 Round 1 M5：DCA 调度自身已满足 entry+exit 语义（自洽程序，
   //   不需要额外出场触发即可生成可运行策略）。
   'position.sizing': ['sizing'],
+  'position.fixed_notional': ['sizing'],
   'position.dca_schedule': ['entry', 'exit', 'sizing'],
   'position.pyramiding_limit': ['entry', 'sizing'],
   'position.budget_cap': ['sizing'],
   'position.leverage': ['sizing'],
   'position.max_exposure_pct': ['sizing'],
+  'position.max_concurrent_positions': ['risk'],
   'grid.range_rebalance': ['entry', 'exit', 'sizing'],
   // ── orchestration ──
   'gate.regime': [],
@@ -374,6 +401,11 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'program.adaptive_volatility_grid': ['entry', 'exit', 'sizing'],
   // Issue #1383 Round 1 M5：事件监听类程序自洽，含 exit。
   'program.event_listener': ['entry', 'exit'],
+  'program.twap': ['entry', 'exit', 'sizing'],
+  'program.dca': ['entry', 'exit', 'sizing'],
+  'program.martingale': ['entry', 'exit', 'sizing'],
+  'program.rebalance': ['entry', 'exit', 'sizing'],
+  'program.iceberg': ['entry', 'exit', 'sizing'],
   'scope.symbol': ['context'],
   'scope.leg': ['context'],
   'scope.timeframe': ['context'],
@@ -397,6 +429,8 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'volume.confirmation': ['entry', 'exit'],
   'time.cooldown_window': ['entry', 'exit'],
   'orderbook.imbalance': ['entry', 'exit'],
+  'orderbook.spread_condition': ['entry', 'exit'],
+  'orderbook.depth_ratio': ['entry', 'exit'],
   'fundingRate.condition': ['entry', 'exit'],
   'openInterest.condition': ['entry', 'exit'],
   'liquidation.condition': ['entry', 'exit'],
@@ -458,6 +492,12 @@ const ATOM_ROLES = {
   // ── action（effect）──
   'action.add_position': ['effect'],
   'action.reverse_position': ['effect'],
+  'action.limit_order': ['effect'],
+  'action.reduce_position': ['effect'],
+  'action.conditional_order': ['effect'],
+  'execution.post_only': ['effect'],
+  'execution.reduce_only': ['effect'],
+  'execution.limit_chase': ['effect'],
   'action.open_long': ['effect'],
   'action.close_long': ['effect'],
   'action.open_short': ['effect'],
@@ -471,15 +511,19 @@ const ATOM_ROLES = {
   'risk.max_drawdown_pct': ['effect'],
   'risk.cooldown': ['effect'],
   'risk.max_loss_per_trade': ['effect'],
+  'risk.daily_loss_limit': ['effect'],
+  'risk.kill_switch': ['effect'],
   // ── orchestration（drawdown_block：副作用护栏）──
   'portfolioRisk.drawdown_block': ['effect'],
   // ── positionConstraint（effect）──
   'position.sizing': ['effect'],
+  'position.fixed_notional': ['effect'],
   'position.dca_schedule': ['effect'],
   'position.pyramiding_limit': ['effect'],
   'position.budget_cap': ['effect'],
   'position.leverage': ['effect'],
   'position.max_exposure_pct': ['effect'],
+  'position.max_concurrent_positions': ['effect'],
   'grid.range_rebalance': ['effect'],
   // ── orchestration / scope ──
   'gate.regime': ['predicate'],
@@ -489,6 +533,11 @@ const ATOM_ROLES = {
   'program.fixed_grid_gated': ['effect'],
   'program.adaptive_volatility_grid': ['effect'],
   'program.event_listener': ['effect'],
+  'program.twap': ['effect'],
+  'program.dca': ['effect'],
+  'program.martingale': ['effect'],
+  'program.rebalance': ['effect'],
+  'program.iceberg': ['effect'],
   'scope.symbol': ['effect'],
   'scope.leg': ['effect'],
   'scope.timeframe': ['effect'],
@@ -512,6 +561,8 @@ const ATOM_ROLES = {
   'volume.confirmation': ['predicate'],
   'time.cooldown_window': ['predicate'],
   'orderbook.imbalance': ['predicate'],
+  'orderbook.spread_condition': ['predicate'],
+  'orderbook.depth_ratio': ['predicate'],
   'fundingRate.condition': ['predicate'],
   'openInterest.condition': ['predicate'],
   'liquidation.condition': ['predicate'],
@@ -603,6 +654,12 @@ const ATOM_TEMPORALITY = {
   //   归为 'structural' 表达"非 predicate-class atom，已审计"。
   'action.add_position': 'structural',
   'action.reverse_position': 'structural',
+  'action.limit_order': 'structural',
+  'action.reduce_position': 'structural',
+  'action.conditional_order': 'structural',
+  'execution.post_only': 'structural',
+  'execution.reduce_only': 'structural',
+  'execution.limit_chase': 'structural',
   'action.open_long': 'structural',
   'action.close_long': 'structural',
   'action.open_short': 'structural',
@@ -620,19 +677,28 @@ const ATOM_TEMPORALITY = {
   'risk.max_drawdown_pct': 'structural',
   'risk.cooldown': 'structural',
   'risk.max_loss_per_trade': 'structural',
+  'risk.daily_loss_limit': 'structural',
+  'risk.kill_switch': 'structural',
 
   'position.sizing': 'structural',
+  'position.fixed_notional': 'structural',
   'position.dca_schedule': 'structural',
   'position.pyramiding_limit': 'structural',
   'position.budget_cap': 'structural',
   'position.leverage': 'structural',
   'position.max_exposure_pct': 'structural',
+  'position.max_concurrent_positions': 'structural',
   'grid.range_rebalance': 'structural',
 
   'program.dynamic_grid': 'structural',
   'program.fixed_grid_gated': 'structural',
   'program.adaptive_volatility_grid': 'structural',
   'program.event_listener': 'structural',
+  'program.twap': 'structural',
+  'program.dca': 'structural',
+  'program.martingale': 'structural',
+  'program.rebalance': 'structural',
+  'program.iceberg': 'structural',
 
   'scope.symbol': 'structural',
   'scope.leg': 'structural',
@@ -648,6 +714,8 @@ const ATOM_TEMPORALITY = {
   'volume.confirmation': 'event',
   'time.cooldown_window': 'structural',
   'orderbook.imbalance': 'state',
+  'orderbook.spread_condition': 'state',
+  'orderbook.depth_ratio': 'state',
   'fundingRate.condition': 'state',
   'openInterest.condition': 'state',
   'liquidation.condition': 'event',
@@ -715,6 +783,12 @@ const ATOM_PUBLIC_NAMES = {
   'price.range_position_gte': { zh: '区间高位', en: 'Above range high' },
   'action.add_position': { zh: '加仓', en: 'Add to position' },
   'action.reverse_position': { zh: '反手', en: 'Reverse position' },
+  'action.limit_order': { zh: '限价单', en: 'Limit order' },
+  'action.reduce_position': { zh: '减仓', en: 'Reduce position' },
+  'action.conditional_order': { zh: '条件单', en: 'Conditional order' },
+  'execution.post_only': { zh: 'Post-only 订单', en: 'Post-only order option' },
+  'execution.reduce_only': { zh: 'Reduce-only 订单', en: 'Reduce-only order option' },
+  'execution.limit_chase': { zh: '限价追价', en: 'Limit chase policy' },
   'action.open_long': { zh: '开多', en: 'Open long' },
   'action.close_long': { zh: '平多', en: 'Close long' },
   'action.open_short': { zh: '开空', en: 'Open short' },
@@ -727,13 +801,17 @@ const ATOM_PUBLIC_NAMES = {
   'risk.max_drawdown_pct': { zh: '最大回撤限制', en: 'Maximum drawdown limit' },
   'risk.cooldown': { zh: '交易冷却期', en: 'Trade cooldown' },
   'risk.max_loss_per_trade': { zh: '单笔亏损上限', en: 'Max loss per trade' },
+  'risk.daily_loss_limit': { zh: '日亏损上限', en: 'Daily loss limit' },
+  'risk.kill_switch': { zh: '熔断开关', en: 'Kill switch' },
   'portfolioRisk.drawdown_block': { zh: '组合回撤护栏', en: 'Portfolio drawdown guard' },
   'position.sizing': { zh: '仓位大小', en: 'Position sizing' },
+  'position.fixed_notional': { zh: '固定名义金额', en: 'Fixed notional size' },
   'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
   'position.pyramiding_limit': { zh: '金字塔加仓限制', en: 'Pyramiding limit' },
   'position.budget_cap': { zh: '预算上限', en: 'Budget cap' },
   'position.leverage': { zh: '杠杆倍数', en: 'Leverage' },
   'position.max_exposure_pct': { zh: '敞口上限', en: 'Exposure cap' },
+  'position.max_concurrent_positions': { zh: '最大同时持仓数', en: 'Max concurrent positions' },
   'grid.range_rebalance': { zh: '网格区间再平衡', en: 'Grid range rebalance' },
   // ── orchestration / scope（#1329 follow-up：stub publicName，Phase 2 完整实现 paramRenderers / summaryTemplate）──
   'gate.regime': { zh: '趋势/状态过滤', en: 'Regime/Trend gate' },
@@ -743,6 +821,11 @@ const ATOM_PUBLIC_NAMES = {
   'program.fixed_grid_gated': { zh: '门控固定网格', en: 'Fixed grid (gated)' },
   'program.adaptive_volatility_grid': { zh: 'ATR 自适应网格', en: 'Adaptive volatility grid' },
   'program.event_listener': { zh: '事件监听', en: 'Event listener program' },
+  'program.twap': { zh: 'TWAP 执行程序', en: 'TWAP execution program' },
+  'program.dca': { zh: 'DCA 执行程序', en: 'DCA execution program' },
+  'program.martingale': { zh: '马丁加仓程序', en: 'Martingale execution program' },
+  'program.rebalance': { zh: '再平衡程序', en: 'Rebalance execution program' },
+  'program.iceberg': { zh: '冰山单程序', en: 'Iceberg execution program' },
   'scope.symbol': { zh: '标的范围', en: 'Symbol scope' },
   'scope.leg': { zh: '策略腿', en: 'Leg scope' },
   'scope.timeframe': { zh: '周期范围', en: 'Timeframe scope' },
@@ -766,6 +849,8 @@ const ATOM_PUBLIC_NAMES = {
   'volume.confirmation': { zh: '成交量确认', en: 'Volume confirmation' },
   'time.cooldown_window': { zh: '冷却窗口', en: 'Cooldown window' },
   'orderbook.imbalance': { zh: '盘口失衡', en: 'Orderbook imbalance' },
+  'orderbook.spread_condition': { zh: '盘口价差条件', en: 'Orderbook spread condition' },
+  'orderbook.depth_ratio': { zh: '盘口深度比', en: 'Orderbook depth ratio' },
   'fundingRate.condition': { zh: '资金费率条件', en: 'Funding rate condition' },
   'openInterest.condition': { zh: '持仓量条件', en: 'Open interest condition' },
   'liquidation.condition': { zh: '清算条件', en: 'Liquidation condition' },
@@ -3043,6 +3128,225 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
   },
 
+  'action.limit_order': {
+    corpus: {
+      aliases: ['限价单', '限价开仓', '限价平仓', 'limit order'],
+      positiveExamples: [
+        '限价 65000 开多',
+        'RSI 高于 70 时限价平多',
+      ],
+      negativeExamples: ['市价开仓', '只说限价但不给价格'],
+      goldenUtterances: getGoldenUtterancesForAtom('action.limit_order'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'action.limit_order.limitPrice') return '请补充限价价格，例如 65000。'
+      if (slotKey === 'action.limit_order.timeInForce') return '请确认限价单有效期：gtc / ioc / fok。'
+      return '请补充限价单的缺失信息。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.06.W01' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.limit_order'],
+      paramRenderers: {
+        limitPrice: (v) => String(v),
+        timeInForce: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['action.limit_order'].en
+        const limitPrice = typeof params.limitPrice === 'number' ? ` @ ${formatAtomDisplayNumber(params.limitPrice)}` : ''
+        return `限价单${limitPrice}`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['限价', '限价单', 'limit order'] as const,
+        verbs: { fixed: ['限价', 'limit'] as const },
+      },
+      paramSlots: {
+        limitPrice: { kind: 'number', required: true, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:限价|price|at)\s*(\d+(?:\.\d+)?)', range: [0, 1e9] } },
+        timeInForce: { kind: 'enum', required: false, enum: ['gtc', 'ioc', 'fok'], default: 'gtc', extractor: { kind: 'enum-zh-map', enumMap: { 'GTC': 'gtc', 'gtc': 'gtc', 'IOC': 'ioc', 'ioc': 'ioc', 'FOK': 'fok', 'fok': 'fok' } } },
+      },
+      matchRequires: ['limitPrice'],
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'action.reduce_position': {
+    corpus: {
+      aliases: ['减仓', 'reduce position', '部分平仓'],
+      positiveExamples: ['RSI 高于 70 时减仓 50%', 'Reduce position by 50%'],
+      negativeExamples: ['全部平仓', '只减小下单数量'],
+      goldenUtterances: getGoldenUtterancesForAtom('action.reduce_position'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'action.reduce_position.reducePct') return '请确认减仓比例，例如 50%。'
+      return '请补充减仓参数。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.reduce_position'],
+      paramRenderers: { reducePct: (v) => `${v}%` },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['action.reduce_position'].en
+        const pct = typeof params.reducePct === 'number' ? `${formatAtomDisplayNumber(params.reducePct)}%` : ''
+        return pct ? `减仓 ${pct}` : '减仓'
+      },
+    },
+    surface: {
+      intent: { keywords: ['减仓', 'reduce position', '部分平仓'] as const, verbs: { fixed: ['减仓', 'reduce'] as const } },
+      paramSlots: {
+        reducePct: { kind: 'percent', required: true, range: [0, 100], default: 50 },
+      },
+      matchRequires: ['reducePct'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'action.conditional_order': {
+    corpus: {
+      aliases: ['条件单', 'conditional order', '触发单'],
+      positiveExamples: ['RSI 高于 70 时挂条件单减仓', 'Place a conditional order when RSI is above 70'],
+      negativeExamples: ['普通限价单', '立即市价开仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('action.conditional_order'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'action.conditional_order.orderType') return '请确认条件单类型：stop / take_profit / conditional。'
+      return '请补充条件单参数。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.conditional_order'],
+      paramRenderers: { orderType: (v) => String(v), triggerConditionRef: (v) => String(v) },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES['action.conditional_order'][locale],
+    },
+    surface: {
+      intent: { keywords: ['条件单', '触发单', 'conditional order'] as const, verbs: { fixed: ['条件', 'trigger', 'conditional'] as const } },
+      paramSlots: {
+        triggerConditionRef: { kind: 'enum', required: false, enum: ['current_rule'], default: 'current_rule' },
+        orderType: { kind: 'enum', required: true, enum: ['stop', 'take_profit', 'conditional'], default: 'conditional' },
+      },
+      matchRequires: ['orderType'],
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'execution.post_only': {
+    corpus: {
+      aliases: ['post-only', '只挂 maker', '只做 maker'],
+      positiveExamples: ['只用 post-only 限价单开多', 'Use post-only orders only'],
+      negativeExamples: ['市价单开仓', '允许吃单成交'],
+      goldenUtterances: getGoldenUtterancesForAtom('execution.post_only'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请确认是否要求 post-only 订单。',
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['execution.post_only'],
+      paramRenderers: { postOnly: (v) => String(v) },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES['execution.post_only'][locale],
+    },
+    surface: {
+      intent: { keywords: ['post-only', 'post only', 'maker'] as const, verbs: { fixed: ['post-only', 'maker'] as const } },
+      paramSlots: {
+        postOnly: { kind: 'enum', required: true, enum: ['true'], default: 'true' },
+      },
+      matchRequires: ['postOnly'],
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'execution.reduce_only': {
+    corpus: {
+      aliases: ['reduce-only', '只减仓', '只平仓'],
+      positiveExamples: ['reduce-only 限价平多', 'Use reduce-only close orders'],
+      negativeExamples: ['反手开空', '允许加仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('execution.reduce_only'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请确认是否要求 reduce-only 订单。',
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['execution.reduce_only'],
+      paramRenderers: { reduceOnly: (v) => String(v) },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES['execution.reduce_only'][locale],
+    },
+    surface: {
+      intent: { keywords: ['reduce-only', 'reduce only', '只减仓', '只平仓'] as const, verbs: { fixed: ['reduce-only', '减仓', '平仓'] as const } },
+      paramSlots: {
+        reduceOnly: { kind: 'enum', required: true, enum: ['true'], default: 'true' },
+      },
+      matchRequires: ['reduceOnly'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'execution.limit_chase': {
+    corpus: {
+      aliases: ['追价', '限价追价', 'limit chase'],
+      positiveExamples: ['3 根 K 线没成交就追价一次', 'Chase the limit order once after timeout'],
+      negativeExamples: ['毫秒级撤单做市', '根据队列位置抢成交'],
+      goldenUtterances: getGoldenUtterancesForAtom('execution.limit_chase'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'execution.limit_chase.maxChases') return '请确认最多追价次数，例如 1 次。'
+      if (slotKey === 'execution.limit_chase.timeoutBars') return '请确认等待几根 K 线未成交后追价，例如 3 根。'
+      return '请补充限价追价参数。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['execution.limit_chase'],
+      paramRenderers: { maxChases: (v) => String(v), timeoutBars: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['execution.limit_chase'].en
+        const maxChases = typeof params.maxChases === 'number' ? params.maxChases : 1
+        const timeoutBars = typeof params.timeoutBars === 'number' ? params.timeoutBars : null
+        return timeoutBars ? `${timeoutBars} 根 K 未成交后追价 ${maxChases} 次` : `限价追价 ${maxChases} 次`
+      },
+    },
+    surface: {
+      intent: { keywords: ['追价', 'chase', '未成交'] as const, verbs: { fixed: ['追价', 'chase'] as const } },
+      paramSlots: {
+        maxChases: { kind: 'number', required: true, range: [1, 20], multipleOf: 1, default: 1 },
+        timeoutBars: { kind: 'number', required: false, range: [1, 1000], multipleOf: 1, default: 3 },
+      },
+      matchRequires: ['maxChases'],
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
   // ── 开多 / 平多 action（PR2c-final-1a：解 caller 切换后 open-slot-resolver spec 3 fail）
   'action.open_long': {
     corpus: {
@@ -3394,7 +3698,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // #1497: period 收紧 [1, 100] + multipleOf:1；multiple 收紧 [0.1, 20] + multipleOf:0.1。
         period: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 14, extractor: { kind: 'number-decimal', pattern: 'ATR\\s*(\\d+)', range: [1, 100] } },
         pctOfAtr: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(\\d+(?:\\.\\d+)?)\\s*%\\s*ATR', range: [0, 100] } },
-        multiple: { kind: 'number', required: false, range: [0.1, 20], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR', range: [0.1, 20] } },
+        multiple: { kind: 'number', required: false, range: [0.1, 20], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(?:ATR\\s*\\d*\\D{0,8})?(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR?', range: [0.1, 20] } },
       },
       phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
@@ -3617,6 +3921,79 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
   },
 
+  'risk.daily_loss_limit': {
+    corpus: {
+      aliases: ['当天亏损', '日亏损上限', 'daily loss limit'],
+      positiveExamples: ['当天亏损超过 5% 后停止新开仓', 'Stop new entries after daily loss exceeds 5%'],
+      negativeExamples: ['单笔最多亏 2%', '最大回撤 10%'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.daily_loss_limit'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'risk.daily_loss_limit.valuePct') return '请确认当天亏损阈值百分比，例如 5%。'
+      return '请补充日亏损上限参数。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.daily_loss_limit'],
+      paramRenderers: { valuePct: (v) => `${v}%` },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.daily_loss_limit'].en
+        const valuePct = typeof params.valuePct === 'number' ? `${formatAtomDisplayNumber(params.valuePct)}%` : ''
+        return valuePct ? `当天亏损超过 ${valuePct} 后阻断开仓` : '日亏损上限'
+      },
+    },
+    surface: {
+      intent: { keywords: ['当天亏损', '日亏损', 'daily loss'] as const, verbs: { fixed: ['超过', '停止', 'block', 'stop'] as const } },
+      paramSlots: {
+        valuePct: { kind: 'number', required: true, range: [0, 100], multipleOf: 0.1, default: 5 },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
+    },
+  },
+
+  'risk.kill_switch': {
+    corpus: {
+      aliases: ['熔断', '停止新开仓', 'kill switch'],
+      positiveExamples: ['亏损超过阈值后停止新开仓', 'Enable kill switch after daily loss breach'],
+      negativeExamples: ['普通止损平仓', '市价开仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.kill_switch'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'risk.kill_switch.action') return '请确认熔断动作：block_new_entries 或 pause_strategy。'
+      return '请补充熔断开关参数。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.kill_switch'],
+      paramRenderers: { action: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.kill_switch'].en
+        return params.action === 'pause_strategy' ? '熔断：暂停策略' : '熔断：停止新开仓'
+      },
+    },
+    surface: {
+      intent: { keywords: ['停止新开仓', '停止开仓', '熔断', 'kill switch'] as const, verbs: { fixed: ['停止', '暂停', 'block', 'pause'] as const } },
+      paramSlots: {
+        action: { kind: 'enum', required: true, enum: ['block_new_entries', 'pause_strategy'], default: 'block_new_entries' },
+      },
+      matchRequires: ['action'],
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
+    },
+  },
+
   // ── 组合风险 orchestration（portfolioRisk）
   'portfolioRisk.drawdown_block': {
     // TODO #1329b corpus stub，待补真实 NL 语料
@@ -3711,6 +4088,52 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       paramSlots: {
         value: { kind: 'number', required: true, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:仓位|单笔|每次|position).*?(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|%)?', range: [0, 1e9] } },
         mode: { kind: 'enum', required: false, enum: ['fixed_quote', 'fixed_pct'], default: 'fixed_quote', extractor: { kind: 'enum-zh-map', enumMap: { 'USDT': 'fixed_quote', 'U': 'fixed_quote', '%': 'fixed_pct', '百分比': 'fixed_pct' } } },
+      },
+      matchRequires: ['value'],
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'position.fixed_notional': {
+    corpus: {
+      aliases: ['固定名义金额', '固定 USDT 仓位', 'fixed notional'],
+      positiveExamples: ['每次固定 100 USDT', '单笔 250U 开仓'],
+      negativeExamples: ['账户 10% 仓位', '最多投入 1000 USDT'],
+      goldenUtterances: getGoldenUtterancesForAtom('position.fixed_notional'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'position.fixed_notional.value') return '请确认单笔固定名义金额，例如 100 USDT。'
+      if (slotKey === 'position.fixed_notional.asset') return '请确认计价资产，例如 USDT。'
+      return '请补充固定名义金额仓位的缺失信息。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.06.W01' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.fixed_notional'],
+      paramRenderers: {
+        value: (v) => String(v),
+        asset: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.fixed_notional'].en
+        const value = typeof params.value === 'number' ? formatAtomDisplayNumber(params.value) : ''
+        const asset = typeof params.asset === 'string' && params.asset.trim() ? params.asset.trim() : 'USDT'
+        return value ? `单笔 ${value} ${asset}` : '固定名义金额'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['固定', '单笔', '每次', 'USDT', 'U', 'fixed notional'] as const,
+        verbs: { fixed: ['固定', '买入', '使用', 'allocate'] as const },
+      },
+      paramSlots: {
+        value: { kind: 'number', required: true, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:固定|单笔|每次)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|美元)', range: [0, 1e9] } },
+        asset: { kind: 'enum', required: false, enum: ['USDT', 'USD'], default: 'USDT', extractor: { kind: 'enum-zh-map', enumMap: { 'USDT': 'USDT', 'U': 'USDT', '美元': 'USD', 'USD': 'USD' } } },
       },
       matchRequires: ['value'],
       phaseResolver: 'fixed-entry',
@@ -4001,6 +4424,43 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       matchRequires: ['valuePct'],
       phaseResolver: 'fixed-entry',
       sideResolver: 'inherit',
+    },
+  },
+
+  'position.max_concurrent_positions': {
+    corpus: {
+      aliases: ['最多同时持仓', '最大同时持仓数', 'max concurrent positions'],
+      positiveExamples: ['最多同时持有 3 个仓位', 'Max concurrent positions 3'],
+      negativeExamples: ['单笔仓位 10%', '最大敞口 30%'],
+      goldenUtterances: getGoldenUtterancesForAtom('position.max_concurrent_positions'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'position.max_concurrent_positions.count') return '请确认最多同时持有几个仓位，例如 3。'
+      return '请补充最大同时持仓数。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.max_concurrent_positions'],
+      paramRenderers: { count: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.max_concurrent_positions'].en
+        const count = typeof params.count === 'number' ? params.count : null
+        return count ? `最多同时持有 ${count} 个仓位` : '最大同时持仓数'
+      },
+    },
+    surface: {
+      intent: { keywords: ['最多同时持有', '最多持有', '最大同时持仓', 'max concurrent'] as const, verbs: { fixed: ['最多', 'max', 'limit'] as const } },
+      paramSlots: {
+        count: { kind: 'number', required: true, range: [1, 100], multipleOf: 1, default: 1 },
+      },
+      matchRequires: ['count'],
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
     },
   },
 
@@ -4731,6 +5191,116 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         dedupWindowMs: { kind: 'number', required: false, range: [100, 3600000], extractor: { kind: 'number-int', pattern: '\\d+', range: [100, 3600000] } },
         expirationTtlMs: { kind: 'number', required: false, range: [100, 86400000], extractor: { kind: 'number-int', pattern: '\\d+', range: [100, 86400000] } },
       },
+      phaseResolver: 'fixed-program',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.twap': {
+    corpus: {
+      aliases: ['TWAP', '分批均匀执行', 'time weighted execution'],
+      positiveExamples: ['把 1000 USDT 分 10 次在 1 小时内 TWAP 买入 BTC'],
+      negativeExamples: ['一次性市价买入'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.twap'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请补全 TWAP 执行参数。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    surface: {
+      intent: { keywords: ['TWAP', 'twap', '分批均匀'] as const, verbs: { fixed: ['分', '均匀', '执行'] as const } },
+      paramSlots: {},
+      phaseResolver: 'fixed-program',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.dca': {
+    corpus: {
+      aliases: ['DCA program', '定投程序', '分批补仓程序'],
+      positiveExamples: ['BTC 每下跌 3% 做一次 DCA program，最多 3 次'],
+      negativeExamples: ['普通一次开仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.dca'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请补全 DCA 执行参数。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    surface: {
+      intent: { keywords: ['DCA', 'dca', '定投'] as const, verbs: { fixed: ['下跌', '回撤', '补仓'] as const } },
+      paramSlots: {},
+      phaseResolver: 'fixed-program',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.martingale': {
+    corpus: {
+      aliases: ['martingale', '马丁', '翻倍补单'],
+      positiveExamples: ['亏损后按 2 倍 martingale 加码，最多 3 层'],
+      negativeExamples: ['固定金额补仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.martingale'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请补全马丁加仓执行参数。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    surface: {
+      intent: { keywords: ['martingale', '马丁', '翻倍补单'] as const, verbs: { fixed: ['翻倍', '加码', '补单'] as const } },
+      paramSlots: {},
+      phaseResolver: 'fixed-program',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.rebalance': {
+    corpus: {
+      aliases: ['rebalance', '再平衡', '再均衡'],
+      positiveExamples: ['BTC 和 ETH 每天再平衡到 50% 50%'],
+      negativeExamples: ['单币种开仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.rebalance'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请补全再平衡执行参数。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    surface: {
+      intent: { keywords: ['rebalance', '再平衡', '再均衡'] as const, verbs: { fixed: ['再平衡', '再均衡'] as const } },
+      paramSlots: {},
+      phaseResolver: 'fixed-program',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.iceberg': {
+    corpus: {
+      aliases: ['iceberg', '冰山单', '隐藏拆分'],
+      positiveExamples: ['用 iceberg 订单把 10 BTC 拆成每次 0.5 BTC 卖出'],
+      negativeExamples: ['普通限价单'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.iceberg'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: () => '请补全冰山单执行参数。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    surface: {
+      intent: { keywords: ['iceberg', '冰山', '隐藏拆分'] as const, verbs: { fixed: ['拆成', '隐藏', '拆分'] as const } },
+      paramSlots: {},
       phaseResolver: 'fixed-program',
       sideResolver: 'inherit',
     },
@@ -5876,6 +6446,81 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'orderbook.imbalance': createMarketDataPredicateShell('orderbook.imbalance', ['盘口', '订单簿', 'orderbook', 'imbalance'], ['失衡', 'imbalance']),
+  'orderbook.spread_condition': {
+    corpus: {
+      aliases: ['盘口价差', 'bid ask spread', 'orderbook spread'],
+      positiveExamples: ['价差小于 0.03% 才开仓', 'Only enter when spread is below 0.03%'],
+      negativeExamples: ['K 线涨幅超过 2%', '资金费率大于 0.01%'],
+      goldenUtterances: getGoldenUtterancesForAtom('orderbook.spread_condition'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'orderbook.spread_condition.valuePct') return '请确认盘口价差百分比阈值，例如 0.03%。'
+      return '请补充盘口价差条件。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['orderbook.spread_condition'],
+      paramRenderers: { operator: (v) => String(v), valuePct: (v) => `${v}%` },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['orderbook.spread_condition'].en
+        const valuePct = typeof params.valuePct === 'number' ? `${formatAtomDisplayNumber(params.valuePct)}%` : ''
+        return valuePct ? `盘口价差 ${params.operator ?? 'lt'} ${valuePct}` : '盘口价差条件'
+      },
+    },
+    surface: {
+      intent: { keywords: ['价差', 'spread', 'bid ask spread'] as const, verbs: { fixed: ['小于', '低于', 'below', 'lt'] as const } },
+      paramSlots: {
+        operator: { kind: 'enum', required: true, enum: ['lt', 'lte', 'gt', 'gte'], default: 'lt' },
+        valuePct: { kind: 'percent', required: true, range: [0, 100], default: 0.03 },
+      },
+      matchRequires: ['operator', 'valuePct'],
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+  'orderbook.depth_ratio': {
+    corpus: {
+      aliases: ['盘口深度比', '买卖深度比', 'orderbook depth ratio'],
+      positiveExamples: ['买一卖一深度比大于 2 才开多', 'Enter when bid over ask depth ratio is above 2'],
+      negativeExamples: ['成交量放大 2 倍', '价差小于 0.03%'],
+      goldenUtterances: getGoldenUtterancesForAtom('orderbook.depth_ratio'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey) => {
+      if (slotKey === 'orderbook.depth_ratio.ratio') return '请确认盘口深度比阈值，例如 2。'
+      return '请补充盘口深度比条件。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['orderbook.depth_ratio'],
+      paramRenderers: { side: (v) => String(v), operator: (v) => String(v), ratio: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['orderbook.depth_ratio'].en
+        const ratio = typeof params.ratio === 'number' ? formatAtomDisplayNumber(params.ratio) : ''
+        return ratio ? `盘口深度比 ${params.operator ?? 'gt'} ${ratio}` : '盘口深度比'
+      },
+    },
+    surface: {
+      intent: { keywords: ['深度比', 'depth ratio', '买一卖一深度'] as const, verbs: { fixed: ['大于', '超过', 'above', 'gt'] as const } },
+      paramSlots: {
+        side: { kind: 'enum', required: true, enum: ['bid_over_ask', 'ask_over_bid'], default: 'bid_over_ask' },
+        operator: { kind: 'enum', required: true, enum: ['gt', 'gte', 'lt', 'lte'], default: 'gt' },
+        ratio: { kind: 'number', required: true, range: [0, 1000], multipleOf: 0.01, default: 2 },
+      },
+      matchRequires: ['side', 'operator', 'ratio'],
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
   'fundingRate.condition': createMarketDataPredicateShell('fundingRate.condition', ['资金费率', 'funding rate'], ['大于', '小于', '为正', '为负', 'positive', 'negative']),
   'openInterest.condition': createMarketDataPredicateShell('openInterest.condition', ['持仓量', 'OI', 'open interest'], ['增加', '上升', '下降', 'rising', 'falling']),
   'liquidation.condition': createMarketDataPredicateShell('liquidation.condition', ['清算', 'liquidation'], ['超过', 'spike', '瀑布']),

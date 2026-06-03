@@ -1026,11 +1026,18 @@ export class SemanticContractReadinessService {
           summary.hasExit = true
         }
       }
+      if (rule.phase === 'program' && entryCapableEffect) {
+        summary.hasEntry = true
+      }
 
       for (const key of effectKeys) {
         if (key.startsWith('risk.')) summary.hasRisk = true
         // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 直接匹配 grid.range_rebalance（自洽闭环 position 信号），见上方同类豁免。
-        if (key === 'grid.range_rebalance' || key.startsWith('position.') || key.startsWith('sizing.') || (key.startsWith('program.') && key.includes('grid'))) {
+        if (key === 'grid.range_rebalance'
+          || key.startsWith('position.')
+          || key.startsWith('sizing.')
+          || (key in ATOM_CONTRACT_REGISTRY && getAtomFulfillsStrategyPhase(key as keyof typeof ATOM_CONTRACT_REGISTRY).includes('sizing'))
+        ) {
           summary.hasPosition = true
         }
       }

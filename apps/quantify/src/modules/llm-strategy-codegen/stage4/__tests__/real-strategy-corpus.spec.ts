@@ -158,4 +158,15 @@ describe('Stage 4 real strategy corpus', () => {
 
     expect(duplicateCases).toEqual([])
   })
+
+  it('does not over-emit kill switch for max-drawdown portfolio risk cases', () => {
+    const targetCases = STAGE4_REAL_STRATEGY_CORPUS.filter(item => item.id.includes('portfolio-risk'))
+    const invalidCases = targetCases.flatMap((item) => {
+      const patch = dispatcher.dispatch(item.initialUserMessage)
+      const actualKeys = new Set(collectRuleAtomKeys(patch))
+      return actualKeys.has('risk.kill_switch') ? [item.id] : []
+    })
+
+    expect(invalidCases).toEqual([])
+  })
 })

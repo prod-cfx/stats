@@ -1458,12 +1458,23 @@ export class GenericSeedDispatcher {
       const conditionPredicates = this.selectTypedRuleConditionPredicates(group.predicates, phase, userMessage)
       const predicate = conditionPredicates[0] ?? group.predicates[0] ?? fallbackPredicate
       if (!predicate) continue
-      const sideScope = group.sideScope
+      const sideScope = this.resolveTypedRuleGroupSideScope(phase, group.sideScope, effects)
       const typedEffects = EMPTY_RULE_EFFECTS()
       for (const effect of effects) {
         if (!this.typedEffectAppliesToPhase(effect, phase)) continue
         if (!this.typedEffectAppliesToSide(effect, sideScope)) continue
         this.appendTypedEffect(typedEffects, this.alignTypedLifecycleEffectToRuleSide(effect, sideScope))
+      }
+      if (phase === 'exit' && typedEffects.actions.length === 0 && this.hasCloseActionIntent(userMessage)) {
+        this.appendTypedEffect(typedEffects, {
+          kind: 'atom',
+          key: sideScope === 'short'
+            ? ATOM_CONTRACT_REGISTRY['action.close_short'].key
+            : ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+          params: { phase: 'exit' },
+          sideScope: sideScope === 'short' ? 'short' : 'long',
+          evidence: { text: this.findEvidenceText(userMessage, '(?:平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)') ?? 'exit' },
+        })
       }
       const condition = conditionPredicates.length > 1
         ? {
@@ -1472,7 +1483,7 @@ export class GenericSeedDispatcher {
               kind: 'atom' as const,
               key: item.key,
               params: item.params ?? {},
-              ...(item.sideScope ? { sideScope: item.sideScope } : {}),
+              sideScope: item.sideScope && item.sideScope !== 'both' ? item.sideScope : sideScope,
               ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
             })),
           }
@@ -1480,7 +1491,7 @@ export class GenericSeedDispatcher {
             kind: 'atom' as const,
             key: predicate.key,
             params: predicate.params ?? {},
-            ...(predicate.sideScope ? { sideScope: predicate.sideScope } : {}),
+            sideScope: predicate.sideScope && predicate.sideScope !== 'both' ? predicate.sideScope : sideScope,
             ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
           }
       rules.push({
@@ -1520,6 +1531,22 @@ export class GenericSeedDispatcher {
       sideScope,
       predicates: phasePredicates.filter(item => item.sideScope === sideScope || item.sideScope === 'both'),
     }))
+  }
+
+  private resolveTypedRuleGroupSideScope(
+    phase: SemanticRule['phase'],
+    fallback: 'long' | 'short' | 'both',
+    effects: readonly AtomExpr[],
+  ): 'long' | 'short' | 'both' {
+    if (phase !== 'exit' || fallback !== 'both') return fallback
+    const exitSides = new Set<'long' | 'short'>()
+    for (const effect of effects) {
+      if (effect.kind !== 'atom' || !this.typedEffectAppliesToPhase(effect, phase)) continue
+      if (effect.key === ATOM_CONTRACT_REGISTRY['action.close_long'].key) exitSides.add('long')
+      if (effect.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key) exitSides.add('short')
+      if (effect.sideScope === 'long' || effect.sideScope === 'short') exitSides.add(effect.sideScope)
+    }
+    return exitSides.size === 1 ? [...exitSides][0] ?? fallback : fallback
   }
 
   private selectTypedRuleConditionPredicates(
@@ -1745,6 +1772,17 @@ export class GenericSeedDispatcher {
   private resolveRuleEffectRole(effect: AtomExpr): RuleEffectRole | null {
     if (effect.kind !== 'atom') return null
     if (effect.key === 'position.sizing') return 'positions'
+    if (effect.key === 'position.fixed_notional') return 'positions'
+    if (effect.key === 'position.max_concurrent_positions') return 'positions'
+    if (effect.key === 'risk.daily_loss_limit' || effect.key === 'risk.kill_switch') return 'risks'
+    if (
+      effect.key === 'action.reduce_position'
+      || effect.key === 'action.limit_order'
+      || effect.key === 'action.conditional_order'
+      || effect.key === 'execution.post_only'
+      || effect.key === 'execution.reduce_only'
+      || effect.key === 'execution.limit_chase'
+    ) return 'actions'
     if (this.isProgramEffectAtom(effect.key)) return 'programs'
     const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[effect.key]?.bucket
     switch (bucket) {
@@ -1796,6 +1834,19 @@ export class GenericSeedDispatcher {
         sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
         params: { mode: 'inside_range', lowerRole: 'range_low', upperRole: 'range_high' },
         evidence: { text: this.findEvidenceText(userMessage, '(?:震荡区间|区间震荡|盘整|range[- ]?bound)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    if (this.hasIndicatorBoundaryIntent(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key,
+        phase: 'entry',
+        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        params: {
+          indicator: /boll|布林/iu.test(userMessage) ? 'boll' : 'channel',
+          boundaryRole: /上轨|上沿|upper/iu.test(userMessage) ? 'upper' : /中轨|中线|middle/iu.test(userMessage) ? 'middle' : 'lower',
+          direction: 'touch',
+        },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:触及|碰到|到达|touch)[^，。；;]*(?:指标边界|指标下边界|指标上边界|布林|boll|上轨|下轨|中轨|通道|channel)') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
     this.pushTypedLifecyclePredicates(out, flatPatch)
@@ -1857,6 +1908,24 @@ export class GenericSeedDispatcher {
         sideScope: 'both',
         params: this.extractLiquidationParams(userMessage),
         evidence: { text: this.findEvidenceText(userMessage, '(?:清算|liquidation)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    if (/价差|spread/iu.test(userMessage) && !out.some(item => item.key === 'orderbook.spread_condition')) {
+      out.push({
+        key: 'orderbook.spread_condition',
+        phase: 'entry',
+        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        params: { operator: 'lt', valuePct: this.extractFirstNumber(userMessage, '(?:价差|spread)[^，。；;]{0,12}(\d+(?:\.\d+)?)\s*%') ?? 0.03 },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:价差|spread)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    if (/(?:深度比|买一卖一深度|depth\s*ratio)/iu.test(userMessage) && !out.some(item => item.key === 'orderbook.depth_ratio')) {
+      out.push({
+        key: 'orderbook.depth_ratio',
+        phase: 'entry',
+        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        params: { side: /卖一|ask/iu.test(userMessage) && !/买一|bid/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask', operator: 'gt', ratio: this.extractFirstNumber(userMessage, '(?:深度比|深度|depth)[^，。；;]{0,12}(\d+(?:\.\d+)?)') ?? 2 },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:深度比|买一卖一深度|depth\s*ratio)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
     for (const item of out) {
@@ -1942,15 +2011,33 @@ export class GenericSeedDispatcher {
     const contextSlots = flatPatch.contextSlots ?? {}
     const explicitSymbols = extractExplicitSymbolValues(userMessage)
     if (explicitSymbols.length > 1) {
-      pushAtom({
-        key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
-        params: {
-          symbolScopeKind: 'symbol',
-          symbols: explicitSymbols,
-          primarySymbol: explicitSymbols[0],
-        },
-        evidence: { text: explicitSymbols.join(' ') },
-      })
+      for (const symbol of explicitSymbols) {
+        pushAtom({
+          key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
+          params: {
+            symbolScopeKind: 'symbol',
+            scopeId: `symbol_${symbol.toLowerCase()}`,
+            symbols: [symbol],
+            primarySymbol: symbol,
+          },
+          evidence: { text: symbol },
+        })
+      }
+    }
+    if (this.hasLegScopeIntent(userMessage)) {
+      const first = explicitSymbols[0] ?? 'BTCUSDT'
+      const second = explicitSymbols[1] ?? 'ETHUSDT'
+      const legs = [
+        { legId: `${first.toLowerCase().replace(/usdt$/u, '')}_long`, direction: 'long' as const, instrumentRef: `symbol_${first.toLowerCase()}` },
+        { legId: `${second.toLowerCase().replace(/usdt$/u, '')}_short`, direction: 'short' as const, instrumentRef: `symbol_${second.toLowerCase()}` },
+      ]
+      for (const leg of legs) {
+        pushAtom({
+          key: ATOM_CONTRACT_REGISTRY['scope.leg'].key,
+          params: { legScopeKind: 'leg', ...leg },
+          evidence: { text: this.findEvidenceText(userMessage, '(?:多空双腿|对冲腿|策略腿|pair\\s*spread|leg)') ?? userMessage.trim() },
+        })
+      }
     }
     const symbolEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.symbol))
     if (explicitSymbols.length <= 1 && typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
@@ -1987,6 +2074,15 @@ export class GenericSeedDispatcher {
         key: 'position.sizing',
         params: { sizing: flatPatch.position.sizing, phase: 'entry' },
         ...(isEvidenceWithText(flatPatch.position.evidence) ? { evidence: { text: flatPatch.position.evidence.text } } : {}),
+      })
+    }
+    if (this.hasFixedNotionalIntent(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'position.fixed_notional')) {
+      const notional = this.extractFirstNumber(userMessage, '(?:固定|每次|单笔)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|美元)')
+      pushAtom({
+        key: 'position.fixed_notional',
+        phase: 'entry',
+        params: { value: notional ?? 100, asset: 'USDT' },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:(?:固定|每次|单笔)[^，。；;]{0,12}\\d+(?:\\.\\d+)?\\s*(?:USDT|U|美元))') ?? userMessage.trim() },
       })
     }
     // Issue #1707 Gap C：原 fallback 在 hasSizingIntent && 无 sizing shape 时硬塞一个
@@ -2028,12 +2124,87 @@ export class GenericSeedDispatcher {
       const closeKey = hasShortEntry && !hasLongEntry
         ? ATOM_CONTRACT_REGISTRY['action.close_short'].key
         : ATOM_CONTRACT_REGISTRY['action.close_long'].key
-      const evidence = this.findEvidenceText(userMessage, '(?:平仓|平多|平空|止盈|止损|离场|卖出|出场|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)')
+      const evidence = this.findEvidenceText(userMessage, '(?:平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)')
       pushAtom({
         key: closeKey,
         phase: 'exit',
+        sideScope: closeKey === ATOM_CONTRACT_REGISTRY['action.close_short'].key ? 'short' : 'long',
         params: {},
         ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
+    if (/减仓|reduce\s+position/iu.test(userMessage) && !/reduce[-\s]?only/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'action.reduce_position')) {
+      pushAtom({
+        key: 'action.reduce_position',
+        params: { reducePct: this.extractFirstNumber(userMessage, '(\\d+(?:\\.\\d+)?)\\s*%') ?? 50 },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:减仓|reduce(?:\\s+position)?)') ?? userMessage.trim() },
+      })
+    }
+    if (/限价(?:单|开|平|买|卖)?|limit\s*order/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'action.limit_order')) {
+      pushAtom({
+        key: 'action.limit_order',
+        phase: /减仓|平仓|平多|平空|close|exit/iu.test(userMessage) ? 'exit' : 'entry',
+        params: { orderType: 'limit' },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:限价(?:单|开|平|买|卖)?|limit\\s*order)') ?? userMessage.trim() },
+      })
+    }
+    if (/post[-\s]?only/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'execution.post_only')) {
+      pushAtom({
+        key: 'execution.post_only',
+        phase: /减仓|平仓|平多|平空|close|exit/iu.test(userMessage) ? 'exit' : 'entry',
+        params: { postOnly: true },
+        evidence: { text: this.findEvidenceText(userMessage, 'post[-\\s]?only') ?? userMessage.trim() },
+      })
+    }
+    if (/reduce[-\s]?only/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'execution.reduce_only')) {
+      pushAtom({
+        key: 'execution.reduce_only',
+        phase: 'exit',
+        params: { reduceOnly: true },
+        evidence: { text: this.findEvidenceText(userMessage, 'reduce[-\\s]?only') ?? userMessage.trim() },
+      })
+    }
+    if (/追价|chase/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'execution.limit_chase')) {
+      pushAtom({
+        key: 'execution.limit_chase',
+        phase: /减仓|平仓|平多|平空|close|exit/iu.test(userMessage) ? 'exit' : 'entry',
+        params: {
+          maxChases: this.extractFirstNumber(userMessage, '(\\d+)\\s*(?:次|轮)') ?? 1,
+          timeoutBars: this.extractFirstNumber(userMessage, '(\\d+)\\s*(?:根\\s*K|根|bars?)') ?? 3,
+        },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:追价|chase)[^，。；;]*') ?? userMessage.trim() },
+      })
+    }
+    if (/当天亏损|日亏损|daily\s+loss/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'risk.daily_loss_limit')) {
+      pushAtom({
+        key: 'risk.daily_loss_limit',
+        phase: 'gate',
+        params: { valuePct: this.extractFirstNumber(userMessage, '(?:当天亏损|日亏损|daily\\s+loss)[^，。；;]{0,16}(\\d+(?:\\.\\d+)?)\\s*%') ?? 5 },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:当天亏损|日亏损|daily\s+loss)[^，。；;]*') ?? userMessage.trim() },
+      })
+    }
+    if (/(?:当天亏损|日亏损|daily\s+loss)[^，。；;]*(?:停止新开仓|停止开仓)|kill\s*switch/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'risk.kill_switch')) {
+      pushAtom({
+        key: 'risk.kill_switch',
+        phase: 'gate',
+        params: { action: 'block_new_entries' },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:停止新开仓|停止开仓|kill\s*switch)') ?? userMessage.trim() },
+      })
+    }
+    if (/最多同时持有|最多持有|max\s+concurrent/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'position.max_concurrent_positions')) {
+      pushAtom({
+        key: 'position.max_concurrent_positions',
+        phase: 'gate',
+        params: { count: this.extractFirstNumber(userMessage, '(?:最多同时持有|最多持有|max\s+concurrent)[^，。；;]{0,12}(\d+)') ?? 1 },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:最多同时持有|最多持有|max\s+concurrent)[^，。；;]*') ?? userMessage.trim() },
+      })
+    }
+    if (/条件单|conditional\s*order/iu.test(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'action.conditional_order')) {
+      pushAtom({
+        key: 'action.conditional_order',
+        phase: 'entry',
+        params: { orderType: 'conditional' },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:条件单|conditional\\s*order)') ?? userMessage.trim() },
       })
     }
     if (
@@ -2119,7 +2290,43 @@ export class GenericSeedDispatcher {
         })
       }
     }
+    const atrStopMultiple = this.extractAtrStopMultiple(userMessage)
+    const fixedNotional = this.extractFixedNotionalValue(userMessage)
+    for (const effect of out) {
+      if (effect.kind !== 'atom') continue
+      if (
+        (effect.key === ATOM_CONTRACT_REGISTRY['risk.atr_stop'].key || effect.key === ATOM_CONTRACT_REGISTRY['risk.atr_multiple_stop'].key)
+        && typeof effect.params.multiple !== 'number'
+        && atrStopMultiple !== null
+      ) {
+        Object.assign(effect.params, { multiple: atrStopMultiple })
+      }
+      if (
+        effect.key === 'position.fixed_notional'
+        && fixedNotional !== null
+        && (typeof effect.params.value !== 'number' || effect.params.value <= 0)
+      ) {
+        Object.assign(effect.params, { value: fixedNotional, asset: typeof effect.params.asset === 'string' ? effect.params.asset : 'USDT' })
+      }
+    }
     return out
+  }
+
+  private extractAtrStopMultiple(userMessage: string): number | null {
+    const match = userMessage.match(/(?:ATR\s*\d*\D{0,8})?(\d+(?:\.\d+)?)\s*(?:倍|x)\s*(?:ATR)?[^，。；;]*(?:止损|stop)/iu)
+      ?? userMessage.match(/(?:止损|stop)[^，。；;]*(?:ATR\s*\d*\D{0,8})?(\d+(?:\.\d+)?)\s*(?:倍|x)/iu)
+    const raw = match?.[1]
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }
+
+  private extractFixedNotionalValue(userMessage: string): number | null {
+    const match = userMessage.match(/(?:固定|每次|单笔)\D{0,12}(\d+(?:\.\d+)?)\s*(?:USDT|U|美元)/iu)
+    const raw = match?.[1]
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
   }
 
   private hasFixedGridGatedProgramIntent(userMessage: string): boolean {
@@ -2151,6 +2358,26 @@ export class GenericSeedDispatcher {
   // 放量 / 倍均量 等关键词对齐，作为 fallback predicate 兜底触发器。
   private hasVolumeSpikeIntent(userMessage: string): boolean {
     return /放量|放大量|量能放大|量能放量|成交量放大|倍均量|倍量|volume\s*(?:spike|surge|breakout)/iu.test(userMessage)
+  }
+
+  private hasIndicatorBoundaryIntent(userMessage: string): boolean {
+    return /(?:触及|碰到|到达|touch)[^，。；;]*(?:指标边界|指标下边界|指标上边界|布林|boll|上轨|下轨|中轨|通道|channel)/iu.test(userMessage)
+  }
+
+  private hasFixedNotionalIntent(userMessage: string): boolean {
+    return /(?:固定|每次|单笔)[^，。；;]{0,12}\d+(?:\.\d+)?\s*(?:USDT|U|美元)/iu.test(userMessage)
+  }
+
+  private hasLegScopeIntent(userMessage: string): boolean {
+    return /多空双腿|对冲腿|策略腿|pair\s*spread|\bleg\b/iu.test(userMessage)
+  }
+
+  private extractFirstNumber(userMessage: string, pattern: string): number | null {
+    const match = userMessage.match(new RegExp(pattern, 'iu'))
+    const raw = match?.[1]
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : null
   }
 
   private hasFundingRateIntent(userMessage: string): boolean {
@@ -2198,7 +2425,7 @@ export class GenericSeedDispatcher {
   // 「平仓 / 平多 / 平空 / 止盈 / 止损 / 离场 / 卖出 / close / exit / sell / take-profit / stop-loss」
   // 与 generic-seed-dispatcher.helpers.ts 中 EXIT_PHRASES 词法对齐。
   private hasCloseActionIntent(userMessage: string): boolean {
-    return /平仓|平多|平空|止盈|止损|离场|卖出|出场|close|exit|sell|take[ -]?profit|stop[ -]?loss/iu.test(userMessage)
+    return /平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|close|exit|sell|take[ -]?profit|stop[ -]?loss/iu.test(userMessage)
   }
 
   private hasRiskIntent(userMessage: string): boolean {

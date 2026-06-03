@@ -553,6 +553,7 @@ export class CodegenPublicationGenerationStage {
     const timeframe = args.canonicalSpec.dataRequirements.requiredTimeframes[0]
       ?? args.canonicalSpec.market.defaultTimeframe
       ?? semanticTimeframe
+      ?? this.inferPublishTimeframeFromSemanticRules(args.semanticState)
 
     if (!symbol || !timeframe) {
       throw new Error('codegen.publication_context_missing')
@@ -762,5 +763,13 @@ export class CodegenPublicationGenerationStage {
       return null
     }
     return slot.value.trim()
+  }
+
+  private inferPublishTimeframeFromSemanticRules(state: SemanticState): string {
+    const text = (state.rules ?? [])
+      .map(rule => rule.evidence?.text ?? '')
+      .join(' ')
+    if (/每天|每日|daily|\b1d\b/iu.test(text)) return '1d'
+    return '1m'
   }
 }
