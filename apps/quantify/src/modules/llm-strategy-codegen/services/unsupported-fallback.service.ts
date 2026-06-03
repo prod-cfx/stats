@@ -6,6 +6,7 @@ import type {
   UnsupportedFallbackState,
 } from '../types/semantic-atom-support'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
+import { classifyUnsupportedStrategyIntent } from './unsupported-strategy-taxonomy'
 
 interface UnsupportedAtomInput {
   key: string
@@ -45,6 +46,27 @@ const ENGLISH_MODIFY_PATTERN = /\b(change|switch|but|however|position|timeframe|
 export class UnsupportedFallbackService {
   constructor(private readonly registry: SemanticAtomRegistryService = new SemanticAtomRegistryService()) {}
 
+  buildFinalUnsupportedFromMessage(
+    message: string,
+    locale: UnsupportedFallbackLocale = 'zh',
+  ): UnsupportedFallbackState | null {
+    const match = classifyUnsupportedStrategyIntent(message)
+    if (!match) return null
+
+    const displayName = locale === 'en' ? match.matchedPhrase : match.matchedPhrase
+    const prompt = locale === 'en' ? match.publicPromptEn : match.publicPromptZh
+    return {
+      status: 'final',
+      unsupportedAtoms: [{
+        key: match.atomKey,
+        displayName,
+        reasonCode: match.reasonCode,
+        publicReason: match.publicReason,
+      }],
+      prompt,
+    }
+  }
+
   /**
    * 过滤掉与 supported 触发器形成"同义覆盖"的 unsupported atom。
    * 典型场景：K 线形态既被 supported `price.candle_pattern` 识别，也被裸 pattern 兜底分支
@@ -76,7 +98,6 @@ export class UnsupportedFallbackService {
       return null
     }
 
-    const replacement = this.resolveReplacement(filtered[0]?.key)
     const unsupportedAtomCopies = filtered.map(atom => ({ ...atom }))
     // Issue #1495: 禁止把 internal atom key（如 `volume.spike`）漏到 user-facing prompt。
     //   EN locale 也走 displayName；缺失时只能用通用「unsupported feature」兜底，
@@ -89,6 +110,25 @@ export class UnsupportedFallbackService {
       ? [...new Set(unsupportedAtomCopies.map(atom => atom.reasonCode))]
         .map(reasonCode => `Reason: ${reasonCode}. This semantic is recognized but is not supported by the current public beta execution layer yet.`)
       : [...new Set(unsupportedAtomCopies.map(atom => atom.publicReason))]
+    const replacement = this.resolveReplacement(filtered[0]?.key)
+
+    if (!replacement) {
+      return {
+        status: 'final',
+        unsupportedAtoms: unsupportedAtomCopies,
+        prompt: locale === 'en'
+          ? [
+              `I understand you want: ${names}.`,
+              ...publicReasons,
+              'This strategy cannot be generated or backtested safely yet. Please adjust the strategy to currently supported atoms before continuing.',
+            ].join('\n')
+          : [
+              `我听懂了，你要的是 ${names}。`,
+              ...publicReasons,
+              '当前还不能安全生成或回测该策略。请改成当前已支持的原子能力后再继续。',
+            ].join('\n'),
+      }
+    }
     const localizedReplacement = {
       ...cloneReplacement(replacement),
       description: this.localizeReplacementDescription(replacement, locale),
@@ -151,16 +191,10 @@ export class UnsupportedFallbackService {
     return { kind: 'unclear' }
   }
 
-  private resolveReplacement(atomKey: string | undefined): SemanticAtomReplacementStrategy {
+  private resolveReplacement(atomKey: string | undefined): SemanticAtomReplacementStrategy | undefined {
     const atomReplacement = atomKey ? this.readReplacement(atomKey) : undefined
     const fallbackReplacement = this.readReplacement(DEFAULT_FALLBACK_ATOM_KEY)
-    const replacement = atomReplacement ?? fallbackReplacement
-
-    if (!replacement) {
-      throw new Error('unsupported_fallback_replacement_missing')
-    }
-
-    return replacement
+    return atomReplacement ?? fallbackReplacement
   }
 
   private readReplacement(atomKey: string): SemanticAtomReplacementStrategy | undefined {

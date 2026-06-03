@@ -5,7 +5,7 @@ import type { StrategyVersionInfo, VersionedAtomContract } from './version-gate.
  * 当前语义版本
  * 格式：YYYY.MM.WNN（零填充周序号）
  */
-export const CURRENT_SEMANTIC_VERSION = '2026.05.W02'
+export const CURRENT_SEMANTIC_VERSION = '2026.06.W01'
 
 /**
  * 语义版本格式正则：YYYY.MM.WNN（年.月.W周，周序号零填充）

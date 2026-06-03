@@ -1,18 +1,11 @@
 import type { CryptoCoverageScope, CryptoCoverageSupportStatus } from './crypto-coverage-types'
+import { classifyUnsupportedStrategyIntent } from '../../services/unsupported-strategy-taxonomy'
 
 interface ScopeMatch {
   readonly scope: CryptoCoverageScope
   readonly matchedPhrase: string | null
   readonly publicReason: string | null
 }
-
-const C_SCOPE_PATTERNS: ReadonlyArray<{ pattern: RegExp, phrase: string, publicReason: string }> = [
-  { pattern: /跨所搬砖|cross[- ]exchange arbitrage/iu, phrase: '跨所搬砖', publicReason: 'cross_exchange_fund_transfer_arbitrage_out_of_scope' },
-  { pattern: /自动(?:划转|转账)|fund transfer/iu, phrase: '自动划转', publicReason: 'cross_exchange_fund_transfer_arbitrage_out_of_scope' },
-  { pattern: /三角套利|triangular arbitrage/iu, phrase: '三角套利', publicReason: 'triangular_arbitrage_matching_out_of_scope' },
-  { pattern: /高频做市|HFT|high[- ]frequency market making/iu, phrase: 'HFT', publicReason: 'hft_market_making_out_of_scope' },
-  { pattern: /order queue alpha|队列(?:位置|alpha)|queue position/iu, phrase: 'order queue alpha', publicReason: 'latency_sensitive_order_queue_alpha_out_of_scope' },
-]
 
 const ATOM_WEIGHTS = new Map<string, number>([
   ['action.open_long', 3],
@@ -30,10 +23,9 @@ const ATOM_WEIGHTS = new Map<string, number>([
 ])
 
 export function classifyCryptoIntentScope(message: string): ScopeMatch {
-  for (const entry of C_SCOPE_PATTERNS) {
-    if (entry.pattern.test(message)) {
-      return { scope: 'C', matchedPhrase: entry.phrase, publicReason: entry.publicReason }
-    }
+  const unsupported = classifyUnsupportedStrategyIntent(message)
+  if (unsupported) {
+    return { scope: 'C', matchedPhrase: unsupported.matchedPhrase, publicReason: unsupported.reasonCode }
   }
   return { scope: 'B', matchedPhrase: null, publicReason: null }
 }

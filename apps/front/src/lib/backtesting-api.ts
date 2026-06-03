@@ -302,6 +302,14 @@ function buildBacktestingHeaders(path: string): Record<string, string> {
   }
 }
 
+function buildBacktestingNoCacheHeaders(path: string): Record<string, string> {
+  return {
+    ...buildBacktestingHeaders(path),
+    'Cache-Control': 'no-store, no-cache, max-age=0',
+    Pragma: 'no-cache',
+  }
+}
+
 export async function fetchBacktestCapabilities(
   options?: FetchBacktestCapabilitiesOptions,
 ): Promise<BacktestCapabilities> {
@@ -402,7 +410,7 @@ export async function createBacktestJob(payload: CreateBacktestJobPayload): Prom
 
 export async function getBacktestJob(jobId: string): Promise<BacktestJob> {
   const safeJobId = normalizeJobId(jobId)
-  const headers = buildBacktestingHeaders(`job:${safeJobId}`)
+  const headers = buildBacktestingNoCacheHeaders(`job:${safeJobId}`)
   const job = await requestJson<BacktestJob>(
     signal =>
       (client as any).BacktestingProxyController_getJob({
@@ -417,7 +425,7 @@ export async function getBacktestJob(jobId: string): Promise<BacktestJob> {
 
 export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> {
   const safeJobId = normalizeJobId(jobId)
-  const headers = buildBacktestingHeaders(`job-result:${safeJobId}`)
+  const headers = buildBacktestingNoCacheHeaders(`job-result:${safeJobId}`)
   return requestJson<BacktestJobResult>(
     signal =>
       (client as any).BacktestingProxyController_getJobResult({

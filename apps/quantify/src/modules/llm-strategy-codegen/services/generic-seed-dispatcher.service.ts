@@ -91,7 +91,7 @@ const INDICATOR_KEYWORDS = new Set([
   'ATR', 'ADX', 'CCI', 'OBV', 'MFI', 'DMI', 'SAR', 'ROC', 'WR',
   'STOCH', 'STOCRSI', 'STOCHRSI',
   // 策略/执行类型
-  'DCA', 'TWAP', 'VWAP', 'ICT', 'SMC',
+  'DCA', 'TWAP', 'VWAP', 'ICEBERG', 'REBALANCE', 'REBALANCING', 'MARTINGALE', 'ICT', 'SMC',
   // 英文常见停用词（3 字母，避免 'AND'/'FOR'/'BUY'/'THE' 被推为 base）
   'AND', 'FOR', 'THE', 'BUY', 'SEL', 'GET', 'SET', 'PUT', 'OFF', 'OUT',
   'ALL', 'ANY', 'ARE', 'CAN', 'DID', 'HAS', 'HAD', 'LET', 'MAY', 'NEW',
@@ -101,7 +101,7 @@ const INDICATOR_KEYWORDS = new Set([
   'OKX', 'BINANCE', 'HYPERLIQUID', 'SPOT', 'PERP', 'SWAP', 'CONTRACT',
   'EXCHANGE', 'TIMEFRAME', 'MARKETTYPE', 'SYMBOL', 'POSITION', 'POSITIONS',
   'EXECUTIONCONTEXT', 'RULESTREE', 'SEMANTIC', 'ACTION', 'ADD',
-  'EXIT', 'ENTRY', 'RISK', 'CONSTRAINT', 'SIZING',
+  'EXIT', 'ENTRY', 'RISK', 'CONSTRAINT', 'SIZING', 'REDUCE', 'ONLY', 'POST', 'LIMIT', 'CHASE',
   'MISSING', 'RULES', 'RULESMAINFLOW', 'CONTEXTSLOTS', 'EFFECTS',
   // 字段路径片段：用户在 clarification 答案里粘了 fieldPath（如
   // "rules[0].effects.positions[0].params.value: 10%"）时，避免 PARAMS/VALUE/REASON
@@ -121,6 +121,7 @@ const SHORT_SYMBOL_RE = /^[A-Z]{3,10}$/
  *   - 不在 INDICATOR_KEYWORDS（技术指标/策略/停用词）
  */
 function looksLikeBaseToken(token: string): boolean {
+  if (SYMBOL_QUOTES.some(quote => token.length > quote.length && token.endsWith(quote))) return false
   return SHORT_SYMBOL_RE.test(token)
     && !QUOTE_TOKENS.has(token)
     && !INDICATOR_KEYWORDS.has(token)
@@ -207,6 +208,11 @@ const PARSER_NUMBER_INT: ParserFn = (clause, spec) => {
   if (Number.isNaN(n)) return undefined
   if (spec.range && (n < spec.range[0] || n > spec.range[1])) return undefined
   return n
+}
+
+const PARSER_INDICATOR_PERIOD_INT: ParserFn = (clause, spec) => {
+  const pattern = spec.pattern ?? '(?:EMA|SMA|MA|RSI|MACD)\\s*[（(]?\\s*(\\d{1,4})'
+  return PARSER_NUMBER_INT(clause, { ...spec, kind: 'number-int', pattern })
 }
 
 const PARSER_NUMBER_DECIMAL: ParserFn = (clause, spec) => {
@@ -296,6 +302,7 @@ const PARSER_VERBATIM: ParserFn = (clause) => clause
 
 const GENERIC_PARSERS: Readonly<Record<string, ParserFn>> = {
   'number-int': PARSER_NUMBER_INT,
+  'indicator-period-int': PARSER_INDICATOR_PERIOD_INT,
   'number-decimal': PARSER_NUMBER_DECIMAL,
   'percent': PARSER_PERCENT,
   'duration': PARSER_DURATION,
@@ -323,6 +330,11 @@ const DERIVES: Readonly<Record<string, DeriveFn>> = {
     if (period < 10) return 'short_term'
     if (period < 50) return 'mid_term'
     return 'long_term'
+  },
+  'range-boundary-threshold': (clause) => {
+    if (/(?:区间|range)[^，。；;]{0,12}(?:下沿|下边界|底部|低位|lower|bottom)|(?:下沿|下边界|底部|低位|lower|bottom)[^，。；;]{0,12}(?:区间|range)/iu.test(clause)) return 0
+    if (/(?:区间|range)[^，。；;]{0,12}(?:上沿|上边界|顶部|高位|upper|top)|(?:上沿|上边界|顶部|高位|upper|top)[^，。；;]{0,12}(?:区间|range)/iu.test(clause)) return 100
+    return undefined
   },
 }
 
@@ -803,7 +815,9 @@ function normalizeLifecycleParams(
 }
 
 function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
-  if (!/价格|price|close/iu.test(clause)) return null
+  const hasPriceSubject = /价格|price|close/iu.test(clause)
+  const hasCrossVerb = /上穿|下穿|突破|跌破|cross(?:es|ed|ing)?\s+(?:above|below|over|under)|breaks?\s+(?:above|below)/iu.test(clause)
+  if (!hasPriceSubject && !hasCrossVerb) return null
   const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
   if (periodMatches.length !== 1) return null
   const period = Number(periodMatches[0]?.[1])
@@ -1009,6 +1023,21 @@ function extractExplicitSymbolValues(text: string): string[] {
     const quote = match[2]?.toUpperCase()
     if (!base || !quote || !looksLikeBaseToken(base)) continue
     const value = `${base}${quote}`
+    if (seen.has(value)) continue
+    seen.add(value)
+    values.push(value)
+  }
+  return values
+}
+
+function extractInferredSymbolScopeValues(text: string): string[] {
+  const values: string[] = []
+  const seen = new Set<string>()
+  const tokens = text.match(/(?<![A-Za-z0-9])[A-Za-z]{2,10}(?![A-Za-z0-9])/gu) ?? []
+  for (const token of tokens) {
+    const base = token.toUpperCase()
+    if (!looksLikeBaseToken(base)) continue
+    const value = `${base}USDT`
     if (seen.has(value)) continue
     seen.add(value)
     values.push(value)
@@ -1817,9 +1846,11 @@ export class GenericSeedDispatcher {
       const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
       const fixedGateEffect = contract?.surface?.phaseResolver === 'fixed-gate' && contract.roles.includes('effect')
       if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !fixedGateEffect) return
+      const evidenceText = isEvidenceWithText(item.evidence) ? item.evidence.text : undefined
+      const phase = this.resolveTypedRulePhaseForAtom(item.key, item.phase)
       out.push({
         key: item.key,
-        phase: this.resolveTypedRulePhaseForAtom(item.key, item.phase),
+        phase: this.shouldTreatPredicateEvidenceAsExit(evidenceText) ? 'exit' : phase,
         sideScope: item.sideScope ?? 'both',
         params: item.params ?? {},
         evidence: item.evidence,
@@ -1849,7 +1880,21 @@ export class GenericSeedDispatcher {
         evidence: { text: this.findEvidenceText(userMessage, '(?:触及|碰到|到达|touch)[^，。；;]*(?:指标边界|指标下边界|指标上边界|布林|boll|上轨|下轨|中轨|通道|channel)') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
+    this.pushNumericPriceBreakoutPredicates(out, userMessage)
     this.pushTypedLifecyclePredicates(out, flatPatch)
+    const genericExecutionProgramKey = this.resolveGenericExecutionProgramKeyFromMessage(userMessage)
+    if (
+      (genericExecutionProgramKey === 'program.dca' || genericExecutionProgramKey === 'program.martingale')
+      && !out.some(item => this.normalizeTypedRulePhase(item.phase) === 'entry')
+    ) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
+        phase: 'entry',
+        sideScope: /开空|做空|short/iu.test(userMessage) ? 'short' : 'long',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        evidence: { text: this.findEvidenceText(userMessage, '(?:DCA|dca|马丁|martingale|启动|开启)') ?? userMessage.trim(), source: 'user_explicit' },
+      })
+    }
     if (this.hasProgramStrategySignal(userMessage) && !out.some(item => this.normalizeTypedRulePhase(item.phase) === 'program')) {
       out.push({
         key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
@@ -1957,6 +2002,34 @@ export class GenericSeedDispatcher {
     return mergeCompatiblePatchAtomNodes(out)
   }
 
+  private shouldTreatPredicateEvidenceAsExit(evidenceText: string | undefined): boolean {
+    return typeof evidenceText === 'string'
+      && /(?:减仓|平仓|平多|平空|卖出|出场|离场|止损|止盈|reduce\s+position|close|exit|sell)/iu.test(evidenceText)
+      && !/(?:开多|开空|开仓|做多|做空|买入|入场|open|enter|buy)/iu.test(evidenceText)
+  }
+
+  private pushNumericPriceBreakoutPredicates(out: PatchAtomNode[], userMessage: string): void {
+    const push = (key: string, re: RegExp, reference: 'price_level') => {
+      if (out.some(item => item.key === key && item.params?.reference === reference)) return
+      const match = userMessage.match(re)
+      const rawLevel = match?.[1]
+      if (!rawLevel) return
+      const priceLevel = Number(rawLevel)
+      if (!Number.isFinite(priceLevel) || priceLevel <= 0) return
+      const evidence = match?.[0]?.trim() || userMessage.trim()
+      out.push({
+        key,
+        phase: this.hasCloseActionIntent(evidence) ? 'exit' : 'entry',
+        sideScope: key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key ? 'short' : 'long',
+        params: { reference, priceLevel },
+        evidence: { text: evidence, source: 'user_explicit' },
+      })
+    }
+
+    push(ATOM_CONTRACT_REGISTRY['price.breakout_up'].key, /(?:突破|上破|升破|breaks?\s+(?:above|over)|breakout)\s*(\d+(?:\.\d+)?)/iu, 'price_level')
+    push(ATOM_CONTRACT_REGISTRY['price.breakout_down'].key, /(?:跌破|下破|跌穿|breaks?\s+(?:below|under)|breakdown)\s*(\d+(?:\.\d+)?)/iu, 'price_level')
+  }
+
   private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: InternalSeedDraft): void {
     const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
     const onStartKey = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
@@ -1993,14 +2066,30 @@ export class GenericSeedDispatcher {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
       if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      let phase = item.phase
+      let sideScope = item.sideScope
+      if (item.key === 'execution.limit_chase' && phase === 'entry') {
+        const exitOrderModifier = out.find((effect): effect is Extract<AtomExpr, { kind: 'atom' }> =>
+          effect.kind === 'atom'
+          && (effect.key === 'action.limit_order' || effect.key === 'execution.reduce_only')
+          && effect.params.phase === 'exit',
+        )
+        if (exitOrderModifier) {
+          phase = 'exit'
+          if ((sideScope === undefined || sideScope === null || sideScope === 'both')
+            && (exitOrderModifier.sideScope === 'long' || exitOrderModifier.sideScope === 'short')) {
+            sideScope = exitOrderModifier.sideScope
+          }
+        }
+      }
       const effect: AtomExpr = {
         kind: 'atom',
         key: item.key,
         params: {
           ...(item.params ?? {}),
-          ...(typeof item.phase === 'string' ? { phase: item.phase } : {}),
+          ...(typeof phase === 'string' ? { phase } : {}),
         },
-        ...(item.sideScope ? { sideScope: item.sideScope } : {}),
+        ...(sideScope ? { sideScope } : {}),
         ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
       }
       if (this.resolveRuleEffectRole(effect)) out.push(effect)
@@ -2010,8 +2099,9 @@ export class GenericSeedDispatcher {
     for (const item of flatPatch.atoms ?? []) pushAtom(item)
     const contextSlots = flatPatch.contextSlots ?? {}
     const explicitSymbols = extractExplicitSymbolValues(userMessage)
-    if (explicitSymbols.length > 1) {
-      for (const symbol of explicitSymbols) {
+    const scopedSymbols = explicitSymbols.length > 0 ? explicitSymbols : extractInferredSymbolScopeValues(userMessage)
+    if (scopedSymbols.length > 1) {
+      for (const symbol of scopedSymbols) {
         pushAtom({
           key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
           params: {
@@ -2025,8 +2115,8 @@ export class GenericSeedDispatcher {
       }
     }
     if (this.hasLegScopeIntent(userMessage)) {
-      const first = explicitSymbols[0] ?? 'BTCUSDT'
-      const second = explicitSymbols[1] ?? 'ETHUSDT'
+      const first = scopedSymbols[0] ?? 'BTCUSDT'
+      const second = scopedSymbols[1] ?? 'ETHUSDT'
       const legs = [
         { legId: `${first.toLowerCase().replace(/usdt$/u, '')}_long`, direction: 'long' as const, instrumentRef: `symbol_${first.toLowerCase()}` },
         { legId: `${second.toLowerCase().replace(/usdt$/u, '')}_short`, direction: 'short' as const, instrumentRef: `symbol_${second.toLowerCase()}` },
@@ -2083,6 +2173,19 @@ export class GenericSeedDispatcher {
         phase: 'entry',
         params: { value: notional ?? 100, asset: 'USDT' },
         evidence: { text: this.findEvidenceText(userMessage, '(?:(?:固定|每次|单笔)[^，。；;]{0,12}\\d+(?:\\.\\d+)?\\s*(?:USDT|U|美元))') ?? userMessage.trim() },
+      })
+    }
+    const genericExecutionProgramKeyForAction = this.resolveGenericExecutionProgramKeyFromMessage(userMessage)
+    if (
+      (genericExecutionProgramKeyForAction === 'program.dca' || genericExecutionProgramKeyForAction === 'program.martingale')
+      && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'actions')
+    ) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+        evidence: { text: this.findEvidenceText(userMessage, '(?:DCA|dca|马丁|martingale|启动|开启)') ?? userMessage.trim() },
       })
     }
     // Issue #1707 Gap C：原 fallback 在 hasSizingIntent && 无 sizing shape 时硬塞一个

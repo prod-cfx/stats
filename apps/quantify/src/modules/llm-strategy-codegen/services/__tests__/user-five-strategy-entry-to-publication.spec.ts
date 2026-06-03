@@ -122,6 +122,48 @@ function findSemanticFact(state: SemanticState, key: string): RulesMainflowAtomF
   return rulesMainflowReader.readFacts(state).find(item => item.key === key)
 }
 
+async function runCompiledScriptOnBars(message: string, bars: Bar[]) {
+  const state = buildStateFromUserMessage(message)
+  const artifacts = await createPublicationStage().generate({ semanticState: state })
+  const adapter = new BacktestStrategyAdapterService()
+  const symbolRaw = state.contextSlots.symbol?.value
+  const symbol = typeof symbolRaw === 'string' && symbolRaw.length > 0 ? symbolRaw : bars[0]?.symbol ?? 'BTCUSDT'
+  const timeframeRaw = state.contextSlots.timeframe?.value
+  const timeframe = (typeof timeframeRaw === 'string' && timeframeRaw.length > 0 ? timeframeRaw : bars[0]?.timeframe ?? '15m') as Bar['timeframe']
+  const exchangeRaw = state.contextSlots.exchange?.value
+  const marketTypeRaw = state.contextSlots.marketType?.value
+  const built = await adapter.build({
+    id: `runtime-regression-${symbol}-${timeframe}`,
+    protocolVersion: 'v1',
+    scriptCode: artifacts.compiledScript,
+    params: {
+      exchange: typeof exchangeRaw === 'string' ? exchangeRaw : 'okx',
+      marketType: typeof marketTypeRaw === 'string' ? marketTypeRaw : 'perp',
+      symbol,
+      timeframe,
+    },
+  })
+  const runner = new BacktestRunnerService(
+    new TheoreticalExecutionModel(),
+    new PortfolioLedgerServiceFactory(),
+    new BacktestReporterService(),
+    new StateEngineService(),
+    new RiskEvaluatorService(),
+  )
+  const report = await runner.run({
+    symbols: [symbol],
+    baseTimeframe: timeframe,
+    stateTimeframes: [],
+    initialCash: 10000,
+    leverage: 1,
+    execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+    strategy: built,
+    dataRange: { fromTs: bars[0]!.closeTime, toTs: bars.at(-1)!.closeTime },
+    bars,
+  })
+  return { state, artifacts, report }
+}
+
 describe('user reported five strategies: entry -> middle -> publication generation', () => {
   const plazaMaCrossTrendMessage = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。'
   const plazaBollMeanReversionMessage = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。'
@@ -540,6 +582,175 @@ describe('user reported five strategies: entry -> middle -> publication generati
     expect(serialized).toContain('ema_20_15m')
     expect(serialized).not.toContain('ema_7_15m')
     expect(serialized).not.toContain('ema_21_15m')
+  })
+
+  it('用户复杂策略：orderbook 条件回测缺事件流时给出 event-stream 诊断', async () => {
+    const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m。价格上穿 EMA20 开多，但需要 OKX orderbook imbalance 大于 60% 确认，单笔 10% 仓位。跌破 EMA20 时平多。')
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const adapter = new BacktestStrategyAdapterService()
+    const built = await adapter.build({
+      id: 'orderbook-missing-stream',
+      protocolVersion: 'v1',
+      scriptCode: artifacts.compiledScript,
+      params: { exchange: 'okx', marketType: 'perp', symbol: 'BTCUSDT', timeframe: '15m' },
+    })
+    const intervalMs = 15 * 60 * 1000
+    const bars: Bar[] = Array.from({ length: 25 }, (_, index) => {
+      const closeTime = (index + 1) * intervalMs
+      const close = index < 20 ? 100 : 110
+      return { symbol: 'BTCUSDT', timeframe: '15m', openTime: closeTime - intervalMs, closeTime, open: close, high: close + 1, low: close - 1, close, volume: 100 }
+    })
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+      new RiskEvaluatorService(),
+    )
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: built,
+      dataRange: { fromTs: bars[0]!.closeTime, toTs: bars.at(-1)!.closeTime },
+      bars,
+    })
+
+    expect(report.diagnostics.eventStreamMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
+  })
+
+  describe('用户反馈 7 条策略：rules 主数据流通用修复', () => {
+    it('range inside + break lower: 编译为可执行区间谓词并在 mock 行情产生成交', async () => {
+      const intervalMs = 15 * 60 * 1000
+      const closes = Array.from({ length: 58 }, (_, index) => [100, 101, 99][index % 3]!).concat([100, 98, 99, 100])
+      const bars: Bar[] = closes.map((close, index) => ({
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        openTime: index * intervalMs,
+        closeTime: (index + 1) * intervalMs,
+        open: index === 0 ? close : closes[index - 1]!,
+        high: close + 1,
+        low: close - 1,
+        close,
+        volume: 100 + index,
+      }))
+
+      const { artifacts, report } = await runCompiledScriptOnBars('OKX 合约 BTCUSDT 15m，价格维持在震荡区间内时开多，单笔 10% 仓位。跌破震荡区间下沿时平多。', bars)
+      const serializedExprs = JSON.stringify(artifacts.ast.exprPool)
+
+      expect(serializedExprs).toContain('RANGE_POSITION_PCT')
+      expect(artifacts.ast.exprPool).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({ kind: 'compare', args: [] }),
+        }),
+      ]))
+      expect(report.summary.totalTrades + (report.summary.totalOpenTrades ?? 0)).toBeGreaterThan(0)
+    })
+
+    it('indicator lower boundary + ATR stop: 保留 ATR 出场，只追问指标类型而不是出场', () => {
+      const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，价格触及指标下边界时开多，每次固定 100 USDT，使用 5 倍杠杆，并用 ATR14 的 2 倍止损。')
+      const conversation = createConversationService()
+      const clarificationState = conversation.buildClarificationFromSemanticState(state)
+      const prompt = new StrategyClarificationQuestionService().build(clarificationState)
+      const keys = allSemanticKeys(state)
+
+      expect(keys).toContain('risk.atr_stop')
+      expect(prompt).not.toContain('请补充出场')
+      expect(prompt).not.toContain('退出条件')
+      expect(prompt).not.toContain('出场/风控')
+    })
+
+    it('martingale program: 有出场后不能发布只有 CLOSE、没有 OPEN/ADD 的无交易脚本', async () => {
+      const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，开启马丁程序，亏损后按 2 倍补单，最多补 3 次。跌破ema20平仓')
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      const actionKinds = artifacts.ast.decisionPrograms.flatMap(program => program.actions.map(action => action.kind))
+
+      expect(actionKinds.some(kind => kind === 'OPEN_LONG' || kind === 'ADD_LONG')).toBe(true)
+      expect(artifacts.compiledScript).toContain('martingale')
+    })
+
+    it.each([
+      ['open-interest-breakout', 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。', ['openInterest.condition', 'price.breakout_up', 'action.open_long']],
+      ['indicator-lower-atr-stop', 'OKX 合约 BTCUSDT 15m，价格触及指标下边界时开多，每次固定 100 USDT，使用 5 倍杠杆，并用 ATR14 的 2 倍止损。', ['price.detect.indicator_boundary', 'action.open_long', 'risk.atr_stop', 'position.fixed_notional', 'position.leverage']],
+      ['twap-entry-program', 'OKX 合约 BTCUSDT 15m，EMA20 上穿 EMA50 后用 TWAP 分 10 次均匀买入，总仓位 1000 USDT。', ['indicator.cross_over', 'program.twap', 'action.open_long']],
+      ['dca-program', 'OKX 合约 BTCUSDT 1h，启用 DCA 程序，每回撤 3% 买入一次，最多执行 5 次。', ['program.dca']],
+    ])('%s: 入口到发布不抛 INTERNAL_SERVER_ERROR', async (_name, message, expectedKeys) => {
+      const state = buildStateFromUserMessage(message)
+      const keys = allSemanticKeys(state)
+      for (const key of expectedKeys) expect(keys).toContain(key)
+
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      expect(artifacts.validation.passed).toBe(true)
+      expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+      expect(artifacts.compiledScript).toContain('protocolVersion')
+    })
+
+    it('limit reduce + conditional entry: RSI 减仓保留 exit，不被误识别成开多入场', async () => {
+      const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，RSI14 高于 70 时用限价单减仓 50%，突破 70000 后下条件单开多。相对入场价下跌5%平仓')
+      const exitActionFacts = factsByRole(state, 'action').filter(fact => fact.phase === 'exit')
+      const entryFacts = factsByRole(state, 'condition').filter(fact => fact.phase === 'entry')
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+
+      expect(exitActionFacts).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'action.reduce_position' })]))
+      expect(entryFacts).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'price.breakout_up' })]))
+      expect(entryFacts).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'oscillator.rsi_gte' })]))
+      expect(artifacts.compiledScript).not.toContain('"1b"')
+      expect(artifacts.compiledScript).not.toContain('timeframe":"1b')
+      expect(artifacts.compiledScript).not.toContain('market.timeframe_unsupported')
+      expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+    })
+
+    it('martingale program: 补退出后不再 position sizing drift', async () => {
+      const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，开启马丁程序，亏损后按 2 倍补单，最多补 3 次。相对入场价下跌5%平仓')
+      const keys = allSemanticKeys(state)
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+
+      expect(keys).toContain('program.martingale')
+      expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+      expect(artifacts.compiledScript).toContain('martingale')
+    })
+
+    it('spot equal-weight rebalance: 等权组合映射为 rebalance program，不要求单笔仓位', async () => {
+      const state = buildStateFromUserMessage('OKX 现货 BTC 和 ETH 做 50% 50% 等权组合，每天执行 rebalance 再平衡。')
+      const keys = allSemanticKeys(state)
+      const conversation = createConversationService()
+      const clarificationState = conversation.buildClarificationFromSemanticState(state)
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      const serialized = JSON.stringify({ state, ast: artifacts.ast, script: artifacts.compiledScript })
+
+      expect(keys).toContain('program.rebalance')
+      expect(clarificationState.items.map(item => item.reason)).not.toContain('missing_position_sizing')
+      expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+      expect(artifacts.compiledScript).toContain('rebalance')
+      expect(serialized).not.toContain('REBALANCEUSDT')
+    })
+  })
+
+  describe('用户反馈 5 条策略：rules 主数据流通用修复', () => {
+    it.each([
+      ['iceberg-price-level', 'OKX 合约 BTCUSDT 15m，突破 70000 后用 iceberg 冰山单买入 1000 USDT，拆成每次 100 USDT。相对入场价下跌5%平仓', ['price.breakout_up', 'program.iceberg']],
+      ['pair-spread-legs', 'OKX 合约 BTCUSDT 和 ETHUSDT 做多空双腿价差，BTC 腿做多、ETH 腿做空，价差扩大时开仓。', ['scope.leg', 'orderbook.spread_condition']],
+      ['orderbook-post-only', 'OKX BTCUSDT 永续 1m，盘口价差小于 0.03% 且买一卖一深度比超过 2 倍时，只用 post-only 限价单开多，亏损 1% 止损。', ['orderbook.spread_condition', 'orderbook.depth_ratio', 'execution.post_only', 'action.open_long', 'risk.stop_loss_pct']],
+      ['portfolio-risk-multi-symbol', 'OKX 合约 BTC 和 ETH 15m，EMA20 上穿 EMA50 开多。账户当天亏损超过 5% 后停止新开仓，最多同时持有 3 个仓位。单笔仓位 1%。', ['indicator.cross_over', 'risk.daily_loss_limit', 'risk.kill_switch', 'position.max_concurrent_positions', 'scope.symbol']],
+      ['reduce-only-limit-chase', 'BTCUSDT 5m，RSI14 高于 70 时 reduce-only 限价平多，如果 3 根 K 线没成交就追价一次。', ['oscillator.rsi_gte', 'action.close_long', 'execution.reduce_only', 'action.limit_order', 'execution.limit_chase']],
+    ])('%s: 入口到发布不抛 INTERNAL_SERVER_ERROR / gate blocked', async (_name, message, expectedKeys) => {
+      const state = buildStateFromUserMessage(message)
+      const keys = allSemanticKeys(state)
+      for (const key of expectedKeys) expect(keys).toContain(key)
+
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      const serialized = JSON.stringify({ state, ast: artifacts.ast, script: artifacts.compiledScript })
+      expect(artifacts.validation.passed).toBe(true)
+      expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+      expect(artifacts.compiledScript).toContain('protocolVersion')
+      expect(serialized).not.toContain('BTCUSDTUSDT')
+      expect(serialized).not.toContain('ICEBERGUSDT')
+      expect(serialized).not.toContain('REBALANCEUSDT')
+    })
   })
 
   it('用户复杂策略：固定网格只生成 orchestration program，不重复生成 legacy order programs', async () => {

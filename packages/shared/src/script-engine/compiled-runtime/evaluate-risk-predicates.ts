@@ -7,10 +7,10 @@ interface RiskPredicateProgramNode {
   id: string
   payload: {
     id?: string
-    kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'atrTrailingStop' | 'rememberedLevelStop' | 'timeStopBars'
+    kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'atrTrailingStop' | 'rememberedLevelStop' | 'timeStopBars' | 'cooldownBars'
     params?: Readonly<Record<string, number | string | boolean>>
     actions?: ReadonlyArray<{
-      kind?: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+      kind?: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'BLOCK_NEW_ENTRY'
     }>
   }
 }
@@ -26,6 +26,7 @@ export function evaluateRiskPredicates(
   }
 
   const triggered = [...baseGuardState.triggered]
+  let blockNewEntry = baseGuardState.blockNewEntry
   let forceExit = baseGuardState.forceExit
   const predicateIndex = new Map(riskPredicates.map(predicate => [predicate.id, predicate]))
   const orderedPredicates = (riskPredicateOrder && riskPredicateOrder.length > 0
@@ -37,19 +38,32 @@ export function evaluateRiskPredicates(
       continue
     }
 
-    if (shouldForceExit(ctx, predicate)) {
-      triggered.push(predicate.id)
+    const blocksNewEntry = shouldBlockNewEntry(predicate)
+    const forcesExit = shouldForceExit(ctx, predicate)
+    if (!blocksNewEntry && !forcesExit) {
+      continue
+    }
+
+    triggered.push(predicate.id)
+    if (blocksNewEntry) {
+      blockNewEntry = true
+    }
+    if (forcesExit) {
       forceExit = true
     }
   }
 
   return Object.freeze({
     strategyHalt: baseGuardState.strategyHalt,
-    blockNewEntry: baseGuardState.blockNewEntry,
+    blockNewEntry,
     forceExit,
     cancelOrderPrograms: baseGuardState.cancelOrderPrograms,
     triggered: Object.freeze(triggered),
   })
+}
+
+function shouldBlockNewEntry(predicate: RiskPredicateProgramNode): boolean {
+  return predicate.payload.actions?.some(action => action.kind === 'BLOCK_NEW_ENTRY') ?? false
 }
 
 function shouldForceExit(
@@ -91,9 +105,39 @@ function isRiskPredicateBreached(
       return isRememberedLevelStopBreached(ctx, predicate)
     case 'timeStopBars':
       return isTimeStopBarsBreached(ctx, predicate)
+    case 'cooldownBars':
+      return isCooldownBarsBreached(ctx, predicate)
     default:
       return false
   }
+}
+
+function isCooldownBarsBreached(
+  ctx: StrategyExecutionContextV1,
+  predicate: RiskPredicateProgramNode,
+): boolean {
+  const barsRaw = predicate.payload.params?.bars
+  const bars = typeof barsRaw === 'number' ? barsRaw : Number(barsRaw)
+  if (!Number.isInteger(bars) || bars <= 0) return false
+
+  const currentBarIndex = readNestedNumber(ctx, ['__compiledDecisionState', 'barIndex'])
+    ?? readNestedNumber(ctx, ['barIndex'])
+    ?? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'currentBarIndex'])
+  if (currentBarIndex === null) return false
+
+  const scope = typeof predicate.payload.params?.scope === 'string'
+    ? predicate.payload.params.scope
+    : 'after_exit'
+  const lastExitBarIndex = scope === 'after_stop_loss'
+    ? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastStopLossBarIndex'])
+      ?? (readNestedString(ctx, ['semanticRuntimeState', 'cooldown', 'lastExitReason']) === 'stop_loss'
+        ? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastExitBarIndex'])
+        : null)
+    : readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastExitBarIndex'])
+      ?? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'lastStopLossBarIndex'])
+  if (lastExitBarIndex === null) return false
+
+  return currentBarIndex - lastExitBarIndex < bars
 }
 
 function isTimeStopBarsBreached(
@@ -243,6 +287,25 @@ function readRememberedLevel(
     (state as Record<string, unknown>).stopLevel,
     (state as Record<string, unknown>).value,
   ])
+}
+
+function readNestedNumber(ctx: StrategyExecutionContextV1, path: readonly string[]): number | null {
+  const value = readNestedValue(ctx, path)
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function readNestedString(ctx: StrategyExecutionContextV1, path: readonly string[]): string | null {
+  const value = readNestedValue(ctx, path)
+  return typeof value === 'string' ? value : null
+}
+
+function readNestedValue(ctx: StrategyExecutionContextV1, path: readonly string[]): unknown {
+  let current: unknown = ctx
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null
+    current = (current as Record<string, unknown>)[key]
+  }
+  return current
 }
 
 function readPositionQty(ctx: StrategyExecutionContextV1): number {

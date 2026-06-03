@@ -1,5 +1,5 @@
 const commonApp = {
-  cwd: '.',
+  cwd: __dirname,
   script: 'node',
   instances: 1,
   exec_mode: 'fork',

@@ -100,14 +100,14 @@ export interface SemanticAtomSupportMetadata {
 }
 
 export interface UnsupportedFallbackState {
-  status: 'pending'
+  status: 'pending' | 'final'
   unsupportedAtoms: Array<{
     key: string
     displayName: string
     reasonCode: string
     publicReason: string
   }>
-  recommendedStrategy: {
+  recommendedStrategy?: {
     strategyKey: string
     description: string
     patch: CodegenSemanticPatch

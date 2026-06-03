@@ -1790,6 +1790,18 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'price.level_breakout_up':
+      case 'price.level_breakout_down': {
+        const closeRef = this.ensurePriceSeries(context, 'close')
+        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.params?.priceLevel, atom.value], 0))
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          atom.key === 'price.level_breakout_down' ? 'CROSS_UNDER' : 'CROSS_OVER',
+          [closeRef, thresholdRef],
+        )
+      }
+
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], NaN)
@@ -2026,19 +2038,27 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'pattern.range': {
+        const period = this.readNumber([atom.params?.period, atom.params?.lookbackBars], 20)
+        const rangePositionRef = this.ensureRangePositionSeries(context, period)
+        const lowerRef = this.ensureConstSeries(context, 0)
+        const upperRef = this.ensureConstSeries(context, 1)
+        const lowerPredicate = this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_pattern_range_inside_lower_${period}`,
+          'GTE',
+          [rangePositionRef, lowerRef],
+        )
+        const upperPredicate = this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_pattern_range_inside_upper_${period}`,
+          'LTE',
+          [rangePositionRef, upperRef],
+        )
         return this.upsertPredicate(
           context.predicateMap,
-          `${seed}_pattern_range`,
-          'compare',
-          [],
-          {
-            op: 'EQ',
-            mode: typeof atom.params?.mode === 'string' ? atom.params.mode : 'inside_range',
-            lowerRole: typeof atom.params?.lowerRole === 'string' ? atom.params.lowerRole : 'range_low',
-            upperRole: typeof atom.params?.upperRole === 'string' ? atom.params.upperRole : 'range_high',
-            lookbackBars: this.readNumber([atom.params?.lookbackBars], 48),
-            ...(typeof atom.params?.timeframe === 'string' ? { timeframe: atom.params.timeframe } : {}),
-          },
+          `${seed}_pattern_range_inside_${period}`,
+          'AND',
+          [lowerPredicate, upperPredicate],
         )
       }
 

@@ -1696,7 +1696,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       paramSlots: {
         period: { kind: 'number', required: false, range: [1, 1000], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 1000] } },
-        reference: { kind: 'enum', required: true, enum: ['channel_high', 'unknown'], default: 'channel_high' },
+        reference: { kind: 'enum', required: true, enum: ['channel_high', 'price_level', 'unknown'], default: 'channel_high' },
         bufferPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
       },
       phaseResolver: 'by-clause-verb',
@@ -1747,7 +1747,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       paramSlots: {
         period: { kind: 'number', required: false, range: [1, 1000], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 1000] } },
-        reference: { kind: 'enum', required: true, enum: ['channel_low', 'unknown'], default: 'channel_low' },
+        reference: { kind: 'enum', required: true, enum: ['channel_low', 'price_level', 'unknown'], default: 'channel_low' },
         bufferPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
       },
       phaseResolver: 'by-clause-verb',
@@ -1899,10 +1899,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // 'RSI14 上穿 70' → period=14, value=70。
         // Issue #1395 mute-spider：multipleOf:1 强制整数；range 已是 [0,100]/[1,500]。
         value: { kind: 'number', required: false, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
-        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        fastPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        slowPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
-        signalPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500] } },
+        fastPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500] } },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500], index: 1 } },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500], index: 2 } },
       },
       // Issue #1395 mute-spider S5：MACD 三元组合法白名单（业界标准 + 快速线变体）
       paramPresetCombos: [
@@ -1990,10 +1990,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // Issue #1338：与 cross_over 对称——双数字按位置 disambiguate。
         // Issue #1395 mute-spider：multipleOf:1 强制整数。
         value: { kind: 'number', required: false, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
-        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        fastPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        slowPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
-        signalPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500] } },
+        fastPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500] } },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500], index: 1 } },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'indicator-period-int', range: [1, 500], index: 2 } },
       },
       // Issue #1395 mute-spider S5：MACD 三元组合法白名单（业界标准 + 快速线变体）。
       // 与 cross_over 对称。
@@ -2394,7 +2394,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
             },
           },
         },
-        thresholdPct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        thresholdPct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100], derive: 'range-boundary-threshold' } },
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
@@ -2456,7 +2456,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
             },
           },
         },
-        thresholdPct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        thresholdPct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100], derive: 'range-boundary-threshold' } },
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',

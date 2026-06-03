@@ -4,6 +4,7 @@ import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
@@ -16,6 +17,7 @@ import { BacktestSnapshotLoaderService } from '../services/backtest-snapshot-loa
 import { BacktestJobRepository } from './backtest-job.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestQueueProducer } from './backtest-queue.producer'
+import { DEFAULT_BACKTEST_JOB_TIMEOUT_MS, DEFAULT_BACKTEST_QUEUE_TIMEOUT_MS } from './backtest-queue.constants'
 
 interface LastBacktestRangeConfig {
   preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
@@ -92,6 +94,8 @@ type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'> & {
   resultSummary?: BacktestReport['summary']
 }
 
+type PersistedBacktestJob = NonNullable<Awaited<ReturnType<BacktestJobRepository['findById']>>>
+
 @Injectable()
 export class BacktestJobsService {
   constructor(
@@ -100,6 +104,7 @@ export class BacktestJobsService {
     private readonly jobsRepository: BacktestJobRepository,
     private readonly queueProducer: BacktestQueueProducer,
     private readonly snapshotLoader: BacktestSnapshotLoaderService,
+    private readonly config: ConfigService,
   ) {}
 
   async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
@@ -244,12 +249,16 @@ export class BacktestJobsService {
   }
 
   async getJob(id: string, ownerUserId: string): Promise<BacktestJobView> {
-    const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
+    const job = await this.reconcileStaleJobOnRead(
+      await this.getOwnedJobOrThrowNotFound(id, ownerUserId),
+    )
     return this.toView(job)
   }
 
   async getJobResult(id: string, ownerUserId: string): Promise<BacktestReport> {
-    const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
+    const job = await this.reconcileStaleJobOnRead(
+      await this.getOwnedJobOrThrowNotFound(id, ownerUserId),
+    )
     const status = this.normalizePersistedStatus(job.status, job.id)
     if (status === 'failed')
       throw new DomainException('backtest.job_failed', {
@@ -325,6 +334,33 @@ export class BacktestJobsService {
         args: { id },
       })
     }
+    return job
+  }
+
+  private async reconcileStaleJobOnRead(job: PersistedBacktestJob): Promise<PersistedBacktestJob> {
+    const now = Date.now()
+    if (job.status === 'queued') {
+      const queueTimeoutMs = this.readPositiveNumber('BACKTEST_QUEUE_TIMEOUT_MS', DEFAULT_BACKTEST_QUEUE_TIMEOUT_MS)
+      if (job.createdAt.getTime() <= now - queueTimeoutMs) {
+        return await this.jobsRepository.markFailed(job.id, {
+          code: ErrorCode.BACKTEST_QUEUE_TIMEOUT,
+          message: 'Backtest queue wait timed out',
+          finishedAt: new Date(now),
+        })
+      }
+    }
+
+    if (job.status === 'running' && job.startedAt) {
+      const jobTimeoutMs = this.readPositiveNumber('BACKTEST_JOB_TIMEOUT_MS', DEFAULT_BACKTEST_JOB_TIMEOUT_MS)
+      if (job.startedAt.getTime() <= now - jobTimeoutMs) {
+        return await this.jobsRepository.markFailed(job.id, {
+          code: ErrorCode.BACKTEST_JOB_TIMEOUT,
+          message: 'Backtest job timed out',
+          finishedAt: new Date(now),
+        })
+      }
+    }
+
     return job
   }
 
@@ -501,6 +537,13 @@ export class BacktestJobsService {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       args: { id, status },
     })
+  }
+
+  private readPositiveNumber(key: string, fallback: number): number {
+    const raw = this.config.get<number | string>(key)
+    if (raw === undefined || raw === null || raw === '') return fallback
+    const parsed = typeof raw === 'number' ? raw : Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
   }
 
   private describeError(error: unknown): string {

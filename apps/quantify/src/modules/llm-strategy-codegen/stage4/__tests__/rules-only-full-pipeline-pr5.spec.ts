@@ -82,6 +82,7 @@ describe('Stage 4 PR5 rules-only full pipeline', () => {
 
     expect(pr5ReadyRows.map(row => row.atomKey).sort()).toEqual([
       'orchestration.data_source_binding',
+      'orchestration.multi_leg',
       'orchestration.multi_symbol',
       'orchestration.multi_timeframe',
       'orchestration.portfolio_risk',
@@ -110,5 +111,18 @@ describe('Stage 4 PR5 rules-only full pipeline', () => {
     expect(result.publicationError).toBeNull()
     expect(serializedPublication).toContain('protocolVersion')
     expect(serializedPublication).not.toContain('fake_deploy_payload')
+  })
+
+  it('range lower-bound exit reaches rules mainflow publication as CLOSE_LONG', async () => {
+    const utterance = 'OKX 合约 BTCUSDT 15m，价格维持在震荡区间内时开多，单笔 10% 仓位。跌破震荡区间下沿时平多。'
+    const result = await runFailClosedPipeline(utterance)
+    const serializedPatch = JSON.stringify(result.semanticPatch)
+    const serializedPublication = JSON.stringify(result.publication ?? {})
+
+    expect(result.publicationError).toBeNull()
+    expect(serializedPatch).toContain('price.range_position_lte')
+    expect(serializedPatch).toContain('"thresholdPct":0')
+    expect(serializedPublication).toContain('CLOSE_LONG')
+    expect(serializedPublication).not.toContain('canonical_projection_missing_exit_program')
   })
 })

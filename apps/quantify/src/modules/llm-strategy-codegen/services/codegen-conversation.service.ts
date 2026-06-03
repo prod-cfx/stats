@@ -363,6 +363,45 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
+    const finalUnsupportedFallback = this.unsupportedFallback.buildFinalUnsupportedFromMessage(
+      dto.initialMessage ?? '',
+      responseLocale,
+    )
+    if (finalUnsupportedFallback) {
+      const semanticState = this.withUnsupportedFallback(this.createEmptySemanticState(), finalUnsupportedFallback)
+      const clarificationState = this.buildUnsupportedFallbackClarificationState()
+      const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
+      const constraintPack = {
+        ...createDefaultConstraintPack(guidePrompt),
+        locale: responseLocale,
+        recommendationStyle: 'neutral',
+        conversationHistory: this.appendConversationHistory([], dto.initialMessage, finalUnsupportedFallback.prompt),
+      }
+      const session = await this.sessionsRepo.createSession({
+        userId: sessionUserId,
+        status: 'DRAFTING',
+        semanticState: semanticState as unknown as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+        constraintPack: constraintPack as unknown as Prisma.InputJsonValue,
+        latestDraftCode: null,
+        latestSpecDesc: null,
+        rejectReason: null,
+        strategyInstanceId: null,
+      } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        specDesc: null,
+        canonicalDigest: null,
+        semanticGraph: null,
+        assistantPrompt: finalUnsupportedFallback.prompt,
+        clarificationState,
+        unsupportedFallback: finalUnsupportedFallback as unknown as Record<string, unknown>,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
     // Issue #1492：startSession 不再从 dispatcher seed SemanticState，
     //   planner 是策略语义唯一真源；空 state 直接喂给 planner。
     const seedSemanticState = this.createEmptySemanticState()
@@ -6449,6 +6488,20 @@ export class CodegenConversationService {
     guideConfig?: CodegenGuideConfigDto
   }): Promise<{ semanticState: SemanticState; response: CodegenSessionResponseDto | null }> {
     const pendingFallback = args.semanticState.unsupportedFallback
+    if (pendingFallback?.status === 'final') {
+      const constraintPack = this.readConstraintPack(args.session.constraintPack)
+      return {
+        semanticState: args.semanticState,
+        response: await this.persistUnsupportedFallbackConversationTurn({
+          session: args.session,
+          semanticState: args.semanticState,
+          message: args.message,
+          assistantPrompt: pendingFallback.prompt,
+          userId: args.userId,
+          constraintPack,
+        }),
+      }
+    }
     if (pendingFallback?.status !== 'pending') {
       return { semanticState: args.semanticState, response: null }
     }

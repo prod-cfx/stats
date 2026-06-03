@@ -1,6 +1,6 @@
 import type { BacktestRunInput } from './types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
-import { Body, Controller, Get, Headers, HttpStatus, Logger, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Header, Headers, HttpStatus, Logger, Param, Post, UseGuards } from '@nestjs/common'
 import {
   ApiExtraModels,
   ApiHeader,
@@ -114,6 +114,8 @@ export class BacktestingController {
   }
 
   @Get('jobs/:id')
+  @Header('Cache-Control', 'no-store, no-cache, max-age=0')
+  @Header('Pragma', 'no-cache')
   @ApiOperation({ summary: '获取回测任务状态' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
@@ -128,6 +130,8 @@ export class BacktestingController {
   }
 
   @Get('jobs/:id/result')
+  @Header('Cache-Control', 'no-store, no-cache, max-age=0')
+  @Header('Pragma', 'no-cache')
   @ApiOperation({ summary: '获取回测任务结果' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })

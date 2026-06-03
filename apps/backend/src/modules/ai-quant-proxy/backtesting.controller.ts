@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Header, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
@@ -63,6 +63,8 @@ export class BacktestingProxyController {
   }
 
   @Get('jobs/:id')
+  @Header('Cache-Control', 'no-store, no-cache, max-age=0')
+  @Header('Pragma', 'no-cache')
   async getJob(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
@@ -73,6 +75,8 @@ export class BacktestingProxyController {
   }
 
   @Get('jobs/:id/result')
+  @Header('Cache-Control', 'no-store, no-cache, max-age=0')
+  @Header('Pragma', 'no-cache')
   async getJobResult(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,

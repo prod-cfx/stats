@@ -999,6 +999,28 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect((service as any).extractFallbackPositionPct('可以，止损改成 5％')).toBeNull()
   })
 
+  it.each([
+    ['cross-exchange', '做 Binance 和 OKX 跨所搬砖，价差大于 0.5% 时自动划转 USDT 并套利。', 'cross_exchange_fund_transfer_arbitrage_out_of_scope', '目前不支持跨所搬砖套利'],
+    ['triangular', '做 BTC/USDT、ETH/USDT、ETH/BTC 三角套利，盘口出现价差时自动撮合三条腿。', 'triangular_arbitrage_matching_out_of_scope', '目前不支持三角套利策略'],
+    ['hft', '做 BTCUSDT 高频做市，根据毫秒级盘口变化不断撤单挂单。', 'hft_market_making_out_of_scope', '目前不支持高频做市策略'],
+    ['queue-alpha', '做延迟敏感 order queue alpha，根据队列位置抢 maker 成交。', 'latency_sensitive_order_queue_alpha_out_of_scope', '目前不支持延迟敏感 order queue alpha'],
+  ])('routes C-scope unsupported strategy before planner and sizing clarification: %s', async (_name, initialMessage, reasonCode, publicText) => {
+    mockRepo.createSession.mockResolvedValue({ id: `s-unsupported-${_name}` })
+    mockAi.chat.mockRejectedValue(new Error('planner must not be called for C-scope unsupported strategy'))
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(result.assistantPrompt).toContain(publicText)
+    expect(result.assistantPrompt).not.toContain('请确认单笔仓位')
+    expect(result.clarificationState?.status).toBe('CLEAR')
+    expect(result.unsupportedFallback).toEqual(expect.objectContaining({ status: 'final' }))
+    expect(JSON.stringify(createPayload.semanticState)).toContain(reasonCode)
+    expect(JSON.stringify(result.unsupportedFallback)).not.toContain('recommendedStrategy')
+    expect(createPayload.semanticState).not.toHaveProperty('rules')
+  })
+
   it('rejects engine tests when semantic input is missing', async () => {
     await expect(service.testEngine({
       userId: 'u1',
@@ -1320,6 +1342,26 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         reason: 'missing_semantic_position_sizing',
       }),
     ]))
+  })
+
+  it('does not throw 500 when deterministic rules fallback lacks market context', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我已整理出策略逻辑，请补充交易所和标的。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-ema-stack-missing-context' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里面 价格低于ema20时平多；止损：5%；仓位：10usdt',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请')
+    expect(mockRepo.createSession).toHaveBeenCalled()
   })
 
   it('does not return stale planner prompt when dispatcher repairs MA cross lifecycle', async () => {

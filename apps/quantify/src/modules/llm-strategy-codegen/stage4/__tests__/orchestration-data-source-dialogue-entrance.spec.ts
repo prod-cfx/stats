@@ -69,4 +69,24 @@ describe('Stage 4 PR5 orchestration and data-source dialogue entrance', () => {
     expect(orchestrationKeys).toContain('scope.timeframe')
     expect(orchestrationKeys).not.toContain('gate.regime')
   })
+
+  it('does not treat execution timeframe as EMA cross period', () => {
+    const patch = dispatcher.dispatch('BTC 15m EMA20 上穿 EMA50 开多，1h MA50 上方才允许入场，单笔 10% 仓位。')
+    const cross = (patch.rules ?? [])
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+      .find(leaf => leaf.key === 'indicator.cross_over')
+
+    expect(cross?.params).toMatchObject({ indicator: 'ema', fastPeriod: 20, slowPeriod: 50 })
+    expect(cross?.params).not.toMatchObject({ fastPeriod: 15, slowPeriod: 20 })
+  })
+
+  it('keeps multi-symbol EMA20/EMA50 entry periods executable', () => {
+    const patch = dispatcher.dispatch('OKX 永续 BTCUSDT 和 ETHUSDT 15m 都按 EMA20 上穿 EMA50 开多，单笔使用 10% 仓位，亏损 3% 止损。')
+    const cross = (patch.rules ?? [])
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+      .find(leaf => leaf.key === 'indicator.cross_over')
+
+    expect(cross?.params).toMatchObject({ indicator: 'ema', fastPeriod: 20, slowPeriod: 50 })
+    expect(cross?.params).not.toMatchObject({ fastPeriod: 15, slowPeriod: 20 })
+  })
 })

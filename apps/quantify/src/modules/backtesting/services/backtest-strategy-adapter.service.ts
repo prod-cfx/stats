@@ -18,6 +18,7 @@ import { buildTimeframeBarStatus } from '@ai/shared/script-engine/helpers/build-
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
+import type { CompiledScriptProjection } from '@/modules/llm-strategy-codegen/types/compiled-script-projection'
 import { isStrategyAdapterV1 } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 
@@ -52,12 +53,35 @@ export class BacktestStrategyAdapterService {
       })
     }
 
+    const projection = this.tryParseCompiledProjection(rawScript)
     const adapter = await this.resolveAdapter(rawScript, input.executionEnvelope)
 
     return {
       id: input.id,
       params: input.params ?? {},
+      ...(projection
+        ? {
+            astSnapshot: {
+              exprPool: projection.exprPool,
+              dataRequirements: projection.dataRequirements,
+              executionModel: projection.executionModel,
+            },
+            specSnapshot: {
+              rules: projection.decisionPrograms,
+              orderPrograms: projection.orderPrograms,
+            },
+          }
+        : {}),
       fn: async ctx => adapter.onBar(ctx as never),
+    }
+  }
+
+  private tryParseCompiledProjection(scriptCode: string): CompiledScriptProjection | null {
+    try {
+      return this.compiledScriptParser.parse(scriptCode)
+    }
+    catch {
+      return null
     }
   }
 

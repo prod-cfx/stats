@@ -43,6 +43,7 @@ export function evaluateGuards(
     if (!breached) continue
 
     state.triggered = [...state.triggered, guardId]
+    recordCooldownTrigger(ctx, guard)
 
     switch (guard.payload.onBreach) {
       case 'HALT_STRATEGY':
@@ -64,6 +65,45 @@ export function evaluateGuards(
     ...state,
     triggered: Object.freeze([...state.triggered]),
   })
+}
+
+function recordCooldownTrigger(
+  ctx: StrategyExecutionContextV1,
+  guard: GuardProgramNode,
+): void {
+  if (guard.payload.kind !== 'STOP_LOSS_PCT' || guard.payload.onBreach !== 'FORCE_EXIT') {
+    return
+  }
+
+  const barIndex = readCurrentBarIndex(ctx)
+  if (barIndex === null) return
+
+  const root = ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }
+  if (!root.semanticRuntimeState || typeof root.semanticRuntimeState !== 'object' || Array.isArray(root.semanticRuntimeState)) {
+    root.semanticRuntimeState = {}
+  }
+  const cooldown = root.semanticRuntimeState.cooldown
+  root.semanticRuntimeState.cooldown = {
+    ...(cooldown && typeof cooldown === 'object' && !Array.isArray(cooldown) ? cooldown : {}),
+    lastExitBarIndex: barIndex,
+    lastExitReason: 'stop_loss',
+    lastStopLossBarIndex: barIndex,
+  }
+}
+
+function readCurrentBarIndex(ctx: StrategyExecutionContextV1): number | null {
+  return readNestedNumber(ctx, ['__compiledDecisionState', 'barIndex'])
+    ?? readNestedNumber(ctx, ['barIndex'])
+    ?? readNestedNumber(ctx, ['semanticRuntimeState', 'cooldown', 'currentBarIndex'])
+}
+
+function readNestedNumber(ctx: StrategyExecutionContextV1, path: readonly string[]): number | null {
+  let current: unknown = ctx
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null
+    current = (current as Record<string, unknown>)[key]
+  }
+  return typeof current === 'number' && Number.isFinite(current) ? current : null
 }
 
 function isGuardBreached(

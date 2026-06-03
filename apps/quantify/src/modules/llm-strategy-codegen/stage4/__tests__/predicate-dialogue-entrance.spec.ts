@@ -36,4 +36,5 @@ describe('Stage 4 PR2 predicate dialogue entrance', () => {
     expect(collectConditionKeys(patch)).toContain(expectedKey)
     expect(patch.rules?.length ?? 0).toBeGreaterThan(0)
   })
+
 })

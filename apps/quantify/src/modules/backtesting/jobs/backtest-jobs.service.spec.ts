@@ -3,6 +3,7 @@ import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
+import { DEFAULT_BACKTEST_QUEUE_TIMEOUT_MS } from './backtest-queue.constants'
 import { BacktestJobsService } from './backtest-jobs.service'
 
 const OWNER_USER_ID = 'user-1'
@@ -157,6 +158,12 @@ function createSnapshotLoaderMock() {
   }
 }
 
+function createConfigMock(values: Record<string, unknown> = {}) {
+  return {
+    get: jest.fn((key: string) => values[key]),
+  }
+}
+
 function createAvailabilityMock(
   result: { supported: true } | { supported: false; reasonCode: string; args?: Record<string, unknown> } = { supported: true },
 ) {
@@ -210,6 +217,7 @@ function createService(args?: {
   repository?: ReturnType<typeof createRepositoryMock>
   queue?: ReturnType<typeof createQueueMock>
   snapshotLoader?: ReturnType<typeof createSnapshotLoaderMock>
+  config?: ReturnType<typeof createConfigMock>
 }) {
   const runner = args?.runner ?? { run: jest.fn().mockImplementation(() => new Promise(() => {})) }
   const marketData = args?.marketData ?? createMarketDataMock()
@@ -219,6 +227,7 @@ function createService(args?: {
   const repository = args?.repository ?? createRepositoryMock(prisma)
   const queue = args?.queue ?? createQueueMock()
   const snapshotLoader = args?.snapshotLoader ?? createSnapshotLoaderMock()
+  const config = args?.config ?? createConfigMock()
 
   return {
     runner,
@@ -235,6 +244,7 @@ function createService(args?: {
       repository as never,
       queue as never,
       snapshotLoader as never,
+      config as never,
     ),
   }
 }
@@ -273,6 +283,30 @@ describe('backtestJobsService', () => {
     expect(created.status).toBe('queued')
     expect(queue.enqueue).toHaveBeenCalledWith(created.id)
     expect(marketData.prepareData).not.toHaveBeenCalled()
+  })
+
+  it('fails stale queued jobs on read so staging does not poll forever when the worker is unavailable', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-03T06:43:50.000Z'))
+    const { service, prisma, repository } = createService()
+    const created = await service.createJob(createInput(), OWNER_USER_ID)
+    const record = prisma.backtestJob.store.get(created.id)
+    record.createdAt = new Date(Date.now() - DEFAULT_BACKTEST_QUEUE_TIMEOUT_MS - 1)
+
+    const stale = await service.getJob(created.id, OWNER_USER_ID)
+
+    expect(repository.markFailed).toHaveBeenCalledWith(created.id, expect.objectContaining({
+      code: ErrorCode.BACKTEST_QUEUE_TIMEOUT,
+      message: 'Backtest queue wait timed out',
+    }))
+    expect(stale).toMatchObject({
+      id: created.id,
+      status: 'failed',
+      error: 'Backtest queue wait timed out',
+      errorDetails: {
+        code: ErrorCode.BACKTEST_QUEUE_TIMEOUT,
+        message: 'Backtest queue wait timed out',
+      },
+    })
   })
 
   it('marks job failed when enqueue fails after persistence', async () => {
@@ -418,6 +452,7 @@ describe('backtestJobsService', () => {
       createRepositoryMock(prisma as never) as never,
       createQueueMock() as never,
       createSnapshotLoaderMock() as never,
+      createConfigMock() as never,
     )
     const input = createInput()
     input.symbols = ['BTCUSDT']
@@ -463,6 +498,7 @@ describe('backtestJobsService', () => {
       createRepositoryMock(prisma as never) as never,
       createQueueMock() as never,
       createSnapshotLoaderMock() as never,
+      createConfigMock() as never,
     )
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
@@ -534,6 +570,7 @@ describe('backtestJobsService', () => {
       createRepositoryMock(prisma as never) as never,
       createQueueMock() as never,
       createSnapshotLoaderMock() as never,
+      createConfigMock() as never,
     )
 
     await expect(service.getJob('job-invalid', OWNER_USER_ID)).rejects.toThrow(
@@ -566,6 +603,7 @@ describe('backtestJobsService', () => {
       createRepositoryMock(prisma as never) as never,
       createQueueMock() as never,
       createSnapshotLoaderMock() as never,
+      createConfigMock() as never,
     )
 
     await expect(service.getJobResult('job-invalid-result', OWNER_USER_ID)).rejects.toThrow(

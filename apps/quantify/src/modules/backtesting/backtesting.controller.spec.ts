@@ -59,6 +59,10 @@ jest.mock('@nestjs/throttler', () => ({
 }))
 
 describe('backtestingController', () => {
+  function readHeaderMetadata(methodName: 'getJob' | 'getJobResult') {
+    return Reflect.getMetadata('__headers__', BacktestingController.prototype[methodName]) as Array<{ name: string; value: string }> | undefined
+  }
+
   it('retains runtime DTO metadata for symbol support requests', () => {
     const paramTypes = Reflect.getMetadata('design:paramtypes', BacktestingController.prototype, 'checkSymbolSupport')
     expect(paramTypes?.[3]?.name).toBe('CheckBacktestSymbolDto')
@@ -106,6 +110,15 @@ describe('backtestingController', () => {
     expect(typeof c.getJobResult).toBe('function')
     expect(typeof c.getCapabilities).toBe('function')
     expect(typeof c.checkSymbolSupport).toBe('function')
+  })
+
+  it('marks backtest polling endpoints as no-store to prevent 304 polling stalls', () => {
+    for (const methodName of ['getJob', 'getJobResult'] as const) {
+      expect(readHeaderMetadata(methodName)).toEqual(expect.arrayContaining([
+        { name: 'Cache-Control', value: 'no-store, no-cache, max-age=0' },
+        { name: 'Pragma', value: 'no-cache' },
+      ]))
+    }
   })
 
   it('loads published snapshot strategy before delegating to runner and jobs service', async () => {

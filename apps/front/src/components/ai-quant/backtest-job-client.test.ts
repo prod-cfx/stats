@@ -119,9 +119,38 @@ describe('backtest-job-client', () => {
         headers: expect.objectContaining({
           Authorization: 'Bearer header.payload.signature',
           'x-request-id': expect.stringContaining('front-backtest:job:btjob-1'),
+          'Cache-Control': 'no-store, no-cache, max-age=0',
+          Pragma: 'no-cache',
         }),
         params: { id: 'btjob-1' },
         signal: expect.anything(),
+      }),
+    )
+  })
+
+  it('disables browser cache for backtest job result polling', async () => {
+    mockClient.BacktestingProxyController_getJobResult.mockResolvedValue({
+      data: {
+        summary: {
+          netProfit: 0,
+          netProfitPct: 0,
+          maxDrawdownPct: 0,
+          winRate: 0,
+          profitFactor: null,
+          totalTrades: 0,
+        },
+      },
+    })
+
+    await getBacktestJobResult('btjob-1')
+
+    expect(mockClient.BacktestingProxyController_getJobResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Cache-Control': 'no-store, no-cache, max-age=0',
+          Pragma: 'no-cache',
+        }),
+        params: { id: 'btjob-1' },
       }),
     )
   })

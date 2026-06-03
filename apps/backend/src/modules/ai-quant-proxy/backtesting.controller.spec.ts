@@ -4,6 +4,10 @@ import { BacktestingCreateJobRequestDto } from './dto/backtesting-create-job.dto
 import { BacktestingSymbolSupportRequestDto } from './dto/backtesting-symbol-support.dto'
 
 describe('backtestingProxyController', () => {
+  function readHeaderMetadata(methodName: 'getJob' | 'getJobResult') {
+    return Reflect.getMetadata('__headers__', BacktestingProxyController.prototype[methodName]) as Array<{ name: string; value: string }> | undefined
+  }
+
   function createController() {
     const service = {
       getBacktestCapabilities: jest.fn().mockResolvedValue({ allowedBaseTimeframes: ['1h'] }),
@@ -153,5 +157,14 @@ describe('backtestingProxyController', () => {
         }],
       },
     }), 'req-1')
+  })
+
+  it('marks backtest polling endpoints as no-store to prevent 304 polling stalls', () => {
+    for (const methodName of ['getJob', 'getJobResult'] as const) {
+      expect(readHeaderMetadata(methodName)).toEqual(expect.arrayContaining([
+        { name: 'Cache-Control', value: 'no-store, no-cache, max-age=0' },
+        { name: 'Pragma', value: 'no-cache' },
+      ]))
+    }
   })
 })

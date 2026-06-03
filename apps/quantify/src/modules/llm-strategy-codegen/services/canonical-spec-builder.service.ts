@@ -7481,6 +7481,15 @@ export class CanonicalSpecBuilderService {
           },
         }
       case ATOM_CONTRACT_REGISTRY['price.breakout_up'].key:
+        if (trigger.params.reference === 'price_level' && typeof trigger.params.priceLevel === 'number') {
+          return {
+            kind: 'atom',
+            key: 'price.level_breakout_up',
+            semanticScope: 'market',
+            op: 'CROSS_OVER',
+            params: { priceLevel: trigger.params.priceLevel },
+          }
+        }
         return {
           kind: 'atom',
           key: 'breakout.channel_high_break',
@@ -7493,6 +7502,15 @@ export class CanonicalSpecBuilderService {
           },
         }
       case ATOM_CONTRACT_REGISTRY['price.breakout_down'].key:
+        if (trigger.params.reference === 'price_level' && typeof trigger.params.priceLevel === 'number') {
+          return {
+            kind: 'atom',
+            key: 'price.level_breakout_down',
+            semanticScope: 'market',
+            op: 'CROSS_UNDER',
+            params: { priceLevel: trigger.params.priceLevel },
+          }
+        }
         return {
           kind: 'atom',
           key: 'breakout.channel_low_break',

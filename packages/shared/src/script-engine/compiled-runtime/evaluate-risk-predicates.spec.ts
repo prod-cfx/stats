@@ -161,6 +161,47 @@ describe('evaluateRiskPredicates', () => {
     })
   })
 
+  describe('cooldownBars', () => {
+    const baseGuardState = {
+      strategyHalt: false,
+      blockNewEntry: false,
+      forceExit: false,
+      cancelOrderPrograms: false,
+      triggered: [],
+    }
+
+    it('blocks new entries while the post-exit cooldown window is active', () => {
+      const guardState = evaluateRiskPredicates(
+        {
+          barIndex: 12,
+          semanticRuntimeState: {
+            cooldown: {
+              lastExitBarIndex: 10,
+              lastExitReason: 'stop_loss',
+            },
+          },
+        },
+        [
+          {
+            id: 'risk_cooldown_after_stop',
+            payload: {
+              id: 'risk-cooldown-after-stop',
+              kind: 'cooldownBars',
+              params: { bars: 5, scope: 'after_stop_loss' },
+              actions: [{ kind: 'BLOCK_NEW_ENTRY' }],
+            },
+          },
+        ],
+        baseGuardState,
+        ['risk_cooldown_after_stop'],
+      )
+
+      expect(guardState.blockNewEntry).toBe(true)
+      expect(guardState.forceExit).toBe(false)
+      expect(guardState.triggered).toEqual(['risk_cooldown_after_stop'])
+    })
+  })
+
   it('does not force a short exit when an ATR take-profit only declares CLOSE_LONG', () => {
     const guardState = evaluateRiskPredicates(
       {

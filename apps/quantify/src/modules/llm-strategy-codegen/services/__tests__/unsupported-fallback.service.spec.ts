@@ -4,6 +4,42 @@ import { UnsupportedFallbackService } from '../unsupported-fallback.service'
 describe('UnsupportedFallbackService', () => {
   const service = new UnsupportedFallbackService(new SemanticAtomRegistryService())
 
+  it.each([
+    [
+      '做 Binance 和 OKX 跨所搬砖，价差大于 0.5% 时自动划转 USDT 并套利。',
+      'unsupported.cross_exchange_fund_transfer_arbitrage',
+      'cross_exchange_fund_transfer_arbitrage_out_of_scope',
+      '目前不支持跨所搬砖套利',
+    ],
+    [
+      '做 BTC/USDT、ETH/USDT、ETH/BTC 三角套利，盘口出现价差时自动撮合三条腿。',
+      'unsupported.triangular_arbitrage_matching',
+      'triangular_arbitrage_matching_out_of_scope',
+      '目前不支持三角套利策略',
+    ],
+    [
+      '做 BTCUSDT 高频做市，根据毫秒级盘口变化不断撤单挂单。',
+      'unsupported.hft_market_making',
+      'hft_market_making_out_of_scope',
+      '目前不支持高频做市策略',
+    ],
+    [
+      '做延迟敏感 order queue alpha，根据队列位置抢 maker 成交。',
+      'unsupported.latency_sensitive_order_queue_alpha',
+      'latency_sensitive_order_queue_alpha_out_of_scope',
+      '目前不支持延迟敏感 order queue alpha',
+    ],
+  ])('builds final fail-closed unsupported prompt for C-scope: %s', (message, atomKey, reasonCode, publicText) => {
+    const fallback = service.buildFinalUnsupportedFromMessage(message)
+
+    expect(fallback).not.toBeNull()
+    expect(fallback!.status).toBe('final')
+    expect(fallback!.unsupportedAtoms).toEqual([expect.objectContaining({ key: atomKey, reasonCode })])
+    expect(fallback!.prompt).toContain(publicText)
+    expect(fallback!.prompt).not.toContain('请确认单笔仓位')
+    expect(fallback).not.toHaveProperty('recommendedStrategy')
+  })
+
   // Issue #1383 Lane A：risk.atr_stop 已升级为 supported_executable，不再走
   //   recognized_unsupported fallback 路径。下列用例改用仍为 unsupported 的
   //   volume.spike（成交量放大）作为代表性 case。
@@ -148,6 +184,24 @@ describe('UnsupportedFallbackService', () => {
     ])
 
     expect(fallback).toBeNull()
+  })
+
+  it('returns final unsupported prompt instead of throwing when no replacement strategy exists', () => {
+    const fallback = service.buildPendingFallback([
+      {
+        key: 'position.fixed_notional',
+        displayName: '固定名义金额',
+        reasonCode: 'runtime_version_unsupported',
+        publicReason: '当前策略部署版本暂不支持该语义原子，请重新发布策略或改用替代方案。',
+      },
+    ])
+
+    expect(fallback).not.toBeNull()
+    expect(fallback!.status).toBe('final')
+    expect(fallback!.prompt).toContain('固定名义金额')
+    expect(fallback!.prompt).toContain('当前策略部署版本暂不支持')
+    expect(fallback!.prompt).not.toContain('是否改用')
+    expect(fallback).not.toHaveProperty('recommendedStrategy')
   })
 
   it('returns unclear for empty or ambiguous message', () => {
