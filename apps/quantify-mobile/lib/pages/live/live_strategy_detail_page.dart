@@ -1165,13 +1165,14 @@ class _StickyAction extends ConsumerWidget {
               onPressed: () => _onDelete(context, ref),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
+                backgroundColor: c.bgElev,
+                foregroundColor: c.statusDanger,
                 side: BorderSide(color: c.statusDanger.withValues(alpha: 0.4)),
               ),
               child: Text(
                 stopped
                     ? l10n.liveActionDeletePermanent
                     : l10n.liveActionDelete,
-                style: TextStyle(color: c.statusDanger),
               ),
             ),
           ),

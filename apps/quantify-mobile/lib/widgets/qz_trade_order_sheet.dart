@@ -99,6 +99,7 @@ class QzTradeOrderSheet extends StatefulWidget {
   }) {
     return QzSheet.show<TradeOrderResult>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => QzTradeOrderSheet(
         symbol: symbol,
         direction: direction,

@@ -18,6 +18,7 @@ class CoinStockDetailSheet extends StatelessWidget {
   static Future<void> show(BuildContext context, CoinStock stock) {
     return showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CoinStockDetailSheet(stock: stock),

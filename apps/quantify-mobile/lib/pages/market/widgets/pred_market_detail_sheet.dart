@@ -19,6 +19,7 @@ class PredMarketDetailSheet extends StatelessWidget {
   static Future<void> show(BuildContext context, PredMarket market) {
     return showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => PredMarketDetailSheet(market: market),

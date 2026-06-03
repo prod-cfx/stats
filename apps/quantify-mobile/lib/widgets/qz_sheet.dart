@@ -35,10 +35,12 @@ class QzSheet {
     required WidgetBuilder builder,
     bool isDismissible = true,
     bool isScrollControlled = true,
+    bool useRootNavigator = false,
   }) {
     final QzColorScheme c = context.qzScheme;
     return showModalBottomSheet<T>(
       context: context,
+      useRootNavigator: useRootNavigator,
       isDismissible: isDismissible,
       isScrollControlled: isScrollControlled,
       backgroundColor: c.bgElev,

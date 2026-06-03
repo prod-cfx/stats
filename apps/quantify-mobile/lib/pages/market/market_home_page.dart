@@ -71,7 +71,10 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
   /// [CoinStockSearchOverlay] 范式）。搜索词/结果均在路由内部管理，
   /// 选中条目先记入历史再 pop，回到本屏跳详情。历史经路由回填本 state。
   Future<void> _openSearch() async {
-    final List<String> updated = await Navigator.of(context).push<List<String>>(
+    final List<String> updated = await Navigator.of(
+          context,
+          rootNavigator: true,
+        ).push<List<String>>(
           MaterialPageRoute<List<String>>(
             fullscreenDialog: true,
             builder: (_) => _MarketSearchRoute(

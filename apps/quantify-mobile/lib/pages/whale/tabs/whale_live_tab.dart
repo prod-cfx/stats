@@ -109,6 +109,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   Future<void> _openCoinSearch() async {
     final String? picked = await showGeneralDialog<String>(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: true,
       barrierLabel: '搜索币种',
       barrierColor: Colors.transparent,

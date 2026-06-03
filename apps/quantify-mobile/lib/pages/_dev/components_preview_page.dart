@@ -191,6 +191,7 @@ class _ComponentsPreviewPageState extends State<ComponentsPreviewPage> {
                   variant: QzButtonVariant.ghost,
                   onPressed: () => QzSheet.show<void>(
                     context: ctx,
+                    useRootNavigator: true,
                     builder: (_) => Padding(
                       padding: const EdgeInsets.all(QzSpacing.lg),
                       child: Column(

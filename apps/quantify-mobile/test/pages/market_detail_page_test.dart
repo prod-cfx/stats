@@ -9,14 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
 import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
-import 'package:quantify_mobile/data/models/exchange_long_short_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
-import 'package:quantify_mobile/data/models/long_short_models.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/kline_repository.dart';
-import 'package:quantify_mobile/data/repositories/long_short_repository.dart';
 import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/data/storage/market_favorites_persistence.dart';
@@ -109,37 +106,6 @@ class _FakeKlineRepository implements KlineRepository {
   Future<void> close() => controller.close();
 }
 
-class _FakeLongShortRepository implements LongShortRepository {
-  @override
-  Future<LongShortRatio> getRatio({
-    required String symbol,
-    required KlineInterval interval,
-  }) async => LongShortRatio(
-    symbol: symbol,
-    longRatio: 0.58,
-    shortRatio: 0.42,
-    timestamp: DateTime(2026),
-  );
-
-  @override
-  Future<MarketLongShortSnapshot> getSnapshot({
-    required String symbol,
-  }) async => MarketLongShortSnapshot(
-    symbol: symbol,
-    baseAsset: 'BTC',
-    assetGlyph: 'B',
-    assetGradientStart: const Color(0xFFF7931A),
-    assetGradientEnd: const Color(0xFFC16100),
-    totalNotional: '\$0',
-    longNotional: '\$0',
-    shortNotional: '\$0',
-    longPct: 50,
-    shortPct: 50,
-    exchanges: const <ExchangeLongShort>[],
-    timestamp: DateTime(2026),
-  );
-}
-
 Future<_FakeKlineRepository> _pump(
   WidgetTester tester,
   _FakeOrderbookRepository orderbookRepo, {
@@ -169,9 +135,6 @@ Future<_FakeKlineRepository> _pump(
       overrides: <Override>[
         tickerRepositoryProvider.overrideWithValue(_FakeTickerRepository()),
         orderbookRepositoryProvider.overrideWithValue(orderbookRepo),
-        longShortRepositoryProvider.overrideWithValue(
-          _FakeLongShortRepository(),
-        ),
         klineRepositoryProvider.overrideWithValue(repo),
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
@@ -184,7 +147,7 @@ Future<_FakeKlineRepository> _pump(
       ),
     ),
   );
-  // Resolve futures: tickerRepo / longShortRepo are sync mocks (no delay),
+  // Resolve futures: tickerRepo is sync mock (no delay),
   // klineRepo's listCandles awaits 0ms in this fake, orderbookRepo similar.
   // Three pumps cover: initial frame -> async loaded -> kline post-init.
   await tester.pump();
@@ -292,19 +255,24 @@ void main() {
     // 让 await oldSub.cancel() 在真实事件循环里 resolve（fake clock
     // 不会自动推进 broadcast stream 的 cancel 微任务），再 pump 一次
     // 把 setState 应用到 widget tree。
-    await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
+    await tester.runAsync(
+      () async => await Future<void>.delayed(Duration.zero),
+    );
     await tester.pump();
     expect(
       klineRepo.pendingByInterval.containsKey(KlineInterval.m5),
       isTrue,
-      reason: 'm5 pending 未注册；当前 pending=${klineRepo.pendingByInterval.keys.toList()} lastList=${klineRepo.lastListInterval}',
+      reason:
+          'm5 pending 未注册；当前 pending=${klineRepo.pendingByInterval.keys.toList()} lastList=${klineRepo.lastListInterval}',
     );
 
     // 触发周期切换 m5 → h4
     tester
         .widget<QzKlineChart>(find.byType(QzKlineChart))
         .onIntervalChanged(KlineInterval.h4);
-    await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
+    await tester.runAsync(
+      () async => await Future<void>.delayed(Duration.zero),
+    );
     await tester.pump();
     expect(klineRepo.pendingByInterval.containsKey(KlineInterval.h4), isTrue);
 
@@ -522,9 +490,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const Key('market-detail-source-option-okx')),
-    );
+    await tester.tap(find.byKey(const Key('market-detail-source-option-okx')));
     await tester.pumpAndSettle();
 
     // 抽屉关闭，副标题与 pill 切到 OKX。
@@ -541,9 +507,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('market-detail-more')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('market-more-switch-exchange')),
-    );
+    await tester.tap(find.byKey(const Key('market-more-switch-exchange')));
     await tester.pumpAndSettle();
 
     expect(find.text('数据来源'), findsOneWidget);
@@ -605,11 +569,7 @@ void main() {
     final Text inflow = tester.widget<Text>(
       find.textContaining(RegExp(r'^\+.*[BMK]$')),
     );
-    expect(
-      inflow.style?.color,
-      ctx.qzScheme.marketUp,
-      reason: '正净流入应使用涨色',
-    );
+    expect(inflow.style?.color, ctx.qzScheme.marketUp, reason: '正净流入应使用涨色');
   });
 
   // #2101 净流入为负（ETHUSDT changePercent -0.74）使用跌色，且带 - 号。
@@ -620,11 +580,7 @@ void main() {
     final Text inflow = tester.widget<Text>(
       find.textContaining(RegExp(r'^-.*[BMK]$')),
     );
-    expect(
-      inflow.style?.color,
-      ctx.qzScheme.marketDown,
-      reason: '负净流入应使用跌色',
-    );
+    expect(inflow.style?.color, ctx.qzScheme.marketDown, reason: '负净流入应使用跌色');
   });
 
   // #2105 TopBar 标题：标准交易对展示 BASE / QUOTE 分隔格式。
@@ -647,10 +603,7 @@ void main() {
     // TopBar 标题回退展示原 symbol（FOOBAR 也出现在 not-found 空态，故用
     // QzTopBar 内 descendant 精确定位标题，避免 findsOneWidget 误判）。
     expect(
-      find.descendant(
-        of: find.byType(QzTopBar),
-        matching: find.text('FOOBAR'),
-      ),
+      find.descendant(of: find.byType(QzTopBar), matching: find.text('FOOBAR')),
       findsOneWidget,
     );
   });

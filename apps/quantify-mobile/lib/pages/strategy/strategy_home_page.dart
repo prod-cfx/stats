@@ -276,7 +276,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   /// 打开全屏搜索 overlay（#1824）。overlay 自身负责 pop + 回调：
   /// 选策略 → push 详情；选标签 → 切分类（退出收藏视图）。
   Future<void> _openSearchOverlay() async {
-    await Navigator.of(context).push<void>(
+    await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (BuildContext _) => StrategySearchOverlay(

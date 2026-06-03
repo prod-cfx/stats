@@ -46,6 +46,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
     setState(() => _precisionOpen = true);
     final int? picked = await showModalBottomSheet<int>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) {
         final QzColorScheme c = ctx.qzScheme;
         return SafeArea(
@@ -104,6 +105,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
   Future<void> _openSourceSheet() async {
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       builder: (BuildContext ctx) => _SourceSheet(
         initial: _selectedEx.toSet(),
@@ -457,10 +459,11 @@ class _CardHeader extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Flexible(
+          Expanded(
             child: Text(
+              key: const Key('agg-orderbook-title'),
               title,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
               style: TextStyle(
                 color: c.text,
                 fontSize: 12.5,
@@ -469,7 +472,6 @@ class _CardHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: QzSpacing.sm),
-          const Spacer(),
           _ViewToggle(view: view, onChanged: onView),
           const SizedBox(width: QzSpacing.xs),
           _PrecisionButton(

@@ -25,6 +25,7 @@ class WhaleWatchRuleSheet {
   }) {
     return QzSheet.show<WatchRule>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => _RuleForm(
         initial: initial,
         tgBound: tgBound,

@@ -166,6 +166,17 @@ void main() {
     expect(find.byKey(const Key('agg-orderbook-list')), findsOneWidget);
   });
 
+  testWidgets('聚合挂单标题完整展示，不使用省略号', (WidgetTester tester) async {
+    await _pump(tester);
+
+    expect(find.text('BTC/USD 实时订单(合约)'), findsOneWidget);
+    final Text title = tester.widget<Text>(
+      find.byKey(const Key('agg-orderbook-title')),
+    );
+    expect(title.maxLines, 2);
+    expect(title.overflow, isNull);
+  });
+
   testWidgets('聚合挂单默认屏 golden（Issues #2037-#2042）', (
     WidgetTester tester,
   ) async {

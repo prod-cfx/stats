@@ -24,6 +24,7 @@ class SourcePicker extends StatelessWidget {
   Future<void> _openSheet(BuildContext context) async {
     final MarketSource? next = await QzSheet.show<MarketSource>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => DataSourceSheet(current: source),
     );
     if (next != null && next != source) onChanged(next);

@@ -126,6 +126,8 @@ class LoginTextField extends StatelessWidget {
                   autocorrect: false,
                   style: TextStyle(color: colors.text, fontSize: 14),
                   decoration: InputDecoration(
+                    filled: false,
+                    fillColor: Colors.transparent,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
@@ -179,7 +181,7 @@ class SendCodeButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           minimumSize: const Size(0, 32),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: disabled ? Colors.transparent : colors.bgElev,
+          backgroundColor: disabled ? Colors.transparent : colors.accentSoft,
           foregroundColor: disabled ? colors.textFaint : colors.accent,
           side: BorderSide(color: colors.borderSoft),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

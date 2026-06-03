@@ -8,14 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
 import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
-import 'package:quantify_mobile/data/models/exchange_long_short_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
-import 'package:quantify_mobile/data/models/long_short_models.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/kline_repository.dart';
-import 'package:quantify_mobile/data/repositories/long_short_repository.dart';
 import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -63,36 +60,6 @@ class _StubKlineRepository implements KlineRepository {
   }) => const Stream<Candle>.empty();
 }
 
-class _StubLongShortRepository implements LongShortRepository {
-  @override
-  Future<LongShortRatio> getRatio({
-    required String symbol,
-    required KlineInterval interval,
-  }) async => LongShortRatio(
-    symbol: symbol,
-    longRatio: 0.55,
-    shortRatio: 0.45,
-    timestamp: DateTime(2026),
-  );
-
-  @override
-  Future<MarketLongShortSnapshot> getSnapshot({required String symbol}) async =>
-      MarketLongShortSnapshot(
-        symbol: symbol,
-        baseAsset: 'BTC',
-        assetGlyph: 'B',
-        assetGradientStart: const Color(0xFFF7931A),
-        assetGradientEnd: const Color(0xFFC16100),
-        totalNotional: '\$0',
-        longNotional: '\$0',
-        shortNotional: '\$0',
-        longPct: 50,
-        shortPct: 50,
-        exchanges: const <ExchangeLongShort>[],
-        timestamp: DateTime(2026),
-      );
-}
-
 Future<void> _pump(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -113,9 +80,6 @@ Future<void> _pump(WidgetTester tester) async {
         tickerRepositoryProvider.overrideWithValue(_StubTickerRepository()),
         orderbookRepositoryProvider.overrideWithValue(
           _StubOrderbookRepository(),
-        ),
-        longShortRepositoryProvider.overrideWithValue(
-          _StubLongShortRepository(),
         ),
         klineRepositoryProvider.overrideWithValue(_StubKlineRepository()),
         sharedPreferencesProvider.overrideWithValue(prefs),

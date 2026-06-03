@@ -21,6 +21,7 @@ class WhaleSearchSheet {
   static Future<void> show(BuildContext context) {
     return QzSheet.show<void>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => const _WhaleSearchBody(),
     );
   }

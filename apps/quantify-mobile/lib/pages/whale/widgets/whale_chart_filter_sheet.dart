@@ -32,6 +32,7 @@ class WhaleChartFilterSheet extends StatelessWidget {
   }) {
     return QzSheet.show<String>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => WhaleChartFilterSheet(
         title: title,
         options: options,

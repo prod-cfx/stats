@@ -9,12 +9,14 @@ import '../../data/models/auth_models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
+import '../../widgets/qz_grab_handle.dart';
 import 'widgets/login_form_widgets.dart';
 
 Future<void> showLoginSheet(BuildContext context) {
   final BuildContext parentContext = context;
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
@@ -223,15 +225,9 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Container(
-                    key: const Key('login-sheet-handle'),
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 10, bottom: 8),
-                    decoration: BoxDecoration(
-                      color: c.borderSoft,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                  const QzGrabHandle(
+                    key: Key('login-sheet-handle'),
+                    margin: EdgeInsets.only(top: 10, bottom: 8),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),

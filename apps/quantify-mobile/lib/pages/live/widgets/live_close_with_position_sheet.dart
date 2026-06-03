@@ -32,6 +32,7 @@ class LiveCloseWithPositionSheet extends StatefulWidget {
   }) {
     return showModalBottomSheet<LivePauseMode>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext ctx) =>

@@ -16,6 +16,7 @@ class QzNotificationBell extends StatelessWidget {
     this.iconKey,
     this.circular = false,
     this.bordered = true,
+    this.compact = false,
   });
 
   /// 未读数量；<= 0 时不渲染 badge。
@@ -33,6 +34,10 @@ class QzNotificationBell extends StatelessWidget {
   /// 圆形变体是否带描边/填充背景。默认 true = market 行情页样式（c.bgElev 填充 + c.border 描边）；
   /// false = 设计稿巨鲸顶栏样式（透明、无边框）。仅在 circular 为 true 时生效。
   final bool bordered;
+
+  /// 紧凑裸铃铛形态：32x32 点击区、零 padding，badge 贴近图标。
+  /// 用于 DataHubHeader 的单行 tab 条，避免默认 IconButton 48px 盒子把数字推远。
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -65,12 +70,36 @@ class QzNotificationBell extends StatelessWidget {
               ),
             ),
           )
+        : compact
+        ? SizedBox(
+            width: 32,
+            height: 32,
+            child: IconButton(
+              key: iconKey,
+              onPressed: onTap,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 32,
+                minHeight: 32,
+                maxWidth: 32,
+                maxHeight: 32,
+              ),
+              icon: Icon(
+                Icons.notifications_outlined,
+                size: 20,
+                color: c.textMid,
+              ),
+              tooltip: tooltip,
+            ),
+          )
         : IconButton(
             key: iconKey,
             onPressed: onTap,
             icon: Icon(Icons.notifications_outlined, size: 20, color: c.text),
             tooltip: tooltip,
           );
+    final double badgeRight = compact ? 0 : -4;
+    final double badgeTop = compact ? 1 : -2;
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.center,
@@ -78,8 +107,8 @@ class QzNotificationBell extends StatelessWidget {
         button,
         if (unread > 0)
           Positioned(
-            right: -4,
-            top: -2,
+            right: badgeRight,
+            top: badgeTop,
             child: IgnorePointer(
               child: Container(
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),

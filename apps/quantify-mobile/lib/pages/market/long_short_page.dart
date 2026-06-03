@@ -66,6 +66,7 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
   Future<void> _pickPeriod() async {
     final String? picked = await QzSheet.show<String>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext context) =>
           _PeriodSheet(selected: _period, periods: _periods),
     );
@@ -81,7 +82,10 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
 
   /// 打开全屏币种搜索（设计稿 `LSCoinTabs` 搜索按钮 → `SearchOverlay`）。
   Future<void> _openSearch(List<String> symbols) async {
-    final String? picked = await Navigator.of(context).push<String>(
+    final String? picked = await Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push<String>(
       MaterialPageRoute<String>(
         fullscreenDialog: true,
         builder: (BuildContext context) =>

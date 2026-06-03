@@ -177,7 +177,7 @@ function DataHubHeader({ current, badgeCount = 3 }) {
           {/* red count badge */}
           {badgeCount > 0 && (
             <span style={{
-              position: 'absolute', top: -2, right: -4,
+              position: 'absolute', top: 1, right: 0,
               minWidth: 16, height: 16,
               borderRadius: 8,
               background: '#E5484D',

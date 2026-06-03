@@ -19,6 +19,7 @@ class LiveActionSheet extends StatelessWidget {
   }) {
     return showModalBottomSheet<LiveActionSheetResult>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext ctx) => LiveActionSheet(strategy: strategy),

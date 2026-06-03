@@ -39,6 +39,7 @@ class QzDeploySheet extends ConsumerStatefulWidget {
   static Future<DeploymentResult?> show(BuildContext context) {
     return QzSheet.show<DeploymentResult>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => const QzDeploySheet(),
     );
   }

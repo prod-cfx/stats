@@ -62,6 +62,7 @@ class StrategySortSheet extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     return showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: c.scrim,

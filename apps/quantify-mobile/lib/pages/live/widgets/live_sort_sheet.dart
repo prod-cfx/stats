@@ -72,6 +72,7 @@ class LiveSortSheet extends StatefulWidget {
   }) {
     return showModalBottomSheet<LiveSortSelection>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext ctx) => LiveSortSheet(

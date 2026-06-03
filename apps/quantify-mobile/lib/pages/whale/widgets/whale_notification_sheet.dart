@@ -68,14 +68,19 @@ class _PanelHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double maxH = MediaQuery.sizeOf(context).height * 0.78;
-    return SafeArea(
-      bottom: false,
+    final MediaQueryData media = MediaQuery.of(context);
+    final double topInset = media.padding.top;
+    final double maxH = media.size.height * 0.78;
+    return Material(
+      color: Colors.transparent,
       child: Align(
         alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxH),
-          child: child,
+        child: Padding(
+          padding: EdgeInsets.only(top: topInset),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxH),
+            child: SizedBox(width: double.infinity, child: child),
+          ),
         ),
       ),
     );

@@ -12,6 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/qz_grab_handle.dart';
 import '../../widgets/qz_spinner.dart';
 import '../live/widgets/live_status_style.dart';
 import 'api_form_sheet.dart';
@@ -79,6 +80,7 @@ Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
 
   final String? picked = await showModalBottomSheet<String>(
     context: context,
+    useRootNavigator: true,
     backgroundColor: c.bgElev,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -89,15 +91,7 @@ Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Container(
-              width: 42,
-              height: 4,
-              margin: const EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(
-                color: c.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const QzGrabHandle(margin: EdgeInsets.fromLTRB(0, 10, 0, 0)),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 QzSpacing.lg,

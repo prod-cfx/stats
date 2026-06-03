@@ -37,7 +37,7 @@ class _PredMarketBodyState extends State<PredMarketBody> {
   }
 
   Future<void> _openSearch() async {
-    await Navigator.of(context).push<void>(
+    await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => PredMarketSearchOverlay(

@@ -40,6 +40,7 @@ class WhaleTradeStatsSheet extends StatefulWidget {
     final QzColorScheme c = context.qzScheme;
     return showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isDismissible: true,
       isScrollControlled: true,
       backgroundColor: c.bg,

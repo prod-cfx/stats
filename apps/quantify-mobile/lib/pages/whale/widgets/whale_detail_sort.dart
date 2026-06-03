@@ -217,6 +217,7 @@ class WhaleCoinFilterSheet {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return QzSheet.show<String>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) {
         final QzColorScheme c = ctx.qzScheme;
         return Column(
@@ -368,6 +369,7 @@ class WhaleMoreSortSheet {
     final QzColorScheme c = context.qzScheme;
     return showModalBottomSheet<WhaleSortState>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: c.bgElev,
       barrierColor: c.scrim,

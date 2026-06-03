@@ -68,7 +68,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
   }
 
   Future<void> _openSearch() async {
-    await Navigator.of(context).push<void>(
+    await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => CoinStockSearchOverlay(

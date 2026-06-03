@@ -17,6 +17,7 @@ class LiveNeedPauseSheet extends StatelessWidget {
   static Future<bool?> show(BuildContext context, {required String name}) {
     return showModalBottomSheet<bool>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext ctx) => LiveNeedPauseSheet(name: name),

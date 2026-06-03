@@ -10,6 +10,7 @@ import 'package:quantify_mobile/data/repositories/auth_repository.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/auth/login_sheet.dart';
+import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -103,6 +104,46 @@ void main() {
     expect(find.byKey(const Key('login-email-field')), findsOneWidget);
     expect(find.byKey(const Key('login-code-field')), findsOneWidget);
     expect(find.text('或'), findsOneWidget);
+  });
+
+  testWidgets('LoginSheet form controls avoid inner white fills', (
+    WidgetTester tester,
+  ) async {
+    final (:ProviderContainer container, :InMemoryTokenStorage storage) =
+        await _pumpSheetHarness(tester);
+    expect(storage.snapshot, isEmpty);
+
+    final InputDecorator emailInput = tester.widget<InputDecorator>(
+      find.descendant(
+        of: find.byKey(const Key('login-email-field')),
+        matching: find.byType(InputDecorator),
+      ),
+    );
+    final InputDecorator codeInput = tester.widget<InputDecorator>(
+      find.descendant(
+        of: find.byKey(const Key('login-code-field')),
+        matching: find.byType(InputDecorator),
+      ),
+    );
+
+    expect(emailInput.decoration.filled, isFalse);
+    expect(emailInput.decoration.fillColor, Colors.transparent);
+    expect(codeInput.decoration.filled, isFalse);
+    expect(codeInput.decoration.fillColor, Colors.transparent);
+
+    final OutlinedButton sendCodeButton = tester.widget<OutlinedButton>(
+      find.descendant(
+        of: find.byKey(const Key('login-send-code')),
+        matching: find.byType(OutlinedButton),
+      ),
+    );
+    expect(
+      sendCodeButton.style?.backgroundColor?.resolve(<WidgetState>{}),
+      qzColors(
+        container.read(themeProvider).bg,
+        container.read(themeProvider).accent,
+      ).accentSoft,
+    );
   });
 
   testWidgets('LoginSheet send code countdown starts at 58', (

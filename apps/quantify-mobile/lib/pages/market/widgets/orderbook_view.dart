@@ -133,6 +133,7 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final double? picked = await showModalBottomSheet<double>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext sheetCtx) {
         final QzColorScheme c = sheetCtx.qzScheme;
         return SafeArea(

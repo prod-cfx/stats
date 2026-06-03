@@ -14,7 +14,7 @@ Future<String?> showAggCoinSearch(
   BuildContext context, {
   required List<String> coins,
 }) {
-  return Navigator.of(context).push<String>(
+  return Navigator.of(context, rootNavigator: true).push<String>(
     MaterialPageRoute<String>(
       fullscreenDialog: true,
       builder: (BuildContext ctx) => _AggCoinSearchSheet(coins: coins),

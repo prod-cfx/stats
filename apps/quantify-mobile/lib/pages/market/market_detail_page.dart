@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/kline_models.dart';
-import '../../data/models/long_short_models.dart';
 import '../../data/models/market_source.dart';
 import '../../data/models/ticker_models.dart';
 import '../../data/models/trade_models.dart';
@@ -17,7 +16,6 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/qz_card.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_kline_chart.dart';
 import '../../widgets/qz_sheet.dart';
@@ -25,7 +23,6 @@ import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_trade_order_sheet.dart';
 import 'widgets/depth_panel.dart';
-import 'widgets/long_short_bar.dart';
 import 'widgets/market_detail_stats.dart';
 import 'widgets/orderbook_view.dart';
 import 'widgets/source_picker.dart';
@@ -49,7 +46,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   KlineInterval _interval = KlineInterval.h1;
   MarketSource _source = MarketSource.aggregated;
   Ticker? _priceSnapshot;
-  LongShortRatio? _longShort;
   List<Candle> _candles = const <Candle>[];
   bool _klineError = false;
   _DetailPanel _panel = _DetailPanel.book;
@@ -61,7 +57,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   StreamSubscription<Candle>? _candleSub;
   bool _loading = true;
   Object? _error;
-  int _longShortRequestId = 0;
   int _klineRequestId = 0;
 
   @override
@@ -85,7 +80,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
         if (!mounted) return;
         setState(() {
           _priceSnapshot = null;
-          _longShort = null;
           _loading = false;
         });
         return;
@@ -99,8 +93,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
         if (!mounted) return;
         setState(() => _priceSnapshot = next);
       });
-      // 复用 _loadLongShort / _loadKline，避免与各自 requestId 守卫脱节。
-      unawaited(_loadLongShort());
       unawaited(_loadKline(_interval));
     } catch (error) {
       if (!mounted) return;
@@ -149,24 +141,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
         _candles = const <Candle>[];
         _klineError = true;
       });
-    }
-  }
-
-  Future<void> _loadLongShort() async {
-    final int requestId = ++_longShortRequestId;
-    // 同步读取 provider，避免 await 后 ref 失效。
-    final longShortRepo = ref.read(longShortRepositoryProvider);
-    final KlineInterval interval = _interval;
-    try {
-      final LongShortRatio ratio = await longShortRepo.getRatio(
-        symbol: widget.symbol,
-        interval: interval,
-      );
-      if (!mounted || requestId != _longShortRequestId) return;
-      setState(() => _longShort = ratio);
-    } catch (_) {
-      if (!mounted || requestId != _longShortRequestId) return;
-      setState(() => _longShort = null);
     }
   }
 
@@ -223,6 +197,7 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   Future<void> _openMoreSheet() async {
     await QzSheet.show<void>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext sheetCtx) => _MoreActionsSheet(
         symbol: widget.symbol,
         onCopySymbol: _copySymbol,
@@ -235,6 +210,7 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   Future<void> _openSourceSheet() async {
     final MarketSource? next = await QzSheet.show<MarketSource>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => DataSourceSheet(current: _source),
     );
     if (!mounted || next == null || next == _source) return;
@@ -343,7 +319,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                         _klineError = false;
                       });
                       unawaited(_loadKline(next));
-                      unawaited(_loadLongShort());
                     },
                   ),
                 ),
@@ -364,27 +339,6 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                     trades: _trades ??= trade_fixtures.buildMockTrades(
                       symbol: widget.symbol,
                       mid: _priceSnapshot!.price,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: QzSpacing.md),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
-                  child: QzCard(
-                    onTap: () => context.push('/market/long-short'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        _SectionTitle(l10n.marketLongShortTitle),
-                        const SizedBox(height: QzSpacing.md),
-                        if (_longShort == null)
-                          QzEmptyState(title: l10n.marketLongShortLoadError)
-                        else
-                          LongShortBar(
-                            longRatio: _longShort!.longRatio,
-                            shortRatio: _longShort!.shortRatio,
-                          ),
-                      ],
                     ),
                   ),
                 ),
@@ -908,25 +862,6 @@ class _CumStatCell extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Text(
-      text,
-      style: TextStyle(
-        color: c.textMid,
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
       ),
     );
   }

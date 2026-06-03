@@ -467,6 +467,7 @@ class _FilterSheet {
   }) {
     return QzSheet.show<T>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) {
         final QzColorScheme c = ctx.qzScheme;
         return Column(
@@ -562,6 +563,7 @@ class _SortSheet {
     final QzColorScheme c = context.qzScheme;
     return showModalBottomSheet<_SortResult>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: c.bgElev,
       barrierColor: c.scrim,
@@ -856,7 +858,7 @@ class _CoinSearchSheet {
     required BuildContext context,
     required List<String> coins,
   }) {
-    return Navigator.of(context).push<String>(
+    return Navigator.of(context, rootNavigator: true).push<String>(
       MaterialPageRoute<String>(
         fullscreenDialog: true,
         builder: (BuildContext ctx) => _CoinSearchBody(coins: coins),

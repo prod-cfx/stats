@@ -218,6 +218,7 @@ class QzKlineChart extends StatelessWidget {
   ) {
     QzSheet.show<void>(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext ctx) => Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: QzSpacing.lg,
