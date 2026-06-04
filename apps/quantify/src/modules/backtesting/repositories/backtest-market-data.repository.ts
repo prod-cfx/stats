@@ -63,23 +63,29 @@ export class BacktestMarketDataRepository {
       where: { code: { in: symbolCodes } },
       select: { id: true, code: true },
     })
-    const symbol = symbolCodes
-      .map(code => symbols.find(item => item.code === code))
-      .find((item): item is { id: string, code: string } => Boolean(item))
-    if (!symbol) return []
+    for (const code of symbolCodes) {
+      const symbol = symbols.find(item => item.code === code)
+      if (!symbol) continue
 
-    const quotes = await this.txHost.tx.marketQuote.findMany({
-      where: {
-        symbolId: symbol.id,
-        eventTime: {
-          gte: new Date(params.fromTs),
-          lte: new Date(params.toTs),
+      const quotes = await this.txHost.tx.marketQuote.findMany({
+        where: {
+          symbolId: symbol.id,
+          bidPrice: { not: null },
+          bidQty: { not: null },
+          askPrice: { not: null },
+          askQty: { not: null },
+          eventTime: {
+            gte: new Date(params.fromTs),
+            lte: new Date(params.toTs),
+          },
         },
-      },
-      orderBy: { eventTime: 'desc' },
-      take: Math.max(1, params.limit),
-    })
-    return quotes.reverse()
+        orderBy: { eventTime: 'desc' },
+        take: Math.max(1, params.limit),
+      })
+      if (quotes.length > 0) return quotes.reverse()
+    }
+
+    return []
   }
 
   private buildSymbolCodeCandidates(symbol: string): string[] {

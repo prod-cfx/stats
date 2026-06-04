@@ -52,7 +52,39 @@ describe('BacktestMarketDataRepository', () => {
     expect(result).toEqual([{ id: 'quote-perp' }])
   })
 
-  it('loads latest quotes through the symbol-time index and returns them chronologically', async () => {
+  it('continues to perp symbol when raw symbol has no depth quotes', async () => {
+    const tx = {
+      symbol: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'symbol-raw', code: 'BTCUSDT' },
+          { id: 'symbol-perp', code: 'BTCUSDT:PERP' },
+        ]),
+      },
+      marketQuote: {
+        findMany: jest.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ id: 'quote-perp' }]),
+      },
+    }
+    const repository = new BacktestMarketDataRepository({ tx } as never)
+
+    const result = await repository.findHistoricalQuotes({
+      symbol: 'BTCUSDT',
+      fromTs: 1_000,
+      toTs: 2_000,
+      limit: 100,
+    })
+
+    expect(tx.marketQuote.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({ symbolId: 'symbol-raw' }),
+    }))
+    expect(tx.marketQuote.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({ symbolId: 'symbol-perp' }),
+    }))
+    expect(result).toEqual([{ id: 'quote-perp' }])
+  })
+
+  it('loads latest usable-depth quotes and returns them chronologically', async () => {
     const newest = { id: 'quote-new', eventTime: new Date(2_000) }
     const older = { id: 'quote-old', eventTime: new Date(1_500) }
     const tx = {
@@ -75,13 +107,12 @@ describe('BacktestMarketDataRepository', () => {
     expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         symbolId: 'symbol-perp',
+        bidPrice: { not: null },
+        bidQty: { not: null },
+        askPrice: { not: null },
+        askQty: { not: null },
       }),
       orderBy: { eventTime: 'desc' },
-    }))
-    expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.not.objectContaining({
-        bidPrice: { not: null },
-      }),
     }))
     expect(result).toEqual([older, newest])
   })

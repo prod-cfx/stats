@@ -2122,14 +2122,21 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
-      case 'orderbook.imbalance':
+      case 'orderbook.imbalance': {
+        const ratio = this.readOptionalNumber(atom.params?.ratio)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_orderbook_imbalance`,
           'orderbookImbalance',
           [],
-          this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+          {
+            ...this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+            metric: 'depth_ratio',
+            side: this.readStringParam(atom.params?.side) ?? 'bid_over_ask',
+            ...(ratio !== null ? { ratio } : {}),
+          },
         )
+      }
 
       case 'orderbook.spread_condition':
         return this.upsertPredicate(
@@ -5240,6 +5247,7 @@ export class CanonicalSpecV2IrCompilerService {
       ?? this.readOptionalNumber(atom.params?.valuePct)
       ?? this.readOptionalNumber(atom.params?.thresholdPct)
       ?? this.readOptionalNumber(atom.params?.changePct)
+      ?? this.readOptionalNumber(atom.params?.ratio)
       ?? this.readOptionalNumber(atom.params?.notionalUsd)
     if (value !== null) params.value = value
     const window = this.readStringParam(atom.params?.window)

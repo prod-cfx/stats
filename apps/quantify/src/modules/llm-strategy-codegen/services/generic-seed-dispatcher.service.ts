@@ -1973,6 +1973,9 @@ export class GenericSeedDispatcher {
       })
     }
     for (const item of out) {
+      if (item.key === 'orderbook.imbalance') {
+        item.params = { ...this.extractOrderbookImbalanceParams(userMessage), ...item.params }
+      }
       if (item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
         item.params = { ...this.extractFundingRateParams(userMessage), ...item.params }
       }
@@ -2498,6 +2501,31 @@ export class GenericSeedDispatcher {
     if (!raw) return null
     const parsed = Number(raw)
     return Number.isFinite(parsed) ? parsed : null
+  }
+
+  private extractOrderbookImbalanceParams(userMessage: string): Record<string, unknown> {
+    const percent = this.parsePositiveNumber(userMessage.match(/(?:imbalance|失衡|盘口)[^\d，。；;]{0,32}(\d+(?:\.\d+)?)\s*(?:%|percent)/iu)?.[1])
+    const ratio = percent !== null
+      ? this.convertOrderbookImbalancePercentToRatio(percent)
+      : this.parsePositiveNumber(userMessage.match(/(?:imbalance|失衡|盘口)[^\d，。；;]{0,32}(\d+(?:\.\d+)?)\s*(?:倍|x|X)/iu)?.[1])
+    return {
+      side: /卖盘|卖方|ask|sell/iu.test(userMessage) && !/买盘|买方|bid|buy|多/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask',
+      operator: /小于|低于|below|less|lt/iu.test(userMessage) ? 'lt' : 'gt',
+      ...(ratio !== null ? { ratio } : {}),
+    }
+  }
+
+  private convertOrderbookImbalancePercentToRatio(percent: number): number | null {
+    if (!Number.isFinite(percent) || percent <= 0 || percent >= 100) return null
+    const share = percent / 100
+    const ratio = share / (1 - share)
+    return Number.isFinite(ratio) && ratio > 0 ? Number(ratio.toFixed(6)) : null
+  }
+
+  private parsePositiveNumber(raw: string | undefined): number | null {
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
   }
 
   private hasFundingRateIntent(userMessage: string): boolean {

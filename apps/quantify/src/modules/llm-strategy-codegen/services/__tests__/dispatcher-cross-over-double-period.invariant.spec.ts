@@ -113,6 +113,9 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     expect(crossOverTrigger).toBeDefined()
     expect(crossOverTrigger!.params).toMatchObject({ indicator: 'ema', fastPeriod: 20 })
     expect(crossOverTrigger!.params).not.toHaveProperty('priceCross')
+    const orderbookTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'orderbook.imbalance')
+    expect(orderbookTrigger).toBeDefined()
+    expect(orderbookTrigger!.params).toMatchObject({ side: 'bid_over_ask', operator: 'gt', ratio: 1.5 })
   })
 
   it('明确价格主语时单 EMA 上穿才投影为 priceCross', () => {
