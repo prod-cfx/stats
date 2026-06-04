@@ -1,5 +1,5 @@
 import type { BulkTarget } from './bulk-action'
-import { aggregateBulkSettledResults } from './bulk-action'
+import { aggregateBulkSettledResults, toErrorMessage } from './bulk-action'
 
 describe('aggregateBulkSettledResults', () => {
   const targets: BulkTarget[] = [
@@ -68,5 +68,22 @@ describe('aggregateBulkSettledResults', () => {
     expect(aggregate.successCount).toBe(1)
     expect(aggregate.failureCount).toBe(1)
     expect(aggregate.failures).toEqual([{ target: updateTargets[1], errorMessage: '更新失败' }])
+  })
+
+  it('uses backend error args reason when response message is absent', () => {
+    const message = toErrorMessage({
+      response: {
+        data: {
+          error: {
+            code: 'DATA_SYNC_CONFIG_MISSING',
+            args: {
+              reason: 'userAddress is required in cursor',
+            },
+          },
+        },
+      },
+    })
+
+    expect(message).toBe('userAddress is required in cursor')
   })
 })

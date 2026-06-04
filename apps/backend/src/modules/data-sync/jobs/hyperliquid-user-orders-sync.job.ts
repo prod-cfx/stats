@@ -58,7 +58,7 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
     if (!cursor.userAddress) {
       throw new DomainException('data_sync.user_orders_sync.config_missing', {
         code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        status: HttpStatus.BAD_REQUEST,
         args: { reason: 'userAddress is required in cursor' },
       })
     }

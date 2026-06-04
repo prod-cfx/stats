@@ -18,7 +18,8 @@ describe('BBX crypto stock quotes job (E2E)', () => {
   beforeAll(async () => {
     const ctx = await createTestingApp({
       envDefaults: {
-        BBX_API_KEY: 'test-bbx-api-key',
+        BBX_ACCESS_KEY_ID: 'test-bbx-access-key-id',
+        BBX_ACCESS_SECRET: 'test-bbx-access-secret',
         BBX_CRYPTO_STOCK_SYMBOLS: 'MSTR,COIN',
         // JWT 配置在非 development 环境是必需的，这里为 e2e 提供一个固定值
         JWT_SECRET: 'test-jwt-secret',

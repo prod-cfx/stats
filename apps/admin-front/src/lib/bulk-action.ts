@@ -39,6 +39,20 @@ export function toErrorMessage(error: unknown): string {
           return responseMessage
         }
         const responseError = responseData.error
+        if (isRecord(responseError)) {
+          const args = responseError.args
+          if (isRecord(args)) {
+            const reason = args.reason
+            if (typeof reason === 'string' && reason.trim()) {
+              return reason
+            }
+
+            const detail = args.detail
+            if (typeof detail === 'string' && detail.trim()) {
+              return detail
+            }
+          }
+        }
         if (typeof responseError === 'string' && responseError.trim()) {
           return responseError
         }
