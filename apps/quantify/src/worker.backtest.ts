@@ -27,6 +27,7 @@ async function bootstrap() {
   process.chdir(findWorkspaceRoot(__dirname))
   loadEnvironment()
   applyQuantifyEnvOverrides()
+  process.env.QUANTIFY_BACKTEST_WORKER = 'true'
 
   const app = await NestFactory.createApplicationContext(BacktestingWorkerModule, {
     bufferLogs: process.env.NEST_BUFFER_LOGS !== 'false',
