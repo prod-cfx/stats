@@ -754,6 +754,55 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
   const service = new SemanticOpenSlotAnswerResolverService(new GenericSeedDispatcher())
 
+  it('consumes a rules-tree missing-entry clarification even when no trigger.entry open slot exists in state', () => {
+    const exitRule: SemanticRule = {
+      id: 'rule-exit-rsi-gte',
+      phase: 'exit',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, value: 70 } },
+      effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+    }
+    const state = createSemanticState({
+      rules: [exitRule],
+      position: {
+        mode: 'fixed_quote',
+        value: 100,
+        positionMode: 'long_only',
+        sizing: { kind: 'quote', value: 100, asset: 'USDT' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'RSI14 低于或等于70时开多',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          key: 'rulesTree.entry',
+          field: 'rules.entry',
+          reason: 'missing_entry_rules',
+          question: '请补充入场条件，例如什么价格或指标条件触发开仓。',
+          blocking: true,
+          status: 'pending',
+          priority: 90,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.closedSlotKeys).toEqual(['trigger.entry'])
+    expect(result.nextState.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ key: 'oscillator.rsi_lte' }),
+      }),
+    ]))
+  })
+
   it('locks an open symbol context slot from an inferred symbol answer', () => {
     const state = stateWithMissingEntry()
     state.contextSlots.symbol = {
