@@ -106,4 +106,23 @@ describe('aggregateBulkSettledResults', () => {
       'BBX API request failed after 3/3: status=401 Unauthorized',
     )
   })
+
+  it('uses backend error args reason from nested cause', () => {
+    const error = new Error('Request failed with status code 500') as Error & {
+      cause?: unknown
+    }
+    error.cause = {
+      response: {
+        data: {
+          error: {
+            args: {
+              reason: 'BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required',
+            },
+          },
+        },
+      },
+    }
+
+    expect(toErrorMessage(error)).toBe('BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required')
+  })
 })
