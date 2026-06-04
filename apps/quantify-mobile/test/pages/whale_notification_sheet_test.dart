@@ -44,33 +44,33 @@ Future<void> _pumpHost(
 }
 
 void main() {
-  testWidgets('顶部 panel：geometry 从屏幕顶部开始，maxHeight ≈ 78%',
-      (WidgetTester tester) async {
+  testWidgets('顶部 panel：geometry 从屏幕顶部开始，maxHeight ≈ 84%', (
+    WidgetTester tester,
+  ) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     final Rect rect = tester.getRect(find.byType(WhaleNotificationSheet));
-    final Size screen = tester.view.physicalSize /
-        tester.view.devicePixelRatio;
+    final Size screen = tester.view.physicalSize / tester.view.devicePixelRatio;
     // top 接近屏幕顶部（SafeArea 之内，<= 30）
-    expect(rect.top, lessThanOrEqualTo(30),
-        reason: 'panel 应靠近顶部，而不是底部 sheet');
-    // 高度 ≤ 78% * 屏幕高度（panel 是 wrap content + maxHeight 约束）
-    expect(rect.height, lessThanOrEqualTo(screen.height * 0.78 + 1));
+    expect(rect.top, lessThanOrEqualTo(30), reason: 'panel 应靠近顶部，而不是底部 sheet');
+    // 高度 ≤ 84% * 屏幕高度（对齐设计稿首屏覆盖比例）。
+    expect(rect.height, lessThanOrEqualTo(screen.height * 0.84 + 1));
   });
 
-  testWidgets('header 显示标题、未读 badge 文本、subtitle、关闭按钮',
-      (WidgetTester tester) async {
+  testWidgets('header 显示标题、未读 badge 文本、关闭按钮', (WidgetTester tester) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     expect(find.text('通知中心'), findsOneWidget);
-    final int unread =
-        mockWhaleNotifications.where((WhaleNotification n) => n.unread).length;
+    final int unread = mockWhaleNotifications
+        .where((WhaleNotification n) => n.unread)
+        .length;
     expect(find.text('$unread 条未读'), findsOneWidget);
-    expect(find.text('巨鲸预警 · 监控触发 · 资金流向'), findsOneWidget);
-    // 关闭按钮为 Icons.close（28×28 圆形）
+    expect(find.text('巨鲸预警 · 监控触发 · 资金流向'), findsNothing);
+    // 关闭按钮为 Icons.close（38×38 圆形）
     expect(find.byIcon(Icons.close), findsOneWidget);
   });
 
-  testWidgets('tabs 显示分类数量；切到「巨鲸预警」后只剩 alert kind',
-      (WidgetTester tester) async {
+  testWidgets('tabs 显示分类数量；切到「巨鲸预警」后只剩 alert kind', (
+    WidgetTester tester,
+  ) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     // 「全部」tab 数量 = 总数
     expect(find.text('${mockWhaleNotifications.length}'), findsWidgets);
@@ -83,27 +83,25 @@ void main() {
     await tester.tap(alertTab.first);
     await tester.pumpAndSettle();
     final List<WhaleNotification> alerts = mockWhaleNotifications
-        .where(
-            (WhaleNotification n) => n.kind == WhaleNotificationKind.alert)
+        .where((WhaleNotification n) => n.kind == WhaleNotificationKind.alert)
         .toList();
     expect(alerts, isNotEmpty);
     // 列表中标题包含某条 alert（取 mock 首条 alert title，避免硬编码字面量）
     expect(find.text(alerts.first.title), findsOneWidget);
   });
 
-  testWidgets('点击「全部已读」后未读 badge 消失',
-      (WidgetTester tester) async {
+  testWidgets('点击「全部已读」后未读 badge 消失', (WidgetTester tester) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
-    final int unread =
-        mockWhaleNotifications.where((WhaleNotification n) => n.unread).length;
+    final int unread = mockWhaleNotifications
+        .where((WhaleNotification n) => n.unread)
+        .length;
     expect(find.text('$unread 条未读'), findsOneWidget);
     await tester.tap(find.text('全部已读'));
     await tester.pumpAndSettle();
     expect(find.text('$unread 条未读'), findsNothing);
   });
 
-  testWidgets('sheet 渲染恰好 4 个 tab（_NotifTab 守护）',
-      (WidgetTester tester) async {
+  testWidgets('sheet 渲染恰好 4 个 tab（_NotifTab 守护）', (WidgetTester tester) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     // tabs 区域为 SingleChildScrollView(horizontal)；每个 tab label 在该区域
     // 内必须命中且仅命中一次。row 内 kind label 与 tab label 共字面量，
@@ -119,17 +117,15 @@ void main() {
     }
   });
 
-  testWidgets(
-      'tab 顺序固定为「全部 / 巨鲸预警 / 监控触发 / 系统」（issue #1663）',
-      (WidgetTester tester) async {
+  testWidgets('tab 顺序固定为「全部 / 巨鲸预警 / 监控触发 / 系统」（issue #1663）', (
+    WidgetTester tester,
+  ) async {
     // 设计稿 m-screens-4 NOTIF_TABS = ['全部','巨鲸预警','监控触发','系统']，
     // 顺序变更会破坏视觉对齐与 mock kind 映射；用 dx 坐标守护排列序。
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     final Finder tabsScroll = find.byType(SingleChildScrollView);
     double dxOf(String label) => tester
-        .getTopLeft(
-          find.descendant(of: tabsScroll, matching: find.text(label)),
-        )
+        .getTopLeft(find.descendant(of: tabsScroll, matching: find.text(label)))
         .dx;
     final double dxAll = dxOf('全部');
     final double dxAlert = dxOf('巨鲸预警');
@@ -140,15 +136,15 @@ void main() {
     expect(dxWatch, lessThan(dxSystem), reason: '监控触发 应排第 3');
   });
 
-  testWidgets('footer 显示 24h 提示和通知设置入口',
-      (WidgetTester tester) async {
+  testWidgets('footer 显示 24h 提示和通知设置入口', (WidgetTester tester) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     expect(find.text('仅显示最近 24 小时通知'), findsOneWidget);
     expect(find.text('通知设置'), findsOneWidget);
   });
 
-  testWidgets('关闭按钮 pop 返回 WhaleNotificationSheetResult，含最新未读状态',
-      (WidgetTester tester) async {
+  testWidgets('关闭按钮 pop 返回 WhaleNotificationSheetResult，含最新未读状态', (
+    WidgetTester tester,
+  ) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
     await tester.tap(find.text('全部已读'));
     await tester.pumpAndSettle();

@@ -7,9 +7,9 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_backtest_progress_card.dart';
-import '../../widgets/qz_button.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
+import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「回测进行中」整屏页 — 向导第 4 步。
 class AiBacktestRunPage extends StatefulWidget {
@@ -55,6 +55,12 @@ class _AiBacktestRunPageState extends State<AiBacktestRunPage> {
         title: '回测进行中',
         subtitle: 'BTC 趋势 · 双均线 · 15m',
         onBack: () => context.pop(),
+        actions: <Widget>[
+          QzTopCancelButton(
+            label: l10n.commonCancel,
+            onTap: () => context.go('/ai'),
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -89,18 +95,65 @@ class _AiBacktestRunPageState extends State<AiBacktestRunPage> {
                     left: QzSpacing.lg,
                     right: QzSpacing.lg,
                     bottom: QzSpacing.lg,
-                    child: QzButton(
+                    child: _SolidCancelButton(
                       key: const Key('backtest-progress-cancel'),
                       label: l10n.backtestProgressCancel,
-                      variant: QzButtonVariant.ghost,
                       onPressed: () => context.pop(),
-                      expanded: true,
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SolidCancelButton extends StatelessWidget {
+  const _SolidCancelButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.qzScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: c.bgElev,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: c.text.withValues(alpha: 0.04),
+                offset: const Offset(0, 2),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: c.text,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ),
     );

@@ -28,6 +28,8 @@ class QzWhaleRow extends StatelessWidget {
     this.highlight = false,
     DateTime? now,
     this.displayTimestamp,
+    this.onOpen,
+    this.onStats,
   }) : _now = now;
 
   final WhaleEvent event;
@@ -36,6 +38,12 @@ class QzWhaleRow extends StatelessWidget {
 
   /// 可选：相对时间渲染基于此 timestamp 而非 `event.timestamp`。
   final DateTime? displayTimestamp;
+
+  /// 点击地址进入巨鲸地址详情。
+  final VoidCallback? onOpen;
+
+  /// 点击右上角趋势图标进入交易统计弹层。
+  final VoidCallback? onStats;
 
   static const String _dash = '--';
 
@@ -133,7 +141,7 @@ class QzWhaleRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _buildHeaderRow(c, relTime),
+          _buildHeaderRow(c, relTime, l10n),
           const SizedBox(height: QzSpacing.sm),
           _buildPositionRow(c, l10n),
           const SizedBox(height: QzSpacing.sm),
@@ -144,84 +152,126 @@ class QzWhaleRow extends StatelessWidget {
   }
 
   /// Row1：地址 + 商人标签 + fresh 圆点 + 相对时间。
-  Widget _buildHeaderRow(QzColorScheme c, String relTime) {
+  Widget _buildHeaderRow(
+    QzColorScheme c,
+    String relTime,
+    AppLocalizations l10n,
+  ) {
     final String addressText = event.address ?? event.fromLabel;
     return Row(
       children: <Widget>[
-        Flexible(
-          child: Container(
-            padding: const EdgeInsets.only(bottom: 1),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: c.accent.withValues(alpha: 0.4)),
+        Expanded(
+          child: Row(
+            children: <Widget>[
+              Flexible(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onOpen,
+                  child: Container(
+                    padding: const EdgeInsets.only(bottom: 1),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: c.accent.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      addressText,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: c.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: QzFont.mono,
+                        fontFamilyFallback: QzFont.monoFallback,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: Text(
-              addressText,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: c.accent,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                fontFamily: QzFont.mono,
-                fontFamilyFallback: QzFont.monoFallback,
-                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-              ),
-            ),
+              const SizedBox(width: QzSpacing.xs),
+              Icon(Icons.copy, size: 12, color: c.textMid),
+              if (event.traderTag != null) ...<Widget>[
+                const SizedBox(width: QzSpacing.sm),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      event.traderTag!,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: c.accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (event.isFresh) ...<Widget>[
+                const SizedBox(width: QzSpacing.sm),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: c.marketUp,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        const SizedBox(width: QzSpacing.xs),
-        Icon(Icons.copy, size: 12, color: c.textMid),
-        if (event.traderTag != null) ...<Widget>[
-          const SizedBox(width: QzSpacing.sm),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: c.accentSoft,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              event.traderTag!,
-              style: TextStyle(
-                color: c.accent,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-        if (event.isFresh) ...<Widget>[
-          const SizedBox(width: QzSpacing.sm),
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: c.marketUp,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-        ],
-        const Spacer(),
         const SizedBox(width: QzSpacing.sm),
-        Text(
-          relTime,
-          style: TextStyle(
-            color: c.textDim,
-            fontSize: 11,
-            fontFamily: QzFont.mono,
-            fontFamilyFallback: QzFont.monoFallback,
+        SizedBox(
+          width: 116,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              Flexible(
+                child: Text(
+                  relTime,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: c.textDim,
+                    fontSize: 11,
+                    fontFamily: QzFont.mono,
+                    fontFamilyFallback: QzFont.monoFallback,
+                  ),
+                ),
+              ),
+              const SizedBox(width: QzSpacing.xs),
+              Tooltip(
+                message: l10n.whaleLeaderTrendTooltip,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onStats,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: c.bgElev,
+                      border: Border.all(color: c.borderSoft),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(Icons.show_chart, size: 13, color: c.textMid),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(width: QzSpacing.xs),
-        Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: c.bgElev,
-            border: Border.all(color: c.borderSoft),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(Icons.show_chart, size: 13, color: c.textMid),
         ),
       ],
     );

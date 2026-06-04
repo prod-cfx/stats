@@ -204,7 +204,8 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
                       return ListView.separated(
                         // 不继承 MediaQuery 顶部 inset（刘海/状态栏），否则
                         // 列头与首行间被注入空白（issue: 行情列表顶部留白 #2122）。
-                        padding: EdgeInsets.zero,
+                        // 底部留白对齐策略广场，避免 shell 透明底栏盖住最后一行。
+                        padding: const EdgeInsets.only(bottom: 100),
                         itemCount: visible.length,
                         separatorBuilder: (BuildContext context, int index) =>
                             Divider(height: 1, color: c.borderSoft),

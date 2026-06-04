@@ -6,25 +6,13 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/qz_button.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
+import '../../widgets/qz_top_cancel_button.dart';
 
-/// Backtest configuration sheet — route `/ai/backtest-config` (#1566 / #1893)。
+/// Backtest configuration sheet — route `/ai/backtest-config`.
 ///
-/// 字段基准 = `design/project/mobile/m-screens-btconfig.jsx` ScreenBacktestConfig
-/// （整屏版字段集）。当前按设计稿恢复为整屏向导页，顶部渲染统一 5 步
-/// StepBar：确认策略 / 策略脚本 / 回测设置 / 回测 / 部署。字段对齐 (#1893)：
-///   - 顶部策略 recap 条
-///   - 历史区间 chips（7D / 30D / 90D / 1Y / 3Y / 自定义）+ 区间回显
-///     （非自定义：数据范围 start → end；自定义：共 N 天 · N 根 15m K 线）
-///   - 初始资金（USDT）+ 快捷预设 1k/5k/10k/50k/100k + 模拟资金提示
-///   - 交易市场 现货/合约 segmented + 杠杆 1x–50x（20x/50x 高杠杆告警）
-///   - 撮合参数：滑点 / 手续费（带 hint）+ 成交价来源 / 数据缺失策略 segmented
-///   - 「本次回测设定」summary 卡（区间 / 资金 / 市场 / 撮合 / 数据 5 行回显）
-///   - 底部 shield 提示 banner + 双按钮：「上一步」+「开始回测」
-///
-/// 点击「开始回测」进入 `/ai/backtest-run`，由回测中页自动推进到结果页。
+/// 视觉基准：`design/project/mobile/m-screens-btconfig.jsx` + 设计稿截图。
 class BacktestConfigSheet extends StatefulWidget {
   const BacktestConfigSheet({super.key});
 
@@ -33,18 +21,15 @@ class BacktestConfigSheet extends StatefulWidget {
 }
 
 class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
-  /// 历史区间预设。值为「相对今天往前推的天数」；0 = 自定义。
   static const List<({String key, int days})> _ranges =
       <({String key, int days})>[
         (key: '7D', days: 7),
         (key: '30D', days: 30),
         (key: '90D', days: 90),
         (key: '1Y', days: 365),
-        (key: '3Y', days: 1095),
         (key: 'custom', days: 0),
       ];
 
-  /// 初始资金快捷预设（对齐设计稿：1k/5k/10k/50k/100k）。
   static const List<({String label, int value})> _capitalPresets =
       <({String label, int value})>[
         (label: '1k', value: 1000),
@@ -54,35 +39,46 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         (label: '100k', value: 100000),
       ];
 
-  /// 杠杆预设（对齐设计稿：1x–50x；20x/50x 触发高杠杆告警）。
-  static const List<String> _leverages = <String>[
-    '1x',
-    '2x',
-    '3x',
-    '5x',
-    '10x',
-    '20x',
-    '50x',
-  ];
-  static const Set<String> _highLeverages = <String>{'20x', '50x'};
+  static const Map<String, String> _rangeText = <String, String>{
+    '7D': '2026-05-19 → 2026-05-26',
+    '30D': '2026-04-26 → 2026-05-26',
+    '90D': '2026-02-26 → 2026-05-26',
+    '1Y': '2025-05-26 → 2026-05-26',
+    'custom': '选择起止日期',
+  };
+
+  static final List<TextInputFormatter> _integerFormatters =
+      <TextInputFormatter>[
+        FilteringTextInputFormatter.digitsOnly,
+        TextInputFormatter.withFunction((
+          TextEditingValue oldV,
+          TextEditingValue newV,
+        ) {
+          if (newV.text.isEmpty) return newV;
+          final int value = int.tryParse(newV.text) ?? 0;
+          if (value > 100) {
+            return TextEditingValue(
+              text: '100',
+              selection: TextSelection.collapsed(offset: 3),
+            );
+          }
+          return newV;
+        }),
+      ];
 
   String _rangeKey = '30D';
   final TextEditingController _capital = TextEditingController(text: '10000');
+  final TextEditingController _leverage = TextEditingController(text: '5');
   final TextEditingController _slippage = TextEditingController(text: '5');
   final TextEditingController _fee = TextEditingController(text: '2');
   String _fillSource = 'close';
   bool _partialData = true;
   // 交易市场：现货无杠杆；合约启用杠杆选择。默认合约 · 5x 对齐设计稿。
   bool _futures = true;
-  String _leverage = '5x';
-
-  /// 仅自定义模式启用。
   final TextEditingController _start = TextEditingController(
-    text: _isoDate(DateTime.now().subtract(const Duration(days: 30))),
+    text: '2025-12-01',
   );
-  final TextEditingController _end = TextEditingController(
-    text: _isoDate(DateTime.now()),
-  );
+  final TextEditingController _end = TextEditingController(text: '2026-05-26');
 
   String? _error;
 
@@ -91,6 +87,7 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
     super.initState();
     // summary 卡需随资金/滑点/手续费输入实时回显 → 监听重建。
     _capital.addListener(_onInputChanged);
+    _leverage.addListener(_onInputChanged);
     _slippage.addListener(_onInputChanged);
     _fee.addListener(_onInputChanged);
     _start.addListener(_onInputChanged);
@@ -104,11 +101,13 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
   @override
   void dispose() {
     _capital.removeListener(_onInputChanged);
+    _leverage.removeListener(_onInputChanged);
     _slippage.removeListener(_onInputChanged);
     _fee.removeListener(_onInputChanged);
     _start.removeListener(_onInputChanged);
     _end.removeListener(_onInputChanged);
     _capital.dispose();
+    _leverage.dispose();
     _slippage.dispose();
     _fee.dispose();
     _start.dispose();
@@ -129,38 +128,6 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         }),
       ];
 
-  static String _isoDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  /// 返回值约定：
-  ///   - `range != null`：解析成功
-  ///   - `range == null && error != null`：自定义模式校验失败，error 是对应 i18n key 取值
-  ///   - 预设区间永远成功；key 不在 `_ranges` 时直接抛 StateError（开发期暴露不变量被破坏）
-  ({({DateTime start, DateTime end})? range, String? error}) _resolveRange(
-    AppLocalizations l10n,
-  ) {
-    if (_rangeKey == 'custom') {
-      final DateTime? s = DateTime.tryParse(_start.text.trim());
-      final DateTime? e = DateTime.tryParse(_end.text.trim());
-      if (s == null || e == null) {
-        return (range: null, error: l10n.backtestErrorInvalidDate);
-      }
-      if (!e.isAfter(s)) {
-        return (range: null, error: l10n.backtestErrorEndBeforeStart);
-      }
-      return (range: (start: s, end: e), error: null);
-    }
-    final int days = _ranges
-        .firstWhere(
-          (r) => r.key == _rangeKey,
-          orElse: () => throw StateError('unknown range key: $_rangeKey'),
-        )
-        .days;
-    final DateTime end = DateTime.now();
-    final DateTime start = end.subtract(Duration(days: days));
-    return (range: (start: start, end: end), error: null);
-  }
-
   void _clearError() {
     if (_error != null) setState(() => _error = null);
   }
@@ -177,8 +144,6 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
     }
   }
 
-  /// 非自定义：`数据范围: start → end`；自定义：`共 N 天 · 覆盖 N 根 15m K 线`。
-  /// 15m K 线一天 96 根（对齐设计稿 daysBetween * 96）。
   String _rangeEchoText(AppLocalizations l10n) {
     if (_rangeKey == 'custom') {
       final DateTime? s = DateTime.tryParse(_start.text.trim());
@@ -191,18 +156,12 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         (days * 96).toString(),
       );
     }
-    final int days = _ranges.firstWhere((r) => r.key == _rangeKey).days;
-    final DateTime end = DateTime.now();
-    final DateTime start = end.subtract(Duration(days: days));
-    return l10n.backtestRangeDataLabel(_isoDate(start), _isoDate(end));
+    return '数据范围:${_rangeText[_rangeKey] ?? _rangeText['30D']!}';
   }
 
-  String _summaryRangeValue() {
-    if (_rangeKey == 'custom') {
-      return '${_start.text.trim()} → ${_end.text.trim()}';
-    }
-    return _rangeKey;
-  }
+  String _summaryRangeValue() => _rangeKey == 'custom'
+      ? '${_start.text.trim()} → ${_end.text.trim()}'
+      : _rangeKey;
 
   String _summaryCapitalValue() {
     final double v = double.tryParse(_capital.text.trim()) ?? 0;
@@ -217,8 +176,11 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
     return '\$$b';
   }
 
+  String _leverageLabel() =>
+      '${_leverage.text.trim().isEmpty ? '5' : _leverage.text.trim()}x';
+
   String _summaryMarketValue(AppLocalizations l10n) => _futures
-      ? l10n.backtestSummaryMarketFutures(_leverage)
+      ? l10n.backtestSummaryMarketFutures(_leverageLabel())
       : l10n.backtestSummaryMarketSpot;
 
   String _summaryMatchingValue(AppLocalizations l10n) =>
@@ -230,11 +192,17 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
 
   Future<void> _submit() async {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final ({({DateTime start, DateTime end})? range, String? error}) parsed =
-        _resolveRange(l10n);
-    if (parsed.range == null) {
-      setState(() => _error = parsed.error);
-      return;
+    if (_rangeKey == 'custom') {
+      final DateTime? s = DateTime.tryParse(_start.text.trim());
+      final DateTime? e = DateTime.tryParse(_end.text.trim());
+      if (s == null || e == null) {
+        setState(() => _error = l10n.backtestErrorInvalidDate);
+        return;
+      }
+      if (!e.isAfter(s)) {
+        setState(() => _error = l10n.backtestErrorEndBeforeStart);
+        return;
+      }
     }
     final double? capital = double.tryParse(_capital.text.trim());
     if (capital == null || capital <= 0) {
@@ -249,6 +217,11 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
     final double? feeBps = double.tryParse(_fee.text.trim());
     if (feeBps == null || feeBps < 0) {
       setState(() => _error = l10n.backtestErrorInvalidFee);
+      return;
+    }
+    final int? leverage = int.tryParse(_leverage.text.trim());
+    if (_futures && (leverage == null || leverage <= 0 || leverage > 100)) {
+      setState(() => _error = l10n.backtestErrorInvalidCapital);
       return;
     }
 
@@ -273,6 +246,12 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         title: '回测设置',
         subtitle: '设置如何回测这条策略',
         onBack: () => context.pop(),
+        actions: <Widget>[
+          QzTopCancelButton(
+            label: l10n.commonCancel,
+            onTap: () => context.go('/ai'),
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -293,6 +272,7 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
               child: Stack(
                 children: <Widget>[
                   SingleChildScrollView(
+                    key: const Key('backtest-scroll'),
                     padding: const EdgeInsets.only(
                       left: QzSpacing.lg,
                       top: QzSpacing.md,
@@ -302,10 +282,7 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        _RecapStrip(
-                          scheme: c,
-                          text: l10n.backtestRecap('BTC 趋势 · 双均线'),
-                        ),
+                        _RecapStrip(scheme: c),
                         const SizedBox(height: 14),
                         _SectionTitle(
                           scheme: c,
@@ -322,63 +299,45 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                                 value: _rangeKey,
                                 l10n: l10n,
                                 scheme: c,
-                                onChanged: (String v) =>
-                                    setState(() => _rangeKey = v),
+                                onChanged: (String v) {
+                                  setState(() {
+                                    _rangeKey = v;
+                                    _error = null;
+                                  });
+                                },
                               ),
                               if (_rangeKey == 'custom') ...<Widget>[
                                 const SizedBox(height: 14),
                                 Row(
                                   children: <Widget>[
                                     Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          _TinyLabel(
-                                            text: l10n.commonStart,
-                                            scheme: c,
-                                          ),
-                                          const SizedBox(height: 5),
-                                          _TextInput(
-                                            key: const Key('backtest-start'),
-                                            controller: _start,
-                                            scheme: c,
-                                            compact: true,
-                                            onChanged: (_) => _clearError(),
-                                          ),
-                                        ],
+                                      child: _DateField(
+                                        key: const Key('backtest-start'),
+                                        label: l10n.commonStart,
+                                        controller: _start,
+                                        scheme: c,
+                                        onChanged: (_) => _clearError(),
                                       ),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.only(
                                         left: QzSpacing.xs,
                                         right: QzSpacing.xs,
-                                        top: 18,
+                                        top: 20,
                                       ),
                                       child: Icon(
                                         Icons.arrow_forward_rounded,
-                                        size: 12,
+                                        size: 14,
                                         color: c.textDim,
                                       ),
                                     ),
                                     Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          _TinyLabel(
-                                            text: l10n.commonEnd,
-                                            scheme: c,
-                                          ),
-                                          const SizedBox(height: 5),
-                                          _TextInput(
-                                            key: const Key('backtest-end'),
-                                            controller: _end,
-                                            scheme: c,
-                                            compact: true,
-                                            onChanged: (_) => _clearError(),
-                                          ),
-                                        ],
+                                      child: _DateField(
+                                        key: const Key('backtest-end'),
+                                        label: l10n.commonEnd,
+                                        controller: _end,
+                                        scheme: c,
+                                        onChanged: (_) => _clearError(),
                                       ),
                                     ),
                                   ],
@@ -407,7 +366,6 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                           controller: _capital,
                           presets: _capitalPresets,
                           scheme: c,
-                          hint: l10n.backtestCapitalPresetHint,
                           inputFormatters: _numericFormatters,
                           onChanged: (_) => _clearError(),
                           onPick: (int v) {
@@ -443,17 +401,15 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                               if (_futures) ...<Widget>[
                                 const SizedBox(height: 14),
                                 _LeveragePicker(
-                                  leverages: _leverages,
-                                  value: _leverage,
+                                  controller: _leverage,
                                   scheme: c,
                                   label: l10n.backtestFieldLeverage,
                                   hint: l10n.backtestLeverageHint,
-                                  onChanged: (String v) =>
-                                      setState(() => _leverage = v),
+                                  inputFormatters: _integerFormatters,
+                                  onChanged: (_) => _clearError(),
                                 ),
-                                if (_highLeverages.contains(
-                                  _leverage,
-                                )) ...<Widget>[
+                                if ((int.tryParse(_leverage.text) ?? 0) >=
+                                    20) ...<Widget>[
                                   const SizedBox(height: 10),
                                   _WarnBanner(
                                     key: const Key('backtest-leverage-warn'),
@@ -513,8 +469,6 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: QzSpacing.lg),
-                        _ShieldBanner(scheme: c, text: l10n.backtestShieldHint),
                         if (_error != null) ...<Widget>[
                           const SizedBox(height: QzSpacing.sm),
                           Text(
@@ -549,23 +503,22 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                       child: Row(
                         children: <Widget>[
                           Expanded(
-                            child: QzButton(
+                            child: _ActionButton(
                               key: const Key('backtest-collapse'),
+                              scheme: c,
                               label: l10n.backtestCollapseButton,
-                              variant: QzButtonVariant.ghost,
                               onPressed: _cancel,
-                              expanded: true,
                             ),
                           ),
                           const SizedBox(width: QzSpacing.md),
                           Expanded(
                             flex: 2,
-                            child: QzButton(
+                            child: _ActionButton(
                               key: const Key('backtest-submit'),
+                              scheme: c,
                               label: l10n.backtestStartButton,
-                              variant: QzButtonVariant.accent,
                               onPressed: _submit,
-                              expanded: true,
+                              accent: true,
                             ),
                           ),
                         ],
@@ -577,6 +530,43 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RecapStrip extends StatelessWidget {
+  const _RecapStrip({required this.scheme});
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.accentSoft,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.auto_awesome, size: 14, color: scheme.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                text: '正在为「',
+                children: <InlineSpan>[
+                  const TextSpan(
+                    text: 'BTC 趋势 · 双均线',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const TextSpan(text: '」配置回测参数'),
+                ],
+              ),
+              style: TextStyle(color: scheme.accent, fontSize: 12, height: 1.5),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -596,14 +586,7 @@ class _RangeChips extends StatelessWidget {
   final QzColorScheme scheme;
   final ValueChanged<String> onChanged;
 
-  String _label(String key) {
-    switch (key) {
-      case 'custom':
-        return l10n.backtestRangeCustom;
-      default:
-        return key;
-    }
-  }
+  String _label(String key) => key == 'custom' ? l10n.backtestRangeCustom : key;
 
   @override
   Widget build(BuildContext context) {
@@ -617,10 +600,10 @@ class _RangeChips extends StatelessWidget {
             onTap: () => onChanged(r.key),
             behavior: HitTestBehavior.opaque,
             child: Container(
-              height: 32,
+              height: 34,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: r.key == value ? scheme.accentSoft : scheme.bgInput,
+                color: r.key == value ? scheme.accentSoft : scheme.bgElev,
                 border: Border.all(
                   color: r.key == value
                       ? scheme.accent.withValues(alpha: 0.3)
@@ -634,11 +617,11 @@ class _RangeChips extends StatelessWidget {
                 child: Text(
                   _label(r.key),
                   style: TextStyle(
+                    color: r.key == value ? scheme.accent : scheme.textMid,
                     fontSize: 13,
                     fontWeight: r.key == value
                         ? FontWeight.w600
                         : FontWeight.w500,
-                    color: r.key == value ? scheme.accent : scheme.textMid,
                   ),
                 ),
               ),
@@ -649,104 +632,89 @@ class _RangeChips extends StatelessWidget {
   }
 }
 
-/// 顶部策略 recap 条：「正在为「...」配置回测参数」（对齐设计稿 violetSoft 条）。
-class _RecapStrip extends StatelessWidget {
-  const _RecapStrip({required this.scheme, required this.text});
-  final QzColorScheme scheme;
-  final String text;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.accentSoft,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: <Widget>[
-          Icon(Icons.auto_awesome, size: 14, color: scheme.accent),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(color: scheme.accent, fontSize: 12, height: 1.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 初始资金快捷预设按钮排（1k/5k/10k/50k/100k）。
-class _CapitalPresets extends StatelessWidget {
-  const _CapitalPresets({
-    required this.presets,
+class _DateField extends StatelessWidget {
+  const _DateField({
+    super.key,
+    required this.label,
+    required this.controller,
     required this.scheme,
-    required this.onPick,
+    required this.onChanged,
   });
-  final List<({String label, int value})> presets;
+  final String label;
+  final TextEditingController controller;
   final QzColorScheme scheme;
-  final ValueChanged<int> onPick;
+  final ValueChanged<String> onChanged;
+
+  Future<void> _pickDate(BuildContext context) async {
+    final DateTime now = DateTime.now();
+    final DateTime initial = DateTime.tryParse(controller.text.trim()) ?? now;
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1, 12, 31),
+    );
+    if (picked == null) return;
+    controller.text =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    onChanged(controller.text);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        for (int i = 0; i < presets.length; i++) ...<Widget>[
-          if (i > 0) const SizedBox(width: QzSpacing.xs),
-          Expanded(
-            child: GestureDetector(
-              key: Key('backtest-capital-${presets[i].label}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onPick(presets[i].value),
-              child: Container(
-                height: 28,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.bgInput,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  presets[i].label,
-                  style: TextStyle(
-                    color: scheme.textMid,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+        Text(label, style: TextStyle(color: scheme.textDim, fontSize: 10)),
+        const SizedBox(height: 5),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _pickDate(context),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: scheme.bgInput,
+              border: Border.all(color: scheme.borderSoft),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: IgnorePointer(
+                    child: TextField(
+                      controller: controller,
+                      readOnly: true,
+                      style: TextStyle(
+                        color: scheme.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        fillColor: Colors.transparent,
+                        filled: false,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 14,
+                  color: scheme.textDim,
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ],
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.scheme,
-    required this.child,
-    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    this.marginBottom = 0,
-  });
-  final QzColorScheme scheme;
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final double marginBottom;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.only(bottom: marginBottom),
-      padding: padding,
-      decoration: BoxDecoration(
-        color: scheme.bgElev,
-        border: Border.all(color: scheme.border),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: child,
     );
   }
 }
@@ -756,7 +724,6 @@ class _CapitalCard extends StatelessWidget {
     required this.controller,
     required this.presets,
     required this.scheme,
-    required this.hint,
     required this.inputFormatters,
     required this.onChanged,
     required this.onPick,
@@ -764,7 +731,6 @@ class _CapitalCard extends StatelessWidget {
   final TextEditingController controller;
   final List<({String label, int value})> presets;
   final QzColorScheme scheme;
-  final String hint;
   final List<TextInputFormatter> inputFormatters;
   final ValueChanged<String> onChanged;
   final ValueChanged<int> onPick;
@@ -773,6 +739,7 @@ class _CapitalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionCard(
       scheme: scheme,
+      marginBottom: 0,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -834,11 +801,74 @@ class _CapitalCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          _CapitalPresets(presets: presets, scheme: scheme, onPick: onPick),
+          Row(
+            children: <Widget>[
+              for (int i = 0; i < presets.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(width: QzSpacing.xs),
+                Expanded(
+                  child: GestureDetector(
+                    key: Key('backtest-capital-${presets[i].label}'),
+                    onTap: () => onPick(presets[i].value),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      height: 28,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: scheme.bgSoft,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        presets[i].label,
+                        style: TextStyle(
+                          color: scheme.textMid,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
           const SizedBox(height: QzSpacing.sm),
-          Text(hint, style: TextStyle(color: scheme.textDim, fontSize: 11)),
+          Text(
+            '模拟资金,仅用于本次回测,不影响实盘',
+            style: TextStyle(color: scheme.textDim, fontSize: 11),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.scheme,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    this.marginBottom = 0,
+  });
+  final QzColorScheme scheme;
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double marginBottom;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.only(bottom: marginBottom),
+      padding: padding,
+      decoration: BoxDecoration(
+        color: scheme.bgElev,
+        border: Border.all(color: scheme.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: child,
     );
   }
 }
@@ -911,22 +941,26 @@ class _Segmented extends StatelessWidget {
   }
 }
 
-/// 杠杆选择：标题 + hint + 当前倍数大字 + 1x–50x chips。
+/// 杠杆选择：标题 + hint + 当前倍数大字 + 数字输入。
 class _LeveragePicker extends StatelessWidget {
   const _LeveragePicker({
-    required this.leverages,
-    required this.value,
+    required this.controller,
     required this.scheme,
     required this.label,
     required this.hint,
+    required this.inputFormatters,
     required this.onChanged,
   });
-  final List<String> leverages;
-  final String value;
+  final TextEditingController controller;
   final QzColorScheme scheme;
   final String label;
   final String hint;
+  final List<TextInputFormatter> inputFormatters;
   final ValueChanged<String> onChanged;
+
+  String get _valueLabel =>
+      '${controller.text.trim().isEmpty ? '5' : controller.text.trim()}x';
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -955,7 +989,7 @@ class _LeveragePicker extends StatelessWidget {
               ),
             ),
             Text(
-              value,
+              _valueLabel,
               style: TextStyle(
                 color: scheme.accent,
                 fontSize: 20,
@@ -965,45 +999,65 @@ class _LeveragePicker extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: QzSpacing.xs),
-        Wrap(
-          spacing: QzSpacing.xs,
-          runSpacing: QzSpacing.xs,
+        const SizedBox(height: 10),
+        Row(
           children: <Widget>[
-            for (final l in leverages)
-              GestureDetector(
-                key: Key('backtest-leverage-$l'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(l),
-                child: Container(
-                  height: 30,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: l == value ? scheme.accentSoft : scheme.bgInput,
-                    border: Border.all(
-                      color: l == value
-                          ? scheme.accent.withValues(alpha: 0.3)
-                          : scheme.border,
+            Expanded(
+              child: Container(
+                key: const Key('backtest-leverage-input'),
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: scheme.bgSoft,
+                  border: Border.all(color: scheme.borderSoft),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: inputFormatters,
+                        onChanged: onChanged,
+                        style: TextStyle(
+                          color: scheme.text,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          fillColor: Colors.transparent,
+                          filled: false,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Align(
-                    widthFactor: 1,
-                    alignment: Alignment.center,
-                    child: Text(
-                      l,
+                    Text(
+                      'x',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: l == value ? scheme.accent : scheme.textMid,
+                        color: scheme.textDim,
+                        fontSize: 13,
                         fontFeatures: const <FontFeature>[
                           FontFeature.tabularFigures(),
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
+            const SizedBox(width: QzSpacing.sm),
+            Text(
+              '最大 100 倍',
+              style: TextStyle(color: scheme.textDim, fontSize: 11),
+            ),
           ],
         ),
       ],
@@ -1362,88 +1416,48 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _ShieldBanner extends StatelessWidget {
-  const _ShieldBanner({required this.scheme, required this.text});
-  final QzColorScheme scheme;
-  final String text;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: scheme.accentSoft,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(Icons.shield_outlined, size: 16, color: scheme.accent),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: scheme.accent,
-                fontSize: 12,
-                height: 1.55,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TinyLabel extends StatelessWidget {
-  const _TinyLabel({required this.text, required this.scheme});
-  final String text;
-  final QzColorScheme scheme;
-  @override
-  Widget build(BuildContext context) {
-    return Text(text, style: TextStyle(color: scheme.textDim, fontSize: 10));
-  }
-}
-
-class _TextInput extends StatelessWidget {
-  const _TextInput({
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
     super.key,
-    required this.controller,
     required this.scheme,
-    this.onChanged,
-    this.compact = false,
+    required this.label,
+    required this.onPressed,
+    this.accent = false,
   });
-  final TextEditingController controller;
   final QzColorScheme scheme;
-  final ValueChanged<String>? onChanged;
-  final bool compact;
+  final String label;
+  final VoidCallback onPressed;
+  final bool accent;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.bgInput,
-        border: Border.all(color: scheme.border),
-        borderRadius: BorderRadius.circular(QzRadii.input),
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: QzSpacing.md,
-        vertical: QzSpacing.xs,
-      ),
-      constraints: BoxConstraints(minHeight: compact ? 42 : 0),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onChanged: onChanged,
-              style: TextStyle(color: scheme.text, fontSize: 14),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-              ),
+    final Color fg = accent ? scheme.accentOn : scheme.text;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: accent ? null : scheme.bgElev,
+            gradient: accent ? scheme.accentGrad : null,
+            border: accent ? null : Border.all(color: scheme.border),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: accent ? <BoxShadow>[scheme.accentShadow] : null,
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: fg,
+              fontSize: 14,
+              fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
             ),
           ),
-        ],
+        ),
       ),
     );
   }

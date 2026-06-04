@@ -130,26 +130,35 @@ void main() {
     );
   });
 
-  testWidgets('hub header 铃铛使用裸铃铛形态并保留 badge（#2049）', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('hub header 铃铛对齐巨鲸页无边框圆形态并保留 badge', (WidgetTester tester) async {
     await _pumpHub(tester);
     final Finder bell = find.byKey(const Key('data-hub-notification-bell'));
     final Finder bellStack = find
         .ancestor(of: bell, matching: find.byType(Stack))
         .first;
 
-    expect(
-      find.descendant(
-        of: bellStack,
-        matching: find.byWidgetPredicate(
-          (Widget widget) =>
-              widget is SizedBox && widget.width == 36 && widget.height == 36,
-        ),
-      ),
-      findsNothing,
-      reason: 'DataHubHeader 应使用裸铃铛，无 36px 圆形描边容器',
+    final SizedBox bellBox = tester.widget<SizedBox>(
+      find
+          .descendant(
+            of: bellStack,
+            matching: find.byWidgetPredicate(
+              (Widget widget) =>
+                  widget is SizedBox &&
+                  widget.width == 36 &&
+                  widget.height == 36,
+            ),
+          )
+          .first,
     );
+    expect(bellBox.width, 36);
+    expect(bellBox.height, 36);
+
+    final DecoratedBox circle = tester.widget<DecoratedBox>(
+      find.descendant(of: bellStack, matching: find.byType(DecoratedBox)).first,
+    );
+    final BoxDecoration deco = circle.decoration as BoxDecoration;
+    expect(deco.color, Colors.transparent);
+    expect(deco.border, isNull);
 
     final Icon icon = tester.widget<Icon>(
       find.descendant(

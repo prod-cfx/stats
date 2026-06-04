@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../data/models/whale_models.dart';
 import '../../../data/providers.dart';
@@ -12,6 +13,7 @@ import '../../../theme/tokens.dart';
 import '../../../widgets/qz_empty_state.dart';
 import '../../../widgets/qz_spinner.dart';
 import '../widgets/qz_whale_row.dart';
+import '../widgets/whale_trade_stats_sheet.dart';
 
 /// 巨鲸动向 — 实时 tab body（issue #1560，原 [`WhaleFeedPage`] 拆分而来）。
 ///
@@ -194,6 +196,36 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     return e.symbol.startsWith(_symbolFilter);
   }
 
+  String _eventAddress(WhaleEvent event) => event.address ?? event.fromLabel;
+
+  void _openProfile(WhaleEvent event) {
+    final String address = _eventAddress(event);
+    context.push('/whale/profile/${Uri.encodeComponent(address)}');
+  }
+
+  Future<void> _openStats(WhaleEvent event) async {
+    final String address = _eventAddress(event);
+    try {
+      final profile = await ref
+          .read(whaleProfileRepositoryProvider)
+          .getProfile(address);
+      if (!mounted) return;
+      await WhaleTradeStatsSheet.show(
+        context,
+        address: address,
+        stats: profile.stats,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(error.toString()),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -215,7 +247,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     return ColoredBox(
       color: c.bg,
       child: ListView(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.only(bottom: 100),
         children: <Widget>[
           _buildFilterBar(c, l10n),
           _buildActionRow(c, l10n),
@@ -365,6 +397,8 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
           highlight: item.highlight,
           now: now,
           displayTimestamp: now,
+          onOpen: () => _openProfile(item.event),
+          onStats: () => _openStats(item.event),
         ),
     ];
   }
@@ -494,6 +528,8 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
             highlight: item.highlight,
             now: now,
             displayTimestamp: displayFor(groupKey, i),
+            onOpen: () => _openProfile(item.event),
+            onStats: () => _openStats(item.event),
           ),
         );
       }

@@ -19,7 +19,7 @@ import 'package:quantify_mobile/widgets/qz_notification_bell.dart';
 
 class _FakeWhaleFeedRepository implements WhaleFeedRepository {
   _FakeWhaleFeedRepository({List<WhaleEvent>? history})
-      : _history = history ?? mockWhaleEvents.reversed.toList();
+    : _history = history ?? mockWhaleEvents.reversed.toList();
 
   final List<WhaleEvent> _history;
   final StreamController<WhaleEvent> _controller =
@@ -71,8 +71,7 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('WhaleHomePage 渲染 4 个二级 tab label',
-      (WidgetTester tester) async {
+  testWidgets('WhaleHomePage 渲染 4 个二级 tab label', (WidgetTester tester) async {
     await _pump(tester);
     // 子 tab label 在 tab 栏内（按 key 定位，避开默认「发现」tab body
     // 中同名文案的干扰）。
@@ -106,8 +105,9 @@ void main() {
     );
   });
 
-  testWidgets('默认进入「发现」tab → WhaleDiscoverNew（轮播+排序条+列表卡）出现',
-      (WidgetTester tester) async {
+  testWidgets('默认进入「发现」tab → WhaleDiscoverNew（轮播+排序条+列表卡）出现', (
+    WidgetTester tester,
+  ) async {
     // issue #1789：发现 tab 重构为 top3 轮播 + 排序条 + 巨鲸列表卡。
     // issue #1976：默认 tab 改为「发现」，无需点击即应可见发现内容。
     await _pump(tester);
@@ -131,8 +131,9 @@ void main() {
     expect(find.text('金库管家'), findsWidgets);
   });
 
-  testWidgets('切到「持仓」tab → 巨鲸持仓明细（币种 chip + 筛选 + 列表）出现',
-      (WidgetTester tester) async {
+  testWidgets('切到「持仓」tab → 巨鲸持仓明细（币种 chip + 筛选 + 列表）出现', (
+    WidgetTester tester,
+  ) async {
     // issue #1790：持仓 tab 重构为 币种 chip + 方向/盈亏筛选 + 排序 +
     // 持仓明细卡列表（WhaleHoldingsTab），废弃旧的「交易所余额/头部地址持仓」
     // section。断言同步到现行 WhaleHoldingsTab 可见结构。
@@ -148,8 +149,9 @@ void main() {
     expect(find.byKey(const Key('whaleHoldingsPnlFilter')), findsOneWidget);
   });
 
-  testWidgets('切到「监控」tab → 三层子 Tab 分段（实时巨鲸/监控地址/通知中心）',
-      (WidgetTester tester) async {
+  testWidgets('切到「监控」tab → 三层子 Tab 分段（实时巨鲸/监控地址/通知中心）', (
+    WidgetTester tester,
+  ) async {
     // issue #1769：监控 tab 改为 segmented 三子 Tab。
     await _pump(tester);
     await tester.tap(find.byKey(const Key('whaleSubTab_3')));
@@ -159,29 +161,32 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets(
-      '监控 tab → 监控地址子 Tab「添加地址监控」按钮可点，打开规则表单 sheet',
-      (WidgetTester tester) async {
+  testWidgets('监控 tab → 监控地址子 Tab「创建监控」按钮可点，打开规则表单 sheet', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('whaleSubTab_3')));
     await tester.pumpAndSettle();
     // 切到「监控地址」子 Tab。
     await tester.tap(find.text('监控地址'));
     await tester.pumpAndSettle();
-    final Finder ctaButton = find.ancestor(
-      of: find.text('添加地址监控'),
-      matching: find.byType(OutlinedButton),
+    expect(find.text('添加地址监控'), findsNothing);
+    final Finder ctaButton = find.byKey(
+      const Key('whaleWatchAddressCreateMonitorButton'),
     );
-    final OutlinedButton cta = tester.widget<OutlinedButton>(ctaButton.first);
-    expect(cta.onPressed, isNotNull, reason: '#1754 后添加按钮应可点');
-    await tester.tap(ctaButton.first);
+    final Finder filledButton = find.descendant(
+      of: ctaButton,
+      matching: find.byType(FilledButton),
+    );
+    final FilledButton cta = tester.widget<FilledButton>(filledButton);
+    expect(cta.onPressed, isNotNull, reason: '#1754 后创建按钮应可点');
+    await tester.tap(filledButton);
     await tester.pumpAndSettle();
     // 规则表单 sheet 标题为「添加地址监控」。
     expect(find.text('添加地址监控'), findsWidgets);
   });
 
-  testWidgets('默认进入「发现」tab：tab 高亮 + 发现内容可见',
-      (WidgetTester tester) async {
+  testWidgets('默认进入「发现」tab：tab 高亮 + 发现内容可见', (WidgetTester tester) async {
     // issue #1976 守护：设计稿 proto.jsx 巨鲸子 tab 首项为「发现」(w-discover)，
     // Flutter _tabIndex=0，必须有测试断言避免回退到「实时」。
     await _pump(tester);
@@ -193,24 +198,27 @@ void main() {
     );
     expect(discoverTabText, findsOneWidget);
     final Text discoverText = tester.widget<Text>(discoverTabText);
-    expect(discoverText.style?.fontWeight, FontWeight.w600,
-        reason: '默认 tab 应为「发现」，文案应高亮 w600（#2012 对齐设计稿）');
+    expect(
+      discoverText.style?.fontWeight,
+      FontWeight.w600,
+      reason: '默认 tab 应为「发现」，文案应高亮 w600（#2012 对齐设计稿）',
+    );
     // 「实时」未选中应为 w400
-    final Text liveText = tester.widget<Text>(find.descendant(
-      of: find.byKey(const Key('whaleSubTab_1')),
-      matching: find.text('实时'),
-    ));
+    final Text liveText = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const Key('whaleSubTab_1')),
+        matching: find.text('实时'),
+      ),
+    );
     expect(liveText.style?.fontWeight, FontWeight.w400);
   });
 
-  testWidgets('右上铃铛存在且显示初始未读数 badge',
-      (WidgetTester tester) async {
+  testWidgets('右上铃铛存在且显示初始未读数 badge', (WidgetTester tester) async {
     await _pump(tester);
     final int expectedUnread = mockWhaleNotifications
         .where((w) => w.unread)
         .length;
-    expect(expectedUnread, greaterThan(0),
-        reason: 'fixture 至少包含 1 条未读');
+    expect(expectedUnread, greaterThan(0), reason: 'fixture 至少包含 1 条未读');
     // badge 文字 = unread 数（限定在铃铛内，避开默认「发现」tab body 同名数字）。
     expect(
       find.descendant(
@@ -222,9 +230,9 @@ void main() {
     expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
   });
 
-  testWidgets(
-      '单行合并 header：移除标题/副标题/搜索圆钮（对齐设计稿 #2012）',
-      (WidgetTester tester) async {
+  testWidgets('单行合并 header：移除标题/副标题/搜索圆钮（对齐设计稿 #2012）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
 
     // 标题「巨鲸动向」、副标题「链上 + 交易所」已移除。
@@ -234,9 +242,9 @@ void main() {
     expect(find.byIcon(Icons.search), findsNothing);
   });
 
-  testWidgets(
-      '铃铛为无边框 36x36 变体（circular+bordered=false）位于右侧',
-      (WidgetTester tester) async {
+  testWidgets('铃铛为无边框 36x36 变体（circular+bordered=false）位于右侧', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
 
     // 铃铛渲染（QzNotificationBell circular 路径用 SizedBox 36x36）。
@@ -262,8 +270,7 @@ void main() {
     expect(deco.border, isNull, reason: '#2011 无边框变体无 border');
   });
 
-  testWidgets('header 顶部避让状态栏：tab 位于状态栏下方',
-      (WidgetTester tester) async {
+  testWidgets('header 顶部避让状态栏：tab 位于状态栏下方', (WidgetTester tester) async {
     // 模拟带刘海的设备：top padding = 44。
     await tester.binding.setSurfaceSize(const Size(420, 3000));
     tester.view.padding = FakeViewPadding(
@@ -280,12 +287,10 @@ void main() {
         matching: find.text('发现'),
       ),
     );
-    expect(tabPos.dy, greaterThanOrEqualTo(44),
-        reason: 'tab 应位于状态栏下方');
+    expect(tabPos.dy, greaterThanOrEqualTo(44), reason: 'tab 应位于状态栏下方');
   });
 
-  testWidgets('点击铃铛弹出通知中心 sheet，含 4 个 tab',
-      (WidgetTester tester) async {
+  testWidgets('点击铃铛弹出通知中心 sheet，含 4 个 tab', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byIcon(Icons.notifications_outlined));
     await tester.pumpAndSettle();
@@ -304,8 +309,7 @@ void main() {
     expect(find.text('全部已读'), findsOneWidget);
   });
 
-  testWidgets('点击「全部已读」后关闭 sheet，badge 消失',
-      (WidgetTester tester) async {
+  testWidgets('点击「全部已读」后关闭 sheet，badge 消失', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byIcon(Icons.notifications_outlined));
     await tester.pumpAndSettle();
@@ -331,6 +335,7 @@ void main() {
         matching: find.text('$unreadBefore'),
       ),
       findsNothing,
-      reason: '全部已读后 badge 数字应消失');
+      reason: '全部已读后 badge 数字应消失',
+    );
   });
 }

@@ -9,6 +9,7 @@ import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_card.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
+import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「确认策略」屏 — route `/ai/confirm`（#1832 / 内容对齐 #1891）。
 ///
@@ -66,9 +67,9 @@ class AiConfirmPage extends StatelessWidget {
         subtitle: l10n.aiConfirmSubtitle,
         onBack: () => context.pop(),
         actions: <Widget>[
-          _CancelButton(
+          QzTopCancelButton(
             label: l10n.aiConfirmCancel,
-            onTap: () => context.pop(),
+            onTap: () => context.go('/ai'),
           ),
         ],
       ),
@@ -296,39 +297,6 @@ StrategyConfirmView _ethGridView(Map<String, String> params) {
 }
 
 /// 顶栏右侧「取消」按钮。
-class _CancelButton extends StatelessWidget {
-  const _CancelButton({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Padding(
-      padding: const EdgeInsets.only(right: QzSpacing.xs),
-      child: TextButton(
-        key: const Key('ai-confirm-cancel'),
-        onPressed: onTap,
-        style: TextButton.styleFrom(
-          minimumSize: const Size(0, 30),
-          padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
-          foregroundColor: c.textMid,
-          backgroundColor: c.bgElev,
-          side: BorderSide(color: c.border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(QzRadii.input),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-        ),
-      ),
-    );
-  }
-}
-
 /// Hero 卡：spark icon + 策略名 + 副标题 + 4 chips。
 class _HeroCard extends StatelessWidget {
   const _HeroCard({required this.view, required this.subtitle});
@@ -844,20 +812,12 @@ class _BottomBar extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: _SecondaryCta(
-              label: backLabel,
-              onTap: onBack,
-              scheme: c,
-            ),
+            child: _SecondaryCta(label: backLabel, onTap: onBack, scheme: c),
           ),
           const SizedBox(width: QzSpacing.sm),
           Expanded(
             flex: 2,
-            child: _PrimaryCta(
-              label: nextLabel,
-              onTap: onNext,
-              scheme: c,
-            ),
+            child: _PrimaryCta(label: nextLabel, onTap: onNext, scheme: c),
           ),
         ],
       ),

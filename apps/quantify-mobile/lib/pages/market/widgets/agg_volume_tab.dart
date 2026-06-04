@@ -30,7 +30,7 @@ class _AggVolumeTabState extends State<AggVolumeTab> {
 
     return ListView(
       key: const Key('agg-volume-list'),
-      padding: const EdgeInsets.only(top: QzSpacing.md, bottom: QzSpacing.xxl),
+      padding: const EdgeInsets.only(top: QzSpacing.md, bottom: 100),
       children: <Widget>[
         AggCoinChips(
           coins: kVolCoins,
@@ -79,8 +79,10 @@ class _AggVolumeTabState extends State<AggVolumeTab> {
         children: <Widget>[
           Text(_coin, style: TextStyle(color: c.textDim, fontSize: 13)),
           const SizedBox(height: QzSpacing.xs),
-          Text(l10n.aggNoData,
-              style: TextStyle(color: c.textFaint, fontSize: 11)),
+          Text(
+            l10n.aggNoData,
+            style: TextStyle(color: c.textFaint, fontSize: 11),
+          ),
         ],
       ),
     );
@@ -105,8 +107,7 @@ class _VolumeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final double pct =
-        total > 0 ? (value / total).clamp(0, 1).toDouble() : 0;
+    final double pct = total > 0 ? (value / total).clamp(0, 1).toDouble() : 0;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 14,

@@ -114,12 +114,14 @@ class DataHubHeader extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(left: QzSpacing.xs, right: 14),
+                padding: const EdgeInsets.fromLTRB(6, 0, 14, 4),
                 child: QzNotificationBell(
                   iconKey: const Key('data-hub-notification-bell'),
                   unread: unread,
                   onTap: onBell,
                   tooltip: l10n.dataHubNotificationTooltip,
+                  circular: true,
+                  bordered: false,
                 ),
               ),
             ],

@@ -135,7 +135,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
                       QzSpacing.lg,
                       QzSpacing.xxs,
                       QzSpacing.lg,
-                      16,
+                      100,
                     ),
                     itemCount: shown.length,
                     separatorBuilder: (_, _) =>

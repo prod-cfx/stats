@@ -35,11 +35,13 @@ class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
     final List<OiRow> rows = data?.rows ?? <OiRow>[];
     final double maxPct = rows.isEmpty
         ? 1
-        : rows.map((OiRow r) => r.pct).reduce((double a, double b) => a > b ? a : b);
+        : rows
+              .map((OiRow r) => r.pct)
+              .reduce((double a, double b) => a > b ? a : b);
 
     return ListView(
       key: const Key('agg-oi-list'),
-      padding: const EdgeInsets.only(top: QzSpacing.md, bottom: QzSpacing.xxl),
+      padding: const EdgeInsets.only(top: QzSpacing.md, bottom: 100),
       children: <Widget>[
         AggCoinChips(
           coins: kOiCoins,
@@ -78,8 +80,10 @@ class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
         children: <Widget>[
           Text(_coin, style: TextStyle(color: c.textDim, fontSize: 13)),
           const SizedBox(height: QzSpacing.xs),
-          Text(l10n.aggNoData,
-              style: TextStyle(color: c.textFaint, fontSize: 11)),
+          Text(
+            l10n.aggNoData,
+            style: TextStyle(color: c.textFaint, fontSize: 11),
+          ),
         ],
       ),
     );
@@ -94,26 +98,43 @@ class _Header extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     TextStyle s() => TextStyle(
-          color: c.textDim,
-          fontSize: 11,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        );
+      color: c.textDim,
+      fontSize: 11,
+      fontFamily: QzFont.mono,
+      fontFamilyFallback: QzFont.monoFallback,
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.xs),
+      padding: const EdgeInsets.fromLTRB(
+        QzSpacing.lg,
+        QzSpacing.sm,
+        QzSpacing.lg,
+        QzSpacing.xs,
+      ),
       child: Row(
         children: <Widget>[
-          Expanded(flex: _oiFlex[0], child: Text(l10n.aggOiColExchange, style: s())),
-          Expanded(flex: _oiFlex[1], child: Text(l10n.aggOiColShare, style: s())),
+          Expanded(
+            flex: _oiFlex[0],
+            child: Text(l10n.aggOiColExchange, style: s()),
+          ),
+          Expanded(
+            flex: _oiFlex[1],
+            child: Text(l10n.aggOiColShare, style: s()),
+          ),
           Expanded(
             flex: _oiFlex[2],
-            child: Text(l10n.aggOiColPosition,
-                textAlign: TextAlign.right, style: s()),
+            child: Text(
+              l10n.aggOiColPosition,
+              textAlign: TextAlign.right,
+              style: s(),
+            ),
           ),
           Expanded(
             flex: _oiFlex[3],
-            child: Text(l10n.aggOiCol24hChange,
-                textAlign: TextAlign.right, style: s()),
+            child: Text(
+              l10n.aggOiCol24hChange,
+              textAlign: TextAlign.right,
+              style: s(),
+            ),
           ),
         ],
       ),
@@ -239,7 +260,9 @@ class _TotalRow extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: QzSpacing.lg, vertical: QzSpacing.sm + 2),
+        horizontal: QzSpacing.lg,
+        vertical: QzSpacing.sm + 2,
+      ),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
@@ -259,11 +282,14 @@ class _TotalRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: c.borderSoft),
                   ),
-                  child: Text('#',
-                      style: TextStyle(
-                          color: c.textMid,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700)),
+                  child: Text(
+                    '#',
+                    style: TextStyle(
+                      color: c.textMid,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: QzSpacing.sm),
                 Flexible(
@@ -271,23 +297,30 @@ class _TotalRow extends StatelessWidget {
                     l10n.aggOiRowAll,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        color: c.text,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700),
+                      color: c.text,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           Expanded(
-              flex: _oiFlex[1],
-              child: const _ShareBar(label: '100%', fraction: 1)),
+            flex: _oiFlex[1],
+            child: const _ShareBar(label: '100%', fraction: 1),
+          ),
           Expanded(
             flex: _oiFlex[2],
             child: _Position(
-                usd: total.usd, qtyLabel: fmtOiQty(total.qty, coin)),
+              usd: total.usd,
+              qtyLabel: fmtOiQty(total.qty, coin),
+            ),
           ),
-          Expanded(flex: _oiFlex[3], child: _ChangeBadge(value: total.h24)),
+          Expanded(
+            flex: _oiFlex[3],
+            child: _ChangeBadge(value: total.h24),
+          ),
         ],
       ),
     );
@@ -308,7 +341,9 @@ class _Row extends StatelessWidget {
     return Container(
       key: Key('agg-oi-row-${row.exchange}'),
       padding: const EdgeInsets.symmetric(
-          horizontal: QzSpacing.lg, vertical: QzSpacing.sm + 2),
+        horizontal: QzSpacing.lg,
+        vertical: QzSpacing.sm + 2,
+      ),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
@@ -326,9 +361,10 @@ class _Row extends StatelessWidget {
                     ex?.name ?? row.exchange,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        color: c.text,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
+                      color: c.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -343,10 +379,12 @@ class _Row extends StatelessWidget {
           ),
           Expanded(
             flex: _oiFlex[2],
-            child: _Position(
-                usd: row.usd, qtyLabel: fmtOiQty(row.qty, coin)),
+            child: _Position(usd: row.usd, qtyLabel: fmtOiQty(row.qty, coin)),
           ),
-          Expanded(flex: _oiFlex[3], child: _ChangeBadge(value: row.h24)),
+          Expanded(
+            flex: _oiFlex[3],
+            child: _ChangeBadge(value: row.h24),
+          ),
         ],
       ),
     );

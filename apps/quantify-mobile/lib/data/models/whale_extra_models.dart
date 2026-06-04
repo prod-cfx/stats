@@ -125,6 +125,7 @@ class WhaleNotification {
     required this.body,
     required this.meta,
     this.address,
+    this.actions = const <String>[],
   });
 
   final String id;
@@ -135,15 +136,17 @@ class WhaleNotification {
   final String body;
   final String meta;
   final String? address;
+  final List<String> actions;
 
   WhaleNotification copyWith({bool? unread}) => WhaleNotification(
-        id: id,
-        kind: kind,
-        tone: tone,
-        unread: unread ?? this.unread,
-        title: title,
-        body: body,
-        meta: meta,
-        address: address,
-      );
+    id: id,
+    kind: kind,
+    tone: tone,
+    unread: unread ?? this.unread,
+    title: title,
+    body: body,
+    meta: meta,
+    address: address,
+    actions: actions,
+  );
 }

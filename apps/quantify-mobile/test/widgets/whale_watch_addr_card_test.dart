@@ -64,8 +64,9 @@ Future<void> _pump(WidgetTester tester, WatchRule rule) async {
 }
 
 void main() {
-  testWidgets('渲染 5 个永续字段标签（永续总价值/未实现盈亏/可用保证金/保证金率/持仓）',
-      (WidgetTester tester) async {
+  testWidgets('渲染 5 个永续字段标签（永续总价值/未实现盈亏/可用保证金/保证金率/持仓）', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester, _filled);
     expect(find.text('永续合约总价值'), findsOneWidget);
     expect(find.text('未实现盈亏'), findsOneWidget);
@@ -90,8 +91,9 @@ void main() {
     expect(find.text('\$12.5M'), findsNothing);
   });
 
-  testWidgets('删除/编辑/静音操作按钮存在', (WidgetTester tester) async {
+  testWidgets('趋势/静音/编辑/删除操作按钮存在', (WidgetTester tester) async {
     await _pump(tester, _filled);
+    expect(find.byIcon(Icons.trending_up), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
     // 未静音 → 显示 notifications_outlined（点击静音）

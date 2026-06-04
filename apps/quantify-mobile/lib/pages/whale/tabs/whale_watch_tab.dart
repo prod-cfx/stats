@@ -44,8 +44,9 @@ class _WhaleWatchTabState extends ConsumerState<WhaleWatchTab> {
   }
 
   Future<void> _load() async {
-    final List<WatchRule> rules =
-        await ref.read(whaleWatchRepositoryProvider).listRules();
+    final List<WatchRule> rules = await ref
+        .read(whaleWatchRepositoryProvider)
+        .listRules();
     if (!mounted) return;
     setState(() => _rules = rules);
   }
@@ -57,8 +58,10 @@ class _WhaleWatchTabState extends ConsumerState<WhaleWatchTab> {
   }
 
   Future<void> _editRule(WatchRule rule) async {
-    final WatchRule? updated =
-        await WhaleWatchRuleSheet.show(context, initial: rule);
+    final WatchRule? updated = await WhaleWatchRuleSheet.show(
+      context,
+      initial: rule,
+    );
     if (updated == null) return;
     setState(() {
       _rules = <WatchRule>[
@@ -107,10 +110,12 @@ class _WhaleWatchTabState extends ConsumerState<WhaleWatchTab> {
 
   @override
   Widget build(BuildContext context) {
-    final List<WhaleNotification> notifications =
-        ref.watch(whaleNotificationsProvider);
-    final int unread =
-        notifications.where((WhaleNotification n) => n.unread).length;
+    final List<WhaleNotification> notifications = ref.watch(
+      whaleNotificationsProvider,
+    );
+    final int unread = notifications
+        .where((WhaleNotification n) => n.unread)
+        .length;
     final int ruleCount = _rules?.length ?? 0;
 
     return Column(
@@ -165,29 +170,33 @@ class _SegmentedSubTabs extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final List<({_SubTab tab, String label, int? count, bool dot})> segs =
         <({_SubTab tab, String label, int? count, bool dot})>[
-      (
-        tab: _SubTab.live,
-        label: l10n.whaleWatchSubTabLive,
-        count: null,
-        dot: false
-      ),
-      (
-        tab: _SubTab.addresses,
-        label: l10n.whaleWatchSubTabAddresses,
-        count: addressCount,
-        dot: false
-      ),
-      (
-        tab: _SubTab.notifications,
-        label: l10n.whaleWatchSubTabNotifications,
-        count: notificationCount,
-        dot: notificationDot
-      ),
-    ];
+          (
+            tab: _SubTab.live,
+            label: l10n.whaleWatchSubTabLive,
+            count: null,
+            dot: false,
+          ),
+          (
+            tab: _SubTab.addresses,
+            label: l10n.whaleWatchSubTabAddresses,
+            count: addressCount,
+            dot: false,
+          ),
+          (
+            tab: _SubTab.notifications,
+            label: l10n.whaleWatchSubTabNotifications,
+            count: notificationCount,
+            dot: notificationDot,
+          ),
+        ];
     return Container(
       color: c.bgElev,
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, 4, QzSpacing.lg, QzSpacing.md),
+        QzSpacing.lg,
+        4,
+        QzSpacing.lg,
+        QzSpacing.md,
+      ),
       child: Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
@@ -310,16 +319,22 @@ class _AddressesBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
     final List<WatchRule> list = rules ?? const <WatchRule>[];
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.lg),
+        QzSpacing.lg,
+        QzSpacing.md,
+        QzSpacing.lg,
+        100,
+      ),
       children: <Widget>[
         Align(
           alignment: Alignment.centerRight,
-          child:
-              _CreateButton(label: l10n.whaleWatchCreateMonitor, onTap: onAdd),
+          child: _CreateButton(
+            key: const Key('whaleWatchAddressCreateMonitorButton'),
+            label: l10n.whaleWatchCreateMonitor,
+            onTap: onAdd,
+          ),
         ),
         const SizedBox(height: QzSpacing.md),
         if (list.isEmpty)
@@ -337,25 +352,6 @@ class _AddressesBody extends StatelessWidget {
             ),
             if (i != list.length - 1) const SizedBox(height: QzSpacing.sm),
           ],
-        const SizedBox(height: QzSpacing.lg),
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: OutlinedButton.icon(
-            onPressed: onAdd,
-            icon: Icon(Icons.add, size: 18, color: c.accent),
-            label: Text(
-              l10n.whaleAddWatchAddress,
-              style: TextStyle(color: c.accent, fontSize: 13),
-            ),
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              side: BorderSide(color: c.accent),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -372,13 +368,19 @@ class _NotificationsBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final int unread =
-        notifications.where((WhaleNotification n) => n.unread).length;
-    final WhaleNotificationsNotifier notifier =
-        ref.read(whaleNotificationsProvider.notifier);
+    final int unread = notifications
+        .where((WhaleNotification n) => n.unread)
+        .length;
+    final WhaleNotificationsNotifier notifier = ref.read(
+      whaleNotificationsProvider.notifier,
+    );
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.lg),
+        QzSpacing.lg,
+        QzSpacing.md,
+        QzSpacing.lg,
+        100,
+      ),
       children: <Widget>[
         Align(
           alignment: Alignment.centerRight,
@@ -425,7 +427,7 @@ class _NotificationsBody extends ConsumerWidget {
 }
 
 class _CreateButton extends StatelessWidget {
-  const _CreateButton({required this.label, required this.onTap});
+  const _CreateButton({required this.label, required this.onTap, super.key});
   final String label;
   final VoidCallback onTap;
 
@@ -442,9 +444,7 @@ class _CreateButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         minimumSize: const Size(0, 28),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -472,9 +472,7 @@ class _MarkAllReadButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         minimumSize: const Size(0, 28),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       child: Text(label, style: const TextStyle(fontSize: 12)),
     );
@@ -496,10 +494,7 @@ class _EmptyBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Center(
-        child: Text(
-          text,
-          style: TextStyle(color: c.textDim, fontSize: 12),
-        ),
+        child: Text(text, style: TextStyle(color: c.textDim, fontSize: 12)),
       ),
     );
   }
@@ -580,8 +575,11 @@ class _NotifRow extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     item.body,
-                    style:
-                        TextStyle(color: c.textMid, fontSize: 11, height: 1.4),
+                    style: TextStyle(
+                      color: c.textMid,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

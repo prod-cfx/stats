@@ -8,13 +8,11 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
-/// 覆盖 #1650 / #1795 / #1893：
+/// 覆盖 #1650 / #1795 / #1893 和截图版回测设置：
 /// - 默认手续费 = 2 bps
 /// - 成交价来源改 segmented（含 开盘价/收盘价/中间价），默认 收盘价 (#1893)
-/// - 历史区间含 3Y (#1795)；非自定义显示「数据范围」回显，自定义显示「共 N 天」(#1893)
-/// - 顶部策略 recap 条 (#1893)
-/// - 初始资金快捷预设 1k/5k/10k/50k/100k + 模拟资金提示 (#1893)
-/// - 交易市场 现货/合约 segmented + 杠杆 chips，20x/50x 高杠杆告警 (#1893)
+/// - 顶部 recap / 历史区间 / 初始资金 / 交易市场按设计稿顺序渲染
+/// - 交易市场 现货/合约 segmented + 杠杆数字输入，20x+ 高杠杆告警 (#1893)
 /// - 「本次回测设定」summary 卡 5 行回显 (#1893)
 /// - 整屏向导页视觉：顶部 QzTopBar + 统一 5 步 StepBar
 /// - footer 贴底（不在滚动内）：滚动后「开始回测」依然可见
@@ -88,40 +86,43 @@ void main() {
     );
   });
 
-  testWidgets('历史区间含 3Y chip', (WidgetTester tester) async {
-    await _pump(tester);
-    expect(find.byKey(const Key('backtest-range-3Y')), findsOneWidget);
-    expect(find.text('3Y'), findsOneWidget);
-  });
-
-  testWidgets('顶部策略 recap 条显示 (#1893)', (WidgetTester tester) async {
+  testWidgets('设计稿结构：recap + 历史区间 + 初始资金', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.textContaining('配置回测参数'), findsOneWidget);
     expect(find.textContaining('BTC 趋势 · 双均线'), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-7D')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-30D')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-90D')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-1Y')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-custom')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-3Y')), findsNothing);
+    expect(find.byKey(const Key('backtest-range-echo')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-capital')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-capital-1k')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-capital-100k')), findsOneWidget);
   });
 
-  testWidgets('区间回显：默认 30D 显示「数据范围」(#1893)', (WidgetTester tester) async {
+  testWidgets('区间回显：默认 30D 显示设计稿固定数据范围', (WidgetTester tester) async {
     await _pump(tester);
     final Text echo = tester.widget<Text>(
       find.byKey(const Key('backtest-range-echo')),
     );
-    expect(echo.data, contains('数据范围'));
+    expect(echo.data, '数据范围:2026-04-26 → 2026-05-26');
   });
 
-  testWidgets('自定义区间显示「共 N 天 · N 根 15m K 线」(#1893)', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('自定义区间：点击起始日期打开日期选择器', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('backtest-range-custom')));
     await tester.pumpAndSettle();
-    final Text echo = tester.widget<Text>(
-      find.byKey(const Key('backtest-range-echo')),
-    );
-    expect(echo.data, contains('天'));
-    expect(echo.data, contains('15m K 线'));
+    expect(find.byKey(const Key('backtest-start')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-end')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('backtest-start')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
   });
 
-  testWidgets('初始资金快捷预设：点 10k 写入 10000 (#1893)', (WidgetTester tester) async {
+  testWidgets('初始资金快捷预设：点 50k 写入 50000 (#1893)', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('backtest-capital-50k')));
     await tester.pumpAndSettle();
@@ -134,34 +135,44 @@ void main() {
     expect(cap.controller!.text, '50000');
   });
 
-  testWidgets('交易市场默认合约：显示杠杆 chips；切现货后隐藏 (#1893)', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('交易市场默认合约：显示杠杆输入；切现货后隐藏 (#1893)', (WidgetTester tester) async {
     await _pump(tester);
-    // 默认合约 → 杠杆 chips 可见
-    expect(find.byKey(const Key('backtest-leverage-5x')), findsOneWidget);
-    expect(find.byKey(const Key('backtest-leverage-50x')), findsOneWidget);
-    // 切到现货 → 杠杆隐藏
+    expect(find.byKey(const Key('backtest-leverage-input')), findsOneWidget);
+    final TextField lev = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const Key('backtest-leverage-input')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(lev.controller!.text, '5');
     await tester.tap(find.byKey(const Key('backtest-seg-spot')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('backtest-leverage-5x')), findsNothing);
+    expect(find.byKey(const Key('backtest-leverage-input')), findsNothing);
   });
 
-  testWidgets('高杠杆告警：选 20x/50x 出现告警，回到 5x 消失 (#1893)', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('高杠杆告警：输入 20 出现告警，回到 5 消失 (#1893)', (WidgetTester tester) async {
     await _pump(tester);
-    // 默认 5x 无告警
     expect(find.byKey(const Key('backtest-leverage-warn')), findsNothing);
-    // 杠杆 chips 在滚动区下方，tap 前需滚入可视区
-    await tester.ensureVisible(find.byKey(const Key('backtest-leverage-20x')));
+    await tester.ensureVisible(
+      find.byKey(const Key('backtest-leverage-input')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('backtest-leverage-20x')));
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('backtest-leverage-input')),
+        matching: find.byType(TextField),
+      ),
+      '20',
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('backtest-leverage-warn')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('backtest-leverage-5x')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('backtest-leverage-5x')));
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('backtest-leverage-input')),
+        matching: find.byType(TextField),
+      ),
+      '5',
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('backtest-leverage-warn')), findsNothing);
   });
@@ -211,7 +222,7 @@ void main() {
 
     // 在滚动区内向上拖；如果按钮在滚动内会跟着移动
     await tester.drag(
-      find.byKey(const Key('backtest-capital')),
+      find.byKey(const Key('backtest-scroll')),
       const Offset(0, -200),
     );
     await tester.pumpAndSettle();

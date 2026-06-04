@@ -11,6 +11,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
+import '../../widgets/qz_top_cancel_button.dart';
 
 /// 默认参数（直接深链 `/ai/script` 无 extra 时回退），对齐设计稿 BTC 双均线。
 const Map<String, String> kStratFallbackParams = <String, String>{
@@ -159,6 +160,12 @@ class _AiScriptPageState extends State<AiScriptPage> {
         title: l10n.aiScriptTitle,
         subtitle: l10n.aiScriptSubtitle,
         onBack: () => context.pop(),
+        actions: <Widget>[
+          QzTopCancelButton(
+            label: l10n.commonCancel,
+            onTap: () => context.go('/ai'),
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,

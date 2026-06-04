@@ -79,20 +79,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
                   selected: p == _precision,
                   onTap: () => Navigator.of(ctx).pop(p),
                 ),
-              const SizedBox(height: QzSpacing.sm),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  QzSpacing.sm,
-                  0,
-                  QzSpacing.sm,
-                  QzSpacing.sm,
-                ),
-                child: TextButton(
-                  key: const Key('agg-precision-cancel'),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(l10n.aggCancel, style: TextStyle(color: c.text)),
-                ),
-              ),
+              const SizedBox(height: QzSpacing.md),
             ],
           ),
         );
@@ -131,7 +118,7 @@ class _AggOrderbookCardState extends State<AggOrderbookCard> {
 
     return ListView(
       key: const Key('agg-orderbook-list'),
-      padding: const EdgeInsets.only(bottom: QzSpacing.xxl),
+      padding: const EdgeInsets.only(bottom: 100),
       children: <Widget>[
         // 合约/现货 + BTC/ETH segments
         Padding(
@@ -1140,13 +1127,7 @@ class _SourceSheetState extends State<_SourceSheet> {
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(QzSpacing.sm),
-            child: TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.aggCancel, style: TextStyle(color: c.text)),
-            ),
-          ),
+          const SizedBox(height: QzSpacing.md),
         ],
       ),
     );

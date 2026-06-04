@@ -119,7 +119,7 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
   Widget _buildScrollBody() {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.only(bottom: 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[

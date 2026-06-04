@@ -57,8 +57,9 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final AsyncValue<List<WhaleLeaderEntry>> async =
-        ref.watch(whaleLeaderboardProvider);
+    final AsyncValue<List<WhaleLeaderEntry>> async = ref.watch(
+      whaleLeaderboardProvider,
+    );
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (Object e, StackTrace st) => Center(
@@ -71,7 +72,7 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
         final List<WhaleLeaderEntry> top3 = topWhaleLeaders(entries);
         final List<WhaleLeaderEntry> sorted = sortWhaleLeaders(entries, _sort);
         return ListView(
-          padding: const EdgeInsets.only(bottom: QzSpacing.lg),
+          padding: const EdgeInsets.only(bottom: 100),
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(

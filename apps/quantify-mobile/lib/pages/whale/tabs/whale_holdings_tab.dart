@@ -145,7 +145,7 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
           _sort,
         );
         return ListView(
-          padding: const EdgeInsets.only(bottom: QzSpacing.lg),
+          padding: const EdgeInsets.only(bottom: 100),
           children: <Widget>[
             _CoinChips(
               coins: coins,

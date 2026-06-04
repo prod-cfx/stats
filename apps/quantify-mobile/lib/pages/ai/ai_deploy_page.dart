@@ -3,10 +3,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
-import '../../theme/tokens.dart';
 import '../../widgets/qz_deploy_sheet.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
+import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「部署策略」整屏页 — 向导第 5 步。
 class AiDeployPage extends StatelessWidget {
@@ -22,6 +22,12 @@ class AiDeployPage extends StatelessWidget {
         title: '部署策略',
         subtitle: 'BTC 趋势 · 双均线 · 15m',
         onBack: () => context.pop(),
+        actions: <Widget>[
+          QzTopCancelButton(
+            label: l10n.commonCancel,
+            onTap: () => context.go('/ai'),
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -38,17 +44,7 @@ class AiDeployPage extends StatelessWidget {
               active: 4,
               done: const <int>[0, 1, 2, 3],
             ),
-            const Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  QzSpacing.lg,
-                  QzSpacing.md,
-                  QzSpacing.lg,
-                  QzSpacing.lg,
-                ),
-                child: QzDeploySheet(showHeader: false),
-              ),
-            ),
+            const Expanded(child: QzDeploySheet(showHeader: false)),
           ],
         ),
       ),

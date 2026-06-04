@@ -37,18 +37,18 @@ class WhaleWatchAddrCard extends StatelessWidget {
     final Color pnlColor = empty
         ? c.textDim
         : pnl > 0
-            ? c.marketUp
-            : pnl < 0
-                ? c.marketDown
-                : c.text;
+        ? c.marketUp
+        : pnl < 0
+        ? c.marketDown
+        : c.text;
     final int? usage = rule.marginUsagePct;
     final Color usageColor = usage == null
         ? c.textDim
         : usage >= 80
-            ? c.marketDown
-            : usage >= 50
-                ? c.statusWarn
-                : c.accent;
+        ? c.marketDown
+        : usage >= 50
+        ? c.statusWarn
+        : c.accent;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
@@ -72,82 +72,103 @@ class WhaleWatchAddrCard extends StatelessWidget {
     );
   }
 
-  Widget _head(
-      BuildContext context, AppLocalizations l10n, QzColorScheme c) {
+  Widget _head(BuildContext context, AppLocalizations l10n, QzColorScheme c) {
     return Row(
       children: <Widget>[
-        Flexible(
-          child: GestureDetector(
-            onTap: onOpen,
-            behavior: HitTestBehavior.opaque,
-            child: Text(
-              rule.address,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: c.accent,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                fontFamily: QzFont.mono,
-                fontFamilyFallback: QzFont.monoFallback,
-                letterSpacing: -0.2,
+        Expanded(
+          child: Row(
+            children: <Widget>[
+              Flexible(
+                child: GestureDetector(
+                  onTap: onOpen,
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    rule.address,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: c.accent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: QzFont.mono,
+                      fontFamilyFallback: QzFont.monoFallback,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (rule.live) ...<Widget>[
+                const SizedBox(width: 6),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: c.marketUp,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ],
+              if (rule.alias != null && rule.alias!.isNotEmpty) ...<Widget>[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    rule.alias!,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: c.textMid,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        if (rule.live) ...<Widget>[
-          const SizedBox(width: 6),
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: c.marketUp,
-              borderRadius: BorderRadius.circular(3),
+        const SizedBox(width: 8),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _ActionBtn(
+              icon: Icons.trending_up,
+              tooltip: l10n.whaleLeaderTrendTooltip,
+              color: c.accent,
+              onTap: onOpen,
             ),
-          ),
-        ],
-        if (rule.alias != null && rule.alias!.isNotEmpty) ...<Widget>[
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              rule.alias!,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: c.textMid,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-              ),
+            const SizedBox(width: 4),
+            _ActionBtn(
+              icon: rule.muted
+                  ? Icons.notifications_off_outlined
+                  : Icons.notifications_outlined,
+              tooltip: rule.muted
+                  ? l10n.whaleRuleMenuUnmute
+                  : l10n.whaleRuleMenuMute,
+              onTap: onToggleMute,
             ),
-          ),
-        ] else
-          const Spacer(),
-        _ActionBtn(
-          icon: rule.muted
-              ? Icons.notifications_off_outlined
-              : Icons.notifications_outlined,
-          tooltip: rule.muted
-              ? l10n.whaleRuleMenuUnmute
-              : l10n.whaleRuleMenuMute,
-          onTap: onToggleMute,
-        ),
-        const SizedBox(width: 4),
-        _ActionBtn(
-          icon: Icons.edit_outlined,
-          tooltip: l10n.whaleRuleMenuEdit,
-          onTap: onEdit,
-        ),
-        const SizedBox(width: 4),
-        _ActionBtn(
-          icon: Icons.delete_outline,
-          tooltip: l10n.whaleRuleMenuDelete,
-          color: c.marketDown,
-          onTap: onDelete,
+            const SizedBox(width: 4),
+            _ActionBtn(
+              icon: Icons.edit_outlined,
+              tooltip: l10n.whaleRuleMenuEdit,
+              onTap: onEdit,
+            ),
+            const SizedBox(width: 4),
+            _ActionBtn(
+              icon: Icons.delete_outline,
+              tooltip: l10n.whaleRuleMenuDelete,
+              color: c.marketDown,
+              onTap: onDelete,
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _heroRow(AppLocalizations l10n, QzColorScheme c, bool empty,
-      Color pnlColor) {
+  Widget _heroRow(
+    AppLocalizations l10n,
+    QzColorScheme c,
+    bool empty,
+    Color pnlColor,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: <Widget>[
@@ -195,8 +216,13 @@ class WhaleWatchAddrCard extends StatelessWidget {
     );
   }
 
-  Widget _footerRow(AppLocalizations l10n, QzColorScheme c, bool empty,
-      int? usage, Color usageColor) {
+  Widget _footerRow(
+    AppLocalizations l10n,
+    QzColorScheme c,
+    bool empty,
+    int? usage,
+    Color usageColor,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -252,8 +278,7 @@ class WhaleWatchAddrCard extends StatelessWidget {
                           value: (usage.clamp(2, 100)) / 100,
                           minHeight: 3,
                           backgroundColor: c.bgSoft,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(usageColor),
+                          valueColor: AlwaysStoppedAnimation<Color>(usageColor),
                         ),
                       ),
                     ),

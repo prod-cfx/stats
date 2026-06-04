@@ -104,7 +104,7 @@ class _PredMarketBodyState extends State<PredMarketBody> {
                               (constraints.maxWidth - 24 - gap) / 2;
                           return SingleChildScrollView(
                             key: const Key('pred-grid'),
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 100),
                             child: Wrap(
                               spacing: gap,
                               runSpacing: gap,

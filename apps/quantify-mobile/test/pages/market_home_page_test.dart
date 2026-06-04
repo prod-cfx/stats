@@ -411,7 +411,7 @@ void main() {
     await tester.pump();
 
     final ListView list = tester.widget<ListView>(find.byType(ListView));
-    expect(list.padding, EdgeInsets.zero);
+    expect(list.padding, const EdgeInsets.only(bottom: 100));
   });
 
   testWidgets('搜索框 placeholder 为「搜索」（#2030）', (WidgetTester tester) async {

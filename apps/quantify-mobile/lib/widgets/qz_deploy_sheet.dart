@@ -210,16 +210,19 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       ),
       data: (List<ExchangeApiKey> list) {
         final _DeployTarget target = _targetFromKeys(list);
+        final Widget body = _buildBody(c, l10n, target);
         return Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             QzSpacing.lg,
             0,
             QzSpacing.lg,
-            QzSpacing.lg,
+            widget.showHeader ? QzSpacing.lg : 0,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: widget.showHeader
+                ? MainAxisSize.min
+                : MainAxisSize.max,
             children: <Widget>[
               if (widget.showHeader) ...<Widget>[
                 Row(
@@ -239,7 +242,13 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
                 ),
                 const SizedBox(height: QzSpacing.md),
               ],
-              _buildBody(c, l10n, target),
+              if (widget.showHeader)
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SingleChildScrollView(child: body),
+                )
+              else
+                Expanded(child: body),
             ],
           ),
         );
@@ -259,7 +268,9 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           amount: _amount,
           onAccountChanged: _selectAccount,
           onGoConfigure: _goConfigureApi,
+          onBack: () => Navigator.of(context).maybePop(),
           onConfirm: () => _confirmDeploy(target),
+          stickyActions: !widget.showHeader,
         );
       case DeployStep.deploying:
         final _DeployTarget active = _deployingTarget ?? target;
@@ -269,7 +280,11 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           onDone: _onDeployingDone,
         );
       case DeployStep.success:
-        return _DonePane(result: _result!, onFinish: _finish);
+        return _DonePane(
+          result: _result!,
+          onFinish: _finish,
+          stickyActions: !widget.showHeader,
+        );
     }
   }
 }
@@ -1087,10 +1102,15 @@ String _formatStartedAt(DateTime t) {
 }
 
 class _DonePane extends StatelessWidget {
-  const _DonePane({required this.result, required this.onFinish});
+  const _DonePane({
+    required this.result,
+    required this.onFinish,
+    this.stickyActions = false,
+  });
 
   final DeploymentResult result;
   final VoidCallback onFinish;
+  final bool stickyActions;
 
   @override
   Widget build(BuildContext context) {
@@ -1117,102 +1137,145 @@ class _DonePane extends StatelessWidget {
           _formatStartedAt(result.startedAt!),
         ],
     ];
+    final List<Widget> content = <Widget>[
+      // hero
+      Center(
+        child: Column(
+          children: <Widget>[
+            Icon(Icons.check_circle, size: 48, color: c.marketUp),
+            const SizedBox(height: QzSpacing.sm),
+            Text(
+              l10n.deployDoneTitle,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.deployDoneSubtitle(result.exchange.toUpperCase()),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.textDim, fontSize: 12, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: QzSpacing.md),
+      // detail card
+      Container(
+        key: const Key('deploy-done-detail'),
+        decoration: BoxDecoration(
+          color: c.bgSoft,
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(QzRadii.card),
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: QzSpacing.md,
+          vertical: QzSpacing.sm,
+        ),
+        child: Column(
+          children: <Widget>[
+            for (final List<String> r in rows)
+              _DetailRow(label: r[0], value: r[1], scheme: c),
+            _DetailRow(
+              label: l10n.deployDoneDetailStatus,
+              value: l10n.deployDoneStatusRunning,
+              scheme: c,
+              valueColor: c.marketUp,
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: QzSpacing.md),
+      // next steps
+      Text(
+        l10n.deployDoneNextStepsLabel,
+        style: TextStyle(
+          color: c.textDim,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: QzSpacing.sm),
+      _NextStepRow(
+        stepKey: const Key('deploy-next-live'),
+        icon: Icons.show_chart,
+        title: l10n.deployDoneNextLiveTitle,
+        sub: l10n.deployDoneNextLiveSub,
+        scheme: c,
+        // pop 返回 result：调用方据此跳 /me/live（#1752 联动）。
+        onTap: onFinish,
+      ),
+      _NextStepRow(
+        stepKey: const Key('deploy-next-notify'),
+        icon: Icons.notifications_none,
+        title: l10n.deployDoneNextNotifyTitle,
+        sub: l10n.deployDoneNextNotifySub,
+        scheme: c,
+        onTap: onFinish,
+      ),
+      _NextStepRow(
+        stepKey: const Key('deploy-next-tune'),
+        icon: Icons.auto_awesome,
+        title: l10n.deployDoneNextTuneTitle,
+        sub: l10n.deployDoneNextTuneSub,
+        scheme: c,
+        onTap: onFinish,
+      ),
+    ];
+    final Widget action = QzButton(
+      key: const Key('deploy-finish'),
+      label: l10n.deployDoneCloseButton,
+      variant: QzButtonVariant.accent,
+      height: 50,
+      onPressed: onFinish,
+    );
+
+    if (stickyActions) {
+      return Stack(
+        children: <Widget>[
+          Positioned.fill(
+            bottom: 92,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: QzSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: content,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[c.bg.withValues(alpha: 0), c.bg, c.bg],
+                  stops: const <double>[0, 0.32, 1],
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 12, 0, QzSpacing.xl),
+                child: action,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        // hero
-        Center(
-          child: Column(
-            children: <Widget>[
-              Icon(Icons.check_circle, size: 48, color: c.marketUp),
-              const SizedBox(height: QzSpacing.sm),
-              Text(
-                l10n.deployDoneTitle,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                l10n.deployDoneSubtitle(result.exchange.toUpperCase()),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.textDim, fontSize: 12, height: 1.5),
-              ),
-            ],
-          ),
-        ),
+        ...content,
         const SizedBox(height: QzSpacing.md),
-        // detail card
-        Container(
-          key: const Key('deploy-done-detail'),
-          decoration: BoxDecoration(
-            color: c.bgSoft,
-            border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(QzRadii.card),
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: QzSpacing.md,
-            vertical: QzSpacing.sm,
-          ),
-          child: Column(
-            children: <Widget>[
-              for (final List<String> r in rows)
-                _DetailRow(label: r[0], value: r[1], scheme: c),
-              _DetailRow(
-                label: l10n.deployDoneDetailStatus,
-                value: l10n.deployDoneStatusRunning,
-                scheme: c,
-                valueColor: c.marketUp,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: QzSpacing.md),
-        // next steps
-        Text(
-          l10n.deployDoneNextStepsLabel,
-          style: TextStyle(
-            color: c.textDim,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: QzSpacing.sm),
-        _NextStepRow(
-          stepKey: const Key('deploy-next-live'),
-          icon: Icons.show_chart,
-          title: l10n.deployDoneNextLiveTitle,
-          sub: l10n.deployDoneNextLiveSub,
-          scheme: c,
-          // pop 返回 result：调用方据此跳 /me/live（#1752 联动）。
-          onTap: onFinish,
-        ),
-        _NextStepRow(
-          stepKey: const Key('deploy-next-notify'),
-          icon: Icons.notifications_none,
-          title: l10n.deployDoneNextNotifyTitle,
-          sub: l10n.deployDoneNextNotifySub,
-          scheme: c,
-          onTap: onFinish,
-        ),
-        _NextStepRow(
-          stepKey: const Key('deploy-next-tune'),
-          icon: Icons.auto_awesome,
-          title: l10n.deployDoneNextTuneTitle,
-          sub: l10n.deployDoneNextTuneSub,
-          scheme: c,
-          onTap: onFinish,
-        ),
-        const SizedBox(height: QzSpacing.md),
-        QzButton(
-          key: const Key('deploy-finish'),
-          label: l10n.deployDoneCloseButton,
-          variant: QzButtonVariant.primary,
-          onPressed: onFinish,
-        ),
+        action,
       ],
     );
   }
@@ -1234,7 +1297,7 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(
         children: <Widget>[
           Expanded(
@@ -1758,14 +1821,18 @@ class _PreflightPane extends StatefulWidget {
     required this.amount,
     required this.onAccountChanged,
     required this.onGoConfigure,
+    required this.onBack,
     required this.onConfirm,
+    this.stickyActions = false,
   });
 
   final _DeployTarget target;
   final double amount;
   final ValueChanged<String> onAccountChanged;
   final VoidCallback onGoConfigure;
+  final VoidCallback onBack;
   final VoidCallback onConfirm;
+  final bool stickyActions;
 
   @override
   State<_PreflightPane> createState() => _PreflightPaneState();
@@ -1855,148 +1922,226 @@ class _PreflightPaneState extends State<_PreflightPane> {
     final int fail = checks.length - pass;
     final bool allPass = fail == 0;
     final bool canDeploy = !scanning && allPass;
+    final List<Widget> content = <Widget>[
+      // 只读账单确认：策略 + 风险 summary 卡（净值 / Sharpe / 最大回撤）
+      // + 只读表单（交易所 / 市场类型 / 选择账户 / 部署杠杆）+ footnote（#1896）。
+      Container(
+        key: const Key('deploy-confirm-bill'),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        decoration: BoxDecoration(
+          color: c.bgSoft,
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(QzRadii.card),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              l10n.deployPreflightStrategyName,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              l10n.deployPreflightStrategyMeta,
+              style: TextStyle(color: c.textDim, fontSize: 11.5),
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            // 风险 summary 3 格（mock）。
+            Row(
+              children: <Widget>[
+                _SummaryCell(
+                  label: l10n.deployConfirmSummaryReturn,
+                  value: '+38.2%',
+                  valueColor: c.marketUp,
+                  scheme: c,
+                ),
+                _SummaryCell(
+                  label: l10n.deployConfirmSummarySharpe,
+                  value: '1.86',
+                  scheme: c,
+                ),
+                _SummaryCell(
+                  label: l10n.deployConfirmSummaryMaxDrawdown,
+                  value: '-12.4%',
+                  valueColor: c.marketDown,
+                  scheme: c,
+                ),
+              ],
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            Divider(color: c.border, height: 1),
+            const SizedBox(height: QzSpacing.xs),
+            // 只读表单。
+            _DetailRow(
+              label: l10n.deployConfirmFieldExchange,
+              value: widget.target.catalog.name,
+              scheme: c,
+            ),
+            _DetailRow(
+              label: l10n.deployConfirmFieldMarketType,
+              value: l10n.deployConfirmMarketPerp,
+              scheme: c,
+            ),
+            _AccountSelectRow(
+              accounts: widget.target.accounts,
+              selected: widget.target.apiKey,
+              scheme: c,
+              label: l10n.deployConfirmFieldAccount,
+              emptyText: widget.target.catalog.name,
+              onChanged: widget.onAccountChanged,
+            ),
+            _DetailRow(
+              label: l10n.deployConfirmFieldLeverage,
+              value: '5x · 全仓',
+              scheme: c,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              l10n.deployConfirmFootnote,
+              style: TextStyle(color: c.textDim, fontSize: 11.5, height: 1.6),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 14),
+      _PreflightChecksCard(
+        scheme: c,
+        title: l10n.deploySheetTitlePreflight,
+        status: scanning
+            ? l10n.deployPreflightScanning(_scanned, checks.length)
+            : (allPass
+                  ? l10n.deployPreflightPassed(pass, checks.length)
+                  : l10n.deployPreflightFailed(fail, checks.length)),
+        allPass: allPass,
+        scanning: scanning,
+        recheckLabel: _rechecking
+            ? l10n.deployPreflightRechecking
+            : l10n.deployPreflightRecheck,
+        showRecheck: !allPass && !scanning,
+        onRecheck: _rechecking ? null : _recheck,
+        rows: <Widget>[
+          for (int i = 0; i < checks.length; i++)
+            _PreflightRow(
+              index: i,
+              check: checks[i],
+              checking: i >= _scanned,
+              scheme: c,
+            ),
+        ],
+      ),
+      if (!widget.target.authorized) ...<Widget>[
+        const SizedBox(height: QzSpacing.sm),
+        QzButton(
+          key: const Key('deploy-go-configure'),
+          label: l10n.deployGoConfigureButton,
+          variant: QzButtonVariant.accent,
+          onPressed: widget.onGoConfigure,
+        ),
+      ],
+    ];
+    final Widget actions = _PreflightActions(
+      canDeploy: canDeploy,
+      l10n: l10n,
+      onBack: widget.onBack,
+      onConfirm: widget.onConfirm,
+    );
+
+    if (widget.stickyActions) {
+      return Stack(
+        children: <Widget>[
+          Positioned.fill(
+            bottom: 92,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: QzSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: content,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[c.bg.withValues(alpha: 0), c.bg, c.bg],
+                  stops: const <double>[0, 0.32, 1],
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 12, 0, QzSpacing.xl),
+                child: actions,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        // 只读账单确认：策略 + 风险 summary 卡（净值 / Sharpe / 最大回撤）
-        // + 只读表单（交易所 / 市场类型 / 选择账户 / 部署杠杆）+ footnote（#1896）。
-        Container(
-          key: const Key('deploy-confirm-bill'),
-          padding: const EdgeInsets.all(QzSpacing.md),
-          decoration: BoxDecoration(
-            color: c.bgSoft,
-            border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(QzRadii.card),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                l10n.deployPreflightStrategyName,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                l10n.deployPreflightStrategyMeta,
-                style: TextStyle(color: c.textDim, fontSize: 12),
-              ),
-              const SizedBox(height: QzSpacing.md),
-              // 风险 summary 3 格（mock）。
-              Row(
-                children: <Widget>[
-                  _SummaryCell(
-                    label: l10n.deployConfirmSummaryReturn,
-                    value: '+38.2%',
-                    valueColor: c.marketUp,
-                    scheme: c,
-                  ),
-                  _SummaryCell(
-                    label: l10n.deployConfirmSummarySharpe,
-                    value: '1.86',
-                    scheme: c,
-                  ),
-                  _SummaryCell(
-                    label: l10n.deployConfirmSummaryMaxDrawdown,
-                    value: '-12.4%',
-                    valueColor: c.marketDown,
-                    scheme: c,
-                  ),
-                ],
-              ),
-              const SizedBox(height: QzSpacing.sm),
-              Divider(color: c.border, height: 1),
-              const SizedBox(height: QzSpacing.xs),
-              // 只读表单。
-              _DetailRow(
-                label: l10n.deployConfirmFieldExchange,
-                value: widget.target.catalog.name,
-                scheme: c,
-              ),
-              _DetailRow(
-                label: l10n.deployConfirmFieldMarketType,
-                value: l10n.deployConfirmMarketPerp,
-                scheme: c,
-              ),
-              _AccountSelectRow(
-                accounts: widget.target.accounts,
-                selected: widget.target.apiKey,
-                scheme: c,
-                label: l10n.deployConfirmFieldAccount,
-                emptyText: widget.target.catalog.name,
-                onChanged: widget.onAccountChanged,
-              ),
-              _DetailRow(
-                label: l10n.deployConfirmFieldLeverage,
-                value: '5x · 全仓',
-                scheme: c,
-              ),
-              const SizedBox(height: QzSpacing.xs),
-              Text(
-                l10n.deployConfirmFootnote,
-                style: TextStyle(color: c.textDim, fontSize: 11, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: QzSpacing.md),
-        _PreflightChecksCard(
-          scheme: c,
-          title: l10n.deploySheetTitlePreflight,
-          status: scanning
-              ? l10n.deployPreflightScanning(_scanned, checks.length)
-              : (allPass
-                    ? l10n.deployPreflightPassed(pass, checks.length)
-                    : l10n.deployPreflightFailed(fail, checks.length)),
-          allPass: allPass,
-          scanning: scanning,
-          recheckLabel: _rechecking
-              ? l10n.deployPreflightRechecking
-              : l10n.deployPreflightRecheck,
-          showRecheck: !allPass && !scanning,
-          onRecheck: _rechecking ? null : _recheck,
-          rows: <Widget>[
-            for (int i = 0; i < checks.length; i++)
-              _PreflightRow(
-                index: i,
-                check: checks[i],
-                checking: i >= _scanned,
-                scheme: c,
-              ),
-          ],
-        ),
-        if (!widget.target.authorized) ...<Widget>[
-          const SizedBox(height: QzSpacing.sm),
-          QzButton(
-            key: const Key('deploy-go-configure'),
-            label: l10n.deployGoConfigureButton,
-            variant: QzButtonVariant.accent,
-            onPressed: widget.onGoConfigure,
-          ),
-        ],
+        ...content,
         const SizedBox(height: QzSpacing.lg),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: QzButton(
-                key: const Key('deploy-preflight-confirm'),
-                label: l10n.deployPreflightConfirmButton,
-                variant: QzButtonVariant.accent,
-                onPressed: canDeploy ? widget.onConfirm : null,
-              ),
-            ),
-          ],
+        actions,
+      ],
+    );
+  }
+}
+
+class _PreflightActions extends StatelessWidget {
+  const _PreflightActions({
+    required this.canDeploy,
+    required this.l10n,
+    required this.onBack,
+    required this.onConfirm,
+  });
+
+  final bool canDeploy;
+  final AppLocalizations l10n;
+  final VoidCallback onBack;
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: QzButton(
+            key: const Key('deploy-preflight-back'),
+            label: l10n.deployPreflightBackButton,
+            variant: QzButtonVariant.ghost,
+            height: 50,
+            onPressed: onBack,
+          ),
+        ),
+        const SizedBox(width: QzSpacing.lg),
+        Expanded(
+          flex: 2,
+          child: QzButton(
+            key: const Key('deploy-preflight-confirm'),
+            label: l10n.deployPreflightConfirmButton,
+            variant: QzButtonVariant.accent,
+            height: 50,
+            onPressed: canDeploy ? onConfirm : null,
+          ),
         ),
       ],
     );
   }
 }
 
-class _AccountSelectRow extends StatelessWidget {
+class _AccountSelectRow extends StatefulWidget {
   const _AccountSelectRow({
     required this.accounts,
     required this.selected,
@@ -2014,21 +2159,83 @@ class _AccountSelectRow extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
+  State<_AccountSelectRow> createState() => _AccountSelectRowState();
+}
+
+class _AccountSelectRowState extends State<_AccountSelectRow> {
+  final LayerLink _link = LayerLink();
+  OverlayEntry? _entry;
+
+  bool get _open => _entry != null;
+
+  @override
+  void dispose() {
+    _removeMenu();
+    super.dispose();
+  }
+
+  void _toggleMenu() {
+    if (_open) {
+      _removeMenu();
+    } else {
+      _showMenu();
+    }
+  }
+
+  void _removeMenu() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  void _showMenu() {
+    final OverlayState overlay = Overlay.of(context);
+    _entry = OverlayEntry(
+      builder: (BuildContext context) => Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _removeMenu,
+            ),
+          ),
+          CompositedTransformFollower(
+            link: _link,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.bottomRight,
+            followerAnchor: Alignment.topRight,
+            offset: const Offset(0, 6),
+            child: _AccountMenu(
+              accounts: widget.accounts,
+              selected: widget.selected,
+              scheme: widget.scheme,
+              onPick: (String id) {
+                widget.onChanged(id);
+                _removeMenu();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_entry!);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final QzColorScheme c = scheme;
+    final QzColorScheme c = widget.scheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(
         children: <Widget>[
           Expanded(
             child: Text(
-              label,
+              widget.label,
               style: TextStyle(color: c.textDim, fontSize: 12),
             ),
           ),
-          if (accounts.isEmpty)
+          if (widget.accounts.isEmpty)
             Text(
-              emptyText,
+              widget.emptyText,
               style: TextStyle(
                 color: c.text,
                 fontSize: 12,
@@ -2036,35 +2243,143 @@ class _AccountSelectRow extends StatelessWidget {
               ),
             )
           else
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 180),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  key: const Key('deploy-account-select'),
-                  value: selected?.id,
-                  isDense: true,
-                  alignment: AlignmentDirectional.centerEnd,
-                  dropdownColor: c.bgSoft,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  items: accounts
-                      .map<DropdownMenuItem<String>>(
-                        (ExchangeApiKey account) => DropdownMenuItem<String>(
-                          value: account.id,
-                          child: Text(account.label),
+            CompositedTransformTarget(
+              link: _link,
+              child: GestureDetector(
+                key: const Key('deploy-account-select'),
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleMenu,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 144),
+                      child: Text(
+                        widget.selected?.label ?? widget.accounts.first.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (String? value) {
-                    if (value != null) onChanged(value);
-                  },
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Icon(
+                      _open
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: c.textDim,
+                    ),
+                  ],
                 ),
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _AccountMenu extends StatelessWidget {
+  const _AccountMenu({
+    required this.accounts,
+    required this.selected,
+    required this.scheme,
+    required this.onPick,
+  });
+
+  final List<ExchangeApiKey> accounts;
+  final ExchangeApiKey? selected;
+  final QzColorScheme scheme;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 236,
+        padding: const EdgeInsets.all(QzSpacing.xs),
+        decoration: BoxDecoration(
+          color: scheme.bgElev,
+          border: Border.all(color: scheme.border),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: scheme.text.withValues(alpha: 0.12),
+              offset: const Offset(0, 16),
+              blurRadius: 36,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (final ExchangeApiKey account in accounts)
+              _AccountMenuItem(
+                account: account,
+                selected: account.id == selected?.id,
+                scheme: scheme,
+                onTap: () => onPick(account.id),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountMenuItem extends StatelessWidget {
+  const _AccountMenuItem({
+    required this.account,
+    required this.selected,
+    required this.scheme,
+    required this.onTap,
+  });
+
+  final ExchangeApiKey account;
+  final bool selected;
+  final QzColorScheme scheme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: selected ? scheme.accentSoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: <Widget>[
+            SizedBox(
+              width: 18,
+              child: selected
+                  ? Icon(Icons.check, size: 17, color: scheme.accent)
+                  : null,
+            ),
+            const SizedBox(width: QzSpacing.md),
+            Expanded(
+              child: Text(
+                account.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: scheme.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

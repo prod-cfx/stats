@@ -27,11 +27,7 @@ Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pump();
 }
 
-WhaleEvent _ev({
-  String id = 'w-x',
-  required DateTime ts,
-  double winRate = 72,
-}) {
+WhaleEvent _ev({String id = 'w-x', required DateTime ts, double winRate = 72}) {
   return WhaleEvent(
     id: id,
     symbol: 'BTCUSDT',
@@ -45,13 +41,12 @@ WhaleEvent _ev({
 }
 
 void main() {
-  testWidgets('displayTimestamp 注入时行内显示派生相对时间（与分组一致）',
-      (WidgetTester tester) async {
+  testWidgets('displayTimestamp 注入时行内显示派生相对时间（与分组一致）', (
+    WidgetTester tester,
+  ) async {
     final DateTime now = DateTime(2026, 5, 19, 12, 0, 0);
     // event.timestamp 为远古时间，但 displayTimestamp 指向 now-2min
-    final WhaleEvent event = _ev(
-      ts: DateTime(2024, 5, 18, 12, 0, 0),
-    );
+    final WhaleEvent event = _ev(ts: DateTime(2024, 5, 18, 12, 0, 0));
     await _pump(
       tester,
       QzWhaleRow(
@@ -62,27 +57,25 @@ void main() {
     );
 
     // 不允许出现「731 天前」/「天前」级别的时间穿帮
-    expect(find.textContaining('天前'), findsNothing,
-        reason: '注入 displayTimestamp 后应使用派生时间，不应出现 天前');
+    expect(
+      find.textContaining('天前'),
+      findsNothing,
+      reason: '注入 displayTimestamp 后应使用派生时间，不应出现 天前',
+    );
     expect(find.text('2 分钟前'), findsOneWidget);
   });
 
-  testWidgets('未注入 displayTimestamp 时回退 event.timestamp',
-      (WidgetTester tester) async {
+  testWidgets('未注入 displayTimestamp 时回退 event.timestamp', (
+    WidgetTester tester,
+  ) async {
     final DateTime now = DateTime(2026, 5, 19, 12, 0, 0);
-    final WhaleEvent event = _ev(
-      ts: now.subtract(const Duration(hours: 3)),
-    );
-    await _pump(
-      tester,
-      QzWhaleRow(event: event, now: now),
-    );
+    final WhaleEvent event = _ev(ts: now.subtract(const Duration(hours: 3)));
+    await _pump(tester, QzWhaleRow(event: event, now: now));
 
     expect(find.text('3 小时前'), findsOneWidget);
   });
 
-  testWidgets('displayTimestamp 指向 just now 边界',
-      (WidgetTester tester) async {
+  testWidgets('displayTimestamp 指向 just now 边界', (WidgetTester tester) async {
     final DateTime now = DateTime(2026, 5, 19, 12, 0, 0);
     final WhaleEvent event = _ev(ts: DateTime(2024, 1, 1));
     await _pump(
@@ -116,10 +109,7 @@ void main() {
       '3h ago',
     );
     expect(
-      QzWhaleRow.formatRelativeTime(
-        now.subtract(const Duration(days: 2)),
-        now,
-      ),
+      QzWhaleRow.formatRelativeTime(now.subtract(const Duration(days: 2)), now),
       '2d ago',
     );
   });
@@ -158,8 +148,9 @@ void main() {
     );
   }
 
-  testWidgets('完整持仓字段渲染：地址/标签/币种/mode/方向/持仓价值/数量/开盘价/胜率',
-      (WidgetTester tester) async {
+  testWidgets('完整持仓字段渲染：地址/标签/币种/mode/方向/持仓价值/数量/开盘价/胜率', (
+    WidgetTester tester,
+  ) async {
     await _pump(
       tester,
       QzWhaleRow(event: holding(), now: DateTime(2024, 5, 18, 0, 2)),
@@ -175,27 +166,84 @@ void main() {
     expect(find.text('73%'), findsOneWidget); // 胜率
   });
 
+  testWidgets('点击地址触发详情回调，点击右上角图标触发统计回调', (WidgetTester tester) async {
+    bool opened = false;
+    bool statsOpened = false;
+    await _pump(
+      tester,
+      QzWhaleRow(
+        event: holding(),
+        now: DateTime(2024, 5, 18, 0, 2),
+        onOpen: () => opened = true,
+        onStats: () => statsOpened = true,
+      ),
+    );
+
+    await tester.tap(find.text('0xe2…55d6'));
+    await tester.pump();
+    expect(opened, isTrue);
+    expect(statsOpened, isFalse);
+
+    await tester.tap(find.byIcon(Icons.show_chart));
+    await tester.pump();
+    expect(statsOpened, isTrue);
+  });
+
+  testWidgets('右上时间和趋势图标靠右对齐', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      QzWhaleRow(event: holding(), now: DateTime(2024, 5, 18, 0, 0, 10)),
+    );
+
+    final double cardRight = tester.getTopRight(find.byType(QzWhaleRow)).dx;
+    final double iconRight = tester
+        .getTopRight(find.byIcon(Icons.show_chart))
+        .dx;
+    expect(cardRight - iconRight, lessThanOrEqualTo(32));
+  });
+
   testWidgets('side long → 做多，short → 做空', (WidgetTester tester) async {
-    await _pump(tester, QzWhaleRow(event: holding(side: 'long'), now: DateTime(2024, 5, 18)));
+    await _pump(
+      tester,
+      QzWhaleRow(
+        event: holding(side: 'long'),
+        now: DateTime(2024, 5, 18),
+      ),
+    );
     expect(find.text('做多'), findsOneWidget);
     expect(find.text('做空'), findsNothing);
 
-    await _pump(tester, QzWhaleRow(event: holding(side: 'short'), now: DateTime(2024, 5, 18)));
+    await _pump(
+      tester,
+      QzWhaleRow(
+        event: holding(side: 'short'),
+        now: DateTime(2024, 5, 18),
+      ),
+    );
     expect(find.text('做空'), findsOneWidget);
     expect(find.text('做多'), findsNothing);
   });
 
   testWidgets('leverage null → 显示 --，非 null → Nx', (WidgetTester tester) async {
-    await _pump(tester, QzWhaleRow(event: holding(leverage: null), now: DateTime(2024, 5, 18)));
+    await _pump(
+      tester,
+      QzWhaleRow(event: holding(leverage: null), now: DateTime(2024, 5, 18)),
+    );
     expect(find.text('--'), findsOneWidget);
 
-    await _pump(tester, QzWhaleRow(event: holding(leverage: 20), now: DateTime(2024, 5, 18)));
+    await _pump(
+      tester,
+      QzWhaleRow(event: holding(leverage: 20), now: DateTime(2024, 5, 18)),
+    );
     expect(find.text('20x'), findsOneWidget);
   });
 
   testWidgets('旧数据（无持仓字段）优雅降级不抛异常', (WidgetTester tester) async {
     final WhaleEvent legacy = _ev(ts: DateTime(2024, 5, 18));
-    await _pump(tester, QzWhaleRow(event: legacy, now: DateTime(2024, 5, 18, 0, 1)));
+    await _pump(
+      tester,
+      QzWhaleRow(event: legacy, now: DateTime(2024, 5, 18, 0, 1)),
+    );
     expect(tester.takeException(), isNull);
     expect(find.byType(QzWhaleRow), findsOneWidget);
   });

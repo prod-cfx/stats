@@ -320,6 +320,7 @@ void main() {
     await tester.tap(find.byKey(const Key('agg-precision-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('agg-precision-10')), findsOneWidget);
+    expect(find.byKey(const Key('agg-precision-cancel')), findsNothing);
     await tester.tap(find.byKey(const Key('agg-precision-10')));
     await tester.pumpAndSettle();
     // 精度按钮文案更新为 10
@@ -337,10 +338,11 @@ void main() {
     await tester.tap(find.byKey(const Key('agg-source-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('agg-source-clear-all')), findsOneWidget);
+    expect(find.text('取消'), findsNothing);
     await tester.tap(find.byKey(const Key('agg-source-clear-all')));
     await tester.pumpAndSettle();
-    // 关闭抽屉应用
-    await tester.tap(find.text('取消'));
+    // 点击遮罩关闭抽屉，选择已在抽屉内实时应用。
+    await tester.tapAt(const Offset(12, 12));
     await tester.pumpAndSettle();
     // 清空后无中价条（bestBid/bestAsk 为空 → strip 仍在但值为 --）
     expect(find.textContaining('--'), findsWidgets);
