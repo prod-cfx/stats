@@ -1530,7 +1530,7 @@ describe('backtestRunnerService', () => {
         params: {},
         bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
         fn: (): StrategyDecisionV1 => ({ action: 'NOOP' }),
-      } as any,
+      } as BacktestRunInput['strategy'],
       dataRange: { fromTs: 1, toTs: 1 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
@@ -1573,7 +1573,7 @@ describe('backtestRunnerService', () => {
           noNextBarHandling: 'KEEP_PENDING',
         },
         fn: (): StrategyDecisionV1 => ({ action: 'NOOP' }),
-      } as any,
+      } as BacktestRunInput['strategy'],
       dataRange: { fromTs: 1, toTs: 3 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '1m', closeTime: 1, close: 100 }),
@@ -1583,6 +1583,48 @@ describe('backtestRunnerService', () => {
     })
 
     expect(lookbackReads).toBe(1)
+  })
+
+  it('strict snapshot runtime history honors dataRequirements maxLookback', async () => {
+    const runner = createRunner()
+    const bars = Array.from({ length: 50 }, (_unused, index) => createBar({
+      symbol: 'BTCUSDT',
+      timeframe: '5m',
+      closeTime: index + 1,
+      close: 100 + index,
+    }))
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-strict-max-lookback',
+        params: {},
+        astSnapshot: { dataRequirements: { maxLookback: 47, warmupBars: 47 } },
+        bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'BAR_CLOSE',
+          noNextBarHandling: 'KEEP_PENDING',
+        },
+        fn: (ctx): StrategyDecisionV1 => {
+          return ctx.ts === 50 && ctx.bars.length >= 47
+            ? { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 } }
+            : { action: 'NOOP' }
+        },
+        specSnapshot: { rules: [{ id: 'r1' }] },
+      } as any,
+      dataRange: { fromTs: 1, toTs: 50 },
+      bars,
+    })
+
+    expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+    expect(report.summary.totalOpenTrades).toBe(1)
+    expect(report.summary.diagnosticReason).toBeUndefined()
   })
 
   it('fills compiled spot grid order-program limit orders when bar range touches a working level', async () => {

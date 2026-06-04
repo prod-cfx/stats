@@ -1372,7 +1372,7 @@ export class BacktestRunnerService {
   }
 
   private isRuntimeLookbackKey(key: string): boolean {
-    return /^(?:period|fastPeriod|slowPeriod|signalPeriod|lookback|lookbackBars|window|length|bars)$/u.test(key)
+    return /^(?:period|fastPeriod|slowPeriod|signalPeriod|maxLookback|warmupBars|lookback|lookbackBars|window|length|bars)$/u.test(key)
   }
 
   private resolveSemanticRuntimeState(
