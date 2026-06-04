@@ -114,7 +114,7 @@ function createSizingCanonicalSpec(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
-  it('compiles generic indicator boundary as external signal instead of self-compare truthy predicate', () => {
+  it('compiles generic indicator boundary to replayable Bollinger touch predicates', () => {
     const canonicalSpec: CanonicalStrategySpecV2 = {
       version: 2,
       market: {
@@ -153,26 +153,23 @@ describe('canonicalSpecV2IrCompilerService', () => {
         positionPct: 10,
       },
     })
-    const predicate = findPredicate(result.ir.signalCatalog.predicates, item => item.id.includes('indicator_boundary_generic'))
+    const predicate = findPredicate(result.ir.signalCatalog.predicates, item => item.id.includes('indicator_boundary_lower'))
+    const lowSeries = findSeries(result.ir.signalCatalog.series, item => item.kind === 'PRICE' && item.field === 'low')
+    const lowerBand = findSeries(result.ir.signalCatalog.series, item => item.kind === 'LOWER_BAND')
 
-    expect(predicate.kind).toBe('externalSignal')
-    expect(predicate.args).toEqual([])
-    expect(predicate.params).toEqual(expect.objectContaining({
-      provider: 'indicator_boundary',
-      sourceFeedId: 'indicator.boundary',
-      signalId: 'indicator_boundary_touch',
-      indicator: 'channel',
-      boundaryRole: 'lower',
-      confirmationMode: 'touch',
-    }))
+    expect(predicate.kind).toBe('LTE')
+    expect(predicate.args).toEqual([lowSeries.id, lowerBand.id])
+    expect(result.ir.signalCatalog.predicates).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'externalSignal', params: expect.objectContaining({ provider: 'indicator_boundary' }) }),
+    ]))
   })
 
   it.each([
-    'orderbook.imbalance',
-    'fundingRate.condition',
-    'openInterest.condition',
-    'liquidation.condition',
-  ])('fails closed for %s until runtime market data source is bound', (key) => {
+    ['orderbook.imbalance', 'orderbookImbalance'],
+    ['fundingRate.condition', 'fundingRateCondition'],
+    ['openInterest.condition', 'openInterestCondition'],
+    ['liquidation.condition', 'liquidationCondition'],
+  ] as const)('compiles %s into a runtime market-data predicate', (key, predicateKind) => {
     const canonicalSpec: CanonicalStrategySpecV2 = {
       version: 2,
       market: {
@@ -198,7 +195,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
       }],
     }
 
-    expect(() => new CanonicalSpecV2IrCompilerService().compile({
+    const result = new CanonicalSpecV2IrCompilerService().compile({
       canonicalSpec,
       fallback: {
         exchange: 'binance',
@@ -206,7 +203,11 @@ describe('canonicalSpecV2IrCompilerService', () => {
         baseTimeframe: '1m',
         positionPct: 10,
       },
-    })).toThrow(`data_source_missing:${key}`)
+    })
+
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: predicateKind }),
+    ]))
   })
 
   it('preserves rules-only EMA stack reference periods through canonical and IR compile', () => {

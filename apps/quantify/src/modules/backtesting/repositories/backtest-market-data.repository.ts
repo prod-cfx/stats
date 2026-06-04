@@ -58,23 +58,39 @@ export class BacktestMarketDataRepository {
     toTs: number
     limit: number
   }) {
-    const symbol = await this.txHost.tx.symbol.findUnique({
-      where: { code: params.symbol.trim().toUpperCase() },
-      select: { id: true },
+    const symbolCodes = this.buildSymbolCodeCandidates(params.symbol)
+    const symbols = await this.txHost.tx.symbol.findMany({
+      where: { code: { in: symbolCodes } },
+      select: { id: true, code: true },
     })
+    const symbol = symbolCodes
+      .map(code => symbols.find(item => item.code === code))
+      .find((item): item is { id: string, code: string } => Boolean(item))
     if (!symbol) return []
 
-    return this.txHost.tx.marketQuote.findMany({
+    const quotes = await this.txHost.tx.marketQuote.findMany({
       where: {
         symbolId: symbol.id,
+        bidPrice: { not: null },
+        bidQty: { not: null },
+        askPrice: { not: null },
+        askQty: { not: null },
         eventTime: {
           gte: new Date(params.fromTs),
           lte: new Date(params.toTs),
         },
       },
-      orderBy: { eventTime: 'asc' },
+      orderBy: { eventTime: 'desc' },
       take: Math.max(1, params.limit),
     })
+    return quotes.reverse()
+  }
+
+  private buildSymbolCodeCandidates(symbol: string): string[] {
+    const normalized = symbol.trim().toUpperCase()
+    if (!normalized) return []
+    if (normalized.includes(':')) return [normalized]
+    return [normalized, `${normalized}:PERP`, `${normalized}:SPOT`]
   }
 
   aggregateCoverage(params: {

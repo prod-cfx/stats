@@ -282,6 +282,48 @@ describe('BacktestJobExecutorService', () => {
     }))
   })
 
+  it('hydrates orderbook event streams from rules-only signalCatalog predicates', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 2_000 }
+    input.strategy = {
+      ...input.strategy,
+      irSnapshot: {
+        signalCatalog: {
+          predicates: [
+            { id: 'book', kind: 'orderbookImbalance', params: { schemaRef: 'orderbook', sourceFeedId: 'orderbook.imbalance' } },
+          ],
+        },
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 2_000 }, appliedRange: { fromTs: 1_000, toTs: 2_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const okxMarketDataProvider = {
+      fetchOrderbookImbalanceEvents: jest.fn().mockResolvedValue([{ id: 'book-1', ts: 1_900, payload: { bidDepth: 3, askDepth: 2 } }]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      okxMarketDataProvider as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(okxMarketDataProvider.fetchOrderbookImbalanceEvents).toHaveBeenCalledWith({ symbol: 'BTCUSDT', startMs: 1_000, endMs: 2_000 })
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'orderbook.imbalance': [{ id: 'book-1', ts: 1_900, payload: { bidDepth: 3, askDepth: 2 } }],
+      },
+    }))
+  })
+
   it('hydrates orderbook event streams from historical quotes when OKX books has no historical rows', async () => {
     const repository = {
       markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),

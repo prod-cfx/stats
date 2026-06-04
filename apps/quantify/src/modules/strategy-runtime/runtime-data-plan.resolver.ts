@@ -49,79 +49,92 @@ function readExternalDataSources(scopes: Array<Record<string, unknown>> | undefi
   })
 }
 
-export function readEventStreamsFromExprPool(exprPool: unknown): RuntimeEventStreamRequirement[] {
-  if (!Array.isArray(exprPool)) return []
+function readPredicateEventStreams(payload: unknown): RuntimeEventStreamRequirement[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+  const payloadRecord = payload as Record<string, unknown>
+  const params = payloadRecord.params
+  const paramsRecord = params && typeof params === 'object' && !Array.isArray(params)
+    ? params as Record<string, unknown>
+    : {}
 
-  const streams = exprPool.flatMap((node): RuntimeEventStreamRequirement[] => {
-    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
-    const payload = (node as Record<string, unknown>).payload
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
-    const payloadRecord = payload as Record<string, unknown>
-    const params = payloadRecord.params
-    const paramsRecord = params && typeof params === 'object' && !Array.isArray(params)
-      ? params as Record<string, unknown>
-      : {}
-
-    if (
-      payloadRecord.kind === 'fundingRateCondition'
-      || payloadRecord.kind === 'liquidationCondition'
-      || payloadRecord.kind === 'orderbookImbalance'
-      || payloadRecord.kind === 'openInterestCondition'
-    ) {
-      const fallback = (() => {
-        switch (payloadRecord.kind) {
-          case 'fundingRateCondition':
-            return { sourceFeedId: 'funding.rate', schemaRef: 'funding' as const }
-          case 'liquidationCondition':
-            return { sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' as const }
-          case 'orderbookImbalance':
-            return { sourceFeedId: 'orderbook.imbalance', schemaRef: 'orderbook' as const }
-          case 'openInterestCondition':
-          default:
-            return { sourceFeedId: 'open_interest', schemaRef: 'open_interest' as const }
-        }
-      })()
-      const sourceFeedId = typeof paramsRecord.sourceFeedId === 'string' && paramsRecord.sourceFeedId.trim()
-        ? paramsRecord.sourceFeedId.trim()
-        : fallback.sourceFeedId
-      const schemaRef = paramsRecord.schemaRef === 'funding'
-        || paramsRecord.schemaRef === 'liquidation'
-        || paramsRecord.schemaRef === 'orderbook'
-        || paramsRecord.schemaRef === 'open_interest'
-        ? paramsRecord.schemaRef
-        : fallback.schemaRef
-
-      return [{
-        provider: 'external_feed',
-        signalId: sourceFeedId,
-        sourceFeedId,
-        schemaRef,
-      }]
-    }
-
-    if (payloadRecord.kind !== 'externalSignal') return []
-
-    const provider = typeof paramsRecord.provider === 'string' && paramsRecord.provider.trim()
-      ? paramsRecord.provider.trim()
-      : 'webhook'
-    const signalId = typeof paramsRecord.signalId === 'string' ? paramsRecord.signalId.trim() : ''
-    if (provider !== 'webhook' || !signalId) return []
-
+  if (
+    payloadRecord.kind === 'fundingRateCondition'
+    || payloadRecord.kind === 'liquidationCondition'
+    || payloadRecord.kind === 'orderbookImbalance'
+    || payloadRecord.kind === 'openInterestCondition'
+  ) {
+    const fallback = (() => {
+      switch (payloadRecord.kind) {
+        case 'fundingRateCondition':
+          return { sourceFeedId: 'funding.rate', schemaRef: 'funding' as const }
+        case 'liquidationCondition':
+          return { sourceFeedId: 'liquidation.events', schemaRef: 'liquidation' as const }
+        case 'orderbookImbalance':
+          return { sourceFeedId: 'orderbook.imbalance', schemaRef: 'orderbook' as const }
+        case 'openInterestCondition':
+        default:
+          return { sourceFeedId: 'open_interest', schemaRef: 'open_interest' as const }
+      }
+    })()
     const sourceFeedId = typeof paramsRecord.sourceFeedId === 'string' && paramsRecord.sourceFeedId.trim()
       ? paramsRecord.sourceFeedId.trim()
-      : `webhook.${signalId}`
-    const ttlMs = typeof paramsRecord.ttlMs === 'number' && Number.isFinite(paramsRecord.ttlMs) && paramsRecord.ttlMs > 0
-      ? paramsRecord.ttlMs
-      : undefined
+      : fallback.sourceFeedId
+    const schemaRef = paramsRecord.schemaRef === 'funding'
+      || paramsRecord.schemaRef === 'liquidation'
+      || paramsRecord.schemaRef === 'orderbook'
+      || paramsRecord.schemaRef === 'open_interest'
+      ? paramsRecord.schemaRef
+      : fallback.schemaRef
 
     return [{
-      provider: 'webhook',
-      signalId,
+      provider: 'external_feed',
+      signalId: sourceFeedId,
       sourceFeedId,
-      ...(ttlMs ? { ttlMs } : {}),
-      schemaRef: 'webhook_event',
+      schemaRef,
     }]
+  }
+
+  if (payloadRecord.kind !== 'externalSignal') return []
+
+  const provider = typeof paramsRecord.provider === 'string' && paramsRecord.provider.trim()
+    ? paramsRecord.provider.trim()
+    : 'webhook'
+  const signalId = typeof paramsRecord.signalId === 'string' ? paramsRecord.signalId.trim() : ''
+  if (provider !== 'webhook' || !signalId) return []
+
+  const sourceFeedId = typeof paramsRecord.sourceFeedId === 'string' && paramsRecord.sourceFeedId.trim()
+    ? paramsRecord.sourceFeedId.trim()
+    : `webhook.${signalId}`
+  const ttlMs = typeof paramsRecord.ttlMs === 'number' && Number.isFinite(paramsRecord.ttlMs) && paramsRecord.ttlMs > 0
+    ? paramsRecord.ttlMs
+    : undefined
+
+  return [{
+    provider: 'webhook',
+    signalId,
+    sourceFeedId,
+    ...(ttlMs ? { ttlMs } : {}),
+    schemaRef: 'webhook_event',
+  }]
+}
+
+function readSignalCatalogPredicates(value: unknown): unknown[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  const signalCatalog = (value as Record<string, unknown>).signalCatalog
+  if (!signalCatalog || typeof signalCatalog !== 'object' || Array.isArray(signalCatalog)) return []
+  const predicates = (signalCatalog as Record<string, unknown>).predicates
+  return Array.isArray(predicates) ? predicates : []
+}
+
+export function readEventStreamsFromExprPool(exprPool: unknown): RuntimeEventStreamRequirement[] {
+  const exprPoolNodes = Array.isArray(exprPool) ? exprPool : []
+  const exprPoolStreams = exprPoolNodes.flatMap((node): RuntimeEventStreamRequirement[] => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+    return readPredicateEventStreams((node as Record<string, unknown>).payload)
   })
+
+  const signalCatalogStreams = readSignalCatalogPredicates(exprPool).flatMap(readPredicateEventStreams)
+  const streams = [...exprPoolStreams, ...signalCatalogStreams]
 
   const byFeedId = new Map<string, RuntimeEventStreamRequirement>()
   streams.forEach((stream) => {

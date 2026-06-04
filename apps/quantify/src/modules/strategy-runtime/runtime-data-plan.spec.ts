@@ -196,4 +196,39 @@ describe('resolveRuntimeDataPlan', () => {
       { provider: 'external_feed', signalId: 'open_interest', sourceFeedId: 'open_interest', schemaRef: 'open_interest' },
     ]))
   })
+
+  it('derives event stream requirements from rules-only signal catalog predicates', () => {
+    const plan = resolveRuntimeDataPlan({
+      strictParams: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '1m',
+      },
+      stateTimeframes: [],
+      scriptMetadata: {},
+      orchestrationScopes: [],
+      exprPool: {
+        signalCatalog: {
+          predicates: [
+            {
+              id: 'orderbook_depth_ratio',
+              kind: 'orderbookImbalance',
+              params: { schemaRef: 'orderbook', sourceFeedId: 'orderbook.imbalance' },
+            },
+            {
+              id: 'spread_expand',
+              kind: 'externalSignal',
+              params: { provider: 'webhook', signalId: 'spread_expand', sourceFeedId: 'webhook.spread_expand' },
+            },
+          ],
+        },
+      },
+    })
+
+    expect(plan.eventStreams).toEqual(expect.arrayContaining([
+      { provider: 'external_feed', signalId: 'orderbook.imbalance', sourceFeedId: 'orderbook.imbalance', schemaRef: 'orderbook' },
+      { provider: 'webhook', signalId: 'spread_expand', sourceFeedId: 'webhook.spread_expand', schemaRef: 'webhook_event' },
+    ]))
+  })
 })

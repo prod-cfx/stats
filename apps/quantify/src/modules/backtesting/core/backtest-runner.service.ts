@@ -582,8 +582,11 @@ export class BacktestRunnerService {
 
   private resolveRequiredEventStreams(strategy: BacktestRunInput['strategy']): ReturnType<typeof readEventStreamsFromExprPool> {
     const candidates = [
+      this.readRecord(strategy.astSnapshot),
       this.readRecord(strategy.astSnapshot)?.exprPool,
+      this.readRecord(strategy.irSnapshot),
       this.readRecord(strategy.irSnapshot)?.exprPool,
+      this.readRecord(strategy.specSnapshot),
       this.readRecord(strategy.specSnapshot)?.exprPool,
     ]
     const streams = candidates.flatMap(candidate => readEventStreamsFromExprPool(candidate))
