@@ -306,7 +306,12 @@ export abstract class HyperliquidOrderbookWsAdapterBase implements OrderbookWsAd
     }
 
     if (msg.channel === 'l2Book') {
-      await this.handleL2Book(msg.data)
+      try {
+        await this.handleL2Book(msg.data)
+      }
+      catch (err) {
+        this.logger.warn(`Failed to publish Hyperliquid orderbook: ${err instanceof Error ? err.message : String(err)}`)
+      }
     }
   }
 

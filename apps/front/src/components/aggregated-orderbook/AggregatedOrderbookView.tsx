@@ -27,7 +27,7 @@ const FALLBACK_MARKETS: AggregatedOrderbookMarket[] = [
   { base: 'BTC', type: 'spot', venues: DEFAULT_EXCHANGES },
   { base: 'ETH', type: 'spot', venues: DEFAULT_EXCHANGES },
 ]
-const HOT_MARKET_PRIORITY = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'LINK', 'AVAX', 'HYPE']
+const HOT_MARKET_PRIORITY = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'LINK', 'AVAX', 'HYPE', 'LTC', 'BCH', 'DOT', 'TRX', 'TON', 'SUI', 'AAVE', 'UNI', 'NEAR', 'ARB', 'OP', 'APT', 'ETC', 'FIL', 'INJ', 'ATOM', 'SEI', 'WIF', 'ENA']
 const HOT_MARKET_PRIORITY_MAP = new Map(HOT_MARKET_PRIORITY.map((base, index) => [base, index]))
 const SYMBOL_TICK_SIZE_OPTIONS: Record<string, string[]> = {
   BTC: ['1', '10', '100'],

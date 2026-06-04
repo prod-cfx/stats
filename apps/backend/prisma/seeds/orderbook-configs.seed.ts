@@ -1,9 +1,37 @@
 import { BackendInstrumentType, VenueType } from '@ai/shared'
 import type { PrismaClient } from '../../generated/prisma'
 
-const POPULAR_ORDERBOOK_BASES = ['SOL', 'XRP', 'DOGE', 'BNB', 'ADA', 'LINK', 'AVAX'] as const
+const POPULAR_ORDERBOOK_BASES = [
+  'SOL',
+  'XRP',
+  'DOGE',
+  'BNB',
+  'ADA',
+  'LINK',
+  'AVAX',
+  'LTC',
+  'BCH',
+  'DOT',
+  'TRX',
+  'TON',
+  'SUI',
+  'AAVE',
+  'UNI',
+  'NEAR',
+  'ARB',
+  'OP',
+  'APT',
+  'ETC',
+  'FIL',
+  'INJ',
+  'ATOM',
+  'SEI',
+  'WIF',
+  'ENA',
+] as const
 const HYPERLIQUID_EXTRA_PERP_BASES = ['HYPE'] as const
 const HYPERLIQUID_SPOT_MARKETS = [
+  { base: 'HYPE', spotIndex: 107 },
   { base: 'BTC', spotIndex: 142 },
   { base: 'ETH', spotIndex: 151 },
   { base: 'SOL', spotIndex: 156 },
@@ -475,21 +503,6 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
     // Hyperliquid 现货
     // 注意：PURR/USDC 使用 "PURR/USDC" 格式，其他币种需要使用 @{index} 格式
     // 参考: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/spot
-    {
-      pairId: 'HYPE/USDC.HYPERLIQUID.SPOT',
-      venue: 'HYPERLIQUID',
-      symbol: 'HYPE/USDC',
-      baseAsset: 'HYPE',
-      quoteAsset: 'USDC',
-      venueType: VenueType.DEX,
-      instrumentType: BackendInstrumentType.SPOT,
-      enabled: true,
-      priority: 125,
-      depthLevels: 100,
-      pullIntervalSeconds: 1,
-      description: 'HYPE/USDC spot trading pair on Hyperliquid DEX',
-      metadata: { spotIndex: 107 }, // HYPE 在 Hyperliquid spotMeta 中的 index
-    },
     {
       pairId: 'PURR/USDC.HYPERLIQUID.SPOT',
       venue: 'HYPERLIQUID',
