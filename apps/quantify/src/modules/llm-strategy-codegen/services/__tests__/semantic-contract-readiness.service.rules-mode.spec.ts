@@ -735,6 +735,34 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
       }),
     ]))
   })
+
+  it('mainflow blocks moving-average cross when slowPeriod is missing and priceCross is not explicit', () => {
+    const r = svc.evaluateMainflowRulesReadiness([
+      rule({
+        id: 'entry-missing-slow-period',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: andExpr(
+          atom('ma.golden_cross', { indicator: 'ema', fastPeriod: 20, period: 20 }),
+          atom('orderbook.imbalance', { side: 'bid_over_ask', operator: 'gt', ratio: 1.5 }),
+        ),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [],
+          positions: [atom('position.sizing', { sizing: { kind: 'ratio', value: 0.01 } })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+
+    expect(r.ready).toBe(false)
+    expect(r.blockingReasons).toContain('missing_required_rule_params')
+    expect(r.openSlots).toEqual([expect.objectContaining({
+      slotKey: 'ma.golden_cross.slowPeriod',
+      fieldPath: 'rules[0].condition.and.children[0].params.slowPeriod',
+    })])
+  })
 })
 
 describe('semanticContractReadinessService.normalize DCA exit contract in rules tree', () => {

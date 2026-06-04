@@ -1300,6 +1300,10 @@ function readSizingValueFromParams(params: Readonly<Record<string, unknown>>): n
 }
 
 function buildMainflowRequiredParamSlot(leaf: RulesMainflowLeaf): SemanticSlotState | null {
+  if (isMainflowMovingAverageCrossMissingSlowPeriod(leaf)) {
+    return buildMainflowParamSlot(leaf, 'slowPeriod', '请确认长期/慢速均线周期，例如 EMA50。')
+  }
+
   if (leaf.role !== 'risk' && leaf.role !== 'position') return null
 
   if (leaf.key === ATOM_CONTRACT_REGISTRY['position.sizing'].key) {
@@ -1322,6 +1326,17 @@ function buildMainflowRequiredParamSlot(leaf: RulesMainflowLeaf): SemanticSlotSt
   }
 
   return null
+}
+
+function isMainflowMovingAverageCrossMissingSlowPeriod(leaf: RulesMainflowLeaf): boolean {
+  if (leaf.role !== 'condition') return false
+  if (!isMovingAverageCrossAtomKey(leaf.key)) return false
+  const indicator = typeof leaf.params.indicator === 'string' ? leaf.params.indicator.toLowerCase() : ''
+  if (indicator !== 'ma' && indicator !== 'ema' && indicator !== 'sma') return false
+  if (leaf.params.priceCross === true) return false
+  if (leaf.params.fastPeriod === undefined) return false
+  const slowPeriod = readNumberParam(leaf.params, 'slowPeriod')
+  return slowPeriod === null || slowPeriod <= 0
 }
 
 function buildMainflowOneOfParamSlot(leaf: RulesMainflowLeaf): SemanticSlotState | null {

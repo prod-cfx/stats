@@ -1848,7 +1848,7 @@ export class CanonicalSpecV2IrCompilerService {
         const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], NaN)
         const fastPeriod = this.readNumber([atom.params?.fastPeriod], NaN)
         const slowPeriod = this.readNumber([atom.params?.slowPeriod], NaN)
-        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+        if (atom.params?.priceCross === true && Number.isFinite(fastPeriod)) {
           const referencePeriod = Number.isFinite(period) ? period : fastPeriod
           const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'sma' ? 'SMA' : 'EMA'
           const closeRef = this.ensurePriceSeries(context, 'close')
@@ -1859,6 +1859,9 @@ export class CanonicalSpecV2IrCompilerService {
             atom.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER',
             [closeRef, ref],
           )
+        }
+        if (this.isMovingAverageCrossSlowPeriodRequired(atom) && (!Number.isFinite(slowPeriod) || slowPeriod <= 0)) {
+          throw new Error(`codegen.canonical_spec_v2_ma_cross_invalid_slow_period:${atom.key}:${slowPeriod}`)
         }
         const movingAverage = this.resolveMovingAverageAtomConfig(atom, context.movingAverage)
         const fastRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.fast)
@@ -3033,6 +3036,13 @@ export class CanonicalSpecV2IrCompilerService {
       fast,
       slow: slow > fast ? slow : fast + 14,
     }
+  }
+
+  private isMovingAverageCrossSlowPeriodRequired(atom: CanonicalConditionAtom): boolean {
+    const rawIndicator = this.readStringParam(atom.params?.indicator)?.toLowerCase()
+    if (rawIndicator !== 'ma' && rawIndicator !== 'ema' && rawIndicator !== 'sma') return false
+    if (atom.params?.priceCross === true) return false
+    return atom.params?.fastPeriod !== undefined
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {

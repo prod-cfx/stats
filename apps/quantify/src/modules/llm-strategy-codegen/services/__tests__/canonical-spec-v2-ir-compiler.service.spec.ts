@@ -1380,6 +1380,53 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('fails closed when moving-average cross carries fastPeriod but no slowPeriod and is not explicit priceCross', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    expect(() => compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'ema', params: { period: 20, fastPeriod: 20 } }],
+        sizing: { mode: 'RATIO', value: 0.01 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-ma-cross-missing-slow',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+              op: 'CROSS_OVER',
+              params: { indicator: 'ema', fastPeriod: 20, period: 20 },
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.01 } }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 1,
+      },
+    })).toThrow(/codegen\.canonical_spec_v2_ma_cross_invalid_slow_period/)
+  })
+
   it('compiles MACD 16/34/12 cross rules without falling back to defaults', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
