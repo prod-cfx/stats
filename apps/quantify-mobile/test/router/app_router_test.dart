@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
@@ -556,7 +557,7 @@ void main() {
     await tester.ensureVisible(logout);
     await tester.tap(logout);
     await tester.pumpAndSettle();
-    expect(container.read(sessionControllerProvider).valueOrNull, isNull);
+    expect(container.read(sessionControllerProvider).value, isNull);
     expect(find.byType(StrategyGuestPage), findsOneWidget);
     expect(find.byType(MeHomePage), findsNothing);
   });

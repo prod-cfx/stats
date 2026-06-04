@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `Override` 在 Riverpod 3.x 未由 flutter_riverpod 公开导出，直连 misc。
+import 'package:riverpod/misc.dart' show Override;
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,6 +22,11 @@ Future<void> main() async {
   final SharedPreferences prefs = await SharedPreferences.getInstance();
 
   final ProviderContainer container = ProviderContainer(
+    // Riverpod 3.x 默认在 provider build 抛错时按指数退避自动重试，会让
+    // repository / mock 失败被框架静默重试、改变 2.6.1 「一次失败即落错误态」
+    // 语义。统一关闭 retry，保持升级前行为（Never break userspace）；个别需
+    // retry 的 provider 应在定义处显式打开并配测试。
+    retry: (_, _) => null,
     overrides: <Override>[
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
@@ -62,7 +69,7 @@ class _QuantifyMobileAppState extends ConsumerState<QuantifyMobileApp> {
     );
     _router = buildRouter(
       readSession: () =>
-          ref.read(sessionControllerProvider).valueOrNull,
+          ref.read(sessionControllerProvider).value,
       refreshListenable: _refresh,
     );
   }

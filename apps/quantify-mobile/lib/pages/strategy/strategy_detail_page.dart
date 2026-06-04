@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `FutureProviderFamily` 在 Riverpod 3.x 未由 flutter_riverpod 公开导出。
+import 'package:riverpod/misc.dart' show FutureProviderFamily;
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/strategy_models.dart';

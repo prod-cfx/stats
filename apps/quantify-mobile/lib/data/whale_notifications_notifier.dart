@@ -9,9 +9,10 @@ import 'models/whale_extra_models.dart';
 /// 已读状态，避免两套独立 state 漂移。mock 阶段种子来自
 /// [mockWhaleNotifications]，真实推送（#1683）接入后替换 seed 来源即可。
 class WhaleNotificationsNotifier
-    extends StateNotifier<List<WhaleNotification>> {
-  WhaleNotificationsNotifier()
-      : super(List<WhaleNotification>.of(mockWhaleNotifications));
+    extends Notifier<List<WhaleNotification>> {
+  @override
+  List<WhaleNotification> build() =>
+      List<WhaleNotification>.of(mockWhaleNotifications);
 
   int get unreadCount =>
       state.where((WhaleNotification n) => n.unread).length;
@@ -38,9 +39,8 @@ class WhaleNotificationsNotifier
 }
 
 /// 通知中心共享 provider（issue #1769）。
-final StateNotifierProvider<WhaleNotificationsNotifier,
-        List<WhaleNotification>> whaleNotificationsProvider =
-    StateNotifierProvider<WhaleNotificationsNotifier,
-        List<WhaleNotification>>(
-  (Ref ref) => WhaleNotificationsNotifier(),
+final NotifierProvider<WhaleNotificationsNotifier, List<WhaleNotification>>
+    whaleNotificationsProvider =
+    NotifierProvider<WhaleNotificationsNotifier, List<WhaleNotification>>(
+  WhaleNotificationsNotifier.new,
 );

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
@@ -71,7 +72,7 @@ void main() {
           .read(sessionControllerProvider.notifier)
           .loginEmail(email: 'x@y.com', password: 'pwpwpw');
 
-      final AuthSession? cur = c.read(sessionControllerProvider).valueOrNull;
+      final AuthSession? cur = c.read(sessionControllerProvider).value;
       expect(cur, isNotNull);
       expect(cur!.email, 'x@y.com');
       expect(storage.snapshot[kSessionStorageKey], isNotNull);
@@ -94,7 +95,7 @@ void main() {
       await controller.sendLoginCode(email: 'code@y.com');
       await controller.loginEmailCode(email: 'code@y.com', code: '123456');
 
-      final AuthSession? cur = c.read(sessionControllerProvider).valueOrNull;
+      final AuthSession? cur = c.read(sessionControllerProvider).value;
       expect(cur, isNotNull);
       expect(cur!.email, 'code@y.com');
       expect(storage.snapshot[kSessionStorageKey], isNotNull);
@@ -113,7 +114,7 @@ void main() {
       await c.read(sessionControllerProvider.future);
       await c.read(sessionControllerProvider.notifier).loginTelegram();
 
-      final AuthSession? cur = c.read(sessionControllerProvider).valueOrNull;
+      final AuthSession? cur = c.read(sessionControllerProvider).value;
       expect(cur, isNotNull);
       expect(cur!.email, kTelegramMockEmail);
     });
@@ -130,7 +131,7 @@ void main() {
       expect(storage.snapshot[kSessionStorageKey], isNotNull);
 
       await c.read(sessionControllerProvider.notifier).logout();
-      expect(c.read(sessionControllerProvider).valueOrNull, isNull);
+      expect(c.read(sessionControllerProvider).value, isNull);
       expect(storage.snapshot.containsKey(kSessionStorageKey), isFalse);
     });
   });

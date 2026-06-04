@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
@@ -183,7 +184,7 @@ void main() {
     expect(find.text('AI_HOME_PLACEHOLDER'), findsOneWidget);
     expect(storage.snapshot.containsKey(kSessionStorageKey), isTrue);
     expect(
-      container.read(sessionControllerProvider).valueOrNull?.email,
+      container.read(sessionControllerProvider).value?.email,
       'me@quantify.dev',
     );
   });

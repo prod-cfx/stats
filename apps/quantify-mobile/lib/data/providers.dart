@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `FutureProviderFamily` 在 Riverpod 3.x 未由 flutter_riverpod 公开导出，
+// family provider 的显式类型注解需直连 misc。
+import 'package:riverpod/misc.dart' show FutureProviderFamily;
 
 import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';

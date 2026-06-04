@@ -250,7 +250,7 @@ class _StrategyEntryPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AuthSession? session = ref
         .watch(sessionControllerProvider)
-        .valueOrNull;
+        .value;
     return session == null
         ? const StrategyGuestPage()
         : const StrategyHomePage();

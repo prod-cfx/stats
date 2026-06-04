@@ -14,7 +14,10 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  flutter_riverpod: ^2.6.1
+  flutter_riverpod: ^3.0.0
+  # 直接消费 `package:riverpod/misc.dart` 的 `Override` 类型：3.x 中 `Override`
+  # 未通过 flutter_riverpod 公开导出，ProviderContainer overrides 列表需显式依赖。
+  riverpod: ^3.0.0
   go_router: ^14.6.2
   shared_preferences: ^2.3.3
   flutter_secure_storage: ^9.2.4

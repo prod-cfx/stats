@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/mock/mock_account_repository.dart';
 import 'package:quantify_mobile/data/mock/mock_ai_chat_repository.dart';

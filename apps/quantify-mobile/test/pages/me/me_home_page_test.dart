@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
@@ -394,7 +395,7 @@ void main() {
     await tester.tap(find.text('退出登录'));
     await tester.pumpAndSettle();
     // session 已被清零
-    expect(container.read(sessionControllerProvider).valueOrNull, isNull);
+    expect(container.read(sessionControllerProvider).value, isNull);
     expect(find.text('GUEST_STRATEGY_PLACEHOLDER'), findsOneWidget);
   });
 

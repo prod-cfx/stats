@@ -21,7 +21,7 @@ class MainShellScaffold extends ConsumerWidget {
 
   void _onTap(BuildContext context, WidgetRef ref, int i) {
     final bool loggedIn =
-        ref.read(sessionControllerProvider).valueOrNull != null;
+        ref.read(sessionControllerProvider).value != null;
     if (i == 4 && !loggedIn) {
       showLoginSheet(context);
       return;

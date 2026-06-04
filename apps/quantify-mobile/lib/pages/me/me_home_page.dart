@@ -56,15 +56,23 @@ class MeHomePage extends ConsumerWidget {
 /// 统计卡相对于 header 的垂直叠加偏移（原型 `m-screens-4.jsx:992` `marginTop:-26`）。
 const double _statsCardOverlap = -26;
 
+/// 偏好分组「语言」行选中值的轻量 Notifier（替代 3.0 legacy `StateProvider`）。
+/// 仅承载选中值，行为对外零变化：消费方 watch 值、`set` 写入。
+class LanguageNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? value) => state = value;
+}
+
 /// 偏好分组「语言」行的选中值（UI 会话态）。
 ///
 /// 当前 app locale 在 `main.dart` 硬锁 `Locale('zh')`，无应用级语言切换基建
 /// （tracking #1515 follow-up）。本 provider 仅承载抽屉选中值回显，**不实际
 /// 切换 locale**；待 locale 基建接通后改为驱动真实 `localeProvider`。
 /// 默认值在 widget 内由 `meSettingsLanguageOptionZh` 回填（避免在此硬编码文案）。
-final StateProvider<String?> selectedLanguageProvider = StateProvider<String?>(
-  (Ref ref) => null,
-);
+final NotifierProvider<LanguageNotifier, String?> selectedLanguageProvider =
+    NotifierProvider<LanguageNotifier, String?>(LanguageNotifier.new);
 
 /// 弹出语言底部抽屉（简体中文 / English 单选 + 勾选态 + 取消），结构对齐
 /// 设计稿 `m-screens-4.jsx:2640-2730`。返回所选项；点取消 / 点遮罩返回 null。
@@ -140,7 +148,7 @@ Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
   // dispose；缺 mounted 检查时写 ref 会触发 `Cannot use "ref" after the
   // widget was disposed` StateError。与同文件 `_openSheet` 的守卫一致。
   if (picked != null && context.mounted) {
-    ref.read(selectedLanguageProvider.notifier).state = picked;
+    ref.read(selectedLanguageProvider.notifier).set(picked);
   }
 }
 
