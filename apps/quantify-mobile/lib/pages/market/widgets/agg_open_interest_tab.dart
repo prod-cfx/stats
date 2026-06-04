@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/mock/fixtures/agg_orders.dart';
-import '../../../data/models/agg_orders_models.dart';
+import '../../../data/models/agg_market_data.dart';
+import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -17,21 +18,26 @@ import 'agg_format.dart';
 /// 排序入口已按设计稿对齐移除（Issue #1919，decisions.md 同日节）：设计稿
 /// `OpenInterestTab` 渲染层只有 chips + 表格，排序 state 在设计稿中即为未渲染
 /// 死代码；表格按 fixtures 原始顺序展示，不再提供排序按钮 / 抽屉。
-class AggOpenInterestTab extends StatefulWidget {
+class AggOpenInterestTab extends ConsumerStatefulWidget {
   const AggOpenInterestTab({super.key});
 
   @override
-  State<AggOpenInterestTab> createState() => _AggOpenInterestTabState();
+  ConsumerState<AggOpenInterestTab> createState() => _AggOpenInterestTabState();
 }
 
-class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
+class _AggOpenInterestTabState extends ConsumerState<AggOpenInterestTab> {
   String _coin = 'BTC';
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final OiSnapshot? data = kOiData[_coin];
+    // 持仓量数据经 aggOrderbookProvider 注入（issue #2216）。
+    final AggMarketData? agg = ref.watch(aggOrderbookProvider).value;
+    final List<String> oiCoins = agg?.oiCoins ?? const <String>[];
+    final Map<String, AggExchange> oiExchangeMap =
+        agg?.oiExchangeMap ?? const <String, AggExchange>{};
+    final OiSnapshot? data = agg?.oiData[_coin];
     final List<OiRow> rows = data?.rows ?? <OiRow>[];
     final double maxPct = rows.isEmpty
         ? 1
@@ -44,7 +50,7 @@ class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
       padding: const EdgeInsets.only(top: QzSpacing.md, bottom: 100),
       children: <Widget>[
         AggCoinChips(
-          coins: kOiCoins,
+          coins: oiCoins,
           value: _coin,
           onChanged: (String v) => setState(() => _coin = v),
         ),
@@ -65,7 +71,12 @@ class _AggOpenInterestTabState extends State<AggOpenInterestTab> {
                 _Header(),
                 _TotalRow(coin: _coin, total: data.total),
                 for (final OiRow r in rows)
-                  _Row(coin: _coin, row: r, maxPct: maxPct),
+                  _Row(
+                    coin: _coin,
+                    row: r,
+                    maxPct: maxPct,
+                    exchangeMap: oiExchangeMap,
+                  ),
               ],
             ),
           ),
@@ -328,16 +339,22 @@ class _TotalRow extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.coin, required this.row, required this.maxPct});
+  const _Row({
+    required this.coin,
+    required this.row,
+    required this.maxPct,
+    required this.exchangeMap,
+  });
 
   final String coin;
   final OiRow row;
   final double maxPct;
+  final Map<String, AggExchange> exchangeMap;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final AggExchange? ex = kOiExchangeMap[row.exchange];
+    final AggExchange? ex = exchangeMap[row.exchange];
     return Container(
       key: Key('agg-oi-row-${row.exchange}'),
       padding: const EdgeInsets.symmetric(

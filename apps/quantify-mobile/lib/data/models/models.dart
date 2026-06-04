@@ -1,4 +1,5 @@
 export 'account_models.dart';
+export 'agg_market_data.dart';
 export 'ai_chat_models.dart';
 export 'api_key_models.dart';
 export 'auth_models.dart';

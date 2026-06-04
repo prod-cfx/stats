@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/mock/fixtures/agg_orders.dart';
+import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -22,16 +23,17 @@ Future<String?> showAggCoinSearch(
   );
 }
 
-class _AggCoinSearchSheet extends StatefulWidget {
+class _AggCoinSearchSheet extends ConsumerStatefulWidget {
   const _AggCoinSearchSheet({required this.coins});
 
   final List<String> coins;
 
   @override
-  State<_AggCoinSearchSheet> createState() => _AggCoinSearchSheetState();
+  ConsumerState<_AggCoinSearchSheet> createState() =>
+      _AggCoinSearchSheetState();
 }
 
-class _AggCoinSearchSheetState extends State<_AggCoinSearchSheet> {
+class _AggCoinSearchSheetState extends ConsumerState<_AggCoinSearchSheet> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String _query = '';
@@ -263,6 +265,10 @@ class _AggCoinSearchSheetState extends State<_AggCoinSearchSheet> {
         ),
       );
     }
+    // 币种配色经 aggOrderbookProvider 注入（issue #2216）。
+    final Map<String, Color> coinColor =
+        ref.watch(aggOrderbookProvider).value?.coinColor ??
+        const <String, Color>{};
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(
         QzSpacing.lg,
@@ -276,7 +282,7 @@ class _AggCoinSearchSheetState extends State<_AggCoinSearchSheet> {
         return _SearchResultRow(
           key: Key('agg-coin-result-$coin'),
           coin: coin,
-          color: kAggCoinColor[coin] ?? c.accent,
+          color: coinColor[coin] ?? c.accent,
           onTap: () => _pick(coin),
         );
       },

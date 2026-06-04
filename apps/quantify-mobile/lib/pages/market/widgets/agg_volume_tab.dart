@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/mock/fixtures/agg_orders.dart';
-import '../../../data/models/agg_orders_models.dart';
+import '../../../data/models/agg_market_data.dart';
+import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -12,28 +13,34 @@ import 'agg_format.dart';
 /// 聚合成交量 tab（设计稿 `AggVolumeTab`:1421）。
 ///
 /// 币种 chips + 单卡片：总计行（100% 条）+ 各所横向占比条（各所配色）。
-class AggVolumeTab extends StatefulWidget {
+class AggVolumeTab extends ConsumerStatefulWidget {
   const AggVolumeTab({super.key});
 
   @override
-  State<AggVolumeTab> createState() => _AggVolumeTabState();
+  ConsumerState<AggVolumeTab> createState() => _AggVolumeTabState();
 }
 
-class _AggVolumeTabState extends State<AggVolumeTab> {
+class _AggVolumeTabState extends ConsumerState<AggVolumeTab> {
   String _coin = 'BTC';
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final VolSnapshot? data = kVolData[_coin];
+    // 成交量数据经 aggOrderbookProvider 注入（issue #2216）。
+    final AggMarketData? agg = ref.watch(aggOrderbookProvider).value;
+    final List<String> volCoins = agg?.volCoins ?? const <String>[];
+    final Map<String, String> volExchangeName =
+        agg?.volExchangeName ?? const <String, String>{};
+    final Map<String, Color> volColor = agg?.volColor ?? const <String, Color>{};
+    final VolSnapshot? data = agg?.volData[_coin];
 
     return ListView(
       key: const Key('agg-volume-list'),
       padding: const EdgeInsets.only(top: QzSpacing.md, bottom: 100),
       children: <Widget>[
         AggCoinChips(
-          coins: kVolCoins,
+          coins: volCoins,
           value: _coin,
           onChanged: (String v) => setState(() => _coin = v),
         ),
@@ -55,15 +62,15 @@ class _AggVolumeTabState extends State<AggVolumeTab> {
                   name: l10n.aggVolumeTotal,
                   value: data.total,
                   total: data.total,
-                  color: kVolColor['TOTAL']!,
+                  color: volColor['TOTAL'] ?? c.accent,
                   isTotal: true,
                 ),
                 for (final VolRow r in data.rows)
                   _VolumeRow(
-                    name: kVolExchangeName[r.exchange] ?? r.exchange,
+                    name: volExchangeName[r.exchange] ?? r.exchange,
                     value: r.value,
                     total: data.total,
-                    color: kVolColor[r.exchange] ?? c.accent,
+                    color: volColor[r.exchange] ?? c.accent,
                   ),
               ],
             ),

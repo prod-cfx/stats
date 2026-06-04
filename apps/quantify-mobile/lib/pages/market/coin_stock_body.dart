@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/mock/fixtures/coin_stocks.dart';
 import '../../data/models/coin_stock_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -22,17 +22,25 @@ import 'widgets/coin_stock_sort_sheet.dart';
 /// [CoinStockDetailSheet]。页面级 tab/filter/sort/dir 由 [CoinStockController]
 /// 持有（issue #2184）。
 class CoinStockBody extends ConsumerWidget {
-  const CoinStockBody({super.key, this.stocks = kCoinStocks});
+  const CoinStockBody({super.key, this.stocks});
 
-  /// 数据源（默认 mock fixtures，测试可注入）。
-  final List<CoinStock> stocks;
+  /// 数据源覆盖（测试可注入）。为 null 时经 [coinStocksProvider] 取数。
+  final List<CoinStock>? stocks;
+
+  /// 解析数据源：优先注入值，否则经 [coinStocksProvider] 取数（加载/错误态
+  /// 回退空列表渲染空态）。`build` 用 watch 触发刷新；回调内用 read。
+  List<CoinStock> _read(WidgetRef ref) {
+    return stocks ??
+        ref.read(coinStocksProvider).value ??
+        const <CoinStock>[];
+  }
 
   Future<void> _openSearch(BuildContext context, WidgetRef ref) async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => CoinStockSearchOverlay(
-          stocks: stocks,
+          stocks: _read(ref),
           onApplyQuery: (String q) =>
               ref.read(coinStockControllerProvider.notifier).setFilter(q),
           onOpenStock: (CoinStock r) => _openDetail(context, r),
@@ -50,7 +58,7 @@ class CoinStockBody extends ConsumerWidget {
       context,
       sort: s.sort,
       dir: s.dir,
-      resultCount: coinStockShown(stocks, s).length,
+      resultCount: coinStockShown(_read(ref), s).length,
     );
     if (result == null) return;
     ref
@@ -67,6 +75,10 @@ class CoinStockBody extends ConsumerWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final CoinStockState s = ref.watch(coinStockControllerProvider);
+    final List<CoinStock> stocks =
+        this.stocks ??
+        ref.watch(coinStocksProvider).value ??
+        const <CoinStock>[];
     final List<CoinStock> shown = coinStockShown(stocks, s);
     return ColoredBox(
       color: c.bg,

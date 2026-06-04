@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/error/error_router.dart';
 import '../../core/providers/notifier_lifecycle.dart';
-import '../../data/mock/fixtures/trades.dart' as trade_fixtures;
 import '../../data/models/kline_models.dart';
 import '../../data/models/market_source.dart';
 import '../../data/models/ticker_models.dart';
+import '../../data/models/trade_models.dart';
 import '../../data/providers.dart';
 import 'market_detail_state.dart';
 
@@ -63,15 +63,17 @@ class MarketDetailController extends Notifier<MarketDetailState> {
         return;
       }
       if (!mounted) return;
-      // mock 成交列表随快照一次性构建并缓存（对齐原 `_trades ??=` 语义：
-      // 仅首次构建，ticker 推流改价时不重建）。
+      // 成交列表随快照一次性构建并缓存（对齐原 `_trades ??=` 语义：
+      // 仅首次构建，ticker 推流改价时不重建）。经 tradesRepository 取数，
+      // 不再直接 import fixtures（issue #2216）。
+      final List<Trade> trades = await ref
+          .read(tradesRepositoryProvider)
+          .listTrades(symbol: symbol, mid: snapshot.price);
+      if (!mounted) return;
       state = state.copyWith(
         priceSnapshot: snapshot,
         loading: false,
-        trades: trade_fixtures.buildMockTrades(
-          symbol: symbol,
-          mid: snapshot.price,
-        ),
+        trades: trades,
       );
       _tickerSub = tickerRepo.watchTicker(symbol).listen((Ticker next) {
         if (!mounted) return;

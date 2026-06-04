@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/mock/fixtures/pred_markets.dart';
 import '../../data/models/pred_market_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -19,12 +19,20 @@ import 'widgets/pred_market_search_overlay.dart';
 /// 搜索空态。无 Scaffold / header（由 [DataHubPage] 提供）。点击卡片弹
 /// [PredMarketDetailSheet]。页面级搜索词由 [PredMarketController] 持有（#2184）。
 class PredMarketBody extends ConsumerWidget {
-  const PredMarketBody({super.key, this.markets = kPredMarkets});
+  const PredMarketBody({super.key, this.markets});
 
-  /// 数据源（默认 mock fixtures，测试可注入）。
-  final List<PredMarket> markets;
+  /// 数据源覆盖（测试可注入）。为 null 时经 [predMarketsProvider] 取数。
+  final List<PredMarket>? markets;
 
-  List<PredMarket> _shown(String filter) {
+  /// 解析数据源：优先注入值，否则经 [predMarketsProvider] 取数（加载/错误态
+  /// 回退空列表）。`build` 用 watch；回调内用 read。
+  List<PredMarket> _read(WidgetRef ref) {
+    return markets ??
+        ref.read(predMarketsProvider).value ??
+        const <PredMarket>[];
+  }
+
+  List<PredMarket> _shown(List<PredMarket> markets, String filter) {
     final String q = filter.trim().toLowerCase();
     if (q.isEmpty) return markets;
     return markets
@@ -37,7 +45,7 @@ class PredMarketBody extends ConsumerWidget {
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => PredMarketSearchOverlay(
-          markets: markets,
+          markets: _read(ref),
           onApplyQuery: (String q) =>
               ref.read(predMarketControllerProvider.notifier).setFilter(q),
           onOpenMarket: (PredMarket m) => _openDetail(context, m),
@@ -57,7 +65,11 @@ class PredMarketBody extends ConsumerWidget {
     final String filter = ref.watch(
       predMarketControllerProvider.select((PredMarketState s) => s.filter),
     );
-    final List<PredMarket> shown = _shown(filter);
+    final List<PredMarket> markets =
+        this.markets ??
+        ref.watch(predMarketsProvider).value ??
+        const <PredMarket>[];
+    final List<PredMarket> shown = _shown(markets, filter);
     return ColoredBox(
       color: c.bg,
       child: Column(

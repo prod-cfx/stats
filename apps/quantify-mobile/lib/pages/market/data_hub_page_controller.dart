@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/notifier_lifecycle.dart';
-import '../../data/mock/fixtures/whale_extras.dart';
 import '../../data/models/whale_extra_models.dart';
+import '../../data/providers.dart';
 import 'data_hub_page_state.dart';
 import 'widgets/data_hub_header.dart' show DataHubScreen;
 
@@ -22,9 +22,13 @@ class DataHubController extends Notifier<DataHubState> {
   @override
   DataHubState build() {
     _life.attach(ref);
+    // 通知列表经 whaleExtrasProvider 注入（mock 同步可用；加载/错误态回退空列表）。
+    final List<WhaleNotification> seed =
+        ref.watch(whaleExtrasProvider).value ??
+        const <WhaleNotification>[];
     return DataHubState(
       current: initial,
-      notifications: List<WhaleNotification>.of(mockWhaleNotifications),
+      notifications: List<WhaleNotification>.of(seed),
     );
   }
 

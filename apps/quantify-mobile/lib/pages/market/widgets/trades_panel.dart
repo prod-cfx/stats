@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/mock/fixtures/trades.dart';
 import '../../../data/models/trade_models.dart';
+import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -35,7 +36,7 @@ List<Trade> sortTrades(List<Trade> trades, {required bool byQty}) {
 /// 子标签（最新/大额）与排序在本 widget 内部状态维护；过滤/排序为纯函数，
 /// 真实接入后只换数据源不动交互。列表头单位由 `symbol` 解析为 `baseAsset` /
 /// `quoteAsset` 后动态拼接，兼容 ETH/USDT、SOL/USDT 等非 BTC 交易对。
-class TradesPanel extends StatefulWidget {
+class TradesPanel extends ConsumerStatefulWidget {
   const TradesPanel({
     super.key,
     required this.symbol,
@@ -48,10 +49,10 @@ class TradesPanel extends StatefulWidget {
   final List<Trade>? trades;
 
   @override
-  State<TradesPanel> createState() => _TradesPanelState();
+  ConsumerState<TradesPanel> createState() => _TradesPanelState();
 }
 
-class _TradesPanelState extends State<TradesPanel> {
+class _TradesPanelState extends ConsumerState<TradesPanel> {
   TradesTab _tab = TradesTab.latest;
   bool _sortByQty = false;
 
@@ -59,8 +60,13 @@ class _TradesPanelState extends State<TradesPanel> {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    // 成交源经 tradesProvider 注入（mock 同步可用；加载/错误态回退空列表）。
     final List<Trade> source =
-        widget.trades ?? buildMockTrades(symbol: widget.symbol, mid: widget.mid);
+        widget.trades ??
+        ref
+                .watch(tradesProvider((widget.symbol, widget.mid)))
+                .value ??
+            const <Trade>[];
     final List<Trade> filtered =
         _tab == TradesTab.big ? filterBigTrades(source) : source;
     final List<Trade> rows = sortTrades(filtered, byQty: _sortByQty);

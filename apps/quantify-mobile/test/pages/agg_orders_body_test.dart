@@ -7,6 +7,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/agg_orders_body.dart';
 import 'package:quantify_mobile/pages/market/widgets/agg_exchange_avatar.dart';
 import 'package:quantify_mobile/pages/market/widgets/agg_format.dart';
+import 'package:quantify_mobile/pages/market/widgets/agg_orderbook_math.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';

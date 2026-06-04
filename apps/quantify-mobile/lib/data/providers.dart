@@ -5,7 +5,13 @@ import 'package:riverpod/misc.dart' show FutureProviderFamily;
 
 import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
+import 'models/agg_market_data.dart';
 import 'models/api_key_models.dart';
+import 'models/coin_stock_models.dart';
+import 'models/pred_market_models.dart';
+import 'models/ticker_models.dart';
+import 'models/trade_models.dart';
+import 'models/whale_extra_models.dart';
 import 'mock/fixtures/live_strategies.dart' show mockLivePositions;
 import '../domain/models/live_strategy_models.dart';
 import 'storage/market_favorites_persistence.dart';
@@ -13,7 +19,12 @@ import 'storage/strategy_favorites_persistence.dart';
 import 'storage/strategy_search_history_persistence.dart';
 import 'storage/strategy_subscription_persistence.dart';
 import 'mock/mock_account_repository.dart';
+import 'mock/mock_agg_orderbook_repository.dart';
 import 'mock/mock_ai_chat_repository.dart';
+import 'mock/mock_coin_stock_repository.dart';
+import 'mock/mock_pred_market_repository.dart';
+import 'mock/mock_trades_repository.dart';
+import 'mock/mock_whale_extras_repository.dart';
 import 'mock/mock_api_key_repository.dart';
 import 'mock/mock_auth_repository.dart';
 import 'mock/mock_backtest_repository.dart';
@@ -123,6 +134,83 @@ final Provider<TickerRepository> tickerRepositoryProvider =
       return ref.watch(useMockProvider)
           ? MockTickerRepository()
           : ApiTickerRepository(ref.watch(tickerServiceProvider));
+    });
+
+// ── market 域数据 Provider（issue #2216）──────────────────────────────────
+// pages/market 不再直接 import data/mock/fixtures，统一经下列 Provider 取数。
+// 后端就绪（#2189）后只需在各 repository provider 加 Api 分支，UI 不动。
+
+/// 行情列表（#2216）。多空比页 watch 取 symbol 列表。复用 [tickerRepositoryProvider]。
+final FutureProvider<List<Ticker>> tickersProvider =
+    FutureProvider<List<Ticker>>((Ref ref) async {
+      return ref.watch(tickerRepositoryProvider).listTickers();
+    });
+
+/// 币股 Repository（#2216）。mock 驱动；接后端属 #2189。
+final Provider<CoinStockRepository> coinStockRepositoryProvider =
+    Provider<CoinStockRepository>((Ref ref) {
+      return const MockCoinStockRepository();
+    });
+
+/// 币股列表（#2216）。币股 hub 子屏 watch。
+final FutureProvider<List<CoinStock>> coinStocksProvider =
+    FutureProvider<List<CoinStock>>((Ref ref) async {
+      return ref.watch(coinStockRepositoryProvider).listCoinStocks();
+    });
+
+/// 预测市场 Repository（#2216）。mock 驱动；接后端属 #2189。
+final Provider<PredMarketRepository> predMarketRepositoryProvider =
+    Provider<PredMarketRepository>((Ref ref) {
+      return const MockPredMarketRepository();
+    });
+
+/// 预测市场列表（#2216）。预测市场 hub 子屏 watch。
+final FutureProvider<List<PredMarket>> predMarketsProvider =
+    FutureProvider<List<PredMarket>>((Ref ref) async {
+      return ref.watch(predMarketRepositoryProvider).listPredMarkets();
+    });
+
+/// 巨鲸「数据」hub 附加数据 Repository（#2216）。mock 驱动；接后端属 #2189。
+final Provider<WhaleExtrasRepository> whaleExtrasRepositoryProvider =
+    Provider<WhaleExtrasRepository>((Ref ref) {
+      return const MockWhaleExtrasRepository();
+    });
+
+/// data hub 通知列表（#2216）。data hub 控制器初始 seed。
+final FutureProvider<List<WhaleNotification>> whaleExtrasProvider =
+    FutureProvider<List<WhaleNotification>>((Ref ref) async {
+      return ref.watch(whaleExtrasRepositoryProvider).listNotifications();
+    });
+
+/// 成交记录 Repository（#2216）。mock 驱动；接后端属 #2189。
+final Provider<TradesRepository> tradesRepositoryProvider =
+    Provider<TradesRepository>((Ref ref) {
+      return const MockTradesRepository();
+    });
+
+/// 成交记录列表（#2216），family by `(symbol, mid)`。成交面板 watch；
+/// `mid` 锚价由调用方（详情页快照价）注入，mock 据此生成滚动成交。
+final FutureProviderFamily<List<Trade>, (String, double)> tradesProvider =
+    FutureProvider.family<List<Trade>, (String, double)>((
+      Ref ref,
+      (String, double) args,
+    ) async {
+      return ref
+          .watch(tradesRepositoryProvider)
+          .listTrades(symbol: args.$1, mid: args.$2);
+    });
+
+/// 聚合市场数据 Repository（#2216）。mock 驱动；接后端属 #2189。
+final Provider<AggOrderbookRepository> aggOrderbookRepositoryProvider =
+    Provider<AggOrderbookRepository>((Ref ref) {
+      return const MockAggOrderbookRepository();
+    });
+
+/// 聚合市场数据 bundle（#2216）。4 个 `agg_*` widget 统一 watch 此单一共享
+/// Provider 取原始 levels 与各表静态数据；派生留 widget（C4 #2218 收口上移）。
+final FutureProvider<AggMarketData> aggOrderbookProvider =
+    FutureProvider<AggMarketData>((Ref ref) async {
+      return ref.watch(aggOrderbookRepositoryProvider).getMarketData();
     });
 
 final Provider<KlineRepository> klineRepositoryProvider =

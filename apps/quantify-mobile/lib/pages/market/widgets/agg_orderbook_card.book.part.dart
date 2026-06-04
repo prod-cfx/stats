@@ -57,11 +57,13 @@ class _BookRow extends StatelessWidget {
     required this.level,
     required this.isAsk,
     required this.maxCum,
+    required this.exchangeMap,
   });
 
   final AggBookLevel level;
   final bool isAsk;
   final double maxCum;
+  final Map<String, AggExchange> exchangeMap;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +72,7 @@ class _BookRow extends StatelessWidget {
     final Color sideSoft = _marketSoft(c, isAsk);
     final double w = maxCum <= 0 ? 0 : (level.total / maxCum).clamp(0, 1);
     final double hotW = (w + 0.3).clamp(0, 1);
-    final AggExchange? ex = kAggExchangeMap[level.exchange];
+    final AggExchange? ex = exchangeMap[level.exchange];
     final String priceKey = level.price.toStringAsFixed(2);
     return Stack(
       children: <Widget>[
@@ -290,9 +292,14 @@ class _DepthLegend extends StatelessWidget {
 
 /// 交易所来源底部抽屉（多选 + 全选/清空）。
 class _SourceSheet extends StatefulWidget {
-  const _SourceSheet({required this.initial, required this.onSelectionChanged});
+  const _SourceSheet({
+    required this.initial,
+    required this.exchanges,
+    required this.onSelectionChanged,
+  });
 
   final Set<String> initial;
+  final List<AggExchange> exchanges;
   final ValueChanged<Set<String>> onSelectionChanged;
 
   @override
@@ -350,7 +357,7 @@ class _SourceSheetState extends State<_SourceSheet> {
                 TextButton(
                   key: const Key('agg-source-select-all'),
                   onPressed: () => _update(
-                    kAggExchanges.map((AggExchange e) => e.key).toSet(),
+                    widget.exchanges.map((AggExchange e) => e.key).toSet(),
                   ),
                   child: Text(
                     l10n.aggSelectAll,
@@ -368,7 +375,7 @@ class _SourceSheetState extends State<_SourceSheet> {
               ],
             ),
           ),
-          for (final AggExchange ex in kAggExchanges)
+          for (final AggExchange ex in widget.exchanges)
             InkWell(
               key: Key('agg-source-${ex.key}'),
               onTap: () => _toggle(ex.key),

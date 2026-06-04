@@ -6,7 +6,6 @@ import '../../models/agg_orders_models.dart';
 ///
 /// 移植设计稿 `m-screens-data.jsx`：`EXCHANGES`(:208) / `AGG_ASKS`(:217) /
 /// `AGG_BIDS`(:234) / `OI_DATA`(:1004) / `VOL_DATA`(:1344)。
-/// [aggregateLevels] / [withCumulative] 为纯函数，可单测。
 
 /// 订单簿来源交易所（默认全选）。
 const List<AggExchange> kAggExchanges = <AggExchange>[
@@ -87,52 +86,8 @@ const List<AggBookLevel> kAggBids = <AggBookLevel>[
 /// 价格精度聚合档位（设计稿抽屉 1/10/100）。
 const List<int> kAggPrecisions = <int>[1, 10, 100];
 
-/// 按价格桶聚合（`bucket > 1` 时生效）。ask 向上取整、bid 向下取整，
-/// 桶边界落在 mid 两侧不重叠。结果按价格降序（与展示顺序一致）。纯函数。
-List<AggBookLevel> aggregateLevels(
-  List<AggBookLevel> rows,
-  int bucket,
-  bool isAsk,
-) {
-  if (bucket <= 1 || rows.isEmpty) return rows;
-  final Map<double, AggBookLevel> map = <double, AggBookLevel>{};
-  for (final AggBookLevel r in rows) {
-    final double key = isAsk
-        ? (r.price / bucket).ceilToDouble() * bucket
-        : (r.price / bucket).floorToDouble() * bucket;
-    final AggBookLevel? existing = map[key];
-    if (existing == null) {
-      map[key] = r.copyWith(price: key);
-    } else {
-      map[key] = existing.copyWith(
-        qty: existing.qty + r.qty,
-        hot: existing.hot || r.hot,
-      );
-    }
-  }
-  return map.values.toList()
-    ..sort((AggBookLevel a, AggBookLevel b) => b.price.compareTo(a.price));
-}
-
-/// 填充累计数量。ask 从近 mid（列表末）向外累加；bid 从高价（列表首）向下累加。
-/// 返回顺序与输入一致（高价在前）。纯函数。
-List<AggBookLevel> withCumulative(List<AggBookLevel> rows, bool isAsk) {
-  if (rows.isEmpty) return rows;
-  if (isAsk) {
-    double acc = 0;
-    final List<AggBookLevel> out = <AggBookLevel>[];
-    for (final AggBookLevel r in rows.reversed) {
-      acc += r.qty;
-      out.add(r.copyWith(total: acc));
-    }
-    return out.reversed.toList();
-  }
-  double acc = 0;
-  return rows.map((AggBookLevel r) {
-    acc += r.qty;
-    return r.copyWith(total: acc);
-  }).toList();
-}
+// 聚合派生纯函数 `aggregateLevels` / `withCumulative` 已迁出至
+// `lib/pages/market/widgets/agg_orderbook_math.dart`（issue #2216）。
 
 // ── 聚合持仓量 ──────────────────────────────────────────────────────────
 

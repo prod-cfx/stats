@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/mock/fixtures/tickers.dart';
 import '../../data/models/exchange_long_short_models.dart';
+import '../../data/models/ticker_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -60,8 +61,10 @@ class LongShortBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final LongShortState s = ref.watch(longShortControllerProvider);
-    final List<String> symbols = mockTickers
-        .map((ticker) => ticker.symbol)
+    final List<Ticker> tickers =
+        ref.watch(tickersProvider).value ?? const <Ticker>[];
+    final List<String> symbols = tickers
+        .map((Ticker ticker) => ticker.symbol)
         .take(8)
         .toList();
     // coin tabs 固定在顶部（设计稿 LSCoinTabs 为 sticky 头），仅下方内容滚动。
