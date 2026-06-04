@@ -1245,14 +1245,16 @@ export class BacktestRunnerService {
   }) {
     const { bar, htfState, portfolio } = input
     const requestedTimeframes = this.resolveRequestedRuntimeTimeframes(input.input)
+    const runtimeHistoryLimit = this.resolveRuntimeHistoryLimit(input.input.strategy)
     const barsByTimeframe: Record<string, Bar[]> = {}
     const scriptBarsByTimeframe: Record<string, ScriptRuntimeBar[]> = {}
 
     for (const timeframe of requestedTimeframes) {
       const history = input.historyBarsBySymbolTimeframe.get(this.buildHistoryKey(bar.symbol, timeframe))
       if (!history || history.rawBars.length === 0) continue
-      barsByTimeframe[timeframe] = history.rawBars
-      scriptBarsByTimeframe[timeframe] = history.scriptBars
+      const visibleHistory = this.sliceRuntimeHistory(history, bar.closeTime, runtimeHistoryLimit)
+      barsByTimeframe[timeframe] = visibleHistory.rawBars
+      scriptBarsByTimeframe[timeframe] = visibleHistory.scriptBars
     }
 
     const multiLegContext = buildRuntimeMarketContext({
@@ -1300,6 +1302,74 @@ export class BacktestRunnerService {
       __compiledDecisionState: input.compiledDecisionState,
       ...runtimeContext,
     }
+  }
+
+  private sliceRuntimeHistory(
+    history: HistorySeries,
+    closeTime: number,
+    limit: number | null,
+  ): HistorySeries {
+    if (limit === null) return history
+
+    const end = this.findClosedBarEndIndex(history.rawBars, closeTime)
+    if (end <= 0) return { rawBars: [], scriptBars: [] }
+    const start = Math.max(0, end - limit)
+    return {
+      rawBars: history.rawBars.slice(start, end),
+      scriptBars: history.scriptBars.slice(start, end),
+    }
+  }
+
+  private findClosedBarEndIndex(bars: readonly Bar[], closeTime: number): number {
+    let low = 0
+    let high = bars.length
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2)
+      if (bars[mid]!.closeTime <= closeTime) low = mid + 1
+      else high = mid
+    }
+    return low
+  }
+
+  private resolveRuntimeHistoryLimit(strategy: BacktestRunInput['strategy']): number | null {
+    if (strategy.bindingSource !== 'PUBLISHED_SNAPSHOT_STRICT') return null
+
+    const candidates = [strategy.specSnapshot, strategy.irSnapshot, strategy.astSnapshot, strategy.dataRequirements]
+    let maxLookback = 0
+    for (const candidate of candidates) {
+      maxLookback = Math.max(maxLookback, this.collectRuntimeLookback(candidate))
+    }
+
+    const safeLookback = maxLookback > 0 ? maxLookback + 5 : 2
+    return Math.max(2, Math.min(10_000, safeLookback))
+  }
+
+  private collectRuntimeLookback(value: unknown): number {
+    if (!value || typeof value !== 'object') return 0
+
+    let maxLookback = 0
+    const visit = (node: unknown) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item)
+        return
+      }
+
+      for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+        if (this.isRuntimeLookbackKey(key)) {
+          const parsed = typeof child === 'number' ? child : typeof child === 'string' ? Number(child) : Number.NaN
+          if (Number.isFinite(parsed)) maxLookback = Math.max(maxLookback, Math.floor(parsed))
+        }
+        visit(child)
+      }
+    }
+
+    visit(value)
+    return maxLookback
+  }
+
+  private isRuntimeLookbackKey(key: string): boolean {
+    return /^(?:period|fastPeriod|slowPeriod|signalPeriod|lookback|lookbackBars|window|length|bars)$/u.test(key)
   }
 
   private resolveSemanticRuntimeState(
