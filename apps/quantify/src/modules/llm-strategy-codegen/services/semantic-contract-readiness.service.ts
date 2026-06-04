@@ -164,6 +164,7 @@ export class SemanticContractReadinessService {
 
     let materialized: ReadinessMaterializedState
     if (hasRules) {
+      state = this.repairPairSpreadEntryMainflow(state)
       state = this.withGridSizingProjectedToProgramRules(
         this.dropStandalonePositionSizingRules(
           this.withTopLevelPositionSizingProjectedToRules(state),
@@ -1177,6 +1178,65 @@ export class SemanticContractReadinessService {
       blockingReasons,
       openSlots: openSlots.slice(0, 1),
     }
+  }
+
+  private repairPairSpreadEntryMainflow(state: SemanticState): SemanticState {
+    const rules = state.rules ?? []
+    if (rules.length === 0 || this.rulesContainEntryOpenAction(rules) || !this.rulesContainLongShortLegScopes(rules)) return state
+
+    let changed = false
+    const nextRules = rules.map((rule) => {
+      if (rule.phase !== 'exit' || !isRuleEffectsByRole(rule.effects) || !this.ruleConditionContainsKey(rule.condition, 'orderbook.spread_condition')) return rule
+      const actionsWithoutClose = rule.effects.actions.filter(action =>
+        action.kind !== 'atom'
+        || (action.key !== 'action.close_long' && action.key !== 'action.close_short'),
+      )
+      const actions = [...actionsWithoutClose]
+      if (!actions.some(action => action.kind === 'atom' && action.key === 'action.open_long')) {
+        actions.push({ kind: 'atom', key: 'action.open_long', params: { phase: 'entry' }, sideScope: 'long' })
+      }
+      if (!actions.some(action => action.kind === 'atom' && action.key === 'action.open_short')) {
+        actions.push({ kind: 'atom', key: 'action.open_short', params: { phase: 'entry' }, sideScope: 'short' })
+      }
+      changed = true
+      return {
+        ...rule,
+        phase: 'entry' as const,
+        sideScope: 'both' as const,
+        effects: {
+          ...rule.effects,
+          actions,
+        },
+      }
+    })
+
+    return changed ? { ...state, rules: nextRules } : state
+  }
+
+  private rulesContainEntryOpenAction(rules: readonly SemanticRule[]): boolean {
+    return rules.some(rule => rule.phase === 'entry' && isRuleEffectsByRole(rule.effects) && rule.effects.actions.some(action =>
+      action.kind === 'atom' && (action.key === 'action.open_long' || action.key === 'action.open_short'),
+    ))
+  }
+
+  private rulesContainLongShortLegScopes(rules: readonly SemanticRule[]): boolean {
+    const directions = new Set<string>()
+    for (const rule of rules) {
+      if (!isRuleEffectsByRole(rule.effects)) continue
+      for (const item of rule.effects.orchestration) {
+        if (item.kind !== 'atom' || item.key !== 'scope.leg') continue
+        const direction = typeof item.params.direction === 'string' ? item.params.direction : ''
+        if (direction === 'long' || direction === 'short') directions.add(direction)
+      }
+    }
+    return directions.has('long') && directions.has('short')
+  }
+
+  private ruleConditionContainsKey(condition: SemanticRule['condition'], key: string): boolean {
+    if (condition.kind === 'atom') return condition.key === key
+    if (condition.kind === 'and' || condition.kind === 'or') return condition.children.some(child => this.ruleConditionContainsKey(child, key))
+    if (condition.kind === 'not') return this.ruleConditionContainsKey(condition.child, key)
+    return condition.steps.some(step => this.ruleConditionContainsKey(step, key))
   }
 }
 
