@@ -1386,9 +1386,78 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const serializedRules = JSON.stringify(createPayload.semanticState?.rules ?? [])
 
     expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).not.toContain('核心交易语义')
     expect(serializedRules).toContain('openInterest.condition')
     expect(serializedRules).toContain('price.breakout_up')
     expect(serializedRules).toContain('action.open_long')
+    expect(createPayload.clarificationState.items.map((item: any) => item.reason)).not.toContain('missing_entry_rules')
+  })
+
+  it('final semantic-state application recovers rules when plan remains context-only', () => {
+    const initialMessage = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
+    const state = (service as unknown as { applyConversationPlanToSemanticState: Function }).applyConversationPlanToSemanticState({
+      currentState: {
+        version: 1,
+        families: [],
+        orchestrationContracts: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: new Date().toISOString(),
+      },
+      plan: {
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充入场条件、出场条件、风控和仓位。',
+        semanticPatch: {
+          contextSlots: { symbol: 'BTCUSDT', timeframe: '15m' },
+        },
+      },
+      message: initialMessage,
+    })
+
+    const serializedRules = JSON.stringify(state.rules ?? [])
+    expect(serializedRules).toContain('openInterest.condition')
+    expect(serializedRules).toContain('price.breakout_up')
+    expect(serializedRules).toContain('action.open_long')
+  })
+
+  it('recovers deterministic rules when planner schema-rejects invalid open-interest breakout rule', async () => {
+    const initialMessage = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我当前理解的策略是：BTCUSDT 15m；已识别部分条件，但仍未完整。 现在还缺一个会影响脚本生成一致性的条件：核心交易语义。 请确认：当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+        semanticPatch: {
+          rules: [{
+            id: 'bad-open-interest-breakout',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'openInterest.condition', params: 'increase' },
+            effects: {
+              actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+              risks: [],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-invalid-rule-open-interest-breakout' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const serializedRules = JSON.stringify(createPayload.semanticState?.rules ?? [])
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).not.toContain('核心交易语义')
+    expect(serializedRules).toContain('openInterest.condition')
+    expect(serializedRules).toContain('price.breakout_up')
+    expect(serializedRules).toContain('action.open_long')
+    expect(createPayload.clarificationState.items.map((item: any) => item.reason)).not.toContain('missing_entry_rules')
   })
 
   it('does not return stale planner prompt when dispatcher repairs MA cross lifecycle', async () => {

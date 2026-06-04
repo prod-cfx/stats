@@ -4659,6 +4659,7 @@ export class CodegenConversationService {
         derived: derivedSemanticState,
       })
     }
+    nextState = this.recoverDeterministicRulesWhenPlannerStateHasNoRules(nextState, input.message)
     nextState = this.hydrateDeterministicExecutionContextFromMessage(nextState, input.message)
 
     const reconciledNextState = this.reconcileSemanticMissingPlaceholders(nextState)
@@ -4670,6 +4671,35 @@ export class CodegenConversationService {
     })
 
     return this.normalizeRiskState(stateWithRequiredSlots)
+  }
+
+  private recoverDeterministicRulesWhenPlannerStateHasNoRules(
+    state: SemanticState,
+    message?: string,
+  ): SemanticState {
+    if (state.rules?.length || !message?.trim()) return state
+
+    try {
+      const dispatcherPatch = this.genericSeedDispatcher.dispatch(message) as CodegenSemanticPatch
+      const rulesPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
+        dispatcherPatch,
+        message,
+      )
+      const rulesState = this.buildSemanticStateFromPlannerPatch(rulesPatch, message)
+      if (!rulesState?.rules?.length) return state
+
+      this.logPlannerFallback('deterministic_rules_tree_recovered')
+      return this.semanticStateMerge.merge({
+        persisted: state,
+        derived: rulesState,
+      })
+    }
+    catch (error) {
+      this.logger.warn(
+        `deterministic rules tree final recovery failed, keeping planner state: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return state
+    }
   }
 
   private hydrateDeterministicExecutionContextFromMessage(
