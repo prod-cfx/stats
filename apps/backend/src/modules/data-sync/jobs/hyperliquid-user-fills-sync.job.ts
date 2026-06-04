@@ -35,7 +35,7 @@ interface HyperliquidFill {
   crossed: boolean
   fee: string
   tid: number // trade ID
-  liquidation: boolean
+  liquidation?: boolean
 }
 
 @Injectable()
@@ -109,7 +109,7 @@ export class HyperliquidUserFillsSyncJob implements DataPullJob {
       tradeId: BigInt(fill.tid),
       crossed: fill.crossed,
       fee: fill.fee,
-      liquidation: fill.liquidation,
+      liquidation: fill.liquidation ?? false,
       source: 'HYPERLIQUID',
     }))
 
@@ -129,7 +129,7 @@ export class HyperliquidUserFillsSyncJob implements DataPullJob {
     // 统计
     const buyFills = fills.filter(f => f.side === 'A').length
     const sellFills = fills.filter(f => f.side === 'B').length
-    const liquidations = fills.filter(f => f.liquidation).length
+    const liquidations = fills.filter(f => f.liquidation === true).length
 
     return {
       fetchedCount: insertedCount,

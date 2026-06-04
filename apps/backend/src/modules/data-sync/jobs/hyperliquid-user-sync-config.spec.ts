@@ -126,4 +126,50 @@ describe('hyperliquid user sync job config validation', () => {
       })],
     }))
   })
+
+  it('defaults missing fill liquidation flags to false', async () => {
+    const txHost = {
+      tx: {
+        hyperliquidUserFill: {
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+      },
+    }
+    const hyperliquidApi = {
+      getUserFillsByTime: jest.fn().mockResolvedValue([{
+        coin: 'ETH',
+        px: '1885.3',
+        sz: '0.0998',
+        side: 'A',
+        time: 1779966000027,
+        startPosition: '-15103.1089',
+        dir: 'Open Short',
+        closedPnl: '0.0',
+        hash: '0xabc',
+        oid: 454811980657,
+        crossed: false,
+        fee: '0.015052',
+        tid: 1001962798821134,
+      }]),
+    }
+    const job = new HyperliquidUserFillsSyncJob(txHost as never, hyperliquidApi as never, txEvents as never)
+
+    const result = await job.run({
+      taskId: 1,
+      key: job.key,
+      cursor: JSON.stringify({ userAddress: '0x0ddf9bae2af4b874b96d287a5ad42eb47138a902', lastSyncTime: 0 }),
+      meta: null,
+      now: new Date('2026-06-04T10:00:00.000Z'),
+    })
+
+    expect(result.fetchedCount).toBe(1)
+    expect(txHost.tx.hyperliquidUserFill.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({
+        coin: 'ETH',
+        liquidation: false,
+        orderId: BigInt(454811980657),
+        tradeId: BigInt(1001962798821134),
+      })],
+    }))
+  })
 })
