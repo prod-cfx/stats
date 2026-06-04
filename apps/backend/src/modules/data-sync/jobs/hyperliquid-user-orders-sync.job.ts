@@ -21,7 +21,7 @@ interface UserOrdersCursor {
   lastSyncTime: number
 }
 
-interface HyperliquidOrder {
+interface HyperliquidOrderPayload {
   coin: string
   side: string // 'A' = buy, 'B' = sell
   limitPx: string // limit price
@@ -36,6 +36,13 @@ interface HyperliquidOrder {
   triggerCondition?: string
   reduceOnly?: boolean
 }
+
+interface HyperliquidHistoricalOrderPayload {
+  order?: HyperliquidOrderPayload
+  status?: string
+}
+
+type HyperliquidHistoricalOrder = HyperliquidOrderPayload | HyperliquidHistoricalOrderPayload
 
 @Injectable()
 export class HyperliquidUserOrdersSyncJob implements DataPullJob {
@@ -68,7 +75,7 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
     this.logger.log(`Fetching historical orders for ${cursor.userAddress}`)
 
     // 调用 Hyperliquid API（historicalOrders 不支持时间范围参数，返回所有历史订单）
-    const orders = await this.hyperliquidApi.getHistoricalOrders<HyperliquidOrder[]>(
+    const orders = await this.hyperliquidApi.getHistoricalOrders<HyperliquidHistoricalOrder[]>(
       cursor.userAddress,
       false, // skipCache
     )
@@ -85,7 +92,10 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
     }
 
     // 过滤增量数据：仅同步 lastSyncTime 之后的订单
-    const incrementalOrders = orders.filter(order => order.timestamp > cursor.lastSyncTime)
+    const normalizedOrders = orders
+      .map(item => this.normalizeOrder(item))
+      .filter((order): order is HyperliquidOrderPayload & { status?: string } => Boolean(order))
+    const incrementalOrders = normalizedOrders.filter(order => order.timestamp > cursor.lastSyncTime)
 
     if (incrementalOrders.length === 0) {
       return {
@@ -115,7 +125,7 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
       triggerPrice: order.triggerPx ?? null,
       triggerCondition: order.triggerCondition ?? null,
       reduceOnly: order.reduceOnly ?? null,
-      status: 'filled', // 历史订单默认为已完成状态
+      status: order.status ?? 'filled',
       timestamp: new Date(order.timestamp),
       source: 'HYPERLIQUID',
     }))
@@ -151,6 +161,13 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
         },
       },
     }
+  }
+
+  private normalizeOrder(item: HyperliquidHistoricalOrder): (HyperliquidOrderPayload & { status?: string }) | null {
+    if ('order' in item && item.order) {
+      return { ...item.order, status: item.status }
+    }
+    return item as HyperliquidOrderPayload
   }
 
   private parseCursor(currentCursor: string | null): UserOrdersCursor {

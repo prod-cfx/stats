@@ -21,13 +21,20 @@ interface UserFundingCursor {
   lastSyncTime: number
 }
 
-interface HyperliquidFunding {
+interface HyperliquidFundingPayload {
   coin: string
   fundingRate: string
   szi: string // 持仓大小（signed size）
   usdc: string // 支付或收到的 USDC 金额
   time: number // timestamp in milliseconds
 }
+
+interface HyperliquidFundingDeltaPayload {
+  time: number
+  delta?: Omit<HyperliquidFundingPayload, 'time'> & { type?: string }
+}
+
+type HyperliquidFunding = HyperliquidFundingPayload | HyperliquidFundingDeltaPayload
 
 @Injectable()
 export class HyperliquidUserFundingSyncJob implements DataPullJob {
@@ -86,7 +93,9 @@ export class HyperliquidUserFundingSyncJob implements DataPullJob {
     const client = this.txHost.tx
 
     // 转换数据并写入数据库
-    const rows = funding.map(item => ({
+    const normalizedFunding = funding.map(item => this.normalizeFunding(item))
+
+    const rows = normalizedFunding.map(item => ({
       userAddress: cursor.userAddress,
       coin: item.coin,
       fundingRate: item.fundingRate,
@@ -110,17 +119,17 @@ export class HyperliquidUserFundingSyncJob implements DataPullJob {
     }
 
     // 统计
-    const totalFundingPaid = funding.reduce((sum, item) => {
+    const totalFundingPaid = normalizedFunding.reduce((sum, item) => {
       const usdc = Number.parseFloat(item.usdc)
       return sum + (usdc < 0 ? Math.abs(usdc) : 0)
     }, 0)
 
-    const totalFundingReceived = funding.reduce((sum, item) => {
+    const totalFundingReceived = normalizedFunding.reduce((sum, item) => {
       const usdc = Number.parseFloat(item.usdc)
       return sum + (usdc > 0 ? usdc : 0)
     }, 0)
 
-    const uniqueCoins = new Set(funding.map(item => item.coin)).size
+    const uniqueCoins = new Set(normalizedFunding.map(item => item.coin)).size
 
     return {
       fetchedCount: insertedCount,
@@ -141,6 +150,19 @@ export class HyperliquidUserFundingSyncJob implements DataPullJob {
         },
       },
     }
+  }
+
+  private normalizeFunding(item: HyperliquidFunding): HyperliquidFundingPayload {
+    if ('delta' in item && item.delta) {
+      return {
+        coin: item.delta.coin,
+        fundingRate: item.delta.fundingRate,
+        szi: item.delta.szi,
+        usdc: item.delta.usdc,
+        time: item.time,
+      }
+    }
+    return item as HyperliquidFundingPayload
   }
 
   private parseCursor(currentCursor: string | null): UserFundingCursor {
