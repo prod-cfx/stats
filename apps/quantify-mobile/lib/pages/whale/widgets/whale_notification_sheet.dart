@@ -74,7 +74,7 @@ class _PanelHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final MediaQueryData media = MediaQuery.of(context);
-    final double maxH = media.size.height * 0.84;
+    final double maxH = media.size.height * 0.78;
     return Material(
       color: Colors.transparent,
       child: Align(
@@ -215,7 +215,9 @@ class _WhaleNotificationSheetState extends State<WhaleNotificationSheet> {
                       ),
                       child: Center(
                         child: Text(
-                          l10n.whaleNotificationEmpty,
+                          _tabIndex == 0
+                              ? l10n.whaleNotificationEmpty
+                              : '暂无该类通知',
                           style: TextStyle(color: c.textDim, fontSize: 13),
                         ),
                       ),
@@ -266,7 +268,7 @@ class _Header extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
@@ -278,14 +280,14 @@ class _Header extends StatelessWidget {
                     l10n.whaleNotificationTitle,
                     style: TextStyle(
                       color: c.text,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (unread > 0) ...<Widget>[
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   _UnreadBadge(count: unread),
                 ],
               ],
@@ -310,19 +312,21 @@ class _UnreadBadge extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
         color: c.statusDanger.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(9),
       ),
       alignment: Alignment.center,
       child: Text(
         l10n.whaleNotificationUnreadBadge(count),
         style: TextStyle(
           color: c.statusDanger,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          fontFamily: QzFont.mono,
+          fontFamilyFallback: QzFont.monoFallback,
         ),
       ),
     );
@@ -342,24 +346,24 @@ class _MarkAllReadButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
           color: Colors.transparent,
           border: Border.all(color: c.borderSoft),
-          borderRadius: BorderRadius.circular(19),
+          borderRadius: BorderRadius.circular(13),
         ),
         alignment: Alignment.center,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.check, size: 14, color: enabled ? c.textMid : c.textDim),
-            const SizedBox(width: 6),
+            Icon(Icons.check, size: 11, color: enabled ? c.textMid : c.textDim),
+            const SizedBox(width: 4),
             Text(
               l10n.whaleNotificationMarkAllRead,
               style: TextStyle(
                 color: enabled ? c.textMid : c.textDim,
-                fontSize: 14,
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -384,14 +388,14 @@ class _CloseRoundButton extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          width: 38,
-          height: 38,
+          width: 26,
+          height: 26,
           decoration: BoxDecoration(
             color: c.bgSoft,
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(13),
           ),
           alignment: Alignment.center,
-          child: Icon(Icons.close, size: 18, color: c.textMid),
+          child: Icon(Icons.close, size: 13, color: c.textMid),
         ),
       ),
     );
@@ -415,22 +419,26 @@ class _Tabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Row(
-          children: <Widget>[
-            for (int i = 0; i < labels.length; i++)
-              _NotifTab(
-                label: labels[i],
-                count: counts[i],
-                selected: selected == i,
-                onTap: () => onTap(i),
-              ),
-          ],
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: <Widget>[
+              for (int i = 0; i < labels.length; i++)
+                _NotifTab(
+                  label: labels[i],
+                  count: counts[i],
+                  selected: selected == i,
+                  onTap: () => onTap(i),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -457,8 +465,8 @@ class _NotifTab extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(0, 9, 0, 11),
-        margin: const EdgeInsets.only(right: 24),
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
+        margin: const EdgeInsets.only(right: 6),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
@@ -474,17 +482,19 @@ class _NotifTab extends StatelessWidget {
               label,
               style: TextStyle(
                 color: selected ? c.text : c.textMid,
-                fontSize: 15,
+                fontSize: 12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Text(
               '$count',
               style: TextStyle(
                 color: selected ? c.accent : c.textDim,
-                fontSize: 13,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
               ),
             ),
           ],
@@ -504,17 +514,18 @@ class _NotifRow extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final _KindPalette palette = _palette(c);
     return Container(
-      padding: const EdgeInsets.fromLTRB(22, 18, 24, 17),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: item.unread ? c.accentSoft : Colors.transparent,
         border: Border(bottom: BorderSide(color: c.borderSoft)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: <Widget>[
           if (item.unread)
-            Padding(
-              padding: const EdgeInsets.only(top: 9, right: 6),
+            Positioned(
+              left: -10,
+              top: 6,
               child: Container(
                 width: 6,
                 height: 6,
@@ -523,71 +534,78 @@ class _NotifRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
-            )
-          else
-            const SizedBox(width: 12),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: palette.bg,
-              borderRadius: BorderRadius.circular(22),
             ),
-            child: Icon(palette.icon, size: 20, color: palette.accent),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: palette.bg,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(palette.icon, size: 15, color: palette.accent),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Text(
+                          _kindLabel(l10n, item.kind),
+                          style: TextStyle(
+                            color: palette.accent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        if (item.address != null) ...<Widget>[
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '· ${item.address}',
+                              style: TextStyle(
+                                color: c.textDim,
+                                fontSize: 10,
+                                fontFamily: QzFont.mono,
+                                fontFamilyFallback: QzFont.monoFallback,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
                     Text(
-                      _kindLabel(l10n, item.kind),
+                      item.title,
                       style: TextStyle(
-                        color: palette.accent,
+                        color: c.text,
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                        letterSpacing: -0.1,
                       ),
                     ),
-                    if (item.address != null) ...<Widget>[
-                      const SizedBox(width: 6),
-                      Text(
-                        '· ${item.address}',
-                        style: TextStyle(
-                          color: c.textDim,
-                          fontSize: 13,
-                          fontFamily: QzFont.mono,
-                          fontFamilyFallback: QzFont.monoFallback,
-                        ),
-                      ),
+                    const SizedBox(height: 3),
+                    _BodyText(item: item),
+                    const SizedBox(height: 6),
+                    Text(
+                      item.meta,
+                      style: TextStyle(color: c.textDim, fontSize: 10),
+                    ),
+                    if (item.actions.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 8),
+                      _NotificationActions(actions: item.actions),
                     ],
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  item.title,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                _BodyText(item: item),
-                const SizedBox(height: 9),
-                Text(
-                  item.meta,
-                  style: TextStyle(color: c.textDim, fontSize: 13, height: 1.2),
-                ),
-                if (item.actions.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 14),
-                  _NotificationActions(actions: item.actions),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -650,8 +668,8 @@ class _BodyText extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final TextStyle base = TextStyle(
       color: c.textMid,
-      fontSize: 16,
-      height: 1.35,
+      fontSize: 12,
+      height: 1.45,
     );
     final Color? toneColor = switch (item.tone) {
       'up' => c.marketUp,
@@ -699,12 +717,13 @@ class _NotificationActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 9,
-      runSpacing: 8,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        for (int i = 0; i < actions.length; i++)
+        for (int i = 0; i < actions.length; i++) ...<Widget>[
+          if (i > 0) const SizedBox(width: 6),
           _NotificationActionButton(label: actions[i], primary: i == 0),
+        ],
       ],
     );
   }
@@ -719,20 +738,21 @@ class _NotificationActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     return Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      constraints: const BoxConstraints(minWidth: 0),
       decoration: BoxDecoration(
         color: primary ? c.text : Colors.transparent,
         border: primary ? null : Border.all(color: c.borderSoft),
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(13),
       ),
       alignment: Alignment.center,
       child: Text(
         label,
         style: TextStyle(
           color: primary ? c.bgElev : c.textMid,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -759,7 +779,7 @@ class _Footer extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: c.bgElev,
         border: Border(top: BorderSide(color: c.borderSoft)),
@@ -770,7 +790,7 @@ class _Footer extends StatelessWidget {
           Expanded(
             child: Text(
               l10n.whaleNotificationFooterHint,
-              style: TextStyle(color: c.textDim, fontSize: 14),
+              style: TextStyle(color: c.textDim, fontSize: 11),
             ),
           ),
           GestureDetector(
@@ -779,14 +799,14 @@ class _Footer extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Icon(Icons.tune, size: 16, color: c.accent),
-                const SizedBox(width: 5),
+                Icon(Icons.tune, size: 13, color: c.accent),
+                const SizedBox(width: 4),
                 Text(
                   l10n.whaleNotificationSettings,
                   style: TextStyle(
                     color: c.accent,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

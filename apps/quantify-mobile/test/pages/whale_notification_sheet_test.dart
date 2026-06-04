@@ -44,7 +44,7 @@ Future<void> _pumpHost(
 }
 
 void main() {
-  testWidgets('顶部 panel：geometry 从屏幕顶部开始，maxHeight ≈ 84%', (
+  testWidgets('顶部 panel：geometry 从屏幕顶部开始，maxHeight ≈ 78%', (
     WidgetTester tester,
   ) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);
@@ -52,8 +52,8 @@ void main() {
     final Size screen = tester.view.physicalSize / tester.view.devicePixelRatio;
     // top 接近屏幕顶部（SafeArea 之内，<= 30）
     expect(rect.top, lessThanOrEqualTo(30), reason: 'panel 应靠近顶部，而不是底部 sheet');
-    // 高度 ≤ 84% * 屏幕高度（对齐设计稿首屏覆盖比例）。
-    expect(rect.height, lessThanOrEqualTo(screen.height * 0.84 + 1));
+    // 高度 ≤ 78% * 屏幕高度（对齐设计稿首屏覆盖比例）。
+    expect(rect.height, lessThanOrEqualTo(screen.height * 0.78 + 1));
   });
 
   testWidgets('header 显示标题、未读 badge 文本、关闭按钮', (WidgetTester tester) async {
@@ -64,7 +64,7 @@ void main() {
         .length;
     expect(find.text('$unread 条未读'), findsOneWidget);
     expect(find.text('巨鲸预警 · 监控触发 · 资金流向'), findsNothing);
-    // 关闭按钮为 Icons.close（38×38 圆形）
+    // 关闭按钮为 Icons.close（26×26 圆形）
     expect(find.byIcon(Icons.close), findsOneWidget);
   });
 
