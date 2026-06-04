@@ -16,6 +16,23 @@ app and the captured PNG line up visually. Smoke tests assert the widget
 renders without exceptions under all 9 theme combinations
 (`test/helpers/golden_harness.dart#verifyAllThemes`).
 
+### Golden 运行约定（环境绑定）
+
+Golden 基线是**像素级**断言，对 Flutter 引擎（Skia/Impeller）栅格化版本敏感。
+基线锁定到仓库当前约定的 Flutter 版本：**Flutter 3.44.0（Dart 3.12.0）**。
+
+- 字体确定性：`test/flutter_test_config.dart` 在所有测试前调用
+  `test/helpers/load_fonts.dart#loadAppFonts`，注册 pubspec 内的真实 Inter /
+  JetBrainsMono 字体，消除主机字体回退导致的字形漂移（#1782）。字体已不再是
+  drift 来源；剩余跨环境像素差异来自引擎栅格化版本。
+- 容差兜底：`golden_harness.dart#expectGoldenWithinTolerance` 提供
+  `precisionTolerance`，仅用于吸收**同版本引擎**下亚像素级抗锯齿抖动
+  （量级 `1e-4`～`1e-2`），**不**用于掩盖跨 Flutter 版本的结构性 diff。
+- 重生成基线：仅当确认运行环境与仓库约定的 Flutter 版本一致时，执行
+  `flutter test --update-goldens <file>` 重生成并提交 PNG。换 Flutter 版本
+  导致整批 golden 飘红时，应统一升级版本后在该版本下重生成全部基线，
+  不要逐个调大容差关掉门禁。
+
 ---
 
 ## Components
