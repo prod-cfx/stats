@@ -25,10 +25,6 @@ export function toErrorMessage(error: unknown): string {
     return error.trim() ? error : unknownErrorMessage
   }
 
-  if (error instanceof Error) {
-    return error.message.trim() ? error.message : unknownErrorMessage
-  }
-
   if (isRecord(error)) {
     const response = error.response
     if (isRecord(response)) {
@@ -71,6 +67,10 @@ export function toErrorMessage(error: unknown): string {
     if (typeof message === 'string' && message.trim()) {
       return message
     }
+  }
+
+  if (error instanceof Error) {
+    return error.message.trim() ? error.message : unknownErrorMessage
   }
 
   return unknownErrorMessage

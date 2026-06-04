@@ -86,4 +86,24 @@ describe('aggregateBulkSettledResults', () => {
 
     expect(message).toBe('userAddress is required in cursor')
   })
+
+  it('prefers backend error args reason over axios error message', () => {
+    const error = new Error('Request failed with status code 500') as Error & {
+      response?: Record<string, unknown>
+    }
+    error.response = {
+      data: {
+        error: {
+          code: 'DATA_SYNC_API_ERROR',
+          args: {
+            reason: 'BBX API request failed after 3/3: status=401 Unauthorized',
+          },
+        },
+      },
+    }
+
+    expect(toErrorMessage(error)).toBe(
+      'BBX API request failed after 3/3: status=401 Unauthorized',
+    )
+  })
 })
