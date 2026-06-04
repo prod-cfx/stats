@@ -162,6 +162,11 @@ void main() {
 
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('57s 后重发'), findsOneWidget);
+
+    // 倒计时 Timer 现由 controller 持有，关闭 sheet → provider autoDispose →
+    // `ref.onDispose` 取消 Timer（issue #2187 验收：无 dispose 后残留计时器）。
+    await tester.tap(find.byKey(const Key('login-sheet-close')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('LoginSheet email login closes sheet before going to /ai', (

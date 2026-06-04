@@ -1,15 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/auth/session_controller.dart';
-import '../../data/models/auth_models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../widgets/qz_grab_handle.dart';
+import 'login_sheet_controller.dart';
+import 'login_sheet_state.dart';
 import 'widgets/login_form_widgets.dart';
 
 Future<void> showLoginSheet(BuildContext context) {
@@ -42,18 +40,10 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
   final TextEditingController _email = TextEditingController();
   final TextEditingController _code = TextEditingController();
 
-  bool _emailLoading = false;
-  bool _codeLoading = false;
-  bool _telegramLoading = false;
-  bool _codeSent = false;
-  int _codeCountdown = 0;
-  Timer? _codeTimer;
-
   @override
   void dispose() {
     _email.dispose();
     _code.dispose();
-    _codeTimer?.cancel();
     super.dispose();
   }
 
@@ -71,111 +61,51 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
     return null;
   }
 
+  LoginSheetController get _controller =>
+      ref.read(loginSheetControllerProvider.notifier);
+
   Future<void> _sendLoginCode() async {
     final String? emailError = _validateEmail(_email.text.trim());
     if (emailError != null) {
       _formKey.currentState?.validate();
       return;
     }
-    setState(() => _codeLoading = true);
-    try {
-      await ref
-          .read(sessionControllerProvider.notifier)
-          .sendLoginCode(email: _email.text.trim());
-      if (!mounted) return;
-      _codeTimer?.cancel();
-      setState(() {
-        _codeSent = true;
-        _codeCountdown = 58;
-      });
-      _codeTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        setState(() {
-          if (_codeCountdown <= 1) {
-            _codeCountdown = 0;
-            timer.cancel();
-            return;
-          }
-          _codeCountdown -= 1;
-        });
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${AppLocalizations.of(context).authLoginFailedPrefix}$e',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _codeLoading = false);
-    }
+    await _controller.sendLoginCode(email: _email.text.trim());
   }
 
   Future<void> _submitEmail() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _emailLoading = true);
-    try {
-      await ref
-          .read(sessionControllerProvider.notifier)
-          .loginEmailCode(email: _email.text.trim(), code: _code.text.trim());
-      if (!mounted) return;
-      final AsyncValue<AuthSession?> session = ref.read(
-        sessionControllerProvider,
-      );
-      if (session.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${AppLocalizations.of(context).authLoginFailedPrefix}${session.error}',
-            ),
-          ),
-        );
-        return;
-      }
-      Navigator.of(context).pop();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onAuthenticated?.call();
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${AppLocalizations.of(context).authLoginFailedPrefix}$e',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _emailLoading = false);
-    }
+    final bool ok = await _controller.submitEmailCode(
+      email: _email.text.trim(),
+      code: _code.text.trim(),
+    );
+    if (!mounted || !ok) return;
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onAuthenticated?.call();
+    });
   }
 
   Future<void> _submitTelegram() async {
-    setState(() => _telegramLoading = true);
-    try {
-      await ref.read(sessionControllerProvider.notifier).loginTelegram();
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onAuthenticated?.call();
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${AppLocalizations.of(context).authTelegramLoginFailedPrefix}$e',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _telegramLoading = false);
-    }
+    final bool ok = await _controller.submitTelegram();
+    if (!mounted || !ok) return;
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onAuthenticated?.call();
+    });
+  }
+
+  /// 把 controller 落的一次性错误信号弹成 SnackBar，按来源选前缀文案。
+  void _showError(LoginSheetState st) {
+    final String? msg = st.errorMessage;
+    if (msg == null || msg.isEmpty) return;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String prefix = st.errorPrefixKind == LoginErrorKind.telegram
+        ? l10n.authTelegramLoginFailedPrefix
+        : l10n.authLoginFailedPrefix;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$prefix$msg')),
+    );
   }
 
   void _onTermsTap() {
@@ -196,10 +126,21 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool busy = _emailLoading || _codeLoading || _telegramLoading;
-    final String sendCodeLabel = _codeCountdown > 0
-        ? l10n.authLoginCountdown(_codeCountdown)
-        : (_codeSent ? l10n.authLoginResend : l10n.authLoginSendCode);
+
+    // 一次性错误信号：仅在 epoch 变化时弹一次，避免重建重弹。
+    ref.listen<int>(
+      loginSheetControllerProvider.select((LoginSheetState s) => s.errorEpoch),
+      (int? prev, int next) {
+        if (next == 0 || next == prev) return;
+        _showError(ref.read(loginSheetControllerProvider));
+      },
+    );
+
+    final LoginSheetState st = ref.watch(loginSheetControllerProvider);
+    final bool busy = st.busy;
+    final String sendCodeLabel = st.codeCountdown > 0
+        ? l10n.authLoginCountdown(st.codeCountdown)
+        : (st.codeSent ? l10n.authLoginResend : l10n.authLoginSendCode);
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -308,8 +249,8 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                             suffix: SendCodeButton(
                               key: const Key('login-send-code'),
                               label: sendCodeLabel,
-                              loading: _codeLoading,
-                              enabled: !busy && _codeCountdown == 0,
+                              loading: st.codeLoading,
+                              enabled: !busy && st.codeCountdown == 0,
                               onPressed: _sendLoginCode,
                               colors: c,
                             ),
@@ -323,7 +264,7 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                     child: GradientPrimaryButton(
                       key: const Key('login-submit'),
                       label: l10n.authLoginButton,
-                      loading: _emailLoading,
+                      loading: st.emailLoading,
                       onPressed: busy ? null : _submitEmail,
                       colors: c,
                     ),
@@ -353,7 +294,7 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                     child: TelegramGhostButton(
                       key: const Key('login-telegram'),
                       label: l10n.authLoginTelegramButton,
-                      loading: _telegramLoading,
+                      loading: st.telegramLoading,
                       onPressed: busy ? null : _submitTelegram,
                       colors: c,
                     ),

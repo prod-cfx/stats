@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_button.dart';
+import 'api_form_sheet_controller.dart';
+import 'api_form_sheet_state.dart';
 import 'widgets/qz_exchange_logo.dart';
 
 /// 交易所认证形态（对齐设计稿 `m-screens-4.jsx:2825-2831` 的 `API_META`）。
 enum _ApiMode { key, wallet }
-
-/// 表单环境：仅 `testnet=true` 的交易所允许在主网 / 测试网间切换。
-enum _ApiEnv { mainnet, testnet }
 
 /// 单个交易所的表单 meta：决定渲染哪种字段与权限。
 class _ApiMeta {
@@ -96,15 +94,14 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   // 共用
   final TextEditingController _label = TextEditingController();
 
-  bool _showSecret = false;
-  bool _saving = false;
-
+  /// 按 `exchange` 纯派生，无状态流转，故留在 widget。
   late final _ApiMeta _meta = _metaFor(widget.exchange);
 
-  /// 当前环境。不支持测试网的交易所恒为主网；切换控件也不渲染。
-  _ApiEnv _env = _ApiEnv.mainnet;
+  ApiFormSheetController get _controller =>
+      ref.read(apiFormSheetControllerProvider.notifier);
 
-  bool get _isTestnet => _meta.testnet && _env == _ApiEnv.testnet;
+  /// 当前是否处于测试网态：交易所支持测试网且 controller env 选了 testnet。
+  bool _isTestnetFor(ApiEnv env) => _meta.testnet && env == ApiEnv.testnet;
 
   @override
   void dispose() {
@@ -145,7 +142,6 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _saving = true);
     final AppLocalizations l10n = AppLocalizations.of(context);
     // wallet 模式：主钱包地址 → apiKey 槽，Agent 私钥 → apiSecret 槽。
     final bool isWallet = _meta.mode == _ApiMode.wallet;
@@ -153,28 +149,24 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     final String apiSecret = isWallet ? _agentKey.text : _secret.text;
     final String? passphrase =
         (!isWallet && _meta.passphrase) ? _passphrase.text : null;
-    try {
-      await ref.read(apiKeyRepositoryProvider).addKey(
-            exchange: widget.exchange,
-            label: _label.text.trim().isEmpty
-                ? l10n.meApiFormDefaultLabel
-                : _label.text.trim(),
-            apiKey: apiKey,
-            apiSecret: apiSecret,
-            apiPassphrase: passphrase,
-          );
-      if (!mounted) return;
+    final bool ok = await _controller.save(
+      exchange: widget.exchange,
+      label: _label.text.trim().isEmpty
+          ? l10n.meApiFormDefaultLabel
+          : _label.text.trim(),
+      apiKey: apiKey,
+      apiSecret: apiSecret,
+      apiPassphrase: passphrase,
+    );
+    if (!mounted) return;
+    if (ok) {
       Navigator.of(context).pop(true);
-    } catch (_) {
-      // 不把后端异常原文塞给用户 SnackBar，避免暴露请求体片段 / 内部
-      // 字段名 / stack trace 片段。统一显示固定通用文案；详细错误走日志。
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.meApiFormSaveFailed)),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      return;
     }
+    // 保存失败：不暴露后端原文，统一固定文案（controller 已吞原文，详细走日志）。
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.meApiFormSaveFailed)),
+    );
   }
 
   @override
@@ -182,6 +174,8 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final MediaQueryData mq = MediaQuery.of(context);
+    final ApiFormSheetState st = ref.watch(apiFormSheetControllerProvider);
+    final bool isTestnet = _isTestnetFor(st.env);
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 200),
@@ -236,7 +230,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                                   ),
                                 ),
                               ),
-                              if (_isTestnet) ...<Widget>[
+                              if (isTestnet) ...<Widget>[
                                 const SizedBox(width: 6),
                                 _TestnetBadge(c: c),
                               ],
@@ -244,7 +238,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            _isTestnet
+                            isTestnet
                                 ? l10n.meApiFormTestnetSubtitle
                                 : l10n.meApiFormPermissionHint,
                             style: TextStyle(
@@ -270,19 +264,18 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                         const SizedBox(height: 6),
                         _EnvToggle(
                           l10n: l10n,
-                          env: _env,
-                          onChanged: (_ApiEnv next) =>
-                              setState(() => _env = next),
+                          env: st.env,
+                          onChanged: _controller.setEnv,
                         ),
                         const SizedBox(height: 14),
                       ],
                       _WarningBanner(
                         exchange: widget.exchange,
                         wallet: _meta.mode == _ApiMode.wallet,
-                        testnet: _isTestnet,
+                        testnet: isTestnet,
                       ),
                       const SizedBox(height: 18),
-                      ..._buildCredentialFields(c, l10n),
+                      ..._buildCredentialFields(c, l10n, st.showSecret),
                       const SizedBox(height: 14),
                       _Label(text: l10n.meApiFormLabelNote),
                       const SizedBox(height: 6),
@@ -291,7 +284,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                         decoration: _inputDecoration(c),
                         validator: _validateLabel,
                       ),
-                      if (_isTestnet) ...<Widget>[
+                      if (isTestnet) ...<Widget>[
                         const SizedBox(height: 14),
                         _EndpointHint(l10n: l10n),
                       ],
@@ -301,7 +294,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                       _PermissionList(
                         l10n: l10n,
                         wallet: _meta.mode == _ApiMode.wallet,
-                        testnet: _isTestnet,
+                        testnet: isTestnet,
                       ),
                     ],
                   ),
@@ -324,17 +317,17 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                     const SizedBox(width: QzSpacing.sm + 2),
                     Expanded(
                       flex: 2,
-                      child: _isTestnet
+                      child: isTestnet
                           ? _TestnetSaveButton(
                               label: l10n.meApiFormSaveTestnetButton,
-                              loading: _saving,
-                              onPressed: _saving ? null : _save,
+                              loading: st.saving,
+                              onPressed: st.saving ? null : _save,
                             )
                           : QzButton(
                               label: l10n.meApiFormSaveButton,
                               variant: QzButtonVariant.accent,
-                              loading: _saving,
-                              onPressed: _saving ? null : _save,
+                              loading: st.saving,
+                              onPressed: st.saving ? null : _save,
                               expanded: true,
                             ),
                     ),
@@ -353,6 +346,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   List<Widget> _buildCredentialFields(
     QzColorScheme c,
     AppLocalizations l10n,
+    bool showSecret,
   ) {
     if (_meta.mode == _ApiMode.wallet) {
       return <Widget>[
@@ -372,8 +366,8 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
         const SizedBox(height: 6),
         TextFormField(
           controller: _agentKey,
-          obscureText: !_showSecret,
-          decoration: _secretDecoration(c),
+          obscureText: !showSecret,
+          decoration: _secretDecoration(c, showSecret),
           validator: (String? v) => _validateRequired(
             v,
             minLen: _minCredentialLen,
@@ -404,8 +398,8 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
       const SizedBox(height: 6),
       TextFormField(
         controller: _secret,
-        obscureText: !_showSecret,
-        decoration: _secretDecoration(c),
+        obscureText: !showSecret,
+        decoration: _secretDecoration(c, showSecret),
         validator: (String? v) => _validateRequired(
           v,
           minLen: _minCredentialLen,
@@ -418,7 +412,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
         const SizedBox(height: 6),
         TextFormField(
           controller: _passphrase,
-          obscureText: !_showSecret,
+          obscureText: !showSecret,
           decoration: _inputDecoration(c),
           validator: (String? v) => _validateNotEmpty(
             v,
@@ -455,15 +449,15 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   }
 
   /// 带「显示/隐藏」眼睛图标的 secret 类输入框装饰。
-  InputDecoration _secretDecoration(QzColorScheme c) {
+  InputDecoration _secretDecoration(QzColorScheme c, bool showSecret) {
     return _inputDecoration(c).copyWith(
       suffixIcon: IconButton(
         icon: Icon(
-          _showSecret ? Icons.visibility_off : Icons.visibility,
+          showSecret ? Icons.visibility_off : Icons.visibility,
           size: 18,
           color: c.textMid,
         ),
-        onPressed: () => setState(() => _showSecret = !_showSecret),
+        onPressed: _controller.toggleSecret,
       ),
     );
   }
@@ -749,8 +743,8 @@ class _EnvToggle extends StatelessWidget {
     required this.onChanged,
   });
   final AppLocalizations l10n;
-  final _ApiEnv env;
-  final ValueChanged<_ApiEnv> onChanged;
+  final ApiEnv env;
+  final ValueChanged<ApiEnv> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -766,20 +760,20 @@ class _EnvToggle extends StatelessWidget {
         children: <Widget>[
           _segment(
             c,
-            selected: env == _ApiEnv.mainnet,
+            selected: env == ApiEnv.mainnet,
             label: l10n.meApiFormEnvMainnetLabel,
             sub: l10n.meApiFormEnvMainnetSub,
             color: c.accent,
-            onTap: () => onChanged(_ApiEnv.mainnet),
+            onTap: () => onChanged(ApiEnv.mainnet),
           ),
           const SizedBox(width: 3),
           _segment(
             c,
-            selected: env == _ApiEnv.testnet,
+            selected: env == ApiEnv.testnet,
             label: l10n.meApiFormEnvTestnetLabel,
             sub: l10n.meApiFormEnvTestnetSub,
             color: c.statusWarn,
-            onTap: () => onChanged(_ApiEnv.testnet),
+            onTap: () => onChanged(ApiEnv.testnet),
           ),
         ],
       ),
