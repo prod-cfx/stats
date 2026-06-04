@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/ai/ai_script_page.dart';
@@ -10,14 +11,16 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildQzThemeData(
-        const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(
+          const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+        ),
+        home: AiScriptPage(params: params),
       ),
-      home: AiScriptPage(params: params),
     ),
   );
   await tester.pump();

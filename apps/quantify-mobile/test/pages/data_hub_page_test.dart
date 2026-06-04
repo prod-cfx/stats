@@ -161,13 +161,19 @@ void main() {
     expect(deco.color, Colors.transparent);
     expect(deco.border, isNull);
 
-    final Icon icon = tester.widget<Icon>(
+    // circular 变体的图标尺寸由外层 IconButton.iconSize 决定（Icon.size 为 null），
+    // 与巨鲸页同变体一致：18。
+    expect(
       find.descendant(
         of: bellStack,
         matching: find.byIcon(Icons.notifications_outlined),
       ),
+      findsOneWidget,
     );
-    expect(icon.size, 20);
+    final IconButton iconBtn = tester.widget<IconButton>(
+      find.descendant(of: bellStack, matching: find.byType(IconButton)),
+    );
+    expect(iconBtn.iconSize, 18);
 
     final Positioned badgePosition = tester.widget<Positioned>(
       find.descendant(of: bellStack, matching: find.byType(Positioned)),

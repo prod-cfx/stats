@@ -76,12 +76,13 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('默认在「实时巨鲸」子 Tab：含创建监控 + 阈值输入 + 倒计时 + 胜率排序（可用）',
+  testWidgets('默认在「实时巨鲸」子 Tab：含关注币种推送 + 倒计时 + 胜率排序（可用），无阈值输入',
       (WidgetTester tester) async {
     await _pump(tester);
-    // issue #1986：顶部交互区为创建监控 + 自由阈值输入 + 倒计时，取代关注币种推送。
-    expect(find.text('创建监控'), findsOneWidget);
-    expect(find.text('关注币种推送'), findsNothing);
+    // issue #1986：实时巨鲸 feed 顶部交互区为关注币种推送 + 倒计时；创建监控 +
+    // 阈值输入已迁出到「监控地址」子 Tab（详见 whale_live_tab_test 对应反向断言）。
+    expect(find.text('关注币种推送'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing, reason: '实时 feed 无阈值输入');
     expect(find.textContaining('秒后更新'), findsOneWidget);
     // issue #1983：胜率排序 toggle 已启用（不再禁用）。
     final Finder winSort = find.ancestor(

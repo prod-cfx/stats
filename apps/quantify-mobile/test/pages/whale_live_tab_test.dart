@@ -259,6 +259,9 @@ void main() {
     ) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    // 旧页卸载后再 pump 一帧，排空 autoDispose 的 onDispose 微任务（取消 _sub）。
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
 
     expect(find.byType(WhaleLiveTab), findsNothing);
     expect(

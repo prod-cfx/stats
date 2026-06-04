@@ -39,6 +39,10 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  /// 同帧去重哨兵：build 期间不可改 provider，故用本地字段挡住同一帧内的重复
+  /// 调度；真正的 provider 标记 [`markLoadedStrategy`] 延后到 post-frame 回调。
+  String? _pendingLoadStrategyId;
+
   AiHomePageController get _ctrl =>
       ref.read(aiHomePageControllerProvider.notifier);
 
@@ -162,10 +166,14 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     if (st.initialized &&
         loadStrategyId != null &&
         loadStrategyId.isNotEmpty &&
-        loadStrategyId != st.lastLoadedStrategyId) {
-      _ctrl.markLoadedStrategy(loadStrategyId);
+        loadStrategyId != st.lastLoadedStrategyId &&
+        loadStrategyId != _pendingLoadStrategyId) {
+      // 同帧去重用本地字段（不触发 provider 写），provider 标记与注入延后到
+      // post-frame 回调，避免在 build 期间改 provider 触发 riverpod 断言。
+      _pendingLoadStrategyId = loadStrategyId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        _ctrl.markLoadedStrategy(loadStrategyId);
         _handleLoadStrategy(loadStrategyId);
       });
     }
