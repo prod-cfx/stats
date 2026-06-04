@@ -11,6 +11,10 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_toast.dart';
+import 'whale_profile_basic_tab_controller.dart';
+import 'whale_profile_basic_tab_state.dart';
+import 'whale_profile_sortable_tab_controller.dart';
+import 'whale_profile_sortable_tab_state.dart';
 import 'widgets/whale_chart_filter_sheet.dart';
 import 'widgets/whale_detail_rows.dart';
 import 'widgets/whale_detail_sort.dart';
@@ -440,34 +444,20 @@ class _CountTab extends StatelessWidget {
 /// 三个 pill（时间范围 / 统计范围 / 指标）点击弹底部抽屉切换，选择后回填
 /// pill 文案并刷新图表标题。真实数据刷新依赖 #1682；mock 阶段仅切换文案与
 /// 顶部金额展示。
-class _BasicTab extends StatefulWidget {
+/// 基本信息 tab（三件套迁移 #2183）：period/scope/metric pill 态收敛进
+/// [whaleProfileBasicTabControllerProvider]，widget 退化为消费层。pill 默认
+/// 文案（1周 / 仅永续合约 / 总盈亏）由 widget 渲染时只读回退，用户在 sheet
+/// 选中后才写回 controller。
+class _BasicTab extends ConsumerWidget {
   const _BasicTab({required this.profile});
   final WhaleProfile profile;
 
-  @override
-  State<_BasicTab> createState() => _BasicTabState();
-}
-
-class _BasicTabState extends State<_BasicTab> {
-  late String _period;
-  late String _scope;
-  late String _metric;
-  bool _initialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 仅首次初始化，避免依赖变化（主题/locale 重建）重置用户已选的 pill。
-    if (_initialized) return;
-    _initialized = true;
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    // 初值对齐设计稿默认（1周 / 仅永续合约 / 总盈亏）。
-    _period = l10n.whaleProfilePeriodWeek;
-    _scope = l10n.whaleProfileScopePerpOnly;
-    _metric = l10n.whaleProfileMetricTotalPnl;
-  }
-
-  Future<void> _pickPeriod(AppLocalizations l10n) async {
+  Future<void> _pickPeriod(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    String current,
+  ) async {
     final String? next = await WhaleChartFilterSheet.show(
       context,
       title: l10n.whaleProfilePillPeriodTitle,
@@ -477,12 +467,19 @@ class _BasicTabState extends State<_BasicTab> {
         l10n.whaleProfilePeriodMonth,
         l10n.whaleProfilePeriodAll,
       ],
-      value: _period,
+      value: current,
     );
-    if (next != null && mounted) setState(() => _period = next);
+    if (next != null) {
+      ref.read(whaleProfileBasicTabControllerProvider.notifier).setPeriod(next);
+    }
   }
 
-  Future<void> _pickScope(AppLocalizations l10n) async {
+  Future<void> _pickScope(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    String current,
+  ) async {
     final String? next = await WhaleChartFilterSheet.show(
       context,
       title: l10n.whaleProfilePillScopeTitle,
@@ -490,12 +487,19 @@ class _BasicTabState extends State<_BasicTab> {
         l10n.whaleProfileScopePerpOnly,
         l10n.whaleProfileScopePerpSpot,
       ],
-      value: _scope,
+      value: current,
     );
-    if (next != null && mounted) setState(() => _scope = next);
+    if (next != null) {
+      ref.read(whaleProfileBasicTabControllerProvider.notifier).setScope(next);
+    }
   }
 
-  Future<void> _pickMetric(AppLocalizations l10n) async {
+  Future<void> _pickMetric(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    String current,
+  ) async {
     final String? next = await WhaleChartFilterSheet.show(
       context,
       title: l10n.whaleProfilePillMetricTitle,
@@ -503,16 +507,24 @@ class _BasicTabState extends State<_BasicTab> {
         l10n.whaleProfileMetricTotalPnl,
         l10n.whaleProfileMetricAccountValue,
       ],
-      value: _metric,
+      value: current,
     );
-    if (next != null && mounted) setState(() => _metric = next);
+    if (next != null) {
+      ref.read(whaleProfileBasicTabControllerProvider.notifier).setMetric(next);
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final WhaleProfile profile = widget.profile;
+    final WhaleProfileBasicTabState st = ref.watch(
+      whaleProfileBasicTabControllerProvider,
+    );
+    // 只读回退：用户未改动时用设计稿默认文案，不写回 provider。
+    final String period = st.period ?? l10n.whaleProfilePeriodWeek;
+    final String scope = st.scope ?? l10n.whaleProfileScopePerpOnly;
+    final String metric = st.metric ?? l10n.whaleProfileMetricTotalPnl;
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
       children: <Widget>[
@@ -527,7 +539,7 @@ class _BasicTabState extends State<_BasicTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                l10n.whaleProfilePnlChartTitle(_period, _scope),
+                l10n.whaleProfilePnlChartTitle(period, scope),
                 style: TextStyle(fontSize: 12, color: c.textMid),
               ),
               const SizedBox(height: 4),
@@ -547,20 +559,20 @@ class _BasicTabState extends State<_BasicTab> {
                 runSpacing: QzSpacing.xs,
                 children: <Widget>[
                   _FilterPill(
-                    text: _period,
+                    text: period,
                     minWidth: 64,
-                    onTap: () => _pickPeriod(l10n),
+                    onTap: () => _pickPeriod(context, ref, l10n, period),
                   ),
                   _FilterPill(
-                    text: _scope,
+                    text: scope,
                     minWidth: 94,
-                    onTap: () => _pickScope(l10n),
+                    onTap: () => _pickScope(context, ref, l10n, scope),
                   ),
                   _FilterPill(
-                    text: _metric,
+                    text: metric,
                     minWidth: 78,
                     accent: true,
-                    onTap: () => _pickMetric(l10n),
+                    onTap: () => _pickMetric(context, ref, l10n, metric),
                   ),
                 ],
               ),
@@ -661,9 +673,13 @@ class _SortKey<T> {
   final double Function(T item)? numOf;
 }
 
-/// 通用排序/筛选明细 tab。左/右列头三态排序 + 币种筛选 +（可选）更多排序。
-class _SortableTab<T> extends StatefulWidget {
+/// 通用排序/筛选明细 tab（三件套迁移 #2183）。排序/币种态收敛进
+/// [whaleProfileSortableTabControllerProvider]，按 [tabId] 区分 5 个明细 tab
+/// 各自独立实例。币种默认「全部」由 widget 渲染时只读回退，不写回 provider。
+/// 泛型排序逻辑（[_keyOf]/[_process]）为纯函数留在此处。
+class _SortableTab<T> extends ConsumerWidget {
   const _SortableTab({
+    required this.tabId,
     required this.items,
     required this.empty,
     required this.symOf,
@@ -674,6 +690,8 @@ class _SortableTab<T> extends StatefulWidget {
     this.moreSortKeys = const <Never>[],
   });
 
+  /// family key：区分 spot/perp/order/trade/hist，保证各 tab 态互不串扰。
+  final String tabId;
   final List<T> items;
   final String empty;
   final _SymOf<T> symOf;
@@ -687,19 +705,10 @@ class _SortableTab<T> extends StatefulWidget {
   /// 更多排序指标（同 `_SortKey`，列头不展示）；空表示该 tab 无更多排序。
   final List<_SortKey<T>> moreSortKeys;
 
-  @override
-  State<_SortableTab<T>> createState() => _SortableTabState<T>();
-}
-
-class _SortableTabState<T> extends State<_SortableTab<T>> {
-  WhaleSortState _sort = const WhaleSortState();
-  String _coin = '';
-  bool _coinInit = false;
-
   List<_SortKey<T>> get _allKeys => <_SortKey<T>>[
-    ...widget.leftKeys,
-    ...widget.rightKeys,
-    ...widget.moreSortKeys,
+    ...leftKeys,
+    ...rightKeys,
+    ...moreSortKeys,
   ];
 
   _SortKey<T>? _keyOf(String? k) {
@@ -710,39 +719,40 @@ class _SortableTabState<T> extends State<_SortableTab<T>> {
     return null;
   }
 
-  List<({int idx, T item})> _process() {
-    final String all = AppLocalizations.of(context).whaleProfileFilterAll;
+  List<({int idx, T item})> _process(WhaleSortState sort, String coin, String all) {
     final List<({int idx, T item})> indexed = <({int idx, T item})>[
-      for (int i = 0; i < widget.items.length; i++)
-        (idx: i, item: widget.items[i]),
+      for (int i = 0; i < items.length; i++) (idx: i, item: items[i]),
     ];
-    final List<({int idx, T item})> filtered = _coin == all
+    final List<({int idx, T item})> filtered = coin == all
         ? indexed
-        : indexed.where((e) => widget.symOf(e.item) == _coin).toList();
-    final _SortKey<T>? sk = _keyOf(_sort.key);
-    if (sk == null || _sort.dir == null) return filtered;
+        : indexed.where((e) => symOf(e.item) == coin).toList();
+    final _SortKey<T>? sk = _keyOf(sort.key);
+    if (sk == null || sort.dir == null) return filtered;
     final List<({int idx, T item})> sorted = <({int idx, T item})>[...filtered];
     // time 列（numOf==null）用行原始索引；其余用数值取值。
     double v(({int idx, T item}) e) =>
         sk.numOf == null ? -e.idx.toDouble() : sk.numOf!(e.item);
     sorted.sort((a, b) => v(a).compareTo(v(b)));
-    if (_sort.dir == WhaleSortDir.desc) {
+    if (sort.dir == WhaleSortDir.desc) {
       return sorted.reversed.toList();
     }
     return sorted;
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    if (!_coinInit) {
-      _coin = l10n.whaleProfileFilterAll;
-      _coinInit = true;
-    }
-    final List<({int idx, T item})> rows = _process();
+    final String all = l10n.whaleProfileFilterAll;
+    final WhaleProfileSortableTabState st = ref.watch(
+      whaleProfileSortableTabControllerProvider(tabId),
+    );
+    final WhaleSortState sort = st.sort;
+    // 只读回退：未选时用「全部」，不写回 provider。
+    final String coin = st.coin ?? all;
+    final List<({int idx, T item})> rows = _process(sort, coin, all);
     final List<String> coinOptions = <String>[
-      l10n.whaleProfileFilterAll,
-      ...<String>{for (final T it in widget.items) widget.symOf(it)},
+      all,
+      ...<String>{for (final T it in items) symOf(it)},
     ];
     final QzColorScheme c = context.qzScheme;
     return ColoredBox(
@@ -752,28 +762,40 @@ class _SortableTabState<T> extends State<_SortableTab<T>> {
           ColoredBox(
             color: c.bgElev,
             child: _Toolbar(
-              leftKeys: widget.leftKeys,
-              rightKeys: widget.rightKeys,
-              sort: _sort,
-              onSort: (String k) => setState(() => _sort = _sort.cycle(k)),
-              coin: _coin,
+              leftKeys: leftKeys,
+              rightKeys: rightKeys,
+              sort: sort,
+              onSort: (String k) => ref
+                  .read(
+                    whaleProfileSortableTabControllerProvider(tabId).notifier,
+                  )
+                  .cycleSort(k),
+              coin: coin,
               coinOptions: coinOptions,
-              filterLabel: widget.filterLabel,
-              onCoin: (String c) => setState(() => _coin = c),
-              moreSortKeys: widget.moreSortKeys,
-              onMoreSort: (WhaleSortState s) => setState(() => _sort = s),
+              filterLabel: filterLabel,
+              onCoin: (String picked) => ref
+                  .read(
+                    whaleProfileSortableTabControllerProvider(tabId).notifier,
+                  )
+                  .selectCoin(picked),
+              moreSortKeys: moreSortKeys,
+              onMoreSort: (WhaleSortState s) => ref
+                  .read(
+                    whaleProfileSortableTabControllerProvider(tabId).notifier,
+                  )
+                  .setSort(s),
             ),
           ),
           Expanded(
             child: ColoredBox(
               color: c.bgElev,
               child: rows.isEmpty
-                  ? WhaleDetailEmpty(text: widget.empty)
+                  ? WhaleDetailEmpty(text: empty)
                   : ListView(
                       padding: EdgeInsets.zero,
                       children: <Widget>[
                         for (final ({int idx, T item}) e in rows)
-                          widget.rowBuilder(e.item),
+                          rowBuilder(e.item),
                       ],
                     ),
             ),
@@ -873,6 +895,7 @@ class _SpotTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return _SortableTab<WhaleSpotHolding>(
+      tabId: 'spot',
       items: items,
       empty: empty,
       symOf: (WhaleSpotHolding h) => h.sym,
@@ -912,6 +935,7 @@ class _PerpTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return _SortableTab<WhalePerpHolding>(
+      tabId: 'perp',
       items: items,
       empty: empty,
       symOf: (WhalePerpHolding h) => h.sym,
@@ -970,6 +994,7 @@ class _OrderTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return _SortableTab<WhaleOpenOrder>(
+      tabId: 'order',
       items: items,
       empty: empty,
       symOf: (WhaleOpenOrder o) => o.sym,
@@ -1004,6 +1029,7 @@ class _TradeTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return _SortableTab<WhaleRecentTrade>(
+      tabId: 'trade',
       items: items,
       empty: empty,
       symOf: (WhaleRecentTrade t) => t.sym,
@@ -1053,6 +1079,7 @@ class _HistTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return _SortableTab<WhaleHistOrder>(
+      tabId: 'hist',
       items: items,
       empty: empty,
       symOf: (WhaleHistOrder o) => o.sym,

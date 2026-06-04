@@ -11,41 +11,37 @@ import 'tabs/whale_discover_tab.dart';
 import 'tabs/whale_holdings_tab.dart';
 import 'tabs/whale_live_tab.dart';
 import 'tabs/whale_watch_tab.dart';
+import 'whale_home_page_controller.dart';
 import 'widgets/whale_notification_sheet.dart';
 
-/// 巨鲸动向首页（issue #1560）。
+/// 巨鲸动向首页（issue #1560 / 三件套迁移 #2183）。
 ///
 /// 单行合并 header（issue #2012）：左侧 4 个二级 tab strip + 右侧通知铃铛，
 /// 对齐设计稿 `m-screens-4.jsx` ScreenWhale header（无标题/副标题/搜索）。
-/// tab 切换走 IndexedStack 保留各 tab 滚动/订阅状态。
-class WhaleHomePage extends ConsumerStatefulWidget {
+/// tab 切换走 IndexedStack 保留各 tab 滚动/订阅状态。页面级导航态收敛进
+/// [whaleHomePageControllerProvider]，widget 退化为纯消费层。
+class WhaleHomePage extends ConsumerWidget {
   const WhaleHomePage({super.key});
-
-  @override
-  ConsumerState<WhaleHomePage> createState() => _WhaleHomePageState();
-}
-
-class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
-  int _tabIndex = 0; // 默认发现 tab（issue #1976，对齐设计稿首项 w-discover）
 
   /// issue #1769：通知中心改为单一数据源 [whaleNotificationsProvider]，
   /// 铃铛 panel 与监控 Tab「通知中心」子 Tab 共享同一份列表/已读态。
-  Future<void> _openNotifications() async {
+  Future<void> _openNotifications(BuildContext context, WidgetRef ref) async {
     final List<WhaleNotification> current = ref.read(
       whaleNotificationsProvider,
     );
     final WhaleNotificationSheetResult? result =
         await WhaleNotificationSheet.show(context, notifications: current);
-    if (!mounted || result == null) return;
+    if (!context.mounted || result == null) return;
     ref
         .read(whaleNotificationsProvider.notifier)
         .replaceAll(result.notifications);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final int tabIndex = ref.watch(whaleHomePageControllerProvider).tabIndex;
     final int unreadCount = ref
         .watch(whaleNotificationsProvider)
         .where((WhaleNotification n) => n.unread)
@@ -82,8 +78,10 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
                             _SubTab(
                               key: Key('whaleSubTab_$i'),
                               label: tabs[i].label,
-                              selected: _tabIndex == i,
-                              onTap: () => setState(() => _tabIndex = i),
+                              selected: tabIndex == i,
+                              onTap: () => ref
+                                  .read(whaleHomePageControllerProvider.notifier)
+                                  .selectTab(i),
                             ),
                             if (i < tabs.length - 1) const SizedBox(width: 20),
                           ],
@@ -95,7 +93,7 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
                     padding: const EdgeInsets.fromLTRB(6, 0, 14, 4),
                     child: QzNotificationBell(
                       unread: unreadCount,
-                      onTap: _openNotifications,
+                      onTap: () => _openNotifications(context, ref),
                       tooltip: l10n.whaleNotificationTooltip,
                       circular: true,
                       bordered: false,
@@ -107,7 +105,7 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
           ),
           Expanded(
             child: IndexedStack(
-              index: _tabIndex,
+              index: tabIndex,
               children: const <Widget>[
                 WhaleDiscoverTab(),
                 WhaleLiveTab(),

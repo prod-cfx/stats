@@ -14,29 +14,21 @@ import '../widgets/whale_leader_card.dart';
 import '../widgets/whale_sort_bar.dart';
 import '../widgets/whale_top_slideshow.dart';
 import '../widgets/whale_trade_stats_sheet.dart';
+import 'whale_discover_tab_controller.dart';
 
-/// 巨鲸动向 — 发现 tab（issue #1789）。对齐设计稿 `WhaleDiscoverNew`：
-/// top3 轮播 hero + 排序条（胜率/总值/盈亏）+ 巨鲸列表卡（AI 标签）。
-/// mock 驱动（[whaleLeaderboardProvider]），排序在本地态完成。
-class WhaleDiscoverTab extends ConsumerStatefulWidget {
+/// 巨鲸动向 — 发现 tab（issue #1789 / 三件套迁移 #2183）。对齐设计稿
+/// `WhaleDiscoverNew`：top3 轮播 hero + 排序条（胜率/总值/盈亏）+ 巨鲸列表卡
+/// （AI 标签）。mock 驱动（[whaleLeaderboardProvider]），排序态收敛进
+/// [whaleDiscoverTabControllerProvider]，widget 退化为纯消费层。
+class WhaleDiscoverTab extends ConsumerWidget {
   const WhaleDiscoverTab({super.key});
 
-  @override
-  ConsumerState<WhaleDiscoverTab> createState() => _WhaleDiscoverTabState();
-}
-
-class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
-  WhaleLeaderSort? _sort = const WhaleLeaderSort(
-    key: WhaleLeaderSortKey.winRate,
-    dir: WhaleLeaderSortDir.desc,
-  );
-
-  void _openProfile(WhaleLeaderEntry entry) {
+  void _openProfile(BuildContext context, WhaleLeaderEntry entry) {
     context.push('/whale/profile/${Uri.encodeComponent(entry.id)}');
   }
 
   /// 点卡片 / 趋势按钮 → 交易统计弹窗（复用 #1859 的 [WhaleTradeStatsSheet]）。
-  void _openStats(WhaleLeaderEntry entry) {
+  void _openStats(BuildContext context, WhaleLeaderEntry entry) {
     WhaleTradeStatsSheet.show(
       context,
       address: entry.id,
@@ -46,17 +38,20 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
     );
   }
 
-  Future<void> _copyAddress(WhaleLeaderEntry entry) async {
+  Future<void> _copyAddress(BuildContext context, WhaleLeaderEntry entry) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     await Clipboard.setData(ClipboardData(text: entry.id));
-    if (!mounted) return;
+    if (!context.mounted) return;
     QzToast.show(context, l10n.whaleLeaderCopied);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final WhaleLeaderSort? sort = ref
+        .watch(whaleDiscoverTabControllerProvider)
+        .sort;
     final AsyncValue<List<WhaleLeaderEntry>> async = ref.watch(
       whaleLeaderboardProvider,
     );
@@ -70,7 +65,7 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
       ),
       data: (List<WhaleLeaderEntry> entries) {
         final List<WhaleLeaderEntry> top3 = topWhaleLeaders(entries);
-        final List<WhaleLeaderEntry> sorted = sortWhaleLeaders(entries, _sort);
+        final List<WhaleLeaderEntry> sorted = sortWhaleLeaders(entries, sort);
         return ListView(
           padding: const EdgeInsets.only(bottom: 100),
           children: <Widget>[
@@ -88,9 +83,9 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
             ),
             WhaleTopSlideshow(
               top3: top3,
-              onOpen: _openProfile,
-              onStats: _openStats,
-              onCopy: _copyAddress,
+              onOpen: (WhaleLeaderEntry e) => _openProfile(context, e),
+              onStats: (WhaleLeaderEntry e) => _openStats(context, e),
+              onCopy: (WhaleLeaderEntry e) => _copyAddress(context, e),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -102,8 +97,10 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
               child: Divider(height: 1, color: c.borderSoft),
             ),
             WhaleSortBar(
-              sort: _sort,
-              onChanged: (WhaleLeaderSort? s) => setState(() => _sort = s),
+              sort: sort,
+              onChanged: (WhaleLeaderSort? s) => ref
+                  .read(whaleDiscoverTabControllerProvider.notifier)
+                  .setSort(s),
             ),
             for (final WhaleLeaderEntry e in sorted)
               Padding(
@@ -115,9 +112,9 @@ class _WhaleDiscoverTabState extends ConsumerState<WhaleDiscoverTab> {
                 ),
                 child: WhaleLeaderCard(
                   entry: e,
-                  onOpen: () => _openProfile(e),
-                  onStats: () => _openStats(e),
-                  onCopy: () => _copyAddress(e),
+                  onOpen: () => _openProfile(context, e),
+                  onStats: () => _openStats(context, e),
+                  onCopy: () => _copyAddress(context, e),
                 ),
               ),
           ],

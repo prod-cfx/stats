@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,38 +12,24 @@ import '../../../widgets/qz_empty_state.dart';
 import '../../../widgets/qz_spinner.dart';
 import '../widgets/qz_whale_row.dart';
 import '../widgets/whale_trade_stats_sheet.dart';
+import 'whale_live_tab_controller.dart';
+import 'whale_live_tab_state.dart';
 
-/// 巨鲸动向 — 实时 tab body（issue #1560，原 [`WhaleFeedPage`] 拆分而来）。
+/// 巨鲸动向 — 实时 tab body（issue #1560 / 三件套迁移 #2183，原 [`WhaleFeedPage`]
+/// 拆分而来）。
 ///
 /// 与原 page 行为一致：history `listRecent(limit: 30)` + watchFeed 推流 +
 /// 700ms 高亮 + symbol/amount filter；新增顶部 hero 卡 + 时间分组渲染。
+/// 加载/推流/倒计时/筛选/排序态收敛进 [whaleLiveTabControllerProvider]，流订阅
+/// 与倒计时由 controller `ref.onDispose` 取消；widget 退化为消费层（仅
+/// `_CoinSearchOverlayState` 保留 setState）。
 ///
 /// 时间分组规则：以可见条目 index 三等分到 now/15m/1h 三组，不依赖
 /// fixture timestamp（mock 数据时间戳写死 2024-05，与真实墙钟差距过大会
 /// 把所有条目都归到「更早」分组，从而让 feed 看上去为空）。详见 plan
 /// `docs/superpowers/plans/2026-05-19-whale-4tabs-notif.md` Critic C2。
-class WhaleLiveTab extends ConsumerStatefulWidget {
+class WhaleLiveTab extends ConsumerWidget {
   const WhaleLiveTab({super.key});
-
-  @override
-  ConsumerState<WhaleLiveTab> createState() => _WhaleLiveTabState();
-}
-
-class _FeedItem {
-  _FeedItem(this.event, {required this.highlight});
-  final WhaleEvent event;
-  bool highlight;
-}
-
-/// 胜率排序状态（issue #1983）。循环：none → desc → asc → none，
-/// 对齐设计稿 `m-screens-4.jsx:595` 的 winSort 行为。
-enum _WinSort { none, desc, asc }
-
-class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
-  final List<_FeedItem> _items = <_FeedItem>[];
-  StreamSubscription<WhaleEvent>? _sub;
-  bool _loading = true;
-  Object? _error;
 
   static const List<String> _symbolFilterKeys = <String>[
     '',
@@ -62,53 +46,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     'OP',
   ];
 
-  /// issue #1604：默认与 hero `BTC 净流入 · 1H` 对齐，避免默认 `全部` 与 hero
-  /// 状态不一致。
-  String _symbolFilter = 'BTC';
-
-  /// issue #1986：顶部「{n} 秒后更新」倒计时。固定 15s 周期循环递减，纯展示态。
-  static const int _countdownStart = 15;
-  int _tick = _countdownStart;
-  Timer? _countdownTimer;
-
-  /// issue #1983：胜率排序状态，默认不排序（按时间分组）。
-  _WinSort _winSort = _WinSort.none;
-
-  void _cycleWinSort() {
-    setState(() {
-      _winSort = switch (_winSort) {
-        _WinSort.none => _WinSort.desc,
-        _WinSort.desc => _WinSort.asc,
-        _WinSort.asc => _WinSort.none,
-      };
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _startCountdown();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _countdownTimer = null;
-    _sub?.cancel();
-    _sub = null;
-    super.dispose();
-  }
-
-  /// issue #1986：每秒递减倒计时，归零后回到 [_countdownStart] 循环；纯展示。
-  void _startCountdown() {
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => _tick = _tick <= 1 ? _countdownStart : _tick - 1);
-    });
-  }
-
-  Future<void> _openCoinSearch() async {
+  Future<void> _openCoinSearch(BuildContext context, WidgetRef ref) async {
     final String? picked = await showGeneralDialog<String>(
       context: context,
       useRootNavigator: true,
@@ -132,91 +70,35 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
             Widget child,
           ) => FadeTransition(opacity: animation, child: child),
     );
-    if (picked == null || !mounted) return;
-    setState(() => _symbolFilter = picked);
-  }
-
-  Future<void> _load() async {
-    final repo = ref.read(whaleFeedRepositoryProvider);
-    try {
-      final List<WhaleEvent> history = await repo.listRecent(limit: 30);
-      if (!mounted) return;
-      // issue #1603: 历史接口理论上不应返回重复 id，但 mock / 后端
-      // 重试链路存在重复风险；这里统一按首次出现保留，保障 ListView key 唯一。
-      final Set<String> seen = <String>{};
-      final List<WhaleEvent> deduped = <WhaleEvent>[
-        for (final WhaleEvent e in history)
-          if (seen.add(e.id)) e,
-      ];
-      setState(() {
-        _items
-          ..clear()
-          ..addAll(
-            deduped.map((WhaleEvent e) => _FeedItem(e, highlight: false)),
-          );
-        _loading = false;
-      });
-      _sub = repo.watchFeed().listen(_onPush);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
-    }
-  }
-
-  void _onPush(WhaleEvent event) {
-    if (!_passesFilter(event)) return;
-    if (!mounted) return;
-    setState(() {
-      // issue #1603: 推流可能与历史/重连重发产生相同 event.id，
-      // 必须先按 id 去重再插入；否则同一 id 在 ListView 中出现两次会触发
-      // RenderSliverMultiBoxAdaptor._debugVerifyChildOrder 断言失败以及
-      // Duplicate Key 异常。
-      _items.removeWhere((_FeedItem it) => it.event.id == event.id);
-      _items.insert(0, _FeedItem(event, highlight: true));
-    });
-    Future<void>.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
-      setState(() {
-        // 按 id 定位目标 row，避免在 700ms 内被其它推流挤下时找错对象。
-        for (final _FeedItem it in _items) {
-          if (it.event.id == event.id) {
-            it.highlight = false;
-            break;
-          }
-        }
-      });
-    });
-  }
-
-  bool _passesFilter(WhaleEvent e) {
-    if (_symbolFilter.isEmpty) return true;
-    return e.symbol.startsWith(_symbolFilter);
+    if (picked == null) return;
+    ref.read(whaleLiveTabControllerProvider.notifier).setSymbolFilter(picked);
   }
 
   String _eventAddress(WhaleEvent event) => event.address ?? event.fromLabel;
 
-  void _openProfile(WhaleEvent event) {
+  void _openProfile(BuildContext context, WhaleEvent event) {
     final String address = _eventAddress(event);
     context.push('/whale/profile/${Uri.encodeComponent(address)}');
   }
 
-  Future<void> _openStats(WhaleEvent event) async {
+  Future<void> _openStats(
+    BuildContext context,
+    WidgetRef ref,
+    WhaleEvent event,
+  ) async {
     final String address = _eventAddress(event);
     try {
       final profile = await ref
           .read(whaleProfileRepositoryProvider)
           .getProfile(address);
-      if (!mounted) return;
+      if (!context.mounted) return;
       await WhaleTradeStatsSheet.show(
         context,
         address: address,
         stats: profile.stats,
       );
     } catch (error) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(error.toString()),
@@ -227,20 +109,21 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final List<_FeedItem> visible = _items
-        .where((_FeedItem it) => _passesFilter(it.event))
+    final WhaleLiveTabState st = ref.watch(whaleLiveTabControllerProvider);
+    final List<WhaleLiveFeedItem> visible = st.items
+        .where((WhaleLiveFeedItem it) => _passesFilter(it.event, st.symbolFilter))
         .toList();
 
-    if (_loading) {
+    if (st.loading) {
       return const Center(child: QzSpinner());
     }
-    if (_error != null) {
+    if (st.error != null) {
       return QzEmptyState(
         title: l10n.commonLoadError,
-        subtitle: _error.toString(),
+        subtitle: st.error!.message,
       );
     }
 
@@ -249,13 +132,13 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 100),
         children: <Widget>[
-          _buildFilterBar(c, l10n),
-          _buildActionRow(c, l10n),
+          _buildFilterBar(context, ref, c, l10n, st.symbolFilter),
+          _buildActionRow(context, ref, c, l10n, st),
           const SizedBox(height: QzSpacing.sm),
-          if (_winSort == _WinSort.none)
-            ..._buildGroupedFeed(visible, l10n, c)
+          if (st.winSort == WhaleLiveWinSort.none)
+            ..._buildGroupedFeed(context, ref, visible, l10n, c)
           else
-            ..._buildSortedFeed(visible, l10n, c),
+            ..._buildSortedFeed(context, ref, visible, l10n, c, st.winSort),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               QzSpacing.lg,
@@ -270,26 +153,41 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     );
   }
 
+  static bool _passesFilter(WhaleEvent e, String filter) {
+    if (filter.isEmpty) return true;
+    return e.symbol.startsWith(filter);
+  }
+
   /// issue #1983：胜率排序 toggle，循环 none → desc → asc → none，
   /// 对齐设计稿 `m-screens-4.jsx:595`。
-  Widget _buildActionRow(QzColorScheme c, AppLocalizations l10n) {
+  Widget _buildActionRow(
+    BuildContext context,
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    WhaleLiveTabState st,
+  ) {
     return Container(
       width: double.infinity,
       color: c.bgElev,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       child: Row(
         children: <Widget>[
-          _buildCoinPushButton(c, l10n),
+          _buildCoinPushButton(context, c, l10n),
           const SizedBox(width: 8),
-          _buildWinSortButton(c, l10n),
+          _buildWinSortButton(ref, c, l10n, st.winSort),
           const Spacer(),
-          _CountdownBadge(tick: _tick),
+          _CountdownBadge(tick: st.tick),
         ],
       ),
     );
   }
 
-  Widget _buildCoinPushButton(QzColorScheme c, AppLocalizations l10n) {
+  Widget _buildCoinPushButton(
+    BuildContext context,
+    QzColorScheme c,
+    AppLocalizations l10n,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
@@ -327,22 +225,28 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   }
 
   /// issue #1983：胜率排序按钮，激活态高亮 + 方向图标，aria/tooltip 反映当前状态。
-  Widget _buildWinSortButton(QzColorScheme c, AppLocalizations l10n) {
-    final bool active = _winSort != _WinSort.none;
-    final String hint = switch (_winSort) {
-      _WinSort.none => l10n.whaleLiveWinSortNone,
-      _WinSort.desc => l10n.whaleLiveWinSortDesc,
-      _WinSort.asc => l10n.whaleLiveWinSortAsc,
+  Widget _buildWinSortButton(
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    WhaleLiveWinSort winSort,
+  ) {
+    final bool active = winSort != WhaleLiveWinSort.none;
+    final String hint = switch (winSort) {
+      WhaleLiveWinSort.none => l10n.whaleLiveWinSortNone,
+      WhaleLiveWinSort.desc => l10n.whaleLiveWinSortDesc,
+      WhaleLiveWinSort.asc => l10n.whaleLiveWinSortAsc,
     };
-    final IconData icon = switch (_winSort) {
-      _WinSort.none => Icons.swap_vert,
-      _WinSort.desc => Icons.arrow_downward,
-      _WinSort.asc => Icons.arrow_upward,
+    final IconData icon = switch (winSort) {
+      WhaleLiveWinSort.none => Icons.swap_vert,
+      WhaleLiveWinSort.desc => Icons.arrow_downward,
+      WhaleLiveWinSort.asc => Icons.arrow_upward,
     };
     return Tooltip(
       message: hint,
       child: OutlinedButton.icon(
-        onPressed: _cycleWinSort,
+        onPressed: () =>
+            ref.read(whaleLiveTabControllerProvider.notifier).cycleWinSort(),
         icon: Icon(icon, size: 14, semanticLabel: hint),
         label: Text(
           l10n.whaleLiveWinSort,
@@ -366,9 +270,12 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   /// issue #1983：胜率排序激活时按 winRate 扁平展示（不再按时间分组），
   /// 对齐设计稿 `m-screens-4.jsx:705` 的排序模式。
   List<Widget> _buildSortedFeed(
-    List<_FeedItem> visible,
+    BuildContext context,
+    WidgetRef ref,
+    List<WhaleLiveFeedItem> visible,
     AppLocalizations l10n,
     QzColorScheme c,
+    WhaleLiveWinSort winSort,
   ) {
     if (visible.isEmpty) {
       return <Widget>[
@@ -378,34 +285,41 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
         ),
       ];
     }
-    final List<_FeedItem> sorted = <_FeedItem>[...visible]
+    final List<WhaleLiveFeedItem> sorted = <WhaleLiveFeedItem>[...visible]
       ..sort(
-        (_FeedItem a, _FeedItem b) => _winSort == _WinSort.desc
+        (WhaleLiveFeedItem a, WhaleLiveFeedItem b) =>
+            winSort == WhaleLiveWinSort.desc
             ? b.event.winRate.compareTo(a.event.winRate)
             : a.event.winRate.compareTo(b.event.winRate),
       );
-    final String label = _winSort == _WinSort.desc
+    final String label = winSort == WhaleLiveWinSort.desc
         ? l10n.whaleLiveWinSortDesc
         : l10n.whaleLiveWinSortAsc;
     final DateTime now = DateTime.now();
     return <Widget>[
       _GroupHeader(label: label, count: sorted.length),
-      for (final _FeedItem item in sorted)
+      for (final WhaleLiveFeedItem item in sorted)
         QzWhaleRow(
           key: ValueKey<String>(item.event.id),
           event: item.event,
           highlight: item.highlight,
           now: now,
           displayTimestamp: now,
-          onOpen: () => _openProfile(item.event),
-          onStats: () => _openStats(item.event),
+          onOpen: () => _openProfile(context, item.event),
+          onStats: () => _openStats(context, ref, item.event),
         ),
     ];
   }
 
   /// 单行 filter strip = 资产 chips · LIVE。阈值已迁出为独立输入行（issue #1986），
   /// 故此处仅保留币种 chips + LIVE pulse；资产 chips 横向滚动避免窄屏溢出。
-  Widget _buildFilterBar(QzColorScheme c, AppLocalizations l10n) {
+  Widget _buildFilterBar(
+    BuildContext context,
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    String symbolFilter,
+  ) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(color: c.bgElev),
@@ -419,8 +333,10 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
                 for (final String s in _symbolFilterKeys) ...<Widget>[
                   _CoinChip(
                     label: s.isEmpty ? l10n.commonAll : s,
-                    selected: _symbolFilter == s,
-                    onTap: () => setState(() => _symbolFilter = s),
+                    selected: symbolFilter == s,
+                    onTap: () => ref
+                        .read(whaleLiveTabControllerProvider.notifier)
+                        .setSymbolFilter(s),
                   ),
                   const SizedBox(width: QzSpacing.xxs),
                 ],
@@ -449,7 +365,7 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
                 child: Center(
                   child: IconButton(
                     tooltip: '搜索币种',
-                    onPressed: _openCoinSearch,
+                    onPressed: () => _openCoinSearch(context, ref),
                     icon: const Icon(Icons.search, size: 17),
                     color: c.textMid,
                     style: IconButton.styleFrom(
@@ -472,7 +388,9 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   }
 
   List<Widget> _buildGroupedFeed(
-    List<_FeedItem> visible,
+    BuildContext context,
+    WidgetRef ref,
+    List<WhaleLiveFeedItem> visible,
     AppLocalizations l10n,
     QzColorScheme c,
   ) {
@@ -488,9 +406,9 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     final int n = visible.length;
     final int thirdA = (n / 3).ceil();
     final int thirdB = (2 * n / 3).ceil();
-    final List<_FeedItem> groupNow = visible.sublist(0, thirdA);
-    final List<_FeedItem> group15 = visible.sublist(thirdA, thirdB);
-    final List<_FeedItem> group1h = visible.sublist(thirdB);
+    final List<WhaleLiveFeedItem> groupNow = visible.sublist(0, thirdA);
+    final List<WhaleLiveFeedItem> group15 = visible.sublist(thirdA, thirdB);
+    final List<WhaleLiveFeedItem> group1h = visible.sublist(thirdB);
 
     final DateTime now = DateTime.now();
     final List<Widget> result = <Widget>[];
@@ -516,11 +434,15 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
       }
     }
 
-    void appendGroup(String label, String groupKey, List<_FeedItem> rows) {
+    void appendGroup(
+      String label,
+      String groupKey,
+      List<WhaleLiveFeedItem> rows,
+    ) {
       if (rows.isEmpty) return;
       result.add(_GroupHeader(label: label, count: rows.length));
       for (int i = 0; i < rows.length; i++) {
-        final _FeedItem item = rows[i];
+        final WhaleLiveFeedItem item = rows[i];
         result.add(
           QzWhaleRow(
             key: ValueKey<String>(item.event.id),
@@ -528,8 +450,8 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
             highlight: item.highlight,
             now: now,
             displayTimestamp: displayFor(groupKey, i),
-            onOpen: () => _openProfile(item.event),
-            onStats: () => _openStats(item.event),
+            onOpen: () => _openProfile(context, item.event),
+            onStats: () => _openStats(context, ref, item.event),
           ),
         );
       }
