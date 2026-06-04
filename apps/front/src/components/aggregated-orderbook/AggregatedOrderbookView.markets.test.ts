@@ -81,7 +81,8 @@ describe('AggregatedOrderbookView markets', () => {
 
     expect(source).toContain('baseAsset={symbol}')
     expect(tableSource).toContain('baseAsset?: string')
-    expect(tableSource).toContain("t('aggregatedOrderbook.table.amount', { asset: baseAsset })")
-    expect(tableSource).toContain("t('aggregatedOrderbook.table.total', { asset: baseAsset })")
+    expect(tableSource).toContain('amountLabel')
+    expect(tableSource).toContain('totalLabel')
+    expect(tableSource).toContain('baseAsset.toUpperCase()')
   })
 })

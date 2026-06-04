@@ -63,6 +63,13 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   if (isBinance) return <div className={className}><BinanceIcon size={size} /></div>;
   if (isOkx) return <div className={className}><OkxIcon size={size} /></div>;
   if (isBybit) return <div className={className}><BybitIcon size={size} /></div>;
+  if (isHyperliquid) {
+    return (
+      <div className={`flex items-center justify-center overflow-hidden rounded-full ${className}`} style={{ width: size, height: size }}>
+        <img src="/images/exchanges/hyperliquid.png" alt="Hyperliquid" className="h-full w-full object-cover" />
+      </div>
+    );
+  }
 
   if (isKuCoin) {
     const finalUrl = logoUrl || 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png';
@@ -73,7 +80,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
     );
   }
 
-  if (isHyperliquid || isDex) return <div className={className}><DexIcon size={size} /></div>;
+  if (isDex) return <div className={className}><DexIcon size={size} /></div>;
 
   if (logoUrl) {
     return (
