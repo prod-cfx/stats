@@ -1223,7 +1223,29 @@ function extractParams(
       params[slotKey] = value
     }
   }
-  return params
+  return normalizeExplicitMacdTupleParams(paramSlots, clause, params)
+}
+
+function normalizeExplicitMacdTupleParams(
+  paramSlots: Readonly<Record<string, ParamSlotSchema>>,
+  clause: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  if (params.indicator !== 'macd') return params
+  if (!('fastPeriod' in paramSlots) || !('slowPeriod' in paramSlots) || !('signalPeriod' in paramSlots)) return params
+  const tuple = extractExplicitMacdTupleFromClause(clause)
+  if (!tuple) return params
+  return { ...params, ...tuple }
+}
+
+function extractExplicitMacdTupleFromClause(clause: string): { fastPeriod: number; slowPeriod: number; signalPeriod: number } | null {
+  const match = /MACD\s*(\d{1,3})\s*[\/／]\s*(\d{1,3})\s*[\/／]\s*(\d{1,3})/iu.exec(clause)
+  if (!match) return null
+  const fastPeriod = Number(match[1])
+  const slowPeriod = Number(match[2])
+  const signalPeriod = Number(match[3])
+  if (!Number.isFinite(fastPeriod) || !Number.isFinite(slowPeriod) || !Number.isFinite(signalPeriod)) return null
+  return { fastPeriod, slowPeriod, signalPeriod }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -2992,12 +3014,13 @@ export class GenericSeedDispatcher {
         //   entry→exit，self→任意），剩余仍 fallback 到最后一条。
         const tentativePhase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params: {} }) ?? 'entry'
         const counterpartPhase: 'entry' | 'exit' | 'gate' | 'program' = tentativePhase === 'exit' ? 'entry' : tentativePhase === 'entry' ? 'exit' : 'entry'
-        const sibling = sourceSiblings.slice().reverse().find((n) => {
+        const siblingCandidates = sourceSiblings.slice().reverse().filter((n) => {
           const np = (n as { phase?: 'entry' | 'exit' | 'gate' | 'program' | null }).phase
           // self-mirror（sourceKey === atomKey）允许任何 phase；否则优先取对偶 phase 的 sibling
           if (sourceKey === atomKey) return true
           return np === counterpartPhase
-        }) ?? sourceSiblings[sourceSiblings.length - 1]
+        })
+        const sibling = selectInheritanceSibling(siblingCandidates, inheritParams) ?? sourceSiblings[sourceSiblings.length - 1]
         if (!sibling) continue
 
         // 继承声明的 params + 本子句仍可抽到的 params 叠加（本子句优先覆盖继承值）
@@ -3225,4 +3248,23 @@ function readPatchEvidenceText(item: { evidence?: unknown }): string | null {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return null
   const text = (evidence as { text?: unknown }).text
   return typeof text === 'string' ? text : null
+}
+
+function selectInheritanceSibling(
+  candidates: readonly PatchAtomNode[],
+  inheritParams: readonly string[],
+): PatchAtomNode | null {
+  if (candidates.length === 0) return null
+  if (inheritParams.length === 0) return candidates[0] ?? null
+  let best: PatchAtomNode | null = null
+  let bestScore = -1
+  for (const candidate of candidates) {
+    const params = candidate.params as Record<string, unknown>
+    const score = inheritParams.filter(slotKey => params[slotKey] !== undefined && params[slotKey] !== null).length
+    if (score > bestScore) {
+      best = candidate
+      bestScore = score
+    }
+  }
+  return best
 }
