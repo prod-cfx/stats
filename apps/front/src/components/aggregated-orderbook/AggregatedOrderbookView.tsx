@@ -1,11 +1,12 @@
 'use client'
 
 import type { AggregatedOrderbookLevel, AggregatedOrderbookMarket, AggregatedOrderbookQueryType } from '@/lib/api'
-import { Check, ChevronDown, Info, Settings } from 'lucide-react'
+import { Check, ChevronDown, Info, Search, Settings } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable'
+import { ExchangeLogo } from '@/components/ui/ExchangeLogo'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { LoadingState } from '@/components/ui/loading'
 import { fetchAggregatedOrderbook, fetchAggregatedOrderbookMarkets } from '@/lib/api'
@@ -153,7 +154,10 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   const [displayMode, setDisplayMode] = useState('both')
   const [selectedExchanges, setSelectedExchanges] = useState<string[]>(DEFAULT_EXCHANGES)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSymbolMenuOpen, setIsSymbolMenuOpen] = useState(false)
+  const [symbolSearch, setSymbolSearch] = useState('')
   const settingsRef = useRef<HTMLDivElement>(null)
+  const symbolMenuRef = useRef<HTMLDivElement>(null)
 
   // API 状态
   const [loading, setLoading] = useState(true)
@@ -189,6 +193,12 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     [availableMarkets, marketType],
   )
 
+  const filteredMarketOptions = useMemo(() => {
+    const query = symbolSearch.trim().toUpperCase()
+    if (!query) return marketOptions
+    return marketOptions.filter(market => market.base.includes(query))
+  }, [marketOptions, symbolSearch])
+
   const currentMarket = useMemo(
     () => pickMarket(availableMarkets, marketType, symbol),
     [availableMarkets, marketType, symbol],
@@ -211,6 +221,8 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     setSymbol(nextMarket.base)
     setTickSize(getDefaultTickSizeForBase(nextMarket.base))
     setSelectedExchanges(nextMarket.venues)
+    setSymbolSearch('')
+    setIsSymbolMenuOpen(false)
   }, [marketOptions])
 
   useEffect(() => {
@@ -238,6 +250,10 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     const handleClickOutside = (event: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
         setIsSettingsOpen(false)
+      }
+      if (symbolMenuRef.current && !symbolMenuRef.current.contains(event.target as Node)) {
+        setIsSymbolMenuOpen(false)
+        setSymbolSearch('')
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -374,20 +390,43 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         {t('aggregatedOrderbook.market.spot')}
                       </button>
                     </div>
-                    <div className="relative">
-                      <select
-                        value={symbol}
-                        onChange={event => handleSymbolChange(event.target.value)}
+                    <div className="relative" ref={symbolMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsSymbolMenuOpen(prev => !prev)}
                         disabled={marketOptions.length === 0}
-                        className={`${isCompact ? 'h-8 min-w-24 pl-3 pr-8' : 'h-9 min-w-32 pl-3.5 pr-9'} appearance-none rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] shadow-sm outline-none transition-colors hover:border-[color:var(--cf-muted)] focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60`}
+                        className={`${isCompact ? 'h-8 min-w-24 pl-3 pr-8' : 'h-9 min-w-32 pl-3.5 pr-9'} relative rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-left !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] shadow-sm outline-none transition-colors hover:border-[color:var(--cf-muted)] focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60`}
                       >
-                        {marketOptions.map(market => (
-                          <option key={`${market.type}:${market.base}`} value={market.base}>
-                            {market.base}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className={`${isCompact ? 'right-2 h-3.5 w-3.5' : 'right-2.5 h-4 w-4'} pointer-events-none absolute top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)]`} />
+                        {symbol}
+                        <ChevronDown className={`${isCompact ? 'right-2 h-3.5 w-3.5' : 'right-2.5 h-4 w-4'} pointer-events-none absolute top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)]`} />
+                      </button>
+
+                      {isSymbolMenuOpen && (
+                        <div className={`${isCompact ? 'w-40' : 'w-48'} absolute left-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-1.5 shadow-sm animate-in fade-in zoom-in-95 duration-150`}>
+                          <div className="relative mb-1">
+                            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
+                            <input
+                              value={symbolSearch}
+                              onChange={event => setSymbolSearch(event.target.value)}
+                              placeholder="Search"
+                              className="h-8 w-full rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] pl-7 pr-2 !text-xs !font-normal !leading-5 text-[color:var(--cf-text)] outline-none transition-colors placeholder:text-[color:var(--cf-muted)] focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            />
+                          </div>
+                          <div className="max-h-56 overflow-y-auto">
+                            {filteredMarketOptions.map(market => (
+                              <button
+                                key={`${market.type}:${market.base}`}
+                                type="button"
+                                onClick={() => handleSymbolChange(market.base)}
+                                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[color:var(--cf-surface-hover)] ${market.base === symbol ? 'text-[color:var(--cf-text-strong)] !font-semibold' : 'text-[color:var(--cf-muted)] !font-normal'}`}
+                              >
+                                <span className="!text-xs !leading-5">{market.base}</span>
+                                {market.base === symbol && <Check className="h-3.5 w-3.5 text-primary" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                   {!isCompact && (
@@ -492,6 +531,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                                   >
                                     {selectedExchanges.includes(ex) && <Check className="w-2 h-2 text-white" />}
                                   </div>
+                                  <ExchangeLogo name={ex} size={isCompact ? 12 : 14} className="shrink-0" />
                                   <span
                                     className={`${isCompact ? '!text-[9px] !leading-4' : '!text-xs !leading-5'} capitalize ${selectedExchanges.includes(ex) ? 'text-[color:var(--cf-text-strong)] !font-semibold' : 'text-[color:var(--cf-muted)] !font-normal'}`}
                                   >

@@ -27,10 +27,25 @@ describe('AggregatedOrderbookView markets', () => {
   it('uses a dropdown for market symbols so hot coin lists fit', () => {
     const source = readFrontSource('components/aggregated-orderbook/AggregatedOrderbookView.tsx')
 
-    expect(source).toContain('<select')
     expect(source).toContain('handleSymbolChange')
-    expect(source).toContain('marketOptions.map')
+    expect(source).toContain('filteredMarketOptions.map')
     expect(source).toContain('ChevronDown')
+  })
+
+  it('filters market symbols from a searchable dropdown when the list grows', () => {
+    const source = readFrontSource('components/aggregated-orderbook/AggregatedOrderbookView.tsx')
+
+    expect(source).toContain('symbolSearch')
+    expect(source).toContain('filteredMarketOptions')
+    expect(source).toContain('placeholder="Search"')
+    expect(source).toContain('Search className')
+  })
+
+  it('shows exchange logos in the exchange source settings menu', () => {
+    const source = readFrontSource('components/aggregated-orderbook/AggregatedOrderbookView.tsx')
+
+    expect(source).toContain("import { ExchangeLogo } from '@/components/ui/ExchangeLogo'")
+    expect(source).toContain('<ExchangeLogo')
   })
 
   it('does not keep fallback symbols visible when the live market list is empty', () => {
