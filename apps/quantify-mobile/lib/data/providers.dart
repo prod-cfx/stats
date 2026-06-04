@@ -7,6 +7,7 @@ import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/agg_market_data.dart';
 import 'models/api_key_models.dart';
+import 'models/backtest_models.dart';
 import 'models/coin_stock_models.dart';
 import 'models/pred_market_models.dart';
 import 'models/ticker_models.dart';
@@ -324,6 +325,14 @@ final Provider<BacktestRepository> backtestRepositoryProvider =
       return ref.watch(useMockProvider)
           ? MockBacktestRepository()
           : ApiBacktestRepository(ref.watch(backtestServiceProvider));
+    });
+
+/// 回测结果（#2215）。结果页 watch；mock-first 阶段固定 scenario id `'mock'`
+/// 收敛于此处一处，View 不再在 build() 里硬编码或新建 future。真实回测 id
+/// 参数化（改 family + 页面入参）依赖后端接入 #2189，本 Issue 不做。
+final FutureProvider<BacktestResult> backtestResultProvider =
+    FutureProvider<BacktestResult>((Ref ref) async {
+      return ref.watch(backtestRepositoryProvider).getResult('mock');
     });
 
 final Provider<AccountRepository> accountRepositoryProvider =

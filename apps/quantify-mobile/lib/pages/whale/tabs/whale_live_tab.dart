@@ -90,9 +90,7 @@ class WhaleLiveTab extends ConsumerWidget {
   ) async {
     final String address = _eventAddress(event);
     try {
-      final profile = await ref
-          .read(whaleProfileRepositoryProvider)
-          .getProfile(address);
+      final profile = await ref.read(whaleProfileProvider(address).future);
       if (!context.mounted) return;
       await WhaleTradeStatsSheet.show(
         context,
