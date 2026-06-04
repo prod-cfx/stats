@@ -1364,6 +1364,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.createSession).toHaveBeenCalled()
   })
 
+  it('recovers deterministic rules when planner returns context-only semanticPatch', async () => {
+    const initialMessage = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充入场条件、出场条件、风控和仓位。',
+        semanticPatch: {
+          contextSlots: {
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-context-only-open-interest-breakout' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const serializedRules = JSON.stringify(createPayload.semanticState?.rules ?? [])
+
+    expect(result.status).toBe('DRAFTING')
+    expect(serializedRules).toContain('openInterest.condition')
+    expect(serializedRules).toContain('price.breakout_up')
+    expect(serializedRules).toContain('action.open_long')
+  })
+
   it('does not return stale planner prompt when dispatcher repairs MA cross lifecycle', async () => {
     const initialMessage = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。'
     mockAi.chat.mockResolvedValue({

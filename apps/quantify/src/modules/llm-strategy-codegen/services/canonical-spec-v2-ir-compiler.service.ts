@@ -224,6 +224,7 @@ export class CanonicalSpecV2IrCompilerService {
     const riskPredicates: RiskPredicateDef[] = []
     const rulePortfolioRisks: IrOrchestrationPortfolioRisk[] = []
     let maxConcurrentPositions = hasOrderPrograms ? orderProgramLevelCount : 1
+    const portfolioSourcePaths = new Set<string>()
 
     // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
@@ -277,6 +278,7 @@ export class CanonicalSpecV2IrCompilerService {
       const maxConcurrent = this.tryReadMaxConcurrentPositions(rule)
       if (maxConcurrent !== null) {
         maxConcurrentPositions = maxConcurrent
+        this.addRuleSourcePath(portfolioSourcePaths, rule)
         continue
       }
 
@@ -389,6 +391,7 @@ export class CanonicalSpecV2IrCompilerService {
         maxConcurrentPositions,
         allowPyramiding: hasOrderPrograms || lifecyclePyramiding.allow,
         maxPyramidingLayers: hasOrderPrograms ? orderProgramLevelCount : lifecyclePyramiding.maxLayers,
+        ...(portfolioSourcePaths.size > 0 ? { sourcePaths: [...portfolioSourcePaths].sort() } : {}),
       },
       dataRequirements: {
         warmupBars: maxLookback,
@@ -1017,6 +1020,9 @@ export class CanonicalSpecV2IrCompilerService {
 
     if (normalizedGroup.kind !== 'AND') return normalizedGroup
 
+    const breakoutNormalized = this.normalizeBreakoutCompileNoise(normalizedGroup)
+    if (breakoutNormalized !== normalizedGroup) return breakoutNormalized
+
     const reclaim = this.findRsiReclaimSequence(normalizedGroup)
     if (!reclaim) return normalizedGroup
 
@@ -1027,6 +1033,41 @@ export class CanonicalSpecV2IrCompilerService {
     if (children.length === normalizedGroup.children.length) return normalizedGroup
     if (children.length === 1) return children[0]!
     return { ...normalizedGroup, children }
+  }
+
+  private normalizeBreakoutCompileNoise(condition: CanonicalConditionNode): CanonicalConditionNode {
+    if (condition.kind !== 'AND') return condition
+    const channelPeriods = new Map<'up' | 'down', Set<number>>()
+    for (const child of condition.children) {
+      if (!this.isConditionAtom(child)) continue
+      const direction = child.key === 'breakout.channel_high_break'
+        ? 'up'
+        : child.key === 'breakout.channel_low_break'
+          ? 'down'
+          : null
+      if (!direction) continue
+      const period = this.readNumber([child.params?.period], Number.NaN)
+      if (!Number.isFinite(period)) continue
+      const periods = channelPeriods.get(direction) ?? new Set<number>()
+      periods.add(period)
+      channelPeriods.set(direction, periods)
+    }
+    if (channelPeriods.size === 0) return condition
+
+    const children = condition.children.filter((child) => {
+      if (!this.isConditionAtom(child)) return true
+      const direction = child.key === 'price.level_breakout_up'
+        ? 'up'
+        : child.key === 'price.level_breakout_down'
+          ? 'down'
+          : null
+      if (!direction) return true
+      const priceLevel = this.readNumber([child.params?.priceLevel, child.value], Number.NaN)
+      return !Number.isFinite(priceLevel) || !channelPeriods.get(direction)?.has(priceLevel)
+    })
+    if (children.length === condition.children.length) return condition
+    if (children.length === 1) return children[0]!
+    return { ...condition, children }
   }
 
   private findRsiReclaimSequence(condition: CanonicalConditionNode): CanonicalConditionAtom | null {
@@ -4674,6 +4715,13 @@ export class CanonicalSpecV2IrCompilerService {
         sourcePath,
       },
     }
+  }
+
+  private addRuleSourcePath(target: Set<string>, rule: CanonicalRuleV2): void {
+    const sourcePath = typeof rule.metadata?.sourcePath === 'string'
+      ? rule.metadata.sourcePath.trim()
+      : ''
+    if (sourcePath) target.add(sourcePath)
   }
 
   private collectPositionLifecycleRuntimeRequirements(

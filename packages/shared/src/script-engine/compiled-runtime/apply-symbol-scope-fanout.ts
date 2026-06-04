@@ -77,7 +77,9 @@ export function runDecisionProgramsFanOut(
   const symbolScopes = ((orchestrationScopes ?? []) as readonly CompiledOrchestrationScope[]).filter(
     (s): s is CompiledSymbolScope => s.scopeKind === 'symbol',
   )
-  if (symbolScopes.length < 2) {
+  const uniqueSymbolScopes = dedupeSymbolScopes(symbolScopes)
+  const hasScopedProgram = programs.some(program => typeof program.metadata?.symbolScopeRef === 'string' && program.metadata.symbolScopeRef.trim().length > 0)
+  if (uniqueSymbolScopes.length < 2 || !hasScopedProgram) {
     return runDecisionPrograms(
       ctx, programs, exprValues, guardState,
       decisionOrder, orchestrationGateState, portfolioRiskState,
@@ -85,7 +87,7 @@ export function runDecisionProgramsFanOut(
     )
   }
   const scopeDecisions: ScopeFanOutDecisionEntry[] = []
-  for (const scope of symbolScopes) {
+  for (const scope of uniqueSymbolScopes) {
     const ctxIter = buildScopeIteration(ctx, scope)
     const decision = runDecisionPrograms(
       ctxIter, programs, exprValues, guardState,
@@ -103,4 +105,15 @@ export function runDecisionProgramsFanOut(
       scopeDecisions: scopeDecisions.map(e => ({ scopeId: e.scopeId, decision: e.decision })),
     },
   })
+}
+
+function dedupeSymbolScopes(scopes: readonly CompiledSymbolScope[]): CompiledSymbolScope[] {
+  const output: CompiledSymbolScope[] = []
+  const seen = new Set<string>()
+  for (const scope of scopes) {
+    if (seen.has(scope.id)) continue
+    seen.add(scope.id)
+    output.push(scope)
+  }
+  return output
 }

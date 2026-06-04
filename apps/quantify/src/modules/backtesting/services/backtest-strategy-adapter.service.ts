@@ -239,10 +239,19 @@ export class BacktestStrategyAdapterService {
           const accountEquityForRisk = readContextEquity(ctx)
           const exposureNotionalBySymbolScope = buildExposureNotionalBySymbolScope(ctx, orchestrationScopes)
           const exposureNotionalBySubStrategyScope = buildExposureNotionalBySubStrategyScope(ctx, orchestrationScopes)
+          const accountRiskContext = ctx as {
+            drawdownPct?: number
+            accountDrawdownPct?: number
+            dailyLossPct?: number
+            accountDailyLossPct?: number
+          }
           const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
             portfolioRisks,
             {
-              drawdownPct: (ctx as { accountDrawdownPct?: number }).accountDrawdownPct,
+              drawdownPct: accountRiskContext.drawdownPct ?? accountRiskContext.accountDrawdownPct,
+              accountDrawdownPct: accountRiskContext.accountDrawdownPct,
+              dailyLossPct: accountRiskContext.dailyLossPct ?? accountRiskContext.accountDailyLossPct,
+              accountDailyLossPct: accountRiskContext.accountDailyLossPct,
               accountEquity: accountEquityForRisk,
               exposureNotionalBySymbolScope,
               exposureNotionalBySubStrategyScope,

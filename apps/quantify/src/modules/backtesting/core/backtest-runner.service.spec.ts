@@ -51,6 +51,53 @@ describe('backtestRunnerService', () => {
     expect(Array.isArray(report.equityCurve)).toBe(true)
   })
 
+  it('supplies account drawdown and daily loss metrics to strategy runtime context', async () => {
+    const runner = createRunner()
+    const seen: Array<{ ts: number; dailyLossPct?: number; drawdownPct?: number; accountEquity?: number }> = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-account-risk-metrics',
+        params: {},
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'BAR_CLOSE',
+          noNextBarHandling: 'KEEP_PENDING',
+        },
+        fn: (ctx) => {
+          const record = ctx as typeof ctx & {
+            dailyLossPct?: number
+            drawdownPct?: number
+            accountEquity?: number
+          }
+          seen.push({
+            ts: ctx.ts,
+            dailyLossPct: record.dailyLossPct,
+            drawdownPct: record.drawdownPct,
+            accountEquity: record.accountEquity,
+          })
+          return ctx.ts === 1 ? { type: 'OPEN_LONG', qty: 1 } : { type: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 90, close: 90 }),
+      ],
+    })
+
+    expect(seen).toEqual([
+      { ts: 1, dailyLossPct: 0, drawdownPct: 0, accountEquity: 1000 },
+      { ts: 2, dailyLossPct: 1, drawdownPct: 1, accountEquity: 990 },
+    ])
+  })
+
   it('should run perp bars when request symbols are raw spot-style codes but strategy marketType is perp', async () => {
     const runner = createRunner()
 
@@ -634,6 +681,139 @@ describe('backtestRunnerService', () => {
         'funding.rate': { schema: 'funding', permissionGranted: true, hasData: true },
       },
     ])
+  })
+
+  it('reports required external feed as unavailable when provider returns an empty stream', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      eventStreams: { 'orderbook.imbalance': [] },
+      strategy: {
+        id: 'orderbook-empty-stream',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'entry' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_orderbook',
+              nodeType: 'predicate',
+              payload: { kind: 'orderbookImbalance', params: { schemaRef: 'orderbook', sourceFeedId: 'orderbook.imbalance' } },
+            },
+          ],
+        },
+        fn: () => ({ action: 'NOOP', reason: 'compiled.noop' } satisfies StrategyDecisionV1),
+      },
+      dataRange: { fromTs: 900_000, toTs: 900_000 },
+      bars: [createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 900_000, close: 100 })],
+    })
+
+    expect(report.diagnostics.eventStreamMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
+  })
+
+  it('short-circuits missing external event streams before scanning 1m bars', async () => {
+    const runner = createRunner()
+    const strategyFn = jest.fn(() => ({ action: 'NOOP', reason: 'compiled.noop' } satisfies StrategyDecisionV1))
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      eventStreams: { 'orderbook.depth': [] },
+      strategy: {
+        id: 'orderbook-1m-empty-stream',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'entry' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_orderbook_depth',
+              nodeType: 'predicate',
+              payload: { kind: 'orderbookImbalance', params: { schemaRef: 'orderbook', sourceFeedId: 'orderbook.depth', metric: 'depth_ratio' } },
+            },
+          ],
+        },
+        fn: strategyFn,
+      },
+      dataRange: { fromTs: 1, toTs: 1_000 },
+      bars: Array.from({ length: 1_000 }, (_unused, index) => createBar({
+        symbol: 'BTCUSDT',
+        timeframe: '1m',
+        closeTime: index + 1,
+        close: 100,
+      })),
+    })
+
+    expect(strategyFn).not.toHaveBeenCalled()
+    expect(report.diagnostics.eventStreamMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
+  })
+
+  it('requires two open-interest events before treating open-interest increase as available', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      eventStreams: { open_interest: [{ id: 'oi-now', ts: 899_000, payload: { openInterest: 100 } }] },
+      strategy: {
+        id: 'open-interest-single-event',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'entry' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_oi',
+              nodeType: 'predicate',
+              payload: { kind: 'openInterestCondition', params: { schemaRef: 'open_interest', sourceFeedId: 'open_interest' } },
+            },
+          ],
+        },
+        fn: () => ({ action: 'NOOP', reason: 'compiled.noop' } satisfies StrategyDecisionV1),
+      },
+      dataRange: { fromTs: 900_000, toTs: 900_000 },
+      bars: [createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 900_000, close: 100 })],
+    })
+
+    expect(report.diagnostics.eventStreamMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
+  })
+
+  it('does not count a flat close decision as a fired fillable signal', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'flat-close-long',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'exit' }] },
+        fn: () => ({ action: 'CLOSE_LONG', size: { mode: 'QTY', value: 1 }, reason: 'exit.cross_under' } satisfies StrategyDecisionV1),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 1, close: 100 })],
+    })
+
+    expect(report.diagnostics.signalTriggerCount).toBe(0)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_NO_SIGNAL_FIRED_IN_RANGE')
   })
 
   it('opens from webhook event fixture and exits on stop loss', async () => {
@@ -1897,6 +2077,22 @@ describe('backtestRunnerService', () => {
       expect(report.diagnostics.fillCount).toBe(0)
     })
 
+    it('规则已编译但基础行情为空时归因 DATA_REQUIREMENT_UNAVAILABLE 而不是 NO_SIGNAL', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        bars: [],
+        strategy: {
+          id: 'rules-no-bars', params: {}, fn: () => ({ type: 'NOOP' }),
+          specSnapshot: { rules: [{ id: 'r1' }] },
+        },
+      })
+
+      expect(report.diagnostics.compiledRulesCount).toBe(1)
+      expect(report.diagnostics.dataRequirementMissingCount).toBeGreaterThan(0)
+      expect(report.summary.diagnosticReason).toBe('BACKTEST_DATA_REQUIREMENT_UNAVAILABLE')
+    })
+
     it('信号触发 + 完整 OPEN→CLOSE 撮合 → fillCount > 0 反映已完结成交', async () => {
       const runner = createRunner()
       let opened = false
@@ -2007,6 +2203,38 @@ describe('backtestRunnerService', () => {
       })
       expect(report.diagnostics.compiledRulesCount).toBe(1)
       expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+    })
+
+    it('orchestration rebalance program creates equal-weight fills even without decision programs', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        symbols: ['BTCUSDT', 'ETHUSDT'],
+        baseTimeframe: '15m',
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: 'rebalance-program-only', params: {},
+          executionPolicy: { fillTiming: 'BAR_CLOSE', signalTiming: 'BAR_CLOSE' },
+          fn: () => ({ action: 'NOOP', reason: 'compiled.noop' } as never),
+          specSnapshot: {
+            rules: [],
+            orchestration: {
+              programs: [
+                { id: 'rebalance-50-50', programKind: 'rebalance' },
+              ],
+            },
+          },
+        },
+        bars: [
+          { symbol: 'BTCUSDT', timeframe: '15m', openTime: 0, closeTime: 1, open: 100, high: 100, low: 100, close: 100, volume: 1 },
+          { symbol: 'ETHUSDT', timeframe: '15m', openTime: 0, closeTime: 1, open: 50, high: 50, low: 50, close: 50, volume: 1 },
+        ],
+      })
+
+      expect(report.summary.totalOpenTrades).toBe(2)
+      expect(report.diagnostics.fillCount).toBe(2)
+      expect(report.diagnostics.signalTriggerCount).toBe(2)
+      expect(report.summary.diagnosticReason).toBeUndefined()
     })
   })
 })

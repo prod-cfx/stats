@@ -1,4 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
+import type { RuntimeScriptBar } from './runtime-data-portal'
 import type { Bar, RuntimeEvent } from '@/modules/backtesting/types/backtesting.types'
 import { getClosedBarsAsOf, toRuntimeScriptBars } from './runtime-data-portal'
 
@@ -8,6 +9,7 @@ export interface BuildRuntimeMarketContextInput {
   primaryCloseTs: number
   params: Record<string, unknown>
   barsByTimeframe: Record<string, Bar[]>
+  scriptBarsByTimeframe?: Record<string, RuntimeScriptBar[]>
   eventStreams?: Record<string, RuntimeEvent[]>
 }
 
@@ -25,9 +27,13 @@ export function buildRuntimeMarketContext(input: BuildRuntimeMarketContextInput)
   for (const [timeframe, bars] of Object.entries(input.barsByTimeframe)) {
     const closedBars = getClosedBarsAsOf(bars, input.primaryCloseTs)
     if (closedBars.length === 0) continue
+    const prebuiltScriptBars = input.scriptBarsByTimeframe?.[timeframe]
+    const canReusePrebuiltBars = Array.isArray(prebuiltScriptBars)
+      && prebuiltScriptBars.length === closedBars.length
+      && bars[bars.length - 1]?.closeTime <= input.primaryCloseTs
 
     dataForPrimary[timeframe] = {
-      bars: toRuntimeScriptBars(closedBars),
+      bars: canReusePrebuiltBars ? prebuiltScriptBars : toRuntimeScriptBars(closedBars),
       indicators: {},
       currentPrice: closedBars[closedBars.length - 1]!.close,
     }

@@ -60,6 +60,8 @@ export type CompiledOrchestrationPortfolioRisk =
 export interface PortfolioRuntimeContext {
   drawdownPct?: number // 0..100 正数；equity 增长时 0 或负
   dailyLossPct?: number // 0..100 正数；当日账户亏损百分比
+  accountDrawdownPct?: number // alias from StrategyExecutionContextV1
+  accountDailyLossPct?: number // alias from StrategyExecutionContextV1
   // Phase 5 S8 #1119: 名义敞口聚合（按 scope id 索引）
   exposureNotionalBySymbolScope?: Readonly<Record<string, number>>
   exposureNotionalBySubStrategyScope?: Readonly<Record<string, number>>
@@ -92,7 +94,9 @@ function handlePortfolioDrawdown(
     return
   }
   const metric = risk.metric ?? 'drawdown_pct'
-  const dd = metric === 'daily_loss_pct' ? ctx.dailyLossPct : ctx.drawdownPct
+  const dd = metric === 'daily_loss_pct'
+    ? (ctx.dailyLossPct ?? ctx.accountDailyLossPct)
+    : (ctx.drawdownPct ?? ctx.accountDrawdownPct)
   if (!Number.isFinite(dd)) {
     // 无 evidence：enforce → fail-closed；observe → 完全 no-op
     if (risk.mode === 'enforce') {

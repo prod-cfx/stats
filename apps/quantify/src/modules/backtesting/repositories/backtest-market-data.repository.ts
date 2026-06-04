@@ -52,6 +52,31 @@ export class BacktestMarketDataRepository {
     })
   }
 
+  async findHistoricalQuotes(params: {
+    symbol: string
+    fromTs: number
+    toTs: number
+    limit: number
+  }) {
+    const symbol = await this.txHost.tx.symbol.findUnique({
+      where: { code: params.symbol.trim().toUpperCase() },
+      select: { id: true },
+    })
+    if (!symbol) return []
+
+    return this.txHost.tx.marketQuote.findMany({
+      where: {
+        symbolId: symbol.id,
+        eventTime: {
+          gte: new Date(params.fromTs),
+          lte: new Date(params.toTs),
+        },
+      },
+      orderBy: { eventTime: 'asc' },
+      take: Math.max(1, params.limit),
+    })
+  }
+
   aggregateCoverage(params: {
     symbolId: string
     timeframe: MarketTimeframe

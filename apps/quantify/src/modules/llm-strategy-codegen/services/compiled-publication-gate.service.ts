@@ -632,6 +632,12 @@ export class CompiledPublicationGateService {
   } {
     const sourcePaths = new Set<string>()
     const missing: string[] = []
+    this.collectExecutableSourcePaths(
+      this.readRecord(ir.portfolio)?.sourcePaths,
+      'ir.portfolio.sourcePaths',
+      sourcePaths,
+      missing,
+    )
     ir.ruleBlocks.forEach((item, index) => {
       this.collectExecutableSourcePath(item, `ir.ruleBlocks[${index}]`, sourcePaths, missing)
       const ruleSourcePath = this.readRulesSourcePath(this.readRecord(item.metadata)?.sourcePath)
@@ -664,6 +670,12 @@ export class CompiledPublicationGateService {
   } {
     const sourcePaths = new Set<string>()
     const missing: string[] = []
+    this.collectExecutableSourcePaths(
+      this.readRecord(ast.portfolioTrace)?.sourcePaths,
+      'ast.portfolioTrace.sourcePaths',
+      sourcePaths,
+      missing,
+    )
     ast.decisionPrograms.forEach((item, index) => {
       this.collectExecutableSourcePath(item, `ast.decisionPrograms[${index}]`, sourcePaths, missing)
       const ruleSourcePath = this.readRulesSourcePath(this.readRecord(item.metadata)?.sourcePath)
@@ -709,6 +721,27 @@ export class CompiledPublicationGateService {
       return
     }
     sourcePaths.add(sourcePath)
+  }
+
+  private collectExecutableSourcePaths(
+    value: unknown,
+    label: string,
+    sourcePaths: Set<string>,
+    missing: string[],
+  ): void {
+    if (value === undefined || value === null) return
+    if (!Array.isArray(value)) {
+      missing.push(label)
+      return
+    }
+    for (const [index, item] of value.entries()) {
+      const sourcePath = this.readRulesSourcePath(item)
+      if (!sourcePath) {
+        missing.push(`${label}[${index}]`)
+        continue
+      }
+      sourcePaths.add(sourcePath)
+    }
   }
 
   private findUnknownRulesSourcePaths(

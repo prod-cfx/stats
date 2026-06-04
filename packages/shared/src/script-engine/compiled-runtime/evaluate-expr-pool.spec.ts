@@ -54,6 +54,32 @@ describe('evaluateExprPool', () => {
     expect(values.close_above_ema_1h).toBe(true)
   })
 
+  it('evaluates orderbook spread_pct predicates from best bid and ask', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 1_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-1', ts: 900, payload: { bestBid: 100, bestAsk: 100.02, bidDepth: 20, askDepth: 10 } },
+          ],
+        },
+      } as any,
+      [
+        {
+          id: 'book_spread_tight',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'orderbookImbalance',
+            params: { sourceFeedId: 'orderbook.imbalance', metric: 'spread_pct', operator: 'LT', valuePct: 0.03 },
+          },
+        },
+      ] as any,
+      ['book_spread_tight'],
+    )
+
+    expect(values.book_spread_tight).toBe(true)
+  })
+
   it('evaluates externalSignal predicates from webhook event inbox', () => {
     const values = evaluateExprPool(
       {

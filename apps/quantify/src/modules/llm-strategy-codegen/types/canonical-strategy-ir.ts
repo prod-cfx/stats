@@ -97,6 +97,7 @@ export interface CanonicalStrategyIrV1 {
     maxConcurrentPositions: number
     allowPyramiding: boolean
     maxPyramidingLayers: number
+    sourcePaths?: string[]
   }
   dataRequirements: {
     warmupBars: number

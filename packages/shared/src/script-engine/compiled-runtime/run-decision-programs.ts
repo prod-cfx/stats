@@ -1079,6 +1079,16 @@ function buildDecision(
   ctx: StrategyExecutionContextV1,
   programId: string,
 ): StrategyDecisionV1 {
+  if (action.kind === 'CLOSE_LONG' || action.kind === 'CLOSE_SHORT') {
+    const currentQty = readCurrentQty(ctx)
+    if ((action.kind === 'CLOSE_LONG' && currentQty <= 0) || (action.kind === 'CLOSE_SHORT' && currentQty >= 0)) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${programId}.noop_flat`,
+      }
+    }
+  }
+
   if (action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT') {
     const currentQty = readCurrentQty(ctx)
     const currentPrice = readCurrentPrice(ctx)
@@ -1774,7 +1784,7 @@ export function applyLegScopeRouting(
  *   scopes.length >= 2 时：
  *     activeSymbolScopeId trim 后空 → fail-closed.no_active_scope
  *     activeId 不在 scopes id 集合 → fail-closed.unknown_active_scope
- *     program.metadata.symbolScopeRef trim 后空 → fail-closed.unbound_program
+ *     program.metadata.symbolScopeRef trim 后空 → ambient program, continue
  *     program ref ≠ activeId → 'skip' （该 program 不属当前 scope，下个 program）
  *     program ref === activeId → 'continue' （正常进入决策）
  */
@@ -1787,6 +1797,12 @@ export function applySymbolScopeRouting(
   // 修复多 scope.symbol + 多 scope.dataSource 共存时被误判为 fail-closed.no_active_scope
   const symbolScopes = (scopes ?? []).filter(s => s.scopeKind === 'symbol')
   if (symbolScopes.length <= 1) return 'continue'
+
+  const programRefRaw = program.metadata?.symbolScopeRef
+  const programRef = typeof programRefRaw === 'string' ? programRefRaw.trim() : ''
+  if (programRef === '') {
+    return 'continue'
+  }
 
   const activeIdRaw = (ctx as { activeSymbolScopeId?: unknown }).activeSymbolScopeId
   const activeId = typeof activeIdRaw === 'string' ? activeIdRaw.trim() : ''
@@ -1803,14 +1819,6 @@ export function applySymbolScopeRouting(
     }
   }
 
-  const programRefRaw = program.metadata?.symbolScopeRef
-  const programRef = typeof programRefRaw === 'string' ? programRefRaw.trim() : ''
-  if (programRef === '') {
-    return {
-      action: 'NOOP',
-      reason: 'compiled.orchestration.scope.fail_closed.unbound_program',
-    }
-  }
   if (programRef !== activeId) return 'skip'
   return 'continue'
 }

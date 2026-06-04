@@ -281,6 +281,76 @@ describe('BacktestJobExecutorService', () => {
     }))
   })
 
+  it('hydrates orderbook event streams from historical quotes when OKX books has no historical rows', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 2_000 }
+    input.strategy = {
+      ...input.strategy,
+      astSnapshot: {
+        exprPool: [
+          { id: 'expr_orderbook', nodeType: 'predicate', payload: { kind: 'orderbookImbalance', params: { sourceFeedId: 'orderbook.imbalance' } } },
+        ],
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 2_000 }, appliedRange: { fromTs: 1_000, toTs: 2_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const okxMarketDataProvider = {
+      fetchOrderbookImbalanceEvents: jest.fn().mockResolvedValue([]),
+    }
+    const backtestMarketDataRepository = {
+      findHistoricalQuotes: jest.fn().mockResolvedValue([
+        {
+          id: 'quote-1',
+          eventTime: new Date(1_500),
+          bidPrice: '100',
+          bidQty: '3',
+          askPrice: '101',
+          askQty: '2',
+        },
+      ]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      okxMarketDataProvider as never,
+      undefined,
+      backtestMarketDataRepository as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(backtestMarketDataRepository.findHistoricalQuotes).toHaveBeenCalledWith({
+      symbol: 'BTCUSDT',
+      fromTs: 1_000,
+      toTs: 2_000,
+      limit: 10_000,
+    })
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'orderbook.imbalance': [{
+          id: 'quote-orderbook:quote-1',
+          ts: 1_500,
+          payload: {
+            bidDepth: 3,
+            askDepth: 2,
+            imbalanceRatio: 1.5,
+            bestBid: 100,
+            bestAsk: 101,
+            spreadPct: expect.any(Number),
+          },
+        }],
+      },
+    }))
+  })
+
   it('hydrates webhook event streams from accepted historical signal events', async () => {
     const repository = {
       markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
