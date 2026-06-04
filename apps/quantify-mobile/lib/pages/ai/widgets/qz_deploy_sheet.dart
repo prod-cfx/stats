@@ -19,6 +19,8 @@ import '../../../widgets/qz_sheet.dart';
 part 'qz_deploy_sheet.authorize.part.dart';
 part 'qz_deploy_sheet.allocate.part.dart';
 part 'qz_deploy_sheet.preflight.part.dart';
+part 'qz_deploy_sheet.preflight_account.part.dart';
+part 'qz_deploy_sheet.preflight_checks.part.dart';
 part 'qz_deploy_sheet.deploying.part.dart';
 part 'qz_deploy_sheet.done.part.dart';
 
