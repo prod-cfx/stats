@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/models/coin_stock_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -77,12 +78,14 @@ const List<CoinStock> _fixtures = <CoinStock>[
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(430, 1600));
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildQzThemeData(QzTheme.fallback),
-      home: const Scaffold(body: CoinStockBody(stocks: _fixtures)),
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(QzTheme.fallback),
+        home: const Scaffold(body: CoinStockBody(stocks: _fixtures)),
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 250));
@@ -193,9 +196,14 @@ void main() {
 
     expect(find.text('热门标的'), findsOneWidget);
     final Text hotTitle = tester.widget<Text>(find.text('热门标的'));
-    expect(hotTitle.style?.fontSize, 14);
+    // 各 market 搜索 overlay 的分节标题统一为小号 uppercase dim 标签
+    // （fontSize 11 / w600 / textDim），与 long_short/pred overlay 对齐。
+    expect(hotTitle.style?.fontSize, 11);
     expect(hotTitle.style?.fontWeight, FontWeight.w600);
-    expect(hotTitle.style?.color, qzColors(QzBg.light, QzAccent.violet).text);
+    expect(
+      hotTitle.style?.color,
+      qzColors(QzBg.light, QzAccent.violet).textDim,
+    );
 
     expect(find.text('搜索历史'), findsOneWidget);
     expect(
@@ -214,9 +222,10 @@ void main() {
     );
     final BoxDecoration chipDecoration = hotChip.decoration! as BoxDecoration;
     expect(hotChip.constraints?.minWidth, 62);
+    // 热门/历史 chip 统一为 bgElev 底 + textMid 文案（#2153 搜索优化后样式）。
     expect(
       chipDecoration.color,
-      qzColors(QzBg.light, QzAccent.violet).accentSoft,
+      qzColors(QzBg.light, QzAccent.violet).bgElev,
     );
     final Text hotChipText = tester.widget<Text>(
       find.descendant(
@@ -226,7 +235,7 @@ void main() {
     );
     expect(
       hotChipText.style?.color,
-      qzColors(QzBg.light, QzAccent.violet).text,
+      qzColors(QzBg.light, QzAccent.violet).textMid,
     );
   });
 

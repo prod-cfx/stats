@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ticker_models.dart';
-import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -11,6 +10,9 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_avatar.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_spinner.dart';
+import '../../data/providers.dart' show marketFavoritesProvider;
+import 'market_home_controller.dart';
+import 'market_home_state.dart';
 import 'widgets/ticker_row.dart'
     show
         TickerRow,
@@ -19,58 +21,25 @@ import 'widgets/ticker_row.dart'
         kTickerRowChangeFlex,
         tickerAssetTone;
 
-enum _MarketTab { watchlist, spot, perp, gainers, losers }
-
 /// 行情列表主体（搜索 + 5 个二级 tab + 列表），无 Scaffold / 顶栏 / 铃铛。
 ///
 /// issue #1561 起步为 standalone 页；issue #1851 抽出本主体；issue #1852 起
 /// 行情数据屏统一由「数据」hub（`DataHubPage`）的 [DataHubHeader] 承载标题/铃铛，
 /// 不再有独立 `QzTopBar` 标题层——本主体只渲染搜索 + 二级 tab + 列表。
 /// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜，默认选中「自选」（#1600）。
-class MarketHomeBody extends ConsumerStatefulWidget {
+/// 页面级状态（tab/tickers/loading/error/searchHistory）由 [MarketHomeController]
+/// 持有（issue #2184）。
+class MarketHomeBody extends ConsumerWidget {
   const MarketHomeBody({super.key});
-
-  @override
-  ConsumerState<MarketHomeBody> createState() => _MarketHomeBodyState();
-}
-
-class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
-  // 默认选中「自选」，对齐设计稿 ScreenTickers（issue #1600）。
-  _MarketTab _tab = _MarketTab.watchlist;
-  List<Ticker> _tickers = <Ticker>[];
-  bool _loading = true;
-  Object? _error;
-
-  List<String> _searchHistory = <String>['BTC', 'ETH', 'SOL'];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final repo = ref.read(tickerRepositoryProvider);
-    try {
-      final List<Ticker> tickers = await repo.listTickers();
-      if (!mounted) return;
-      setState(() {
-        _tickers = tickers;
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
-    }
-  }
 
   /// 打开全屏搜索路由（对齐设计稿 `SearchOverlay` 全屏覆盖 + 兄弟屏
   /// [CoinStockSearchOverlay] 范式）。搜索词/结果均在路由内部管理，
-  /// 选中条目先记入历史再 pop，回到本屏跳详情。历史经路由回填本 state。
-  Future<void> _openSearch() async {
+  /// 选中条目先记入历史再 pop，回到本屏跳详情。历史经路由回填 controller。
+  Future<void> _openSearch(
+    BuildContext context,
+    WidgetRef ref,
+    MarketHomeState s,
+  ) async {
     final List<String> updated = await Navigator.of(
           context,
           rootNavigator: true,
@@ -78,16 +47,15 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
           MaterialPageRoute<List<String>>(
             fullscreenDialog: true,
             builder: (_) => _MarketSearchRoute(
-              tickers: _tickers,
-              history: _searchHistory,
+              tickers: s.tickers,
+              history: s.searchHistory,
               onSelectTicker: (Ticker ticker) =>
                   context.push('/market/${ticker.symbol}'),
             ),
           ),
         ) ??
-        _searchHistory;
-    if (!mounted) return;
-    setState(() => _searchHistory = updated);
+        s.searchHistory;
+    ref.read(marketHomeControllerProvider.notifier).setSearchHistory(updated);
   }
 
   /// 按当前 tab 过滤/排序行情列表。
@@ -98,27 +66,31 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
   /// - gainers：按 24H 涨幅降序（仅展示涨幅 > 0）；
   /// - losers：按 24H 跌幅升序（仅展示跌幅 < 0）。
   /// 搜索已迁出为全屏路由，本屏列表不再内联过滤。
-  List<Ticker> _visibleTickers(Set<String> favorites) {
-    switch (_tab) {
-      case _MarketTab.watchlist:
-        return _tickers
+  List<Ticker> _visibleTickers(
+    MarketTab tab,
+    List<Ticker> tickers,
+    Set<String> favorites,
+  ) {
+    switch (tab) {
+      case MarketTab.watchlist:
+        return tickers
             .where((Ticker t) => favorites.contains(t.symbol))
             .toList();
-      case _MarketTab.spot:
-        return _tickers
+      case MarketTab.spot:
+        return tickers
             .where((Ticker t) => t.kind == MarketKind.spot)
             .toList();
-      case _MarketTab.perp:
-        return _tickers
+      case MarketTab.perp:
+        return tickers
             .where((Ticker t) => t.kind == MarketKind.perp)
             .toList();
-      case _MarketTab.gainers:
-        return _tickers.where((Ticker t) => t.changePercent > 0).toList()
+      case MarketTab.gainers:
+        return tickers.where((Ticker t) => t.changePercent > 0).toList()
           ..sort(
             (Ticker a, Ticker b) => b.changePercent.compareTo(a.changePercent),
           );
-      case _MarketTab.losers:
-        return _tickers.where((Ticker t) => t.changePercent < 0).toList()
+      case MarketTab.losers:
+        return tickers.where((Ticker t) => t.changePercent < 0).toList()
           ..sort(
             (Ticker a, Ticker b) => a.changePercent.compareTo(b.changePercent),
           );
@@ -126,20 +98,21 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
 
-    final List<({_MarketTab tab, String label})> tabs =
-        <({_MarketTab tab, String label})>[
-          (tab: _MarketTab.watchlist, label: l10n.marketHomeTabWatchlist),
-          (tab: _MarketTab.spot, label: l10n.marketHomeTabSpot),
-          (tab: _MarketTab.perp, label: l10n.marketHomeTabPerp),
-          (tab: _MarketTab.gainers, label: l10n.marketHomeTabGainers),
-          (tab: _MarketTab.losers, label: l10n.marketHomeTabLosers),
+    final MarketHomeState s = ref.watch(marketHomeControllerProvider);
+    final List<({MarketTab tab, String label})> tabs =
+        <({MarketTab tab, String label})>[
+          (tab: MarketTab.watchlist, label: l10n.marketHomeTabWatchlist),
+          (tab: MarketTab.spot, label: l10n.marketHomeTabSpot),
+          (tab: MarketTab.perp, label: l10n.marketHomeTabPerp),
+          (tab: MarketTab.gainers, label: l10n.marketHomeTabGainers),
+          (tab: MarketTab.losers, label: l10n.marketHomeTabLosers),
         ];
     final Set<String> favorites = ref.watch(marketFavoritesProvider);
-    final List<Ticker> visible = _visibleTickers(favorites);
+    final List<Ticker> visible = _visibleTickers(s.tab, s.tickers, favorites);
 
     return Column(
       children: <Widget>[
@@ -153,12 +126,14 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: <Widget>[
-                      for (final ({_MarketTab tab, String label}) item in tabs)
+                      for (final ({MarketTab tab, String label}) item in tabs)
                         _SubTab(
                           key: Key('market-tab-${item.tab.name}'),
                           label: item.label,
-                          selected: _tab == item.tab,
-                          onTap: () => setState(() => _tab = item.tab),
+                          selected: s.tab == item.tab,
+                          onTap: () => ref
+                              .read(marketHomeControllerProvider.notifier)
+                              .selectTab(item.tab),
                         ),
                     ],
                   ),
@@ -166,7 +141,7 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
               ),
               IconButton(
                 key: const Key('market-search-toggle'),
-                onPressed: _openSearch,
+                onPressed: () => _openSearch(context, ref, s),
                 iconSize: 18,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.all(QzSpacing.sm),
@@ -182,21 +157,21 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
             color: c.bgElev,
             child: Column(
               children: <Widget>[
-                if (!_loading && _error == null)
+                if (!s.loading && s.error == null)
                   _ColumnHeader(
                     name: l10n.marketHomeColumnName,
                     price: l10n.marketHomeColumnPrice,
-                    change: _columnChangeLabel(l10n),
+                    change: _columnChangeLabel(l10n, s.tab),
                   ),
                 Expanded(
                   child: Builder(
                     builder: (BuildContext context) {
-                      if (_loading) return const Center(child: QzSpinner());
-                      if (_error != null) {
+                      if (s.loading) return const Center(child: QzSpinner());
+                      if (s.error != null) {
                         return QzEmptyState(title: l10n.marketHomeLoadError);
                       }
                       if (visible.isEmpty) {
-                        final String title = _tab == _MarketTab.watchlist
+                        final String title = s.tab == MarketTab.watchlist
                             ? l10n.marketHomeWatchlistEmpty
                             : l10n.marketHomeEmpty;
                         return QzEmptyState(title: title);
@@ -214,7 +189,7 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
                           return TickerRow(
                             key: Key('ticker-row-${ticker.symbol}'),
                             ticker: ticker,
-                            nameSuffix: _tab == _MarketTab.perp ? '永续' : null,
+                            nameSuffix: s.tab == MarketTab.perp ? '永续' : null,
                             onTap: () =>
                                 context.push('/market/${ticker.symbol}'),
                           );
@@ -231,15 +206,15 @@ class _MarketHomeBodyState extends ConsumerState<MarketHomeBody> {
     );
   }
 
-  String _columnChangeLabel(AppLocalizations l10n) {
-    switch (_tab) {
-      case _MarketTab.gainers:
+  String _columnChangeLabel(AppLocalizations l10n, MarketTab tab) {
+    switch (tab) {
+      case MarketTab.gainers:
         return '24H 涨幅';
-      case _MarketTab.losers:
+      case MarketTab.losers:
         return '24H 跌幅';
-      case _MarketTab.watchlist:
-      case _MarketTab.spot:
-      case _MarketTab.perp:
+      case MarketTab.watchlist:
+      case MarketTab.spot:
+      case MarketTab.perp:
         return l10n.marketHomeColumnChange;
     }
   }

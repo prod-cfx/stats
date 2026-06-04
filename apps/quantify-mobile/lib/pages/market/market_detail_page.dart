@@ -6,11 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/models/kline_models.dart';
 import '../../data/models/market_source.dart';
 import '../../data/models/ticker_models.dart';
 import '../../data/models/trade_models.dart';
-import '../../data/mock/fixtures/trades.dart' as trade_fixtures;
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
@@ -22,145 +20,36 @@ import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_trade_order_sheet.dart';
+import 'market_detail_controller.dart';
+import 'market_detail_state.dart';
 import 'widgets/depth_panel.dart';
 import 'widgets/market_detail_stats.dart';
 import 'widgets/orderbook_view.dart';
 import 'widgets/source_picker.dart';
 import 'widgets/trades_panel.dart';
 
-/// Panel 选项：盘口 / 成交 / 深度图（#1563）。
-enum _DetailPanel { book, trades, depth }
-
-class MarketDetailPage extends ConsumerStatefulWidget {
+/// 行情详情页。页面级状态（interval/source/snapshot/candles/panel/双流/竞态）
+/// 由 [MarketDetailController]（按 symbol family）持有（issue #2184）。
+class MarketDetailPage extends ConsumerWidget {
   const MarketDetailPage({super.key, required this.symbol});
 
   final String symbol;
 
-  @override
-  ConsumerState<MarketDetailPage> createState() => _MarketDetailPageState();
-}
-
-class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
-  static const int _klineHistoryLimit = 200;
-
-  KlineInterval _interval = KlineInterval.h1;
-  MarketSource _source = MarketSource.aggregated;
-  Ticker? _priceSnapshot;
-  List<Candle> _candles = const <Candle>[];
-  bool _klineError = false;
-  _DetailPanel _panel = _DetailPanel.book;
-  // Mock 阶段 trade 列表生成一次后缓存，避免 panel 切换或 ticker 推流时
-  // 父 widget rebuild 让 TradesPanel 重新构造 36 条 mock。真实接入后由
-  // tradeRepository 推流维护 ring buffer，本字段会被替换为 StreamSubscription。
-  List<Trade>? _trades;
-  StreamSubscription<Ticker>? _tickerSub;
-  StreamSubscription<Candle>? _candleSub;
-  bool _loading = true;
-  Object? _error;
-  int _klineRequestId = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final tickerRepo = ref.read(tickerRepositoryProvider);
-    try {
-      final List<Ticker> tickers = await tickerRepo.listTickers();
-      Ticker? snapshot;
-      for (final Ticker ticker in tickers) {
-        if (ticker.symbol == widget.symbol) {
-          snapshot = ticker;
-          break;
-        }
-      }
-      if (snapshot == null) {
-        if (!mounted) return;
-        setState(() {
-          _priceSnapshot = null;
-          _loading = false;
-        });
-        return;
-      }
-      if (!mounted) return;
-      setState(() {
-        _priceSnapshot = snapshot;
-        _loading = false;
-      });
-      _tickerSub = tickerRepo.watchTicker(widget.symbol).listen((Ticker next) {
-        if (!mounted) return;
-        setState(() => _priceSnapshot = next);
-      });
-      unawaited(_loadKline(_interval));
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
-    }
-  }
-
-  /// 拉取指定周期历史 K 线并重新订阅推流。
-  ///
-  /// `_klineRequestId` 用于丢弃旧请求：若用户快速切换周期，先发的请求回调
-  /// 时已与当前 `_interval` 不一致，直接抛弃避免错乱 setState。
-  Future<void> _loadKline(KlineInterval interval) async {
-    final int requestId = ++_klineRequestId;
-    // 在第一个 await 之前同步读取 provider，避免页面在 await 期间销毁后
-    // 再访问 ref（ConsumerState 在 dispose 后 ref.read 会抛 StateError）。
-    final klineRepo = ref.read(klineRepositoryProvider);
-    // 先解除旧订阅引用，再 await 取消；先置 null 可避免并发 _loadKline
-    // 中两次看到相同 subscription 并各自 cancel 的窗口（Dart 幂等，但语义更清晰）。
-    final StreamSubscription<Candle>? oldSub = _candleSub;
-    _candleSub = null;
-    await oldSub?.cancel();
-    try {
-      final List<Candle> history = await klineRepo.listCandles(
-        symbol: widget.symbol,
-        interval: interval,
-        limit: _klineHistoryLimit,
-      );
-      if (!mounted || requestId != _klineRequestId) return;
-      setState(() {
-        _candles = history;
-        _klineError = false;
-      });
-      _candleSub = klineRepo
-          .watchCandles(symbol: widget.symbol, interval: interval)
-          .listen((Candle next) {
-            if (!mounted || requestId != _klineRequestId) return;
-            // 当前阶段：append-only。同 openTime upsert 留待真实 WS 接入时补。
-            setState(() => _candles = <Candle>[..._candles, next]);
-          });
-    } catch (_) {
-      if (!mounted || requestId != _klineRequestId) return;
-      setState(() {
-        _candles = const <Candle>[];
-        _klineError = true;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    unawaited(_tickerSub?.cancel());
-    unawaited(_candleSub?.cancel());
-    super.dispose();
-  }
-
-  Future<void> _openOrderSheet(TradeDirection direction) async {
-    final TradeOrderResult? result = await QzTradeOrderSheet.show(
-      context,
-      symbol: widget.symbol,
-      direction: direction,
-      markPrice: _priceSnapshot?.price,
-    );
-    if (!mounted || result == null) return;
+  Future<void> _openOrderSheet(
+    BuildContext context,
+    WidgetRef ref,
+    TradeDirection direction,
+  ) async {
+    final MarketDetailState s = ref.read(marketDetailControllerProvider(symbol));
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final TradeOrderResult? result = await QzTradeOrderSheet.show(
+      context,
+      symbol: symbol,
+      direction: direction,
+      markPrice: s.priceSnapshot?.price,
+    );
+    if (result == null) return;
     messenger.showSnackBar(
       SnackBar(
         content: Text(l10n.tradeOrderSheetSuccessToast),
@@ -169,19 +58,17 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
     );
   }
 
-  Future<void> _toggleFavorite() async {
+  Future<void> _toggleFavorite(BuildContext context, WidgetRef ref) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool wasFavorite = ref
-        .read(marketFavoritesProvider)
-        .contains(widget.symbol);
+    final bool wasFavorite =
+        ref.read(marketFavoritesProvider).contains(symbol);
     try {
-      await ref.read(marketFavoritesProvider.notifier).toggle(widget.symbol);
+      await ref.read(marketFavoritesProvider.notifier).toggle(symbol);
     } catch (_) {
       // 写盘失败由 notifier 回滚 state；不弹成功 toast。
       return;
     }
-    if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -194,34 +81,37 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
     );
   }
 
-  Future<void> _openMoreSheet() async {
+  Future<void> _openMoreSheet(BuildContext context, WidgetRef ref) async {
     await QzSheet.show<void>(
       context: context,
       useRootNavigator: true,
       builder: (BuildContext sheetCtx) => _MoreActionsSheet(
-        symbol: widget.symbol,
-        onCopySymbol: _copySymbol,
-        onSwitchSource: _openSourceSheet,
+        symbol: symbol,
+        onCopySymbol: () => _copySymbol(context),
+        onSwitchSource: () => _openSourceSheet(context, ref),
       ),
     );
   }
 
   /// 「更多」中「切换交易所」入口：复用 [DataSourceSheet] 单选数据来源。
-  Future<void> _openSourceSheet() async {
+  Future<void> _openSourceSheet(BuildContext context, WidgetRef ref) async {
+    final MarketSource current =
+        ref.read(marketDetailControllerProvider(symbol)).source;
     final MarketSource? next = await QzSheet.show<MarketSource>(
       context: context,
       useRootNavigator: true,
-      builder: (BuildContext ctx) => DataSourceSheet(current: _source),
+      builder: (BuildContext ctx) => DataSourceSheet(current: current),
     );
-    if (!mounted || next == null || next == _source) return;
-    setState(() => _source = next);
+    if (next == null) return;
+    ref
+        .read(marketDetailControllerProvider(symbol).notifier)
+        .changeSource(next);
   }
 
-  Future<void> _copySymbol() async {
+  Future<void> _copySymbol(BuildContext context) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(ClipboardData(text: widget.symbol));
-    if (!mounted) return;
+    await Clipboard.setData(ClipboardData(text: symbol));
     messenger.showSnackBar(
       SnackBar(
         content: Text(l10n.marketDetailMoreCopiedToast),
@@ -231,18 +121,21 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10nForBar = AppLocalizations.of(context);
-    final bool isFavorite = ref
-        .watch(marketFavoritesProvider)
-        .contains(widget.symbol);
+    final MarketDetailState s =
+        ref.watch(marketDetailControllerProvider(symbol));
+    final MarketDetailController controller =
+        ref.read(marketDetailControllerProvider(symbol).notifier);
+    final bool isFavorite =
+        ref.watch(marketFavoritesProvider).contains(symbol);
     return Scaffold(
       appBar: QzTopBar(
-        title: _topBarTitle(widget.symbol),
-        subtitle: _source.isAggregated
+        title: _topBarTitle(symbol),
+        subtitle: s.source.isAggregated
             ? l10nForBar.marketDetailSubtitlePerpAggregated
             : l10nForBar.marketDetailSubtitlePerpExchange(
-                _source.exchangeName!,
+                s.source.exchangeName!,
               ),
         onBack: () => context.pop(),
         actions: <Widget>[
@@ -253,35 +146,35 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
               size: 20,
               color: isFavorite ? context.qzScheme.statusWarn : null,
             ),
-            onPressed: () => unawaited(_toggleFavorite()),
+            onPressed: () => unawaited(_toggleFavorite(context, ref)),
             tooltip: l10nForBar.marketDetailStarTooltip,
           ),
           IconButton(
             key: const Key('market-detail-more'),
             icon: const Icon(Icons.more_horiz, size: 20),
-            onPressed: () => unawaited(_openMoreSheet()),
+            onPressed: () => unawaited(_openMoreSheet(context, ref)),
             tooltip: l10nForBar.marketDetailMoreTooltip,
           ),
         ],
       ),
-      bottomNavigationBar: _priceSnapshot == null
+      bottomNavigationBar: s.priceSnapshot == null
           ? null
           : _OrderActionBar(
-              onBuy: () => _openOrderSheet(TradeDirection.buy),
-              onSell: () => _openOrderSheet(TradeDirection.sell),
+              onBuy: () => _openOrderSheet(context, ref, TradeDirection.buy),
+              onSell: () => _openOrderSheet(context, ref, TradeDirection.sell),
             ),
       body: Builder(
         builder: (BuildContext context) {
           final AppLocalizations l10n = AppLocalizations.of(context);
-          if (_loading) return const Center(child: QzSpinner());
-          if (_error != null) {
+          if (s.loading) return const Center(child: QzSpinner());
+          if (s.error != null) {
             return QzEmptyState(
-              title: '${widget.symbol} ${l10n.commonLoadError}',
+              title: '$symbol ${l10n.commonLoadError}',
             );
           }
-          if (_priceSnapshot == null) {
+          if (s.priceSnapshot == null) {
             return QzEmptyState(
-              title: widget.symbol,
+              title: symbol,
               subtitle: l10n.marketDetailSymbolNotFound,
             );
           }
@@ -291,55 +184,33 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
               children: <Widget>[
                 _MarketChartSection(
                   stats: MarketDetailStats(
-                    displaySymbol: widget.symbol,
-                    ticker: _priceSnapshot!,
+                    displaySymbol: symbol,
+                    ticker: s.priceSnapshot!,
                   ),
                   chart: QzKlineChart(
-                    candles: _candles,
-                    interval: _interval,
+                    candles: s.candles,
+                    interval: s.interval,
                     trailing: SourcePicker(
-                      source: _source,
-                      onChanged: (MarketSource next) {
-                        if (next == _source) return;
-                        setState(() => _source = next);
-                      },
+                      source: s.source,
+                      onChanged: controller.changeSource,
                     ),
-                    hasError: _klineError,
-                    onRetry: _klineError
-                        ? () {
-                            setState(() => _klineError = false);
-                            unawaited(_loadKline(_interval));
-                          }
-                        : null,
-                    onIntervalChanged: (KlineInterval next) {
-                      if (next == _interval) return;
-                      setState(() {
-                        _interval = next;
-                        _candles = const <Candle>[];
-                        _klineError = false;
-                      });
-                      unawaited(_loadKline(next));
-                    },
+                    hasError: s.klineError,
+                    onRetry: s.klineError ? controller.retryKline : null,
+                    onIntervalChanged: controller.changeInterval,
                   ),
                 ),
-                _CumulativeStatsRow(ticker: _priceSnapshot!),
+                _CumulativeStatsRow(ticker: s.priceSnapshot!),
                 _PanelSection(
                   tabBar: _PanelTabBar(
-                    panel: _panel,
-                    onChanged: (_DetailPanel next) {
-                      if (next == _panel) return;
-                      setState(() => _panel = next);
-                    },
+                    panel: s.panel,
+                    onChanged: controller.changePanel,
                   ),
                   body: _PanelBody(
-                    panel: _panel,
-                    symbol: widget.symbol,
-                    mid: _priceSnapshot!.price,
-                    changePercent: _priceSnapshot!.changePercent,
-                    trades: _trades ??= trade_fixtures.buildMockTrades(
-                      symbol: widget.symbol,
-                      mid: _priceSnapshot!.price,
-                    ),
+                    panel: s.panel,
+                    symbol: symbol,
+                    mid: s.priceSnapshot!.price,
+                    changePercent: s.priceSnapshot!.changePercent,
+                    trades: s.trades ?? const <Trade>[],
                   ),
                 ),
                 const SizedBox(height: QzSpacing.md),
@@ -408,17 +279,17 @@ class _PanelSection extends StatelessWidget {
 class _PanelTabBar extends StatelessWidget {
   const _PanelTabBar({required this.panel, required this.onChanged});
 
-  final _DetailPanel panel;
-  final ValueChanged<_DetailPanel> onChanged;
+  final DetailPanel panel;
+  final ValueChanged<DetailPanel> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<(_DetailPanel, String)> items = <(_DetailPanel, String)>[
-      (_DetailPanel.book, l10n.marketDetailPanelOrderbook),
-      (_DetailPanel.trades, l10n.marketDetailPanelTrades),
-      (_DetailPanel.depth, l10n.marketDetailPanelDepth),
+    final List<(DetailPanel, String)> items = <(DetailPanel, String)>[
+      (DetailPanel.book, l10n.marketDetailPanelOrderbook),
+      (DetailPanel.trades, l10n.marketDetailPanelTrades),
+      (DetailPanel.depth, l10n.marketDetailPanelDepth),
     ];
     return Container(
       padding: const EdgeInsets.fromLTRB(
@@ -432,7 +303,7 @@ class _PanelTabBar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          for (final (_DetailPanel key, String label) in items)
+          for (final (DetailPanel key, String label) in items)
             Padding(
               padding: const EdgeInsets.only(right: 18),
               child: _PanelTab(
@@ -495,7 +366,7 @@ class _PanelBody extends StatelessWidget {
     required this.trades,
   });
 
-  final _DetailPanel panel;
+  final DetailPanel panel;
   final String symbol;
   final double mid;
   final double changePercent;
@@ -504,15 +375,15 @@ class _PanelBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     switch (panel) {
-      case _DetailPanel.book:
+      case DetailPanel.book:
         return OrderbookView(
           symbol: symbol,
           mid: mid,
           changePercent: changePercent,
         );
-      case _DetailPanel.trades:
+      case DetailPanel.trades:
         return TradesPanel(symbol: symbol, mid: mid, trades: trades);
-      case _DetailPanel.depth:
+      case DetailPanel.depth:
         return DepthPanel(symbol: symbol, mid: mid);
     }
   }

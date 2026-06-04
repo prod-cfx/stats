@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/mock/fixtures/coin_stocks.dart';
 import '../../data/models/coin_stock_models.dart';
@@ -6,106 +7,98 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import 'coin_stock_body_controller.dart';
+import 'coin_stock_body_state.dart';
 import 'widgets/coin_stock_card.dart';
 import 'widgets/coin_stock_detail_sheet.dart';
 import 'widgets/coin_stock_search_overlay.dart';
 import 'widgets/coin_stock_sort_sheet.dart';
-
-/// 币股类型 tab（设计稿 `CSTOCK_TABS`:1844）。
-enum _CoinTab { all, btc, eth, other }
 
 /// 币股 hub 子屏（设计稿 `ScreenCoinStocks`:1909）。
 ///
 /// 无 Scaffold / header（由 [DataHubPage] 提供）。类型 tab（全部/BTC/ETH/其他）
 /// + 搜索 icon（弹全屏 [CoinStockSearchOverlay]）+ 排序按钮（弹
 /// [CoinStockSortSheet]）+ 公司卡列表 + 搜索/过滤空态。点击卡片弹
-/// [CoinStockDetailSheet]。
-class CoinStockBody extends StatefulWidget {
+/// [CoinStockDetailSheet]。页面级 tab/filter/sort/dir 由 [CoinStockController]
+/// 持有（issue #2184）。
+class CoinStockBody extends ConsumerWidget {
   const CoinStockBody({super.key, this.stocks = kCoinStocks});
 
   /// 数据源（默认 mock fixtures，测试可注入）。
   final List<CoinStock> stocks;
 
-  @override
-  State<CoinStockBody> createState() => _CoinStockBodyState();
-}
-
-class _CoinStockBodyState extends State<CoinStockBody> {
-  _CoinTab _tab = _CoinTab.all;
-  String _filter = '';
-  CoinStockSort _sort = CoinStockSort.mcap;
-  SortDir? _dir = SortDir.desc;
-
-  bool _matchTab(CoinStock r) {
-    switch (_tab) {
-      case _CoinTab.all:
+  bool _matchTab(CoinStock r, CoinTab tab) {
+    switch (tab) {
+      case CoinTab.all:
         return true;
-      case _CoinTab.btc:
+      case CoinTab.btc:
         return r.coin == 'BTC';
-      case _CoinTab.eth:
+      case CoinTab.eth:
         return r.coin == 'ETH';
-      case _CoinTab.other:
+      case CoinTab.other:
         return r.coin != 'BTC' && r.coin != 'ETH';
     }
   }
 
-  List<CoinStock> get _shown {
-    final String q = _filter.trim().toLowerCase();
-    final List<CoinStock> filtered = widget.stocks
-        .where(_matchTab)
+  List<CoinStock> _shownFor(CoinStockState s) {
+    final String q = s.filter.trim().toLowerCase();
+    final List<CoinStock> filtered = stocks
+        .where((CoinStock r) => _matchTab(r, s.tab))
         .where(
           (CoinStock r) =>
               q.isEmpty || '${r.sym}${r.cn}${r.ex}'.toLowerCase().contains(q),
         )
         .toList();
-    if (_dir == null) return filtered; // 不排序，保持原始顺序
+    if (s.dir == null) return filtered; // 不排序，保持原始顺序
     filtered.sort((CoinStock a, CoinStock b) {
-      final double va = _sort.valueOf(a);
-      final double vb = _sort.valueOf(b);
-      return _dir == SortDir.desc ? vb.compareTo(va) : va.compareTo(vb);
+      final double va = s.sort.valueOf(a);
+      final double vb = s.sort.valueOf(b);
+      return s.dir == SortDir.desc ? vb.compareTo(va) : va.compareTo(vb);
     });
     return filtered;
   }
 
-  Future<void> _openSearch() async {
+  Future<void> _openSearch(BuildContext context, WidgetRef ref) async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => CoinStockSearchOverlay(
-          stocks: widget.stocks,
-          onApplyQuery: (String q) {
-            if (mounted) setState(() => _filter = q);
-          },
-          onOpenStock: _openDetail,
+          stocks: stocks,
+          onApplyQuery: (String q) =>
+              ref.read(coinStockControllerProvider.notifier).setFilter(q),
+          onOpenStock: (CoinStock r) => _openDetail(context, r),
         ),
       ),
     );
   }
 
-  Future<void> _openSort() async {
+  Future<void> _openSort(
+    BuildContext context,
+    WidgetRef ref,
+    CoinStockState s,
+  ) async {
     final CoinStockSortResult? result = await CoinStockSortSheet.show(
       context,
-      sort: _sort,
-      dir: _dir,
-      resultCount: _shown.length,
+      sort: s.sort,
+      dir: s.dir,
+      resultCount: _shownFor(s).length,
     );
-    if (!mounted || result == null) return;
-    setState(() {
-      _sort = result.sort;
-      _dir = result.dir;
-    });
+    if (result == null) return;
+    ref
+        .read(coinStockControllerProvider.notifier)
+        .setSort(result.sort, result.dir);
   }
 
-  void _openDetail(CoinStock r) {
-    if (!mounted) return;
+  void _openDetail(BuildContext context, CoinStock r) {
     CoinStockDetailSheet.show(context, r);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<CoinStock> shown = _shown;
+    final CoinStockState s = ref.watch(coinStockControllerProvider);
+    final List<CoinStock> shown = _shownFor(s);
     return ColoredBox(
       color: c.bg,
       child: Column(
@@ -118,7 +111,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
               QzSpacing.lg,
               QzSpacing.sm,
             ),
-            child: _controls(c, l10n),
+            child: _controls(context, ref, c, l10n, s),
           ),
           Expanded(
             child: shown.isEmpty
@@ -142,7 +135,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
                         const SizedBox(height: QzSpacing.sm),
                     itemBuilder: (BuildContext ctx, int i) => CoinStockCard(
                       stock: shown[i],
-                      onTap: () => _openDetail(shown[i]),
+                      onTap: () => _openDetail(context, shown[i]),
                     ),
                   ),
           ),
@@ -151,7 +144,13 @@ class _CoinStockBodyState extends State<CoinStockBody> {
     );
   }
 
-  Widget _controls(QzColorScheme c, AppLocalizations l10n) {
+  Widget _controls(
+    BuildContext context,
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    CoinStockState s,
+  ) {
     return Row(
       children: <Widget>[
         Expanded(
@@ -160,7 +159,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.only(right: 36),
-                child: _tabs(c, l10n),
+                child: _tabs(ref, c, l10n, s.tab),
               ),
               Positioned(
                 right: 0,
@@ -175,31 +174,36 @@ class _CoinStockBodyState extends State<CoinStockBody> {
                       colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
                     ),
                   ),
-                  child: _searchButton(c),
+                  child: _searchButton(context, ref, c),
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(width: QzSpacing.xs),
-        _sortButton(c, l10n),
+        _sortButton(context, ref, c, l10n, s),
       ],
     );
   }
 
-  Widget _tabs(QzColorScheme c, AppLocalizations l10n) {
-    final List<(_CoinTab, String)> tabs = <(_CoinTab, String)>[
-      (_CoinTab.all, l10n.coinStockTabAll),
-      (_CoinTab.btc, 'BTC'),
-      (_CoinTab.eth, 'ETH'),
-      (_CoinTab.other, l10n.coinStockTabOther),
+  Widget _tabs(
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    CoinTab current,
+  ) {
+    final List<(CoinTab, String)> tabs = <(CoinTab, String)>[
+      (CoinTab.all, l10n.coinStockTabAll),
+      (CoinTab.btc, 'BTC'),
+      (CoinTab.eth, 'ETH'),
+      (CoinTab.other, l10n.coinStockTabOther),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: <Widget>[
-          for (final (_CoinTab, String) t in tabs) ...<Widget>[
-            _tabButton(c, t.$1, t.$2),
+          for (final (CoinTab, String) t in tabs) ...<Widget>[
+            _tabButton(ref, c, t.$1, t.$2, current),
             const SizedBox(width: 2),
           ],
         ],
@@ -207,11 +211,18 @@ class _CoinStockBodyState extends State<CoinStockBody> {
     );
   }
 
-  Widget _tabButton(QzColorScheme c, _CoinTab tab, String label) {
-    final bool on = _tab == tab;
+  Widget _tabButton(
+    WidgetRef ref,
+    QzColorScheme c,
+    CoinTab tab,
+    String label,
+    CoinTab current,
+  ) {
+    final bool on = current == tab;
     return GestureDetector(
       key: Key('coin-stock-tab-${tab.name}'),
-      onTap: () => setState(() => _tab = tab),
+      onTap: () =>
+          ref.read(coinStockControllerProvider.notifier).selectTab(tab),
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -233,10 +244,10 @@ class _CoinStockBodyState extends State<CoinStockBody> {
     );
   }
 
-  Widget _searchButton(QzColorScheme c) {
+  Widget _searchButton(BuildContext context, WidgetRef ref, QzColorScheme c) {
     return GestureDetector(
       key: const Key('coin-stock-search-button'),
-      onTap: _openSearch,
+      onTap: () => _openSearch(context, ref),
       child: SizedBox(
         width: 32,
         height: 32,
@@ -245,15 +256,21 @@ class _CoinStockBodyState extends State<CoinStockBody> {
     );
   }
 
-  Widget _sortButton(QzColorScheme c, AppLocalizations l10n) {
-    final String arrow = _dir == SortDir.desc
+  Widget _sortButton(
+    BuildContext context,
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    CoinStockState s,
+  ) {
+    final String arrow = s.dir == SortDir.desc
         ? '↓'
-        : _dir == SortDir.asc
+        : s.dir == SortDir.asc
         ? '↑'
         : '↕';
     return GestureDetector(
       key: const Key('coin-stock-sort-button'),
-      onTap: _openSort,
+      onTap: () => _openSort(context, ref, s),
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -271,7 +288,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
             ),
             const SizedBox(width: 4),
             Text(
-              _sortLabel(l10n, _sort),
+              _sortLabel(l10n, s.sort),
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -284,7 +301,7 @@ class _CoinStockBodyState extends State<CoinStockBody> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: _dir != null ? c.accent : c.textDim,
+                color: s.dir != null ? c.accent : c.textDim,
               ),
             ),
           ],

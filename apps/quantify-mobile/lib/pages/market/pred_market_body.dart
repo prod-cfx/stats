@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/mock/fixtures/pred_markets.dart';
 import '../../data/models/pred_market_models.dart';
@@ -6,6 +7,8 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import 'pred_market_body_controller.dart';
+import 'pred_market_body_state.dart';
 import 'widgets/pred_market_card.dart';
 import 'widgets/pred_market_detail_sheet.dart';
 import 'widgets/pred_market_search_overlay.dart';
@@ -14,53 +17,47 @@ import 'widgets/pred_market_search_overlay.dart';
 ///
 /// 副标题 + 可点搜索栏（弹全屏 [PredMarketSearchOverlay]）+ 2 列卡片网格 +
 /// 搜索空态。无 Scaffold / header（由 [DataHubPage] 提供）。点击卡片弹
-/// [PredMarketDetailSheet]。
-class PredMarketBody extends StatefulWidget {
+/// [PredMarketDetailSheet]。页面级搜索词由 [PredMarketController] 持有（#2184）。
+class PredMarketBody extends ConsumerWidget {
   const PredMarketBody({super.key, this.markets = kPredMarkets});
 
   /// 数据源（默认 mock fixtures，测试可注入）。
   final List<PredMarket> markets;
 
-  @override
-  State<PredMarketBody> createState() => _PredMarketBodyState();
-}
-
-class _PredMarketBodyState extends State<PredMarketBody> {
-  String _filter = '';
-
-  List<PredMarket> get _shown {
-    final String q = _filter.trim().toLowerCase();
-    if (q.isEmpty) return widget.markets;
-    return widget.markets
+  List<PredMarket> _shown(String filter) {
+    final String q = filter.trim().toLowerCase();
+    if (q.isEmpty) return markets;
+    return markets
         .where((PredMarket m) => m.question.toLowerCase().contains(q))
         .toList(growable: false);
   }
 
-  Future<void> _openSearch() async {
+  Future<void> _openSearch(BuildContext context, WidgetRef ref) async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => PredMarketSearchOverlay(
-          markets: widget.markets,
-          onApplyQuery: (String q) {
-            if (mounted) setState(() => _filter = q);
-          },
-          onOpenMarket: _openDetail,
+          markets: markets,
+          onApplyQuery: (String q) =>
+              ref.read(predMarketControllerProvider.notifier).setFilter(q),
+          onOpenMarket: (PredMarket m) => _openDetail(context, m),
         ),
       ),
     );
   }
 
-  void _openDetail(PredMarket m) {
-    if (!mounted) return;
+  void _openDetail(BuildContext context, PredMarket m) {
     PredMarketDetailSheet.show(context, m);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<PredMarket> shown = _shown;
+    final String filter = ref.watch(
+      predMarketControllerProvider.select((PredMarketState s) => s.filter),
+    );
+    final List<PredMarket> shown = _shown(filter);
     return ColoredBox(
       color: c.bg,
       child: Column(
@@ -85,7 +82,7 @@ class _PredMarketBodyState extends State<PredMarketBody> {
               QzSpacing.lg,
               QzSpacing.sm,
             ),
-            child: _searchBar(c, l10n),
+            child: _searchBar(context, ref, c, l10n, filter),
           ),
           Expanded(
             child: shown.isEmpty
@@ -118,7 +115,7 @@ class _PredMarketBodyState extends State<PredMarketBody> {
                                       ),
                                       child: PredMarketCard(
                                         market: m,
-                                        onTap: () => _openDetail(m),
+                                        onTap: () => _openDetail(context, m),
                                       ),
                                     ),
                                   ),
@@ -133,10 +130,16 @@ class _PredMarketBodyState extends State<PredMarketBody> {
     );
   }
 
-  Widget _searchBar(QzColorScheme c, AppLocalizations l10n) {
+  Widget _searchBar(
+    BuildContext context,
+    WidgetRef ref,
+    QzColorScheme c,
+    AppLocalizations l10n,
+    String filter,
+  ) {
     return GestureDetector(
       key: const Key('pred-search-bar'),
-      onTap: _openSearch,
+      onTap: () => _openSearch(context, ref),
       child: Container(
         height: 38,
         decoration: BoxDecoration(
@@ -151,19 +154,20 @@ class _PredMarketBodyState extends State<PredMarketBody> {
             const SizedBox(width: QzSpacing.sm),
             Expanded(
               child: Text(
-                _filter.isEmpty ? l10n.predMarketSearchHint : _filter,
+                filter.isEmpty ? l10n.predMarketSearchHint : filter,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: _filter.isEmpty ? c.textDim : c.text,
+                  color: filter.isEmpty ? c.textDim : c.text,
                   fontSize: 13,
                 ),
               ),
             ),
-            if (_filter.isNotEmpty)
+            if (filter.isNotEmpty)
               GestureDetector(
                 key: const Key('pred-search-bar-clear'),
-                onTap: () => setState(() => _filter = ''),
+                onTap: () =>
+                    ref.read(predMarketControllerProvider.notifier).setFilter(''),
                 child: Icon(Icons.cancel, size: 16, color: c.textDim),
               ),
           ],

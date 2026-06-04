@@ -12,8 +12,12 @@ import 'package:quantify_mobile/data/mock/fixtures/api_key.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
+import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/data/models/live_strategy_models.dart';
+import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/kline_repository.dart';
+import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/main.dart';
 import 'package:quantify_mobile/pages/_dev/components_preview_page.dart';
@@ -33,12 +37,67 @@ import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_guest_page.dart';
+import 'package:quantify_mobile/pages/whale/tabs/whale_live_tab_controller.dart';
+import 'package:quantify_mobile/pages/whale/tabs/whale_live_tab_state.dart';
 import 'package:quantify_mobile/pages/whale/whale_home_page.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Pumps the app and navigates to `/ai` to bypass the debug-only landing
 /// (`/_dev/theme-preview`). Returns a [BuildContext] anchored on the AI page.
+/// 路由测试用无计时器假行情仓库：`watchTicker` 返回空流，避免真实
+/// `MockTickerRepository.Stream.periodic`（1s）在 widget dispose 后残留计时器
+/// 触发 `!timersPending`（同 #1838 对 account/apiKeys 的处理思路）。
+class _NoTimerTickerRepository implements TickerRepository {
+  static const Ticker _btc = Ticker(
+    symbol: 'BTCUSDT',
+    price: 100,
+    changePercent: 1,
+    volume24h: 10,
+  );
+
+  @override
+  Future<List<Ticker>> listTickers() async => const <Ticker>[_btc];
+
+  @override
+  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
+}
+
+/// 同上：`watchCandles` 返回空流，消除 K 线 periodic 计时器。
+class _NoTimerKlineRepository implements KlineRepository {
+  @override
+  Future<List<Candle>> listCandles({
+    required String symbol,
+    required KlineInterval interval,
+    required int limit,
+  }) async =>
+      <Candle>[
+        Candle(
+          openTime: DateTime(2024),
+          open: 100,
+          high: 101,
+          low: 99,
+          close: 100,
+          volume: 1,
+        ),
+      ];
+
+  @override
+  Stream<Candle> watchCandles({
+    required String symbol,
+    required KlineInterval interval,
+  }) =>
+      const Stream<Candle>.empty();
+}
+
+/// whale 实时 tab 控制器在 `build()` 内启 1s periodic 倒计时（#1986）。路由测试
+/// 切到 whale tab 时该 Timer 会被 StatefulShellRoute 保活，测试体结束仍 pending →
+/// "A Timer is still pending"。路由测试只关心落地页类型，用不启计时器的子类覆盖。
+class _NoTimerWhaleLiveTabController extends WhaleLiveTabController {
+  @override
+  WhaleLiveTabState build() => const WhaleLiveTabState();
+}
+
 Future<BuildContext> _pumpApp(
   WidgetTester tester, {
   InMemoryTokenStorage? storage,
@@ -51,6 +110,11 @@ Future<BuildContext> _pumpApp(
       sharedPreferencesProvider.overrideWithValue(prefs),
       tokenStorageProvider.overrideWithValue(s),
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      // `/market/:symbol` 落地 MarketDetailPage，其 #2184 controller 订阅
+      // ticker/candle mock `Stream.periodic` 推流；用无计时器假仓库覆盖，避免
+      // widget dispose 后残留 periodic 计时器（同 #1838 思路）。
+      tickerRepositoryProvider.overrideWithValue(_NoTimerTickerRepository()),
+      klineRepositoryProvider.overrideWithValue(_NoTimerKlineRepository()),
       // `/me` 落地 MeHomePage 会 watch account/apiKeys/liveStrategySummary，
       // 其 mock repo 各启 200ms `Future.delayed` 计时器；widget dispose 时
       // 该 timer 未排空 → "A Timer is still pending"（#1838）。路由测试只关心
@@ -70,6 +134,11 @@ Future<BuildContext> _pumpApp(
           pausedCount: 0,
           stoppedCount: 0,
         ),
+      ),
+      // whale tab 倒计时 1s periodic Timer 在路由测试中会残留为 pending；用不启
+      // 计时器的子类覆盖（同 ticker/kline/me 的无计时器 fixture 思路）。
+      whaleLiveTabControllerProvider.overrideWith(
+        _NoTimerWhaleLiveTabController.new,
       ),
     ],
   );

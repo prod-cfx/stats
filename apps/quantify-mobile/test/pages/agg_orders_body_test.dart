@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/mock/fixtures/agg_orders.dart';
 import 'package:quantify_mobile/data/models/agg_orders_models.dart';
@@ -23,12 +24,14 @@ import '../helpers/golden_harness.dart';
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(430, 1600));
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildQzThemeData(QzTheme.fallback),
-      home: const Scaffold(body: AggOrdersBody()),
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(QzTheme.fallback),
+        home: const Scaffold(body: AggOrdersBody()),
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 250));

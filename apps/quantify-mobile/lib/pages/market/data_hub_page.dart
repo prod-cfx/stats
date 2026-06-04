@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/mock/fixtures/whale_extras.dart';
-import '../../data/models/whale_extra_models.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../whale/widgets/whale_notification_sheet.dart';
 import 'agg_orders_body.dart';
 import 'coin_stock_body.dart';
+import 'data_hub_page_controller.dart';
+import 'data_hub_page_state.dart';
 import 'long_short_page.dart';
 import 'market_home_page.dart';
 import 'pred_market_body.dart';
@@ -31,58 +31,45 @@ import 'widgets/data_hub_header.dart';
 /// IndexedStack 一次性构建全部子屏 → MarketHomeBody / LongShortBody 在 hub 挂载
 /// 时即触发各自 mock 仓库加载。mock 数据廉价，接受 eager 构建（KISS），不引入
 /// lazy 缓存复杂度。
-class DataHubPage extends ConsumerStatefulWidget {
+class DataHubPage extends ConsumerWidget {
   const DataHubPage({super.key, this.initial = DataHubScreen.market});
 
   /// 初始选中的子屏。底栏 market tab 默认进 [DataHubScreen.market]；
   /// `/market/long-short` 深链传 [DataHubScreen.longShort] 预选多空比（#1853）。
   final DataHubScreen initial;
 
-  @override
-  ConsumerState<DataHubPage> createState() => _DataHubPageState();
-}
-
-class _DataHubPageState extends ConsumerState<DataHubPage> {
-  late DataHubScreen _current;
-  late List<WhaleNotification> _notifications;
-
-  @override
-  void initState() {
-    super.initState();
-    _current = widget.initial;
-    _notifications = List<WhaleNotification>.of(mockWhaleNotifications);
-  }
-
-  int get _unreadCount =>
-      _notifications.where((WhaleNotification n) => n.unread).length;
-
-  Future<void> _openNotifications() async {
+  Future<void> _openNotifications(BuildContext context, WidgetRef ref) async {
+    final DataHubState s = ref.read(dataHubControllerProvider(initial));
     final WhaleNotificationSheetResult? result =
         await WhaleNotificationSheet.show(
       context,
-      notifications: _notifications,
+      notifications: s.notifications,
     );
-    if (!mounted || result == null) return;
-    setState(() => _notifications = result.notifications);
+    if (result == null) return;
+    ref
+        .read(dataHubControllerProvider(initial).notifier)
+        .setNotifications(result.notifications);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
+    final DataHubState s = ref.watch(dataHubControllerProvider(initial));
     return Scaffold(
       backgroundColor: c.bg,
       body: Column(
         children: <Widget>[
           DataHubHeader(
-            current: _current,
-            unread: _unreadCount,
-            onSelect: (DataHubScreen screen) =>
-                setState(() => _current = screen),
-            onBell: _openNotifications,
+            current: s.current,
+            unread: s.unreadCount,
+            onSelect: (DataHubScreen screen) => ref
+                .read(dataHubControllerProvider(initial).notifier)
+                .select(screen),
+            onBell: () => _openNotifications(context, ref),
           ),
           Expanded(
             child: IndexedStack(
-              index: DataHubScreen.values.indexOf(_current),
+              index: DataHubScreen.values.indexOf(s.current),
               // children 顺序由 DataHubScreen.values 单一来源派生，杜绝 index 与
               // 手写列表的隐式排序耦合（重排枚举不会静默错位）。
               children: <Widget>[

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/mock/fixtures/tickers.dart';
 import '../../data/models/exchange_long_short_models.dart';
-import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -12,76 +11,37 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
+import 'long_short_controller.dart';
+import 'long_short_state.dart';
 import 'widgets/exchange_long_short_tile.dart';
 import 'widgets/long_short_hero_card.dart';
 import 'widgets/long_short_search_overlay.dart';
 
-class LongShortBody extends ConsumerStatefulWidget {
+/// 多空比 hub 子屏。页面级状态（symbol/period/snapshot/loading/error）由
+/// [LongShortController] 持有（issue #2184）。
+class LongShortBody extends ConsumerWidget {
   const LongShortBody({super.key});
 
-  @override
-  ConsumerState<LongShortBody> createState() => _LongShortBodyState();
-}
-
-class _LongShortBodyState extends ConsumerState<LongShortBody> {
   static const List<String> _periods = <String>['15分钟', '1小时', '4小时', '12小时'];
 
-  String _symbol = 'BTCUSDT';
-  String _period = '4小时';
-  MarketLongShortSnapshot? _snapshot;
-  bool _loading = true;
-  Object? _error;
-  int _requestId = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final int requestId = ++_requestId;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final MarketLongShortSnapshot snapshot = await ref
-          .read(longShortRepositoryProvider)
-          .getSnapshot(symbol: _symbol);
-      if (!mounted || requestId != _requestId) return;
-      setState(() {
-        _snapshot = snapshot;
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted || requestId != _requestId) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _pickPeriod() async {
+  Future<void> _pickPeriod(BuildContext context, WidgetRef ref) async {
+    final LongShortState s = ref.read(longShortControllerProvider);
     final String? picked = await QzSheet.show<String>(
       context: context,
       useRootNavigator: true,
       builder: (BuildContext context) =>
-          _PeriodSheet(selected: _period, periods: _periods),
+          _PeriodSheet(selected: s.period, periods: _periods),
     );
-    if (picked == null || picked == _period || !mounted) return;
-    setState(() => _period = picked);
-  }
-
-  void _onSymbolChanged(String value) {
-    if (value == _symbol) return;
-    setState(() => _symbol = value);
-    _load();
+    if (picked == null) return;
+    ref.read(longShortControllerProvider.notifier).changePeriod(picked);
   }
 
   /// 打开全屏币种搜索（设计稿 `LSCoinTabs` 搜索按钮 → `SearchOverlay`）。
-  Future<void> _openSearch(List<String> symbols) async {
+  Future<void> _openSearch(
+    BuildContext context,
+    WidgetRef ref,
+    List<String> symbols,
+  ) async {
     final String? picked = await Navigator.of(
       context,
       rootNavigator: true,
@@ -92,11 +52,14 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
             LongShortSearchOverlay(symbols: symbols),
       ),
     );
-    if (picked != null) _onSymbolChanged(picked);
+    if (picked != null) {
+      ref.read(longShortControllerProvider.notifier).changeSymbol(picked);
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final LongShortState s = ref.watch(longShortControllerProvider);
     final List<String> symbols = mockTickers
         .map((ticker) => ticker.symbol)
         .take(8)
@@ -107,16 +70,18 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
       children: <Widget>[
         _CoinTabs(
           symbols: symbols,
-          selected: _symbol,
-          onChanged: _onSymbolChanged,
-          onSearch: () => _openSearch(symbols),
+          selected: s.symbol,
+          onChanged: (String value) => ref
+              .read(longShortControllerProvider.notifier)
+              .changeSymbol(value),
+          onSearch: () => _openSearch(context, ref, symbols),
         ),
-        Expanded(child: _buildScrollBody()),
+        Expanded(child: _buildScrollBody(context, ref, s)),
       ],
     );
   }
 
-  Widget _buildScrollBody() {
+  Widget _buildScrollBody(BuildContext context, WidgetRef ref, LongShortState s) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 100),
@@ -126,10 +91,13 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
           const SizedBox(height: QzSpacing.md),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
-            child: _ChartTitleRow(period: _period, onTapPeriod: _pickPeriod),
+            child: _ChartTitleRow(
+              period: s.period,
+              onTapPeriod: () => _pickPeriod(context, ref),
+            ),
           ),
           const SizedBox(height: QzSpacing.sm),
-          if (_loading)
+          if (s.loading)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: QzSpacing.md),
               child: QzCard(
@@ -137,7 +105,7 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
                 child: Center(child: QzSpinner()),
               ),
             )
-          else if (_error != null || _snapshot == null)
+          else if (s.error != null || s.snapshot == null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
               child: QzCard(
@@ -147,13 +115,13 @@ class _LongShortBodyState extends ConsumerState<LongShortBody> {
           else ...<Widget>[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
-              child: LongShortHeroCard(snapshot: _snapshot!),
+              child: LongShortHeroCard(snapshot: s.snapshot!),
             ),
             const SizedBox(height: QzSpacing.md),
             const _ExchangeSectionHeader(),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-              child: _ExchangeList(exchanges: _snapshot!.exchanges),
+              child: _ExchangeList(exchanges: s.snapshot!.exchanges),
             ),
           ],
         ],

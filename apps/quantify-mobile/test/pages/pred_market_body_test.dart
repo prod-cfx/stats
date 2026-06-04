@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/models/pred_market_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -17,12 +18,14 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(430, 1600));
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildQzThemeData(QzTheme.fallback),
-      home: const Scaffold(body: PredMarketBody()),
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(QzTheme.fallback),
+        home: const Scaffold(body: PredMarketBody()),
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 250));
