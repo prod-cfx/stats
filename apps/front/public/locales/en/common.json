@@ -1176,8 +1176,8 @@
     "table": {
       "exchange": "Exchanges",
       "price": "Price (USDT)",
-      "amount": "Amount (BTC)",
-      "total": "Total (BTC)"
+      "amount": "Amount ({{asset}})",
+      "total": "Total ({{asset}})"
     },
     "openInterest": {
       "title": "{{symbol}} Futures Open Interest",

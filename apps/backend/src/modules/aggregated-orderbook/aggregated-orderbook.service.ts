@@ -64,6 +64,7 @@ export class AggregatedOrderbookService {
 
   async getAvailableMarkets(): Promise<AvailableAggregatedMarket[]> {
     const configs = await this.orderbookPairConfigService.findEnabledConfigs()
+    const liveVenues = await this.getLiveVenueKeys(configs)
     const grouped = new Map<string, AvailableAggregatedMarket>()
 
     for (const config of configs) {
@@ -72,6 +73,8 @@ export class AggregatedOrderbookService {
       if (!type || !VENUE_MAPPING[venue]?.[type]) continue
 
       const base = config.baseAsset.toUpperCase()
+      if (!liveVenues.has(`${base}:${type}:${venue}`)) continue
+
       const key = `${base}:${type}`
       const existing = grouped.get(key)
       if (existing) {
@@ -85,6 +88,49 @@ export class AggregatedOrderbookService {
     return [...grouped.values()]
       .map(item => ({ ...item, venues: item.venues.sort((a, b) => a.localeCompare(b)) }))
       .sort((a, b) => a.base.localeCompare(b.base) || a.type.localeCompare(b.type))
+  }
+
+  private async getLiveVenueKeys(configs: OrderbookPairConfig[]): Promise<Set<string>> {
+    const client = this.redisService.getClient()
+    const lookups: { key: string, liveKey: string }[] = []
+
+    for (const config of configs) {
+      const venue = config.venue.toLowerCase()
+      const type = INSTRUMENT_TYPE_TO_MARKET_TYPE[config.instrumentType]
+      if (!type || !VENUE_MAPPING[venue]?.[type]) continue
+
+      const venueId = VENUE_MAPPING[venue][type]
+      const base = config.baseAsset.toUpperCase()
+      for (const quote of STABLE_QUOTES) {
+        lookups.push({
+          key: `orderbook:${venueId}:${base}-${quote}:${type}`,
+          liveKey: `${base}:${type}:${venue}`,
+        })
+      }
+    }
+
+    if (!lookups.length) return new Set()
+
+    const live = new Set<string>()
+    try {
+      const snapshots = await client.mget(...lookups.map(item => item.key))
+      for (let i = 0; i < snapshots.length; i += 1) {
+        const raw = snapshots[i]
+        if (!raw) continue
+        try {
+          const book = JSON.parse(raw) as VenueOrderBook
+          if (this.isFreshOrderbook(book)) live.add(lookups[i]!.liveKey)
+        }
+        catch (err) {
+          this.logger.warn(`Failed to parse market availability orderbook: ${err}`)
+        }
+      }
+    }
+    catch (err) {
+      this.logger.warn(`Failed to read market availability orderbooks: ${err}`)
+    }
+
+    return live
   }
 
   async getAggregatedOrderbook(params: {

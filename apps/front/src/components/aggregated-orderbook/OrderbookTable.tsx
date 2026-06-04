@@ -25,6 +25,7 @@ interface OrderbookTableProps {
   }
   displayMode?: 'both' | 'bids' | 'asks'
   variant?: 'default' | 'compact'
+  baseAsset?: string
 }
 
 const BOTH_SIDE_ROWS = 13
@@ -157,10 +158,15 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   bids,
   displayMode = 'both',
   variant = 'default',
+  baseAsset = 'BTC',
 }) => {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const isCompact = variant === 'compact'
+  const assetUnit = baseAsset.toUpperCase()
+  const isZh = i18n.language?.startsWith('zh')
+  const amountLabel = isZh ? `数量(${assetUnit})` : `Amount (${assetUnit})`
+  const totalLabel = isZh ? `总计(${assetUnit})` : `Total (${assetUnit})`
 
   // Define a precise row height to ensure alignment (font + padding)
   const ROW_HEIGHT = isCompact ? 20 : 28
@@ -225,10 +231,10 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
           {t('aggregatedOrderbook.table.price')}
         </span>
         <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} pr-0.5 text-right`}>
-          {t('aggregatedOrderbook.table.amount')}
+          {amountLabel}
         </span>
         <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right`}>
-          {t('aggregatedOrderbook.table.total')}
+          {totalLabel}
         </span>
       </div>
 
