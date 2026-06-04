@@ -108,4 +108,25 @@ export class BacktestMarketDataRepository {
       _max: { time: true },
     })
   }
+
+  aggregateCoverageInRange(params: {
+    symbolId: string
+    timeframe: MarketTimeframe
+    fromTs: number
+    toTs: number
+  }) {
+    return this.txHost.tx.marketBar.aggregate({
+      where: {
+        symbolId: params.symbolId,
+        timeframe: mapTimeframe(params.timeframe),
+        time: {
+          gte: new Date(params.fromTs),
+          lte: new Date(params.toTs),
+        },
+      },
+      _count: { _all: true },
+      _min: { time: true },
+      _max: { time: true },
+    })
+  }
 }

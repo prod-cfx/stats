@@ -84,10 +84,19 @@ export class BacktestMarketDataService {
     const targetTimeframes = this.resolveRequestedTimeframes(input)
     for (const symbol of targetSymbols) {
       for (const timeframe of targetTimeframes) {
-        await this.backfillHistoricalBars(provider, symbol, timeframe, {
+        const range = {
           fromTs: this.resolveQueryFromTs(input.dataRange.fromTs, input.baseTimeframe, timeframe),
           toTs: input.dataRange.toTs,
-        })
+        }
+        if (await this.hasStoredCoverageForBackfill({
+          exchange,
+          symbol,
+          timeframe,
+          range,
+        })) {
+          continue
+        }
+        await this.backfillHistoricalBars(provider, symbol, timeframe, range)
       }
     }
   }
@@ -321,7 +330,7 @@ export class BacktestMarketDataService {
     const codeCandidates = [...new Set(normalizedSymbols.flatMap(symbol => this.buildCodeCandidates(symbol)))]
     const rows = await this.repository.findSymbolsByCodes(codeCandidates, exchange?.toUpperCase())
 
-    const rowMap = new Map(rows.map(row => [normalizeExactCode(row.code), row.id]))
+    const rowMap = new Map((rows ?? []).map(row => [normalizeExactCode(row.code), row.id]))
     const result = new Map<string, string>()
     for (const symbol of normalizedSymbols) {
       const resolvedId = this.resolveSymbolId(symbol, rowMap)
@@ -519,6 +528,35 @@ export class BacktestMarketDataService {
       }
       cursor = new Date(nextCursorMs)
     }
+  }
+
+  private async hasStoredCoverageForBackfill(input: {
+    exchange: BacktestExchangeId
+    symbol: string
+    timeframe: Timeframe
+    range: { fromTs: number; toTs: number }
+  }): Promise<boolean> {
+    const timeframeMs = getMarketTimeframeMs(input.timeframe)
+    if (!Number.isFinite(timeframeMs) || timeframeMs <= 0) return false
+    const symbolMap = await this.loadSymbolMap([input.symbol], input.exchange)
+    const symbolId = symbolMap.get(normalizeExactCode(input.symbol))
+    if (!symbolId) return false
+
+    const aggregate = await this.repository.aggregateCoverageInRange({
+      symbolId,
+      timeframe: input.timeframe as MarketTimeframe,
+      fromTs: input.range.fromTs,
+      toTs: input.range.toTs,
+    })
+    const count = aggregate?._count?._all ?? 0
+    const minTime = aggregate?._min?.time?.getTime()
+    const maxTime = aggregate?._max?.time?.getTime()
+    if (!Number.isFinite(minTime) || !Number.isFinite(maxTime)) return false
+
+    const expectedBars = Math.max(1, Math.floor(Math.max(0, input.range.toTs - input.range.fromTs) / timeframeMs))
+    return count >= expectedBars
+      && minTime! <= input.range.fromTs + timeframeMs
+      && maxTime! >= input.range.toTs - timeframeMs
   }
 
   private async backfillOkxHistoricalBars(

@@ -5,6 +5,7 @@ function createRepositoryMock() {
   return {
     findBars: jest.fn(),
     aggregateCoverage: jest.fn(),
+    aggregateCoverageInRange: jest.fn(),
     findSymbolsByCodes: jest.fn(),
     findActiveSymbolByExchangeAndCodes: jest.fn(),
   }
@@ -427,6 +428,43 @@ describe('backtestMarketDataService', () => {
       symbol: 'ETHUSDC:SPOT',
       timeframe: '15m',
     }))
+  })
+
+  it('skips historical backfill when stored bars already cover the requested range', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT:PERP' }])
+    repository.aggregateCoverageInRange.mockResolvedValue({
+      _count: { _all: 3 },
+      _min: { time: new Date(1_000) },
+      _max: { time: new Date(3_000) },
+    })
+    const { service, marketDataService, okxProvider } = createService(repository)
+    okxProvider.fetchSymbols.mockResolvedValue([
+      {
+        symbol: 'BTCUSDT',
+        exchange: 'OKX',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
+        status: 'ACTIVE',
+        filters: [],
+      },
+    ])
+
+    await service.prepareData({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_000, toTs: 3_000 },
+      strategy: {
+        id: 's-okx-perp-covered',
+        params: { exchange: 'okx', marketType: 'perp' },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(okxProvider.fetchHistoricalBars).not.toHaveBeenCalled()
+    expect(marketDataService.saveBarFromProvider).not.toHaveBeenCalled()
   })
 
   it('prepares snapshot-derived secondary timeframes even when payload stateTimeframes is empty', async () => {

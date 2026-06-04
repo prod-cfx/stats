@@ -237,6 +237,7 @@ export class BacktestRunnerService {
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
     const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
     const requiredHtfTimeframes = this.resolveRequiredHtfTimeframes(input)
+    const runtimeHistoryLimit = this.resolveRuntimeHistoryLimit(input.strategy)
 
     for (const bar of baseBars) {
       while (stateCursor < stateBars.length && stateBars[stateCursor].closeTime <= bar.closeTime) {
@@ -303,6 +304,8 @@ export class BacktestRunnerService {
         position,
         positionRuntimeState,
         semanticRuntimeState,
+        requestedTimeframes: requestedRuntimeTimeframes,
+        runtimeHistoryLimit,
       })
       this.collectAvailableRuntimeTimeframes(strategyContext)
         .forEach(timeframe => availableRuntimeKeys.add(this.buildRuntimeRequirementKey(bar.symbol, timeframe)))
@@ -1242,17 +1245,17 @@ export class BacktestRunnerService {
     accountRiskMetrics: AccountRiskMetrics
     input: BacktestRunInput
     historyBarsBySymbolTimeframe: Map<string, HistorySeries>
+    requestedTimeframes: readonly Timeframe[]
+    runtimeHistoryLimit: number | null
   }) {
     const { bar, htfState, portfolio } = input
-    const requestedTimeframes = this.resolveRequestedRuntimeTimeframes(input.input)
-    const runtimeHistoryLimit = this.resolveRuntimeHistoryLimit(input.input.strategy)
     const barsByTimeframe: Record<string, Bar[]> = {}
     const scriptBarsByTimeframe: Record<string, ScriptRuntimeBar[]> = {}
 
-    for (const timeframe of requestedTimeframes) {
+    for (const timeframe of input.requestedTimeframes) {
       const history = input.historyBarsBySymbolTimeframe.get(this.buildHistoryKey(bar.symbol, timeframe))
       if (!history || history.rawBars.length === 0) continue
-      const visibleHistory = this.sliceRuntimeHistory(history, bar.closeTime, runtimeHistoryLimit)
+      const visibleHistory = this.sliceRuntimeHistory(history, bar.closeTime, input.runtimeHistoryLimit)
       barsByTimeframe[timeframe] = visibleHistory.rawBars
       scriptBarsByTimeframe[timeframe] = visibleHistory.scriptBars
     }

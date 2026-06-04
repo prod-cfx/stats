@@ -1540,6 +1540,51 @@ describe('backtestRunnerService', () => {
     })
   })
 
+  it('resolves strict snapshot runtime config once per run instead of once per bar', async () => {
+    const runner = createRunner()
+    let lookbackReads = 0
+    const astSnapshot = {
+      signalCatalog: {
+        series: [{
+          id: 'lookback_series',
+          get period() {
+            lookbackReads += 1
+            return 20
+          },
+        }],
+      },
+    }
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1m',
+      stateTimeframes: ['1m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-strict-config-once',
+        params: {},
+        astSnapshot,
+        bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'BAR_CLOSE',
+          noNextBarHandling: 'KEEP_PENDING',
+        },
+        fn: (): StrategyDecisionV1 => ({ action: 'NOOP' }),
+      } as any,
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1m', closeTime: 1, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1m', closeTime: 2, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1m', closeTime: 3, close: 102 }),
+      ],
+    })
+
+    expect(lookbackReads).toBe(1)
+  })
+
   it('fills compiled spot grid order-program limit orders when bar range touches a working level', async () => {
     const runner = createRunner()
 
