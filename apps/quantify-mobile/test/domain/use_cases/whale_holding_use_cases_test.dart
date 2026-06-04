@@ -216,4 +216,51 @@ void main() {
       expect(stats.shortPct, 100);
     });
   });
+
+  group('deriveWhaleHoldingsView (#2192)', () {
+    test('coins 去重保序 + rows 经筛选排序', () {
+      final list = <WhaleHoldingPosition>[
+        _pos(symbol: 'BTC', value: 100),
+        _pos(symbol: 'ETH', value: 300),
+        _pos(symbol: 'BTC', value: 200),
+      ];
+      final view = deriveWhaleHoldingsView(
+        list,
+        const WhaleHoldingFilter(),
+        const WhaleHoldingSort(
+          key: WhaleHoldingSortKey.value,
+          dir: WhaleHoldingSortDir.desc,
+        ),
+      );
+      expect(view.coins, <String>['BTC', 'ETH']);
+      expect(
+        view.rows.map((WhaleHoldingPosition e) => e.value).toList(),
+        <double>[300, 200, 100],
+      );
+    });
+
+    test('filter 收窄到币种后 rows 仅含该币，coins 仍全量', () {
+      final list = <WhaleHoldingPosition>[
+        _pos(symbol: 'BTC'),
+        _pos(symbol: 'ETH'),
+      ];
+      final view = deriveWhaleHoldingsView(
+        list,
+        const WhaleHoldingFilter(coin: 'ETH'),
+        null,
+      );
+      expect(view.rows.single.symbol, 'ETH');
+      expect(view.coins, <String>['BTC', 'ETH']);
+    });
+
+    test('空输入 → 空 view', () {
+      final view = deriveWhaleHoldingsView(
+        const <WhaleHoldingPosition>[],
+        const WhaleHoldingFilter(),
+        null,
+      );
+      expect(view.coins, isEmpty);
+      expect(view.rows, isEmpty);
+    });
+  });
 }

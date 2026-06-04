@@ -37,6 +37,34 @@ class MarketHomeController extends Notifier<MarketHomeState> {
     }
   }
 
+  /// 按当前 tab 过滤/排序行情列表（#2192：从 View.build 上移至 ViewModel）。
+  ///
+  /// Tab 语义：watchlist 仅命中 [favorites]；spot/perp 按 `Ticker.kind`；
+  /// gainers 涨幅 > 0 降序；losers 跌幅 < 0 升序。搜索已迁出全屏路由，不在此处。
+  List<Ticker> visibleTickers(Set<String> favorites) {
+    final List<Ticker> tickers = state.tickers;
+    switch (state.tab) {
+      case MarketTab.watchlist:
+        return tickers
+            .where((Ticker t) => favorites.contains(t.symbol))
+            .toList();
+      case MarketTab.spot:
+        return tickers.where((Ticker t) => t.kind == MarketKind.spot).toList();
+      case MarketTab.perp:
+        return tickers.where((Ticker t) => t.kind == MarketKind.perp).toList();
+      case MarketTab.gainers:
+        return tickers.where((Ticker t) => t.changePercent > 0).toList()
+          ..sort(
+            (Ticker a, Ticker b) => b.changePercent.compareTo(a.changePercent),
+          );
+      case MarketTab.losers:
+        return tickers.where((Ticker t) => t.changePercent < 0).toList()
+          ..sort(
+            (Ticker a, Ticker b) => a.changePercent.compareTo(b.changePercent),
+          );
+    }
+  }
+
   void selectTab(MarketTab tab) {
     state = state.copyWith(tab: tab);
   }

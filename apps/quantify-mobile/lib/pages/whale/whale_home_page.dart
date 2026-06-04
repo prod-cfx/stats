@@ -42,10 +42,7 @@ class WhaleHomePage extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final int tabIndex = ref.watch(whaleHomePageControllerProvider).tabIndex;
-    final int unreadCount = ref
-        .watch(whaleNotificationsProvider)
-        .where((WhaleNotification n) => n.unread)
-        .length;
+    final int unreadCount = ref.watch(whaleUnreadCountProvider);
     final List<({String label})> tabs = <({String label})>[
       (label: l10n.whaleTabDiscover),
       (label: l10n.whaleTabLive),

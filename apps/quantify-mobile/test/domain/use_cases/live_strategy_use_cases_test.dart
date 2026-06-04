@@ -105,4 +105,39 @@ void main() {
       expect(list.map((e) => e.id).toList(), <String>['a', 'b']);
     });
   });
+
+  group('liveStatusBreakdown (#2192)', () {
+    LiveStrategySummary summary({
+      int running = 0,
+      int warning = 0,
+      int paused = 0,
+      int stopped = 0,
+    }) {
+      return LiveStrategySummary(
+        totalAssets: 0,
+        totalCapital: 0,
+        todayPnl: 0,
+        totalPnl: 0,
+        runningCount: running,
+        warningCount: warning,
+        pausedCount: paused,
+        stoppedCount: stopped,
+      );
+    }
+
+    test('仅保留计数 > 0 项，按 running→warning→paused→stopped 顺序', () {
+      final out = liveStatusBreakdown(
+        summary(running: 2, warning: 0, paused: 3, stopped: 1),
+      );
+      expect(out, <(LiveStrategyStatus, int)>[
+        (LiveStrategyStatus.running, 2),
+        (LiveStrategyStatus.paused, 3),
+        (LiveStrategyStatus.stopped, 1),
+      ]);
+    });
+
+    test('全 0 → 空列表', () {
+      expect(liveStatusBreakdown(summary()), isEmpty);
+    });
+  });
 }

@@ -81,3 +81,37 @@ class StrategyHomeState {
 
   static const Object _unset = Object();
 }
+
+/// featured hero 仅在「全部分类 + 无搜索 + 非收藏视图」时显示（设计稿 line 646）。
+/// #2192：从 `StrategyHomePage` 上移的纯判定。
+bool strategyShowFeatured(StrategyHomeState s) =>
+    s.featured != null &&
+    !s.favOnly &&
+    s.category == StrategyCategory.all &&
+    s.query.isEmpty;
+
+/// 列表渲染用视图项（#2192：从 View 上移的纯派生）。
+///
+/// - 收藏视图（`favOnly`）：仅保留 [favorites] 内的策略，忽略分类。
+/// - hero 卡显示时：剔除与 hero 同 id 的策略，避免同卡同时出现在 hero 和列表。
+List<StrategyMarketItem> strategyListItems(
+  StrategyHomeState s,
+  Set<String> favorites,
+) {
+  Iterable<StrategyMarketItem> items = s.items;
+  if (s.favOnly) {
+    items = items.where(
+      (StrategyMarketItem it) => favorites.contains(it.card.id),
+    );
+  }
+  if (strategyShowFeatured(s)) {
+    final String heroId = s.featured!.card.id;
+    items = items.where((StrategyMarketItem it) => it.card.id != heroId);
+  }
+  return items.toList(growable: false);
+}
+
+/// 「查看 N 个结果」计数真值（#2128 / #2192：从 View 上移）。
+/// 收藏视图反映过滤后条数（含 hero 已剔除项），否则为全量条数。
+int strategyResultCount(StrategyHomeState s, Set<String> favorites) =>
+    s.favOnly ? strategyListItems(s, favorites).length : s.items.length;

@@ -150,11 +150,13 @@ class WhaleHoldingsTab extends ConsumerWidget {
         ),
       ),
       data: (List<WhaleHoldingPosition> all) {
-        final List<String> coins = whaleHoldingCoins(all);
-        final List<WhaleHoldingPosition> rows = sortWhaleHoldings(
-          filterWhaleHoldings(all, s.filter),
+        final WhaleHoldingsView view = deriveWhaleHoldingsView(
+          all,
+          s.filter,
           s.sort,
         );
+        final List<String> coins = view.coins;
+        final List<WhaleHoldingPosition> rows = view.rows;
         return ListView(
           padding: const EdgeInsets.only(bottom: 100),
           children: <Widget>[

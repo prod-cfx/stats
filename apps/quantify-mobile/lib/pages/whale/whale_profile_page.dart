@@ -673,10 +673,52 @@ class _SortKey<T> {
   final double Function(T item)? numOf;
 }
 
+/// 在 [allKeys] 中按 key 解析排序列定义（#2192：从 `_SortableTab._keyOf` 上移）。
+_SortKey<T>? _whaleProfileSortKeyOf<T>(List<_SortKey<T>> allKeys, String? k) {
+  if (k == null) return null;
+  for (final _SortKey<T> sk in allKeys) {
+    if (sk.key == k) return sk;
+  }
+  return null;
+}
+
+/// 按币种筛选 + 排序派生明细行（#2192：从 `_SortableTab._process` 上移的纯派生）。
+///
+/// 保留原行为：`coin == all` 不筛；排序键缺失或 `dir == null` 仅返回筛选结果；
+/// time 列（`numOf == null`）按行原始索引排序。返回带原索引的行，供渲染消费。
+List<({int idx, T item})> _whaleProfileSortableRows<T>({
+  required List<T> items,
+  required List<_SortKey<T>> allKeys,
+  required _SymOf<T> symOf,
+  required WhaleSortState sort,
+  required String coin,
+  required String all,
+}) {
+  final List<({int idx, T item})> indexed = <({int idx, T item})>[
+    for (int i = 0; i < items.length; i++) (idx: i, item: items[i]),
+  ];
+  final List<({int idx, T item})> filtered = coin == all
+      ? indexed
+      : indexed.where((({int idx, T item}) e) => symOf(e.item) == coin).toList();
+  final _SortKey<T>? sk = _whaleProfileSortKeyOf(allKeys, sort.key);
+  if (sk == null || sort.dir == null) return filtered;
+  final List<({int idx, T item})> sorted = <({int idx, T item})>[...filtered];
+  // time 列（numOf==null）用行原始索引；其余用数值取值。
+  double v(({int idx, T item}) e) =>
+      sk.numOf == null ? -e.idx.toDouble() : sk.numOf!(e.item);
+  sorted.sort((({int idx, T item}) a, ({int idx, T item}) b) =>
+      v(a).compareTo(v(b)));
+  if (sort.dir == WhaleSortDir.desc) {
+    return sorted.reversed.toList();
+  }
+  return sorted;
+}
+
 /// 通用排序/筛选明细 tab（三件套迁移 #2183）。排序/币种态收敛进
 /// [whaleProfileSortableTabControllerProvider]，按 [tabId] 区分 5 个明细 tab
 /// 各自独立实例。币种默认「全部」由 widget 渲染时只读回退，不写回 provider。
-/// 泛型排序逻辑（[_keyOf]/[_process]）为纯函数留在此处。
+/// 泛型排序/筛选派生上移为顶层纯函数 [_whaleProfileSortableRows]（#2192），
+/// widget 仅取用。
 class _SortableTab<T> extends ConsumerWidget {
   const _SortableTab({
     required this.tabId,
@@ -711,34 +753,6 @@ class _SortableTab<T> extends ConsumerWidget {
     ...moreSortKeys,
   ];
 
-  _SortKey<T>? _keyOf(String? k) {
-    if (k == null) return null;
-    for (final _SortKey<T> sk in _allKeys) {
-      if (sk.key == k) return sk;
-    }
-    return null;
-  }
-
-  List<({int idx, T item})> _process(WhaleSortState sort, String coin, String all) {
-    final List<({int idx, T item})> indexed = <({int idx, T item})>[
-      for (int i = 0; i < items.length; i++) (idx: i, item: items[i]),
-    ];
-    final List<({int idx, T item})> filtered = coin == all
-        ? indexed
-        : indexed.where((e) => symOf(e.item) == coin).toList();
-    final _SortKey<T>? sk = _keyOf(sort.key);
-    if (sk == null || sort.dir == null) return filtered;
-    final List<({int idx, T item})> sorted = <({int idx, T item})>[...filtered];
-    // time 列（numOf==null）用行原始索引；其余用数值取值。
-    double v(({int idx, T item}) e) =>
-        sk.numOf == null ? -e.idx.toDouble() : sk.numOf!(e.item);
-    sorted.sort((a, b) => v(a).compareTo(v(b)));
-    if (sort.dir == WhaleSortDir.desc) {
-      return sorted.reversed.toList();
-    }
-    return sorted;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -749,7 +763,14 @@ class _SortableTab<T> extends ConsumerWidget {
     final WhaleSortState sort = st.sort;
     // 只读回退：未选时用「全部」，不写回 provider。
     final String coin = st.coin ?? all;
-    final List<({int idx, T item})> rows = _process(sort, coin, all);
+    final List<({int idx, T item})> rows = _whaleProfileSortableRows<T>(
+      items: items,
+      allKeys: _allKeys,
+      symOf: symOf,
+      sort: sort,
+      coin: coin,
+      all: all,
+    );
     final List<String> coinOptions = <String>[
       all,
       ...<String>{for (final T it in items) symOf(it)},

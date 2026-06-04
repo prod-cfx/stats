@@ -55,3 +55,16 @@ List<LiveStrategy> sortStrategies(
   });
   return sorted;
 }
+
+/// 实盘策略概览的状态明细（#2192：从 `_LiveStatusBreakdown.build` 上移）。
+///
+/// 仅保留计数 > 0 的状态项，保持 running → warning → paused → stopped 顺序，
+/// 供「我的」页 hero 卡状态 chip 渲染。View 仅取用，不在 build 内 `.where`。
+List<(LiveStrategyStatus, int)> liveStatusBreakdown(LiveStrategySummary s) {
+  return <(LiveStrategyStatus, int)>[
+    (LiveStrategyStatus.running, s.runningCount),
+    (LiveStrategyStatus.warning, s.warningCount),
+    (LiveStrategyStatus.paused, s.pausedCount),
+    (LiveStrategyStatus.stopped, s.stoppedCount),
+  ].where(((LiveStrategyStatus, int) e) => e.$2 > 0).toList();
+}

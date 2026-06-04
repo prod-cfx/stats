@@ -40,3 +40,38 @@ class CoinStockState {
 
   static const Object _unset = Object();
 }
+
+bool _matchCoinTab(CoinStock r, CoinTab tab) {
+  switch (tab) {
+    case CoinTab.all:
+      return true;
+    case CoinTab.btc:
+      return r.coin == 'BTC';
+    case CoinTab.eth:
+      return r.coin == 'ETH';
+    case CoinTab.other:
+      return r.coin != 'BTC' && r.coin != 'ETH';
+  }
+}
+
+/// 按 tab + 搜索词过滤、再按 [CoinStockState.sort]/[CoinStockState.dir] 排序的
+/// 展示行（#2192：从 `CoinStockBody.build` 上移到 ViewModel 层纯派生）。
+///
+/// `dir == null` 保持原序。入参均为概念数据 + 页面态，不依赖 BuildContext。
+List<CoinStock> coinStockShown(List<CoinStock> stocks, CoinStockState s) {
+  final String q = s.filter.trim().toLowerCase();
+  final List<CoinStock> filtered = stocks
+      .where((CoinStock r) => _matchCoinTab(r, s.tab))
+      .where(
+        (CoinStock r) =>
+            q.isEmpty || '${r.sym}${r.cn}${r.ex}'.toLowerCase().contains(q),
+      )
+      .toList();
+  if (s.dir == null) return filtered; // 不排序，保持原始顺序
+  filtered.sort((CoinStock a, CoinStock b) {
+    final double va = s.sort.valueOf(a);
+    final double vb = s.sort.valueOf(b);
+    return s.dir == SortDir.desc ? vb.compareTo(va) : va.compareTo(vb);
+  });
+  return filtered;
+}

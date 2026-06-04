@@ -93,4 +93,75 @@ void main() {
       expect(read(c).searchHistory, <String>['DOGE']);
     });
   });
+
+  group('visibleTickers (#2192 派生上移)', () {
+    const Ticker spot = Ticker(
+      symbol: 'BTCUSDT',
+      price: 100,
+      changePercent: 2,
+      volume24h: 10,
+    );
+    const Ticker perp = Ticker(
+      symbol: 'ETHUSDT',
+      price: 50,
+      changePercent: -3,
+      volume24h: 5,
+      kind: MarketKind.perp,
+    );
+    const Ticker loser = Ticker(
+      symbol: 'SOLUSDT',
+      price: 20,
+      changePercent: -1,
+      volume24h: 3,
+    );
+
+    Future<MarketHomeController> loaded(ProviderContainer c) async {
+      ctrl(c);
+      await Future<void>.delayed(Duration.zero);
+      completer.complete(<Ticker>[spot, perp, loser]);
+      await Future<void>.delayed(Duration.zero);
+      return ctrl(c);
+    }
+
+    test('spot/perp 按 kind 过滤', () async {
+      final ProviderContainer c = makeContainer();
+      final MarketHomeController k = await loaded(c);
+      k.selectTab(MarketTab.spot);
+      expect(
+        k.visibleTickers(const <String>{}).map((Ticker t) => t.symbol).toList(),
+        <String>['BTCUSDT', 'SOLUSDT'],
+      );
+      k.selectTab(MarketTab.perp);
+      expect(
+        k.visibleTickers(const <String>{}).single.symbol,
+        'ETHUSDT',
+      );
+    });
+
+    test('watchlist 仅命中收藏集合', () async {
+      final ProviderContainer c = makeContainer();
+      final MarketHomeController k = await loaded(c);
+      k.selectTab(MarketTab.watchlist);
+      expect(
+        k.visibleTickers(const <String>{'ETHUSDT'}).single.symbol,
+        'ETHUSDT',
+      );
+    });
+
+    test('gainers 涨幅>0 降序；losers 跌幅<0 升序', () async {
+      final ProviderContainer c = makeContainer();
+      final MarketHomeController k = await loaded(c);
+      k.selectTab(MarketTab.gainers);
+      expect(
+        k.visibleTickers(const <String>{}).map((Ticker t) => t.symbol).toList(),
+        <String>['BTCUSDT'],
+      );
+      k.selectTab(MarketTab.losers);
+      // perp(-3) 比 sol(-1) 更跌 → 升序在前
+      expect(
+        k.visibleTickers(const <String>{}).map((Ticker t) => t.symbol).toList(),
+        <String>['ETHUSDT', 'SOLUSDT'],
+      );
+    });
+  });
 }

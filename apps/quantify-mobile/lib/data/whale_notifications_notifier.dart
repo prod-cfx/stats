@@ -44,3 +44,14 @@ final NotifierProvider<WhaleNotificationsNotifier, List<WhaleNotification>>
     NotifierProvider<WhaleNotificationsNotifier, List<WhaleNotification>>(
   WhaleNotificationsNotifier.new,
 );
+
+/// 未读通知计数派生 provider（#2192）。
+///
+/// 各 View（顶部铃铛角标 / 监控 Tab）原先在 `build()` 内 `where(unread).length`
+/// 内联聚合；上移为派生 provider，View 仅 `ref.watch`，计数随列表响应式更新。
+final Provider<int> whaleUnreadCountProvider = Provider<int>((Ref ref) {
+  return ref
+      .watch(whaleNotificationsProvider)
+      .where((WhaleNotification n) => n.unread)
+      .length;
+});

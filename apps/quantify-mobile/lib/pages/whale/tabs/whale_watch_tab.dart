@@ -83,9 +83,7 @@ class WhaleWatchTab extends ConsumerWidget {
     final List<WhaleNotification> notifications = ref.watch(
       whaleNotificationsProvider,
     );
-    final int unread = notifications
-        .where((WhaleNotification n) => n.unread)
-        .length;
+    final int unread = ref.watch(whaleUnreadCountProvider);
     final int ruleCount = st.rules?.length ?? 0;
 
     return Column(
@@ -338,9 +336,7 @@ class _NotificationsBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final int unread = notifications
-        .where((WhaleNotification n) => n.unread)
-        .length;
+    final int unread = ref.watch(whaleUnreadCountProvider);
     final WhaleNotificationsNotifier notifier = ref.read(
       whaleNotificationsProvider.notifier,
     );

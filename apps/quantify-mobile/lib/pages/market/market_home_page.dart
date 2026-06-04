@@ -58,45 +58,6 @@ class MarketHomeBody extends ConsumerWidget {
     ref.read(marketHomeControllerProvider.notifier).setSearchHistory(updated);
   }
 
-  /// 按当前 tab 过滤/排序行情列表。
-  ///
-  /// Tab 语义：
-  /// - watchlist：仅命中收藏集合 [favorites]（来自 `marketFavoritesProvider`）的条目；
-  /// - spot/perp：按 `Ticker.kind` 过滤；
-  /// - gainers：按 24H 涨幅降序（仅展示涨幅 > 0）；
-  /// - losers：按 24H 跌幅升序（仅展示跌幅 < 0）。
-  /// 搜索已迁出为全屏路由，本屏列表不再内联过滤。
-  List<Ticker> _visibleTickers(
-    MarketTab tab,
-    List<Ticker> tickers,
-    Set<String> favorites,
-  ) {
-    switch (tab) {
-      case MarketTab.watchlist:
-        return tickers
-            .where((Ticker t) => favorites.contains(t.symbol))
-            .toList();
-      case MarketTab.spot:
-        return tickers
-            .where((Ticker t) => t.kind == MarketKind.spot)
-            .toList();
-      case MarketTab.perp:
-        return tickers
-            .where((Ticker t) => t.kind == MarketKind.perp)
-            .toList();
-      case MarketTab.gainers:
-        return tickers.where((Ticker t) => t.changePercent > 0).toList()
-          ..sort(
-            (Ticker a, Ticker b) => b.changePercent.compareTo(a.changePercent),
-          );
-      case MarketTab.losers:
-        return tickers.where((Ticker t) => t.changePercent < 0).toList()
-          ..sort(
-            (Ticker a, Ticker b) => a.changePercent.compareTo(b.changePercent),
-          );
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -112,7 +73,9 @@ class MarketHomeBody extends ConsumerWidget {
           (tab: MarketTab.losers, label: l10n.marketHomeTabLosers),
         ];
     final Set<String> favorites = ref.watch(marketFavoritesProvider);
-    final List<Ticker> visible = _visibleTickers(s.tab, s.tickers, favorites);
+    final List<Ticker> visible = ref
+        .read(marketHomeControllerProvider.notifier)
+        .visibleTickers(favorites);
 
     return Column(
       children: <Widget>[

@@ -8,6 +8,8 @@
 /// 仅限 use_case 层，#2189 接通真实现后由 service 转换替代。
 library;
 
+import 'package:flutter/foundation.dart';
+
 import '../../data/models/whale_profile_models.dart';
 import '../models/whale_holding_models.dart';
 
@@ -70,6 +72,37 @@ List<String> whaleHoldingCoins(List<WhaleHoldingPosition> entries) {
     if (!coins.contains(e.symbol)) coins.add(e.symbol);
   }
   return coins;
+}
+
+/// 持仓 tab 的视图派生结果（#2192）：币种 chip 列表 + 筛选排序后的明细行。
+///
+/// 把原先散在 `WhaleHoldingsTab.build()` 里的
+/// `whaleHoldingCoins` + `sortWhaleHoldings(filterWhaleHoldings(...))` 组合收敛
+/// 为单个纯派生，View 仅取用，不在 build 内拼装业务派生。
+@immutable
+class WhaleHoldingsView {
+  const WhaleHoldingsView({required this.coins, required this.rows});
+
+  /// 当前数据源出现过的币种（首次出现序），供 chip 渲染。
+  final List<String> coins;
+
+  /// 经筛选 + 排序后的展示行。
+  final List<WhaleHoldingPosition> rows;
+}
+
+/// 由原始持仓集合 + 页面筛选/排序态派生视图结果（#2192）。
+///
+/// 入参均为 domain 类型（[WhaleHoldingFilter] / [WhaleHoldingSort]），不依赖
+/// 页面层 state，保持 domain 纯净。
+WhaleHoldingsView deriveWhaleHoldingsView(
+  List<WhaleHoldingPosition> all,
+  WhaleHoldingFilter filter,
+  WhaleHoldingSort? sort,
+) {
+  return WhaleHoldingsView(
+    coins: whaleHoldingCoins(all),
+    rows: sortWhaleHoldings(filterWhaleHoldings(all, filter), sort),
+  );
 }
 
 /// 由持仓条目派生交易统计入参（issue #1977 持仓卡「趋势/交易统计」入口）。

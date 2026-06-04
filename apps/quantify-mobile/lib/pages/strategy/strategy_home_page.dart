@@ -127,7 +127,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     // 收藏视图忽略分类，故类型选中态归一到 all，避免 pill 高亮某类与实际过滤不符。
     _sheetCategory.value = s.favOnly ? StrategyCategory.all : s.category;
     _sheetSort.value = s.sort;
-    _sheetResultCount.value = _computeResultCount(
+    _sheetResultCount.value = strategyResultCount(
       s,
       ref.read(strategyFavoritesProvider),
     );
@@ -159,39 +159,6 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     );
   }
 
-  /// featured hero 仅在「全部 + 无搜索 + 非收藏视图」时显示（设计稿 line 646）。
-  bool _showFeatured(StrategyHomeState s) =>
-      s.featured != null &&
-      !s.favOnly &&
-      s.category == StrategyCategory.all &&
-      s.query.isEmpty;
-
-  /// 列表渲染用的视图项。
-  ///
-  /// - 收藏视图（`favOnly`）：仅保留 `favorites` 集合内的策略，忽略分类。
-  /// - hero 卡显示时（[_showFeatured]）：剔除与 hero 同 id 的策略，避免同一张卡
-  ///   同时出现在 hero 和列表里。
-  List<StrategyMarketItem> _computeListItems(
-    StrategyHomeState s,
-    Set<String> favorites,
-  ) {
-    Iterable<StrategyMarketItem> items = s.items;
-    if (s.favOnly) {
-      items = items.where(
-        (StrategyMarketItem it) => favorites.contains(it.card.id),
-      );
-    }
-    if (_showFeatured(s)) {
-      final String heroId = s.featured!.card.id;
-      items = items.where((StrategyMarketItem it) => it.card.id != heroId);
-    }
-    return items.toList(growable: false);
-  }
-
-  /// 当前条件下「查看 N 个结果」的计数真值（#2128）。
-  int _computeResultCount(StrategyHomeState s, Set<String> favorites) =>
-      s.favOnly ? _computeListItems(s, favorites).length : s.items.length;
-
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -207,10 +174,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         context.go(route);
       }
     });
-    final List<StrategyMarketItem> listItems = _computeListItems(s, favorites);
+    final List<StrategyMarketItem> listItems = strategyListItems(s, favorites);
     // 收藏视图下结果计数应反映过滤后的条数（含 hero 已剔除项）。
-    final int resultCount = _computeResultCount(s, favorites);
-    final bool showFeatured = _showFeatured(s);
+    final int resultCount = strategyResultCount(s, favorites);
+    final bool showFeatured = strategyShowFeatured(s);
     // 把实时计数推给已打开的 sheet（#2128）；仅 sheet 打开时调度，避免 sheet 关闭
     // 时高频 rebuild（滚动分页 / 收藏切换）无意义排回调。post-frame 避免 build 内
     // 改 notifier 触发同帧重入。

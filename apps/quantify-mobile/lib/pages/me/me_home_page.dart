@@ -6,6 +6,7 @@ import '../../data/auth/session_controller.dart';
 import '../../data/models/account_models.dart';
 import '../../data/models/api_key_models.dart';
 import '../../domain/models/live_strategy_models.dart';
+import '../../domain/use_cases/live_strategy_use_cases.dart';
 import '../../data/providers.dart';
 import '../../data/utils/mask_helpers.dart';
 import '../../l10n/app_localizations.dart';
@@ -570,12 +571,7 @@ class _LiveStatusBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<(LiveStrategyStatus, int)> entries = <(LiveStrategyStatus, int)>[
-      (LiveStrategyStatus.running, summary.runningCount),
-      (LiveStrategyStatus.warning, summary.warningCount),
-      (LiveStrategyStatus.paused, summary.pausedCount),
-      (LiveStrategyStatus.stopped, summary.stoppedCount),
-    ].where(((LiveStrategyStatus, int) e) => e.$2 > 0).toList();
+    final List<(LiveStrategyStatus, int)> entries = liveStatusBreakdown(summary);
 
     if (entries.isEmpty) {
       return Text(

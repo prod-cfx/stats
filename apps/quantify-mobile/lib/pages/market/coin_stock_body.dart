@@ -27,37 +27,6 @@ class CoinStockBody extends ConsumerWidget {
   /// 数据源（默认 mock fixtures，测试可注入）。
   final List<CoinStock> stocks;
 
-  bool _matchTab(CoinStock r, CoinTab tab) {
-    switch (tab) {
-      case CoinTab.all:
-        return true;
-      case CoinTab.btc:
-        return r.coin == 'BTC';
-      case CoinTab.eth:
-        return r.coin == 'ETH';
-      case CoinTab.other:
-        return r.coin != 'BTC' && r.coin != 'ETH';
-    }
-  }
-
-  List<CoinStock> _shownFor(CoinStockState s) {
-    final String q = s.filter.trim().toLowerCase();
-    final List<CoinStock> filtered = stocks
-        .where((CoinStock r) => _matchTab(r, s.tab))
-        .where(
-          (CoinStock r) =>
-              q.isEmpty || '${r.sym}${r.cn}${r.ex}'.toLowerCase().contains(q),
-        )
-        .toList();
-    if (s.dir == null) return filtered; // 不排序，保持原始顺序
-    filtered.sort((CoinStock a, CoinStock b) {
-      final double va = s.sort.valueOf(a);
-      final double vb = s.sort.valueOf(b);
-      return s.dir == SortDir.desc ? vb.compareTo(va) : va.compareTo(vb);
-    });
-    return filtered;
-  }
-
   Future<void> _openSearch(BuildContext context, WidgetRef ref) async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
@@ -81,7 +50,7 @@ class CoinStockBody extends ConsumerWidget {
       context,
       sort: s.sort,
       dir: s.dir,
-      resultCount: _shownFor(s).length,
+      resultCount: coinStockShown(stocks, s).length,
     );
     if (result == null) return;
     ref
@@ -98,7 +67,7 @@ class CoinStockBody extends ConsumerWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final CoinStockState s = ref.watch(coinStockControllerProvider);
-    final List<CoinStock> shown = _shownFor(s);
+    final List<CoinStock> shown = coinStockShown(stocks, s);
     return ColoredBox(
       color: c.bg,
       child: Column(

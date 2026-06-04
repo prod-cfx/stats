@@ -35,23 +35,10 @@ class LiveStrategiesPage extends ConsumerStatefulWidget {
 }
 
 class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
-  bool _matches(LiveStrategy s, LiveFilter filter) {
-    switch (filter) {
-      case LiveFilter.all:
-        return s.status != LiveStrategyStatus.stopped;
-      case LiveFilter.running:
-        return s.status == LiveStrategyStatus.running;
-      case LiveFilter.paused:
-        return s.status == LiveStrategyStatus.paused;
-      case LiveFilter.stopped:
-        return s.status == LiveStrategyStatus.stopped;
-    }
-  }
-
   Future<void> _openSortSheet(AsyncValue<List<LiveStrategy>> strategies) async {
     final LiveStrategiesState st = ref.read(liveStrategiesControllerProvider);
     final LiveSortStatusCounts counts = strategies.maybeWhen(
-      data: _statusCounts,
+      data: liveStatusCounts,
       orElse: () =>
           const LiveSortStatusCounts(all: 0, running: 0, paused: 0, stopped: 0),
     );
@@ -70,23 +57,6 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
           metric: result.metric,
           dir: result.direction,
         );
-  }
-
-  LiveSortStatusCounts _statusCounts(List<LiveStrategy> all) {
-    return LiveSortStatusCounts(
-      all: all
-          .where((LiveStrategy s) => s.status != LiveStrategyStatus.stopped)
-          .length,
-      running: all
-          .where((LiveStrategy s) => s.status == LiveStrategyStatus.running)
-          .length,
-      paused: all
-          .where((LiveStrategy s) => s.status == LiveStrategyStatus.paused)
-          .length,
-      stopped: all
-          .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
-          .length,
-    );
   }
 
   LiveSortStatus _sortStatusFromFilter(LiveFilter filter) {
@@ -238,14 +208,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     AsyncValue<LiveStrategySummary> summary,
   ) {
     final LiveStrategiesState st = ref.watch(liveStrategiesControllerProvider);
-    final List<LiveStrategy> filtered = all
-        .where((LiveStrategy s) => _matches(s, st.filter))
-        .toList(growable: false);
-    final List<LiveStrategy> visible = sortStrategies(
-      filtered,
-      st.sortMetric,
-      st.sortDir,
-    );
+    final List<LiveStrategy> visible = liveVisibleStrategies(all, st);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -496,24 +459,7 @@ class _FilterPills extends StatelessWidget {
   final List<LiveStrategy> all;
   final ValueChanged<LiveFilter> onChanged;
 
-  int _count(LiveFilter f) {
-    switch (f) {
-      case LiveFilter.all:
-        return all.length;
-      case LiveFilter.running:
-        return all
-            .where((LiveStrategy s) => s.status == LiveStrategyStatus.running)
-            .length;
-      case LiveFilter.paused:
-        return all
-            .where((LiveStrategy s) => s.status == LiveStrategyStatus.paused)
-            .length;
-      case LiveFilter.stopped:
-        return all
-            .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
-            .length;
-    }
-  }
+  int _count(LiveFilter f) => liveFilterPillCount(all, f);
 
   @override
   Widget build(BuildContext context) {
