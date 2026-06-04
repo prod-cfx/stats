@@ -52,7 +52,7 @@ describe('BacktestMarketDataRepository', () => {
     expect(result).toEqual([{ id: 'quote-perp' }])
   })
 
-  it('loads latest quotes with usable depth and returns them chronologically', async () => {
+  it('loads latest quotes through the symbol-time index and returns them chronologically', async () => {
     const newest = { id: 'quote-new', eventTime: new Date(2_000) }
     const older = { id: 'quote-old', eventTime: new Date(1_500) }
     const tx = {
@@ -74,12 +74,14 @@ describe('BacktestMarketDataRepository', () => {
 
     expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        bidPrice: { not: null },
-        bidQty: { not: null },
-        askPrice: { not: null },
-        askQty: { not: null },
+        symbolId: 'symbol-perp',
       }),
       orderBy: { eventTime: 'desc' },
+    }))
+    expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.not.objectContaining({
+        bidPrice: { not: null },
+      }),
     }))
     expect(result).toEqual([older, newest])
   })

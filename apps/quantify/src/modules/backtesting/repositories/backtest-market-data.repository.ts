@@ -71,10 +71,6 @@ export class BacktestMarketDataRepository {
     const quotes = await this.txHost.tx.marketQuote.findMany({
       where: {
         symbolId: symbol.id,
-        bidPrice: { not: null },
-        bidQty: { not: null },
-        askPrice: { not: null },
-        askQty: { not: null },
         eventTime: {
           gte: new Date(params.fromTs),
           lte: new Date(params.toTs),
