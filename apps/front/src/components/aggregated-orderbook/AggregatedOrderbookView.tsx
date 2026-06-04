@@ -1,6 +1,6 @@
 'use client'
 
-import type { AggregatedOrderbookLevel, AggregatedOrderbookQueryType } from '@/lib/api'
+import type { AggregatedOrderbookLevel, AggregatedOrderbookMarket, AggregatedOrderbookQueryType } from '@/lib/api'
 import { Check, Info, Settings } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { LoadingState } from '@/components/ui/loading'
-import { fetchAggregatedOrderbook } from '@/lib/api'
+import { fetchAggregatedOrderbook, fetchAggregatedOrderbookMarkets } from '@/lib/api'
 
 const DepthChart = dynamic(
   () => import('@/components/aggregated-orderbook/DepthChart').then(mod => mod.DepthChart),
@@ -19,11 +19,37 @@ const DepthChart = dynamic(
 )
 
 // 后端支持的交易所
-const FUTURES_EXCHANGES = ['bybit', 'binance', 'bitmax', 'okx']
-const SPOT_EXCHANGES = ['binance', 'okx', 'bybit', 'bitmax']
+const DEFAULT_EXCHANGES = ['bybit', 'binance', 'bitmax', 'okx', 'hyperliquid']
+const FALLBACK_MARKETS: AggregatedOrderbookMarket[] = [
+  { base: 'BTC', type: 'perp', venues: DEFAULT_EXCHANGES },
+  { base: 'ETH', type: 'perp', venues: DEFAULT_EXCHANGES },
+  { base: 'BTC', type: 'spot', venues: DEFAULT_EXCHANGES },
+  { base: 'ETH', type: 'spot', venues: DEFAULT_EXCHANGES },
+]
 
 // 刷新间隔（毫秒）
 const REFRESH_INTERVAL = 3000
+
+function toApiMarketType(marketType: 'futures' | 'spot'): AggregatedOrderbookQueryType {
+  return marketType === 'futures' ? 'perp' : 'spot'
+}
+
+function marketsForType(
+  markets: AggregatedOrderbookMarket[],
+  marketType: 'futures' | 'spot',
+): AggregatedOrderbookMarket[] {
+  const apiType = toApiMarketType(marketType)
+  return markets.filter(market => market.type === apiType)
+}
+
+function pickMarket(
+  markets: AggregatedOrderbookMarket[],
+  marketType: 'futures' | 'spot',
+  preferredBase: string,
+): AggregatedOrderbookMarket {
+  const candidates = marketsForType(markets.length ? markets : FALLBACK_MARKETS, marketType)
+  return candidates.find(market => market.base === preferredBase) ?? candidates[0] ?? FALLBACK_MARKETS[0]!
+}
 
 const BothIcon = memo(({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -86,9 +112,10 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   const { t, i18n } = useTranslation()
   const [marketType, setMarketType] = useState<'futures' | 'spot'>('futures')
   const [symbol, setSymbol] = useState('BTC')
+  const [availableMarkets, setAvailableMarkets] = useState<AggregatedOrderbookMarket[]>(FALLBACK_MARKETS)
   const [tickSize, setTickSize] = useState('1')
   const [displayMode, setDisplayMode] = useState('both')
-  const [selectedExchanges, setSelectedExchanges] = useState<string[]>(FUTURES_EXCHANGES)
+  const [selectedExchanges, setSelectedExchanges] = useState<string[]>(DEFAULT_EXCHANGES)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
 
@@ -121,13 +148,43 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     })
   }, [i18n.language])
 
+  const marketOptions = useMemo(
+    () => marketsForType(availableMarkets, marketType),
+    [availableMarkets, marketType],
+  )
+
+  const currentMarket = useMemo(
+    () => pickMarket(availableMarkets, marketType, symbol),
+    [availableMarkets, marketType, symbol],
+  )
+
   const handleMarketTypeChange = useCallback((nextMarketType: 'futures' | 'spot') => {
     if (nextMarketType === marketType)
       return
 
+    const nextMarket = pickMarket(availableMarkets, nextMarketType, symbol)
     setMarketType(nextMarketType)
-    setSelectedExchanges(nextMarketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES)
-  }, [marketType])
+    setSymbol(nextMarket.base)
+    setSelectedExchanges(nextMarket.venues)
+  }, [availableMarkets, marketType, symbol])
+
+  useEffect(() => {
+    let ignore = false
+
+    fetchAggregatedOrderbookMarkets()
+      .then((markets) => {
+        if (ignore || markets.length === 0) return
+        const nextMarket = pickMarket(markets, marketType, symbol)
+        setAvailableMarkets(markets)
+        setSymbol(nextMarket.base)
+        setSelectedExchanges(nextMarket.venues)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      ignore = true
+    }
+  }, [marketType, symbol])
 
   // Click outside to close settings
   useEffect(() => {
@@ -149,7 +206,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   // 获取数据
   const fetchData = useCallback(async () => {
     try {
-      const apiType: AggregatedOrderbookQueryType = marketType === 'futures' ? 'perp' : 'spot'
+      const apiType = toApiMarketType(marketType)
 
       const data = await fetchAggregatedOrderbook({
         base: symbol,
@@ -268,24 +325,21 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                       </button>
                     </div>
                     <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setSymbol('BTC')}
-                        className={`${isCompact ? 'px-2 py-1' : 'px-3.5 py-1.5'} rounded !text-xs !font-semibold !leading-5 transition-colors ${symbol === 'BTC'
-                          ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-sm shadow-primary/20'
-                          : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
-                      >
-                        BTC
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSymbol('ETH')}
-                        className={`${isCompact ? 'px-2 py-1' : 'px-3.5 py-1.5'} rounded !text-xs !font-semibold !leading-5 transition-colors ${symbol === 'ETH'
-                          ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-sm shadow-primary/20'
-                          : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
-                      >
-                        ETH
-                      </button>
+                      {marketOptions.map(market => (
+                        <button
+                          key={`${market.type}:${market.base}`}
+                          type="button"
+                          onClick={() => {
+                            setSymbol(market.base)
+                            setSelectedExchanges(market.venues)
+                          }}
+                          className={`${isCompact ? 'px-2 py-1' : 'px-3.5 py-1.5'} rounded !text-xs !font-semibold !leading-5 transition-colors ${symbol === market.base
+                            ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-sm shadow-primary/20'
+                            : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
+                        >
+                          {market.base}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   {!isCompact && (
@@ -376,7 +430,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           {isSettingsOpen && (
                             <div className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-32' : 'w-44'} animate-in fade-in zoom-in-95 z-30 overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-1.5 shadow-sm duration-150`}>
                               <p className="!text-[10px] !font-semibold !leading-4 text-[color:var(--cf-muted)] uppercase tracking-normal px-2 py-1 mb-0.5">{t('aggregatedOrderbook.settings.exchangeSources')}</p>
-                              {(marketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES).map(ex => (
+                              {currentMarket.venues.map(ex => (
                                 <button
                                   key={ex}
                                   type="button"

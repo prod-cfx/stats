@@ -1,6 +1,7 @@
 import type { TestingModule } from '@nestjs/testing'
 import { Test } from '@nestjs/testing'
 import { RedisService } from '@/common/services/redis.service'
+import { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 import { AggregatedOrderbookService } from './aggregated-orderbook.service'
 
 describe('aggregatedOrderbookService', () => {
@@ -16,6 +17,10 @@ describe('aggregatedOrderbookService', () => {
     getClient: jest.fn(() => mockRedisClient),
   }
 
+  const mockOrderbookConfigService = {
+    findEnabledConfigs: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-03-31T09:45:00.000Z'))
@@ -27,12 +32,17 @@ describe('aggregatedOrderbookService', () => {
           provide: RedisService,
           useValue: mockRedisService,
         },
+        {
+          provide: OrderbookPairConfigService,
+          useValue: mockOrderbookConfigService,
+        },
       ],
     }).compile()
 
     service = module.get<AggregatedOrderbookService>(AggregatedOrderbookService)
     mockRedisClient.get.mockResolvedValue(null)
     mockRedisClient.setex.mockResolvedValue('OK')
+    mockOrderbookConfigService.findEnabledConfigs.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -84,5 +94,74 @@ describe('aggregatedOrderbookService', () => {
     expect(result.asks[0]?.price).toBe(66481)
     expect(result.midPrice).toBe(66480.5)
     expect(result.venues).toEqual(['binance'])
+  })
+
+  it('aggregates hyperliquid snapshots when venue is requested', async () => {
+    const hyperliquidBook = {
+      venueId: 'hyperliquid-perp',
+      marketKey: 'SOL-USDC:perp',
+      bids: [{ price: 153.1, size: 120 }],
+      asks: [{ price: 153.2, size: 90 }],
+      exchangeTs: Date.now() - 500,
+      receivedTs: Date.now() - 250,
+      version: 789,
+    }
+
+    mockRedisClient.mget.mockResolvedValue([null, JSON.stringify(hyperliquidBook)])
+
+    const result = await service.getAggregatedOrderbook({
+      base: 'SOL',
+      type: 'perp',
+      venues: ['hyperliquid'],
+      depth: 20,
+      tickSize: 0.1,
+    })
+
+    expect(mockRedisClient.mget).toHaveBeenCalledWith(
+      'orderbook:hyperliquid-perp:SOL-USDT:perp',
+      'orderbook:hyperliquid-perp:SOL-USDC:perp',
+    )
+    expect(result.bids[0]).toMatchObject({ price: 153.1, sizeTotal: 120 })
+    expect(result.asks[0]).toMatchObject({ price: 153.2, sizeTotal: 90 })
+    expect(result.venues).toEqual(['hyperliquid'])
+  })
+
+  it('lists enabled aggregated orderbook markets grouped by base and type', async () => {
+    mockOrderbookConfigService.findEnabledConfigs.mockResolvedValue([
+      {
+        venue: 'BINANCE',
+        venueType: 'CEX',
+        instrumentType: 'PERPETUAL',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+      },
+      {
+        venue: 'HYPERLIQUID',
+        venueType: 'DEX',
+        instrumentType: 'PERPETUAL',
+        baseAsset: 'SOL',
+        quoteAsset: 'USDC',
+      },
+      {
+        venue: 'OKX',
+        venueType: 'CEX',
+        instrumentType: 'SPOT',
+        baseAsset: 'SOL',
+        quoteAsset: 'USDT',
+      },
+      {
+        venue: 'UNSUPPORTED',
+        venueType: 'CEX',
+        instrumentType: 'PERPETUAL',
+        baseAsset: 'DOGE',
+        quoteAsset: 'USDT',
+      },
+    ])
+
+    await expect(service.getAvailableMarkets()).resolves.toEqual([
+      { base: 'BTC', type: 'perp', venues: ['binance'] },
+      { base: 'SOL', type: 'perp', venues: ['hyperliquid'] },
+      { base: 'SOL', type: 'spot', venues: ['okx'] },
+    ])
   })
 })

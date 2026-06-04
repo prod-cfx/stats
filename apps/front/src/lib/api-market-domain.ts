@@ -142,12 +142,22 @@ export interface AggregatedOrderbookResponse {
   mergedQuotes: string[]
 }
 
+export interface AggregatedOrderbookMarket {
+  base: string
+  type: AggregatedOrderbookQueryType
+  venues: string[]
+}
+
 export interface FetchAggregatedOrderbookParams {
   base: string
   type: AggregatedOrderbookQueryType
   venues?: string
   depth?: number
   tickSize?: number
+}
+
+interface AggregatedOrderbookMarketsApiResponse {
+  data?: AggregatedOrderbookMarket[]
 }
 
 export interface FetchAggregatedOpenInterestQuery {
@@ -571,6 +581,24 @@ export async function fetchAggregatedOrderbook(
       venues,
       mergedQuotes: [],
     }
+  }
+}
+
+export async function fetchAggregatedOrderbookMarkets(): Promise<AggregatedOrderbookMarket[]> {
+  try {
+    return await apiCall(async () => {
+      const response = await client.AggregatedOrderbookController_getAvailableMarkets()
+      const payload = response as AggregatedOrderbookMarketsApiResponse | AggregatedOrderbookMarket[]
+      return Array.isArray(payload) ? payload : unwrapResponse<AggregatedOrderbookMarket[]>(payload)
+    }, 'FETCH_AGGREGATED_ORDERBOOK_MARKETS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return [
+      { base: 'BTC', type: 'perp', venues: ['binance', 'bitmax', 'bybit', 'hyperliquid', 'okx'] },
+      { base: 'ETH', type: 'perp', venues: ['binance', 'bitmax', 'bybit', 'hyperliquid', 'okx'] },
+      { base: 'BTC', type: 'spot', venues: ['binance', 'bitmax', 'bybit', 'hyperliquid', 'okx'] },
+      { base: 'ETH', type: 'spot', venues: ['binance', 'bitmax', 'bybit', 'hyperliquid', 'okx'] },
+    ]
   }
 }
 

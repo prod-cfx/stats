@@ -15,7 +15,8 @@ describe('issue #625 rerender guards', () => {
     expect(source).not.toContain('useEffect(() => {\n    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect\n    setSelectedExchanges(')
     expect(source).toContain('const handleMarketTypeChange = useCallback(')
     expect(source).toContain('if (nextMarketType === marketType)')
-    expect(source).toContain("setSelectedExchanges(nextMarketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES)")
+    expect(source).toContain('const nextMarket = pickMarket(availableMarkets, nextMarketType, symbol)')
+    expect(source).toContain('setSelectedExchanges(nextMarket.venues)')
   })
 
   it('keeps aggregated orderbook mode icons stable at module scope', () => {

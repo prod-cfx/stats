@@ -36,6 +36,7 @@ export {
 export {
   type AggregatedLiquidationSummary,
   type AggregatedOrderbookLevel,
+  type AggregatedOrderbookMarket,
   type AggregatedOrderbookQueryType,
   type AggregatedOrderbookResponse,
   type AggregatedOrderbookVenueDetail,
@@ -49,6 +50,7 @@ export {
   fetchAggregatedOpenInterest,
   type FetchAggregatedOpenInterestQuery,
   fetchAggregatedOrderbook,
+  fetchAggregatedOrderbookMarkets,
   type FetchAggregatedOrderbookParams,
   fetchAggregatedVolume,
   type FetchAggregatedVolumeQuery,

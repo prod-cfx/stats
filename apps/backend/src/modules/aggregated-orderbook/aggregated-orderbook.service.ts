@@ -1,8 +1,12 @@
 import type { VenueOrderBook } from '@ai/shared'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
+// Nest 注入需要运行时引用，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 
 // 稳定币列表，这些计价资产会被合并
 const STABLE_QUOTES = ['USDT', 'USDC']
@@ -17,6 +21,12 @@ const VENUE_MAPPING: Record<string, Record<string, string>> = {
   okx: { spot: 'okx-spot', perp: 'okx-perp' },
   bybit: { spot: 'bybit-spot', perp: 'bybit-perp' },
   bitmax: { spot: 'bitmax-spot', perp: 'bitmax-perp' },
+  hyperliquid: { spot: 'hyperliquid-spot', perp: 'hyperliquid-perp' },
+}
+
+const INSTRUMENT_TYPE_TO_MARKET_TYPE: Partial<Record<OrderbookPairConfig['instrumentType'], 'spot' | 'perp'>> = {
+  SPOT: 'spot',
+  PERPETUAL: 'perp',
 }
 
 interface AggregatedLevel {
@@ -37,11 +47,45 @@ interface AggregatedResult {
   mergedQuotes: string[]
 }
 
+interface AvailableAggregatedMarket {
+  base: string
+  type: 'spot' | 'perp'
+  venues: string[]
+}
+
 @Injectable()
 export class AggregatedOrderbookService {
   private readonly logger = new Logger(AggregatedOrderbookService.name)
 
-  constructor(private readonly redisService: RedisService) {}
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly orderbookPairConfigService: OrderbookPairConfigService,
+  ) {}
+
+  async getAvailableMarkets(): Promise<AvailableAggregatedMarket[]> {
+    const configs = await this.orderbookPairConfigService.findEnabledConfigs()
+    const grouped = new Map<string, AvailableAggregatedMarket>()
+
+    for (const config of configs) {
+      const venue = config.venue.toLowerCase()
+      const type = INSTRUMENT_TYPE_TO_MARKET_TYPE[config.instrumentType]
+      if (!type || !VENUE_MAPPING[venue]?.[type]) continue
+
+      const base = config.baseAsset.toUpperCase()
+      const key = `${base}:${type}`
+      const existing = grouped.get(key)
+      if (existing) {
+        if (!existing.venues.includes(venue)) existing.venues.push(venue)
+      }
+      else {
+        grouped.set(key, { base, type, venues: [venue] })
+      }
+    }
+
+    return [...grouped.values()]
+      .map(item => ({ ...item, venues: item.venues.sort((a, b) => a.localeCompare(b)) }))
+      .sort((a, b) => a.base.localeCompare(b.base) || a.type.localeCompare(b.type))
+  }
 
   async getAggregatedOrderbook(params: {
     base: string
@@ -220,8 +264,9 @@ export class AggregatedOrderbookService {
     const asksMap = new Map<number, { price: number, details: Map<string, number> }>()
 
     // 价格取整函数：买单向下取整，卖单向上取整
-    const roundBidPrice = (price: number) => Math.floor(price / tickSize) * tickSize
-    const roundAskPrice = (price: number) => Math.ceil(price / tickSize) * tickSize
+    const priceRounder = this.createPriceRounder(tickSize)
+    const roundBidPrice = (price: number) => priceRounder(price, 'bid')
+    const roundAskPrice = (price: number) => priceRounder(price, 'ask')
 
     for (const book of orderbooks) {
       // 处理买单（向下取整到最近档位）
@@ -284,5 +329,28 @@ export class AggregatedOrderbookService {
     if (bestAsk === 0 || bestBid === 0)
       return bestAsk || bestBid
     return (bestAsk + bestBid) / 2
+  }
+
+  private createPriceRounder(tickSize: number): (price: number, side: 'bid' | 'ask') => number {
+    const tickDecimals = this.countDecimals(tickSize)
+    const scale = 10 ** tickDecimals
+    const tickUnits = Math.max(1, Math.round(tickSize * scale))
+
+    return (price, side) => {
+      const scaledPrice = price * scale
+      const units = side === 'bid'
+        ? Math.floor((scaledPrice + 1e-9) / tickUnits) * tickUnits
+        : Math.ceil((scaledPrice - 1e-9) / tickUnits) * tickUnits
+      return Number((units / scale).toFixed(tickDecimals))
+    }
+  }
+
+  private countDecimals(value: number): number {
+    if (!Number.isFinite(value)) return 0
+    const normalized = value.toString().toLowerCase()
+    if (!normalized.includes('e')) return normalized.split('.')[1]?.length ?? 0
+
+    const [, exponent = '0'] = normalized.split('e')
+    return Math.max(0, -Number.parseInt(exponent, 10))
   }
 }

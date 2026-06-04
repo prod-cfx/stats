@@ -1342,6 +1342,9 @@ const ExchangeLiquidationResponseDto = z
     rows: z.array(ExchangeLiquidationRowDto),
   })
   .passthrough()
+const AggregatedOrderbookMarketResponseDto = z
+  .object({ base: z.string(), type: z.enum(['spot', 'perp']), venues: z.array(z.string()) })
+  .passthrough()
 const VenueDetailDto = z.object({ venueId: z.string(), size: z.number() }).passthrough()
 const AggregatedLevelDto = z
   .object({ price: z.number(), sizeTotal: z.number(), details: z.array(VenueDetailDto) })
@@ -1580,6 +1583,7 @@ export const schemas = {
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
   ExchangeLiquidationResponseDto,
+  AggregatedOrderbookMarketResponseDto,
   VenueDetailDto,
   AggregatedLevelDto,
   AggregatedOrderbookResponseDto,
@@ -4455,6 +4459,17 @@ const endpoints = makeApi([
     ],
     response: z
       .object({ data: AggregatedOrderbookResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/orderbook/aggregated/symbols',
+    alias: 'AggregatedOrderbookController_getAvailableMarkets',
+    description: `基于启用的订单簿交易对配置返回可聚合的基础资产、市场类型和交易所列表`,
+    requestFormat: 'json',
+    response: z
+      .object({ data: z.array(AggregatedOrderbookMarketResponseDto), message: z.string() })
       .partial()
       .passthrough(),
   },
