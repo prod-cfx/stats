@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -12,6 +11,8 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
+import 'ai_script_page_controller.dart';
+import 'ai_script_page_state.dart';
 
 /// 默认参数（直接深链 `/ai/script` 无 extra 时回退），对齐设计稿 BTC 双均线。
 const Map<String, String> kStratFallbackParams = <String, String>{
@@ -76,8 +77,6 @@ export default class TrendMA extends Strategy {
 }''';
 }
 
-enum _ScriptStage { generating, ready }
-
 /// AI 量化「策略脚本」屏 — route `/ai/script`（向导第 2 步，#1892）。
 ///
 /// 对齐设计稿 `design/project/mobile/m-screens-confirm.jsx#ScreenStratScript`：
@@ -86,23 +85,21 @@ enum _ScriptStage { generating, ready }
 ///   - 「就绪」态：终端风格头部 + 行号 + 语法高亮代码体 + `✓ READY` badge +
 ///     展开折叠（长脚本「查看全部 N 行 / 收起」）+ 成功提示条。
 ///   - 底部「下一步：回测设置」仅就绪态可点 → push `/ai/backtest-config`。
-class AiScriptPage extends StatefulWidget {
+class AiScriptPage extends ConsumerStatefulWidget {
   const AiScriptPage({super.key, this.params});
 
   /// 当前会话参数键值对，经 router `extra` 透传。`null` 时回退 [kStratFallbackParams]。
   final Map<String, String>? params;
 
   @override
-  State<AiScriptPage> createState() => _AiScriptPageState();
+  ConsumerState<AiScriptPage> createState() => _AiScriptPageState();
 }
 
-class _AiScriptPageState extends State<AiScriptPage> {
+class _AiScriptPageState extends ConsumerState<AiScriptPage> {
   static const int _collapsedLines = 12;
 
-  _ScriptStage _stage = _ScriptStage.generating;
-  bool _expanded = false;
-  bool _copied = false;
-  Timer? _genTimer;
+  AiScriptPageController get _ctrl =>
+      ref.read(aiScriptPageControllerProvider.notifier);
 
   Map<String, String> get _params =>
       (widget.params != null && widget.params!.isNotEmpty)
@@ -111,22 +108,6 @@ class _AiScriptPageState extends State<AiScriptPage> {
 
   String get _script => buildStratScript(_params);
   String get _fileName => stratFileName(_params);
-  bool get _ready => _stage == _ScriptStage.ready;
-
-  @override
-  void initState() {
-    super.initState();
-    // mock 生成耗时；真实接入后替换为 codegen 完成回调。
-    _genTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _stage = _ScriptStage.ready);
-    });
-  }
-
-  @override
-  void dispose() {
-    _genTimer?.cancel();
-    super.dispose();
-  }
 
   Future<void> _copyScript() async {
     try {
@@ -136,17 +117,14 @@ class _AiScriptPageState extends State<AiScriptPage> {
     }
     if (!mounted) return;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    setState(() => _copied = true);
+    _ctrl.markCopied();
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(l10n.aiScriptCopiedToast)));
-    Future<void>.delayed(const Duration(milliseconds: 1600), () {
-      if (mounted) setState(() => _copied = false);
-    });
   }
 
   void _next() {
-    if (!_ready) return;
+    if (!ref.read(aiScriptPageControllerProvider).ready) return;
     context.push('/ai/backtest-config');
   }
 
@@ -154,6 +132,8 @@ class _AiScriptPageState extends State<AiScriptPage> {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final AiScriptPageState st = ref.watch(aiScriptPageControllerProvider);
+    final bool ready = st.ready;
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
@@ -197,20 +177,19 @@ class _AiScriptPageState extends State<AiScriptPage> {
                   _RecapCard(params: _params, fileName: _fileName),
                   const SizedBox(height: QzSpacing.lg),
                   _StatusRow(
-                    ready: _ready,
-                    copied: _copied,
+                    ready: ready,
+                    copied: st.copied,
                     onCopy: _copyScript,
                   ),
                   const SizedBox(height: QzSpacing.sm),
-                  if (_ready) ...<Widget>[
+                  if (ready) ...<Widget>[
                     _ScriptViewer(
                       script: _script,
                       fileName: _fileName,
-                      copied: _copied,
-                      expanded: _expanded,
+                      copied: st.copied,
+                      expanded: st.expanded,
                       collapsedLines: _collapsedLines,
-                      onToggleExpand: () =>
-                          setState(() => _expanded = !_expanded),
+                      onToggleExpand: _ctrl.toggleExpand,
                       onCopy: _copyScript,
                     ),
                     const SizedBox(height: QzSpacing.md),
@@ -224,7 +203,7 @@ class _AiScriptPageState extends State<AiScriptPage> {
               ),
             ),
             _BottomBar(
-              ready: _ready,
+              ready: ready,
               prevLabel: l10n.aiScriptPrev,
               nextLabel: l10n.aiScriptNext,
               onPrev: () => context.pop(),

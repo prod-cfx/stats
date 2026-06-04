@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -9,18 +10,21 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
+import 'backtest_config_sheet_controller.dart';
+import 'backtest_config_sheet_state.dart';
 
 /// Backtest configuration sheet — route `/ai/backtest-config`.
 ///
 /// 视觉基准：`design/project/mobile/m-screens-btconfig.jsx` + 设计稿截图。
-class BacktestConfigSheet extends StatefulWidget {
+class BacktestConfigSheet extends ConsumerStatefulWidget {
   const BacktestConfigSheet({super.key});
 
   @override
-  State<BacktestConfigSheet> createState() => _BacktestConfigSheetState();
+  ConsumerState<BacktestConfigSheet> createState() =>
+      _BacktestConfigSheetState();
 }
 
-class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
+class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   static const List<({String key, int days})> _ranges =
       <({String key, int days})>[
         (key: '7D', days: 7),
@@ -66,21 +70,19 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         }),
       ];
 
-  String _rangeKey = '30D';
+  // 6 个输入框控制器保留在 widget（输入框瞬时态属表单局部）。流程/校验态
+  // （rangeKey/fillSource/partialData/futures/error）已迁入 controller。
   final TextEditingController _capital = TextEditingController(text: '10000');
   final TextEditingController _leverage = TextEditingController(text: '5');
   final TextEditingController _slippage = TextEditingController(text: '5');
   final TextEditingController _fee = TextEditingController(text: '2');
-  String _fillSource = 'close';
-  bool _partialData = true;
-  // 交易市场：现货无杠杆；合约启用杠杆选择。默认合约 · 5x 对齐设计稿。
-  bool _futures = true;
   final TextEditingController _start = TextEditingController(
     text: '2025-12-01',
   );
   final TextEditingController _end = TextEditingController(text: '2026-05-26');
 
-  String? _error;
+  BacktestConfigSheetController get _ctrl =>
+      ref.read(backtestConfigSheetControllerProvider.notifier);
 
   @override
   void initState() {
@@ -95,6 +97,8 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
   }
 
   void _onInputChanged() {
+    // 6 个保留控制器的文本驱动 summary 实时回显 → 触发 widget 重建。
+    // 这是输入框局部态重建，非页面级流程态，按 issue 边界保留在 widget。
     if (mounted) setState(() {});
   }
 
@@ -128,13 +132,11 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         }),
       ];
 
-  void _clearError() {
-    if (_error != null) setState(() => _error = null);
-  }
+  void _clearError() => _ctrl.clearError();
 
   /// 成交价来源 i18n 标签（用于 segmented + summary 回显）。
-  String _fillSourceLabel(AppLocalizations l10n) {
-    switch (_fillSource) {
+  String _fillSourceLabel(AppLocalizations l10n, String fillSource) {
+    switch (fillSource) {
       case 'open':
         return l10n.backtestFillOpen;
       case 'mid':
@@ -144,8 +146,8 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
     }
   }
 
-  String _rangeEchoText(AppLocalizations l10n) {
-    if (_rangeKey == 'custom') {
+  String _rangeEchoText(AppLocalizations l10n, String rangeKey) {
+    if (rangeKey == 'custom') {
       final DateTime? s = DateTime.tryParse(_start.text.trim());
       final DateTime? e = DateTime.tryParse(_end.text.trim());
       final int days = (s == null || e == null)
@@ -156,12 +158,12 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
         (days * 96).toString(),
       );
     }
-    return '数据范围:${_rangeText[_rangeKey] ?? _rangeText['30D']!}';
+    return '数据范围:${_rangeText[rangeKey] ?? _rangeText['30D']!}';
   }
 
-  String _summaryRangeValue() => _rangeKey == 'custom'
+  String _summaryRangeValue(String rangeKey) => rangeKey == 'custom'
       ? '${_start.text.trim()} → ${_end.text.trim()}'
-      : _rangeKey;
+      : rangeKey;
 
   String _summaryCapitalValue() {
     final double v = double.tryParse(_capital.text.trim()) ?? 0;
@@ -179,54 +181,59 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
   String _leverageLabel() =>
       '${_leverage.text.trim().isEmpty ? '5' : _leverage.text.trim()}x';
 
-  String _summaryMarketValue(AppLocalizations l10n) => _futures
+  String _summaryMarketValue(AppLocalizations l10n, bool futures) => futures
       ? l10n.backtestSummaryMarketFutures(_leverageLabel())
       : l10n.backtestSummaryMarketSpot;
 
-  String _summaryMatchingValue(AppLocalizations l10n) =>
+  String _summaryMatchingValue(AppLocalizations l10n, String fillSource) =>
       l10n.backtestSummaryMatchingValue(
         _slippage.text.trim().isEmpty ? '0' : _slippage.text.trim(),
         _fee.text.trim().isEmpty ? '0' : _fee.text.trim(),
-        _fillSourceLabel(l10n),
+        _fillSourceLabel(l10n, fillSource),
       );
 
+  /// 校验取值依赖留在 widget 的输入框控制器，故解析在此完成；结果（错误/通过）
+  /// 经 controller 推进流程态。
   Future<void> _submit() async {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    if (_rangeKey == 'custom') {
+    final BacktestConfigSheetState st = ref.read(
+      backtestConfigSheetControllerProvider,
+    );
+    if (st.rangeKey == 'custom') {
       final DateTime? s = DateTime.tryParse(_start.text.trim());
       final DateTime? e = DateTime.tryParse(_end.text.trim());
       if (s == null || e == null) {
-        setState(() => _error = l10n.backtestErrorInvalidDate);
+        _ctrl.setError(l10n.backtestErrorInvalidDate);
         return;
       }
       if (!e.isAfter(s)) {
-        setState(() => _error = l10n.backtestErrorEndBeforeStart);
+        _ctrl.setError(l10n.backtestErrorEndBeforeStart);
         return;
       }
     }
     final double? capital = double.tryParse(_capital.text.trim());
     if (capital == null || capital <= 0) {
-      setState(() => _error = l10n.backtestErrorInvalidCapital);
+      _ctrl.setError(l10n.backtestErrorInvalidCapital);
       return;
     }
     final double? slippageBps = double.tryParse(_slippage.text.trim());
     if (slippageBps == null || slippageBps < 0) {
-      setState(() => _error = l10n.backtestErrorInvalidSlippage);
+      _ctrl.setError(l10n.backtestErrorInvalidSlippage);
       return;
     }
     final double? feeBps = double.tryParse(_fee.text.trim());
     if (feeBps == null || feeBps < 0) {
-      setState(() => _error = l10n.backtestErrorInvalidFee);
+      _ctrl.setError(l10n.backtestErrorInvalidFee);
       return;
     }
     final int? leverage = int.tryParse(_leverage.text.trim());
-    if (_futures && (leverage == null || leverage <= 0 || leverage > 100)) {
-      setState(() => _error = l10n.backtestErrorInvalidCapital);
+    if (st.futures && (leverage == null || leverage <= 0 || leverage > 100)) {
+      _ctrl.setError(l10n.backtestErrorInvalidCapital);
       return;
     }
 
     if (!mounted) return;
-    setState(() => _error = null);
+    _ctrl.clearError();
     context.push('/ai/backtest-run');
   }
 
@@ -238,6 +245,9 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final BacktestConfigSheetState st = ref.watch(
+      backtestConfigSheetControllerProvider,
+    );
     final double bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
       backgroundColor: c.bg,
@@ -296,17 +306,12 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                             children: <Widget>[
                               _RangeChips(
                                 ranges: _ranges,
-                                value: _rangeKey,
+                                value: st.rangeKey,
                                 l10n: l10n,
                                 scheme: c,
-                                onChanged: (String v) {
-                                  setState(() {
-                                    _rangeKey = v;
-                                    _error = null;
-                                  });
-                                },
+                                onChanged: _ctrl.setRange,
                               ),
-                              if (_rangeKey == 'custom') ...<Widget>[
+                              if (st.isCustomRange) ...<Widget>[
                                 const SizedBox(height: 14),
                                 Row(
                                   children: <Widget>[
@@ -346,7 +351,7 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                               const SizedBox(height: 10),
                               Text(
                                 key: const Key('backtest-range-echo'),
-                                _rangeEchoText(l10n),
+                                _rangeEchoText(l10n, st.rangeKey),
                                 style: TextStyle(
                                   color: c.textDim,
                                   fontSize: 11,
@@ -387,7 +392,7 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                               _Segmented(
                                 key: const Key('backtest-market'),
                                 scheme: c,
-                                value: _futures ? 'futures' : 'spot',
+                                value: st.futures ? 'futures' : 'spot',
                                 options: <({String key, String label})>[
                                   (key: 'spot', label: l10n.backtestMarketSpot),
                                   (
@@ -396,9 +401,9 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                                   ),
                                 ],
                                 onChanged: (String v) =>
-                                    setState(() => _futures = v == 'futures'),
+                                    _ctrl.setFutures(v == 'futures'),
                               ),
-                              if (_futures) ...<Widget>[
+                              if (st.futures) ...<Widget>[
                                 const SizedBox(height: 14),
                                 _LeveragePicker(
                                   controller: _leverage,
@@ -430,15 +435,14 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                           scheme: c,
                           slippage: _slippage,
                           fee: _fee,
-                          fillSource: _fillSource,
-                          partialData: _partialData,
+                          fillSource: st.fillSource,
+                          partialData: st.partialData,
                           l10n: l10n,
                           inputFormatters: _numericFormatters,
                           onInputChanged: (_) => _clearError(),
-                          onFillSourceChanged: (String v) =>
-                              setState(() => _fillSource = v),
+                          onFillSourceChanged: _ctrl.setFillSource,
                           onPartialDataChanged: (String v) =>
-                              setState(() => _partialData = v == 'yes'),
+                              _ctrl.setPartialData(v == 'yes'),
                         ),
                         const SizedBox(height: 14),
                         _SummaryCard(
@@ -447,7 +451,7 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                           rows: <({String k, String v})>[
                             (
                               k: l10n.backtestSummaryRange,
-                              v: _summaryRangeValue(),
+                              v: _summaryRangeValue(st.rangeKey),
                             ),
                             (
                               k: l10n.backtestSummaryCapital,
@@ -455,24 +459,24 @@ class _BacktestConfigSheetState extends State<BacktestConfigSheet> {
                             ),
                             (
                               k: l10n.backtestSummaryMarket,
-                              v: _summaryMarketValue(l10n),
+                              v: _summaryMarketValue(l10n, st.futures),
                             ),
                             (
                               k: l10n.backtestSummaryMatching,
-                              v: _summaryMatchingValue(l10n),
+                              v: _summaryMatchingValue(l10n, st.fillSource),
                             ),
                             (
                               k: l10n.backtestSummaryData,
-                              v: _partialData
+                              v: st.partialData
                                   ? l10n.backtestSummaryDataAllow
                                   : l10n.backtestSummaryDataStrict,
                             ),
                           ],
                         ),
-                        if (_error != null) ...<Widget>[
+                        if (st.error != null) ...<Widget>[
                           const SizedBox(height: QzSpacing.sm),
                           Text(
-                            _error!,
+                            st.error!,
                             style: TextStyle(
                               color: c.statusDanger,
                               fontSize: 12,
