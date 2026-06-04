@@ -91,7 +91,7 @@ describe('runDecisionProgramsFanOut (Phase 5 S2 #1108)', () => {
 
   it('case 4: 单 scope（length=1）→ 透传，无 scopeDecisions meta', () => {
     const programs = [entryProgram('p1', 's-btc')]
-    const ctx: StrategyExecutionContextV1 = { symbol: 'BTCUSDT' }
+    const ctx: StrategyExecutionContextV1 = { symbol: 'BTCUSDT', portfolio: { equity: 10000 } }
     const decision = runDecisionProgramsFanOut(
       ctx, programs, exprValues, noopGuard, ['p1'], noopGate, noopPortfolio,
       [symbolScopes[0]], undefined,
@@ -119,6 +119,19 @@ describe('runDecisionProgramsFanOut (Phase 5 S2 #1108)', () => {
     // 主 decision = 首个非 NOOP（s-btc）
     expect(decision.action).toBe('OPEN_LONG')
     expect(decision.meta?.activeSymbolScopeId).toBe('s-btc')
+  })
+
+  it('case 5b: 双 scope + ambient program（无 symbolScopeRef）→ 单次执行，不 fail-closed', () => {
+    const programs = [{ ...entryProgram('p1', ''), metadata: {} }]
+    const ctx: StrategyExecutionContextV1 = { symbol: 'BTCUSDT' }
+    const decision = runDecisionProgramsFanOut(
+      ctx, programs, exprValues, noopGuard, ['p1'], noopGate, noopPortfolio,
+      symbolScopes, undefined,
+    )
+    expect(decision.action).toBe('OPEN_LONG')
+    expect(decision.reason).toBe('compiled.p1')
+    expect(decision.meta?.scopeDecisions).toBeUndefined()
+    expect(decision.meta?.activeSymbolScopeId).toBeUndefined()
   })
 
   it('case 6: scope-A NOOP / scope-B OPEN_LONG → primary 取首个非 NOOP（s-eth）', () => {

@@ -1,6 +1,7 @@
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
 import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
-import type { Prisma } from '@/prisma/prisma.types'
+import type { MarketQuotePayload } from '@ai/shared'
+import type { MarketQuote, Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -12,6 +13,7 @@ import { SignalGeneratorRepository } from '@/modules/strategy-signals/repositori
 import { readEventStreamsFromExprPool } from '@/modules/strategy-runtime/runtime-data-plan.resolver'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
+import { BacktestMarketDataRepository } from '../repositories/backtest-market-data.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataService } from '../services/backtest-market-data.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -73,6 +75,7 @@ export class BacktestJobExecutorService {
     private readonly jobsRepository: BacktestJobRepository,
     @Optional() private readonly okxMarketDataProvider?: OkxMarketDataProvider,
     @Optional() private readonly signalGeneratorRepository?: SignalGeneratorRepository,
+    @Optional() private readonly backtestMarketDataRepository?: BacktestMarketDataRepository,
   ) {}
 
   async execute(
@@ -121,6 +124,19 @@ export class BacktestJobExecutorService {
     input: BacktestRunInput,
     initialSummary: BacktestJobInputSummary,
   ): Promise<{ resolvedSummary: BacktestJobInputSummary; result: BacktestReport }> {
+    const initialEventStreams = await this.resolveBacktestEventStreams(input)
+    if (this.hasMissingRequiredEventStreams(input.strategy, initialEventStreams)) {
+      const result = await this.runner.run({ ...input, bars: [], eventStreams: initialEventStreams })
+      return {
+        resolvedSummary: {
+          ...initialSummary,
+          appliedRange: input.dataRange,
+          isPartial: false,
+        },
+        result,
+      }
+    }
+
     await this.marketDataService.prepareData(input)
     const coverage = await this.marketDataService.resolveCoverage(input)
     if (coverage.kind === 'empty' || !coverage.appliedRange) {
@@ -148,6 +164,12 @@ export class BacktestJobExecutorService {
       isPartial: coverage.kind === 'partial',
     }
 
+    const eventStreams = await this.resolveBacktestEventStreams({ ...input, dataRange: coverage.appliedRange })
+    if (this.hasMissingRequiredEventStreams(input.strategy, eventStreams)) {
+      const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars: [], eventStreams })
+      return { resolvedSummary, result }
+    }
+
     const bars = await this.marketDataService.loadBars({ ...input, dataRange: coverage.appliedRange })
     if (bars.length === 0) {
       throw new DomainException('backtest.market_data_empty', {
@@ -156,9 +178,27 @@ export class BacktestJobExecutorService {
         args: { symbols: input.symbols, fromTs: coverage.appliedRange.fromTs, toTs: coverage.appliedRange.toTs },
       })
     }
-    const eventStreams = await this.resolveBacktestEventStreams({ ...input, dataRange: coverage.appliedRange })
     const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars, eventStreams })
     return { resolvedSummary, result }
+  }
+
+  private hasMissingRequiredEventStreams(
+    strategy: BacktestRunInput['strategy'],
+    eventStreams: BacktestRunInput['eventStreams'],
+  ): boolean {
+    const streams = this.resolveRequiredEventStreams(strategy)
+    if (streams.length === 0) return false
+    const suppliedStreams = eventStreams ?? {}
+    return streams.some((stream) => {
+      const events = suppliedStreams[stream.sourceFeedId]
+      if (!Array.isArray(events)) return true
+      return events.length < this.resolveRequiredEventStreamMinimum(stream.schemaRef)
+    })
+  }
+
+  private resolveRequiredEventStreamMinimum(schemaRef: string): number {
+    if (schemaRef === 'open_interest') return 2
+    return 1
   }
 
   private async resolveBacktestEventStreams(input: BacktestRunInput): Promise<BacktestRunInput['eventStreams']> {
@@ -191,11 +231,18 @@ export class BacktestJobExecutorService {
           endMs: input.dataRange.toTs,
         })
       } else if (stream.schemaRef === 'orderbook') {
-        output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOrderbookImbalanceEvents({
+        const events = await this.okxMarketDataProvider.fetchOrderbookImbalanceEvents({
           symbol,
           startMs: input.dataRange.fromTs,
           endMs: input.dataRange.toTs,
         })
+        output[stream.sourceFeedId] = events.length > 0
+          ? events
+          : await this.loadHistoricalOrderbookEventsFromQuotes({
+            symbol,
+            fromTs: input.dataRange.fromTs,
+            toTs: input.dataRange.toTs,
+          })
       } else if (stream.schemaRef === 'open_interest') {
         output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOpenInterestEvents({
           symbol,
@@ -206,6 +253,74 @@ export class BacktestJobExecutorService {
     }
 
     return Object.keys(output).length > 0 ? output : undefined
+  }
+
+  private async loadHistoricalOrderbookEventsFromQuotes(params: {
+    symbol: string
+    fromTs: number
+    toTs: number
+  }): Promise<NonNullable<BacktestRunInput['eventStreams']>[string]> {
+    if (!this.backtestMarketDataRepository) return []
+    const events = await this.loadOrderbookEventsFromStoredQuotes(params)
+    if (events.length > 0) return events
+
+    const snapshots = await this.fetchOrderbookQuoteSnapshots(params.symbol)
+    for (const snapshot of snapshots) {
+      await this.marketDataService.saveQuoteFromProvider(snapshot)
+    }
+    if (snapshots.length === 0) return []
+
+    return this.loadOrderbookEventsFromStoredQuotes(params)
+  }
+
+  private async loadOrderbookEventsFromStoredQuotes(params: {
+    symbol: string
+    fromTs: number
+    toTs: number
+  }): Promise<NonNullable<BacktestRunInput['eventStreams']>[string]> {
+    if (!this.backtestMarketDataRepository) return []
+    const quotes = await this.backtestMarketDataRepository.findHistoricalQuotes({
+      symbol: params.symbol,
+      fromTs: params.fromTs,
+      toTs: params.toTs,
+      limit: 10_000,
+    })
+    return quotes
+      .map(quote => this.toOrderbookRuntimeEvent(quote))
+      .filter((event): event is NonNullable<BacktestRunInput['eventStreams']>[string][number] => event !== null)
+  }
+
+  private async fetchOrderbookQuoteSnapshots(symbol: string): Promise<MarketQuotePayload[]> {
+    if (!this.okxMarketDataProvider) return []
+    return this.okxMarketDataProvider.fetchOrderbookQuoteSnapshots({
+      symbol,
+      samples: 1,
+      intervalMs: 0,
+    })
+  }
+
+  private toOrderbookRuntimeEvent(quote: Pick<MarketQuote, 'id' | 'eventTime' | 'bidPrice' | 'bidQty' | 'askPrice' | 'askQty'>): NonNullable<BacktestRunInput['eventStreams']>[string][number] | null {
+    const bidDepth = this.readFiniteNumber(quote.bidQty)
+    const askDepth = this.readFiniteNumber(quote.askQty)
+    const bestBid = this.readFiniteNumber(quote.bidPrice)
+    const bestAsk = this.readFiniteNumber(quote.askPrice)
+    if (bidDepth === null || askDepth === null || bestBid === null || bestAsk === null) return null
+    if (bidDepth <= 0 || askDepth <= 0 || bestBid <= 0 || bestAsk <= 0) return null
+    const spreadPct = bestAsk >= bestBid
+      ? ((bestAsk - bestBid) / ((bestAsk + bestBid) / 2)) * 100
+      : null
+    return {
+      id: `quote-orderbook:${quote.id}`,
+      ts: quote.eventTime.getTime(),
+      payload: {
+        bidDepth,
+        askDepth,
+        imbalanceRatio: bidDepth / askDepth,
+        bestBid,
+        bestAsk,
+        ...(spreadPct !== null ? { spreadPct } : {}),
+      },
+    }
   }
 
   private async loadWebhookRuntimeEvents(
@@ -290,10 +405,24 @@ export class BacktestJobExecutorService {
     }
   }
 
+  private readFiniteNumber(value: unknown): number | null {
+    const numeric = typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : value && typeof value === 'object' && typeof (value as { toString?: unknown }).toString === 'function'
+          ? Number((value as { toString: () => string }).toString())
+          : NaN
+    return Number.isFinite(numeric) ? numeric : null
+  }
+
   private resolveRequiredEventStreams(strategy: BacktestRunInput['strategy']): ReturnType<typeof readEventStreamsFromExprPool> {
     const candidates = [
+      this.readRecord(strategy.astSnapshot),
       this.readRecord(strategy.astSnapshot)?.exprPool,
+      this.readRecord(strategy.irSnapshot),
       this.readRecord(strategy.irSnapshot)?.exprPool,
+      this.readRecord(strategy.specSnapshot),
       this.readRecord(strategy.specSnapshot)?.exprPool,
     ]
     const streams = candidates.flatMap(candidate => readEventStreamsFromExprPool(candidate))

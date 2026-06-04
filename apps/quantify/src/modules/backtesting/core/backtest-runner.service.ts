@@ -89,6 +89,21 @@ interface CompiledOrderProgramRuntimeState {
   orders: CompiledOrderProgramRuntimeOrder[]
 }
 
+interface RebalanceRuntimeState {
+  lastRebalancedDayBySymbol: Map<string, string>
+}
+
+interface AccountRiskRuntimeState {
+  peakEquity: number
+  dayKey: string | null
+  dayStartEquity: number
+}
+
+interface AccountRiskMetrics {
+  accountDrawdownPct: number
+  accountDailyLossPct: number
+}
+
 function readRequiredTimeframesFromUnknown(source: unknown): string[] | null {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return null
   const record = source as Record<string, unknown>
@@ -169,6 +184,22 @@ export class BacktestRunnerService {
       dataRequirementMissingCount: 0,
       eventStreamMissingCount: 0,
     }
+    diagnostics.eventStreamMissingCount = this.resolveMissingEventStreamCount(input)
+    if (diagnostics.eventStreamMissingCount > 0) {
+      const report = reporter.toReport(input.initialCash)
+      return {
+        ...report,
+        summary: {
+          ...report.summary,
+          totalOpenTrades: 0,
+          openPnl: 0,
+          diagnosticReason: 'BACKTEST_EVENT_STREAM_UNAVAILABLE',
+        },
+        diagnostics,
+        openPositions: [],
+        pendingSignals: [],
+      }
+    }
     const requestedRuntimeTimeframes = this.resolveRequestedRuntimeTimeframes(input)
     const availableRuntimeKeys = new Set<string>()
 
@@ -197,9 +228,16 @@ export class BacktestRunnerService {
     const runtimeRequirements = readAtomicRuntimeRequirementsFromSnapshot(input.strategy)
     const positionRuntimeStateBySymbol = new Map<string, PositionRuntimeState>()
     const orderProgramStatesBySymbol = new Map<string, Map<string, CompiledOrderProgramRuntimeState>>()
+    const rebalanceRuntimeState: RebalanceRuntimeState = { lastRebalancedDayBySymbol: new Map() }
+    const accountRiskRuntimeState: AccountRiskRuntimeState = {
+      peakEquity: input.initialCash,
+      dayKey: null,
+      dayStartEquity: input.initialCash,
+    }
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
     const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
     const requiredHtfTimeframes = this.resolveRequiredHtfTimeframes(input)
+    const runtimeHistoryLimit = this.resolveRuntimeHistoryLimit(input.strategy)
 
     for (const bar of baseBars) {
       while (stateCursor < stateBars.length && stateBars[stateCursor].closeTime <= bar.closeTime) {
@@ -240,6 +278,7 @@ export class BacktestRunnerService {
 
       ledger.markToMarket({ [bar.symbol]: bar.close })
       const snapshot = ledger.snapshot()
+      const accountRiskMetrics = this.resolveAccountRiskMetrics(accountRiskRuntimeState, snapshot.equity, bar.closeTime)
       const position = ledger.getPosition(bar.symbol)
       const compiledDecisionState = this.bumpCompiledDecisionState(compiledDecisionStateBySymbol, bar.symbol)
       const positionRuntimeState = this.syncPositionRuntimeState(positionRuntimeStateBySymbol, position, bar)
@@ -261,9 +300,12 @@ export class BacktestRunnerService {
           usedMargin: snapshot.usedMargin,
           realizedPnl: snapshot.realizedPnl,
         },
+        accountRiskMetrics,
         position,
         positionRuntimeState,
         semanticRuntimeState,
+        requestedTimeframes: requestedRuntimeTimeframes,
+        runtimeHistoryLimit,
       })
       this.collectAvailableRuntimeTimeframes(strategyContext)
         .forEach(timeframe => availableRuntimeKeys.add(this.buildRuntimeRequirementKey(bar.symbol, timeframe)))
@@ -282,20 +324,9 @@ export class BacktestRunnerService {
         : await input.strategy.fn({
           ...strategyContext,
         })
-      // 任何非 NOOP 都算 trigger。intent 形态有两种：
-      //   - legacy engine intent: { type: 'NOOP' | 'OPEN_LONG' | ... }
-      //   - V1 StrategyDecision: { action: 'NOOP' | 'OPEN_LONG' | ... }（Stage3 主流编译产物）
-      // 同时识别两种 NOOP，避免 V1 NOOP 被错算成 trigger 导致 diagnosticReason
-      // 误派为 SIGNAL_FIRED_BUT_NO_FILL（实证 Issue #1708）。
       const isObjectIntent = intent != null && typeof intent === 'object'
       const intentRecord = intent as { type?: unknown; action?: unknown }
-      const isLegacyNoop = isObjectIntent && intentRecord.type === 'NOOP'
-      const isV1Noop = isObjectIntent
-        && intentRecord.action === 'NOOP'
-        && !this.hasCompiledOrderSignal(intent)
-      if (isObjectIntent && !isLegacyNoop && !isV1Noop) {
-        diagnostics.signalTriggerCount += 1
-      }
+      const hasOrderSignal = isObjectIntent && this.hasCompiledOrderSignal(intent)
       this.applyCompiledOrderProgramFills({
         intent,
         input,
@@ -327,6 +358,16 @@ export class BacktestRunnerService {
         reason: strategyReason,
         reasonSource: 'strategy',
       }
+      const rebalanceOrder = strategyOrder.deltaQty === 0
+        ? this.resolveRebalanceOrder({
+            input,
+            bar,
+            currentQty: postOrderProgramPosition.qty,
+            equity: postOrderProgramSnapshot.equity,
+            markPrice: this.getMarkPrice(bar, input.execution.priceSource),
+            state: rebalanceRuntimeState,
+          })
+        : undefined
 
       const riskDecision = this.riskEvaluator.evaluate({
         symbol: bar.symbol,
@@ -345,9 +386,14 @@ export class BacktestRunnerService {
         : undefined
       const selectedOrder = riskOrder && riskOrder.deltaQty !== 0
         ? riskOrder
-        : strategyOrder
+        : strategyOrder.deltaQty !== 0
+          ? strategyOrder
+          : rebalanceOrder ?? strategyOrder
 
       if (selectedOrder.deltaQty !== 0) {
+        if (selectedOrder.reasonSource === 'system' || (selectedOrder.reasonSource === 'strategy' && isObjectIntent)) {
+          diagnostics.signalTriggerCount += 1
+        }
         if (executionPolicy.fillTiming === 'NEXT_BAR_OPEN') {
           pendingOrdersBySymbol.set(bar.symbol, selectedOrder)
         } else {
@@ -361,6 +407,9 @@ export class BacktestRunnerService {
             reasonSource: selectedOrder.reasonSource,
           })
         }
+      }
+      else if (hasOrderSignal) {
+        diagnostics.signalTriggerCount += 1
       }
 
       ledger.markToMarket({ [bar.symbol]: bar.close })
@@ -384,7 +433,7 @@ export class BacktestRunnerService {
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
     // fillCount 表示有效成交数；未平仓开仓也算成交，避免开仓型策略被误报 no-fill。
     diagnostics.fillCount = report.trades.length + openPositions.length
-    const requiredRuntimeKeys = this.resolveRequiredRuntimeKeys(baseBars, requestedRuntimeTimeframes)
+    const requiredRuntimeKeys = this.resolveRequiredRuntimeKeys(baseBars, requestedRuntimeTimeframes, input.symbols)
     diagnostics.dataRequirementMissingCount = requiredRuntimeKeys
       .filter(key => !availableRuntimeKeys.has(key))
       .length
@@ -434,8 +483,13 @@ export class BacktestRunnerService {
   private resolveRequiredRuntimeKeys(
     baseBars: readonly Bar[],
     requiredTimeframes: readonly Timeframe[],
+    requestedSymbols: readonly string[] = [],
   ): string[] {
-    const symbols = Array.from(new Set(baseBars.map(bar => bar.symbol)))
+    const symbols = Array.from(new Set(
+      baseBars.length > 0
+        ? baseBars.map(bar => bar.symbol)
+        : requestedSymbols,
+    ))
     return symbols.flatMap(symbol => requiredTimeframes.map(timeframe => (
       this.buildRuntimeRequirementKey(symbol, timeframe)
     )))
@@ -467,14 +521,75 @@ export class BacktestRunnerService {
     const suppliedStreams = input.eventStreams ?? {}
     return requiredEventStreams.filter((stream) => {
       const events = suppliedStreams[stream.sourceFeedId]
-      return !Array.isArray(events)
+      if (!Array.isArray(events)) return true
+      return events.length < this.resolveRequiredEventStreamMinimum(stream.schemaRef)
     }).length
+  }
+
+  private resolveRequiredEventStreamMinimum(schemaRef: string): number {
+    if (schemaRef === 'open_interest') return 2
+    return 1
+  }
+
+  private resolveRebalanceOrder(input: {
+    input: BacktestRunInput
+    bar: Bar
+    currentQty: number
+    equity: number
+    markPrice: number
+    state: RebalanceRuntimeState
+  }): PendingOrder | undefined {
+    if (!this.hasRebalanceProgram(input.input.strategy)) return undefined
+    if (input.markPrice <= 0 || input.equity <= 0) return undefined
+
+    const rebalanceDay = new Date(input.bar.closeTime).toISOString().slice(0, 10)
+    const stateKey = `${input.bar.symbol}:${rebalanceDay}`
+    if (input.state.lastRebalancedDayBySymbol.get(input.bar.symbol) === stateKey) return undefined
+    input.state.lastRebalancedDayBySymbol.set(input.bar.symbol, stateKey)
+
+    const targetSymbols = Array.from(new Set(input.input.symbols.map(symbol => normalizeExactCode(symbol).split(':')[0] ?? symbol)))
+    const symbolKey = normalizeExactCode(input.bar.symbol).split(':')[0] ?? input.bar.symbol
+    const symbolCount = Math.max(1, targetSymbols.length)
+    if (!targetSymbols.includes(symbolKey)) return undefined
+
+    const targetQty = (input.equity / symbolCount) / input.markPrice
+    const deltaQty = targetQty - input.currentQty
+    if (Math.abs(deltaQty) < 1e-12) return undefined
+
+    return {
+      deltaQty,
+      reason: 'program.rebalance.equal_weight_daily',
+      reasonSource: 'system',
+    }
+  }
+
+  private hasRebalanceProgram(strategy: BacktestRunInput['strategy']): boolean {
+    const candidates = [strategy.specSnapshot, strategy.irSnapshot, strategy.astSnapshot]
+    return candidates.some(candidate => this.hasRebalanceProgramInSnapshot(candidate))
+  }
+
+  private hasRebalanceProgramInSnapshot(snapshot: unknown): boolean {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false
+    const orchestration = (snapshot as { orchestration?: unknown }).orchestration
+    if (!orchestration || typeof orchestration !== 'object' || Array.isArray(orchestration)) return false
+    const programs = (orchestration as { programs?: unknown }).programs
+    const orchestrationPrograms = (snapshot as { orchestrationPrograms?: unknown }).orchestrationPrograms
+    return [programs, orchestrationPrograms].some(candidate => Array.isArray(candidate)
+      && candidate.some(program => (
+        program
+        && typeof program === 'object'
+        && !Array.isArray(program)
+        && (program as { programKind?: unknown }).programKind === 'rebalance'
+      )))
   }
 
   private resolveRequiredEventStreams(strategy: BacktestRunInput['strategy']): ReturnType<typeof readEventStreamsFromExprPool> {
     const candidates = [
+      this.readRecord(strategy.astSnapshot),
       this.readRecord(strategy.astSnapshot)?.exprPool,
+      this.readRecord(strategy.irSnapshot),
       this.readRecord(strategy.irSnapshot)?.exprPool,
+      this.readRecord(strategy.specSnapshot),
       this.readRecord(strategy.specSnapshot)?.exprPool,
     ]
     const streams = candidates.flatMap(candidate => readEventStreamsFromExprPool(candidate))
@@ -1127,17 +1242,22 @@ export class BacktestRunnerService {
     compiledDecisionState: CompiledDecisionRuntimeState
     semanticRuntimeState: StrategyContext['semanticRuntimeState']
     portfolio: StrategyContext['portfolio']
+    accountRiskMetrics: AccountRiskMetrics
     input: BacktestRunInput
     historyBarsBySymbolTimeframe: Map<string, HistorySeries>
+    requestedTimeframes: readonly Timeframe[]
+    runtimeHistoryLimit: number | null
   }) {
     const { bar, htfState, portfolio } = input
-    const requestedTimeframes = this.resolveRequestedRuntimeTimeframes(input.input)
     const barsByTimeframe: Record<string, Bar[]> = {}
+    const scriptBarsByTimeframe: Record<string, ScriptRuntimeBar[]> = {}
 
-    for (const timeframe of requestedTimeframes) {
+    for (const timeframe of input.requestedTimeframes) {
       const history = input.historyBarsBySymbolTimeframe.get(this.buildHistoryKey(bar.symbol, timeframe))
       if (!history || history.rawBars.length === 0) continue
-      barsByTimeframe[timeframe] = history.rawBars
+      const visibleHistory = this.sliceRuntimeHistory(history, bar.closeTime, input.runtimeHistoryLimit)
+      barsByTimeframe[timeframe] = visibleHistory.rawBars
+      scriptBarsByTimeframe[timeframe] = visibleHistory.scriptBars
     }
 
     const multiLegContext = buildRuntimeMarketContext({
@@ -1146,6 +1266,7 @@ export class BacktestRunnerService {
       primaryCloseTs: bar.closeTime,
       params: input.input.strategy.params,
       barsByTimeframe,
+      scriptBarsByTimeframe,
       eventStreams: input.input.eventStreams,
     }) as MultiLegStrategyContext
 
@@ -1172,6 +1293,11 @@ export class BacktestRunnerService {
         lowestPriceSinceEntry: input.positionRuntimeState?.lowestPriceSinceEntry,
       },
       portfolio,
+      accountEquity: portfolio.equity,
+      accountDrawdownPct: input.accountRiskMetrics.accountDrawdownPct,
+      drawdownPct: input.accountRiskMetrics.accountDrawdownPct,
+      accountDailyLossPct: input.accountRiskMetrics.accountDailyLossPct,
+      dailyLossPct: input.accountRiskMetrics.accountDailyLossPct,
       params: input.input.strategy.params,
       ...(eventInbox ? { eventInbox } : {}),
       ...(dataSourceFeeds ? { dataSourceFeeds } : {}),
@@ -1179,6 +1305,74 @@ export class BacktestRunnerService {
       __compiledDecisionState: input.compiledDecisionState,
       ...runtimeContext,
     }
+  }
+
+  private sliceRuntimeHistory(
+    history: HistorySeries,
+    closeTime: number,
+    limit: number | null,
+  ): HistorySeries {
+    if (limit === null) return history
+
+    const end = this.findClosedBarEndIndex(history.rawBars, closeTime)
+    if (end <= 0) return { rawBars: [], scriptBars: [] }
+    const start = Math.max(0, end - limit)
+    return {
+      rawBars: history.rawBars.slice(start, end),
+      scriptBars: history.scriptBars.slice(start, end),
+    }
+  }
+
+  private findClosedBarEndIndex(bars: readonly Bar[], closeTime: number): number {
+    let low = 0
+    let high = bars.length
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2)
+      if (bars[mid]!.closeTime <= closeTime) low = mid + 1
+      else high = mid
+    }
+    return low
+  }
+
+  private resolveRuntimeHistoryLimit(strategy: BacktestRunInput['strategy']): number | null {
+    if (strategy.bindingSource !== 'PUBLISHED_SNAPSHOT_STRICT') return null
+
+    const candidates = [strategy.specSnapshot, strategy.irSnapshot, strategy.astSnapshot, strategy.dataRequirements]
+    let maxLookback = 0
+    for (const candidate of candidates) {
+      maxLookback = Math.max(maxLookback, this.collectRuntimeLookback(candidate))
+    }
+
+    const safeLookback = maxLookback > 0 ? maxLookback + 5 : 2
+    return Math.max(2, Math.min(10_000, safeLookback))
+  }
+
+  private collectRuntimeLookback(value: unknown): number {
+    if (!value || typeof value !== 'object') return 0
+
+    let maxLookback = 0
+    const visit = (node: unknown) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item)
+        return
+      }
+
+      for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+        if (this.isRuntimeLookbackKey(key)) {
+          const parsed = typeof child === 'number' ? child : typeof child === 'string' ? Number(child) : Number.NaN
+          if (Number.isFinite(parsed)) maxLookback = Math.max(maxLookback, Math.floor(parsed))
+        }
+        visit(child)
+      }
+    }
+
+    visit(value)
+    return maxLookback
+  }
+
+  private isRuntimeLookbackKey(key: string): boolean {
+    return /^(?:period|fastPeriod|slowPeriod|signalPeriod|lookback|lookbackBars|window|length|bars)$/u.test(key)
   }
 
   private resolveSemanticRuntimeState(
@@ -1196,6 +1390,33 @@ export class BacktestRunnerService {
     const semanticRuntimeState = buildSemanticRuntimeState(stateKeys)
     store.set(symbol, semanticRuntimeState)
     return semanticRuntimeState
+  }
+
+  private resolveAccountRiskMetrics(
+    state: AccountRiskRuntimeState,
+    equity: number,
+    closeTime: number,
+  ): AccountRiskMetrics {
+    const safeEquity = Number.isFinite(equity) ? equity : 0
+    const dayKey = new Date(closeTime).toISOString().slice(0, 10)
+    if (state.dayKey !== dayKey) {
+      state.dayKey = dayKey
+      state.dayStartEquity = safeEquity
+    }
+    if (safeEquity > state.peakEquity) {
+      state.peakEquity = safeEquity
+    }
+
+    return {
+      accountDrawdownPct: this.lossPct(state.peakEquity, safeEquity),
+      accountDailyLossPct: this.lossPct(state.dayStartEquity, safeEquity),
+    }
+  }
+
+  private lossPct(referenceEquity: number, currentEquity: number): number {
+    if (!Number.isFinite(referenceEquity) || referenceEquity <= 0) return 0
+    if (!Number.isFinite(currentEquity)) return 0
+    return Math.max(0, ((referenceEquity - currentEquity) / referenceEquity) * 100)
   }
 
   private bumpCompiledDecisionState(

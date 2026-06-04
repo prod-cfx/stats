@@ -689,6 +689,16 @@ describe('user reported five strategies: entry -> middle -> publication generati
       expect(artifacts.compiledScript).toContain('protocolVersion')
     })
 
+    it('open-interest breakout: 20 根高点只生成 channel breakout，不生成价格 20 突破', async () => {
+      const state = buildStateFromUserMessage('BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。')
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      const serialized = JSON.stringify({ spec: artifacts.spec, ast: artifacts.ast })
+
+      expect(serialized).toContain('breakout_channel_high_break')
+      expect(serialized).not.toContain('price.level_breakout_up')
+      expect(serialized).not.toContain('const_20')
+    })
+
     it('limit reduce + conditional entry: RSI 减仓保留 exit，不被误识别成开多入场', async () => {
       const state = buildStateFromUserMessage('OKX 合约 BTCUSDT 15m，RSI14 高于 70 时用限价单减仓 50%，突破 70000 后下条件单开多。相对入场价下跌5%平仓')
       const exitActionFacts = factsByRole(state, 'action').filter(fact => fact.phase === 'exit')

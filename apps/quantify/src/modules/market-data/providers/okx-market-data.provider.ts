@@ -105,6 +105,12 @@ interface OkxOpenInterestResponse {
   data: OkxOpenInterestRow[]
 }
 
+interface OkxOpenInterestHistoryResponse {
+  code: string
+  msg: string
+  data: string[][]
+}
+
 export interface OkxRuntimeEvent {
   id: string
   ts: number
@@ -312,6 +318,11 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         const bidDepth = this.sumOrderbookSize(row.bids ?? [])
         const askDepth = this.sumOrderbookSize(row.asks ?? [])
         if (bidDepth <= 0 || askDepth <= 0) return null
+        const bestBid = this.readFiniteNumber(row.bids?.[0]?.[0])
+        const bestAsk = this.readFiniteNumber(row.asks?.[0]?.[0])
+        const spreadPct = bestBid !== null && bestAsk !== null && bestBid > 0 && bestAsk >= bestBid
+          ? ((bestAsk - bestBid) / ((bestAsk + bestBid) / 2)) * 100
+          : null
         return {
           id: `okx-orderbook:${instId}:${ts}`,
           ts,
@@ -320,6 +331,9 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
             bidDepth,
             askDepth,
             imbalanceRatio: bidDepth / askDepth,
+            ...(bestBid !== null ? { bestBid } : {}),
+            ...(bestAsk !== null ? { bestAsk } : {}),
+            ...(spreadPct !== null ? { spreadPct } : {}),
           },
         }
       })
@@ -328,26 +342,69 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
       .sort((left, right) => left.ts - right.ts)
   }
 
+  async fetchOrderbookQuoteSnapshots(input: { symbol: string; samples?: number; intervalMs?: number }): Promise<MarketQuotePayload[]> {
+    const raw = extractRawSymbol(input.symbol)
+    const market = parseSymbolMarket(input.symbol)
+    const instId = this.toInstId(raw, market)
+    const samples = Math.min(Math.max(Math.floor(input.samples ?? 1), 1), 1000)
+    const intervalMs = Math.max(0, Math.floor(input.intervalMs ?? 0))
+    const snapshots: MarketQuotePayload[] = []
+
+    for (let index = 0; index < samples; index += 1) {
+      if (index > 0 && intervalMs > 0) {
+        await this.sleep(intervalMs)
+      }
+      const data = await this.requestRest<OkxOrderbookResponse>(new URL('/api/v5/market/books', this.restBaseUrl).toString(), {
+        params: { instId, sz: '1' },
+        timeout: this.restTimeoutMs,
+      }).catch((): OkxOrderbookResponse => ({ code: '0', msg: '', data: [] }))
+      const quote = this.toOrderbookQuoteSnapshot(data.data?.[0], raw, market)
+      if (quote) snapshots.push(quote)
+    }
+
+    return snapshots.sort((left, right) => left.eventTime - right.eventTime)
+  }
+
   async fetchOpenInterestEvents(input: { symbol: string; startMs: number; endMs: number }): Promise<OkxRuntimeEvent[]> {
     const raw = extractRawSymbol(input.symbol)
     const instId = this.toInstId(raw, 'PERP')
-    const data = await this.requestRest<OkxOpenInterestResponse>(new URL('/api/v5/public/open-interest', this.restBaseUrl).toString(), {
-      params: { instType: 'SWAP', instId },
-      timeout: this.restTimeoutMs,
-    }).catch((): OkxOpenInterestResponse => ({ code: '0', msg: '', data: [] }))
+    const rows: string[][] = []
+    let endMs = input.endMs
+    for (let page = 0; page < 120 && endMs >= input.startMs; page += 1) {
+      const data = await this.requestRest<OkxOpenInterestHistoryResponse>(new URL('/api/v5/rubik/stat/contracts/open-interest-history', this.restBaseUrl).toString(), {
+        params: {
+          instType: 'SWAP',
+          instId,
+          period: '15m',
+          begin: String(input.startMs),
+          end: String(endMs),
+        },
+        timeout: this.restTimeoutMs,
+      }).catch((): OkxOpenInterestHistoryResponse => ({ code: '0', msg: '', data: [] }))
+      const pageRows = data.data ?? []
+      if (pageRows.length === 0) break
+      rows.push(...pageRows)
+      const oldestTs = pageRows.reduce<number | null>((oldest, row) => {
+        const ts = this.readFiniteNumber(row[0])
+        if (ts === null) return oldest
+        return oldest === null || ts < oldest ? ts : oldest
+      }, null)
+      if (oldestTs === null || oldestTs <= input.startMs || pageRows.length < 100) break
+      endMs = oldestTs - 1
+    }
 
-    return (data.data ?? [])
+    const events = rows
       .map((row): OkxRuntimeEvent | null => {
-        const ts = this.readFiniteNumber(row.ts)
-        const openInterest = this.readFiniteNumber(row.oi)
+        const ts = this.readFiniteNumber(row[0])
+        const openInterest = this.readFiniteNumber(row[1])
         if (ts === null || openInterest === null) return null
-        const openInterestCcy = this.readFiniteNumber(row.oiCcy)
-        const openInterestUsd = this.readFiniteNumber(row.oiUsd)
+        const openInterestCcy = this.readFiniteNumber(row[2])
+        const openInterestUsd = this.readFiniteNumber(row[3])
         return {
-          id: `okx-open-interest:${row.instId ?? instId}:${ts}`,
+          id: `okx-open-interest-history:${instId}:${ts}`,
           ts,
           payload: {
-            instId: row.instId ?? instId,
+            instId,
             openInterest,
             oi: openInterest,
             ...(openInterestCcy !== null ? { openInterestCcy } : {}),
@@ -358,6 +415,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
       .filter((event): event is OkxRuntimeEvent => event !== null)
       .filter(event => event.ts >= input.startMs && event.ts <= input.endMs)
       .sort((left, right) => left.ts - right.ts)
+    return [...new Map(events.map(event => [event.id, event])).values()]
   }
 
   async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
@@ -525,6 +583,31 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     }, 0)
   }
 
+  private toOrderbookQuoteSnapshot(row: OkxOrderbookRow | undefined, raw: string, market: SymbolMarketType): MarketQuotePayload | null {
+    const ts = this.readFiniteNumber(row?.ts)
+    const bidPrice = row?.bids?.[0]?.[0]
+    const bidQty = row?.bids?.[0]?.[1]
+    const askPrice = row?.asks?.[0]?.[0]
+    const askQty = row?.asks?.[0]?.[1]
+    const numericBid = this.readFiniteNumber(bidPrice)
+    const numericAsk = this.readFiniteNumber(askPrice)
+    const numericBidQty = this.readFiniteNumber(bidQty)
+    const numericAskQty = this.readFiniteNumber(askQty)
+    if (ts === null || numericBid === null || numericAsk === null || numericBidQty === null || numericAskQty === null) return null
+    if (numericBid <= 0 || numericAsk <= 0 || numericBidQty <= 0 || numericAskQty <= 0) return null
+
+    return {
+      symbol: toSymbolCode(raw, market),
+      lastPrice: String((numericBid + numericAsk) / 2),
+      bidPrice,
+      bidQty,
+      askPrice,
+      askQty,
+      eventTime: ts,
+      source: 'OKX_REST_BOOKS',
+    }
+  }
+
   private fromInstId(instId: string): string {
     const upper = instId.toUpperCase()
     if (upper.endsWith('-SWAP')) {
@@ -673,7 +756,9 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         symbol: toSymbolCode(rawSymbol, market),
         lastPrice: ticker.last ?? ticker.lastPx ?? '0',
         bidPrice: ticker.bidPx,
+        bidQty: ticker.bidSz,
         askPrice: ticker.askPx,
+        askQty: ticker.askSz,
         volume: ticker.vol24h,
         eventTime: Number(ticker.ts ?? Date.now()),
         source: 'OKX_WS',

@@ -224,6 +224,7 @@ export class CanonicalSpecV2IrCompilerService {
     const riskPredicates: RiskPredicateDef[] = []
     const rulePortfolioRisks: IrOrchestrationPortfolioRisk[] = []
     let maxConcurrentPositions = hasOrderPrograms ? orderProgramLevelCount : 1
+    const portfolioSourcePaths = new Set<string>()
 
     // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
@@ -277,6 +278,7 @@ export class CanonicalSpecV2IrCompilerService {
       const maxConcurrent = this.tryReadMaxConcurrentPositions(rule)
       if (maxConcurrent !== null) {
         maxConcurrentPositions = maxConcurrent
+        this.addRuleSourcePath(portfolioSourcePaths, rule)
         continue
       }
 
@@ -389,6 +391,7 @@ export class CanonicalSpecV2IrCompilerService {
         maxConcurrentPositions,
         allowPyramiding: hasOrderPrograms || lifecyclePyramiding.allow,
         maxPyramidingLayers: hasOrderPrograms ? orderProgramLevelCount : lifecyclePyramiding.maxLayers,
+        ...(portfolioSourcePaths.size > 0 ? { sourcePaths: [...portfolioSourcePaths].sort() } : {}),
       },
       dataRequirements: {
         warmupBars: maxLookback,
@@ -1017,6 +1020,9 @@ export class CanonicalSpecV2IrCompilerService {
 
     if (normalizedGroup.kind !== 'AND') return normalizedGroup
 
+    const breakoutNormalized = this.normalizeBreakoutCompileNoise(normalizedGroup)
+    if (breakoutNormalized !== normalizedGroup) return breakoutNormalized
+
     const reclaim = this.findRsiReclaimSequence(normalizedGroup)
     if (!reclaim) return normalizedGroup
 
@@ -1027,6 +1033,41 @@ export class CanonicalSpecV2IrCompilerService {
     if (children.length === normalizedGroup.children.length) return normalizedGroup
     if (children.length === 1) return children[0]!
     return { ...normalizedGroup, children }
+  }
+
+  private normalizeBreakoutCompileNoise(condition: CanonicalConditionNode): CanonicalConditionNode {
+    if (condition.kind !== 'AND') return condition
+    const channelPeriods = new Map<'up' | 'down', Set<number>>()
+    for (const child of condition.children) {
+      if (!this.isConditionAtom(child)) continue
+      const direction = child.key === 'breakout.channel_high_break'
+        ? 'up'
+        : child.key === 'breakout.channel_low_break'
+          ? 'down'
+          : null
+      if (!direction) continue
+      const period = this.readNumber([child.params?.period], Number.NaN)
+      if (!Number.isFinite(period)) continue
+      const periods = channelPeriods.get(direction) ?? new Set<number>()
+      periods.add(period)
+      channelPeriods.set(direction, periods)
+    }
+    if (channelPeriods.size === 0) return condition
+
+    const children = condition.children.filter((child) => {
+      if (!this.isConditionAtom(child)) return true
+      const direction = child.key === 'price.level_breakout_up'
+        ? 'up'
+        : child.key === 'price.level_breakout_down'
+          ? 'down'
+          : null
+      if (!direction) return true
+      const priceLevel = this.readNumber([child.params?.priceLevel, child.value], Number.NaN)
+      return !Number.isFinite(priceLevel) || !channelPeriods.get(direction)?.has(priceLevel)
+    })
+    if (children.length === condition.children.length) return condition
+    if (children.length === 1) return children[0]!
+    return { ...condition, children }
   }
 
   private findRsiReclaimSequence(condition: CanonicalConditionNode): CanonicalConditionAtom | null {
@@ -1807,7 +1848,7 @@ export class CanonicalSpecV2IrCompilerService {
         const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], NaN)
         const fastPeriod = this.readNumber([atom.params?.fastPeriod], NaN)
         const slowPeriod = this.readNumber([atom.params?.slowPeriod], NaN)
-        if ((atom.params?.priceCross === true && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(fastPeriod)) || (!Number.isFinite(slowPeriod) && Number.isFinite(period) && (!Number.isFinite(fastPeriod) || fastPeriod === period))) {
+        if (atom.params?.priceCross === true && Number.isFinite(fastPeriod)) {
           const referencePeriod = Number.isFinite(period) ? period : fastPeriod
           const kind = typeof atom.params?.indicator === 'string' && atom.params.indicator.toLowerCase() === 'sma' ? 'SMA' : 'EMA'
           const closeRef = this.ensurePriceSeries(context, 'close')
@@ -1818,6 +1859,9 @@ export class CanonicalSpecV2IrCompilerService {
             atom.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER',
             [closeRef, ref],
           )
+        }
+        if (this.isMovingAverageCrossSlowPeriodRequired(atom) && (!Number.isFinite(slowPeriod) || slowPeriod <= 0)) {
+          throw new Error(`codegen.canonical_spec_v2_ma_cross_invalid_slow_period:${atom.key}:${slowPeriod}`)
         }
         const movingAverage = this.resolveMovingAverageAtomConfig(atom, context.movingAverage)
         const fastRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.fast)
@@ -1848,22 +1892,6 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'price.detect.indicator_boundary': {
         const indicator = this.readNestedParam(atom.params, 'indicator', 'name') ?? atom.params?.indicator
-        if (typeof indicator !== 'string' || indicator.toLowerCase() !== 'bollinger') {
-          return this.upsertPredicate(
-            context.predicateMap,
-            `${seed}_indicator_boundary_generic`,
-            'externalSignal',
-            [],
-            {
-              provider: 'indicator_boundary',
-              sourceFeedId: 'indicator.boundary',
-              signalId: 'indicator_boundary_touch',
-              indicator: typeof indicator === 'string' ? indicator : 'generic',
-              boundaryRole: this.readStringParam(atom.params?.boundaryRole) ?? 'lower',
-              confirmationMode: this.readStringParam(atom.params?.confirmationMode) ?? 'touch',
-            },
-          )
-        }
         const boundaryRole = this.readStringParam(atom.params?.boundaryRole)
           ?? this.readStringParam(atom.params?.boundary)
         const confirmationMode = this.readStringParam(atom.params?.confirmationMode)
@@ -2097,14 +2125,21 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
-      case 'orderbook.imbalance':
+      case 'orderbook.imbalance': {
+        const ratio = this.readOptionalNumber(atom.params?.ratio)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_orderbook_imbalance`,
           'orderbookImbalance',
           [],
-          this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+          {
+            ...this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+            metric: 'depth_ratio',
+            side: this.readStringParam(atom.params?.side) ?? 'bid_over_ask',
+            ...(ratio !== null ? { ratio } : {}),
+          },
         )
+      }
 
       case 'orderbook.spread_condition':
         return this.upsertPredicate(
@@ -3001,6 +3036,13 @@ export class CanonicalSpecV2IrCompilerService {
       fast,
       slow: slow > fast ? slow : fast + 14,
     }
+  }
+
+  private isMovingAverageCrossSlowPeriodRequired(atom: CanonicalConditionAtom): boolean {
+    const rawIndicator = this.readStringParam(atom.params?.indicator)?.toLowerCase()
+    if (rawIndicator !== 'ma' && rawIndicator !== 'ema' && rawIndicator !== 'sma') return false
+    if (atom.params?.priceCross === true) return false
+    return atom.params?.fastPeriod !== undefined
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {
@@ -4676,6 +4718,13 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+  private addRuleSourcePath(target: Set<string>, rule: CanonicalRuleV2): void {
+    const sourcePath = typeof rule.metadata?.sourcePath === 'string'
+      ? rule.metadata.sourcePath.trim()
+      : ''
+    if (sourcePath) target.add(sourcePath)
+  }
+
   private collectPositionLifecycleRuntimeRequirements(
     rule: CanonicalRuleV2,
     actions: ActionDef[],
@@ -5208,6 +5257,7 @@ export class CanonicalSpecV2IrCompilerService {
       ?? this.readOptionalNumber(atom.params?.valuePct)
       ?? this.readOptionalNumber(atom.params?.thresholdPct)
       ?? this.readOptionalNumber(atom.params?.changePct)
+      ?? this.readOptionalNumber(atom.params?.ratio)
       ?? this.readOptionalNumber(atom.params?.notionalUsd)
     if (value !== null) params.value = value
     const window = this.readStringParam(atom.params?.window)

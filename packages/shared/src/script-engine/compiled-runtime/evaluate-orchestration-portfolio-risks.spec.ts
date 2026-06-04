@@ -37,6 +37,24 @@ describe('evaluateOrchestrationPortfolioRisks', () => {
     })
   })
 
+  it('uses accountDrawdownPct alias when drawdownPct is absent', () => {
+    expect(evaluateOrchestrationPortfolioRisks([baseRisk({ mode: 'enforce' })], { accountDrawdownPct: 8 })).toEqual({
+      blockEntryLong: false,
+      blockEntryShort: false,
+      observedBreaches: [],
+    })
+  })
+
+  it('uses accountDailyLossPct alias for daily_loss_pct', () => {
+    expect(evaluateOrchestrationPortfolioRisks([
+      baseRisk({ mode: 'enforce', metric: 'daily_loss_pct', thresholdPct: 5 }),
+    ], { accountDailyLossPct: 3 })).toEqual({
+      blockEntryLong: false,
+      blockEntryShort: false,
+      observedBreaches: [],
+    })
+  })
+
   it('enforce + dd 0 (flat) → no block', () => {
     expect(evaluateOrchestrationPortfolioRisks([baseRisk({ mode: 'enforce' })], { drawdownPct: 0 })).toEqual({
       blockEntryLong: false,

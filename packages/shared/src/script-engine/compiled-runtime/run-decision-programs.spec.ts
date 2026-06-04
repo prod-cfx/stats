@@ -18,6 +18,41 @@ const PTP_PROGRAM = {
 
 const baseGuard = { forceExit: false, blockNewEntry: false, strategyHalt: false } as Guard
 
+describe('flat exit decisions', () => {
+  it('skips flat CLOSE_LONG exit programs and allows later entry programs to fire', () => {
+    const exitProgram = {
+      id: 'exit_cross_under',
+      phase: 'exit' as const,
+      priority: 100,
+      when: 'exit_true',
+      actions: [{ kind: 'CLOSE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 100 } }],
+    }
+    const entryProgram = {
+      id: 'entry_cross_over',
+      phase: 'entry' as const,
+      priority: 200,
+      when: 'entry_true',
+      actions: [{ kind: 'OPEN_LONG' as const, quantity: { mode: 'pct_equity' as const, value: 10 } }],
+    }
+    const ctx = {
+      position: { qty: 0 },
+      portfolio: { equity: 10000 },
+      currentPrice: 100,
+      __compiledDecisionState: { previousPositionQty: 0, lastTriggeredByProgram: {}, barIndex: 0 },
+    } as unknown as Ctx
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [exitProgram, entryProgram] as unknown as Programs,
+      { exit_true: true, entry_true: true },
+      baseGuard,
+      [exitProgram.id, entryProgram.id],
+    )
+
+    expect(decision.action).toBe('OPEN_LONG')
+  })
+})
+
 describe('partial take profit decision gate', () => {
   it('skips program whose tier is already fired', () => {
     const ctx = {

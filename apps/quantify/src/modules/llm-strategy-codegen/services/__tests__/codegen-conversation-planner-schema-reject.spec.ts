@@ -12,6 +12,7 @@ import { Logger } from '@nestjs/common'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 
 interface SvcShell {
   // dependencies we exercise
@@ -437,5 +438,88 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     expect(JSON.stringify(plan.semanticPatch)).toContain('"thresholdPct":15')
     const gateRule = plan.semanticPatch?.rules?.find(rule => rule.phase === 'gate')
     expect(JSON.stringify(gateRule?.effects)).not.toContain('action.open_long')
+  })
+
+  it('planner asks for core semantics but deterministic rules tree can recover open-interest 20-bar high breakout entry', async () => {
+    const text = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
+    const { svc, shell } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    shell.aiService.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我当前理解的策略是：BTCUSDT 15m；已识别部分条件，但仍未完整。 现在还缺一个会影响脚本生成一致性的条件：核心交易语义。 请确认：当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+        semanticPatch: {
+          contextSlots: { symbol: 'BTCUSDT', timeframe: '15m' },
+        },
+      }),
+    })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    const serialized = JSON.stringify(plan.semanticPatch?.rules ?? [])
+    expect(shell.aiService.chat).toHaveBeenCalledTimes(1)
+    expect(plan.assistantPrompt).not.toContain('核心交易语义')
+    expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'and' }),
+      }),
+    ]))
+    expect(serialized).toContain('openInterest.condition')
+    expect(serialized).toContain('price.breakout_up')
+    expect(serialized).toContain('action.open_long')
+    expect(serialized).toContain('"period":20')
+    expect(serialized).toContain('channel_high')
+  })
+
+  it('deterministic schema-reject recovery survives seed state builder projection for open-interest breakout', () => {
+    const text = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+    const fallbackPatch = new PlannerDispatcherMergeService().buildRulesTreeFallbackFromDispatcher(dispatcherPatch, text)
+    const state = new SemanticSeedStateBuilderService().build(fallbackPatch, text)
+
+    const serialized = JSON.stringify(state?.rules ?? [])
+    expect(serialized).toContain('openInterest.condition')
+    expect(serialized).toContain('price.breakout_up')
+    expect(serialized).toContain('action.open_long')
+  })
+
+  it('recovers rules when planner returns context-only semanticPatch and execution-slot merge keeps it context-only', async () => {
+    const text = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
+    const { svc, shell, mergeSvc } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    jest.spyOn(mergeSvc, 'mergeDeterministicExecutionSlots').mockReturnValue({
+      contextSlots: { symbol: 'BTCUSDT', timeframe: '15m' },
+    } as any)
+    shell.aiService.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我当前理解的策略是：BTCUSDT 15m；已识别部分条件，但仍未完整。 现在还缺一个会影响脚本生成一致性的条件：核心交易语义。 请确认：当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+        semanticPatch: {
+          contextSlots: { symbol: 'BTCUSDT', timeframe: '15m' },
+        },
+      }),
+    })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    const serialized = JSON.stringify(plan.semanticPatch?.rules ?? [])
+    expect(plan.assistantPrompt).not.toContain('核心交易语义')
+    expect(serialized).toContain('openInterest.condition')
+    expect(serialized).toContain('price.breakout_up')
+    expect(serialized).toContain('action.open_long')
   })
 })

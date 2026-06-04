@@ -52,6 +52,7 @@ export function BacktestSummaryCard({
     ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
   const openPnlValue = typeof result.openPnl === 'number' ? formatSignedPnl(result.openPnl) : null
+  const hasOpenTrades = (result.openTradeCount ?? 0) > 0
   const metrics = normalizedMarketType === 'spot'
     ? [
         {
@@ -143,12 +144,14 @@ export function BacktestSummaryCard({
       ]
   const deployBlockMessage = result.maxDrawdownPct > 20
     ? t('aiQuant.messages.backtestDrawdownFail')
-    : result.tradeCount === 0
+    : result.tradeCount === 0 && !hasOpenTrades
       ? normalizedMarketType === 'spot'
         ? isEn
           ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
           : '本次回测未形成已完成交易，暂不允许部署。请调整现货策略条件后重试。'
         : t('aiQuant.messages.backtestNoTrades')
+      : result.tradeCount === 0 && hasOpenTrades
+      ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
       : t('aiQuant.messages.backtestDrawdownFail')
   const effectiveDeployLabel = deployLabel
     ?? (deploymentState === 'running'

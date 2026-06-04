@@ -225,6 +225,49 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('passes when max concurrent positions trace is carried by portfolio metadata', () => {
+    const input = fixture()
+    input.rules.push({
+      id: 'rule-max-concurrent',
+      phase: 'gate',
+      condition: { kind: 'atom', key: 'execution.always' },
+      effects: {
+        positions: [{ kind: 'atom', key: 'position.max_concurrent_positions', params: { count: 3 } }],
+      },
+    })
+    input.canonicalSpec.rules.push({
+      id: 'semantic-max-concurrent-rule-max-concurrent',
+      phase: 'gate',
+      priority: 99,
+      condition: {
+        kind: 'atom',
+        key: 'position.max_concurrent_positions',
+        semanticScope: 'portfolio',
+        op: 'LT',
+        value: 3,
+        params: { count: 3 },
+      },
+      actions: [{ type: 'BLOCK_NEW_ENTRY', atomKey: 'position.max_concurrent_positions', sourcePath: 'rules[1].effects.positions[0]' }],
+      metadata: {
+        semanticKey: 'position.max_concurrent_positions',
+        sourcePath: 'rules[1].effects.positions[0]',
+      },
+    })
+    input.ir.portfolio.maxConcurrentPositions = 3
+    input.ir.portfolio.sourcePaths = ['rules[1].effects.positions[0]']
+    input.ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'trace.ir', passed: true }),
+      expect.objectContaining({ key: 'trace.ast', passed: true }),
+    ]))
+  })
+
   it('passes rules-only trace for top-level order programs', () => {
     const input = fixture()
     input.rules = [{

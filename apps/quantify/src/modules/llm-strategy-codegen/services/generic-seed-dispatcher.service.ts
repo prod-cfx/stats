@@ -8,6 +8,7 @@ import type {
 } from '../atom-contracts/atom-contract-surface.types'
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import { isRuleEffectsByRole } from '../types/atom-expr'
 import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import type { SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
 /**
@@ -1280,7 +1281,7 @@ export class GenericSeedDispatcher {
   dispatch(message?: string): DispatchResult {
     const text = (message ?? '').trim()
     const flatPatch = this.dispatchFlatPatch(text)
-    const rules = this.buildTypedRulesFromFlatPatch(flatPatch, text)
+    const rules = this.repairPairSpreadEntryRules(this.buildTypedRulesFromFlatPatch(flatPatch, text), text)
     return {
       ...(flatPatch.contextSlots ? { contextSlots: flatPatch.contextSlots } : {}),
       ...(rules.length > 0 ? { rules } : {}),
@@ -1533,6 +1534,41 @@ export class GenericSeedDispatcher {
       }
     }
     return rules
+  }
+
+  private repairPairSpreadEntryRules(rules: SemanticRule[], userMessage: string): SemanticRule[] {
+    if (!this.hasLegScopeIntent(userMessage) || !this.hasOpenActionIntent(userMessage) || this.hasCloseActionIntent(userMessage)) {
+      return rules
+    }
+    return rules.map((rule) => {
+      if (rule.phase !== 'exit' || !isRuleEffectsByRole(rule.effects) || !this.ruleConditionContainsKey(rule.condition, 'orderbook.spread_condition')) return rule
+      const actions = [...rule.effects.actions].filter(action =>
+        action.kind !== 'atom'
+        || (action.key !== ATOM_CONTRACT_REGISTRY['action.close_long'].key && action.key !== ATOM_CONTRACT_REGISTRY['action.close_short'].key),
+      )
+      if (!actions.some(action => action.kind === 'atom' && action.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key)) {
+        actions.push({ kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.open_long'].key, params: { phase: 'entry' }, sideScope: 'long' })
+      }
+      if (!actions.some(action => action.kind === 'atom' && action.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key)) {
+        actions.push({ kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.open_short'].key, params: { phase: 'entry' }, sideScope: 'short' })
+      }
+      return {
+        ...rule,
+        phase: 'entry',
+        sideScope: 'both',
+        effects: {
+          ...rule.effects,
+          actions,
+        },
+      }
+    })
+  }
+
+  private ruleConditionContainsKey(condition: SemanticRule['condition'], key: string): boolean {
+    if (condition.kind === 'atom') return condition.key === key
+    if (condition.kind === 'and' || condition.kind === 'or') return condition.children.some(child => this.ruleConditionContainsKey(child, key))
+    if (condition.kind === 'not') return this.ruleConditionContainsKey(condition.child, key)
+    return condition.steps.some(step => this.ruleConditionContainsKey(step, key))
   }
 
   private buildTypedRulePredicateGroups(
@@ -1846,7 +1882,11 @@ export class GenericSeedDispatcher {
       const fixedGateEffect = contract?.surface?.phaseResolver === 'fixed-gate' && contract.roles.includes('effect')
       if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !fixedGateEffect) return
       const evidenceText = isEvidenceWithText(item.evidence) ? item.evidence.text : undefined
-      const phase = this.resolveTypedRulePhaseForAtom(item.key, item.phase)
+      const forcePairSpreadEntry = item.key === 'orderbook.spread_condition'
+        && this.hasLegScopeIntent(userMessage)
+        && this.hasOpenActionIntent(userMessage)
+        && !this.hasCloseActionIntent(userMessage)
+      const phase = forcePairSpreadEntry ? 'entry' : this.resolveTypedRulePhaseForAtom(item.key, item.phase)
       out.push({
         key: item.key,
         phase: this.shouldTreatPredicateEvidenceAsExit(evidenceText) ? 'exit' : phase,
@@ -1973,6 +2013,9 @@ export class GenericSeedDispatcher {
       })
     }
     for (const item of out) {
+      if (item.key === 'orderbook.imbalance') {
+        item.params = { ...this.extractOrderbookImbalanceParams(userMessage), ...item.params }
+      }
       if (item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
         item.params = { ...this.extractFundingRateParams(userMessage), ...item.params }
       }
@@ -2065,6 +2108,14 @@ export class GenericSeedDispatcher {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
       if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      if (
+        this.hasLegScopeIntent(userMessage)
+        && this.hasOpenActionIntent(userMessage)
+        && !this.hasCloseActionIntent(userMessage)
+        && (item.key === ATOM_CONTRACT_REGISTRY['action.close_long'].key || item.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key)
+      ) {
+        return
+      }
       let phase = item.phase
       let sideScope = item.sideScope
       if (item.key === 'execution.limit_chase' && phase === 'entry') {
@@ -2498,6 +2549,31 @@ export class GenericSeedDispatcher {
     if (!raw) return null
     const parsed = Number(raw)
     return Number.isFinite(parsed) ? parsed : null
+  }
+
+  private extractOrderbookImbalanceParams(userMessage: string): Record<string, unknown> {
+    const percent = this.parsePositiveNumber(userMessage.match(/(?:imbalance|失衡|盘口)[^\d，。；;]{0,32}(\d+(?:\.\d+)?)\s*(?:%|percent)/iu)?.[1])
+    const ratio = percent !== null
+      ? this.convertOrderbookImbalancePercentToRatio(percent)
+      : this.parsePositiveNumber(userMessage.match(/(?:imbalance|失衡|盘口)[^\d，。；;]{0,32}(\d+(?:\.\d+)?)\s*(?:倍|x|X)/iu)?.[1])
+    return {
+      side: /卖盘|卖方|ask|sell/iu.test(userMessage) && !/买盘|买方|bid|buy|多/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask',
+      operator: /小于|低于|below|less|lt/iu.test(userMessage) ? 'lt' : 'gt',
+      ...(ratio !== null ? { ratio } : {}),
+    }
+  }
+
+  private convertOrderbookImbalancePercentToRatio(percent: number): number | null {
+    if (!Number.isFinite(percent) || percent <= 0 || percent >= 100) return null
+    const share = percent / 100
+    const ratio = share / (1 - share)
+    return Number.isFinite(ratio) && ratio > 0 ? Number(ratio.toFixed(6)) : null
+  }
+
+  private parsePositiveNumber(raw: string | undefined): number | null {
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
   }
 
   private hasFundingRateIntent(userMessage: string): boolean {

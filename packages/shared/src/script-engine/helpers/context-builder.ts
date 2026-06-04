@@ -145,7 +145,7 @@ function deriveStateContext(context: Pick<
   const explicitTrendDirection = normalizeStateValue(context.trendDirection)
   const explicitVolatilityState = normalizeStateValue(context.volatilityState)
 
-  const closes = context.bars.map(bar => bar.close).filter(value => Number.isFinite(value))
+  const closes = collectRecentFiniteCloses(context.bars, 20)
   const derivedTrendDirection = explicitTrendDirection ?? deriveTrendDirection(closes)
   const derivedVolatilityState = explicitVolatilityState ?? deriveVolatilityState(
     context.bars,
@@ -158,6 +158,15 @@ function deriveStateContext(context: Pick<
     trendDirection: derivedTrendDirection ?? undefined,
     volatilityState: derivedVolatilityState ?? undefined,
   }
+}
+
+function collectRecentFiniteCloses(bars: StrategyContext['bars'], limit: number): number[] {
+  const closes: number[] = []
+  for (let index = bars.length - 1; index >= 0 && closes.length < limit; index -= 1) {
+    const close = bars[index]?.close
+    if (Number.isFinite(close)) closes.unshift(close)
+  }
+  return closes
 }
 
 function deriveTrendDirection(prices: number[]): string | null {
@@ -176,7 +185,9 @@ function deriveVolatilityState(
   if (bars.length < 15 || typeof currentPrice !== 'number' || !Number.isFinite(currentPrice) || currentPrice <= 0) {
     return null
   }
-  const atrValue = atr(bars, Math.min(14, bars.length - 1))
+  const period = Math.min(14, bars.length - 1)
+  const atrBars = bars.slice(-(period + 1))
+  const atrValue = atr(atrBars, period)
   if (typeof atrValue !== 'number' || !Number.isFinite(atrValue)) {
     return null
   }

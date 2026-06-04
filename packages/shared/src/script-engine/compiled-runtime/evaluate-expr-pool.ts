@@ -39,6 +39,10 @@ interface CompiledExprNode {
   }
 }
 
+type RuntimeFeedEvent = { id?: unknown; ts?: unknown; payload?: unknown }
+
+const sortedFeedEventsCache = new WeakMap<ReadonlyArray<RuntimeFeedEvent>, ReadonlyArray<RuntimeFeedEvent>>()
+
 export function evaluateExprPool(
   ctx: StrategyExecutionContextV1,
   exprPool: readonly CompiledExprNode[],
@@ -309,24 +313,35 @@ function evaluateOrderbookImbalance(
   ctx: StrategyExecutionContextV1,
 ): boolean {
   const sourceFeedId = readStringParam(node.payload.params, 'sourceFeedId') ?? 'orderbook.imbalance'
+  const metric = readStringParam(node.payload.params, 'metric')?.toLowerCase() ?? 'depth_ratio'
   const threshold = readNumberParam(node.payload.params, 'value')
+    ?? readNumberParam(node.payload.params, 'valuePct')
     ?? readNumberParam(node.payload.params, 'ratio')
     ?? 1
   const operator = readStringParam(node.payload.params, 'operator') ?? 'GT'
   const side = readStringParam(node.payload.params, 'side')?.toLowerCase() ?? 'bid'
-  const events = readVisibleFeedEvents(ctx, sourceFeedId)
+  const event = readLatestVisibleFeedEvent(ctx, sourceFeedId)
+  if (!event) return false
 
-  return events.some((event) => {
-    const payload = readPayloadRecord(event.payload)
-    if (!payload) return false
-    const bidDepth = readFirstNumber(payload, ['bidDepth', 'bid_depth', 'bidLiquidity', 'bid_liquidity', 'bids', 'bid'])
-    const askDepth = readFirstNumber(payload, ['askDepth', 'ask_depth', 'askLiquidity', 'ask_liquidity', 'asks', 'ask'])
-    if (bidDepth === null || askDepth === null || bidDepth <= 0 || askDepth <= 0) return false
-    const ratio = side === 'ask' || side === 'sell'
-      ? askDepth / bidDepth
-      : bidDepth / askDepth
-    return Number.isFinite(ratio) && compareByOperator(ratio, threshold, operator)
-  })
+  const payload = readPayloadRecord(event.payload)
+  if (!payload) return false
+  if (metric === 'spread_pct') {
+    const directSpread = readFirstNumber(payload, ['spreadPct', 'spread_pct', 'bidAskSpreadPct', 'bid_ask_spread_pct'])
+    if (directSpread !== null) return compareByOperator(directSpread, threshold, operator)
+    const bidPrice = readFirstNumber(payload, ['bestBid', 'best_bid', 'bidPrice', 'bid_price'])
+    const askPrice = readFirstNumber(payload, ['bestAsk', 'best_ask', 'askPrice', 'ask_price'])
+    if (bidPrice === null || askPrice === null || bidPrice <= 0 || askPrice <= 0 || askPrice < bidPrice) return false
+    const mid = (bidPrice + askPrice) / 2
+    if (mid <= 0) return false
+    return compareByOperator(((askPrice - bidPrice) / mid) * 100, threshold, operator)
+  }
+  const bidDepth = readFirstNumber(payload, ['bidDepth', 'bid_depth', 'bidLiquidity', 'bid_liquidity', 'bids', 'bid'])
+  const askDepth = readFirstNumber(payload, ['askDepth', 'ask_depth', 'askLiquidity', 'ask_liquidity', 'asks', 'ask'])
+  if (bidDepth === null || askDepth === null || bidDepth <= 0 || askDepth <= 0) return false
+  const ratio = side === 'ask' || side === 'sell'
+    ? askDepth / bidDepth
+    : bidDepth / askDepth
+  return Number.isFinite(ratio) && compareByOperator(ratio, threshold, operator)
 }
 
 function evaluateOpenInterestCondition(
@@ -422,7 +437,7 @@ function evaluateCooldownWindow(
 function readVisibleFeedEvents(
   ctx: StrategyExecutionContextV1,
   sourceFeedId: string,
-): ReadonlyArray<{ id?: unknown; ts?: unknown; payload?: unknown }> {
+): ReadonlyArray<RuntimeFeedEvent> {
   const inbox = ctx.eventInbox?.[sourceFeedId]
   if (!Array.isArray(inbox)) return []
   const now = resolveRuntimeTimestamp(ctx)
@@ -431,6 +446,54 @@ function readVisibleFeedEvents(
     const ts = (event as { ts?: unknown }).ts
     return now === null || (typeof ts === 'number' && Number.isFinite(ts) && ts <= now)
   })
+}
+
+function readLatestVisibleFeedEvent(
+  ctx: StrategyExecutionContextV1,
+  sourceFeedId: string,
+): RuntimeFeedEvent | null {
+  const inbox = ctx.eventInbox?.[sourceFeedId]
+  if (!Array.isArray(inbox) || inbox.length === 0) return null
+  const now = resolveRuntimeTimestamp(ctx)
+  if (now === null) return readLatestSortedFeedEvent(inbox as RuntimeFeedEvent[])
+
+  const events = getSortedFeedEvents(inbox as RuntimeFeedEvent[])
+  let low = 0
+  let high = events.length - 1
+  let latest: RuntimeFeedEvent | null = null
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const event = events[mid]
+    const ts = readEventTimestamp(event)
+    if (ts !== null && ts <= now) {
+      latest = event
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
+  }
+  return latest
+}
+
+function getSortedFeedEvents(events: ReadonlyArray<RuntimeFeedEvent>): ReadonlyArray<RuntimeFeedEvent> {
+  const cached = sortedFeedEventsCache.get(events)
+  if (cached) return cached
+  const sorted = events
+    .filter(event => event && typeof event === 'object' && readEventTimestamp(event) !== null)
+    .slice()
+    .sort((left, right) => (readEventTimestamp(left) ?? 0) - (readEventTimestamp(right) ?? 0))
+  sortedFeedEventsCache.set(events, sorted)
+  return sorted
+}
+
+function readLatestSortedFeedEvent(events: ReadonlyArray<RuntimeFeedEvent>): RuntimeFeedEvent | null {
+  const sorted = getSortedFeedEvents(events)
+  return sorted[sorted.length - 1] ?? null
+}
+
+function readEventTimestamp(event: RuntimeFeedEvent): number | null {
+  const ts = event.ts
+  return typeof ts === 'number' && Number.isFinite(ts) ? ts : null
 }
 
 function readPayloadRecord(value: unknown): Record<string, unknown> | null {
@@ -701,6 +764,111 @@ function readRuntimeDataBars(
   return Array.isArray(bars) ? bars as Bar[] : null
 }
 
+function resolvePriceIndicatorValue(
+  kind: 'EMA' | 'SMA',
+  inputId: string | undefined,
+  period: number,
+  offset: number,
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+  exprIndex?: ReadonlyMap<string, CompiledExprNode>,
+): number | null | undefined {
+  if (!inputId || !exprIndex || offset < 0) return undefined
+  const inputNode = exprIndex.get(inputId)
+  if (!inputNode || inputNode.nodeType !== 'series' || inputNode.payload.kind !== 'PRICE') return undefined
+  const bars = resolveBarsForNode(inputNode, ctx)
+  const endExclusive = bars.length - offset
+  if (endExclusive <= 0) return null
+  const field = inputNode.payload.field ?? 'close'
+  const cache = resolvePriceIndicatorCache(ctx, `${kind}:${inputId}:${period}:${field}`)
+  if (cache) {
+    extendPriceIndicatorCache(cache, kind, bars, field, period, endExclusive, executionModel)
+    return cache.values[endExclusive - 1] ?? null
+  }
+
+  if (kind === 'SMA') {
+    const start = Math.max(0, endExclusive - period)
+    let sum = 0
+    let count = 0
+    for (let index = start; index < endExclusive; index += 1) {
+      const value = readBarField(bars[index], field, executionModel)
+      if (value === null) return null
+      sum += value
+      count += 1
+    }
+    return count > 0 ? sum / count : null
+  }
+
+  const first = readBarField(bars[0], field, executionModel)
+  if (first === null) return null
+  const multiplier = 2 / (period + 1)
+  let current = first
+  for (let index = 1; index < endExclusive; index += 1) {
+    const value = readBarField(bars[index], field, executionModel)
+    if (value === null) return null
+    current = (value - current) * multiplier + current
+  }
+  return current
+}
+
+interface PriceIndicatorCacheEntry {
+  values: number[]
+  prefixSums: number[]
+}
+
+function resolvePriceIndicatorCache(ctx: StrategyExecutionContextV1, key: string): PriceIndicatorCacheEntry | null {
+  const state = (ctx as { __compiledDecisionState?: Record<string, unknown> }).__compiledDecisionState
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return null
+  const record = state as Record<string, unknown>
+  const caches = record.__priceIndicatorCache && typeof record.__priceIndicatorCache === 'object' && !Array.isArray(record.__priceIndicatorCache)
+    ? record.__priceIndicatorCache as Record<string, PriceIndicatorCacheEntry>
+    : {}
+  if (!record.__priceIndicatorCache) record.__priceIndicatorCache = caches
+  caches[key] ??= { values: [], prefixSums: [] }
+  return caches[key]
+}
+
+function extendPriceIndicatorCache(
+  cache: PriceIndicatorCacheEntry,
+  kind: 'EMA' | 'SMA',
+  bars: readonly Bar[],
+  field: 'open' | 'high' | 'low' | 'close',
+  period: number,
+  endExclusive: number,
+  executionModel?: Record<string, unknown>,
+): void {
+  const multiplier = 2 / (period + 1)
+  for (let index = cache.values.length; index < endExclusive; index += 1) {
+    const price = readBarField(bars[index], field, executionModel)
+    if (price === null) return
+    const previousPrefix = index > 0 ? cache.prefixSums[index - 1] ?? 0 : 0
+    cache.prefixSums[index] = previousPrefix + price
+    if (kind === 'EMA') {
+      cache.values[index] = index === 0
+        ? price
+        : (price - (cache.values[index - 1] ?? price)) * multiplier + (cache.values[index - 1] ?? price)
+      continue
+    }
+    const start = Math.max(0, index + 1 - period)
+    const before = start > 0 ? cache.prefixSums[start - 1] ?? 0 : 0
+    cache.values[index] = ((cache.prefixSums[index] ?? 0) - before) / (index - start + 1)
+  }
+}
+
+function readBarField(
+  bar: Bar | undefined,
+  field: 'open' | 'high' | 'low' | 'close',
+  executionModel?: Record<string, unknown>,
+): number | null {
+  const value = bar?.[field]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (field === 'close') {
+    const currentPrice = executionModel?.currentPrice
+    if (typeof currentPrice === 'number' && Number.isFinite(currentPrice)) return currentPrice
+  }
+  return null
+}
+
 function resolveSeriesValueAt(
   nodeId: string | undefined,
   offset: number,
@@ -760,6 +928,8 @@ function resolveSeriesValueAt(
       case 'SMA': {
         const inputId = resolveSeriesInputNodeId(node, exprIndex)
         const period = readNumericParam(node.payload.params, 'period') ?? 20
+        const directPriceValue = resolvePriceIndicatorValue(node.payload.kind, inputId, period, offset + (node.payload.offsetBars ?? 0), ctx, executionModel, exprIndex)
+        if (directPriceValue !== undefined) return directPriceValue
         const history = collectSeriesHistory(inputId, offset + (node.payload.offsetBars ?? 0), ctx, executionModel, exprIndex, seriesMemo)
         if (node.payload.kind === 'EMA') {
           return ema(history, period)

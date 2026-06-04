@@ -52,6 +52,49 @@ export class BacktestMarketDataRepository {
     })
   }
 
+  async findHistoricalQuotes(params: {
+    symbol: string
+    fromTs: number
+    toTs: number
+    limit: number
+  }) {
+    const symbolCodes = this.buildSymbolCodeCandidates(params.symbol)
+    const symbols = await this.txHost.tx.symbol.findMany({
+      where: { code: { in: symbolCodes } },
+      select: { id: true, code: true },
+    })
+    for (const code of symbolCodes) {
+      const symbol = symbols.find(item => item.code === code)
+      if (!symbol) continue
+
+      const quotes = await this.txHost.tx.marketQuote.findMany({
+        where: {
+          symbolId: symbol.id,
+          bidPrice: { not: null },
+          bidQty: { not: null },
+          askPrice: { not: null },
+          askQty: { not: null },
+          eventTime: {
+            gte: new Date(params.fromTs),
+            lte: new Date(params.toTs),
+          },
+        },
+        orderBy: { eventTime: 'desc' },
+        take: Math.max(1, params.limit),
+      })
+      if (quotes.length > 0) return quotes.reverse()
+    }
+
+    return []
+  }
+
+  private buildSymbolCodeCandidates(symbol: string): string[] {
+    const normalized = symbol.trim().toUpperCase()
+    if (!normalized) return []
+    if (normalized.includes(':')) return [normalized]
+    return [normalized, `${normalized}:PERP`, `${normalized}:SPOT`]
+  }
+
   aggregateCoverage(params: {
     symbolId: string
     timeframe: MarketTimeframe
@@ -61,6 +104,27 @@ export class BacktestMarketDataRepository {
         symbolId: params.symbolId,
         timeframe: mapTimeframe(params.timeframe),
       },
+      _min: { time: true },
+      _max: { time: true },
+    })
+  }
+
+  aggregateCoverageInRange(params: {
+    symbolId: string
+    timeframe: MarketTimeframe
+    fromTs: number
+    toTs: number
+  }) {
+    return this.txHost.tx.marketBar.aggregate({
+      where: {
+        symbolId: params.symbolId,
+        timeframe: mapTimeframe(params.timeframe),
+        time: {
+          gte: new Date(params.fromTs),
+          lte: new Date(params.toTs),
+        },
+      },
+      _count: { _all: true },
       _min: { time: true },
       _max: { time: true },
     })

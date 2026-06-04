@@ -26,6 +26,9 @@ export interface StrategyAstV1 {
     maxLookback: number
     requiredTimeframes: string[]
   }
+  portfolioTrace?: {
+    sourcePaths: string[]
+  }
   runtimeRequirements?: RuntimeRequirements
   exprPool: ExprNode[]
   guards: GuardProgramNode[]

@@ -54,6 +54,18 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
       this.logger.warn('market data ingestion skipped: QUANTIFY_STAGING_VALIDATION_MODE=true')
       return
     }
+    if (process.env.QUANTIFY_BACKTEST_WORKER === 'true') {
+      this.logger.warn('market data ingestion skipped: QUANTIFY_BACKTEST_WORKER=true')
+      return
+    }
+    setImmediate(() => {
+      void this.initializeMarketData().catch((error) => {
+        this.logger.error(`行情模块后台初始化失败: ${(error as Error).message}`, (error as Error).stack)
+      })
+    })
+  }
+
+  private async initializeMarketData() {
     const baseConfig = this.getConfig()
     const config = await this.mergeDynamicSymbols(baseConfig)
     this.logger.log(

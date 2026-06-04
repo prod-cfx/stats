@@ -42,6 +42,7 @@ export function buildStrategyAstDigestProjection(
     astVersion: ast.astVersion,
     executionModel: ast.executionModel,
     dataRequirements: ast.dataRequirements,
+    ...(ast.portfolioTrace ? { portfolioTrace: ast.portfolioTrace } : {}),
     runtimeRequirements: ast.runtimeRequirements,
     exprPool: projectByTopologyOrder(ast.exprPool, ast.topology.exprOrder),
     guards: projectByTopologyOrder(ast.guards, ast.topology.guardOrder),
@@ -72,6 +73,9 @@ export class CanonicalStrategyAstCompilerService {
       astVersion: 'csa.v1',
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
+      ...(ir.portfolio.sourcePaths && ir.portfolio.sourcePaths.length > 0
+        ? { portfolioTrace: { sourcePaths: [...ir.portfolio.sourcePaths] } }
+        : {}),
       ...(ir.runtimeRequirements ? { runtimeRequirements: ir.runtimeRequirements } : {}),
       exprPool,
       guards,
@@ -92,6 +96,7 @@ export class CanonicalStrategyAstCompilerService {
       manifest: this.buildManifest(ir, astBody),
       executionModel: astBody.executionModel,
       dataRequirements: astBody.dataRequirements,
+      ...(astBody.portfolioTrace ? { portfolioTrace: astBody.portfolioTrace } : {}),
       ...(astBody.runtimeRequirements ? { runtimeRequirements: astBody.runtimeRequirements } : {}),
       exprPool: astBody.exprPool,
       guards: astBody.guards,

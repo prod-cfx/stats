@@ -54,6 +54,32 @@ describe('evaluateExprPool', () => {
     expect(values.close_above_ema_1h).toBe(true)
   })
 
+  it('evaluates orderbook spread_pct predicates from best bid and ask', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 1_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-1', ts: 900, payload: { bestBid: 100, bestAsk: 100.02, bidDepth: 20, askDepth: 10 } },
+          ],
+        },
+      } as any,
+      [
+        {
+          id: 'book_spread_tight',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'orderbookImbalance',
+            params: { sourceFeedId: 'orderbook.imbalance', metric: 'spread_pct', operator: 'LT', valuePct: 0.03 },
+          },
+        },
+      ] as any,
+      ['book_spread_tight'],
+    )
+
+    expect(values.book_spread_tight).toBe(true)
+  })
+
   it('evaluates externalSignal predicates from webhook event inbox', () => {
     const values = evaluateExprPool(
       {
@@ -212,6 +238,33 @@ describe('evaluateExprPool', () => {
     )
 
     expect(values.orderbook_bid_dominant).toBe(true)
+  })
+
+  it('evaluates orderbookImbalance from the latest visible snapshot instead of any historical match', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-old', ts: 8_000, payload: { bidDepth: 1_800, askDepth: 1_000 } },
+            { id: 'book-latest', ts: 9_500, payload: { bidDepth: 1_100, askDepth: 1_000 } },
+          ],
+        },
+      },
+      [{
+        id: 'orderbook_bid_dominant',
+        nodeType: 'predicate',
+        sourceRef: 'orderbook.imbalance',
+        payload: {
+          kind: 'orderbookImbalance',
+          params: { sourceFeedId: 'orderbook.imbalance', side: 'bid', operator: 'GT', ratio: 1.5 },
+        },
+        deps: [],
+      }],
+      ['orderbook_bid_dominant'],
+    )
+
+    expect(values.orderbook_bid_dominant).toBe(false)
   })
 
   it('fails closed for orderbookImbalance without feed data', () => {

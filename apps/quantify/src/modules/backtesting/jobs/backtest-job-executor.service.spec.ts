@@ -56,6 +56,7 @@ function createMarketDataMock() {
       appliedRange: { fromTs: 1, toTs: 2 },
     }),
     loadBars: jest.fn().mockResolvedValue([{ symbol: 'BTCUSDT', close: 100 }]),
+    saveQuoteFromProvider: jest.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -277,6 +278,200 @@ describe('BacktestJobExecutorService', () => {
       eventStreams: {
         'orderbook.imbalance': [{ id: 'book-1', ts: 1_900, payload: { bidDepth: 3, askDepth: 2 } }],
         open_interest: [{ id: 'oi-1', ts: 1_900, payload: { openInterest: 123 } }],
+      },
+    }))
+  })
+
+  it('hydrates orderbook event streams from rules-only signalCatalog predicates', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 2_000 }
+    input.strategy = {
+      ...input.strategy,
+      irSnapshot: {
+        signalCatalog: {
+          predicates: [
+            { id: 'book', kind: 'orderbookImbalance', params: { schemaRef: 'orderbook', sourceFeedId: 'orderbook.imbalance' } },
+          ],
+        },
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 2_000 }, appliedRange: { fromTs: 1_000, toTs: 2_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const okxMarketDataProvider = {
+      fetchOrderbookImbalanceEvents: jest.fn().mockResolvedValue([{ id: 'book-1', ts: 1_900, payload: { bidDepth: 3, askDepth: 2 } }]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      okxMarketDataProvider as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(okxMarketDataProvider.fetchOrderbookImbalanceEvents).toHaveBeenCalledWith({ symbol: 'BTCUSDT', startMs: 1_000, endMs: 2_000 })
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'orderbook.imbalance': [{ id: 'book-1', ts: 1_900, payload: { bidDepth: 3, askDepth: 2 } }],
+      },
+    }))
+  })
+
+  it('hydrates orderbook event streams from historical quotes when OKX books has no historical rows', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 2_000 }
+    input.strategy = {
+      ...input.strategy,
+      astSnapshot: {
+        exprPool: [
+          { id: 'expr_orderbook', nodeType: 'predicate', payload: { kind: 'orderbookImbalance', params: { sourceFeedId: 'orderbook.imbalance' } } },
+        ],
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 2_000 }, appliedRange: { fromTs: 1_000, toTs: 2_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const okxMarketDataProvider = {
+      fetchOrderbookImbalanceEvents: jest.fn().mockResolvedValue([]),
+    }
+    const backtestMarketDataRepository = {
+      findHistoricalQuotes: jest.fn().mockResolvedValue([
+        {
+          id: 'quote-1',
+          eventTime: new Date(1_500),
+          bidPrice: '100',
+          bidQty: '3',
+          askPrice: '101',
+          askQty: '2',
+        },
+      ]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      okxMarketDataProvider as never,
+      undefined,
+      backtestMarketDataRepository as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(backtestMarketDataRepository.findHistoricalQuotes).toHaveBeenCalledWith({
+      symbol: 'BTCUSDT',
+      fromTs: 1_000,
+      toTs: 2_000,
+      limit: 10_000,
+    })
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'orderbook.imbalance': [{
+          id: 'quote-orderbook:quote-1',
+          ts: 1_500,
+          payload: {
+            bidDepth: 3,
+            askDepth: 2,
+            imbalanceRatio: 1.5,
+            bestBid: 100,
+            bestAsk: 101,
+            spreadPct: expect.any(Number),
+          },
+        }],
+      },
+    }))
+  })
+
+  it('backfills orderbook quote depth from OKX books snapshots when stored quotes have no depth', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.dataRange = { fromTs: 1_000, toTs: 2_000 }
+    input.strategy = {
+      ...input.strategy,
+      astSnapshot: {
+        exprPool: [
+          { id: 'expr_orderbook', nodeType: 'predicate', payload: { kind: 'orderbookImbalance', params: { sourceFeedId: 'orderbook.imbalance' } } },
+        ],
+      },
+    } as BacktestRunInput['strategy']
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({ kind: 'full', availableRange: { fromTs: 1_000, toTs: 2_000 }, appliedRange: { fromTs: 1_000, toTs: 2_000 } })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const okxMarketDataProvider = {
+      fetchOrderbookImbalanceEvents: jest.fn().mockResolvedValue([]),
+      fetchOrderbookQuoteSnapshots: jest.fn().mockResolvedValue([
+        {
+          symbol: 'BTCUSDT:PERP',
+          lastPrice: '100.5',
+          bidPrice: '100',
+          bidQty: '3',
+          askPrice: '101',
+          askQty: '2',
+          eventTime: 1_500,
+          source: 'OKX_REST_BOOKS',
+        },
+      ]),
+    }
+    const backtestMarketDataRepository = {
+      findHistoricalQuotes: jest.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([
+          {
+            id: 'quote-backfilled-1',
+            eventTime: new Date(1_500),
+            bidPrice: '100',
+            bidQty: '3',
+            askPrice: '101',
+            askQty: '2',
+          },
+        ]),
+    }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+      okxMarketDataProvider as never,
+      undefined,
+      backtestMarketDataRepository as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(okxMarketDataProvider.fetchOrderbookQuoteSnapshots).toHaveBeenCalledWith({
+      symbol: 'BTCUSDT',
+      samples: 1,
+      intervalMs: 0,
+    })
+    expect(marketData.saveQuoteFromProvider).toHaveBeenCalledWith({
+      symbol: 'BTCUSDT:PERP',
+      lastPrice: '100.5',
+      bidPrice: '100',
+      bidQty: '3',
+      askPrice: '101',
+      askQty: '2',
+      eventTime: 1_500,
+      source: 'OKX_REST_BOOKS',
+    })
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      eventStreams: {
+        'orderbook.imbalance': [expect.objectContaining({ id: 'quote-orderbook:quote-backfilled-1' })],
       },
     }))
   })

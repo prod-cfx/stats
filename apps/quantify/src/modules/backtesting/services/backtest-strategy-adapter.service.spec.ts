@@ -82,6 +82,29 @@ strategy`,
     })
   })
 
+  it('passes runner daily loss metrics into compiled portfolio risk evaluation', async () => {
+    const strategy = await service.build({
+      id: 'compiled-daily-loss-s1',
+      protocolVersion: 'v1',
+      scriptCode: createCompiledDailyLossScriptFixture(),
+      params: {},
+    })
+
+    await expect(strategy.fn({
+      position: { qty: 0 },
+      portfolio: { equity: 10000 },
+      accountEquity: 10000,
+      dailyLossPct: 0,
+      accountDailyLossPct: 0,
+      currentPrice: 100,
+      bars: [{ time: 1, open: 100, high: 101, low: 99, close: 100, volume: 1 }],
+      __compiledDecisionState: { barIndex: 1, lastTriggeredByProgram: {} },
+    } as any)).resolves.toMatchObject({
+      action: 'OPEN_LONG',
+      reason: 'compiled.decision_01_entry_long',
+    })
+  })
+
   it('executes compiled combination scripts through the parser fast path and force-exits on ATR risk', async () => {
     const strategy = await service.build({
       id: 'compiled-combination-s1',
@@ -350,6 +373,76 @@ function createCompiledAtrRiskScriptFixture(): string {
       fillAssumption: 'strict',
     },
   })
+}
+
+function createCompiledDailyLossScriptFixture(): string {
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'b'.repeat(64)}`,
+      specHash: `sha256:${'c'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'perpetual',
+      symbol: 'BTCUSDT',
+      timeframes: ['1h'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 25 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 1,
+      maxLookback: 1,
+      requiredTimeframes: ['1h'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'one', kind: 'CONST', value: 1 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_true', kind: 'EQ', args: ['one', 'one'] },
+      ],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_true',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: { guards: [] },
+    orchestrationPortfolioRisks: [{
+      id: 'risk-daily-loss',
+      scope: 'portfolio',
+      metric: 'daily_loss_pct',
+      mode: 'enforce',
+      thresholdPct: 5,
+      effectWhenTriggered: 'block_new_entries',
+    }],
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+
+  return emitCompiledScript(ir)
 }
 
 function createCompiledCombinationScriptFixture(): string {

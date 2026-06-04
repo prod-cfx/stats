@@ -4076,9 +4076,9 @@ export class CanonicalSpecBuilderService {
     join: 'AND' | 'OR',
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
-    const conditions = triggers
+    const conditions = this.removeRedundantPriceLevelBreakoutConditions(this.removeRedundantPriceLevelBreakoutTriggers(triggers)
       .map(trigger => this.buildConditionFromSemanticTriggerGroup([trigger], defaultTimeframe))
-      .filter((condition): condition is CanonicalConditionNode => condition !== null)
+      .filter((condition): condition is CanonicalConditionNode => condition !== null))
 
     if (conditions.length === 0) {
       return null
@@ -4092,6 +4092,60 @@ export class CanonicalSpecBuilderService {
       predicateForm: 'generic',
       children: conditions,
     }
+  }
+
+  private removeRedundantPriceLevelBreakoutTriggers(triggers: SemanticTriggerState[]): SemanticTriggerState[] {
+    const breakoutUpKey = ATOM_CONTRACT_REGISTRY['price.breakout_up'].key
+    const breakoutDownKey = ATOM_CONTRACT_REGISTRY['price.breakout_down'].key
+    const hasChannelByKey = new Set(
+      triggers
+        .filter(trigger => (trigger.key === breakoutUpKey || trigger.key === breakoutDownKey)
+          && trigger.params.reference !== 'price_level'
+          && typeof trigger.params.period === 'number')
+        .map(trigger => `${trigger.key}:${trigger.params.period}`),
+    )
+
+    if (hasChannelByKey.size === 0) return triggers
+
+    return triggers.filter((trigger) => {
+      if (trigger.key !== breakoutUpKey && trigger.key !== breakoutDownKey) return true
+      if (trigger.params.reference !== 'price_level') return true
+      if (typeof trigger.params.priceLevel !== 'number') return true
+      return !hasChannelByKey.has(`${trigger.key}:${trigger.params.priceLevel}`)
+    })
+  }
+
+  private removeRedundantPriceLevelBreakoutConditions(conditions: CanonicalConditionNode[]): CanonicalConditionNode[] {
+    const channelPeriodsByDirection = new Map<string, Set<number>>()
+    for (const condition of conditions) {
+      if (condition.kind !== 'atom') continue
+      const direction = condition.key === 'breakout.channel_high_break'
+        ? 'up'
+        : condition.key === 'breakout.channel_low_break'
+          ? 'down'
+          : null
+      if (!direction) continue
+      const period = typeof condition.params?.period === 'number' ? condition.params.period : null
+      if (period === null) continue
+      const periods = channelPeriodsByDirection.get(direction) ?? new Set<number>()
+      periods.add(period)
+      channelPeriodsByDirection.set(direction, periods)
+    }
+
+    if (channelPeriodsByDirection.size === 0) return conditions
+
+    return conditions.filter((condition) => {
+      if (condition.kind !== 'atom') return true
+      const direction = condition.key === 'price.level_breakout_up'
+        ? 'up'
+        : condition.key === 'price.level_breakout_down'
+          ? 'down'
+          : null
+      if (!direction) return true
+      const priceLevel = typeof condition.params?.priceLevel === 'number' ? condition.params.priceLevel : null
+      if (priceLevel === null) return true
+      return !channelPeriodsByDirection.get(direction)?.has(priceLevel)
+    })
   }
 
   private buildActionsForSemanticActionKey(

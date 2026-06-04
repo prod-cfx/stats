@@ -38,8 +38,14 @@ describe('market data ingestion service', () => {
 
   let service: MarketDataIngestionService
 
+  async function startIngestion() {
+    await service.onModuleInit()
+    await new Promise(resolve => setImmediate(resolve))
+  }
+
   beforeEach(() => {
     jest.clearAllMocks()
+    delete process.env.QUANTIFY_BACKTEST_WORKER
     ;(providerMock as { name: string }).name = 'BINANCE'
 
     configServiceMock.get.mockImplementation((key: string) => {
@@ -81,7 +87,7 @@ describe('market data ingestion service', () => {
   })
 
   it('expands suffix-less symbols to both SPOT and PERP for historical sync and realtime subscription', async () => {
-    await service.onModuleInit()
+    await startIngestion()
 
     const symbolsFromHistory = providerMock.fetchHistoricalBars.mock.calls.map(call => call[0]?.symbol)
     expect(symbolsFromHistory).toContain('BTCUSDT:SPOT')
@@ -97,7 +103,7 @@ describe('market data ingestion service', () => {
   it('uses provider name as symbol exchange fallback', async () => {
     ;(providerMock as any).name = 'OKX'
 
-    await service.onModuleInit()
+    await startIngestion()
 
     expect(marketDataServiceMock.upsertSymbolsFromProvider).toHaveBeenCalledWith([], 'OKX')
   })
@@ -105,7 +111,7 @@ describe('market data ingestion service', () => {
   it('maps USDT symbols to USDC when provider is hyperliquid', async () => {
     ;(providerMock as any).name = 'HYPERLIQUID'
 
-    await service.onModuleInit()
+    await startIngestion()
 
     const symbolsFromHistory = providerMock.fetchHistoricalBars.mock.calls.map(call => call[0]?.symbol)
     expect(symbolsFromHistory).toContain('BTCUSDC:SPOT')
@@ -132,7 +138,7 @@ describe('market data ingestion service', () => {
       },
     ])
 
-    await service.onModuleInit()
+    await startIngestion()
 
     expect(providerMock.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -159,7 +165,7 @@ describe('market data ingestion service', () => {
         },
       ])
 
-    await service.onModuleInit()
+    await startIngestion()
     await service.handleDynamicSymbolRefresh()
 
     expect(firstUnsubscribe).toHaveBeenCalledTimes(1)
@@ -169,5 +175,28 @@ describe('market data ingestion service', () => {
         symbols: ['BTCUSDT:SPOT', 'BTCUSDT:PERP', 'XRPUSDT:SPOT', 'XRPUSDT:PERP'],
       }),
     )
+  })
+
+  it('does not block module initialization on historical ingestion', async () => {
+    let releaseHistory!: () => void
+    providerMock.fetchHistoricalBars.mockReturnValue(new Promise(resolve => {
+      releaseHistory = () => resolve([])
+    }))
+
+    await expect(service.onModuleInit()).resolves.toBeUndefined()
+
+    expect(providerMock.subscribe).not.toHaveBeenCalled()
+    releaseHistory()
+    await new Promise(resolve => setImmediate(resolve))
+  })
+
+  it('skips market ingestion in backtest worker process', async () => {
+    process.env.QUANTIFY_BACKTEST_WORKER = 'true'
+
+    await service.onModuleInit()
+    await new Promise(resolve => setImmediate(resolve))
+
+    expect(providerMock.fetchHistoricalBars).not.toHaveBeenCalled()
+    expect(providerMock.subscribe).not.toHaveBeenCalled()
   })
 })
