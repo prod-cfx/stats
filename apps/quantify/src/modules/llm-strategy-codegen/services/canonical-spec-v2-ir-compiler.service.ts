@@ -345,7 +345,7 @@ export class CanonicalSpecV2IrCompilerService {
     ]
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates, context)
 
-    const maxLookback = this.resolveMaxLookback(seriesMap)
+    const maxLookback = this.resolveMaxLookback(seriesMap, predicateMap)
     // Issue #1437：网格策略走 orchestration.programs（dynamic_grid / fixed_grid_gated /
     //   adaptive_volatility_grid）而非 orderPrograms；grid program 在 runtime 双向挂单，
     //   天然 long_short，但 rules.actions 中无 OPEN_LONG/SHORT。原推断只看 orderPrograms +
@@ -4943,14 +4943,30 @@ export class CanonicalSpecV2IrCompilerService {
     return 'long_only'
   }
 
-  private resolveMaxLookback(seriesMap: Map<string, SeriesDef>): number {
-    return Math.max(1, ...[...seriesMap.values()].map(series => {
-      const period = typeof series.params?.period === 'number' ? series.params.period : 1
-      const bars = typeof series.params?.bars === 'number' ? series.params.bars : 1
-      const slowPeriod = typeof series.params?.slowPeriod === 'number' ? series.params.slowPeriod : 1
-      const signalPeriod = typeof series.params?.signalPeriod === 'number' ? series.params.signalPeriod : 1
-      return Math.max(period, bars, slowPeriod + signalPeriod)
-    }))
+  private resolveMaxLookback(seriesMap: Map<string, SeriesDef>, predicateMap: Map<string, PredicateDef>): number {
+    const seriesLookbacks = [...seriesMap.values()].map(series => this.resolveSeriesLookback(series))
+    const predicateLookbacks = [...predicateMap.values()].map(predicate => this.resolvePredicateLookback(predicate, seriesMap))
+    return Math.max(1, ...seriesLookbacks, ...predicateLookbacks)
+  }
+
+  private resolveSeriesLookback(series: SeriesDef): number {
+    const period = typeof series.params?.period === 'number' ? series.params.period : 1
+    const bars = typeof series.params?.bars === 'number' ? series.params.bars : 1
+    const slowPeriod = typeof series.params?.slowPeriod === 'number' ? series.params.slowPeriod : 1
+    const signalPeriod = typeof series.params?.signalPeriod === 'number' ? series.params.signalPeriod : 1
+    return Math.max(period, bars, slowPeriod + signalPeriod)
+  }
+
+  private resolvePredicateLookback(predicate: PredicateDef, seriesMap: Map<string, SeriesDef>): number {
+    if (predicate.kind !== 'CROSS_OVER' && predicate.kind !== 'CROSS_UNDER') {
+      return 1
+    }
+
+    const argLookbacks = predicate.args.map(arg => {
+      const series = seriesMap.get(arg)
+      return series ? this.resolveSeriesLookback(series) : 1
+    })
+    return Math.max(1, ...argLookbacks) + 1
   }
 
   private describeCondition(
