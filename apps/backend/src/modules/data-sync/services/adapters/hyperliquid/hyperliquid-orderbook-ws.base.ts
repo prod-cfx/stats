@@ -459,6 +459,7 @@ export abstract class HyperliquidOrderbookWsAdapterBase implements OrderbookWsAd
    */
   private isHyperliquidEnabled(): boolean {
     const raw = this.configService.get<string>('HYPERLIQUID_ORDERBOOK_WS_ENABLED')
+    if (raw === undefined || raw === null) return true
     if (typeof raw === 'string') {
       return raw.toLowerCase() === 'true'
     }

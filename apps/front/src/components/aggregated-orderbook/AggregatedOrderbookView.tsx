@@ -1,7 +1,7 @@
 'use client'
 
 import type { AggregatedOrderbookLevel, AggregatedOrderbookMarket, AggregatedOrderbookQueryType } from '@/lib/api'
-import { Check, Info, Settings } from 'lucide-react'
+import { Check, ChevronDown, Info, Settings } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -26,6 +26,20 @@ const FALLBACK_MARKETS: AggregatedOrderbookMarket[] = [
   { base: 'BTC', type: 'spot', venues: DEFAULT_EXCHANGES },
   { base: 'ETH', type: 'spot', venues: DEFAULT_EXCHANGES },
 ]
+const HOT_MARKET_PRIORITY = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'LINK', 'AVAX', 'HYPE']
+const HOT_MARKET_PRIORITY_MAP = new Map(HOT_MARKET_PRIORITY.map((base, index) => [base, index]))
+const SYMBOL_TICK_SIZE_OPTIONS: Record<string, string[]> = {
+  BTC: ['1', '10', '100'],
+  ETH: ['0.1', '1', '10'],
+  BNB: ['0.1', '1', '10'],
+  SOL: ['0.01', '0.1', '1'],
+  LINK: ['0.01', '0.1', '1'],
+  AVAX: ['0.01', '0.1', '1'],
+  ADA: ['0.0001', '0.001', '0.01'],
+  DOGE: ['0.0001', '0.001', '0.01'],
+  XRP: ['0.0001', '0.001', '0.01'],
+}
+const DEFAULT_TICK_SIZE_OPTIONS = ['0.01', '0.1', '1']
 
 // 刷新间隔（毫秒）
 const REFRESH_INTERVAL = 3000
@@ -39,7 +53,28 @@ function marketsForType(
   marketType: 'futures' | 'spot',
 ): AggregatedOrderbookMarket[] {
   const apiType = toApiMarketType(marketType)
-  return markets.filter(market => market.type === apiType)
+  return sortMarketsByPriority(markets.filter(market => market.type === apiType))
+}
+
+function sortMarketsByPriority(markets: AggregatedOrderbookMarket[]): AggregatedOrderbookMarket[] {
+  return [...markets].sort((a, b) => {
+    const aPriority = HOT_MARKET_PRIORITY_MAP.get(a.base) ?? Number.MAX_SAFE_INTEGER
+    const bPriority = HOT_MARKET_PRIORITY_MAP.get(b.base) ?? Number.MAX_SAFE_INTEGER
+    return aPriority - bPriority || a.base.localeCompare(b.base) || a.type.localeCompare(b.type)
+  })
+}
+
+function getTickSizeOptionsForBase(base: string): string[] {
+  return SYMBOL_TICK_SIZE_OPTIONS[base.toUpperCase()] ?? DEFAULT_TICK_SIZE_OPTIONS
+}
+
+function getDefaultTickSizeForBase(base: string): string {
+  return getTickSizeOptionsForBase(base)[0]!
+}
+
+function getPriceDecimalsForTickSize(tickSize: string): number {
+  const [, decimals = ''] = tickSize.split('.')
+  return Math.max(2, decimals.length)
 }
 
 function pickMarket(
@@ -87,6 +122,7 @@ const AsksIcon = memo(({ active }: { active: boolean }) => (
 function transformOrderbookData(
   levels: AggregatedOrderbookLevel[],
   maxSize: number,
+  priceDecimals: number,
   isAsks: boolean = false,
 ) {
   // Asks: 后端返回 low→high，显示 high→low，累计应从 low 开始
@@ -98,7 +134,7 @@ function transformOrderbookData(
     cumulative += level.sizeTotal
     const depthPercent = maxSize > 0 ? (level.sizeTotal / maxSize) * 100 : 0
     return {
-      price: level.price.toFixed(2),
+      price: level.price.toFixed(priceDecimals),
       amount: level.sizeTotal.toFixed(4),
       total: cumulative.toFixed(4),
       exchanges: level.details.map(d => d.venueId),
@@ -112,7 +148,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   const { t, i18n } = useTranslation()
   const [marketType, setMarketType] = useState<'futures' | 'spot'>('futures')
   const [symbol, setSymbol] = useState('BTC')
-  const [availableMarkets, setAvailableMarkets] = useState<AggregatedOrderbookMarket[]>(FALLBACK_MARKETS)
+  const [availableMarkets, setAvailableMarkets] = useState<AggregatedOrderbookMarket[]>([])
   const [tickSize, setTickSize] = useState('1')
   const [displayMode, setDisplayMode] = useState('both')
   const [selectedExchanges, setSelectedExchanges] = useState<string[]>(DEFAULT_EXCHANGES)
@@ -165,18 +201,29 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     const nextMarket = pickMarket(availableMarkets, nextMarketType, symbol)
     setMarketType(nextMarketType)
     setSymbol(nextMarket.base)
+    setTickSize(getDefaultTickSizeForBase(nextMarket.base))
     setSelectedExchanges(nextMarket.venues)
   }, [availableMarkets, marketType, symbol])
+
+  const handleSymbolChange = useCallback((nextBase: string) => {
+    const nextMarket = marketOptions.find(market => market.base === nextBase)
+    if (!nextMarket) return
+    setSymbol(nextMarket.base)
+    setTickSize(getDefaultTickSizeForBase(nextMarket.base))
+    setSelectedExchanges(nextMarket.venues)
+  }, [marketOptions])
 
   useEffect(() => {
     let ignore = false
 
     fetchAggregatedOrderbookMarkets()
       .then((markets) => {
-        if (ignore || markets.length === 0) return
-        const nextMarket = pickMarket(markets, marketType, symbol)
+        if (ignore) return
         setAvailableMarkets(markets)
+        if (markets.length === 0) return
+        const nextMarket = pickMarket(markets, marketType, symbol)
         setSymbol(nextMarket.base)
+        setTickSize(getDefaultTickSizeForBase(nextMarket.base))
         setSelectedExchanges(nextMarket.venues)
       })
       .catch(() => undefined)
@@ -223,8 +270,9 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
       // 转换数据格式
       // Asks: 累计从最低价（最佳卖价）开始，不需要反向
       // Bids: 累计从最高价（最佳买价）开始
-      const transformedAsks = transformOrderbookData(data.asks, maxSize, false)
-      const transformedBids = transformOrderbookData(data.bids, maxSize, false)
+      const priceDecimals = getPriceDecimalsForTickSize(tickSize)
+      const transformedAsks = transformOrderbookData(data.asks, maxSize, priceDecimals, false)
+      const transformedBids = transformOrderbookData(data.bids, maxSize, priceDecimals, false)
 
       setOrderbook({
         asks: transformedAsks,
@@ -252,6 +300,8 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     const interval = setInterval(fetchData, REFRESH_INTERVAL)
     return () => clearInterval(interval)
   }, [fetchData])
+
+  const tickSizeOptions = useMemo(() => getTickSizeOptionsForBase(symbol), [symbol])
 
   const depthChartData = useMemo(() => {
     if (!orderbook)
@@ -324,22 +374,20 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         {t('aggregatedOrderbook.market.spot')}
                       </button>
                     </div>
-                    <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md p-0.5">
-                      {marketOptions.map(market => (
-                        <button
-                          key={`${market.type}:${market.base}`}
-                          type="button"
-                          onClick={() => {
-                            setSymbol(market.base)
-                            setSelectedExchanges(market.venues)
-                          }}
-                          className={`${isCompact ? 'px-2 py-1' : 'px-3.5 py-1.5'} rounded !text-xs !font-semibold !leading-5 transition-colors ${symbol === market.base
-                            ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-sm shadow-primary/20'
-                            : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
-                        >
-                          {market.base}
-                        </button>
-                      ))}
+                    <div className="relative">
+                      <select
+                        value={symbol}
+                        onChange={event => handleSymbolChange(event.target.value)}
+                        disabled={marketOptions.length === 0}
+                        className={`${isCompact ? 'h-8 min-w-24 pl-3 pr-8' : 'h-9 min-w-32 pl-3.5 pr-9'} appearance-none rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] shadow-sm outline-none transition-colors hover:border-[color:var(--cf-muted)] focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        {marketOptions.map(market => (
+                          <option key={`${market.type}:${market.base}`} value={market.base}>
+                            {market.base}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className={`${isCompact ? 'right-2 h-3.5 w-3.5' : 'right-2.5 h-4 w-4'} pointer-events-none absolute top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)]`} />
                     </div>
                   </div>
                   {!isCompact && (
@@ -409,7 +457,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
 
                         <FilterButton
                           value={tickSize}
-                          options={['1', '10', '100']}
+                          options={tickSizeOptions}
                           onChange={setTickSize}
                           minWidth={isCompact ? '35px' : '70px'}
                           size={isCompact ? 'sm' : 'md'}

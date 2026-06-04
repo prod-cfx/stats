@@ -1,6 +1,157 @@
 import { BackendInstrumentType, VenueType } from '@ai/shared'
 import type { PrismaClient } from '../../generated/prisma'
 
+const POPULAR_ORDERBOOK_BASES = ['SOL', 'XRP', 'DOGE', 'BNB', 'ADA', 'LINK', 'AVAX'] as const
+const HYPERLIQUID_EXTRA_PERP_BASES = ['HYPE'] as const
+const HYPERLIQUID_SPOT_MARKETS = [
+  { base: 'BTC', spotIndex: 142 },
+  { base: 'ETH', spotIndex: 151 },
+  { base: 'SOL', spotIndex: 156 },
+  { base: 'USDT', spotIndex: 166 },
+  { base: 'XPL', spotIndex: 210 },
+  { base: 'USDH', spotIndex: 230 },
+  { base: 'KNTQ', spotIndex: 334 },
+  { base: 'ZEC', spotIndex: 272 },
+] as const
+
+function buildPopularOrderbookConfigs() {
+  return POPULAR_ORDERBOOK_BASES.flatMap((base, index) => {
+    const priority = 200 + index * 20
+    const depthLevels = base === 'DOGE' ? 200 : 100
+
+    return [
+      {
+        pairId: `${base}USDT.BINANCE.SPOT`,
+        venue: 'BINANCE',
+        symbol: `${base}USDT`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.SPOT,
+        enabled: true,
+        priority,
+        depthLevels,
+        pullIntervalSeconds: 5,
+        description: `${base}/USDT spot trading pair on Binance`,
+      },
+      {
+        pairId: `${base}USDT.BINANCE.PERPETUAL`,
+        venue: 'BINANCE',
+        symbol: `${base}USDT`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.PERPETUAL,
+        enabled: true,
+        priority: priority + 1,
+        depthLevels,
+        pullIntervalSeconds: 3,
+        description: `${base}/USDT perpetual contract on Binance`,
+      },
+      {
+        pairId: `${base}USDT.BYBIT.SPOT`,
+        venue: 'BYBIT',
+        symbol: `${base}USDT`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.SPOT,
+        enabled: true,
+        priority: priority + 2,
+        depthLevels,
+        pullIntervalSeconds: 5,
+        description: `${base}/USDT spot trading pair on Bybit`,
+      },
+      {
+        pairId: `${base}USDT.BYBIT.PERPETUAL`,
+        venue: 'BYBIT',
+        symbol: `${base}USDT`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.PERPETUAL,
+        enabled: true,
+        priority: priority + 3,
+        depthLevels,
+        pullIntervalSeconds: 3,
+        description: `${base}/USDT perpetual contract on Bybit`,
+      },
+      {
+        pairId: `${base}USDT.BITMAX.SPOT`,
+        venue: 'BITMAX',
+        symbol: `${base}/USDT`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.SPOT,
+        enabled: true,
+        priority: priority + 4,
+        depthLevels,
+        pullIntervalSeconds: 5,
+        description: `${base}/USDT spot trading pair on Bitmax/AscendEX`,
+      },
+      {
+        pairId: `${base}USDT.BITMAX.PERPETUAL`,
+        venue: 'BITMAX',
+        symbol: `${base}-PERP`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.PERPETUAL,
+        enabled: true,
+        priority: priority + 5,
+        depthLevels,
+        pullIntervalSeconds: 3,
+        description: `${base}/USDT perpetual contract on Bitmax/AscendEX`,
+      },
+      {
+        pairId: `${base}USDT.OKX.SPOT`,
+        venue: 'OKX',
+        symbol: `${base}-USDT`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.SPOT,
+        enabled: true,
+        priority: priority + 6,
+        depthLevels,
+        pullIntervalSeconds: 5,
+        description: `${base}/USDT spot trading pair on OKX`,
+      },
+      {
+        pairId: `${base}USDT.OKX.PERPETUAL`,
+        venue: 'OKX',
+        symbol: `${base}-USDT-SWAP`,
+        baseAsset: base,
+        quoteAsset: 'USDT',
+        venueType: VenueType.CEX,
+        instrumentType: BackendInstrumentType.PERPETUAL,
+        enabled: true,
+        priority: priority + 7,
+        depthLevels,
+        pullIntervalSeconds: 3,
+        description: `${base}/USDT perpetual contract on OKX`,
+      },
+      ...(base === 'SOL'
+        ? []
+        : [{
+            pairId: `${base}USDT.HYPERLIQUID.PERPETUAL`,
+            venue: 'HYPERLIQUID',
+            symbol: `${base}USDT`,
+            baseAsset: base,
+            quoteAsset: 'USDT',
+            venueType: VenueType.DEX,
+            instrumentType: BackendInstrumentType.PERPETUAL,
+            enabled: true,
+            priority: priority + 8,
+            depthLevels,
+            pullIntervalSeconds: 1,
+            description: `${base}/USDT perpetual contract on Hyperliquid DEX`,
+          }]),
+    ]
+  })
+}
+
 /**
  * 订单薄配置种子数据
  * 
@@ -80,7 +231,7 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       quoteAsset: 'USDT',
       venueType: VenueType.CEX,
       instrumentType: BackendInstrumentType.SPOT,
-      enabled: false, // 暂时禁用，需要代理
+      enabled: true,
       priority: 50,
       depthLevels: 100,
       pullIntervalSeconds: 5,
@@ -94,7 +245,7 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       quoteAsset: 'USDT',
       venueType: VenueType.CEX,
       instrumentType: BackendInstrumentType.SPOT,
-      enabled: false, // 暂时禁用，需要代理
+      enabled: true,
       priority: 60,
       depthLevels: 100,
       pullIntervalSeconds: 5,
@@ -109,7 +260,7 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       quoteAsset: 'USDT',
       venueType: VenueType.CEX,
       instrumentType: BackendInstrumentType.PERPETUAL,
-      enabled: false, // 暂时禁用，需要代理
+      enabled: true,
       priority: 55,
       depthLevels: 100,
       pullIntervalSeconds: 3,
@@ -123,7 +274,7 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       quoteAsset: 'USDT',
       venueType: VenueType.CEX,
       instrumentType: BackendInstrumentType.PERPETUAL,
-      enabled: false, // 暂时禁用，需要代理
+      enabled: true,
       priority: 65,
       depthLevels: 100,
       pullIntervalSeconds: 3,
@@ -347,12 +498,42 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       quoteAsset: 'USDC',
       venueType: VenueType.DEX,
       instrumentType: BackendInstrumentType.SPOT,
-      enabled: false, // 暂时禁用，流动性较低
+      enabled: true,
       priority: 130,
       depthLevels: 100,
       pullIntervalSeconds: 1,
       description: 'PURR/USDC spot trading pair on Hyperliquid DEX',
     },
+    ...HYPERLIQUID_SPOT_MARKETS.map((market, index) => ({
+      pairId: `${market.base}/USDC.HYPERLIQUID.SPOT`,
+      venue: 'HYPERLIQUID',
+      symbol: `${market.base}/USDC`,
+      baseAsset: market.base,
+      quoteAsset: 'USDC',
+      venueType: VenueType.DEX,
+      instrumentType: BackendInstrumentType.SPOT,
+      enabled: true,
+      priority: 140 + index,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: `${market.base}/USDC spot trading pair on Hyperliquid DEX`,
+      metadata: { spotIndex: market.spotIndex },
+    })),
+    ...buildPopularOrderbookConfigs(),
+    ...HYPERLIQUID_EXTRA_PERP_BASES.map((base, index) => ({
+      pairId: `${base}USDT.HYPERLIQUID.PERPETUAL`,
+      venue: 'HYPERLIQUID',
+      symbol: `${base}USDT`,
+      baseAsset: base,
+      quoteAsset: 'USDT',
+      venueType: VenueType.DEX,
+      instrumentType: BackendInstrumentType.PERPETUAL,
+      enabled: true,
+      priority: 400 + index,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: `${base}/USDT perpetual contract on Hyperliquid DEX`,
+    })),
   ]
 
   let createdCount = 0

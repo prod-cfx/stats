@@ -127,6 +127,16 @@ describe('aggregatedOrderbookService', () => {
   })
 
   it('lists enabled aggregated orderbook markets grouped by base and type', async () => {
+    const freshBtcBook = {
+      venueId: 'binance-perp',
+      marketKey: 'BTC-USDT:perp',
+      bids: [{ price: 66480, size: 1.25 }],
+      asks: [{ price: 66481, size: 1.1 }],
+      exchangeTs: Date.now() - 500,
+      receivedTs: Date.now() - 250,
+      version: 123,
+    }
+
     mockOrderbookConfigService.findEnabledConfigs.mockResolvedValue([
       {
         venue: 'BINANCE',
@@ -157,11 +167,17 @@ describe('aggregatedOrderbookService', () => {
         quoteAsset: 'USDT',
       },
     ])
+    mockRedisClient.mget.mockResolvedValue([
+      JSON.stringify(freshBtcBook),
+      null,
+      null,
+      null,
+      null,
+      null,
+    ])
 
     await expect(service.getAvailableMarkets()).resolves.toEqual([
       { base: 'BTC', type: 'perp', venues: ['binance'] },
-      { base: 'SOL', type: 'perp', venues: ['hyperliquid'] },
-      { base: 'SOL', type: 'spot', venues: ['okx'] },
     ])
   })
 })

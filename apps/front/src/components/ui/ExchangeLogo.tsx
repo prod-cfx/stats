@@ -57,6 +57,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   const isOkx = normalizedName === 'okx';
   const isBybit = normalizedName === 'bybit';
   const isKuCoin = normalizedName === 'kucoin' || logoUrl?.includes('311.png') || logoUrl?.includes('16.png');
+  const isHyperliquid = normalizedName === 'hyperliquid' || name?.toLowerCase().includes('hyperliquid');
   const isDex = normalizedName === 'dex' || name?.toLowerCase().includes('dex');
 
   if (isBinance) return <div className={className}><BinanceIcon size={size} /></div>;
@@ -72,7 +73,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
     );
   }
 
-  if (isDex) return <div className={className}><DexIcon size={size} /></div>;
+  if (isHyperliquid || isDex) return <div className={className}><DexIcon size={size} /></div>;
 
   if (logoUrl) {
     return (
@@ -88,4 +89,3 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
     </div>
   );
 };
-
