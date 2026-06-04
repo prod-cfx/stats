@@ -69,7 +69,19 @@ describe('AggregatedOrderbookView markets', () => {
 
     expect(source).toContain('getTickSizeOptionsForBase')
     expect(source).toContain("ADA: ['0.0001', '0.001', '0.01']")
+    expect(source).toContain("ARB: ['0.0001', '0.001', '0.01']")
+    expect(source).toContain("DOT: ['0.001', '0.01', '0.1']")
     expect(source).toContain('getDefaultTickSizeForBase(nextMarket.base)')
     expect(source).not.toContain("options={['1', '10', '100']}")
+  })
+
+  it('passes selected base asset to the orderbook table so quantity headers are not hardcoded to BTC', () => {
+    const source = readFrontSource('components/aggregated-orderbook/AggregatedOrderbookView.tsx')
+    const tableSource = readFrontSource('components/aggregated-orderbook/OrderbookTable.tsx')
+
+    expect(source).toContain('baseAsset={symbol}')
+    expect(tableSource).toContain('baseAsset?: string')
+    expect(tableSource).toContain("t('aggregatedOrderbook.table.amount', { asset: baseAsset })")
+    expect(tableSource).toContain("t('aggregatedOrderbook.table.total', { asset: baseAsset })")
   })
 })

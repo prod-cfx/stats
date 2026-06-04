@@ -1179,8 +1179,8 @@
     "table": {
       "exchange": "交易所",
       "price": "价格(USDT)",
-      "amount": "数量(BTC)",
-      "total": "总计(BTC)"
+      "amount": "数量({{asset}})",
+      "total": "总计({{asset}})"
     },
     "openInterest": {
       "title": "{{symbol}} 合约总持仓",

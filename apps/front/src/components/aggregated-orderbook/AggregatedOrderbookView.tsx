@@ -33,12 +33,31 @@ const SYMBOL_TICK_SIZE_OPTIONS: Record<string, string[]> = {
   BTC: ['1', '10', '100'],
   ETH: ['0.1', '1', '10'],
   BNB: ['0.1', '1', '10'],
+  BCH: ['0.1', '1', '10'],
+  AAVE: ['0.01', '0.1', '1'],
   SOL: ['0.01', '0.1', '1'],
   LINK: ['0.01', '0.1', '1'],
   AVAX: ['0.01', '0.1', '1'],
+  LTC: ['0.01', '0.1', '1'],
+  INJ: ['0.01', '0.1', '1'],
+  ETC: ['0.01', '0.1', '1'],
+  DOT: ['0.001', '0.01', '0.1'],
+  TON: ['0.001', '0.01', '0.1'],
+  UNI: ['0.001', '0.01', '0.1'],
+  NEAR: ['0.001', '0.01', '0.1'],
+  APT: ['0.001', '0.01', '0.1'],
+  ATOM: ['0.001', '0.01', '0.1'],
+  FIL: ['0.001', '0.01', '0.1'],
   ADA: ['0.0001', '0.001', '0.01'],
   DOGE: ['0.0001', '0.001', '0.01'],
   XRP: ['0.0001', '0.001', '0.01'],
+  ARB: ['0.0001', '0.001', '0.01'],
+  OP: ['0.0001', '0.001', '0.01'],
+  TRX: ['0.0001', '0.001', '0.01'],
+  SUI: ['0.0001', '0.001', '0.01'],
+  SEI: ['0.0001', '0.001', '0.01'],
+  WIF: ['0.0001', '0.001', '0.01'],
+  ENA: ['0.0001', '0.001', '0.01'],
 }
 const DEFAULT_TICK_SIZE_OPTIONS = ['0.01', '0.1', '1']
 
@@ -118,7 +137,7 @@ const AsksIcon = memo(({ active }: { active: boolean }) => (
   </svg>
 ))
 
-// 转换后端数据到前端组件格式（累计 BTC 数量）
+// 转换后端数据到前端组件格式（累计 base asset 数量）
 // isAsks: asks 需要从最佳价（最低）向外累计，但显示时是倒序，所以需要反向计算
 function transformOrderbookData(
   levels: AggregatedOrderbookLevel[],
@@ -550,6 +569,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         asks={orderbook.asks}
                         bids={orderbook.bids}
                         currentPrice={orderbook.currentPrice}
+                        baseAsset={symbol}
                         displayMode={displayMode as 'both' | 'bids' | 'asks'}
                         variant={variant}
                       />

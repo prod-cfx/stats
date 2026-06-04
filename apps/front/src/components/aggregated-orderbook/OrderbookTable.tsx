@@ -25,6 +25,7 @@ interface OrderbookTableProps {
   }
   displayMode?: 'both' | 'bids' | 'asks'
   variant?: 'default' | 'compact'
+  baseAsset?: string
 }
 
 const BOTH_SIDE_ROWS = 13
@@ -157,6 +158,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   bids,
   displayMode = 'both',
   variant = 'default',
+  baseAsset = 'BTC',
 }) => {
   const { t } = useTranslation()
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -225,10 +227,10 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
           {t('aggregatedOrderbook.table.price')}
         </span>
         <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} pr-0.5 text-right`}>
-          {t('aggregatedOrderbook.table.amount')}
+          {t('aggregatedOrderbook.table.amount', { asset: baseAsset })}
         </span>
         <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right`}>
-          {t('aggregatedOrderbook.table.total')}
+          {t('aggregatedOrderbook.table.total', { asset: baseAsset })}
         </span>
       </div>
 
