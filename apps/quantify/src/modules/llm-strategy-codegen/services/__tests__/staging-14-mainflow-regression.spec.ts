@@ -191,4 +191,20 @@ describe('staging 14 strategy mainflow regression matrix', () => {
       }
     }
   })
+
+  it('repairs pair-spread leg entry when planner mislabels 做空 leg as close/exit', () => {
+    const prompt = 'OKX 合约 BTCUSDT 和 ETHUSDT 做多空双腿价差，BTC 腿做多、ETH 腿做空，价差扩大时开仓。'
+    const rules = (dispatcher as unknown as {
+      buildTypedRulesFromFlatPatch: (patch: CodegenSemanticPatch, message: string) => SemanticState['rules']
+    }).buildTypedRulesFromFlatPatch({
+      triggers: [{ key: 'orderbook.spread_condition', phase: 'exit', params: { operator: 'lt', valuePct: 0.03 } }],
+      actions: [{ key: 'action.close_long', phase: 'exit', params: {} }],
+    } as CodegenSemanticPatch, prompt)
+
+    expect(rules).toHaveLength(1)
+    expect(rules[0]?.phase).toBe('entry')
+    expect(rules[0]?.condition.key).toBe('orderbook.spread_condition')
+    expect(rules[0]?.effects.actions.map(action => action.key)).toEqual(expect.arrayContaining(['action.open_long', 'action.open_short']))
+    expect(rules[0]?.effects.actions.map(action => action.key)).not.toContain('action.close_long')
+  })
 })

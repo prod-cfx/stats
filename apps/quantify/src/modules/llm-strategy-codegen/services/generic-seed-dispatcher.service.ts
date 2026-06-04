@@ -1846,7 +1846,11 @@ export class GenericSeedDispatcher {
       const fixedGateEffect = contract?.surface?.phaseResolver === 'fixed-gate' && contract.roles.includes('effect')
       if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !fixedGateEffect) return
       const evidenceText = isEvidenceWithText(item.evidence) ? item.evidence.text : undefined
-      const phase = this.resolveTypedRulePhaseForAtom(item.key, item.phase)
+      const forcePairSpreadEntry = item.key === 'orderbook.spread_condition'
+        && this.hasLegScopeIntent(userMessage)
+        && this.hasOpenActionIntent(userMessage)
+        && !this.hasCloseActionIntent(userMessage)
+      const phase = forcePairSpreadEntry ? 'entry' : this.resolveTypedRulePhaseForAtom(item.key, item.phase)
       out.push({
         key: item.key,
         phase: this.shouldTreatPredicateEvidenceAsExit(evidenceText) ? 'exit' : phase,
@@ -2068,6 +2072,14 @@ export class GenericSeedDispatcher {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
       if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      if (
+        this.hasLegScopeIntent(userMessage)
+        && this.hasOpenActionIntent(userMessage)
+        && !this.hasCloseActionIntent(userMessage)
+        && (item.key === ATOM_CONTRACT_REGISTRY['action.close_long'].key || item.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key)
+      ) {
+        return
+      }
       let phase = item.phase
       let sideScope = item.sideScope
       if (item.key === 'execution.limit_chase' && phase === 'entry') {
