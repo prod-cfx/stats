@@ -13,6 +13,8 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'live_strategies_controller.dart';
+import 'live_strategies_state.dart';
 import 'widgets/live_action_sheet.dart';
 import 'widgets/live_close_with_position_sheet.dart';
 import 'widgets/live_delete_sheet.dart';
@@ -32,28 +34,22 @@ class LiveStrategiesPage extends ConsumerStatefulWidget {
   ConsumerState<LiveStrategiesPage> createState() => _LiveStrategiesPageState();
 }
 
-/// filter chip 与状态的映射。null = 全部（排除 stopped）。
-enum _LiveFilter { all, running, paused, stopped }
-
 class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
-  _LiveFilter _filter = _LiveFilter.all;
-  LiveSortMetric? _sortMetric;
-  LiveSortDirection _sortDir = LiveSortDirection.none;
-
-  bool _matches(LiveStrategy s) {
-    switch (_filter) {
-      case _LiveFilter.all:
+  bool _matches(LiveStrategy s, LiveFilter filter) {
+    switch (filter) {
+      case LiveFilter.all:
         return s.status != LiveStrategyStatus.stopped;
-      case _LiveFilter.running:
+      case LiveFilter.running:
         return s.status == LiveStrategyStatus.running;
-      case _LiveFilter.paused:
+      case LiveFilter.paused:
         return s.status == LiveStrategyStatus.paused;
-      case _LiveFilter.stopped:
+      case LiveFilter.stopped:
         return s.status == LiveStrategyStatus.stopped;
     }
   }
 
   Future<void> _openSortSheet(AsyncValue<List<LiveStrategy>> strategies) async {
+    final LiveStrategiesState st = ref.read(liveStrategiesControllerProvider);
     final LiveSortStatusCounts counts = strategies.maybeWhen(
       data: _statusCounts,
       orElse: () =>
@@ -61,17 +57,19 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     );
     final LiveSortSelection? result = await LiveSortSheet.show(
       context,
-      metric: _sortMetric,
-      direction: _sortDir,
-      status: _sortStatusFromFilter(_filter),
+      metric: st.sortMetric,
+      direction: st.sortDir,
+      status: _sortStatusFromFilter(st.filter),
       statusCounts: counts,
     );
     if (result == null || !mounted) return;
-    setState(() {
-      _filter = _filterFromSortStatus(result.status);
-      _sortMetric = result.metric;
-      _sortDir = result.direction;
-    });
+    ref
+        .read(liveStrategiesControllerProvider.notifier)
+        .applySortSelection(
+          filter: _filterFromSortStatus(result.status),
+          metric: result.metric,
+          dir: result.direction,
+        );
   }
 
   LiveSortStatusCounts _statusCounts(List<LiveStrategy> all) {
@@ -91,29 +89,29 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     );
   }
 
-  LiveSortStatus _sortStatusFromFilter(_LiveFilter filter) {
+  LiveSortStatus _sortStatusFromFilter(LiveFilter filter) {
     switch (filter) {
-      case _LiveFilter.all:
+      case LiveFilter.all:
         return LiveSortStatus.all;
-      case _LiveFilter.running:
+      case LiveFilter.running:
         return LiveSortStatus.running;
-      case _LiveFilter.paused:
+      case LiveFilter.paused:
         return LiveSortStatus.paused;
-      case _LiveFilter.stopped:
+      case LiveFilter.stopped:
         return LiveSortStatus.stopped;
     }
   }
 
-  _LiveFilter _filterFromSortStatus(LiveSortStatus status) {
+  LiveFilter _filterFromSortStatus(LiveSortStatus status) {
     switch (status) {
       case LiveSortStatus.all:
-        return _LiveFilter.all;
+        return LiveFilter.all;
       case LiveSortStatus.running:
-        return _LiveFilter.running;
+        return LiveFilter.running;
       case LiveSortStatus.paused:
-        return _LiveFilter.paused;
+        return LiveFilter.paused;
       case LiveSortStatus.stopped:
-        return _LiveFilter.stopped;
+        return LiveFilter.stopped;
     }
   }
 
@@ -201,6 +199,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     final AsyncValue<LiveStrategySummary> summary = ref.watch(
       liveStrategySummaryProvider,
     );
+    final LiveStrategiesState st = ref.watch(liveStrategiesControllerProvider);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -211,7 +210,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
           IconButton(
             key: const Key('live-sort-button'),
             icon: const Icon(Icons.tune, size: 20),
-            color: _sortDir == LiveSortDirection.none ? c.textDim : c.accent,
+            color: st.sortDir == LiveSortDirection.none ? c.textDim : c.accent,
             onPressed: () => _openSortSheet(strategies),
             tooltip: l10n.liveSortSheetTitle,
           ),
@@ -238,13 +237,14 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     List<LiveStrategy> all,
     AsyncValue<LiveStrategySummary> summary,
   ) {
+    final LiveStrategiesState st = ref.watch(liveStrategiesControllerProvider);
     final List<LiveStrategy> filtered = all
-        .where(_matches)
+        .where((LiveStrategy s) => _matches(s, st.filter))
         .toList(growable: false);
     final List<LiveStrategy> visible = sortStrategies(
       filtered,
-      _sortMetric,
-      _sortDir,
+      st.sortMetric,
+      st.sortDir,
     );
 
     return ListView(
@@ -261,12 +261,14 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
         ),
         const SizedBox(height: QzSpacing.md),
         _FilterPills(
-          filter: _filter,
+          filter: st.filter,
           all: all,
-          onChanged: (_LiveFilter f) => setState(() => _filter = f),
+          onChanged: (LiveFilter f) => ref
+              .read(liveStrategiesControllerProvider.notifier)
+              .setFilter(f),
         ),
         const SizedBox(height: QzSpacing.md),
-        if (_filter == _LiveFilter.stopped && visible.isNotEmpty)
+        if (st.filter == LiveFilter.stopped && visible.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: QzSpacing.md),
             child: _RetentionHint(text: l10n.liveStoppedRetentionHint),
@@ -490,23 +492,23 @@ class _FilterPills extends StatelessWidget {
     required this.all,
     required this.onChanged,
   });
-  final _LiveFilter filter;
+  final LiveFilter filter;
   final List<LiveStrategy> all;
-  final ValueChanged<_LiveFilter> onChanged;
+  final ValueChanged<LiveFilter> onChanged;
 
-  int _count(_LiveFilter f) {
+  int _count(LiveFilter f) {
     switch (f) {
-      case _LiveFilter.all:
+      case LiveFilter.all:
         return all.length;
-      case _LiveFilter.running:
+      case LiveFilter.running:
         return all
             .where((LiveStrategy s) => s.status == LiveStrategyStatus.running)
             .length;
-      case _LiveFilter.paused:
+      case LiveFilter.paused:
         return all
             .where((LiveStrategy s) => s.status == LiveStrategyStatus.paused)
             .length;
-      case _LiveFilter.stopped:
+      case LiveFilter.stopped:
         return all
             .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
             .length;
@@ -517,17 +519,17 @@ class _FilterPills extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<(_LiveFilter, String)> items = <(_LiveFilter, String)>[
-      (_LiveFilter.all, l10n.liveFilterAll),
-      (_LiveFilter.running, l10n.liveFilterRunning),
-      (_LiveFilter.paused, l10n.liveFilterPaused),
-      (_LiveFilter.stopped, l10n.liveFilterStopped),
+    final List<(LiveFilter, String)> items = <(LiveFilter, String)>[
+      (LiveFilter.all, l10n.liveFilterAll),
+      (LiveFilter.running, l10n.liveFilterRunning),
+      (LiveFilter.paused, l10n.liveFilterPaused),
+      (LiveFilter.stopped, l10n.liveFilterStopped),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: <Widget>[
-          for (final (_LiveFilter, String) it in items)
+          for (final (LiveFilter, String) it in items)
             Padding(
               padding: const EdgeInsets.only(right: QzSpacing.xs),
               child: _Pill(

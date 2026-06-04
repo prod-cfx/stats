@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/strategy_models.dart';
-import '../../data/providers.dart';
-import '../../data/repositories/strategy_repository.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_spinner.dart';
 import '../auth/login_sheet.dart';
+import 'strategy_guest_controller.dart';
+import 'strategy_guest_state.dart';
 import 'widgets/sparkline_view.dart';
 import 'widgets/strategy_card_tile.dart';
 
@@ -20,23 +20,12 @@ class StrategyGuestPage extends ConsumerStatefulWidget {
 }
 
 class _StrategyGuestPageState extends ConsumerState<StrategyGuestPage> {
-  List<StrategyMarketItem> _items = const <StrategyMarketItem>[];
-  bool _loading = true;
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
-
-  Future<void> _load() async {
-    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
-    final StrategyMarketPage page = await repo.listMarket(page: 1, pageSize: 3);
-    if (!mounted) return;
-    setState(() {
-      _items = page.items;
-      _loading = false;
-    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => ref.read(strategyGuestControllerProvider.notifier).load(),
+    );
   }
 
   void _openLogin() => showLoginSheet(context);
@@ -45,15 +34,18 @@ class _StrategyGuestPageState extends ConsumerState<StrategyGuestPage> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final c = context.qzScheme;
+    final StrategyGuestState state =
+        ref.watch(strategyGuestControllerProvider);
+    final List<StrategyMarketItem> items = state.items;
     return ColoredBox(
       key: const Key('strategy-guest-page'),
       color: c.bg,
-      child: _loading
+      child: state.loading
           ? const Center(child: QzSpinner())
           : ListView(
               padding: const EdgeInsets.only(bottom: 120),
               children: <Widget>[
-                _GuestHero(items: _items, onLogin: _openLogin),
+                _GuestHero(items: items, onLogin: _openLogin),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
                   child: Row(
@@ -106,7 +98,7 @@ class _StrategyGuestPageState extends ConsumerState<StrategyGuestPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     children: <Widget>[
-                      for (final StrategyMarketItem item in _items)
+                      for (final StrategyMarketItem item in items)
                         StrategyCardTile(
                           key: Key('strategy-guest-card-${item.card.id}'),
                           item: item,

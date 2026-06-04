@@ -12,6 +12,7 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'live_strategy_detail_controller.dart';
 import 'widgets/live_close_with_position_sheet.dart';
 import 'widgets/live_delete_sheet.dart';
 import 'widgets/live_equity_curve.dart';
@@ -35,14 +36,6 @@ class LiveStrategyDetailPage extends ConsumerStatefulWidget {
 
 class _LiveStrategyDetailPageState
     extends ConsumerState<LiveStrategyDetailPage> {
-  late String _tab;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = 'overview';
-  }
-
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -78,6 +71,7 @@ class _LiveStrategyDetailPageState
     QzColorScheme c,
     LiveStrategy s,
   ) {
+    final String tab = ref.watch(liveStrategyDetailControllerProvider).tab;
     return Column(
       children: <Widget>[
         QzTopBar(
@@ -105,12 +99,13 @@ class _LiveStrategyDetailPageState
                       l10n.liveTabHistory,
                       l10n.liveTabParams,
                     ],
-                    value: _labelFor(_tab, l10n),
-                    onChanged: (String v) =>
-                        setState(() => _tab = _keyFor(v, l10n)),
+                    value: _labelFor(tab, l10n),
+                    onChanged: (String v) => ref
+                        .read(liveStrategyDetailControllerProvider.notifier)
+                        .setTab(_keyFor(v, l10n)),
                   ),
                   const SizedBox(height: QzSpacing.md),
-                  _tabBody(s),
+                  _tabBody(tab, s),
                 ],
               ),
               Positioned(
@@ -126,8 +121,8 @@ class _LiveStrategyDetailPageState
     );
   }
 
-  Widget _tabBody(LiveStrategy s) {
-    switch (_tab) {
+  Widget _tabBody(String tab, LiveStrategy s) {
+    switch (tab) {
       case 'positions':
         return _PositionsTab(id: s.id);
       case 'history':

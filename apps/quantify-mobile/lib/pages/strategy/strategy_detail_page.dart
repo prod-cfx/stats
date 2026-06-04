@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +16,8 @@ import '../../widgets/qz_button.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_spinner.dart';
+import 'strategy_detail_controller.dart';
+import 'strategy_detail_state.dart';
 import 'widgets/equity_curve_view.dart';
 import 'widgets/load_conversation_toast.dart';
 import 'widgets/strategy_metric_card.dart';
@@ -50,10 +50,6 @@ class StrategyDetailPage extends ConsumerStatefulWidget {
 }
 
 class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
-  /// 用户尚未手动切换时为 null，渲染时按策略 `card.period` 推导默认 tab
-  /// （对齐设计稿 line 1052-1058 默认高亮策略自身周期，#1888）。
-  EquityTimeframe? _tf;
-
   /// 把策略 `period`（如 `7D`/`30D`/`90D`/`1Y`）映射到 [EquityTimeframe]；
   /// 无法映射（如 `14D`/`15m`）时回退 [EquityTimeframe.d30]。
   static EquityTimeframe _defaultTimeframe(String period) {
@@ -66,59 +62,28 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
     };
   }
 
-  /// 「载入对话」toast 与跳转 timer（#1666 对齐 strategy_home_page #1596）。
-  /// 显示 toast 后约 700ms 跳 `/ai?loadStrategy=$id`；
-  /// dispose / 重复点击需安全取消，避免页面销毁后仍调 router。
-  String? _toast;
-  Timer? _toastTimer;
-  Timer? _navTimer;
-  static const Duration _kLoadConversationDelay = Duration(milliseconds: 700);
-  static const Duration _kToastDuration = Duration(milliseconds: 2400);
-
-  @override
-  void dispose() {
-    _toastTimer?.cancel();
-    _navTimer?.cancel();
-    super.dispose();
-  }
-
-  /// 点击「载入对话」：toast → 700ms → `context.go('/ai?loadStrategy=$id')`。
-  /// 与 [_StrategyHomePageState._onLoadConversation] 行为对齐。
+  /// 点击「载入对话」：toast → 700ms → `/ai?loadStrategy=$id`。
+  /// toast 文案在此解析（依赖 l10n），timer/导航请求由 controller 持有。
   void _onLoadConversation(StrategyDetail d) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String id = d.card.id;
-    final String msg = l10n.strategyHomeLoadedToast(d.card.name);
-    _toastTimer?.cancel();
-    _navTimer?.cancel();
-    setState(() => _toast = msg);
-    _toastTimer = Timer(_kToastDuration, () {
-      if (!mounted) return;
-      setState(() => _toast = null);
-    });
-    _navTimer = Timer(_kLoadConversationDelay, () {
-      if (!mounted) return;
-      context.go('/ai?loadStrategy=$id');
-    });
+    ref
+        .read(strategyDetailControllerProvider.notifier)
+        .fireToastAndNav(
+          message: l10n.strategyHomeLoadedToast(d.card.name),
+          route: '/ai?loadStrategy=${d.card.id}',
+        );
   }
 
   /// 点击底栏「运行」（#1825，与广场卡 #1821 行为一致）：toast
   /// 「『名』已启动 · 进入实盘监控」，~700ms 后跳实盘监控 `/me/live`。
-  /// 复用 toast/nav timer，与「载入对话」同一取消语义，避免叠加跳转；
-  /// 后端真实启动接口未就绪，此处先按设计稿做交互占位。
   void _onRun(StrategyDetail d) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String msg = l10n.strategyHomeStartedToast(d.card.name);
-    _toastTimer?.cancel();
-    _navTimer?.cancel();
-    setState(() => _toast = msg);
-    _toastTimer = Timer(_kToastDuration, () {
-      if (!mounted) return;
-      setState(() => _toast = null);
-    });
-    _navTimer = Timer(_kLoadConversationDelay, () {
-      if (!mounted) return;
-      context.go('/me/live');
-    });
+    ref
+        .read(strategyDetailControllerProvider.notifier)
+        .fireToastAndNav(
+          message: l10n.strategyHomeStartedToast(d.card.name),
+          route: '/me/live',
+        );
   }
 
   String _fmtPct(double v, {bool sign = true}) =>
@@ -153,6 +118,17 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
         ref.watch(strategyDetailProvider(id));
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     final bool starred = favorites.contains(id);
+    final StrategyDetailState pageState =
+        ref.watch(strategyDetailControllerProvider);
+    // 导航副作用留 widget：controller 到点写 pendingNav，这里消费并跳转。
+    ref.listen<StrategyDetailState>(strategyDetailControllerProvider,
+        (StrategyDetailState? prev, StrategyDetailState next) {
+      final String? route = next.pendingNav;
+      if (route != null) {
+        ref.read(strategyDetailControllerProvider.notifier).consumeNav();
+        context.go(route);
+      }
+    });
 
     // 对齐设计稿 StratDetail：bottom-sheet 形态——顶部避开灵动岛，
     // 圆角顶 + 拖拽 handle + bgElev 头部。整页路由保留（深链 /strategy/:id
@@ -185,7 +161,8 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
           child: QzEmptyState(title: l10n.commonLoadError, subtitle: err.toString()),
         ),
         data: (StrategyDetail d) {
-          final EquityTimeframe tf = _tf ?? _defaultTimeframe(d.card.period);
+          final EquityTimeframe tf =
+              pageState.tf ?? _defaultTimeframe(d.card.period);
           return SafeArea(
           top: false,
           child: SingleChildScrollView(
@@ -203,8 +180,9 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                 _EquityCard(
                   cagr: d.cagr,
                   tf: tf,
-                  onChanged: (EquityTimeframe v) =>
-                      setState(() => _tf = v),
+                  onChanged: (EquityTimeframe v) => ref
+                      .read(strategyDetailControllerProvider.notifier)
+                      .setTf(v),
                   curve: _EquitySection(id: id, tf: tf),
                 ),
                 const SizedBox(height: QzSpacing.md),
@@ -267,7 +245,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
         );
         },
       ),
-                  if (_toast != null)
+                  if (pageState.toast != null)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -275,7 +253,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                       child: Center(
                         child: LoadConversationToast(
                           key: const Key('strategy-load-conversation-toast'),
-                          text: _toast!,
+                          text: pageState.toast!,
                         ),
                       ),
                     ),

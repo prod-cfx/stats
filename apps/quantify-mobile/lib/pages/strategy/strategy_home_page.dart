@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
-import '../../data/repositories/strategy_repository.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -14,6 +11,8 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'strategy_home_controller.dart';
+import 'strategy_home_state.dart';
 import 'widgets/category_chip_bar.dart';
 import 'widgets/featured_hero_card.dart';
 import 'widgets/load_conversation_toast.dart';
@@ -35,49 +34,27 @@ class StrategyHomePage extends ConsumerStatefulWidget {
 }
 
 class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
-  static const int _kPageSize = 10;
-
   final ScrollController _scrollCtrl = ScrollController();
 
-  StrategyCategory _category = StrategyCategory.all;
-  bool _favOnly = false;
-  String _query = '';
-  StrategySortKey _sort = StrategySortKey.hot;
-  int _page = 1;
-  bool _hasMore = true;
-  bool _loading = true;
-  bool _loadingMore = false;
-
-  /// 「筛选 & 排序」sheet 是否打开：驱动顶部筛选按钮的设计稿激活态
-  /// （m-screens-2:578-583，打开时 accentSoft 圆底 + accent 图标）。
-  bool _filterSheetOpen = false;
-  List<StrategyMarketItem> _items = <StrategyMarketItem>[];
-  StrategyMarketItem? _featured;
-
-  /// sheet 实时联动通道（#2128）：sheet 在 modal route 内，无法随父页面 setState
-  /// 重绘，故用 [ValueNotifier] 把选中类型/排序/结果数推给 sheet。父页面状态变化时
-  /// 在 [_syncSheetState] 内同步这些 notifier，sheet 内 [ValueListenableBuilder]
-  /// 即时重绘，对齐设计稿 `setTag`/`setSort`/`filtered.length` 模型。
+  /// sheet 实时联动通道（#2128）：sheet 在 modal route 内，无法随父页面重绘，
+  /// 故用 [ValueNotifier] 把选中类型/排序/结果数推给 sheet。属模态局部态，按
+  /// issue #2185 边界保留在 widget，不并入页面 controller。
   final ValueNotifier<StrategyCategory> _sheetCategory =
       ValueNotifier<StrategyCategory>(StrategyCategory.all);
   final ValueNotifier<StrategySortKey> _sheetSort =
       ValueNotifier<StrategySortKey>(StrategySortKey.hot);
   final ValueNotifier<int> _sheetResultCount = ValueNotifier<int>(0);
 
-  /// 载入对话 toast：与设计稿 `fireToast`(#1596) 一致。
-  /// 显示约 700ms 后跳到 `/ai?loadStrategy=$id`，dispose / 重复点击需安全取消。
-  String? _toast;
-  Timer? _toastTimer;
-  Timer? _navTimer;
-  static const Duration _kLoadConversationDelay = Duration(milliseconds: 700);
+  StrategyHomeController get _ctrl =>
+      ref.read(strategyHomeControllerProvider.notifier);
 
   @override
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reload();
-      _loadFeatured();
+      _ctrl.reload();
+      _ctrl.loadFeatured();
     });
   }
 
@@ -85,166 +62,58 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   void dispose() {
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
-    _toastTimer?.cancel();
-    _navTimer?.cancel();
     _sheetCategory.dispose();
     _sheetSort.dispose();
     _sheetResultCount.dispose();
     super.dispose();
   }
 
-  /// 点击「载入对话」：显示 toast，~700ms 后跳转 `/ai?loadStrategy=$id`。
-  /// 重复点击会取消上一次的 timer，避免叠加跳转；dispose 后所有 timer 安全取消。
+  /// 点击「载入对话」：toast → 700ms → `/ai?loadStrategy=$id`。toast 文案在此
+  /// 解析（依赖 l10n），timer/导航请求由 controller 持有。
   void _onLoadConversation(StrategyMarketItem item) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String id = item.card.id;
-    final String msg = l10n.strategyHomeLoadedToast(item.card.name);
-    _toastTimer?.cancel();
-    _navTimer?.cancel();
-    setState(() => _toast = msg);
-    // 在跳转前清掉 toast 文本，避免跨页残留；跳转交给独立 timer，并在
-    // 触发前再次校验 mounted，防止 dispose 后还调 router。
-    _toastTimer = Timer(const Duration(milliseconds: 2400), () {
-      if (!mounted) return;
-      setState(() => _toast = null);
-    });
-    _navTimer = Timer(_kLoadConversationDelay, () {
-      if (!mounted) return;
-      context.go('/ai?loadStrategy=$id');
-    });
+    _ctrl.fireToastAndNav(
+      message: l10n.strategyHomeLoadedToast(item.card.name),
+      route: '/ai?loadStrategy=${item.card.id}',
+    );
   }
 
-  /// 点击「运行」（#1821）：toast「『名』已启动 · 进入实盘监控」，~700ms 后跳到
-  /// 实盘监控 `/me/live`。复用 toast/nav timer，与「载入对话」同一取消语义，
-  /// 避免叠加跳转；后端真实启动接口未就绪，此处先按设计稿做交互占位。
+  /// 点击「运行」（#1821）：toast「『名』已启动 · 进入实盘监控」，~700ms 后跳
+  /// 实盘监控 `/me/live`。
   void _onRun(StrategyMarketItem item) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String msg = l10n.strategyHomeStartedToast(item.card.name);
-    _toastTimer?.cancel();
-    _navTimer?.cancel();
-    setState(() => _toast = msg);
-    _toastTimer = Timer(const Duration(milliseconds: 2400), () {
-      if (!mounted) return;
-      setState(() => _toast = null);
-    });
-    _navTimer = Timer(_kLoadConversationDelay, () {
-      if (!mounted) return;
-      context.go('/me/live');
-    });
+    _ctrl.fireToastAndNav(
+      message: l10n.strategyHomeStartedToast(item.card.name),
+      route: '/me/live',
+    );
   }
 
   void _onScroll() {
-    if (_loadingMore || !_hasMore) return;
+    final StrategyHomeState s = ref.read(strategyHomeControllerProvider);
+    if (s.loadingMore || !s.hasMore) return;
     if (!_scrollCtrl.hasClients) return;
     final double pos = _scrollCtrl.position.pixels;
     final double max = _scrollCtrl.position.maxScrollExtent;
     if (pos >= max - 200) {
-      _loadMore();
+      _ctrl.loadMore();
     }
-  }
-
-  Future<void> _loadFeatured() async {
-    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
-    try {
-      final StrategyMarketItem hero = await repo.getFeaturedHero();
-      if (!mounted) return;
-      setState(() => _featured = hero);
-    } catch (e, st) {
-      // featured 失败不影响主列表，但留可观测信号便于排查接入真实接口后的故障。
-      debugPrint('[StrategyHome] loadFeatured failed: $e\n$st');
-    }
-  }
-
-  Future<void> _reload() async {
-    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
-    setState(() {
-      _loading = true;
-      _page = 1;
-    });
-    final StrategyMarketPage res = await repo.listMarket(
-      page: 1,
-      pageSize: _kPageSize,
-      query: _query.isEmpty ? null : _query,
-      category: _category,
-    );
-    if (!mounted) return;
-    setState(() {
-      _items = _applySort(res.items, _sort);
-      _hasMore = res.hasMore;
-      _loading = false;
-    });
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
-    final int next = _page + 1;
-    final StrategyMarketPage res = await repo.listMarket(
-      page: next,
-      pageSize: _kPageSize,
-      query: _query.isEmpty ? null : _query,
-      category: _category,
-    );
-    if (!mounted) return;
-    setState(() {
-      _page = next;
-      _items = _applySort(<StrategyMarketItem>[..._items, ...res.items], _sort);
-      _hasMore = res.hasMore;
-      _loadingMore = false;
-    });
-  }
-
-  /// 在当前内存列表上排序，避免 repository 接口暴露 sortKey。
-  ///
-  /// hot=按 users 降序；cagr=按 cagr 降序；sharpe=按 sharpe 降序；
-  /// mddLow=按 mdd 升序（值越大越接近 0，回撤越小）。
-  List<StrategyMarketItem> _applySort(
-    List<StrategyMarketItem> items,
-    StrategySortKey k,
-  ) {
-    final List<StrategyMarketItem> sorted = <StrategyMarketItem>[...items];
-    sorted.sort((StrategyMarketItem a, StrategyMarketItem b) {
-      return switch (k) {
-        StrategySortKey.hot => b.stats.users.compareTo(a.stats.users),
-        StrategySortKey.cagr => b.stats.cagr.compareTo(a.stats.cagr),
-        StrategySortKey.sharpe => b.stats.sharpe.compareTo(a.stats.sharpe),
-        StrategySortKey.mddLow =>
-          b.stats.maxDrawdown.compareTo(a.stats.maxDrawdown),
-      };
-    });
-    return sorted;
   }
 
   void _onCategoryChanged(StrategyCategory c) {
-    // 选分类即退出收藏视图（与「收藏」toggle 互斥）。
-    if (c == _category && !_favOnly) return;
-    setState(() {
-      _favOnly = false;
-      _category = c;
-    });
+    _ctrl.setCategory(c);
     _sheetCategory.value = c;
-    _reload();
   }
 
-  /// 切换「收藏」视图。开启后列表仅显示已星标策略（在内存里过滤，不重拉接口），
-  /// 与分类互斥——开收藏不改变 `_category`，但 [_listItems] 忽略分类、只看星标。
   void _onFavOnlyChanged(bool on) {
-    if (on == _favOnly) return;
-    setState(() => _favOnly = on);
+    _ctrl.setFavOnly(on);
   }
 
   void _onQueryChanged(String q) {
-    setState(() => _query = q);
-    _reload();
+    _ctrl.setQuery(q);
   }
 
   void _onSortChanged(StrategySortKey k) {
-    if (k == _sort) return;
-    setState(() {
-      _sort = k;
-      _items = _applySort(_items, k);
-    });
+    _ctrl.setSort(k);
     _sheetSort.value = k;
   }
 
@@ -253,14 +122,16 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   /// 变化；sheet 选中态/计数由 [_sheetCategory]/[_sheetSort]/[_sheetResultCount]
   /// 实时注入。「查看 N 个结果」只负责关闭 sheet。
   Future<void> _openFilterSheet() async {
+    final StrategyHomeState s = ref.read(strategyHomeControllerProvider);
     // 打开时把当前真值同步给 sheet 三通道，防止任何遗漏的状态分支造成初始态漂移。
     // 收藏视图忽略分类，故类型选中态归一到 all，避免 pill 高亮某类与实际过滤不符。
-    _sheetCategory.value = _favOnly ? StrategyCategory.all : _category;
-    _sheetSort.value = _sort;
+    _sheetCategory.value = s.favOnly ? StrategyCategory.all : s.category;
+    _sheetSort.value = s.sort;
     _sheetResultCount.value = _computeResultCount(
+      s,
       ref.read(strategyFavoritesProvider),
     );
-    setState(() => _filterSheetOpen = true);
+    _ctrl.setFilterSheetOpen(true);
     await StrategySortSheet.show(
       context: context,
       category: _sheetCategory,
@@ -270,7 +141,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
       onCategoryChanged: _onCategoryChanged,
       onSortChanged: _onSortChanged,
     );
-    if (mounted) setState(() => _filterSheetOpen = false);
+    if (mounted) _ctrl.setFilterSheetOpen(false);
   }
 
   /// 打开全屏搜索 overlay（#1824）。overlay 自身负责 pop + 回调：
@@ -289,53 +160,61 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   }
 
   /// featured hero 仅在「全部 + 无搜索 + 非收藏视图」时显示（设计稿 line 646）。
-  bool get _showFeatured =>
-      _featured != null &&
-      !_favOnly &&
-      _category == StrategyCategory.all &&
-      _query.isEmpty;
+  bool _showFeatured(StrategyHomeState s) =>
+      s.featured != null &&
+      !s.favOnly &&
+      s.category == StrategyCategory.all &&
+      s.query.isEmpty;
 
   /// 列表渲染用的视图项。
   ///
-  /// - 收藏视图（[_favOnly]）：仅保留 `favorites` 集合内的策略，忽略分类。
+  /// - 收藏视图（`favOnly`）：仅保留 `favorites` 集合内的策略，忽略分类。
   /// - hero 卡显示时（[_showFeatured]）：剔除与 hero 同 id 的策略，避免同一张卡
   ///   同时出现在 hero 和列表里。
-  ///
-  /// 注意：仅在 [_showFeatured] 为 true 时访问 `_featured!`，依赖该 getter
-  /// 内部已保证 `_featured != null`；如未来改 [_showFeatured] 实现，请同步检查这里。
-  List<StrategyMarketItem> _computeListItems(Set<String> favorites) {
-    Iterable<StrategyMarketItem> items = _items;
-    if (_favOnly) {
+  List<StrategyMarketItem> _computeListItems(
+    StrategyHomeState s,
+    Set<String> favorites,
+  ) {
+    Iterable<StrategyMarketItem> items = s.items;
+    if (s.favOnly) {
       items = items.where(
         (StrategyMarketItem it) => favorites.contains(it.card.id),
       );
     }
-    if (_showFeatured) {
-      final String heroId = _featured!.card.id;
+    if (_showFeatured(s)) {
+      final String heroId = s.featured!.card.id;
       items = items.where((StrategyMarketItem it) => it.card.id != heroId);
     }
     return items.toList(growable: false);
   }
 
   /// 当前条件下「查看 N 个结果」的计数真值（#2128）。
-  ///
-  /// 收藏视图反映过滤后条数（含 hero 已剔除项），非收藏态沿用既有排序行口径
-  /// `_items.length`，与排序行同一来源，避免计数语义分叉。
-  int _computeResultCount(Set<String> favorites) =>
-      _favOnly ? _computeListItems(favorites).length : _items.length;
+  int _computeResultCount(StrategyHomeState s, Set<String> favorites) =>
+      s.favOnly ? _computeListItems(s, favorites).length : s.items.length;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
-    final List<StrategyMarketItem> listItems = _computeListItems(favorites);
+    final StrategyHomeState s = ref.watch(strategyHomeControllerProvider);
+    // 导航副作用留 widget：controller 到点写 pendingNav，这里消费并跳转。
+    ref.listen<StrategyHomeState>(strategyHomeControllerProvider,
+        (StrategyHomeState? prev, StrategyHomeState next) {
+      final String? route = next.pendingNav;
+      if (route != null) {
+        _ctrl.consumeNav();
+        context.go(route);
+      }
+    });
+    final List<StrategyMarketItem> listItems = _computeListItems(s, favorites);
     // 收藏视图下结果计数应反映过滤后的条数（含 hero 已剔除项）。
-    final int resultCount = _computeResultCount(favorites);
+    final int resultCount = _computeResultCount(s, favorites);
+    final bool showFeatured = _showFeatured(s);
     // 把实时计数推给已打开的 sheet（#2128）；仅 sheet 打开时调度，避免 sheet 关闭
     // 时高频 rebuild（滚动分页 / 收藏切换）无意义排回调。post-frame 避免 build 内
     // 改 notifier 触发同帧重入。
-    if (_filterSheetOpen) {
+    if (s.filterSheetOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _sheetResultCount.value = resultCount;
       });
@@ -352,13 +231,13 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 _SearchButton(
-                  active: _query.isNotEmpty,
+                  active: s.query.isNotEmpty,
                   tooltip: l10n.strategySearchButton,
                   onPressed: _openSearchOverlay,
                 ),
                 const SizedBox(width: QzSpacing.sm),
                 _FilterButton(
-                  active: _filterSheetOpen,
+                  active: s.filterSheetOpen,
                   tooltip: l10n.strategyHomeFilterButton,
                   onPressed: _openFilterSheet,
                 ),
@@ -373,23 +252,23 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
             children: <Widget>[
           const SizedBox(height: QzSpacing.xs),
           CategoryChipBar(
-            selected: _category,
-            favOnly: _favOnly,
+            selected: s.category,
+            favOnly: s.favOnly,
             onChanged: _onCategoryChanged,
             onFavOnlyChanged: _onFavOnlyChanged,
           ),
           _SortRow(
-            sort: _sort,
+            sort: s.sort,
             resultCount: resultCount,
             onChanged: _onSortChanged,
           ),
           const SizedBox(height: QzSpacing.xs),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _reload,
-              child: _loading
+              onRefresh: _ctrl.reload,
+              child: s.loading
                   ? const Center(child: QzSpinner())
-                  : listItems.isEmpty && !_showFeatured
+                  : listItems.isEmpty && !showFeatured
                       ? ListView(
                           // RefreshIndicator 要求可滚动 child
                           physics: const AlwaysScrollableScrollPhysics(),
@@ -397,7 +276,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                             const SizedBox(height: 80),
                             // 收藏视图为空时走专属空态（星标图标 + 引导 + CTA）；
                             // 其余情况沿用「暂无匹配策略」。
-                            _favOnly
+                            s.favOnly
                                 ? _FavoritesEmptyState(
                                     onBrowse: () => _onFavOnlyChanged(false),
                                   )
@@ -413,17 +292,17 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                           padding: const EdgeInsets.fromLTRB(
                               QzSpacing.lg, 10, QzSpacing.lg, 100),
                           itemCount: listItems.length +
-                              (_showFeatured ? 1 : 0) +
-                              (_loadingMore ? 1 : 0),
+                              (showFeatured ? 1 : 0) +
+                              (s.loadingMore ? 1 : 0),
                           itemBuilder: (BuildContext ctx, int rawI) {
                             int i = rawI;
-                            if (_showFeatured) {
+                            if (showFeatured) {
                               if (i == 0) {
                                 return FeaturedHeroCard(
                                   key: const Key('strategy-featured-hero'),
-                                  item: _featured!,
+                                  item: s.featured!,
                                   onTap: () => context
-                                      .push('/strategy/${_featured!.card.id}'),
+                                      .push('/strategy/${s.featured!.card.id}'),
                                 );
                               }
                               i -= 1;
@@ -458,7 +337,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
           ),
             ],
           ),
-          if (_toast != null)
+          if (s.toast != null)
             Positioned(
               left: 0,
               right: 0,
@@ -466,7 +345,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
               child: Center(
                 child: LoadConversationToast(
                   key: const Key('strategy-load-conversation-toast'),
-                  text: _toast!,
+                  text: s.toast!,
                 ),
               ),
             ),
