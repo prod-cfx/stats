@@ -240,29 +240,6 @@ class _SessionTile extends StatelessWidget {
                             ? c.accentSoft
                             : c.statusWarn.withValues(alpha: 0.12),
                       ),
-                      if (session.cagrLabel != null) ...<Widget>[
-                        const SizedBox(width: QzSpacing.xs),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: c.marketUp.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            session.cagrLabel!,
-                            style: TextStyle(
-                              color: c.marketUp,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              fontFamily: QzFont.mono,
-                              fontFamilyFallback: QzFont.monoFallback,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 3),

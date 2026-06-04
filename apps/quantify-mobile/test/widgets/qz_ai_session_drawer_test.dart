@@ -43,6 +43,7 @@ void main() {
         id: 's-live',
         title: 'BTC 趋势 · 双均线',
         category: '趋势跟踪',
+        cagrLabel: '+31.6%',
         updatedAt: now.subtract(const Duration(minutes: 5)),
         deployedTo: 'inst-1',
         messages: <ChatTurn>[
@@ -74,6 +75,7 @@ void main() {
     expect(find.text('待部署'), findsOneWidget);
     expect(find.text('✓ 已部署 · 实盘运行中'), findsOneWidget);
     expect(find.text('已生成策略参数'), findsOneWidget);
+    expect(find.text('+31.6%'), findsNothing);
     expect(find.text('5 分钟前'), findsOneWidget);
     expect(find.text('刚刚'), findsOneWidget);
   });

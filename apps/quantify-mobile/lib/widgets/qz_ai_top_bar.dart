@@ -44,6 +44,10 @@ class QzAiTopBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     return AppBar(
+      backgroundColor: c.bgElev,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
+      elevation: 0,
       // 设计稿左按钮：32×32 / borderRadius 9 / bgSoft 软背景方钮 + 历史 glyph
       // （m-screens-1.jsx:368-378）。_TopBarButton 命中区 48 宽（视觉 32 居中，
       // 左右各溢出 8）。leading 槽需容纳 padding + 48 命中区，否则按钮被裁回
