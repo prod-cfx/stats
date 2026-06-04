@@ -147,4 +147,41 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     expect(mstr?.price.toString()).toBe('100')
     expect(mstr?.source).toBe('BBX')
   })
+
+  it('preserves upstream forbidden response details without leaking signed URL credentials', async () => {
+    ;(globalThis as any).fetch = jest.fn(async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      text: async () => JSON.stringify({ error: '没有权限访问此资源', success: false }),
+    }))
+
+    const baseCtx: DataPullJobContext = {
+      taskId: 1,
+      key: job.key,
+      cursor: null,
+      meta: { symbols: ['MSTR'] },
+      now: new Date(),
+    }
+
+    let error: any
+    try {
+      await cls.run(() => job.run(baseCtx))
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toMatchObject({
+      message: 'data_sync.bbx_crypto_stock_quotes.api_error',
+      args: expect.objectContaining({
+        reason: expect.stringContaining('status=403 Forbidden'),
+      }),
+    })
+    expect(error.args.reason).toContain('body="{\\"error\\":\\"没有权限访问此资源\\",\\"success\\":false}"')
+    expect(error.args.reason).toContain('AccessKeyId=***')
+    expect(error.args.reason).toContain('SignatureNonce=***')
+    expect(error.args.reason).toContain('Timestamp=***')
+    expect(error.args.reason).toContain('Signature=***')
+    expect(error.args.reason).not.toContain('test-bbx-access-key-id')
+  })
 })

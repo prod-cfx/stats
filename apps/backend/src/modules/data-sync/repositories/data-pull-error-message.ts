@@ -51,6 +51,11 @@ function sanitizeError(input: string): string {
   )
 
   result = result.replace(
+    /\b(AccessKeyId|SignatureNonce|Signature|Timestamp)=([^\s&]+)/g,
+    (_match, p1) => `${p1}=***`,
+  )
+
+  result = result.replace(
     /(Authorization:\s*Bearer\s+)\S+/gi,
     '$1***',
   )
