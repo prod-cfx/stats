@@ -3,6 +3,7 @@ import type { DataPullTask as DataPullTaskModel } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { formatDataPullError } from './data-pull-error-message'
 
 export type DataPullTaskRunState = 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED'
 
@@ -185,38 +186,7 @@ export class DataPullTaskRepository {
   }
 
   private truncateError(error: any, maxLength = 1000): string {
-    const raw =
-      typeof error === 'string'
-        ? error
-        : error?.message
-          ? `${error.message}${error.stack ? `\n${error.stack}` : ''}`
-          : JSON.stringify(error)
-
-    const sanitized = this.sanitizeError(raw)
-
-    if (sanitized.length <= maxLength) return sanitized
-    return `${sanitized.slice(0, maxLength)}...`
-  }
-
-  /**
-   * 对常见敏感信息（apiKey、Authorization 等）做简单脱敏，避免直接落库。
-   */
-  private sanitizeError(input: string): string {
-    let result = input
-
-    // 掩码形如 apiKey=xxxx / api_key=xxxx
-    result = result.replace(
-      /(api[_-]?key)\s*=\s*([^\s&]+)/gi,
-      (_match, p1) => `${p1}=***`,
-    )
-
-    // 掩码 Authorization: Bearer xxx
-    result = result.replace(
-      /(Authorization:\s*Bearer\s+)\S+/gi,
-      '$1***',
-    )
-
-    return result
+    return formatDataPullError(error, maxLength)
   }
 
   // ===== 管理后台使用的通用 CRUD 能力 =====

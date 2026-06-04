@@ -4,6 +4,7 @@ import type { DataPullExecution as DataPullExecutionModel } from '@/prisma/prism
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { formatDataPullError } from './data-pull-error-message'
 
 export type DataPullExecutionOutcome = 'SUCCESS' | 'FAILED' | 'SKIPPED'
 
@@ -74,35 +75,6 @@ export class DataPullExecutionRepository {
   }
 
   private truncateError(error: any, maxLength = 2000): string {
-    const raw =
-      typeof error === 'string'
-        ? error
-        : error?.message
-          ? `${error.message}${error.stack ? `\n${error.stack}` : ''}`
-          : JSON.stringify(error)
-
-    const sanitized = this.sanitizeError(raw)
-
-    if (sanitized.length <= maxLength) return sanitized
-    return `${sanitized.slice(0, maxLength)}...`
-  }
-
-  /**
-   * 对常见敏感信息（apiKey、Authorization 等）做简单脱敏，避免直接落库。
-   */
-  private sanitizeError(input: string): string {
-    let result = input
-
-    result = result.replace(
-      /(api[_-]?key)\s*=\s*([^\s&]+)/gi,
-      (_match, p1) => `${p1}=***`,
-    )
-
-    result = result.replace(
-      /(Authorization:\s*Bearer\s+)\S+/gi,
-      '$1***',
-    )
-
-    return result
+    return formatDataPullError(error, maxLength)
   }
 }
