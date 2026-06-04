@@ -1072,6 +1072,17 @@ function extractInferredSymbolScopeValues(text: string): string[] {
   }
   return values
 }
+
+function uniqueSymbolValues(symbols: readonly string[]): string[] {
+  const values: string[] = []
+  const seen = new Set<string>()
+  for (const symbol of symbols) {
+    if (seen.has(symbol)) continue
+    seen.add(symbol)
+    values.push(symbol)
+  }
+  return values
+}
 // #1296：加 \b 边界，避免 'perpetual swap' / 'perplexity' 等英文长词被前缀误命中；
 // 中文 '合约' / '永续' 不需要边界（CJK 字符默认无 word char 邻接歧义）。
 // 'spot' 同理避免 'spotlight' 等前缀误命中。
@@ -2180,7 +2191,12 @@ export class GenericSeedDispatcher {
     for (const item of flatPatch.atoms ?? []) pushAtom(item)
     const contextSlots = flatPatch.contextSlots ?? {}
     const explicitSymbols = extractExplicitSymbolValues(userMessage)
-    const scopedSymbols = explicitSymbols.length > 0 ? explicitSymbols : extractInferredSymbolScopeValues(userMessage)
+    const inferredSymbols = extractInferredSymbolScopeValues(userMessage)
+    const scopedSymbols = uniqueSymbolValues(MULTI_SYMBOL_CONTEXT_RE.test(userMessage)
+      ? [...explicitSymbols, ...inferredSymbols]
+      : explicitSymbols.length > 0
+        ? explicitSymbols
+        : inferredSymbols)
     const pushedSymbolScopes = new Set<string>()
     const pushSymbolScope = (symbol: string, evidenceText?: string): void => {
       if (pushedSymbolScopes.has(symbol)) return

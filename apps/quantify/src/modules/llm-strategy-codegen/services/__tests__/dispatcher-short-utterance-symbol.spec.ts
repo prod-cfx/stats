@@ -208,4 +208,10 @@ describe('dispatcher 短句 symbol 推断（PR2c3-A）', () => {
 
     expect(scopeSymbols(patch).sort()).toEqual(['BTCUSDT', 'ETHUSDT'])
   })
+
+  it('显式交易对加裸 token 的混合多标的语境不会漏掉裸 token 标的', () => {
+    const patch = dispatcher.dispatch('BTCUSDT 和 ETH 同时跑相同策略，均线金叉开多')
+
+    expect(scopeSymbols(patch).sort()).toEqual(['BTCUSDT', 'ETHUSDT'])
+  })
 })
