@@ -1,8 +1,12 @@
-import 'live_strategy_models.dart';
-
-/// 实盘策略列表排序指标（#1773）。
+/// 实盘策略列表排序 UseCase（#2190，源自 #1773）。
 ///
+/// 从 `data/models/live_strategy_sort.dart` 迁出。模型文件只留数据结构。
 /// 对齐设计稿 `m-screens-livestrats.jsx` `LS_SORTS`（6 指标）。
+library;
+
+import '../models/live_strategy_models.dart';
+
+/// 实盘策略列表排序指标。
 enum LiveSortMetric { todayPnl, totalPnl, totalPct, winRate, capital, runForDays }
 
 /// 排序方向。[none] = 不排序，保持列表原序。

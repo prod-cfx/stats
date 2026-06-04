@@ -1,4 +1,4 @@
-import '../../models/whale_leader_models.dart';
+import '../../../domain/models/whale_leader_models.dart';
 
 /// 巨鲸「发现」tab 排行榜 mock（issue #1789）。
 ///

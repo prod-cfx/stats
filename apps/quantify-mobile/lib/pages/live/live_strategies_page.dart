@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/models/live_strategy_models.dart';
-import '../../data/models/live_strategy_sort.dart';
 import '../../data/providers.dart';
+import '../../domain/models/live_strategy_models.dart';
+import '../../domain/use_cases/live_strategy_use_cases.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';

@@ -1,4 +1,4 @@
-import '../models/whale_leader_models.dart';
+import '../../domain/models/whale_leader_models.dart';
 import '../repositories/whale_leaderboard_repository.dart';
 import 'fixtures/whale_leaders.dart';
 

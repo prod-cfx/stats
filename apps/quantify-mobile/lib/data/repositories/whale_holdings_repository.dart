@@ -1,4 +1,4 @@
-import '../models/whale_holding_models.dart';
+import '../../domain/models/whale_holding_models.dart';
 
 /// 巨鲸「持仓」tab 持仓明细 Repository 接口（issue #1790）。
 ///

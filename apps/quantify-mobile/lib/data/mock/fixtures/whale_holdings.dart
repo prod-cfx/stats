@@ -1,4 +1,4 @@
-import '../../models/whale_holding_models.dart';
+import '../../../domain/models/whale_holding_models.dart';
 
 /// 币种圆点色（对齐设计稿 `SYM_COLOR`）。
 const int _btc = 0xFFF7931A;

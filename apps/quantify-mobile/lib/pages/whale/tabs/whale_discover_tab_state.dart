@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../data/models/whale_leader_models.dart';
+import '../../../domain/models/whale_leader_models.dart';
 
 /// 发现 tab 的不可变页面态（issue #2183 三件套迁移）。
 ///

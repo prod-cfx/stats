@@ -1,4 +1,4 @@
-import '../models/live_strategy_models.dart';
+import '../../domain/models/live_strategy_models.dart';
 import '../repositories/live_strategy_repository.dart';
 import 'fixtures/live_strategies.dart';
 

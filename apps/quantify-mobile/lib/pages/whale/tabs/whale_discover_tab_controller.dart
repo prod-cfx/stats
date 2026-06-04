@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/notifier_lifecycle.dart';
-import '../../../data/models/whale_leader_models.dart';
+import '../../../domain/models/whale_leader_models.dart';
 import 'whale_discover_tab_state.dart';
 
 /// 发现 tab 控制器（issue #2183 三件套迁移）。

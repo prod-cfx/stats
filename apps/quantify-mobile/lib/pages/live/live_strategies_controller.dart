@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/notifier_lifecycle.dart';
-import '../../data/models/live_strategy_sort.dart';
+import '../../domain/use_cases/live_strategy_use_cases.dart';
 import 'live_strategies_state.dart';
 
 /// 实盘策略列表页控制器（issue #2185 三件套）。

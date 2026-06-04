@@ -5,8 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../data/models/whale_holding_models.dart';
 import '../../../data/providers.dart';
+import '../../../domain/models/whale_holding_models.dart';
+import '../../../domain/use_cases/whale_holding_use_cases.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';

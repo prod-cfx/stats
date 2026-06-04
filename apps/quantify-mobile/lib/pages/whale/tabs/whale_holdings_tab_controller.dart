@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/notifier_lifecycle.dart';
-import '../../../data/models/whale_holding_models.dart';
+import '../../../domain/models/whale_holding_models.dart';
 import 'whale_holdings_tab_state.dart';
 
 /// 持仓 tab 控制器（issue #2182 三件套范式标杆）。

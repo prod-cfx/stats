@@ -1,11 +1,10 @@
-/// 实盘策略（已部署运行中的策略实例）相关 model（#1752）。
+/// 实盘策略（已部署运行中的策略实例）领域模型（#2190）。
 ///
 /// 设计真源：`design/project/mobile/m-screens-livestrats.jsx`
 /// （`LIVE_STRATS` / `STRAT_POSITIONS` / `ScreenLiveStratDetail`）。
 ///
-/// 当前全部由 `MockLiveStrategyRepository` 驱动，后端实例接口（依赖 #1679/
-/// #1682/#1683）接通前保持 const fixture 形态；暂停/删除/脚本/回测/再部署
-/// 等写操作本迭代不接通，UI 侧渲染为禁用/占位语义。
+/// domain 层：作为 UI 唯一消费来源。mock 与（未来 #2189）真实现负责
+/// `data model → domain model` 转换。
 library;
 
 /// 实盘策略运行状态。

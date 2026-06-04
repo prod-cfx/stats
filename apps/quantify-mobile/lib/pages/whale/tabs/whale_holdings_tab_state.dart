@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../data/models/whale_holding_models.dart';
+import '../../../domain/models/whale_holding_models.dart';
 
 /// 持仓 tab 的不可变页面态（issue #2182 三件套范式标杆）。
 ///

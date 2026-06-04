@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../data/models/live_strategy_sort.dart';
+import '../../domain/use_cases/live_strategy_use_cases.dart';
 
 /// filter chip 与状态的映射。[LiveFilter.all] = 全部（排除 stopped）。
 ///

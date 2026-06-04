@@ -9,7 +9,7 @@ import 'package:quantify_mobile/data/mock/mock_account_repository.dart';
 import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
-import 'package:quantify_mobile/data/models/live_strategy_models.dart';
+import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';

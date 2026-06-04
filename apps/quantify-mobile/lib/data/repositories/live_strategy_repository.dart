@@ -1,4 +1,4 @@
-import '../models/live_strategy_models.dart';
+import '../../domain/models/live_strategy_models.dart';
 
 /// 实盘策略 Repository 接口（#1752）。
 ///

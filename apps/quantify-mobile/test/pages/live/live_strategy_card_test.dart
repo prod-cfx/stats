@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/models/live_strategy_models.dart';
+import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/live/widgets/live_sparkline.dart';
 import 'package:quantify_mobile/pages/live/widgets/live_strategy_card.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../data/models/live_strategy_models.dart';
+import '../../../domain/models/live_strategy_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 

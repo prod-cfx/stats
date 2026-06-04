@@ -1,4 +1,4 @@
-import '../models/whale_holding_models.dart';
+import '../../domain/models/whale_holding_models.dart';
 import '../repositories/whale_holdings_repository.dart';
 import 'fixtures/whale_holdings.dart';
 

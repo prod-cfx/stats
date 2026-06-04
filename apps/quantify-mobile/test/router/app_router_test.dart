@@ -13,7 +13,7 @@ import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
-import 'package:quantify_mobile/data/models/live_strategy_models.dart';
+import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/kline_repository.dart';

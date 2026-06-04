@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/models/whale_leader_models.dart';
+import 'package:quantify_mobile/domain/models/whale_leader_models.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_discover_tab_controller.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_discover_tab_state.dart';
 

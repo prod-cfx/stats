@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/auth/session_controller.dart';
 import '../../data/models/account_models.dart';
 import '../../data/models/api_key_models.dart';
-import '../../data/models/live_strategy_models.dart';
+import '../../domain/models/live_strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/utils/mask_helpers.dart';
 import '../../l10n/app_localizations.dart';
