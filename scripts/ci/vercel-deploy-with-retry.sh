@@ -25,7 +25,9 @@ esac
 
 case "$DEPLOY_FLAG" in
   --staging)
-    VERCEL_PROD_ARG=""
+    # Staging projects use fixed custom domains attached to Vercel production deployments.
+    # Keep preview env vars for staging config, but publish the deployment to the alias.
+    VERCEL_PROD_ARG="--prod"
     VERCEL_PULL_ENV="preview"
     VERCEL_ENV_FILE=".env.staging"
     ;;

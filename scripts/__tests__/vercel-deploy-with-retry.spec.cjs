@@ -20,12 +20,12 @@ function runDryRun(args) {
   })
 }
 
-test('front staging deploy builds on runner then deploys prebuilt output', () => {
+test('front staging deploy builds staging config then publishes to fixed domain alias', () => {
   const output = runDryRun(['front', '--staging'])
 
   assert.match(output, /vercel pull --yes --environment preview --token test-token/)
-  assert.match(output, /vercel build --token test-token --local-config vercel\.front\.json/)
-  assert.match(output, /vercel deploy --prebuilt --yes --token test-token --local-config vercel\.front\.json/)
+  assert.match(output, /vercel build --token test-token --prod --local-config vercel\.front\.json/)
+  assert.match(output, /vercel deploy --prebuilt --yes --token test-token --prod --local-config vercel\.front\.json/)
   assert.doesNotMatch(output, /deploy front --staging/)
 })
 
