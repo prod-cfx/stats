@@ -76,6 +76,16 @@ interface ActiveOpenSlotRef {
   slot: SemanticSlotState
 }
 
+interface PendingClarificationItemRef {
+  status?: unknown
+  key?: unknown
+  field?: unknown
+  reason?: unknown
+  slotId?: unknown
+  slotKey?: unknown
+  fieldPath?: unknown
+}
+
 @Injectable()
 export class SemanticOpenSlotAnswerResolverService {
   constructor(
@@ -110,7 +120,7 @@ export class SemanticOpenSlotAnswerResolverService {
       return { consumed: false, nextState: input.currentState }
     }
 
-    return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver)
+    return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver, input.clarificationState)
   }
 
   private resolvePendingSlotAnswer(
@@ -489,26 +499,33 @@ function canConsumeSemanticFragment(state: SemanticState, clarificationState: un
   }
 
   const slotRef = findActiveOpenSlotRef(state, activeTarget)
-  return slotRef?.ownerKind === 'trigger'
+  if (slotRef?.ownerKind === 'trigger'
     && (slotRef.slot.slotKey === ENTRY_TRIGGER_SLOT_KEY || slotRef.slot.slotKey === EXIT_TRIGGER_SLOT_KEY)
+  ) {
+    return true
+  }
+
+  return requestedTriggerPhaseFromClarificationItem(activeTarget) !== null
 }
 
 function fulfillSemanticFragment(
   state: SemanticState,
   patch: CodegenSemanticPatch,
   symbolResolver: MarketInstrumentSymbolResolverService,
+  clarificationState?: unknown,
 ): SemanticOpenSlotAnswerResolverResult {
   const fragmentPatch = projectTypedRulesToFragmentPatch(patch)
   const patchTriggers = fragmentPatch.triggers ?? []
   const entryTriggers = patchTriggers.filter(trigger => trigger.phase === 'entry')
   const exitTriggers = patchTriggers.filter(trigger => trigger.phase === 'exit')
+  const requestedPhases = readRequestedTriggerPhases(state, clarificationState)
   const fulfilledPhases: FulfilledTriggerPhase[] = []
 
-  if (hasOpenSlot(state, ENTRY_TRIGGER_SLOT_KEY) && entryTriggers.some(isCompleteFragmentNode)) {
+  if (shouldFulfillTriggerPhase(state, 'entry', requestedPhases) && entryTriggers.some(isCompleteFragmentNode)) {
     fulfilledPhases.push('entry')
   }
 
-  if (hasOpenSlot(state, EXIT_TRIGGER_SLOT_KEY) && exitTriggers.some(isCompleteFragmentNode)) {
+  if (shouldFulfillTriggerPhase(state, 'exit', requestedPhases) && exitTriggers.some(isCompleteFragmentNode)) {
     fulfilledPhases.push('exit')
   }
 
@@ -526,6 +543,40 @@ function fulfillSemanticFragment(
       fieldPath: triggerPhaseFieldPath(phase),
     })),
   }
+}
+
+function readRequestedTriggerPhases(
+  state: SemanticState,
+  clarificationState: unknown,
+): ReadonlySet<FulfilledTriggerPhase> | null {
+  const activeTarget = pickPendingClarificationTarget(readPendingClarificationItems(clarificationState))
+  if (!activeTarget) return null
+
+  const slotRef = findActiveOpenSlotRef(state, activeTarget)
+  if (slotRef?.ownerKind === 'trigger') {
+    if (slotRef.slot.slotKey === ENTRY_TRIGGER_SLOT_KEY) return new Set(['entry'])
+    if (slotRef.slot.slotKey === EXIT_TRIGGER_SLOT_KEY) return new Set(['exit'])
+  }
+
+  const phase = requestedTriggerPhaseFromClarificationItem(activeTarget)
+  return phase ? new Set([phase]) : null
+}
+
+function requestedTriggerPhaseFromClarificationItem(item: PendingClarificationItemRef): FulfilledTriggerPhase | null {
+  const field = String(item.field ?? '')
+  const key = String(item.key ?? '')
+  if (field === 'rules.entry' || key === 'rulesTree.entry' || key === 'rulesMainflow.missing_entry_rules') return 'entry'
+  if (field === 'rules.exit' || key === 'rulesTree.exit' || key === 'rulesMainflow.missing_exit_rules') return 'exit'
+  return null
+}
+
+function shouldFulfillTriggerPhase(
+  state: SemanticState,
+  phase: FulfilledTriggerPhase,
+  requestedPhases: ReadonlySet<FulfilledTriggerPhase> | null,
+): boolean {
+  if (requestedPhases) return requestedPhases.has(phase)
+  return hasOpenSlot(state, triggerPhaseSlotKey(phase))
 }
 
 function projectTypedRulesToFragmentPatch(patch: CodegenSemanticPatch): SemanticFragmentPatch {
@@ -911,28 +962,15 @@ function slugifyFragmentId(value: string): string {
     || 'atom'
 }
 
-function readPendingClarificationItems(clarificationState: unknown): Array<{
-  status?: unknown
-  key?: unknown
-  reason?: unknown
-  slotId?: unknown
-  slotKey?: unknown
-  fieldPath?: unknown
-}> {
+function readPendingClarificationItems(clarificationState: unknown): PendingClarificationItemRef[] {
   if (!isRecord(clarificationState) || !Array.isArray(clarificationState.items)) {
     return []
   }
 
-  return clarificationState.items.filter((item): item is {
-    status?: unknown
-    key?: unknown
-    reason?: unknown
-    slotId?: unknown
-    slotKey?: unknown
-    fieldPath?: unknown
-  } => isRecord(item) && item.status === 'pending' && (
+  return clarificationState.items.filter((item): item is PendingClarificationItemRef => isRecord(item) && item.status === 'pending' && (
     typeof item.slotId === 'string'
     || (typeof item.slotKey === 'string' && typeof item.fieldPath === 'string')
+    || requestedTriggerPhaseFromClarificationItem(item) !== null
   ))
 }
 
