@@ -88,7 +88,7 @@ const QUOTE_TOKENS = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'TUSD', 'FDUSD'])
  */
 const INDICATOR_KEYWORDS = new Set([
   // 技术指标
-  'MACD', 'RSI', 'KDJ', 'MA', 'EMA', 'SMA', 'WMA', 'BOLL', 'BB',
+  'MACD', 'DIF', 'DEA', 'RSI', 'KDJ', 'MA', 'EMA', 'SMA', 'WMA', 'BOLL', 'BB',
   'ATR', 'ADX', 'CCI', 'OBV', 'MFI', 'DMI', 'SAR', 'ROC', 'WR',
   'STOCH', 'STOCRSI', 'STOCHRSI',
   // 策略/执行类型
@@ -114,6 +114,11 @@ const INDICATOR_KEYWORDS = new Set([
 
 /** 短句 token 形态：3-10 位大写字母 */
 const SHORT_SYMBOL_RE = /^[A-Z]{3,10}$/
+const SYMBOL_TOKEN_RE = /(?<![A-Za-z0-9])[A-Za-z]{2,10}(?![A-Za-z0-9])/gu
+const SYMBOL_CONTEXT_RE = /标的|交易对|币种|symbol|symbols|交易|只交易|同时|跟随|主标的|合约|永续|现货|perp|spot|swap|run|parallel|trade/iu
+const MULTI_SYMBOL_CONTEXT_RE = /标的|交易对|币种|symbols|同时|跟随|主标的|多个标的|跨标的|上挂|同时跑|parallel|same strategy|run/iu
+const SYMBOL_ONLY_ANSWER_RE = /^[\s,，、/|;；:：()（）\-A-Za-z]+$/u
+const INDICATOR_CONTEXT_RE = /MACD|DIF|DEA|RSI|KDJ|MA|EMA|SMA|WMA|BOLL|ATR|上穿|下穿|金叉|死叉|cross/iu
 
 /**
  * 判断 token 是否看起来像合法 base symbol（纯数据查表，无业务分流）：
@@ -126,6 +131,26 @@ function looksLikeBaseToken(token: string): boolean {
   return SHORT_SYMBOL_RE.test(token)
     && !QUOTE_TOKENS.has(token)
     && !INDICATOR_KEYWORDS.has(token)
+}
+
+function isShortSymbolAnswerText(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed || !SYMBOL_ONLY_ANSWER_RE.test(trimmed)) return false
+  return !INDICATOR_CONTEXT_RE.test(trimmed)
+}
+
+function readContextSymbolValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object') return undefined
+  const maybeValue = (value as { value?: unknown }).value
+  return typeof maybeValue === 'string' ? maybeValue : undefined
+}
+
+function isIndicatorExpressionToken(text: string, token: string, index: number): boolean {
+  const upper = token.toUpperCase()
+  if (INDICATOR_KEYWORDS.has(upper)) return true
+  const window = text.slice(Math.max(0, index - 12), Math.min(text.length, index + token.length + 12))
+  return INDICATOR_CONTEXT_RE.test(window) && !SYMBOL_CONTEXT_RE.test(window)
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -932,7 +957,7 @@ const EXCHANGE_ALIASES: Readonly<Record<string, string>> = {
   '币安': 'binance',
 }
 // quote 枚举从 SYMBOL_QUOTES 派生，两处保持单一真相源（M1）
-const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`, 'i')
+const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/\\-]?(${SYMBOL_QUOTES.join('|')})(?:[\\-:]?(?:SWAP|PERP|SPOT))?\\b`, 'i')
 const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
 /**
  * PR2c-final-2 Step1：复合 timeframe 形态识别（短 token surface 精度补齐）。
@@ -1031,11 +1056,14 @@ function extractExplicitSymbolValues(text: string): string[] {
 }
 
 function extractInferredSymbolScopeValues(text: string): string[] {
+  if (!MULTI_SYMBOL_CONTEXT_RE.test(text) && !isShortSymbolAnswerText(text)) return []
   const values: string[] = []
   const seen = new Set<string>()
-  const tokens = text.match(/(?<![A-Za-z0-9])[A-Za-z]{2,10}(?![A-Za-z0-9])/gu) ?? []
-  for (const token of tokens) {
+  const tokens = [...text.matchAll(SYMBOL_TOKEN_RE)]
+  for (const match of tokens) {
+    const token = match[0]
     const base = token.toUpperCase()
+    if (isIndicatorExpressionToken(text, token, match.index ?? 0)) continue
     if (!looksLikeBaseToken(base)) continue
     const value = `${base}USDT`
     if (seen.has(value)) continue
@@ -1081,9 +1109,12 @@ interface ContextSlots {
  * 产出 source='inferred' + quoteSource='default_usdt'（quote 默认 USDT）。
  */
 function tryInferShortSymbol(text: string): InferredSymbolSlot | undefined {
-  const tokens = text.match(/(?<![A-Za-z0-9])[A-Za-z]{2,10}(?![A-Za-z0-9])/gu) ?? []
-  for (const token of tokens) {
+  if (!SYMBOL_CONTEXT_RE.test(text) && !isShortSymbolAnswerText(text)) return undefined
+  const tokens = [...text.matchAll(SYMBOL_TOKEN_RE)]
+  for (const match of tokens) {
+    const token = match[0]
     const upper = token.toUpperCase()
+    if (isIndicatorExpressionToken(text, token, match.index ?? 0)) continue
     if (looksLikeBaseToken(upper)) {
       const value = `${upper}USDT`
       return {
@@ -2150,18 +2181,23 @@ export class GenericSeedDispatcher {
     const contextSlots = flatPatch.contextSlots ?? {}
     const explicitSymbols = extractExplicitSymbolValues(userMessage)
     const scopedSymbols = explicitSymbols.length > 0 ? explicitSymbols : extractInferredSymbolScopeValues(userMessage)
+    const pushedSymbolScopes = new Set<string>()
+    const pushSymbolScope = (symbol: string, evidenceText?: string): void => {
+      if (pushedSymbolScopes.has(symbol)) return
+      pushedSymbolScopes.add(symbol)
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
+        params: {
+          symbolScopeKind: 'symbol',
+          symbols: [symbol],
+          primarySymbol: symbol,
+        },
+        ...(evidenceText ? { evidence: { text: evidenceText } } : {}),
+      })
+    }
     if (scopedSymbols.length > 1) {
       for (const symbol of scopedSymbols) {
-        pushAtom({
-          key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
-          params: {
-            symbolScopeKind: 'symbol',
-            scopeId: `symbol_${symbol.toLowerCase()}`,
-            symbols: [symbol],
-            primarySymbol: symbol,
-          },
-          evidence: { text: symbol },
-        })
+        pushSymbolScope(symbol, symbol)
       }
     }
     if (this.hasLegScopeIntent(userMessage)) {
@@ -2197,17 +2233,10 @@ export class GenericSeedDispatcher {
         })
       }
     }
-    const symbolEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.symbol))
-    if (explicitSymbols.length <= 1 && typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
-      pushAtom({
-        key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
-        params: {
-          symbolScopeKind: 'symbol',
-          symbols: [contextSlots.symbol],
-          primarySymbol: contextSlots.symbol,
-        },
-        ...(symbolEvidence ? { evidence: { text: symbolEvidence } } : {}),
-      })
+    const contextSymbolValue = readContextSymbolValue(contextSlots.symbol)
+    const symbolEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSymbolValue))
+    if (explicitSymbols.length <= 1 && typeof contextSymbolValue === 'string' && contextSymbolValue.trim().length > 0) {
+      pushSymbolScope(contextSymbolValue, symbolEvidence ?? undefined)
     }
     const timeframeEvidence = this.findTimeframeEvidence(userMessage, contextSlots.timeframe)
     if (typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0) {

@@ -14,6 +14,7 @@
  */
 
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
+import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 import type { ExplicitSymbolSlot, InferredSymbolSlot } from '../generic-seed-dispatcher.service'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 
@@ -24,6 +25,17 @@ describe('dispatcher 短句 symbol 推断（PR2c3-A）', () => {
 
   function contextSymbol(patch: CodegenSemanticPatch): ContextSymbolSlot {
     return (patch.contextSlots as { symbol?: ContextSymbolSlot } | undefined)?.symbol
+  }
+
+  function scopeSymbols(patch: ReturnType<GenericSeedDispatcher['dispatch']>): string[] {
+    return (patch.rules ?? [])
+      .flatMap(rule => listRuleEffects(rule.effects))
+      .flatMap(effect => collectAtomLeaves(effect))
+      .filter(leaf => leaf.key === 'scope.symbol')
+      .flatMap((leaf) => {
+        const symbols = leaf.params?.symbols
+        return Array.isArray(symbols) ? symbols.map(String) : []
+      })
   }
 
   it('单字 "BTC" → inferred BTCUSDT, quoteSource=default_usdt', () => {
@@ -80,6 +92,8 @@ describe('dispatcher 短句 symbol 推断（PR2c3-A）', () => {
   // C1: 技术指标关键词不应被推断为 base symbol
   it.each([
     ['MACD', 'MACDUSDT'],
+    ['DIF', 'DIFUSDT'],
+    ['DEA', 'DEAUSDT'],
     ['RSI', 'RSIUSDT'],
     ['DCA', 'DCAUSDT'],
     ['EMA', 'EMAUSDT'],
@@ -178,5 +192,20 @@ describe('dispatcher 短句 symbol 推断（PR2c3-A）', () => {
     const patch = dispatcher.dispatch('BTC100')
     // BTC100 不是纯大写字母 token，SHORT_SYMBOL_RE /^[A-Z]{3,10}$/ 不命中
     expect(contextSymbol(patch)).toBeUndefined()
+  })
+
+  it('OKX SWAP 显式交易对优先，MACD DIF/DEA 不进入多标的 scope', () => {
+    const patch = dispatcher.dispatch('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。')
+
+    expect(contextSymbol(patch)?.value).toBe('ETHUSDT')
+    expect([...new Set(scopeSymbols(patch))]).toEqual(['ETHUSDT'])
+    expect(JSON.stringify(patch)).not.toContain('DIFUSDT')
+    expect(JSON.stringify(patch)).not.toContain('DEAUSDT')
+  })
+
+  it('标的语境内的多裸 token 仍推断为多交易标的', () => {
+    const patch = dispatcher.dispatch('在 BTC 和 ETH 上挂网格')
+
+    expect(scopeSymbols(patch).sort()).toEqual(['BTCUSDT', 'ETHUSDT'])
   })
 })
