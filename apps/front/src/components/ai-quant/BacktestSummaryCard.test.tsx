@@ -16,6 +16,8 @@ jest.mock('react-i18next', () => ({
       'aiQuant.backtestResult': '回测结果',
       'aiQuant.messages.backtestDrawdownLimit': '最大回撤不超过 20% 方可部署',
       'aiQuant.messages.backtestDrawdownFail': '回撤超标，暂不允许部署',
+      'aiQuant.messages.backtestOpenTrades': `回测存在 ${String(options?.count ?? 0)} 个未平仓持仓`,
+      'aiQuant.messages.backtestNoTrades': '本次回测未产生有效成交，暂不允许部署。请调整策略条件后重试。',
       'aiQuant.messages.backtestConfigChanged': '这是历史回测结果，当前参数已变化，不能直接用于部署，需要重新回测。',
       'aiQuant.fullScreen': '全屏查看',
       'aiQuant.maxDrawdown': '最大回撤',
@@ -121,6 +123,8 @@ describe('BacktestSummaryCard', () => {
     expect(container.textContent).toContain('已平仓交易数')
     expect(container.textContent).toContain('Open P&L')
     expect(container.textContent).toContain('+2.49')
+    expect(container.textContent).toContain('回测存在 1 个未平仓持仓')
+    expect(container.textContent).not.toContain('本次回测未产生有效成交')
   })
 
   it('shows drawdown failure copy when open-only results exceed the deploy threshold', async () => {

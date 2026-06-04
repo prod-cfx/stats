@@ -316,29 +316,28 @@ function evaluateOrderbookImbalance(
     ?? 1
   const operator = readStringParam(node.payload.params, 'operator') ?? 'GT'
   const side = readStringParam(node.payload.params, 'side')?.toLowerCase() ?? 'bid'
-  const events = readVisibleFeedEvents(ctx, sourceFeedId)
+  const event = readLatestVisibleFeedEvent(ctx, sourceFeedId)
+  if (!event) return false
 
-  return events.some((event) => {
-    const payload = readPayloadRecord(event.payload)
-    if (!payload) return false
-    if (metric === 'spread_pct') {
-      const directSpread = readFirstNumber(payload, ['spreadPct', 'spread_pct', 'bidAskSpreadPct', 'bid_ask_spread_pct'])
-      if (directSpread !== null) return compareByOperator(directSpread, threshold, operator)
-      const bidPrice = readFirstNumber(payload, ['bestBid', 'best_bid', 'bidPrice', 'bid_price'])
-      const askPrice = readFirstNumber(payload, ['bestAsk', 'best_ask', 'askPrice', 'ask_price'])
-      if (bidPrice === null || askPrice === null || bidPrice <= 0 || askPrice <= 0 || askPrice < bidPrice) return false
-      const mid = (bidPrice + askPrice) / 2
-      if (mid <= 0) return false
-      return compareByOperator(((askPrice - bidPrice) / mid) * 100, threshold, operator)
-    }
-    const bidDepth = readFirstNumber(payload, ['bidDepth', 'bid_depth', 'bidLiquidity', 'bid_liquidity', 'bids', 'bid'])
-    const askDepth = readFirstNumber(payload, ['askDepth', 'ask_depth', 'askLiquidity', 'ask_liquidity', 'asks', 'ask'])
-    if (bidDepth === null || askDepth === null || bidDepth <= 0 || askDepth <= 0) return false
-    const ratio = side === 'ask' || side === 'sell'
-      ? askDepth / bidDepth
-      : bidDepth / askDepth
-    return Number.isFinite(ratio) && compareByOperator(ratio, threshold, operator)
-  })
+  const payload = readPayloadRecord(event.payload)
+  if (!payload) return false
+  if (metric === 'spread_pct') {
+    const directSpread = readFirstNumber(payload, ['spreadPct', 'spread_pct', 'bidAskSpreadPct', 'bid_ask_spread_pct'])
+    if (directSpread !== null) return compareByOperator(directSpread, threshold, operator)
+    const bidPrice = readFirstNumber(payload, ['bestBid', 'best_bid', 'bidPrice', 'bid_price'])
+    const askPrice = readFirstNumber(payload, ['bestAsk', 'best_ask', 'askPrice', 'ask_price'])
+    if (bidPrice === null || askPrice === null || bidPrice <= 0 || askPrice <= 0 || askPrice < bidPrice) return false
+    const mid = (bidPrice + askPrice) / 2
+    if (mid <= 0) return false
+    return compareByOperator(((askPrice - bidPrice) / mid) * 100, threshold, operator)
+  }
+  const bidDepth = readFirstNumber(payload, ['bidDepth', 'bid_depth', 'bidLiquidity', 'bid_liquidity', 'bids', 'bid'])
+  const askDepth = readFirstNumber(payload, ['askDepth', 'ask_depth', 'askLiquidity', 'ask_liquidity', 'asks', 'ask'])
+  if (bidDepth === null || askDepth === null || bidDepth <= 0 || askDepth <= 0) return false
+  const ratio = side === 'ask' || side === 'sell'
+    ? askDepth / bidDepth
+    : bidDepth / askDepth
+  return Number.isFinite(ratio) && compareByOperator(ratio, threshold, operator)
 }
 
 function evaluateOpenInterestCondition(
@@ -443,6 +442,19 @@ function readVisibleFeedEvents(
     const ts = (event as { ts?: unknown }).ts
     return now === null || (typeof ts === 'number' && Number.isFinite(ts) && ts <= now)
   })
+}
+
+function readLatestVisibleFeedEvent(
+  ctx: StrategyExecutionContextV1,
+  sourceFeedId: string,
+): { id?: unknown; ts?: unknown; payload?: unknown } | null {
+  let latest: { id?: unknown; ts?: unknown; payload?: unknown } | null = null
+  for (const event of readVisibleFeedEvents(ctx, sourceFeedId)) {
+    const ts = typeof event.ts === 'number' && Number.isFinite(event.ts) ? event.ts : Number.NEGATIVE_INFINITY
+    const latestTs = latest && typeof latest.ts === 'number' && Number.isFinite(latest.ts) ? latest.ts : Number.NEGATIVE_INFINITY
+    if (!latest || ts >= latestTs) latest = event
+  }
+  return latest
 }
 
 function readPayloadRecord(value: unknown): Record<string, unknown> | null {

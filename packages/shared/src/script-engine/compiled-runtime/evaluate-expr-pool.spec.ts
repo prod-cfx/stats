@@ -240,6 +240,33 @@ describe('evaluateExprPool', () => {
     expect(values.orderbook_bid_dominant).toBe(true)
   })
 
+  it('evaluates orderbookImbalance from the latest visible snapshot instead of any historical match', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-old', ts: 8_000, payload: { bidDepth: 1_800, askDepth: 1_000 } },
+            { id: 'book-latest', ts: 9_500, payload: { bidDepth: 1_100, askDepth: 1_000 } },
+          ],
+        },
+      },
+      [{
+        id: 'orderbook_bid_dominant',
+        nodeType: 'predicate',
+        sourceRef: 'orderbook.imbalance',
+        payload: {
+          kind: 'orderbookImbalance',
+          params: { sourceFeedId: 'orderbook.imbalance', side: 'bid', operator: 'GT', ratio: 1.5 },
+        },
+        deps: [],
+      }],
+      ['orderbook_bid_dominant'],
+    )
+
+    expect(values.orderbook_bid_dominant).toBe(false)
+  })
+
   it('fails closed for orderbookImbalance without feed data', () => {
     const values = evaluateExprPool(
       { timestamp: 10_000, eventInbox: {} },
