@@ -14,33 +14,27 @@ import '../../../theme/tokens.dart';
 import '../../../widgets/qz_sheet.dart';
 import '../widgets/whale_holding_card.dart';
 import '../widgets/whale_trade_stats_sheet.dart';
+import 'whale_holdings_tab_controller.dart';
+import 'whale_holdings_tab_state.dart';
 
-/// 巨鲸动向 — 持仓 tab（issue #1790 / 工具条对齐 #1981）。对齐设计稿
-/// `WhaleHoldings`：币种 chip（含搜索） + 方向/盈亏下拉筛选 + 更多排序抽屉 +
-/// 持仓明细卡列表。mock 驱动（[whaleHoldingsProvider]），筛选与排序在本地态
-/// 即时完成。
-class WhaleHoldingsTab extends ConsumerStatefulWidget {
+/// 巨鲸动向 — 持仓 tab（issue #1790 / 工具条对齐 #1981 / 三件套迁移 #2182）。
+/// 对齐设计稿 `WhaleHoldings`：币种 chip（含搜索） + 方向/盈亏下拉筛选 + 更多
+/// 排序抽屉 + 持仓明细卡列表。mock 驱动（[whaleHoldingsProvider]）；筛选/排序态
+/// 收敛进 [whaleHoldingsTabControllerProvider]，widget 退化为纯消费层。
+class WhaleHoldingsTab extends ConsumerWidget {
   const WhaleHoldingsTab({super.key});
 
-  @override
-  ConsumerState<WhaleHoldingsTab> createState() => _WhaleHoldingsTabState();
-}
-
-class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
-  WhaleHoldingFilter _filter = const WhaleHoldingFilter();
-  WhaleHoldingSort? _sort;
-
-  void _selectCoin(String? coin) {
-    setState(() => _filter = _filter.copyWith(coin: coin));
-  }
-
-  Future<void> _openDirFilter() async {
+  Future<void> _openDirFilter(
+    BuildContext context,
+    WidgetRef ref,
+    WhaleHoldingFilter filter,
+  ) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final WhaleHoldingDirFilter? picked =
         await _FilterSheet.show<WhaleHoldingDirFilter>(
           context: context,
           title: l10n.whaleHoldingsFilterDirTitle,
-          current: _filter.dir,
+          current: filter.dir,
           options: <_FilterOption<WhaleHoldingDirFilter>>[
             _FilterOption<WhaleHoldingDirFilter>(
               WhaleHoldingDirFilter.all,
@@ -57,16 +51,20 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
           ],
         );
     if (picked == null) return;
-    setState(() => _filter = _filter.copyWith(dir: picked));
+    ref.read(whaleHoldingsTabControllerProvider.notifier).setDir(picked);
   }
 
-  Future<void> _openPnlFilter() async {
+  Future<void> _openPnlFilter(
+    BuildContext context,
+    WidgetRef ref,
+    WhaleHoldingFilter filter,
+  ) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final WhaleHoldingPnlFilter? picked =
         await _FilterSheet.show<WhaleHoldingPnlFilter>(
           context: context,
           title: l10n.whaleHoldingsFilterPnlTitle,
-          current: _filter.pnl,
+          current: filter.pnl,
           options: <_FilterOption<WhaleHoldingPnlFilter>>[
             _FilterOption<WhaleHoldingPnlFilter>(
               WhaleHoldingPnlFilter.all,
@@ -83,27 +81,31 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
           ],
         );
     if (picked == null) return;
-    setState(() => _filter = _filter.copyWith(pnl: picked));
+    ref.read(whaleHoldingsTabControllerProvider.notifier).setPnl(picked);
   }
 
-  Future<void> _openSort() async {
+  Future<void> _openSort(
+    BuildContext context,
+    WidgetRef ref,
+    WhaleHoldingSort? current,
+  ) async {
     final _SortResult? result = await _SortSheet.show(
       context: context,
-      current: _sort,
+      current: current,
     );
     // 「完成」回传 _SortResult（其 sort 可能为 null 表示不排序）；点遮罩取消
     // 返回 null，保持原排序态。
     if (result == null) return;
-    setState(() => _sort = result.sort);
+    ref.read(whaleHoldingsTabControllerProvider.notifier).setSort(result.sort);
   }
 
   /// 点地址 → 详情页（按缩写地址路由，对齐设计稿 holdings → profile）。
-  void _openProfile(WhaleHoldingPosition entry) {
+  void _openProfile(BuildContext context, WhaleHoldingPosition entry) {
     context.push('/whale/profile/${Uri.encodeComponent(entry.address)}');
   }
 
   /// 点趋势按钮 / 卡片 → 交易统计弹窗（复用 #1859 的 [WhaleTradeStatsSheet]）。
-  void _openStats(WhaleHoldingPosition entry) {
+  void _openStats(BuildContext context, WhaleHoldingPosition entry) {
     WhaleTradeStatsSheet.show(
       context,
       address: entry.address,
@@ -111,11 +113,16 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
     );
   }
 
-  Future<void> _copyAddress(WhaleHoldingPosition entry) async {
+  Future<void> _copyAddress(
+    BuildContext context,
+    WhaleHoldingPosition entry,
+  ) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
+      context,
+    );
     await Clipboard.setData(ClipboardData(text: entry.address));
-    if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    messenger?.showSnackBar(
       SnackBar(
         content: Text(l10n.whaleLeaderCopied),
         duration: const Duration(seconds: 1),
@@ -124,9 +131,12 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final WhaleHoldingsTabState s = ref.watch(
+      whaleHoldingsTabControllerProvider,
+    );
     final AsyncValue<List<WhaleHoldingPosition>> async = ref.watch(
       whaleHoldingsProvider,
     );
@@ -141,23 +151,25 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
       data: (List<WhaleHoldingPosition> all) {
         final List<String> coins = whaleHoldingCoins(all);
         final List<WhaleHoldingPosition> rows = sortWhaleHoldings(
-          filterWhaleHoldings(all, _filter),
-          _sort,
+          filterWhaleHoldings(all, s.filter),
+          s.sort,
         );
         return ListView(
           padding: const EdgeInsets.only(bottom: 100),
           children: <Widget>[
             _CoinChips(
               coins: coins,
-              selected: _filter.coin,
-              onSelect: _selectCoin,
+              selected: s.filter.coin,
+              onSelect: (String? coin) => ref
+                  .read(whaleHoldingsTabControllerProvider.notifier)
+                  .selectCoin(coin),
             ),
             _FilterSortBar(
-              filter: _filter,
-              sort: _sort,
-              onDir: _openDirFilter,
-              onPnl: _openPnlFilter,
-              onSort: _openSort,
+              filter: s.filter,
+              sort: s.sort,
+              onDir: () => _openDirFilter(context, ref, s.filter),
+              onPnl: () => _openPnlFilter(context, ref, s.filter),
+              onSort: () => _openSort(context, ref, s.sort),
             ),
             _SectionHeader(count: rows.length),
             if (rows.isEmpty)
@@ -181,9 +193,9 @@ class _WhaleHoldingsTabState extends ConsumerState<WhaleHoldingsTab> {
                   ),
                   child: WhaleHoldingCard(
                     entry: e,
-                    onOpen: () => _openProfile(e),
-                    onCopy: () => _copyAddress(e),
-                    onStats: () => _openStats(e),
+                    onOpen: () => _openProfile(context, e),
+                    onCopy: () => _copyAddress(context, e),
+                    onStats: () => _openStats(context, e),
                   ),
                 ),
           ],
