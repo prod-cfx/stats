@@ -342,6 +342,29 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
       .sort((left, right) => left.ts - right.ts)
   }
 
+  async fetchOrderbookQuoteSnapshots(input: { symbol: string; samples?: number; intervalMs?: number }): Promise<MarketQuotePayload[]> {
+    const raw = extractRawSymbol(input.symbol)
+    const market = parseSymbolMarket(input.symbol)
+    const instId = this.toInstId(raw, market)
+    const samples = Math.min(Math.max(Math.floor(input.samples ?? 1), 1), 1000)
+    const intervalMs = Math.max(0, Math.floor(input.intervalMs ?? 0))
+    const snapshots: MarketQuotePayload[] = []
+
+    for (let index = 0; index < samples; index += 1) {
+      if (index > 0 && intervalMs > 0) {
+        await this.sleep(intervalMs)
+      }
+      const data = await this.requestRest<OkxOrderbookResponse>(new URL('/api/v5/market/books', this.restBaseUrl).toString(), {
+        params: { instId, sz: '1' },
+        timeout: this.restTimeoutMs,
+      }).catch((): OkxOrderbookResponse => ({ code: '0', msg: '', data: [] }))
+      const quote = this.toOrderbookQuoteSnapshot(data.data?.[0], raw, market)
+      if (quote) snapshots.push(quote)
+    }
+
+    return snapshots.sort((left, right) => left.eventTime - right.eventTime)
+  }
+
   async fetchOpenInterestEvents(input: { symbol: string; startMs: number; endMs: number }): Promise<OkxRuntimeEvent[]> {
     const raw = extractRawSymbol(input.symbol)
     const instId = this.toInstId(raw, 'PERP')
@@ -558,6 +581,31 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
       const size = this.readFiniteNumber(level[1])
       return size === null ? sum : sum + size
     }, 0)
+  }
+
+  private toOrderbookQuoteSnapshot(row: OkxOrderbookRow | undefined, raw: string, market: SymbolMarketType): MarketQuotePayload | null {
+    const ts = this.readFiniteNumber(row?.ts)
+    const bidPrice = row?.bids?.[0]?.[0]
+    const bidQty = row?.bids?.[0]?.[1]
+    const askPrice = row?.asks?.[0]?.[0]
+    const askQty = row?.asks?.[0]?.[1]
+    const numericBid = this.readFiniteNumber(bidPrice)
+    const numericAsk = this.readFiniteNumber(askPrice)
+    const numericBidQty = this.readFiniteNumber(bidQty)
+    const numericAskQty = this.readFiniteNumber(askQty)
+    if (ts === null || numericBid === null || numericAsk === null || numericBidQty === null || numericAskQty === null) return null
+    if (numericBid <= 0 || numericAsk <= 0 || numericBidQty <= 0 || numericAskQty <= 0) return null
+
+    return {
+      symbol: toSymbolCode(raw, market),
+      lastPrice: String((numericBid + numericAsk) / 2),
+      bidPrice,
+      bidQty,
+      askPrice,
+      askQty,
+      eventTime: ts,
+      source: 'OKX_REST_BOOKS',
+    }
   }
 
   private fromInstId(instId: string): string {

@@ -1,5 +1,6 @@
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
 import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
+import type { MarketQuotePayload } from '@ai/shared'
 import type { MarketQuote, Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
@@ -260,6 +261,24 @@ export class BacktestJobExecutorService {
     toTs: number
   }): Promise<NonNullable<BacktestRunInput['eventStreams']>[string]> {
     if (!this.backtestMarketDataRepository) return []
+    const events = await this.loadOrderbookEventsFromStoredQuotes(params)
+    if (events.length > 0) return events
+
+    const snapshots = await this.fetchOrderbookQuoteSnapshots(params.symbol)
+    for (const snapshot of snapshots) {
+      await this.marketDataService.saveQuoteFromProvider(snapshot)
+    }
+    if (snapshots.length === 0) return []
+
+    return this.loadOrderbookEventsFromStoredQuotes(params)
+  }
+
+  private async loadOrderbookEventsFromStoredQuotes(params: {
+    symbol: string
+    fromTs: number
+    toTs: number
+  }): Promise<NonNullable<BacktestRunInput['eventStreams']>[string]> {
+    if (!this.backtestMarketDataRepository) return []
     const quotes = await this.backtestMarketDataRepository.findHistoricalQuotes({
       symbol: params.symbol,
       fromTs: params.fromTs,
@@ -269,6 +288,15 @@ export class BacktestJobExecutorService {
     return quotes
       .map(quote => this.toOrderbookRuntimeEvent(quote))
       .filter((event): event is NonNullable<BacktestRunInput['eventStreams']>[string][number] => event !== null)
+  }
+
+  private async fetchOrderbookQuoteSnapshots(symbol: string): Promise<MarketQuotePayload[]> {
+    if (!this.okxMarketDataProvider) return []
+    return this.okxMarketDataProvider.fetchOrderbookQuoteSnapshots({
+      symbol,
+      samples: 1,
+      intervalMs: 0,
+    })
   }
 
   private toOrderbookRuntimeEvent(quote: Pick<MarketQuote, 'id' | 'eventTime' | 'bidPrice' | 'bidQty' | 'askPrice' | 'askQty'>): NonNullable<BacktestRunInput['eventStreams']>[string][number] | null {

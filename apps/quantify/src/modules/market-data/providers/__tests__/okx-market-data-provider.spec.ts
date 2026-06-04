@@ -143,6 +143,65 @@ describe('okx market data provider', () => {
     }])
   })
 
+  it('fetches orderbook quote snapshots from OKX books depth', async () => {
+    httpMock.get
+      .mockReturnValueOnce(of({
+        data: {
+          code: '0',
+          msg: '',
+          data: [{
+            ts: '1710000000000',
+            bids: [['100', '2']],
+            asks: [['101', '1']],
+          }],
+        },
+      }))
+      .mockReturnValueOnce(of({
+        data: {
+          code: '0',
+          msg: '',
+          data: [{
+            ts: '1710000001000',
+            bids: [['102', '4']],
+            asks: [['103', '3']],
+          }],
+        },
+      }))
+
+    const snapshots = await provider.fetchOrderbookQuoteSnapshots({
+      symbol: 'BTCUSDT:PERP',
+      samples: 2,
+      intervalMs: 0,
+    })
+
+    expect(httpMock.get).toHaveBeenCalledTimes(2)
+    const [url, requestConfig] = httpMock.get.mock.calls[0] as [string, { params: Record<string, string> }]
+    expect(url).toContain('/api/v5/market/books')
+    expect(requestConfig.params).toEqual({ instId: 'BTC-USDT-SWAP', sz: '1' })
+    expect(snapshots).toEqual([
+      {
+        symbol: 'BTCUSDT:PERP',
+        lastPrice: '100.5',
+        bidPrice: '100',
+        bidQty: '2',
+        askPrice: '101',
+        askQty: '1',
+        eventTime: 1710000000000,
+        source: 'OKX_REST_BOOKS',
+      },
+      {
+        symbol: 'BTCUSDT:PERP',
+        lastPrice: '102.5',
+        bidPrice: '102',
+        bidQty: '4',
+        askPrice: '103',
+        askQty: '3',
+        eventTime: 1710000001000,
+        source: 'OKX_REST_BOOKS',
+      },
+    ])
+  })
+
   it('fetches open interest events from OKX rubik history', async () => {
     httpMock.get.mockReturnValue(of({
       data: {

@@ -1,4 +1,4 @@
-import type { MarketTimeframe, MarketType as SharedMarketType } from '@ai/shared'
+import type { MarketQuotePayload, MarketTimeframe, MarketType as SharedMarketType } from '@ai/shared'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
 import type {
   BacktestSymbolAvailabilityCheckInput,
@@ -239,6 +239,10 @@ export class BacktestMarketDataService {
     }
 
     return bars.sort((a, b) => a.closeTime - b.closeTime)
+  }
+
+  async saveQuoteFromProvider(payload: MarketQuotePayload): Promise<void> {
+    await this.marketDataService.saveQuoteFromProvider(payload)
   }
 
   async resolveCoverage(input: CoverageInput): Promise<BacktestRangeCoverage> {
