@@ -422,4 +422,33 @@ describe('AiQuantBacktestDetailPage', () => {
       rangeDisplay: '2026-04-01 ~ 2026-04-15',
     })
   })
+
+  it('does not crash when a persisted job has invalid result summary fields', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      id: 'backtest-invalid-summary',
+      status: 'succeeded',
+      createdAt: '2026-04-15T00:00:00.000Z',
+      resultSummary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: null,
+        winRate: 0,
+        profitFactor: null,
+        totalTrades: 0,
+      } as never,
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'zh', id: 'backtest-invalid-summary' },
+      searchParams: { symbol: 'BTCUSDT' },
+    })
+
+    renderToStaticMarkup(element)
+
+    const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(props).toMatchObject({
+      id: 'backtest-invalid-summary',
+      metrics: null,
+    })
+  })
 })

@@ -17,6 +17,17 @@ function normalizeNumber(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
+function normalizeMetrics(
+  metrics: AccountAiQuantStrategyListItem['metrics'] | AccountAiQuantStrategyDetail['metrics'] | null | undefined,
+): AiQuantStrategyRecord['metrics'] {
+  return {
+    returnPct: normalizeNumber(metrics?.returnPct),
+    maxDrawdownPct: normalizeNumber(metrics?.maxDrawdownPct),
+    winRatePct: normalizeNumber(metrics?.winRatePct),
+    tradeCount: normalizeNumber(metrics?.tradeCount),
+  }
+}
+
 function normalizeStatus(status: AccountAiQuantStrategyApiState): AiQuantStrategyViewState {
   if (status === 'running') return 'running'
   if (status === 'draft') return 'draft'
@@ -453,12 +464,7 @@ export function mapAccountStrategyListItemToRecord(
     timeframe: item.timeframe ?? '--',
     positionPct: normalizeNumber(item.positionPct),
     initialCapital: 10000,
-    metrics: {
-      returnPct: normalizeNumber(item.metrics.returnPct),
-      maxDrawdownPct: normalizeNumber(item.metrics.maxDrawdownPct),
-      winRatePct: normalizeNumber(item.metrics.winRatePct),
-      tradeCount: normalizeNumber(item.metrics.tradeCount),
-    },
+    metrics: normalizeMetrics(item.metrics),
     ...dynamicParams,
     equitySeries: [],
     timeline: [],
@@ -554,12 +560,7 @@ export function mapAccountStrategyDetailToRecord(
     timeframe: detail.snapshot.timeframe ?? detail.timeframe ?? '--',
     positionPct: normalizeNumber(detail.snapshot.positionPct ?? detail.positionPct),
     initialCapital,
-    metrics: {
-      returnPct: normalizeNumber(detail.metrics.returnPct),
-      maxDrawdownPct: normalizeNumber(detail.metrics.maxDrawdownPct),
-      winRatePct: normalizeNumber(detail.metrics.winRatePct),
-      tradeCount: normalizeNumber(detail.metrics.tradeCount),
-    },
+    metrics: normalizeMetrics(detail.metrics),
     ...dynamicParams,
     runtimeExecutionStates: normalizeRuntimeExecutionStates(detail.runtimeExecutionStates),
     publishedSnapshotParamValues,

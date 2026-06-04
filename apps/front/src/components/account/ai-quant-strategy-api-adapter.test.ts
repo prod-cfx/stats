@@ -52,6 +52,28 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.supportsDynamicParams).toBe(true)
   })
 
+  it('maps list items with missing metrics after fast deletion without crashing', () => {
+    const record = mapAccountStrategyListItemToRecord({
+      id: 'inst-deleting-1',
+      name: 'deleting strategy',
+      status: 'stopped',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: null,
+      updatedAt: '2026-06-04T10:00:00.000Z',
+    } as any)
+
+    expect(record.metrics).toEqual({
+      returnPct: 0,
+      maxDrawdownPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+    })
+  })
+
   it('preserves hyperliquid exchange in strategy list records', () => {
     const record = mapAccountStrategyListItemToRecord({
       id: 'inst-hl-1',

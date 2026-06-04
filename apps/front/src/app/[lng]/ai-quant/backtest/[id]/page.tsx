@@ -1,4 +1,5 @@
-import type { BacktestReportContext } from './backtest-report-data'
+import type { BacktestReportContext, BacktestReportMetrics } from './backtest-report-data'
+import type { BacktestJobResultSummary } from '@/lib/server-api'
 import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
@@ -165,6 +166,44 @@ function readBooleanField(source: Record<string, unknown>, keys: string[]): bool
   return undefined
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function roundTwo(value: number): number {
+  return Number(value.toFixed(2))
+}
+
+function resolveBacktestReportMetrics(
+  resultSummary: BacktestJobResultSummary | undefined,
+): BacktestReportMetrics | null {
+  if (!resultSummary) {
+    return null
+  }
+
+  if (
+    !isFiniteNumber(resultSummary.maxDrawdownPct)
+    || !isFiniteNumber(resultSummary.netProfitPct)
+    || !isFiniteNumber(resultSummary.winRate)
+    || !isFiniteNumber(resultSummary.totalTrades)
+  ) {
+    return null
+  }
+
+  return {
+    maxDrawdownPct: roundTwo(resultSummary.maxDrawdownPct),
+    totalReturnPct: roundTwo(resultSummary.netProfitPct),
+    winRatePct: roundTwo(resultSummary.winRate <= 1 ? resultSummary.winRate * 100 : resultSummary.winRate),
+    tradeCount: resultSummary.totalTrades,
+    openTradeCount: isFiniteNumber(resultSummary.totalOpenTrades)
+      ? resultSummary.totalOpenTrades
+      : undefined,
+    openPnl: isFiniteNumber(resultSummary.openPnl)
+      ? roundTwo(resultSummary.openPnl)
+      : undefined,
+  }
+}
+
 function resolveBacktestReportContext(inputSummary: unknown, symbol: string, marketType: 'spot' | 'perp'): BacktestReportContext | null {
   const source = toBacktestInputSummaryView(inputSummary)
   if (!source) {
@@ -243,25 +282,7 @@ export default async function AiQuantBacktestDetailPage({
   const partialCoverageNotice = resolvePartialCoverageNotice(job?.inputSummary)
   const marketType = resolveBacktestMarketType(job?.inputSummary)
   const reportContext = resolveBacktestReportContext(job?.inputSummary, symbol, marketType)
-  const metrics = job?.resultSummary
-      ? {
-        maxDrawdownPct: Number(job.resultSummary.maxDrawdownPct.toFixed(2)),
-        totalReturnPct: Number(job.resultSummary.netProfitPct.toFixed(2)),
-        winRatePct: Number(
-          (job.resultSummary.winRate <= 1
-            ? job.resultSummary.winRate * 100
-            : job.resultSummary.winRate
-          ).toFixed(2),
-        ),
-        tradeCount: job.resultSummary.totalTrades,
-        openTradeCount: typeof job.resultSummary.totalOpenTrades === 'number'
-          ? job.resultSummary.totalOpenTrades
-          : undefined,
-        openPnl: typeof job.resultSummary.openPnl === 'number'
-          ? Number(job.resultSummary.openPnl.toFixed(2))
-          : undefined,
-      }
-    : null
+  const metrics = resolveBacktestReportMetrics(job?.resultSummary)
 
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
