@@ -25,7 +25,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_context.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
-import 'package:quantify_mobile/widgets/qz_kline_chart.dart';
+import 'package:quantify_mobile/pages/market/widgets/qz_kline_chart.dart';
 import 'package:quantify_mobile/widgets/qz_top_bar.dart';
 
 class _FakeTickerRepository implements TickerRepository {

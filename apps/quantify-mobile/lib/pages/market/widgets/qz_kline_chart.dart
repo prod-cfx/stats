@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:k_chart_plus/k_chart_plus.dart';
 
-import '../data/models/kline_models.dart';
-import '../l10n/app_localizations.dart';
-import '../theme/colors.dart';
-import '../theme/theme_context.dart';
-import '../theme/tokens.dart';
-import 'qz_sheet.dart';
-import 'qz_spinner.dart';
+import '../../../data/models/kline_models.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
+import '../../../widgets/qz_sheet.dart';
+import '../../../widgets/qz_spinner.dart';
 
 /// 真实 K 线图表。
 ///

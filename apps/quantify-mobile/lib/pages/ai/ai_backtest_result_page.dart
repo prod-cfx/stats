@@ -7,7 +7,7 @@ import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/qz_backtest_result_card.dart';
+import 'widgets/qz_backtest_result_card.dart';
 import '../../widgets/qz_button.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';

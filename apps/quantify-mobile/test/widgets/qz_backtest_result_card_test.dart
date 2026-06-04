@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/mock/fixtures/backtest.dart';
-import 'package:quantify_mobile/widgets/qz_backtest_result_card.dart';
+import 'package:quantify_mobile/pages/ai/widgets/qz_backtest_result_card.dart';
 
 import '../helpers/golden_harness.dart';
 

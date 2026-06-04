@@ -11,7 +11,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_button.dart';
-import 'package:quantify_mobile/widgets/qz_deploy_sheet.dart';
+import 'package:quantify_mobile/pages/ai/widgets/qz_deploy_sheet.dart';
 
 /// 无 `Future.delayed` 的 fake repository，配合 widget test 避免 200ms timer
 /// 阻塞。`empty` 构造模拟「未配置任何 API」状态。

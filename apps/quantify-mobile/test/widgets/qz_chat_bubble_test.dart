@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/widgets/qz_chat_bubble.dart';
+import 'package:quantify_mobile/pages/ai/widgets/qz_chat_bubble.dart';
 
 import '../helpers/golden_harness.dart';
 

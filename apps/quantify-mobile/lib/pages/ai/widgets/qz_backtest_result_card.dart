@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../data/models/backtest_models.dart';
-import '../l10n/app_localizations.dart';
-import '../theme/colors.dart';
-import '../theme/theme_context.dart';
-import '../theme/tokens.dart';
-import 'qz_card.dart';
-import 'qz_chip.dart';
+import '../../../data/models/backtest_models.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
+import '../../../widgets/qz_card.dart';
+import '../../../widgets/qz_chip.dart';
 
 /// 回测结果卡，内联渲染在 AI 对话流中，对齐设计稿 `ScreenBacktestResult`：
 ///

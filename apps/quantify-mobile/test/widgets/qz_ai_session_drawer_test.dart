@@ -5,7 +5,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
-import 'package:quantify_mobile/widgets/qz_ai_session_drawer.dart';
+import 'package:quantify_mobile/pages/ai/widgets/qz_ai_session_drawer.dart';
 
 Future<void> _pump(
   WidgetTester tester,

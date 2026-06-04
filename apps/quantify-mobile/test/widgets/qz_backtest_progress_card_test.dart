@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/widgets/qz_backtest_progress_card.dart';
+import 'package:quantify_mobile/pages/ai/widgets/qz_backtest_progress_card.dart';
 
 import '../helpers/golden_harness.dart';
 

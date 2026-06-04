@@ -4,7 +4,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
-import 'package:quantify_mobile/widgets/qz_trade_order_sheet.dart';
+import 'package:quantify_mobile/pages/market/widgets/qz_trade_order_sheet.dart';
 
 /// 弹起 sheet 的脚手架：暴露 `captured` 闭包 + sheet ready 的 future。
 class _SheetHandle {

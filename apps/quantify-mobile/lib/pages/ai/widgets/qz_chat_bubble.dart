@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../l10n/app_localizations.dart';
-import '../theme/colors.dart';
-import '../theme/theme_context.dart';
-import '../theme/tokens.dart';
-import 'qz_button.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
+import '../../../widgets/qz_button.dart';
 
 /// Chat message role. Mirrors the `role` string field on `ChatTurn`
 /// (`user` / `assistant` / `system`) but typed for widget consumption to

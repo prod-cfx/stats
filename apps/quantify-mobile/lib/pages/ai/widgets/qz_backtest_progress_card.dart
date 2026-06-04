@@ -3,12 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../l10n/app_localizations.dart';
-import '../theme/colors.dart';
-import '../theme/theme_context.dart';
-import '../theme/tokens.dart';
-import 'qz_button.dart';
-import 'qz_card.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
+import '../../../widgets/qz_button.dart';
+import '../../../widgets/qz_card.dart';
 
 /// 「回测中」进度卡，内嵌在 AI 对话流（与结果卡同位置）。
 ///
