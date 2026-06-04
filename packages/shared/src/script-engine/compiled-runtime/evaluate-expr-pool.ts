@@ -39,6 +39,10 @@ interface CompiledExprNode {
   }
 }
 
+type RuntimeFeedEvent = { id?: unknown; ts?: unknown; payload?: unknown }
+
+const sortedFeedEventsCache = new WeakMap<ReadonlyArray<RuntimeFeedEvent>, ReadonlyArray<RuntimeFeedEvent>>()
+
 export function evaluateExprPool(
   ctx: StrategyExecutionContextV1,
   exprPool: readonly CompiledExprNode[],
@@ -433,7 +437,7 @@ function evaluateCooldownWindow(
 function readVisibleFeedEvents(
   ctx: StrategyExecutionContextV1,
   sourceFeedId: string,
-): ReadonlyArray<{ id?: unknown; ts?: unknown; payload?: unknown }> {
+): ReadonlyArray<RuntimeFeedEvent> {
   const inbox = ctx.eventInbox?.[sourceFeedId]
   if (!Array.isArray(inbox)) return []
   const now = resolveRuntimeTimestamp(ctx)
@@ -447,14 +451,49 @@ function readVisibleFeedEvents(
 function readLatestVisibleFeedEvent(
   ctx: StrategyExecutionContextV1,
   sourceFeedId: string,
-): { id?: unknown; ts?: unknown; payload?: unknown } | null {
-  let latest: { id?: unknown; ts?: unknown; payload?: unknown } | null = null
-  for (const event of readVisibleFeedEvents(ctx, sourceFeedId)) {
-    const ts = typeof event.ts === 'number' && Number.isFinite(event.ts) ? event.ts : Number.NEGATIVE_INFINITY
-    const latestTs = latest && typeof latest.ts === 'number' && Number.isFinite(latest.ts) ? latest.ts : Number.NEGATIVE_INFINITY
-    if (!latest || ts >= latestTs) latest = event
+): RuntimeFeedEvent | null {
+  const inbox = ctx.eventInbox?.[sourceFeedId]
+  if (!Array.isArray(inbox) || inbox.length === 0) return null
+  const now = resolveRuntimeTimestamp(ctx)
+  if (now === null) return readLatestSortedFeedEvent(inbox as RuntimeFeedEvent[])
+
+  const events = getSortedFeedEvents(inbox as RuntimeFeedEvent[])
+  let low = 0
+  let high = events.length - 1
+  let latest: RuntimeFeedEvent | null = null
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const event = events[mid]
+    const ts = readEventTimestamp(event)
+    if (ts !== null && ts <= now) {
+      latest = event
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
   }
   return latest
+}
+
+function getSortedFeedEvents(events: ReadonlyArray<RuntimeFeedEvent>): ReadonlyArray<RuntimeFeedEvent> {
+  const cached = sortedFeedEventsCache.get(events)
+  if (cached) return cached
+  const sorted = events
+    .filter(event => event && typeof event === 'object' && readEventTimestamp(event) !== null)
+    .slice()
+    .sort((left, right) => (readEventTimestamp(left) ?? 0) - (readEventTimestamp(right) ?? 0))
+  sortedFeedEventsCache.set(events, sorted)
+  return sorted
+}
+
+function readLatestSortedFeedEvent(events: ReadonlyArray<RuntimeFeedEvent>): RuntimeFeedEvent | null {
+  const sorted = getSortedFeedEvents(events)
+  return sorted[sorted.length - 1] ?? null
+}
+
+function readEventTimestamp(event: RuntimeFeedEvent): number | null {
+  const ts = event.ts
+  return typeof ts === 'number' && Number.isFinite(ts) ? ts : null
 }
 
 function readPayloadRecord(value: unknown): Record<string, unknown> | null {
