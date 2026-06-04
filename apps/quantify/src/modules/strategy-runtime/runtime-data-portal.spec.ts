@@ -91,6 +91,62 @@ describe('buildRuntimeMarketContext', () => {
     })
   })
 
+  it('keeps only the latest visible orderbook state snapshot', () => {
+    const context = buildRuntimeMarketContext({
+      symbol: 'BTCUSDT',
+      baseTimeframe: '1m',
+      primaryCloseTs: 10_000,
+      params: { marketType: 'perp' },
+      barsByTimeframe: {
+        '1m': [
+          { symbol: 'BTCUSDT', timeframe: '1m', openTime: 9_000, closeTime: 10_000, open: 100, high: 111, low: 99, close: 110, volume: 1 },
+        ],
+      },
+      eventStreams: {
+        'orderbook.imbalance': [
+          { id: 'old', ts: 1_000, payload: { bidDepth: 3, askDepth: 1 } },
+          { id: 'latest', ts: 9_999, payload: { bidDepth: 1, askDepth: 3 } },
+          { id: 'future', ts: 10_001, payload: { bidDepth: 10, askDepth: 1 } },
+        ],
+      },
+    })
+
+    expect(context.eventInbox).toEqual({
+      'orderbook.imbalance': [
+        { id: 'latest', ts: 9_999, payload: { bidDepth: 1, askDepth: 3 } },
+      ],
+    })
+  })
+
+  it('keeps only the last two visible open-interest state events', () => {
+    const context = buildRuntimeMarketContext({
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      primaryCloseTs: 10_000,
+      params: { marketType: 'perp' },
+      barsByTimeframe: {
+        '15m': [
+          { symbol: 'BTCUSDT', timeframe: '15m', openTime: 9_000, closeTime: 10_000, open: 100, high: 111, low: 99, close: 110, volume: 1 },
+        ],
+      },
+      eventStreams: {
+        open_interest: [
+          { id: 'first', ts: 1_000, payload: { openInterest: 100 } },
+          { id: 'previous', ts: 9_000, payload: { openInterest: 110 } },
+          { id: 'current', ts: 10_000, payload: { openInterest: 120 } },
+          { id: 'future', ts: 11_000, payload: { openInterest: 130 } },
+        ],
+      },
+    })
+
+    expect(context.eventInbox).toEqual({
+      open_interest: [
+        { id: 'previous', ts: 9_000, payload: { openInterest: 110 } },
+        { id: 'current', ts: 10_000, payload: { openInterest: 120 } },
+      ],
+    })
+  })
+
   it('marks funding and liquidation event feeds as live data source feeds', () => {
     const context = buildRuntimeMarketContext({
       symbol: 'BTCUSDT',

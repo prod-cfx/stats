@@ -3,6 +3,8 @@ import type { RuntimeScriptBar } from './runtime-data-portal'
 import type { Bar, RuntimeEvent } from '@/modules/backtesting/types/backtesting.types'
 import { getClosedBarsAsOf, toRuntimeScriptBars } from './runtime-data-portal'
 
+const sortedRuntimeEventCache = new WeakMap<RuntimeEvent[], RuntimeEvent[]>()
+
 export interface BuildRuntimeMarketContextInput {
   symbol: string
   baseTimeframe: MarketTimeframe
@@ -94,20 +96,64 @@ function buildEventInboxAsOf(
   const eventInbox: Record<string, RuntimeEvent[]> = {}
   for (const [feedId, events] of Object.entries(eventStreams)) {
     if (!Array.isArray(events)) continue
-    const visibleEvents = events.filter(event => (
-      event
-      && typeof event.id === 'string'
-      && typeof event.ts === 'number'
-      && Number.isFinite(event.ts)
-      && event.ts <= primaryCloseTs
-      && event.payload
-      && typeof event.payload === 'object'
-      && !Array.isArray(event.payload)
-    ))
+    const visibleEvents = selectVisibleRuntimeEvents(feedId, events, primaryCloseTs)
     if (visibleEvents.length > 0) {
       eventInbox[feedId] = visibleEvents
     }
   }
 
   return Object.keys(eventInbox).length > 0 ? eventInbox : undefined
+}
+
+function selectVisibleRuntimeEvents(feedId: string, events: RuntimeEvent[], primaryCloseTs: number): RuntimeEvent[] {
+  const sorted = getSortedRuntimeEvents(events)
+  const endExclusive = findVisibleEventEndIndex(sorted, primaryCloseTs)
+  if (endExclusive <= 0) return []
+
+  const schema = inferEventFeedSchema(feedId)
+  if (schema === 'orderbook') {
+    return [sorted[endExclusive - 1]!]
+  }
+  if (schema === 'open_interest') {
+    return sorted.slice(Math.max(0, endExclusive - 2), endExclusive)
+  }
+
+  return sorted.slice(0, endExclusive)
+}
+
+function getSortedRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
+  const cached = sortedRuntimeEventCache.get(events)
+  if (cached) return cached
+  const sorted = events
+    .filter(isValidRuntimeEvent)
+    .slice()
+    .sort((left, right) => left.ts - right.ts)
+  sortedRuntimeEventCache.set(events, sorted)
+  return sorted
+}
+
+function findVisibleEventEndIndex(events: RuntimeEvent[], primaryCloseTs: number): number {
+  let low = 0
+  let high = events.length
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    if (events[mid]!.ts <= primaryCloseTs) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+  return low
+}
+
+function isValidRuntimeEvent(event: RuntimeEvent): boolean {
+  return Boolean(
+    event
+    && typeof event.id === 'string'
+    && typeof event.ts === 'number'
+    && Number.isFinite(event.ts)
+    && event.payload
+    && typeof event.payload === 'object'
+    && !Array.isArray(event.payload),
+  )
 }
