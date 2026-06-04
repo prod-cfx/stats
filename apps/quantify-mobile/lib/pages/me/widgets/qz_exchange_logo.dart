@@ -117,23 +117,66 @@ class _ExchangeGlyphPainter extends CustomPainter {
     }
   }
 
-  // 五菱风车：中心大菱形 + 上下左右四个小菱形。
+  // Binance official icon geometry, normalized from 126.611 viewBox to 32x32.
   void _binance(Canvas canvas, Paint paint, double k) {
-    void diamond(double cx, double cy, double r) {
-      final Path p = Path()
-        ..moveTo(cx * k, (cy - r) * k)
-        ..lineTo((cx + r) * k, cy * k)
-        ..lineTo(cx * k, (cy + r) * k)
-        ..lineTo((cx - r) * k, cy * k)
-        ..close();
+    const double sourceSize = 126.611;
+    const double targetSize = 32;
+    final double s = targetSize / sourceSize;
+
+    Offset pt(double x, double y) => Offset(x * s * k, y * s * k);
+
+    void polygon(List<Offset> points) {
+      final Path p = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final Offset point in points.skip(1)) {
+        p.lineTo(point.dx, point.dy);
+      }
+      p.close();
       canvas.drawPath(p, paint);
     }
 
-    diamond(16, 16, 10); // 中心
-    diamond(16, 4.5, 2.5); // 上
-    diamond(16, 27.5, 2.5); // 下
-    diamond(4.5, 16, 2.5); // 左
-    diamond(27.5, 16, 2.5); // 右
+    void diamond(double cx, double cy, double r) {
+      polygon(<Offset>[
+        pt(cx, cy - r),
+        pt(cx + r, cy),
+        pt(cx, cy + r),
+        pt(cx - r, cy),
+      ]);
+    }
+
+    polygon(<Offset>[
+      pt(38.171, 53.203),
+      pt(62.759, 28.616),
+      pt(87.36, 53.216),
+      pt(101.667, 38.909),
+      pt(62.759, 0),
+      pt(23.864, 38.896),
+    ]);
+    diamond(13.761, 63.305, 14.307);
+    polygon(<Offset>[
+      pt(38.171, 73.408),
+      pt(62.759, 97.995),
+      pt(87.359, 73.396),
+      pt(101.674, 87.695),
+      pt(101.667, 87.703),
+      pt(62.759, 126.611),
+      pt(23.863, 87.716),
+      pt(23.843, 87.696),
+    ]);
+    diamond(111.757, 63.306, 14.307);
+    polygon(<Offset>[
+      pt(77.271, 63.298),
+      pt(77.277, 63.298),
+      pt(62.759, 48.78),
+      pt(52.03, 59.509),
+      pt(52.029, 59.509),
+      pt(50.797, 60.742),
+      pt(48.254, 63.285),
+      pt(48.234, 63.305),
+      pt(48.254, 63.326),
+      pt(62.759, 77.831),
+      pt(77.277, 63.313),
+      pt(77.284, 63.305),
+    ]);
   }
 
   // 九宫格五格：对角分布的 5 个方块。

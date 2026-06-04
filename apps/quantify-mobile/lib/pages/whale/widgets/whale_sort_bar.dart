@@ -9,7 +9,7 @@ import '../../../theme/tokens.dart';
 /// 发现 tab 排序条（issue #1789）。胜率/账户总价值/已实现盈亏三档药丸。
 ///
 /// 点击循环：非该 key → (key, desc)；(key, desc) → (key, asc)；
-/// (key, asc) → null（恢复原序）。激活药丸高亮当前方向三角。
+/// (key, asc) → null（恢复原序）。激活项仅用文字与当前方向三角标识。
 class WhaleSortBar extends StatelessWidget {
   const WhaleSortBar({required this.sort, required this.onChanged, super.key});
 
@@ -81,7 +81,7 @@ class _SortPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final Color fg = active ? c.accentOn : c.textMid;
+    final Color fg = active ? c.accent : c.textMid;
     final Color upColor = active && dir == WhaleLeaderSortDir.asc
         ? fg
         : fg.withValues(alpha: 0.4);
@@ -95,8 +95,7 @@ class _SortPill extends StatelessWidget {
         height: 28,
         padding: const EdgeInsets.symmetric(horizontal: QzSpacing.md),
         decoration: BoxDecoration(
-          color: active ? null : Colors.transparent,
-          gradient: active ? c.accentGrad : null,
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(QzRadii.pill),
         ),
         child: Row(
