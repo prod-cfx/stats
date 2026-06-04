@@ -1,5 +1,5 @@
 import type { BulkTarget } from './bulk-action'
-import { aggregateBulkSettledResults } from './bulk-action'
+import { aggregateBulkSettledResults, toErrorMessage } from './bulk-action'
 
 describe('aggregateBulkSettledResults', () => {
   const targets: BulkTarget[] = [
@@ -68,5 +68,61 @@ describe('aggregateBulkSettledResults', () => {
     expect(aggregate.successCount).toBe(1)
     expect(aggregate.failureCount).toBe(1)
     expect(aggregate.failures).toEqual([{ target: updateTargets[1], errorMessage: '更新失败' }])
+  })
+
+  it('uses backend error args reason when response message is absent', () => {
+    const message = toErrorMessage({
+      response: {
+        data: {
+          error: {
+            code: 'DATA_SYNC_CONFIG_MISSING',
+            args: {
+              reason: 'userAddress is required in cursor',
+            },
+          },
+        },
+      },
+    })
+
+    expect(message).toBe('userAddress is required in cursor')
+  })
+
+  it('prefers backend error args reason over axios error message', () => {
+    const error = new Error('Request failed with status code 500') as Error & {
+      response?: Record<string, unknown>
+    }
+    error.response = {
+      data: {
+        error: {
+          code: 'DATA_SYNC_API_ERROR',
+          args: {
+            reason: 'BBX API request failed after 3/3: status=401 Unauthorized',
+          },
+        },
+      },
+    }
+
+    expect(toErrorMessage(error)).toBe(
+      'BBX API request failed after 3/3: status=401 Unauthorized',
+    )
+  })
+
+  it('uses backend error args reason from nested cause', () => {
+    const error = new Error('Request failed with status code 500') as Error & {
+      cause?: unknown
+    }
+    error.cause = {
+      response: {
+        data: {
+          error: {
+            args: {
+              reason: 'BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required',
+            },
+          },
+        },
+      },
+    }
+
+    expect(toErrorMessage(error)).toBe('BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required')
   })
 })

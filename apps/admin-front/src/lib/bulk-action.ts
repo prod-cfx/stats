@@ -20,43 +20,72 @@ const unknownErrorMessage = '未知错误'
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+function extractBackendReason(value: unknown, seen = new Set<unknown>()): string | null {
+  if (!isRecord(value) || seen.has(value)) return null
+  seen.add(value)
+
+  const response = value.response
+  if (isRecord(response)) {
+    const responseData = response.data
+    if (isRecord(responseData)) {
+      const responseMessage = responseData.message
+      if (typeof responseMessage === 'string' && responseMessage.trim()) {
+        return responseMessage
+      }
+
+      const responseError = responseData.error
+      if (isRecord(responseError)) {
+        const args = responseError.args
+        if (isRecord(args)) {
+          const reason = args.reason
+          if (typeof reason === 'string' && reason.trim()) {
+            return reason
+          }
+
+          const detail = args.detail
+          if (typeof detail === 'string' && detail.trim()) {
+            return detail
+          }
+        }
+      }
+
+      if (typeof responseError === 'string' && responseError.trim()) {
+        return responseError
+      }
+    }
+  }
+
+  const data = value.data
+  if (isRecord(data)) {
+    const dataMessage = data.message
+    if (typeof dataMessage === 'string' && dataMessage.trim()) {
+      return dataMessage
+    }
+  }
+
+  const causeReason = extractBackendReason(value.cause, seen)
+  if (causeReason) return causeReason
+
+  return null
+}
+
 export function toErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error.trim() ? error : unknownErrorMessage
   }
 
-  if (error instanceof Error) {
-    return error.message.trim() ? error.message : unknownErrorMessage
-  }
-
   if (isRecord(error)) {
-    const response = error.response
-    if (isRecord(response)) {
-      const responseData = response.data
-      if (isRecord(responseData)) {
-        const responseMessage = responseData.message
-        if (typeof responseMessage === 'string' && responseMessage.trim()) {
-          return responseMessage
-        }
-        const responseError = responseData.error
-        if (typeof responseError === 'string' && responseError.trim()) {
-          return responseError
-        }
-      }
-    }
-
-    const data = error.data
-    if (isRecord(data)) {
-      const dataMessage = data.message
-      if (typeof dataMessage === 'string' && dataMessage.trim()) {
-        return dataMessage
-      }
-    }
+    const backendReason = extractBackendReason(error)
+    if (backendReason) return backendReason
 
     const message = error.message
     if (typeof message === 'string' && message.trim()) {
       return message
     }
+  }
+
+  if (error instanceof Error) {
+    return error.message.trim() ? error.message : unknownErrorMessage
   }
 
   return unknownErrorMessage

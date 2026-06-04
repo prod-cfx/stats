@@ -100,3 +100,12 @@ test('quantify ci deploy starts backtest worker after dx api deploy', () => {
   assert.match(workflow, /Quantify backtest worker ready/)
   assert.match(workflow, /quantify-backtest-worker ready log missing/)
 })
+
+test('quantify backtest worker writes ready marker directly to stdout', () => {
+  const workerSource = fs.readFileSync(
+    path.join(repoRoot, 'apps/quantify/src/worker.backtest.ts'),
+    'utf8',
+  )
+
+  assert.match(workerSource, /process\.stdout\.write\('Quantify backtest worker ready\\n'\)/)
+})

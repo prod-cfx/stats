@@ -94,7 +94,16 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
     // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
     for (let page = 0; page < this.maxPagesPerRun; page += 1) {
-      const pageResult = await this.fetchAndFilterPage(loopCursor, runSetup.filters)
+      const pageResult = await this.fetchAndFilterPageOrResetDeepOffset(loopCursor, runSetup.filters)
+      if (pageResult.reachedDeepOffsetEnd) {
+        loopCursor = {
+          nextCursor: null,
+          offset: 0,
+          usedCursor: false,
+          filterSignature: runSetup.filterSignature,
+        }
+        break
+      }
       stats = {
         processed: stats.processed + pageResult.processed,
         skipped: stats.skipped + pageResult.skipped,
@@ -167,6 +176,36 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       nextCursorValue: response.nextCursor ?? null,
       apiReturned: response.markets.length,
     }
+  }
+
+  private async fetchAndFilterPageOrResetDeepOffset(
+    cursor: PolymarketMarketsCursor,
+    filters: { category: string | null; tags: string[] | null; onlyActive: boolean },
+  ): Promise<Awaited<ReturnType<typeof this.fetchAndFilterPage>> & { reachedDeepOffsetEnd?: boolean }> {
+    try {
+      return await this.fetchAndFilterPage(cursor, filters)
+    } catch (error) {
+      if (!this.isGammaDeepOffsetError(error)) throw error
+
+      this.logger.warn(
+        `Gamma API rejected deep offset=${cursor.offset ?? 0}; resetting cursor to offset 0 for next run`,
+      )
+      return {
+        processed: 0,
+        skipped: 0,
+        total: 0,
+        nextCursorValue: null,
+        apiReturned: 0,
+        reachedDeepOffsetEnd: true,
+      }
+    }
+  }
+
+  private isGammaDeepOffsetError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    const record = error as Record<string, any>
+    const reason = record.args?.reason ?? record.getResponse?.()?.args?.reason ?? record.message
+    return typeof reason === 'string' && reason.includes('offset too large')
   }
 
   private filterMarkets(

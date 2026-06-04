@@ -243,4 +243,37 @@ describe('polymarket markets job', () => {
     expect(newCursor.offset).toBe(0)
     expect(newCursor.usedCursor).toBe(false)
   })
+
+  it('resets offset instead of failing when Gamma rejects deep offset pagination', async () => {
+    const { job, gammaClient } = createJob()
+    gammaClient.listMarkets.mockRejectedValueOnce({
+      message: 'polymarket.client_error',
+      args: {
+        reason: 'Gamma API request failed: status=422 Unprocessable Entity body={"error":"offset too large, use /markets/keyset for deeper pagination"}',
+      },
+    })
+
+    const result = await job.run({
+      taskId: 1,
+      key: job.key,
+      cursor: JSON.stringify({
+        offset: 19000,
+        usedCursor: false,
+        filterSignature: JSON.stringify({
+          category: 'crypto',
+          tags: [],
+          onlyActive: true,
+        }),
+      }),
+      meta: {
+        category: 'crypto',
+        onlyActive: true,
+      },
+      now: new Date(),
+    })
+
+    const newCursor = JSON.parse(result.newCursor as string) as { offset?: number }
+    expect(result.fetchedCount).toBe(0)
+    expect(newCursor.offset).toBe(0)
+  })
 })

@@ -35,6 +35,7 @@ async function bootstrap() {
   app.enableShutdownHooks()
 
   await app.get(BacktestRecoveryService).recoverStaleJobs()
+  process.stdout.write('Quantify backtest worker ready\n')
   logger.log('Quantify backtest worker ready')
 }
 

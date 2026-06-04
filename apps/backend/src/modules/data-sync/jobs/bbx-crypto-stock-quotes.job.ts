@@ -460,12 +460,14 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
           throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
             code: ErrorCode.DATA_SYNC_API_ERROR,
             status: HttpStatus.INTERNAL_SERVER_ERROR,
-            args: { reason: `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+            args: { reason: `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${this.redactSignedUrl(url)} ${failure}` },
           })
         }
 
         return (await response.json()) as BbxApiResponse
       } catch (error) {
+        if (error instanceof DomainException) throw error
+
         const isAbort = this.isAbortError(error)
 
         const failure = isAbort
@@ -487,7 +489,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
         throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
           code: ErrorCode.DATA_SYNC_API_ERROR,
           status: HttpStatus.INTERNAL_SERVER_ERROR,
-          args: { reason: `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}` },
+          args: { reason: `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${this.redactSignedUrl(url)} error=${failure}` },
         })
       } finally {
         clearTimeout(timer)
@@ -498,8 +500,18 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
     throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
       code: ErrorCode.DATA_SYNC_API_ERROR,
       status: HttpStatus.INTERNAL_SERVER_ERROR,
-      args: { reason: `BBX API request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+      args: { reason: `BBX API request failed after ${this.maxAttempts} attempts: url=${this.redactSignedUrl(url)} error=${lastFailure ?? 'unknown'}` },
     })
+  }
+
+  private redactSignedUrl(url: URL): string {
+    const redacted = new URL(url.toString())
+    for (const key of ['AccessKeyId', 'SignatureNonce', 'Timestamp', 'Signature']) {
+      if (redacted.searchParams.has(key)) {
+        redacted.searchParams.set(key, '***')
+      }
+    }
+    return redacted.toString()
   }
 
   private delay(ms: number): Promise<void> {
@@ -534,4 +546,3 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
     }
   }
 }
-

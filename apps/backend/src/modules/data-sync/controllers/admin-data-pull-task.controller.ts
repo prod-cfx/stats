@@ -165,7 +165,6 @@ export class AdminDataPullTaskController {
   }
 
   @Post(':id/trigger')
-  @Transactional()
   @UpdateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({
     summary: '手动触发一次数据拉取任务执行（用于测试）',
@@ -231,5 +230,4 @@ export class AdminDataPullTaskController {
     return { success: true }
   }
 }
-
 

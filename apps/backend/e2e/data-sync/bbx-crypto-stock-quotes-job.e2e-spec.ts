@@ -18,7 +18,8 @@ describe('BBX crypto stock quotes job (E2E)', () => {
   beforeAll(async () => {
     const ctx = await createTestingApp({
       envDefaults: {
-        BBX_API_KEY: 'test-bbx-api-key',
+        BBX_ACCESS_KEY_ID: 'test-bbx-access-key-id',
+        BBX_ACCESS_SECRET: 'test-bbx-access-secret',
         BBX_CRYPTO_STOCK_SYMBOLS: 'MSTR,COIN',
         // JWT 配置在非 development 环境是必需的，这里为 e2e 提供一个固定值
         JWT_SECRET: 'test-jwt-secret',
@@ -145,5 +146,42 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     expect(mstr?.quoteTimestamp.getTime()).toBe(quoteTime)
     expect(mstr?.price.toString()).toBe('100')
     expect(mstr?.source).toBe('BBX')
+  })
+
+  it('preserves upstream forbidden response details without leaking signed URL credentials', async () => {
+    ;(globalThis as any).fetch = jest.fn(async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      text: async () => JSON.stringify({ error: '没有权限访问此资源', success: false }),
+    }))
+
+    const baseCtx: DataPullJobContext = {
+      taskId: 1,
+      key: job.key,
+      cursor: null,
+      meta: { symbols: ['MSTR'] },
+      now: new Date(),
+    }
+
+    let error: any
+    try {
+      await cls.run(() => job.run(baseCtx))
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toMatchObject({
+      message: 'data_sync.bbx_crypto_stock_quotes.api_error',
+      args: expect.objectContaining({
+        reason: expect.stringContaining('status=403 Forbidden'),
+      }),
+    })
+    expect(error.args.reason).toContain('body="{\\"error\\":\\"没有权限访问此资源\\",\\"success\\":false}"')
+    expect(error.args.reason).toContain('AccessKeyId=***')
+    expect(error.args.reason).toContain('SignatureNonce=***')
+    expect(error.args.reason).toContain('Timestamp=***')
+    expect(error.args.reason).toContain('Signature=***')
+    expect(error.args.reason).not.toContain('test-bbx-access-key-id')
   })
 })
