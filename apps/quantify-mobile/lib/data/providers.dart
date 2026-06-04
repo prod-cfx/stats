@@ -28,7 +28,8 @@ import 'mock/mock_whale_holdings_repository.dart';
 import 'mock/mock_whale_leaderboard_repository.dart';
 import 'mock/mock_whale_profile_repository.dart';
 import 'mock/mock_whale_watch_repository.dart';
-import 'mock/unimplemented_repositories.dart';
+import 'api/api.dart';
+import 'services/services.dart';
 import '../domain/models/whale_holding_models.dart';
 import '../domain/models/whale_leader_models.dart';
 import 'models/whale_profile_models.dart';
@@ -49,53 +50,114 @@ final Provider<bool> useMockProvider = Provider<bool>((Ref ref) {
   return _kUseMockEnv.toLowerCase() != 'false';
 });
 
+/// 后端 baseUrl（`USE_MOCK=false` 时生效）。
+///
+/// 通过 `flutter run --dart-define=API_BASE_URL=https://...` 注入；缺省占位
+/// 指向本地 quantify 服务端口。契约就绪后按环境配置校正。
+const String _kApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:3010',
+);
+
+/// 统一后端 HTTP 客户端（issue #2189）。所有 Service 共享一个 [ApiClient]
+/// 实例。鉴权 token 由 [AuthRepository] 的会话态提供（接通登录态后可在此
+/// 注入 tokenSupplier）；本迭代先保留匿名 client。
+final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((Ref ref) {
+  return ApiClient(baseUrl: _kApiBaseUrl);
+});
+
+// ── 各域 Service（stateless，注入共享 ApiClient）─────────────────────────
+final Provider<AuthService> authServiceProvider =
+    Provider<AuthService>((Ref ref) => AuthService(ref.watch(apiClientProvider)));
+final Provider<TickerService> tickerServiceProvider = Provider<TickerService>(
+    (Ref ref) => TickerService(ref.watch(apiClientProvider)));
+final Provider<KlineService> klineServiceProvider = Provider<KlineService>(
+    (Ref ref) => KlineService(ref.watch(apiClientProvider)));
+final Provider<OrderbookService> orderbookServiceProvider =
+    Provider<OrderbookService>(
+        (Ref ref) => OrderbookService(ref.watch(apiClientProvider)));
+final Provider<LongShortService> longShortServiceProvider =
+    Provider<LongShortService>(
+        (Ref ref) => LongShortService(ref.watch(apiClientProvider)));
+final Provider<WhaleFeedService> whaleFeedServiceProvider =
+    Provider<WhaleFeedService>(
+        (Ref ref) => WhaleFeedService(ref.watch(apiClientProvider)));
+final Provider<WhaleLeaderboardService> whaleLeaderboardServiceProvider =
+    Provider<WhaleLeaderboardService>(
+        (Ref ref) => WhaleLeaderboardService(ref.watch(apiClientProvider)));
+final Provider<WhaleHoldingsService> whaleHoldingsServiceProvider =
+    Provider<WhaleHoldingsService>(
+        (Ref ref) => WhaleHoldingsService(ref.watch(apiClientProvider)));
+final Provider<WhaleProfileService> whaleProfileServiceProvider =
+    Provider<WhaleProfileService>(
+        (Ref ref) => WhaleProfileService(ref.watch(apiClientProvider)));
+final Provider<WhaleWatchService> whaleWatchServiceProvider =
+    Provider<WhaleWatchService>(
+        (Ref ref) => WhaleWatchService(ref.watch(apiClientProvider)));
+final Provider<StrategyService> strategyServiceProvider =
+    Provider<StrategyService>(
+        (Ref ref) => StrategyService(ref.watch(apiClientProvider)));
+final Provider<LiveStrategyService> liveStrategyServiceProvider =
+    Provider<LiveStrategyService>(
+        (Ref ref) => LiveStrategyService(ref.watch(apiClientProvider)));
+final Provider<AiChatService> aiChatServiceProvider = Provider<AiChatService>(
+    (Ref ref) => AiChatService(ref.watch(apiClientProvider)));
+final Provider<BacktestService> backtestServiceProvider =
+    Provider<BacktestService>(
+        (Ref ref) => BacktestService(ref.watch(apiClientProvider)));
+final Provider<AccountService> accountServiceProvider =
+    Provider<AccountService>(
+        (Ref ref) => AccountService(ref.watch(apiClientProvider)));
+final Provider<ApiKeyService> apiKeyServiceProvider = Provider<ApiKeyService>(
+    (Ref ref) => ApiKeyService(ref.watch(apiClientProvider)));
+
 final Provider<AuthRepository> authRepositoryProvider =
     Provider<AuthRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockAuthRepository()
-          : UnimplementedAuthRepository();
+          : ApiAuthRepository(ref.watch(authServiceProvider));
     });
 
 final Provider<TickerRepository> tickerRepositoryProvider =
     Provider<TickerRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockTickerRepository()
-          : UnimplementedTickerRepository();
+          : ApiTickerRepository(ref.watch(tickerServiceProvider));
     });
 
 final Provider<KlineRepository> klineRepositoryProvider =
     Provider<KlineRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockKlineRepository()
-          : UnimplementedKlineRepository();
+          : ApiKlineRepository(ref.watch(klineServiceProvider));
     });
 
 final Provider<OrderbookRepository> orderbookRepositoryProvider =
     Provider<OrderbookRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockOrderbookRepository()
-          : UnimplementedOrderbookRepository();
+          : ApiOrderbookRepository(ref.watch(orderbookServiceProvider));
     });
 
 final Provider<LongShortRepository> longShortRepositoryProvider =
     Provider<LongShortRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockLongShortRepository()
-          : UnimplementedLongShortRepository();
+          : ApiLongShortRepository(ref.watch(longShortServiceProvider));
     });
 
 final Provider<WhaleFeedRepository> whaleFeedRepositoryProvider =
     Provider<WhaleFeedRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockWhaleFeedRepository()
-          : UnimplementedWhaleFeedRepository();
+          : ApiWhaleFeedRepository(ref.watch(whaleFeedServiceProvider));
     });
 
 final Provider<WhaleProfileRepository> whaleProfileRepositoryProvider =
     Provider<WhaleProfileRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockWhaleProfileRepository()
-          : UnimplementedWhaleProfileRepository();
+          : ApiWhaleProfileRepository(ref.watch(whaleProfileServiceProvider));
     });
 
 /// 单个巨鲸地址画像（#1753）。地址详情页 watch；未命中已知地址由 mock
@@ -113,7 +175,9 @@ final Provider<WhaleLeaderboardRepository> whaleLeaderboardRepositoryProvider =
     Provider<WhaleLeaderboardRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockWhaleLeaderboardRepository()
-          : UnimplementedWhaleLeaderboardRepository();
+          : ApiWhaleLeaderboardRepository(
+              ref.watch(whaleLeaderboardServiceProvider),
+            );
     });
 
 /// 巨鲸排行榜列表（#1789）。发现 tab watch；排序在 tab 本地态完成。
@@ -127,7 +191,9 @@ final Provider<WhaleHoldingsRepository> whaleHoldingsRepositoryProvider =
     Provider<WhaleHoldingsRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockWhaleHoldingsRepository()
-          : UnimplementedWhaleHoldingsRepository();
+          : ApiWhaleHoldingsRepository(
+              ref.watch(whaleHoldingsServiceProvider),
+            );
     });
 
 /// 巨鲸持仓明细列表（#1790）。持仓 tab watch；筛选与排序在 tab 本地态完成。
@@ -141,49 +207,49 @@ final Provider<WhaleWatchRepository> whaleWatchRepositoryProvider =
     Provider<WhaleWatchRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? const MockWhaleWatchRepository()
-          : UnimplementedWhaleWatchRepository();
+          : ApiWhaleWatchRepository(ref.watch(whaleWatchServiceProvider));
     });
 
 final Provider<StrategyRepository> strategyRepositoryProvider =
     Provider<StrategyRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockStrategyRepository()
-          : UnimplementedStrategyRepository();
+          : ApiStrategyRepository(ref.watch(strategyServiceProvider));
     });
 
 final Provider<LiveStrategyRepository> liveStrategyRepositoryProvider =
     Provider<LiveStrategyRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockLiveStrategyRepository()
-          : UnimplementedLiveStrategyRepository();
+          : ApiLiveStrategyRepository(ref.watch(liveStrategyServiceProvider));
     });
 
 final Provider<AiChatRepository> aiChatRepositoryProvider =
     Provider<AiChatRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockAiChatRepository()
-          : UnimplementedAiChatRepository();
+          : ApiAiChatRepository(ref.watch(aiChatServiceProvider));
     });
 
 final Provider<BacktestRepository> backtestRepositoryProvider =
     Provider<BacktestRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockBacktestRepository()
-          : UnimplementedBacktestRepository();
+          : ApiBacktestRepository(ref.watch(backtestServiceProvider));
     });
 
 final Provider<AccountRepository> accountRepositoryProvider =
     Provider<AccountRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockAccountRepository()
-          : UnimplementedAccountRepository();
+          : ApiAccountRepository(ref.watch(accountServiceProvider));
     });
 
 final Provider<ApiKeyRepository> apiKeyRepositoryProvider =
     Provider<ApiKeyRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockApiKeyRepository()
-          : UnimplementedApiKeyRepository();
+          : ApiApiKeyRepository(ref.watch(apiKeyServiceProvider));
     });
 
 /// 当前账户概要。从 `/me` 主页 watch；写入路径走 repository。

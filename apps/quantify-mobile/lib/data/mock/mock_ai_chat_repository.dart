@@ -8,7 +8,7 @@ import 'fixtures/ai_chat.dart';
 ///
 /// 单例语义：
 /// - `_controller` 在常驻 `Provider`（非 `autoDispose`）下生命周期与应用同长，不显式 close
-/// - `_sessions` 在进程生命周期内累积；切到真实 API 时由 `Unimplemented` 接管
+/// - `_sessions` 在进程生命周期内累积；切到真实 API 时由 `ApiAiChatRepository` 接管
 /// - `sendMessageTo` 模拟一段 200ms 网络延迟，返回 assistant 回复并同步追加到对应 session
 class MockAiChatRepository implements AiChatRepository {
   MockAiChatRepository() : _sessions = buildMockSessions();
