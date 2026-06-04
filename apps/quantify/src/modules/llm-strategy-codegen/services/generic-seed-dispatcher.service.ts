@@ -8,6 +8,7 @@ import type {
 } from '../atom-contracts/atom-contract-surface.types'
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import { isRuleEffectsByRole } from '../types/atom-expr'
 import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import type { SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
 /**
@@ -1280,7 +1281,7 @@ export class GenericSeedDispatcher {
   dispatch(message?: string): DispatchResult {
     const text = (message ?? '').trim()
     const flatPatch = this.dispatchFlatPatch(text)
-    const rules = this.buildTypedRulesFromFlatPatch(flatPatch, text)
+    const rules = this.repairPairSpreadEntryRules(this.buildTypedRulesFromFlatPatch(flatPatch, text), text)
     return {
       ...(flatPatch.contextSlots ? { contextSlots: flatPatch.contextSlots } : {}),
       ...(rules.length > 0 ? { rules } : {}),
@@ -1533,6 +1534,41 @@ export class GenericSeedDispatcher {
       }
     }
     return rules
+  }
+
+  private repairPairSpreadEntryRules(rules: SemanticRule[], userMessage: string): SemanticRule[] {
+    if (!this.hasLegScopeIntent(userMessage) || !this.hasOpenActionIntent(userMessage) || this.hasCloseActionIntent(userMessage)) {
+      return rules
+    }
+    return rules.map((rule) => {
+      if (rule.phase !== 'exit' || !isRuleEffectsByRole(rule.effects) || !this.ruleConditionContainsKey(rule.condition, 'orderbook.spread_condition')) return rule
+      const actions = [...rule.effects.actions].filter(action =>
+        action.kind !== 'atom'
+        || (action.key !== ATOM_CONTRACT_REGISTRY['action.close_long'].key && action.key !== ATOM_CONTRACT_REGISTRY['action.close_short'].key),
+      )
+      if (!actions.some(action => action.kind === 'atom' && action.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key)) {
+        actions.push({ kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.open_long'].key, params: { phase: 'entry' }, sideScope: 'long' })
+      }
+      if (!actions.some(action => action.kind === 'atom' && action.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key)) {
+        actions.push({ kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.open_short'].key, params: { phase: 'entry' }, sideScope: 'short' })
+      }
+      return {
+        ...rule,
+        phase: 'entry',
+        sideScope: 'both',
+        effects: {
+          ...rule.effects,
+          actions,
+        },
+      }
+    })
+  }
+
+  private ruleConditionContainsKey(condition: SemanticRule['condition'], key: string): boolean {
+    if (condition.kind === 'atom') return condition.key === key
+    if (condition.kind === 'and' || condition.kind === 'or') return condition.children.some(child => this.ruleConditionContainsKey(child, key))
+    if (condition.kind === 'not') return this.ruleConditionContainsKey(condition.child, key)
+    return condition.steps.some(step => this.ruleConditionContainsKey(step, key))
   }
 
   private buildTypedRulePredicateGroups(
