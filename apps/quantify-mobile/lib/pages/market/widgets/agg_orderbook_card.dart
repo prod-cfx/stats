@@ -10,29 +10,9 @@ import '../../../theme/tokens.dart';
 import '../../../widgets/qz_grab_handle.dart';
 import 'agg_depth_chart.dart';
 import 'agg_exchange_avatar.dart';
-import 'agg_orderbook_math.dart';
+import 'agg_orderbook_controller.dart';
 part 'agg_orderbook_card.controls.part.dart';
 part 'agg_orderbook_card.book.part.dart';
-
-/// 订单簿视图模式。
-enum AggView { both, asks, bids }
-
-/// 加载/错误态空 bundle 占位（渲染空盘口，不抛错）。
-const AggMarketData _emptyAggData = AggMarketData(
-  exchanges: <AggExchange>[],
-  exchangeMap: <String, AggExchange>{},
-  precisions: <int>[],
-  asks: <AggBookLevel>[],
-  bids: <AggBookLevel>[],
-  oiCoins: <String>[],
-  oiExchangeMap: <String, AggExchange>{},
-  oiData: <String, OiSnapshot>{},
-  volCoins: <String>[],
-  volExchangeName: <String, String>{},
-  volColor: <String, Color>{},
-  volData: <String, VolSnapshot>{},
-  coinColor: <String, Color>{},
-);
 
 /// 聚合挂单子屏（设计稿 `ScreenAggOrders` 的 `聚合挂单` 分支:370）。
 ///
@@ -48,38 +28,16 @@ class AggOrderbookCard extends ConsumerStatefulWidget {
 class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
   bool _futures = true; // true=合约 false=现货
   String _coin = 'BTC';
-  AggView _view = AggView.both;
-  int _precision = 1;
+  // 精度抽屉展开态：UI 瞬时态，保留 widget（非业务派生）。
   bool _precisionOpen = false;
 
-  /// 来源筛选选中集合。null = 尚未初始化（首次有数据时填全选）。
-  Set<String>? _selectedEx;
-
-  /// 当前帧 provider 数据缓存，供 sheet 回调（精度档位 / 来源全集）读取。
-  List<int> _precisions = const <int>[];
-  List<AggExchange> _exchanges = const <AggExchange>[];
-
-  /// 解析来源选中集合：已有用户选择则用之；否则首帧用全集初始化。
-  /// 数据为空（加载中）时不缓存，待真实数据到达再初始化全选。
-  Set<String> _selectionOf(AggMarketData data) {
-    if (_selectedEx != null) return _selectedEx!;
-    if (data.exchanges.isEmpty) return const <String>{};
-    return _selectedEx = data.exchanges.map((AggExchange e) => e.key).toSet();
-  }
-
-  List<AggBookLevel> _side(
-    List<AggBookLevel> raw,
-    bool isAsk,
-    Set<String> selected,
-  ) {
-    final List<AggBookLevel> filtered = raw
-        .where((AggBookLevel r) => selected.contains(r.exchange))
-        .toList();
-    return withCumulative(aggregateLevels(filtered, _precision, isAsk), isAsk);
-  }
+  AggOrderbookController get _controller =>
+      ref.read(aggOrderbookControllerProvider.notifier);
 
   Future<void> _openPrecisionSheet() async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<int> precisions = _controller.precisions;
+    final int current = ref.read(aggOrderbookControllerProvider).precision;
     setState(() => _precisionOpen = true);
     final int? picked = await showModalBottomSheet<int>(
       context: context,
@@ -109,11 +67,11 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
                   ),
                 ),
               ),
-              for (final int p in _precisions)
+              for (final int p in precisions)
                 _PrecisionOption(
                   key: Key('agg-precision-$p'),
                   value: p,
-                  selected: p == _precision,
+                  selected: p == current,
                   onTap: () => Navigator.of(ctx).pop(p),
                 ),
               const SizedBox(height: QzSpacing.md),
@@ -123,22 +81,24 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
       },
     );
     if (mounted) setState(() => _precisionOpen = false);
-    if (picked != null) setState(() => _precision = picked);
+    // autoDispose controller：sheet 异步 gap 后 card 可能已卸载，
+    // 缺 mounted 守卫会在已 dispose 的 Notifier 上 `state=` 抛 StateError。
+    if (picked != null && mounted) _controller.setPrecision(picked);
   }
 
   Future<void> _openSourceSheet() async {
-    final Set<String> initial =
-        _selectedEx?.toSet() ??
-        _exchanges.map((AggExchange e) => e.key).toSet();
+    final Set<String> initial = _controller.currentSelection.toSet();
     await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
       builder: (BuildContext ctx) => _SourceSheet(
         initial: initial,
-        exchanges: _exchanges,
+        exchanges: _controller.exchanges,
+        // mounted 守卫：sheet 经 rootNavigator 独立挂载，card 卸载后
+        // autoDispose 会销毁 controller，裸回调会在已 dispose Notifier 上崩溃。
         onSelectionChanged: (Set<String> selected) {
-          if (mounted) setState(() => _selectedEx = selected);
+          if (mounted) _controller.setExchanges(selected);
         },
       ),
     );
@@ -148,15 +108,16 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    // 聚合数据经单一共享 aggOrderbookProvider 注入（issue #2216）；加载/错误态
-    // 回退空 bundle（渲染空盘口，与改前 mock 同步可用语义一致）。
+    // 原始聚合数据经单一共享 aggOrderbookProvider 注入（issue #2216）；加载/
+    // 错误态回退空 bundle。过滤/聚合/累计派生上移 AggOrderbookController
+    // （#2218 C4），View 仅 watch 输入态 + 调 controller 取派生 asks/bids。
     final AggMarketData data =
-        ref.watch(aggOrderbookProvider).value ?? _emptyAggData;
-    _precisions = data.precisions;
-    _exchanges = data.exchanges;
-    final Set<String> selected = _selectionOf(data);
-    final List<AggBookLevel> asks = _side(data.asks, true, selected);
-    final List<AggBookLevel> bids = _side(data.bids, false, selected);
+        ref.watch(aggOrderbookProvider).value ?? kEmptyAggData;
+    final AggOrderbookState s = ref.watch(aggOrderbookControllerProvider);
+    final AggOrderbookController ctrl = _controller;
+    final List<AggBookLevel> asks = ctrl.asksOf(data);
+    final List<AggBookLevel> bids = ctrl.bidsOf(data);
+    // maxCum/bestAsk/bestBid 为纯 UI 渲染量（深度条比例 / 中价条），保留 View。
     final double maxCum = <double>[
       asks.isEmpty ? 0 : asks.first.total,
       bids.isEmpty ? 0 : bids.last.total,
@@ -217,15 +178,15 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
                     _coin,
                     _futures ? l10n.aggModeFutures : l10n.aggModeSpot,
                   ),
-                  view: _view,
-                  precision: _precision,
+                  view: s.view,
+                  precision: s.precision,
                   precisionExpanded: _precisionOpen,
-                  onView: (AggView v) => setState(() => _view = v),
+                  onView: ctrl.setView,
                   onPrecision: _openPrecisionSheet,
                   onSource: _openSourceSheet,
                 ),
                 _ColumnHeader(coin: _coin),
-                if (_view != AggView.bids)
+                if (s.view != AggView.bids)
                   for (final AggBookLevel r in asks)
                     _BookRow(
                       level: r,
@@ -233,9 +194,9 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
                       maxCum: maxCum,
                       exchangeMap: data.exchangeMap,
                     ),
-                if (_view == AggView.both)
+                if (s.view == AggView.both)
                   _MidStrip(bestBid: bestBid, bestAsk: bestAsk),
-                if (_view != AggView.asks)
+                if (s.view != AggView.asks)
                   for (final AggBookLevel r in bids)
                     _BookRow(
                       level: r,
