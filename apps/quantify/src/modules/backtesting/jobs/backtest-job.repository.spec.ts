@@ -70,4 +70,32 @@ describe('BacktestJobRepository', () => {
       },
     })
   })
+
+  it('marks failed only while the job is still in an expected active status', async () => {
+    const { tx, backtestJob } = createTxHostMock()
+    const finishedAt = new Date('2026-06-01T00:02:00.000Z')
+    backtestJob.updateMany.mockResolvedValue({ count: 1 })
+    const repo = new BacktestJobRepository({ tx } as never)
+
+    await expect(repo.markFailedIfStatus('job-1', ['running'], {
+      code: ErrorCode.BACKTEST_JOB_TIMEOUT,
+      message: 'Backtest job timed out',
+      finishedAt,
+    })).resolves.toBe(true)
+
+    expect(backtestJob.updateMany).toHaveBeenCalledWith({
+      where: { id: 'job-1', status: { in: ['running'] } },
+      data: {
+        status: 'failed',
+        error: 'Backtest job timed out',
+        result: {
+          failure: {
+            code: ErrorCode.BACKTEST_JOB_TIMEOUT,
+            message: 'Backtest job timed out',
+          },
+        },
+        finishedAt,
+      },
+    })
+  })
 })
