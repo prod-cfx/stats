@@ -2727,7 +2727,7 @@ export class PlannerDispatcherMergeService {
       }
       return atom
     })
-    return this.removeContradictoryBollingerBandNoise(normalized, userMessage)
+    return this.removeDominatedGenericBoundaryNoise(this.removeContradictoryBollingerBandNoise(normalized, userMessage))
   }
 
   private removeContradictoryBollingerBandNoise(condition: AtomExpr, userMessage: string): AtomExpr {
@@ -2755,6 +2755,26 @@ export class PlannerDispatcherMergeService {
     if (isUpper && mentionsLower && !mentionsUpper) return true
     if (isLower && mentionsUpper && !mentionsLower) return true
     return false
+  }
+
+  private removeDominatedGenericBoundaryNoise(condition: AtomExpr): AtomExpr {
+    if (condition.kind !== 'and') return condition
+    const hasSpecificBollingerBoundary = condition.children.some(child =>
+      child.kind === 'atom'
+      && (
+        child.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+        || child.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+        || child.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key
+      ),
+    )
+    if (!hasSpecificBollingerBoundary) return condition
+    const children = condition.children.filter(child =>
+      child.kind !== 'atom'
+      || child.key !== ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key,
+    )
+    if (children.length === condition.children.length) return condition
+    if (children.length === 1) return children[0]!
+    return { ...condition, children }
   }
 
   private normalizeRuleEffectsNoise(

@@ -554,6 +554,12 @@ type ExtractedSizingRole = {
   readonly evidenceText: string
 }
 
+type ExtractedRelativeVolumeThreshold = {
+  readonly refWindow: number
+  readonly multiplier: number
+  readonly evidenceText: string
+}
+
 const SIZING_SLOT_RE = /(?:sizing|size|budget)/iu
 const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用|加投|加仓|补仓|账户权益(?:的)?|权益(?:的)?|账户资金(?:的)?|(?:使用|用|投入).*(?:账户权益|权益|账户资金)(?:的)?)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
 const SIZING_ROLE_SUFFIX_RE = /^\s*(?:仓位|资金(?!费率)|比例)/u
@@ -2021,6 +2027,22 @@ export class GenericSeedDispatcher {
     //   matchSurface 选中，导致 dispatcher typed-rule condition 缺少 volume 语义。
     //   按 corpus.phraseHints.triggers 提示，统一兜底成 mode=relative_to_sma 的
     //   均量倍数预设（multiplier=2, refWindow=20），与 atom-contract 推荐对齐。
+    const relativeVolumeThreshold = this.extractRelativeVolumeThreshold(userMessage)
+    if (relativeVolumeThreshold && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['volume.threshold'].key,
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          mode: 'relative_to_sma',
+          multiplier: relativeVolumeThreshold.multiplier,
+          refWindow: relativeVolumeThreshold.refWindow,
+          metric: 'base_volume',
+          operator: 'GT',
+        },
+        evidence: { text: relativeVolumeThreshold.evidenceText, source: 'user_explicit' },
+      })
+    }
     if (
       this.hasVolumeSpikeIntent(userMessage)
       && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key)
@@ -2654,6 +2676,34 @@ export class GenericSeedDispatcher {
   // 放量 / 倍均量 等关键词对齐，作为 fallback predicate 兜底触发器。
   private hasVolumeSpikeIntent(userMessage: string): boolean {
     return /放量|放大量|量能放大|量能放量|成交量放大|倍均量|倍量|volume\s*(?:spike|surge|breakout)/iu.test(userMessage)
+  }
+
+  private extractRelativeVolumeThreshold(userMessage: string): ExtractedRelativeVolumeThreshold | null {
+    const patterns: Array<{
+      readonly re: RegExp
+      readonly read: (match: RegExpMatchArray) => { refWindow: string, multiplier: string }
+    }> = [
+      {
+        re: /((?:成交量|交易量|量能|volume)[^，。；;]{0,40}(?:高于|超过|大于|>=|＞|>|above|over|greater\s+than)[^\d，。；;]{0,40}(?:过去|近|最近|前)?\s*(\d+)\s*(?:根|条|个|bar|bars|periods?)?[^，。；;]{0,20}(?:均量|平均量|平均成交量|成交量均值|volume\s*average|average\s*volume|avg\s*volume)[^\d，。；;]{0,20}(?:的|达(?:到)?|为)?\s*(\d+(?:\.\d+)?)\s*(?:倍|x|X))/iu,
+        read: match => ({ refWindow: match[2], multiplier: match[3] }),
+      },
+      {
+        re: /((?:成交量|交易量|量能|volume)[^，。；;]{0,40}(?:高于|超过|大于|>=|＞|>|above|over|greater\s+than)[^\d，。；;]{0,20}(\d+(?:\.\d+)?)\s*(?:倍|x|X)[^\d，。；;]{0,30}(?:过去|近|最近|前)?\s*(\d+)\s*(?:根|条|个|bar|bars|periods?)?[^，。；;]{0,20}(?:均量|平均量|平均成交量|成交量均值|volume\s*average|average\s*volume|avg\s*volume))/iu,
+        read: match => ({ refWindow: match[3], multiplier: match[2] }),
+      },
+    ]
+
+    for (const pattern of patterns) {
+      const match = userMessage.match(pattern.re)
+      if (!match) continue
+      const { refWindow: rawRefWindow, multiplier: rawMultiplier } = pattern.read(match)
+      const refWindow = Number(rawRefWindow)
+      const multiplier = Number(rawMultiplier)
+      if (!Number.isInteger(refWindow) || refWindow <= 0 || !Number.isFinite(multiplier) || multiplier <= 0) continue
+      return { refWindow, multiplier, evidenceText: match[1].trim() }
+    }
+
+    return null
   }
 
   private hasIndicatorBoundaryIntent(userMessage: string): boolean {
