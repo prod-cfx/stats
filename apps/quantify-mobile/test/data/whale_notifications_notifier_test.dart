@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/whale_notifications_notifier.dart';
+import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/models/whale_extra_models.dart';
 
 void main() {

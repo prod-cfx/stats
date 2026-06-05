@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/models/whale_extra_models.dart';
-import 'package:quantify_mobile/data/whale_notifications_notifier.dart';
+import 'package:quantify_mobile/data/providers.dart';
 
 /// #2192：`whaleUnreadCountProvider` 派生计数（从各 View build 上移）单测。
 WhaleNotification _notif({required String id, required bool unread}) {

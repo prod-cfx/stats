@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../data/models/whale_extra_models.dart';
 import '../../../data/models/whale_watch_models.dart';
-import '../../../data/whale_notifications_notifier.dart';
+import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
