@@ -20,6 +20,7 @@ import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type {
   SemanticActionState,
+  SemanticPositionSizingContract,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -3185,20 +3186,23 @@ export class CodegenConversationService {
     effectIndex?: number
     exprPath: RuleExprPathSegment[]
     paramKey: string
+    paramPath: string
   } | null {
     const candidates = [item.fieldPath, item.field, item.key]
     for (const candidate of candidates) {
       if (typeof candidate !== 'string') continue
-      const effectMatch = candidate.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]((?:\.(?:and\.children\[\d+\]|or\.children\[\d+\]|not\.child|sequence\.steps\[\d+\]))*)\.params\.([A-Za-z_$][\w$]*)$/u)
+      const effectMatch = candidate.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]((?:\.(?:and\.children\[\d+\]|or\.children\[\d+\]|not\.child|sequence\.steps\[\d+\]))*)\.params\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)$/u)
       if (effectMatch?.[1] && effectMatch[2] && effectMatch[3] && effectMatch[5]) {
         const exprPath = this.parseRuleExprPathSegments(effectMatch[4] ?? '')
         if (!exprPath) continue
+        const paramPath = effectMatch[5]
         return {
           ruleIndex: Number.parseInt(effectMatch[1], 10),
           effectRole: effectMatch[2] as keyof RuleEffectsByRole,
           effectIndex: Number.parseInt(effectMatch[3], 10),
           exprPath,
-          paramKey: effectMatch[5],
+          paramKey: paramPath.split('.').at(-1) ?? paramPath,
+          paramPath,
         }
       }
       const conditionMatch = candidate.match(/^rules\[(\d+)\]\.condition\.params\.([A-Za-z_$][\w$]*)$/u)
@@ -3207,6 +3211,7 @@ export class CodegenConversationService {
           ruleIndex: Number.parseInt(conditionMatch[1], 10),
           exprPath: [],
           paramKey: conditionMatch[2],
+          paramPath: conditionMatch[2],
         }
       }
     }
@@ -3263,6 +3268,9 @@ export class CodegenConversationService {
     if (paramKey === 'valuePct' || slotKey === 'risk.stop_loss_pct.valuePct') {
       return this.normalizePositionPctClarificationAnswer(answer)
     }
+    if (slotKey === 'position.sizing.value') {
+      return answer.trim() || null
+    }
     if (paramKey === 'value' || slotKey === 'position.sizing.value') {
       const match = answer.replace(/,/gu, '').match(/(\d+(?:\.\d+)?)/u)
       if (!match?.[1]) return null
@@ -3285,6 +3293,7 @@ export class CodegenConversationService {
       effectIndex?: number
       exprPath: RuleExprPathSegment[]
       paramKey: string
+      paramPath: string
     },
     value: number | string,
   ): SemanticState['rules'] {
@@ -3295,7 +3304,7 @@ export class CodegenConversationService {
     if (!rule) return rules
 
     if (!path.effectRole) {
-      const nextCondition = this.withExprParamValue(rule.condition, path.exprPath, path.paramKey, value)
+      const nextCondition = this.withExprParamValue(rule.condition, path.exprPath, path.paramKey, path.paramPath, value)
       if (!nextCondition) return rules
       nextRules[path.ruleIndex] = {
         ...rule,
@@ -3308,7 +3317,7 @@ export class CodegenConversationService {
     const effectsForRole = rule.effects[path.effectRole]
     const effect = effectsForRole[path.effectIndex]
     if (!effect) return rules
-    const nextEffect = this.withExprParamValue(effect, path.exprPath, path.paramKey, value)
+    const nextEffect = this.withExprParamValue(effect, path.exprPath, path.paramKey, path.paramPath, value)
     if (!nextEffect) return rules
 
     nextRules[path.ruleIndex] = {
@@ -3329,12 +3338,13 @@ export class CodegenConversationService {
     expr: AtomExpr,
     path: readonly RuleExprPathSegment[],
     paramKey: string,
+    paramPath: string,
     value: number | string,
   ): AtomExpr | null {
     const [segment, ...rest] = path
     if (!segment) {
       return expr.kind === 'atom'
-        ? this.withAtomParamValue(expr, paramKey, value)
+        ? this.withAtomParamValue(expr, paramKey, paramPath, value)
         : null
     }
 
@@ -3342,7 +3352,7 @@ export class CodegenConversationService {
       if (expr.kind !== segment.exprKind) return null
       const child = expr.children[segment.index]
       if (!child) return null
-      const nextChild = this.withExprParamValue(child, rest, paramKey, value)
+      const nextChild = this.withExprParamValue(child, rest, paramKey, paramPath, value)
       if (!nextChild) return null
       return {
         ...expr,
@@ -3356,7 +3366,7 @@ export class CodegenConversationService {
       if (expr.kind !== 'sequence') return null
       const step = expr.steps[segment.index]
       if (!step) return null
-      const nextStep = this.withExprParamValue(step, rest, paramKey, value)
+      const nextStep = this.withExprParamValue(step, rest, paramKey, paramPath, value)
       if (!nextStep) return null
       return {
         ...expr,
@@ -3367,7 +3377,7 @@ export class CodegenConversationService {
     }
 
     if (expr.kind !== 'not') return null
-    const nextChild = this.withExprParamValue(expr.child, rest, paramKey, value)
+    const nextChild = this.withExprParamValue(expr.child, rest, paramKey, paramPath, value)
     if (!nextChild) return null
     return {
       ...expr,
@@ -3375,7 +3385,20 @@ export class CodegenConversationService {
     }
   }
 
-  private withAtomParamValue(atom: Extract<AtomExpr, { kind: 'atom' }>, paramKey: string, value: number | string): AtomExpr {
+  private withAtomParamValue(atom: Extract<AtomExpr, { kind: 'atom' }>, paramKey: string, paramPath: string, value: number | string): AtomExpr {
+    if (atom.key === 'position.sizing' && paramPath === 'sizing.value') {
+      const sizing = this.parseRulePathPositionSizingValue(value)
+      if (sizing) {
+        return {
+          ...atom,
+          params: {
+            ...atom.params,
+            sizing,
+          },
+        }
+      }
+    }
+
     return {
       ...atom,
       params: {
@@ -3383,6 +3406,40 @@ export class CodegenConversationService {
         [paramKey]: value,
       },
     }
+  }
+
+  private parseRulePathPositionSizingValue(value: number | string): SemanticPositionSizingContract | null {
+    const text = String(value).trim().replace(/％/gu, '%')
+    if (!text || /[-−﹣－]\s*\d/u.test(text)) return null
+
+    const quoteMatch = text.match(/(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|刀)(?=$|[\s,，。；;.!！?？])/iu)
+    if (quoteMatch?.[1]) {
+      const parsed = Number(quoteMatch[1])
+      if (Number.isFinite(parsed) && parsed > 0) {
+        const rawAsset = (quoteMatch[2] ?? 'USDT').toUpperCase()
+        const asset = rawAsset === 'USDC' ? 'USDC' : rawAsset === 'USD' || rawAsset === '刀' ? 'USD' : 'USDT'
+        return { kind: 'quote', value: parsed, asset }
+      }
+    }
+
+    const baseMatch = text.match(/(\d+(?:\.\d+)?)\s*(BTC|ETH|SOL|BNB)\b/iu)
+    if (baseMatch?.[1] && baseMatch[2]) {
+      const parsed = Number(baseMatch[1])
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return { kind: 'base', value: parsed, asset: baseMatch[2].toUpperCase() }
+      }
+    }
+
+    const percentMatch = text.match(/(\d+(?:\.\d+)?)\s*%/u)
+      ?? text.match(/百分之?\s*(\d+(?:\.\d+)?)/u)
+    if (percentMatch?.[1]) {
+      const pct = Number(percentMatch[1])
+      if (Number.isFinite(pct) && pct > 0 && pct <= 100) {
+        return { kind: 'ratio', value: pct / 100, unit: 'ratio' }
+      }
+    }
+
+    return null
   }
 
   private resolveStructuredSemanticOpenSlotAnswers(

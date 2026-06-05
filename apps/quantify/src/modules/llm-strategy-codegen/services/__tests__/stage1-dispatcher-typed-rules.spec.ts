@@ -172,6 +172,26 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(ruleEffectKeys(entryRule!)).toContain('action.open_long')
   })
 
+  it('keeps explicit relative-volume filter in BOLL lower-band entry condition', () => {
+    const patch = new GenericSeedDispatcher().dispatch('ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。')
+    const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
+    const leaves = entryRule ? collectAtomLeaves(entryRule.condition) : []
+
+    expect(entryRule).toBeDefined()
+    expect(entryRule?.condition.kind).toBe('and')
+    expect(leaves.map(leaf => leaf.key)).toEqual(expect.arrayContaining([
+      'bollinger.touch_lower',
+      'volume.threshold',
+    ]))
+    expect(leaves.find(leaf => leaf.key === 'volume.threshold')).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        mode: 'relative_to_sma',
+        refWindow: 20,
+        multiplier: 1.5,
+      }),
+    }))
+  })
+
   it('keeps explicit fixed-ratio sizing for on-start spot strategy 6', () => {
     const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-006-ordi-spot-on-start')!.text
     const patch = new GenericSeedDispatcher().dispatch(text)

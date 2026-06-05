@@ -98,6 +98,42 @@ describe('SemanticStateReducerService — rules-only service smoke', () => {
     })
     expect(next).not.toHaveProperty('positionConstraint')
   })
+
+  it('writes rules-path position.sizing.value percent answer as executable nested sizing', () => {
+    const slot = {
+      slotKey: 'position.sizing.value',
+      fieldPath: 'rules[0].effects.positions[0].params.sizing.value',
+    }
+    const state = createRulesState({
+      risks: [],
+      positions: [{ kind: 'atom', key: 'position.sizing', params: { sizingIntent: 'qualitative_small' } }],
+    })
+
+    const next = service.applyClarificationAnswer({
+      currentState: state,
+      targetSlotKey: slot.slotKey,
+      targetFieldPath: slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slot),
+      answer: '1%',
+    })
+
+    expect(next.rules).toHaveLength(1)
+    expect(next.rules?.[0].effects).toEqual({
+      actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      risks: [],
+      positions: [{
+        kind: 'atom',
+        key: 'position.sizing',
+        params: {
+          sizingIntent: 'qualitative_small',
+          sizing: { kind: 'ratio', value: 0.01, unit: 'ratio' },
+        },
+      }],
+      orchestration: [],
+      programs: [],
+    })
+    expect(next).not.toHaveProperty('positionConstraint')
+  })
 })
 
 function createRulesState(effects: {

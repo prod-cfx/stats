@@ -51,13 +51,13 @@ function applyDirectRuleParamAnswer(
 ): readonly SemanticRule[] | undefined {
   if (!rules?.length || !fieldPath) return rules
 
-  const effectMatch = fieldPath.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]\.params\.([A-Za-z_$][\w$]*)$/u)
+  const effectMatch = fieldPath.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]\.params\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)$/u)
   if (!effectMatch?.[1] || !effectMatch[2] || !effectMatch[3] || !effectMatch[4]) return rules
 
   const ruleIndex = Number.parseInt(effectMatch[1], 10)
   const role = effectMatch[2] as keyof RuleEffectsByRole
   const effectIndex = Number.parseInt(effectMatch[3], 10)
-  const paramKey = effectMatch[4]
+  const paramPath = effectMatch[4]
   const rule = rules[ruleIndex]
   if (!rule || Array.isArray(rule.effects) || !rule.effects || !(role in rule.effects)) return rules
 
@@ -65,7 +65,10 @@ function applyDirectRuleParamAnswer(
   const effect = effects[role][effectIndex]
   if (!effect || effect.kind !== 'atom') return rules
 
-  const paramValue = parseDirectRuleParamAnswer(answerText)
+  const originalParams = effect.params ?? {}
+  const nextParams = applyDirectRuleParamValue(originalParams, paramPath, answerText, effect.key)
+  if (nextParams === originalParams) return rules
+
   const nextEffects = {
     actions: [...effects.actions],
     risks: [...effects.risks],
@@ -75,10 +78,7 @@ function applyDirectRuleParamAnswer(
   }
   nextEffects[role][effectIndex] = {
     ...effect,
-    params: {
-      ...(effect.params ?? {}),
-      [paramKey]: paramValue,
-    },
+    params: nextParams,
   }
 
   const nextRules = [...rules]
@@ -89,9 +89,89 @@ function applyDirectRuleParamAnswer(
   return nextRules
 }
 
+function applyDirectRuleParamValue(
+  params: Record<string, unknown>,
+  paramPath: string,
+  answerText: string,
+  atomKey: string,
+): Record<string, unknown> {
+  if (atomKey === 'position.sizing' && paramPath === 'sizing.value') {
+    const sizing = parseDirectPositionSizingAnswer(answerText)
+    if (!sizing) return params
+    return {
+      ...params,
+      sizing,
+    }
+  }
+
+  const segments = paramPath.split('.')
+  if (segments.length === 1) {
+    return {
+      ...params,
+      [segments[0] as string]: parseDirectRuleParamAnswer(answerText),
+    }
+  }
+
+  return setNestedDirectRuleParam(params, segments, parseDirectRuleParamAnswer(answerText))
+}
+
+function setNestedDirectRuleParam(
+  params: Record<string, unknown>,
+  segments: string[],
+  value: string | number,
+): Record<string, unknown> {
+  const [head, ...tail] = segments
+  if (!head) return params
+  if (tail.length === 0) return { ...params, [head]: value }
+
+  const current = params[head]
+  const currentRecord = current && typeof current === 'object' && !Array.isArray(current)
+    ? current as Record<string, unknown>
+    : {}
+
+  return {
+    ...params,
+    [head]: setNestedDirectRuleParam(currentRecord, tail, value),
+  }
+}
+
 function parseDirectRuleParamAnswer(answerText: string): string | number {
   const numeric = Number(answerText.trim().replace(/%$/u, ''))
   return Number.isFinite(numeric) ? numeric : answerText
+}
+
+function parseDirectPositionSizingAnswer(answerText: string): SemanticPositionSizingContract | null {
+  const text = answerText.trim().replace(/％/gu, '%')
+  if (!text || /[-−﹣－]\s*\d/u.test(text)) return null
+
+  const quoteMatch = text.match(/(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|刀)(?=$|[\s,，。；;.!！?？])/iu)
+  if (quoteMatch?.[1]) {
+    const value = Number(quoteMatch[1])
+    if (Number.isFinite(value) && value > 0) {
+      const rawAsset = (quoteMatch[2] ?? 'USDT').toUpperCase()
+      const asset = rawAsset === 'USDC' ? 'USDC' : rawAsset === 'USD' || rawAsset === '刀' ? 'USD' : 'USDT'
+      return { kind: 'quote', value, asset }
+    }
+  }
+
+  const baseMatch = text.match(/(\d+(?:\.\d+)?)\s*(BTC|ETH|SOL|BNB)\b/iu)
+  if (baseMatch?.[1] && baseMatch[2]) {
+    const value = Number(baseMatch[1])
+    if (Number.isFinite(value) && value > 0) {
+      return { kind: 'base', value, asset: baseMatch[2].toUpperCase() }
+    }
+  }
+
+  const percentMatch = text.match(/(\d+(?:\.\d+)?)\s*%/u)
+    ?? text.match(/百分之?\s*(\d+(?:\.\d+)?)/u)
+  if (percentMatch?.[1]) {
+    const pct = Number(percentMatch[1])
+    if (Number.isFinite(pct) && pct > 0 && pct <= 100) {
+      return { kind: 'ratio', value: pct / 100, unit: 'ratio' }
+    }
+  }
+
+  return null
 }
 
 /**

@@ -327,7 +327,7 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
 
     expect(nextState.rules?.[0].effects).toMatchObject({
       positions: [expect.objectContaining({
-        params: expect.objectContaining({ value: 100 }),
+        params: expect.objectContaining({ sizing: { kind: 'quote', value: 100, asset: 'USDT' } }),
       })],
     })
     expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).not.toEqual(expect.arrayContaining([
@@ -410,7 +410,7 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     const before = readiness.evaluateMainflowRulesReadiness(state.rules)
     const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
 
-    expect(clarificationState.items[0].key).toBe('rules[0].effects.positions[0].sequence.steps[1].params.value')
+    expect(clarificationState.items[0].key).toBe('rules[0].effects.positions[0].sequence.steps[1].params.sizing.value')
 
     const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
       [clarificationState.items[0].key]: '100 USDT',
@@ -421,7 +421,7 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
         steps: [
           expect.any(Object),
           expect.objectContaining({
-            params: expect.objectContaining({ value: 100 }),
+            params: expect.objectContaining({ sizing: { kind: 'quote', value: 100, asset: 'USDT' } }),
           }),
         ],
       })],
