@@ -649,6 +649,13 @@ function extractSizingRoleFromText(text: string): ExtractedSizingRole | null {
   return null
 }
 
+function extractQualitativeSizingEvidence(text: string): string | null {
+  const normalized = text.trim().replace(/\s+/gu, ' ')
+  if (!normalized) return null
+  const match = normalized.match(/(?:买一点|买一些|小仓位|轻仓|少量)/u)
+  return match?.[0] ?? null
+}
+
 function extractDcaPerOrderSizingRole(clause: string): ExtractedSizingRole | null {
   const normalized = clause.trim().replace(/\s+/gu, ' ').replace(/％/gu, '%')
   if (!normalized) return null
@@ -842,9 +849,10 @@ function normalizeLifecycleParams(
 
 function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
   const hasPriceSubject = /价格|price|close/iu.test(clause)
-  if (!hasPriceSubject) return null
   const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
   if (periodMatches.length !== 1) return null
+  const hasSingleIndicatorCross = /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
+  if (!hasPriceSubject && !hasSingleIndicatorCross) return null
   const period = Number(periodMatches[0]?.[1])
   return Number.isFinite(period) && period > 0 ? period : null
 }
@@ -1983,6 +1991,7 @@ export class GenericSeedDispatcher {
         evidence: { text: this.findEvidenceText(userMessage, '(?:触及|碰到|到达|touch)[^，。；;]*(?:指标边界|指标下边界|指标上边界|布林|boll|上轨|下轨|中轨|通道|channel)') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
+    this.pushRollingExtremaBreakoutPredicates(out, userMessage)
     this.pushNumericPriceBreakoutPredicates(out, userMessage)
     this.pushTypedLifecyclePredicates(out, flatPatch)
     const genericExecutionProgramKey = this.resolveGenericExecutionProgramKeyFromMessage(userMessage)
@@ -2134,6 +2143,44 @@ export class GenericSeedDispatcher {
 
     push(ATOM_CONTRACT_REGISTRY['price.breakout_up'].key, /(?:突破|上破|升破|breaks?\s+(?:above|over)|breakout)\s*(\d+(?:\.\d+)?)/iu, 'price_level')
     push(ATOM_CONTRACT_REGISTRY['price.breakout_down'].key, /(?:跌破|下破|跌穿|breaks?\s+(?:below|under)|breakdown)\s*(\d+(?:\.\d+)?)/iu, 'price_level')
+  }
+
+  private pushRollingExtremaBreakoutPredicates(out: PatchAtomNode[], userMessage: string): void {
+    const key = ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key
+    const push = (match: RegExpMatchArray, extrema: 'high' | 'low', event: 'breakout_up' | 'breakout_down'): void => {
+      const rawLookback = match[1]
+      if (!rawLookback) return
+      const lookbackBars = Number(rawLookback)
+      if (!Number.isInteger(lookbackBars) || lookbackBars <= 0) return
+      const evidence = match[0]?.trim() || userMessage.trim()
+      const phase = this.hasCloseActionIntent(evidence) ? 'exit' : 'entry'
+      const sideScope = phase === 'exit'
+        ? (event === 'breakout_down' ? 'long' : 'short')
+        : (event === 'breakout_down' ? 'short' : 'long')
+      if (out.some(item => item.key === key && item.phase === phase && item.sideScope === sideScope && item.params?.lookbackBars === lookbackBars && item.params?.extrema === extrema)) return
+      out.push({
+        key,
+        phase,
+        sideScope,
+        params: { extrema, lookbackBars, event },
+        evidence: { text: evidence, source: 'user_explicit' },
+      })
+    }
+
+    const highPatterns = [
+      /(?:突破|升破|上破)\s*(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最高价|最高|高点)[^，。；;]*/giu,
+      /(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最高价|最高|高点)[^，。；;]*(?:突破|升破|上破)[^，。；;]*/giu,
+    ]
+    const lowPatterns = [
+      /(?:跌破|下破|跌穿|失守)\s*(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最低价|最低|低点)[^，。；;]*/giu,
+      /(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最低价|最低|低点)[^，。；;]*(?:跌破|下破|跌穿|失守)[^，。；;]*/giu,
+    ]
+    for (const pattern of highPatterns) {
+      for (const match of userMessage.matchAll(pattern)) push(match, 'high', 'breakout_up')
+    }
+    for (const pattern of lowPatterns) {
+      for (const match of userMessage.matchAll(pattern)) push(match, 'low', 'breakout_down')
+    }
   }
 
   private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: InternalSeedDraft): void {
@@ -2300,6 +2347,17 @@ export class GenericSeedDispatcher {
         params: { sizing: flatPatch.position.sizing, phase: 'entry' },
         ...(isEvidenceWithText(flatPatch.position.evidence) ? { evidence: { text: flatPatch.position.evidence.text } } : {}),
       })
+    }
+    else {
+      const qualitativeSizingEvidence = extractQualitativeSizingEvidence(userMessage)
+      if (qualitativeSizingEvidence) {
+        out.push({
+          kind: 'atom',
+          key: 'position.sizing',
+          params: { phase: 'entry', sizingIntent: 'qualitative_small' },
+          evidence: { text: qualitativeSizingEvidence },
+        })
+      }
     }
     if (this.hasFixedNotionalIntent(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'position.fixed_notional')) {
       const notional = this.extractFirstNumber(userMessage, '(?:固定|每次|单笔)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|美元)')
