@@ -68,3 +68,79 @@ List<(LiveStrategyStatus, int)> liveStatusBreakdown(LiveStrategySummary s) {
     (LiveStrategyStatus.stopped, s.stoppedCount),
   ].where(((LiveStrategyStatus, int) e) => e.$2 > 0).toList();
 }
+
+/// filter chip 与状态的映射。[LiveFilter.all] = 全部（排除 stopped）。
+///
+/// 原为页面私有 `_LiveFilter`，迁三件套后由 `LiveStrategiesState` 承载，
+/// #2229 随过滤族函数归位 domain。
+enum LiveFilter { all, running, paused, stopped }
+
+/// 排序 sheet 的状态枚举（#2229：随 [LiveSortStatusCounts] 归位 domain）。
+enum LiveSortStatus { all, running, paused, stopped }
+
+/// 各状态计数聚合（#2229：从 `live_sort_sheet.dart` 归位 domain）。
+class LiveSortStatusCounts {
+  const LiveSortStatusCounts({
+    required this.all,
+    required this.running,
+    required this.paused,
+    required this.stopped,
+  });
+
+  final int all;
+  final int running;
+  final int paused;
+  final int stopped;
+
+  int countOf(LiveSortStatus status) {
+    switch (status) {
+      case LiveSortStatus.all:
+        return all;
+      case LiveSortStatus.running:
+        return running;
+      case LiveSortStatus.paused:
+        return paused;
+      case LiveSortStatus.stopped:
+        return stopped;
+    }
+  }
+}
+
+/// [filter] 是否命中策略 [s]（#2192：从 View 上移的纯谓词）。
+/// `all` 语义 = 排除 stopped。
+bool liveMatchesFilter(LiveStrategy s, LiveFilter filter) {
+  switch (filter) {
+    case LiveFilter.all:
+      return s.status != LiveStrategyStatus.stopped;
+    case LiveFilter.running:
+      return s.status == LiveStrategyStatus.running;
+    case LiveFilter.paused:
+      return s.status == LiveStrategyStatus.paused;
+    case LiveFilter.stopped:
+      return s.status == LiveStrategyStatus.stopped;
+  }
+}
+
+/// 单个 [filter] 下的命中数（#2192：filter pill 计数，从 View 上移）。
+int liveFilterCount(List<LiveStrategy> all, LiveFilter filter) {
+  return all.where((LiveStrategy s) => liveMatchesFilter(s, filter)).length;
+}
+
+/// filter pill 标签计数（#2192：从 `_FilterPills` 上移）。
+///
+/// 注意语义与 [liveFilterCount] 不同：pill 的 `all` 显示**总数**（含 stopped），
+/// 其余状态按精确状态计数。保持迁移前 `_FilterPills._count` 行为不变。
+int liveFilterPillCount(List<LiveStrategy> all, LiveFilter filter) {
+  if (filter == LiveFilter.all) return all.length;
+  return liveFilterCount(all, filter);
+}
+
+/// 各状态计数聚合（#2192：排序 sheet 的状态计数，从 View 上移）。
+LiveSortStatusCounts liveStatusCounts(List<LiveStrategy> all) {
+  return LiveSortStatusCounts(
+    all: liveFilterCount(all, LiveFilter.all),
+    running: liveFilterCount(all, LiveFilter.running),
+    paused: liveFilterCount(all, LiveFilter.paused),
+    stopped: liveFilterCount(all, LiveFilter.stopped),
+  );
+}

@@ -14,35 +14,6 @@ class LiveSortSelection {
   final LiveSortStatus status;
 }
 
-enum LiveSortStatus { all, running, paused, stopped }
-
-class LiveSortStatusCounts {
-  const LiveSortStatusCounts({
-    required this.all,
-    required this.running,
-    required this.paused,
-    required this.stopped,
-  });
-
-  final int all;
-  final int running;
-  final int paused;
-  final int stopped;
-
-  int countOf(LiveSortStatus status) {
-    switch (status) {
-      case LiveSortStatus.all:
-        return all;
-      case LiveSortStatus.running:
-        return running;
-      case LiveSortStatus.paused:
-        return paused;
-      case LiveSortStatus.stopped:
-        return stopped;
-    }
-  }
-}
-
 /// 筛选 & 排序 bottom sheet（#1773）。
 ///
 /// 对齐设计稿 `m-screens-livestrats.jsx:502-604`：排序指标 pill（单选）+
