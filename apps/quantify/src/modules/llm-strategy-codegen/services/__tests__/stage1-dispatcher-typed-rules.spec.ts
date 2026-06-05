@@ -80,6 +80,25 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(ruleEffectKeys(gateRule!)).not.toContain('position.sizing')
   })
 
+  it('uses rolling extrema breakout predicates as rules-tree conditions for breakout channel strategy', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓。')
+    const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
+    const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
+
+    expect(entryRule).toBeDefined()
+    expect(exitRule).toBeDefined()
+    expect(ruleConditionKeys(entryRule!)).toContain('price.rolling_extrema_breakout')
+    expect(ruleConditionKeys(exitRule!)).toContain('price.rolling_extrema_breakout')
+    expect(entryRule!.condition).toEqual(expect.objectContaining({
+      key: 'price.rolling_extrema_breakout',
+      params: expect.objectContaining({ lookbackBars: 20, extrema: 'high', event: 'breakout_up' }),
+    }))
+    expect(exitRule!.condition).toEqual(expect.objectContaining({
+      key: 'price.rolling_extrema_breakout',
+      params: expect.objectContaining({ lookbackBars: 10, extrema: 'low', event: 'breakout_down' }),
+    }))
+  })
+
   it('does not fabricate default effects without explicit text evidence', () => {
     const patch = new GenericSeedDispatcher().dispatch('BTC 1小时 RSI 低于 30')
     const effects = allEffectLeaves(patch)
