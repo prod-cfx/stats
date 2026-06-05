@@ -129,7 +129,8 @@ run_deploy_once() {
 is_retryable_failure() {
   local file="$1"
 
-  grep -Fq 'Error: Unexpected error. Please try again later.' "$file"
+  grep -Fq 'Error: Unexpected error. Please try again later.' "$file" \
+    || grep -Eiq 'FetchError: invalid json response body .*Internal S|Internal Server Error' "$file"
 }
 
 attempt=1
