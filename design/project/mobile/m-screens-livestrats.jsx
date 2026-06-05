@@ -1507,14 +1507,6 @@ function ScreenLiveStratDetail() {
             }}>{s.name}</div>
             <div style={{padding:'2px 8px 6px'}}>
               {[
-                { icon: isStopped
-                    ? 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5'
-                    : (canStart ? ICONS.play : 'M6 4h4v16H6zM14 4h4v16h-4z'),
-                  label: isStopped ? '恢复策略' : (canStart ? '开启策略' : '暂停策略'),
-                  tone: isStopped || canStart ? 'ok' : null,
-                  onClick: onToggle },
-                { icon:'M20 12H4M4 12l6-6M4 12l6 6', label:'返回 AI 对话',
-                  onClick: () => window.__nav?.go('ai') },
                 { icon:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6',
                   label: isStopped ? '永久删除' : '删除策略', tone:'danger',
                   onClick: () => {
@@ -1676,23 +1668,6 @@ function ScreenLiveStratDetail() {
           color:M.danger, fontSize:14, fontWeight:500, cursor:'pointer',
           whiteSpace:'nowrap',
         }}>{isStopped ? '永久删除' : '删除'}</button>
-        <button onClick={onToggle} style={{
-          flex:2, height:50, borderRadius:14, border:0,
-          background: (canStart || isStopped) ? M.violetGrad : M.warn, color:'#fff',
-          fontSize:14, fontWeight:600, whiteSpace:'nowrap',
-          boxShadow: (canStart || isStopped)
-            ? '0 8px 24px rgba(124,92,255,0.32)'
-            : '0 8px 24px rgba(245,158,11,0.32)',
-          cursor:'pointer',
-          display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-        }}>
-          {isStopped
-            ? <><Ico d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" w={14} sw={2}/> 恢复策略</>
-            : canStart
-              ? <><Ico d={ICONS.play} w={14} fill="#fff" sw={0}/> 开启策略</>
-              : <><Ico d="M6 4h4v16H6zM14 4h4v16h-4z" w={14} fill="#fff" sw={0}/> 暂停策略</>
-          }
-        </button>
       </div>
 
       {/* pause-with-position sheet — running strats with a live position */}

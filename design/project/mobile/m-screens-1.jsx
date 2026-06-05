@@ -277,6 +277,7 @@ function ScreenAIChat() {
   const [sessions, setSessions] = React.useState(store.items);
   const [currentId, setCurrentId] = React.useState(store.currentId);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(null); // session to delete | null
   const [deployFor, setDeployFor]   = React.useState(null); // {cagr,sharpe,mdd} | null
   const [toast, setToast]           = React.useState(null);
   const [draft, setDraft] = React.useState('');
@@ -716,7 +717,7 @@ function ScreenAIChat() {
                       </div>
                     </div>
                     {on && (
-                      <button onClick={(e)=>{e.stopPropagation(); deleteSession(s.id);}} style={{
+                      <button onClick={(e)=>{e.stopPropagation(); setConfirmDel(s);}} style={{
                         width:24, height:24, borderRadius:6, border:0, background:'transparent',
                         color:M.dim, cursor:'pointer', flexShrink:0,
                         display:'flex', alignItems:'center', justifyContent:'center',
@@ -739,6 +740,47 @@ function ScreenAIChat() {
             }}>
               <Ico d={ICONS.shield} w={12} fill={M.dim} sw={0}/>
               方案之间上下文隔离 · 不会互相干扰
+            </div>
+          </div>
+        </div>
+      )}
+      {/* delete confirm */}
+      {confirmDel && (
+        <div onClick={(e)=>{stop(e); setConfirmDel(null);}} style={{
+          position:'absolute', inset:0, zIndex:95, background:'rgba(15,11,34,0.55)',
+          display:'flex', alignItems:'center', justifyContent:'center', padding:'0 28px',
+          animation:'qfFade .15s ease-out',
+        }}>
+          <div onClick={stop} style={{
+            width:'100%', maxWidth:300, background:M.bg, borderRadius:18, overflow:'hidden',
+            boxShadow:'0 24px 64px rgba(15,11,34,0.4)', animation:'qfPop .18s ease-out',
+          }}>
+            <div style={{padding:'22px 20px 18px', textAlign:'center'}}>
+              <div style={{
+                width:46, height:46, borderRadius:23, margin:'0 auto 14px',
+                background:M.dangerSoft || 'rgba(255,77,79,0.12)', color:M.danger || '#ff4d4f',
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 7h16M9 7V4h6v3M6 7v13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7"/>
+                </svg>
+              </div>
+              <div style={{fontSize:16, fontWeight:700, color:M.text, marginBottom:6}}>删除该方案?</div>
+              <div style={{fontSize:12.5, color:M.dim, lineHeight:1.55}}>
+                「<strong style={{color:M.text}}>{confirmDel.title}</strong>」及其全部对话上下文将被永久删除，此操作无法撤销。
+              </div>
+            </div>
+            <div style={{display:'flex', gap:10, padding:'0 16px 16px'}}>
+              <button onClick={(e)=>{stop(e); setConfirmDel(null);}} style={{
+                flex:1, height:42, borderRadius:11, border:`1px solid ${M.borderSoft}`,
+                background:M.soft, color:M.text, fontSize:13.5, fontWeight:600, cursor:'pointer',
+              }}>取消</button>
+              <button onClick={(e)=>{stop(e); deleteSession(confirmDel.id); setConfirmDel(null);}} style={{
+                flex:1, height:42, borderRadius:11, border:0,
+                background:M.danger || '#ff4d4f', color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer',
+                boxShadow:'0 4px 14px rgba(255,77,79,0.3)',
+              }}>删除</button>
             </div>
           </div>
         </div>
@@ -779,6 +821,7 @@ function ScreenAIChat() {
         @keyframes qfFade    { from{opacity:0} to{opacity:1} }
         @keyframes qfToast   { from{opacity:0; transform:translate(-50%, 6px)} to{opacity:1; transform:translate(-50%, 0)} }
         @keyframes qfSpin    { to { transform: rotate(360deg) } }
+        @keyframes qfPop     { from{opacity:0; transform:scale(.92)} to{opacity:1; transform:scale(1)} }
       `}</style>
     </div>
   );

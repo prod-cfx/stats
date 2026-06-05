@@ -600,7 +600,7 @@ function ScreenAggOrders() {
             <div style={{padding:'12px 16px 6px', fontSize:14, fontWeight:700, color:M.text}}>
               价格精度
             </div>
-            <div style={{padding:'0 8px 6px'}}>
+            <div style={{padding:'0 8px calc(10px + env(safe-area-inset-bottom))'}}>
               {['1','10','100'].map((o, i) => {
                 const on = o === agg;
                 return (
@@ -634,18 +634,6 @@ function ScreenAggOrders() {
                   </button>
                 );
               })}
-            </div>
-            <div style={{
-              borderTop:`1px solid ${M.borderSoft}`,
-              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
-            }}>
-              <button
-                onClick={()=>setAggOpen(false)}
-                style={{
-                  width:'100%', height:46, border:0, cursor:'pointer',
-                  background:'transparent', color:M.text,
-                  fontSize:14, fontWeight:600, fontFamily:'inherit',
-                }}>取消</button>
             </div>
           </div>
         </div>
@@ -694,7 +682,7 @@ function ScreenAggOrders() {
             </div>
 
             {/* exchange list */}
-            <div style={{padding:'2px 8px 6px', overflowY:'auto'}}>
+            <div style={{padding:'2px 8px calc(10px + env(safe-area-inset-bottom))', overflowY:'auto'}}>
               {EXCHANGES.map((ex, i) => {
                 const checked = selectedEx.includes(ex.k);
                 return (
@@ -740,19 +728,6 @@ function ScreenAggOrders() {
               })}
             </div>
 
-            {/* cancel footer */}
-            <div style={{
-              borderTop:`1px solid ${M.borderSoft}`,
-              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
-            }}>
-              <button
-                onClick={()=>setSettingsOpen(false)}
-                style={{
-                  width:'100%', height:46, border:0, cursor:'pointer',
-                  background:'transparent', color:M.text,
-                  fontSize:14, fontWeight:600, fontFamily:'inherit',
-                }}>取消</button>
-            </div>
           </div>
           <style>{`@keyframes qfAggSheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }`}</style>
         </div>

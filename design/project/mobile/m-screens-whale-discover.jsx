@@ -504,14 +504,14 @@ function SortBar({ sort, onSort }) {
       {opts.map(o => {
         const active = sort && sort.key === o.k;
         const dir = active ? sort.dir : null;
-        // 激活态药丸为紫色底白字 → 用白色系；未激活 → 用 faint 灰
-        const upCol   = active ? (dir==='asc'  ? '#fff' : 'rgba(255,255,255,0.4)') : M.faint;
-        const downCol = active ? (dir==='desc' ? '#fff' : 'rgba(255,255,255,0.4)') : M.faint;
+        // 去掉选中底色：激活态用主题色(M.violet)+加粗+箭头高亮区分，跟随主题切换
+        const upCol   = active ? (dir==='asc'  ? M.violet : M.faint) : M.faint;
+        const downCol = active ? (dir==='desc' ? M.violet : M.faint) : M.faint;
         return (
           <button key={o.k} onClick={()=>handleClick(o.k)} style={{
             height:28, padding:'0 12px', borderRadius:999, border:0, cursor:'pointer',
-            background: active ? M.violetGrad : 'transparent',
-            color: active ? '#fff' : M.mid,
+            background: 'transparent',
+            color: active ? M.violet : M.mid,
             fontSize:12, fontWeight: active?600:500, fontFamily:'inherit',
             display:'inline-flex', alignItems:'center', gap:5, whiteSpace:'nowrap', flexShrink:0,
           }}>

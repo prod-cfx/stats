@@ -229,7 +229,7 @@ function ScreenTradingDetail() {
             <div style={{padding:'12px 16px 6px', fontSize:14, fontWeight:700, color:M.text}}>
               数据来源
             </div>
-            <div style={{padding:'0 8px 6px'}}>
+            <div style={{padding:'0 8px calc(10px + env(safe-area-inset-bottom))'}}>
               {[{ k:'__agg', label:'聚合所有交易所' }, ...SRC_EXCHANGES.map(x=>({ k:x, label:x }))].map(opt => {
                 const on = opt.k === '__agg' ? agg : (!agg && opt.k === exch);
                 return (
@@ -268,16 +268,6 @@ function ScreenTradingDetail() {
                 );
               })}
             </div>
-            <div style={{
-              borderTop:`1px solid ${M.borderSoft}`,
-              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
-            }}>
-              <button onClick={()=>setExchOpen(false)} style={{
-                width:'100%', height:46, border:0, cursor:'pointer',
-                background:'transparent', color:M.text,
-                fontSize:14, fontWeight:600, fontFamily:'inherit',
-              }}>取消</button>
-            </div>
           </div>
         </div>
       )}
@@ -304,7 +294,7 @@ function ScreenTradingDetail() {
             <div style={{padding:'12px 16px 6px', fontSize:14, fontWeight:700, color:M.text}}>
               价格精度
             </div>
-            <div style={{padding:'0 8px 6px'}}>
+            <div style={{padding:'0 8px calc(10px + env(safe-area-inset-bottom))'}}>
               {PREC_OPTS.map(o => {
                 const on = o === prec;
                 return (
@@ -338,16 +328,6 @@ function ScreenTradingDetail() {
                   </button>
                 );
               })}
-            </div>
-            <div style={{
-              borderTop:`1px solid ${M.borderSoft}`,
-              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
-            }}>
-              <button onClick={()=>setPrecOpen(false)} style={{
-                width:'100%', height:46, border:0, cursor:'pointer',
-                background:'transparent', color:M.text,
-                fontSize:14, fontWeight:600, fontFamily:'inherit',
-              }}>取消</button>
             </div>
           </div>
         </div>
