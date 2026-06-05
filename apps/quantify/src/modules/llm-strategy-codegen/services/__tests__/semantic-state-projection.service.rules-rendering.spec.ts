@@ -200,6 +200,97 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).not.toContain('价格在 MA200 上方')
   })
 
+  it('renders shared symbol and timeframe scope once as precondition, not on every rule', () => {
+    const sharedScope = [
+      {
+        kind: 'atom' as const,
+        key: 'scope.symbol',
+        params: { symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' },
+      },
+      {
+        kind: 'atom' as const,
+        key: 'scope.timeframe',
+        params: { primaryTimeframe: '1m', requiredTimeframes: ['1m'], alignmentPolicy: 'tolerant' },
+      },
+    ]
+    const rules: SemanticRule[] = [
+      {
+        id: 'entry-bull-candle',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'single_bull_bar' } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { mode: 'fixed_pct', value: 1 } } }],
+          orchestration: sharedScope,
+          programs: [],
+        },
+      },
+      {
+        id: 'exit-bear-candle',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'single_bear_bar' } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: sharedScope,
+          programs: [],
+        },
+      },
+    ]
+
+    const view = service.buildConversationView(baseState({ rules }))
+
+    expect(view.summary.match(/标的范围/g) ?? []).toHaveLength(1)
+    expect(view.summary.match(/周期范围/g) ?? []).toHaveLength(1)
+    expect(view.summary).toContain('前置：标的范围：BTCUSDT（主：BTCUSDT），周期范围:主 1m，依赖 1m（tolerant）')
+    expect(view.summary).not.toContain('开多，标的范围')
+    expect(view.summary).not.toContain('平多，标的范围')
+  })
+
+  it('keeps rule-local scope inline when it is not shared by multiple rules', () => {
+    const rules: SemanticRule[] = [
+      {
+        id: 'entry-local-timeframe-scope',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'single_bull_bar' } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [{
+            kind: 'atom',
+            key: 'scope.timeframe',
+            params: { primaryTimeframe: '1m', requiredTimeframes: ['5m'], alignmentPolicy: 'strict' },
+          }],
+          programs: [],
+        },
+      },
+      {
+        id: 'exit-bear-candle',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'single_bear_bar' } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      },
+    ]
+
+    const view = service.buildConversationView(baseState({ rules }))
+
+    expect(view.summary).toContain('入场：阳线（收盘价高于开盘价） → 开多，周期范围:主 1m，依赖 5m（strict）')
+    expect(view.summary).not.toContain('前置：周期范围')
+  })
+
   it('renders rolling channel breakout with high/low reference', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-channel-breakout',

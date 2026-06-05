@@ -362,7 +362,7 @@ export class SemanticStateProjectionService {
   }
 
   buildConversationView(state: SemanticState): SemanticConversationView {
-    const hasRulesOnlyMainflow = Array.isArray(state.rules) && state.rules.length > 0
+    const hasRulesOnlyMainflow = Array.isArray(state.rules)
     const facts = this.rulesMainflowReader.readFacts(state)
     const legacyState = state as SemanticState & {
       trigger?: SemanticTriggerState[]
@@ -4214,12 +4214,61 @@ export class SemanticStateProjectionService {
   }
 
   private buildRulesSummary(rules: readonly SemanticRule[]): string {
+    const sharedScopeTexts = this.collectSharedScopeTexts(rules)
     const lines: string[] = []
     for (const rule of rules) {
-      const line = this.renderRule(rule)
+      const line = this.renderRule(this.removeSharedScopeEffectsFromRule(rule, sharedScopeTexts))
       if (line.length > 0) lines.push(line)
     }
+    if (sharedScopeTexts.length > 0) {
+      lines.push(`前置：${sharedScopeTexts.join('，')}`)
+    }
     return lines.join('；')
+  }
+
+  private collectSharedScopeTexts(rules: readonly SemanticRule[]): string[] {
+    const ruleIdsByText = new Map<string, Set<string>>()
+    for (const rule of rules) {
+      for (const effect of listRuleEffects(rule.effects)) {
+        if (!this.isSharedScopeEffect(effect)) continue
+        const text = this.renderAtomExpr(effect)
+        if (!text) continue
+        const ruleIds = ruleIdsByText.get(text) ?? new Set<string>()
+        ruleIds.add(rule.id)
+        ruleIdsByText.set(text, ruleIds)
+      }
+    }
+    return [...ruleIdsByText.entries()]
+      .filter(([, ruleIds]) => ruleIds.size > 1)
+      .map(([text]) => text)
+  }
+
+  private removeSharedScopeEffectsFromRule(rule: SemanticRule, sharedScopeTexts: readonly string[]): SemanticRule {
+    if (sharedScopeTexts.length === 0) return rule
+    const effects = this.removeSharedScopeEffects(rule.effects, new Set(sharedScopeTexts))
+    return effects === rule.effects ? rule : { ...rule, effects }
+  }
+
+  private removeSharedScopeEffects(effects: RuleEffects, sharedScopeTexts: ReadonlySet<string>): RuleEffects {
+    if (isRuleEffectsByRole(effects)) {
+      const orchestration = effects.orchestration.filter(effect => !this.shouldHoistScopeEffect(effect, sharedScopeTexts))
+      return orchestration.length === effects.orchestration.length
+        ? effects
+        : { ...effects, orchestration }
+    }
+
+    const filtered = effects.filter(effect => !this.shouldHoistScopeEffect(effect, sharedScopeTexts))
+    return filtered.length === effects.length ? effects : filtered
+  }
+
+  private shouldHoistScopeEffect(effect: AtomExpr, sharedScopeTexts: ReadonlySet<string>): boolean {
+    if (!this.isSharedScopeEffect(effect)) return false
+    return sharedScopeTexts.has(this.renderAtomExpr(effect))
+  }
+
+  private isSharedScopeEffect(effect: AtomExpr): boolean {
+    const leaves = collectAtomLeaves(effect)
+    return leaves.length > 0 && leaves.every(leaf => leaf.key.startsWith('scope.'))
   }
 
 
