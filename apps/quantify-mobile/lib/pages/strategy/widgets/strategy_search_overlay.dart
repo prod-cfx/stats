@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/strategy_models.dart';
 import '../../../data/providers.dart';
-import '../../../data/repositories/strategy_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 import '../../../widgets/qz_avatar.dart';
+import 'strategy_search_controller.dart';
+import 'strategy_search_state.dart';
 
 /// 热门搜索词（设计稿 m-screens-2 `STRAT_TRENDING`）。静态常驻，不随后端变化。
 const List<String> _kTrending = <String>[
@@ -21,15 +22,6 @@ const List<String> _kTrending = <String>[
   'DCA 定投',
   '高频做市',
 ];
-
-/// 单次联合搜索结果：作者聚合需要从策略命中里派生。
-class _AuthorHit {
-  const _AuthorHit(
-      {required this.name, required this.count, required this.verified});
-  final String name;
-  final int count;
-  final bool verified;
-}
 
 /// 策略广场全屏联合搜索 overlay（设计稿 `StratSearchOverlay` line 243-421）。
 ///
@@ -65,13 +57,9 @@ class _StrategySearchOverlayState
   final TextEditingController _ctrl = TextEditingController();
   final FocusNode _focus = FocusNode();
 
+  // 纯 UI 本地态：输入框文本（驱动 hasQuery 切换 + 清空按钮）。取数命中改由
+  // [strategySearchControllerProvider] 提供。
   String _query = '';
-  bool _loading = false;
-  List<StrategyMarketItem> _stratHits = <StrategyMarketItem>[];
-  List<_AuthorHit> _authorHits = <_AuthorHit>[];
-  List<StrategyCategory> _tagHits = <StrategyCategory>[];
-  List<StrategyMarketItem> _guess = <StrategyMarketItem>[];
-  int _reqSeq = 0;
 
   @override
   void initState() {
@@ -79,7 +67,6 @@ class _StrategySearchOverlayState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
     });
-    _loadGuess();
   }
 
   @override
@@ -87,18 +74,6 @@ class _StrategySearchOverlayState
     _ctrl.dispose();
     _focus.dispose();
     super.dispose();
-  }
-
-  /// 「猜你想跟」：取在跟人数 Top3。mock listMarket 默认按 fixture 序返回，
-  /// 这里拉一页后本地按 users 降序取前 3，与设计稿一致。
-  Future<void> _loadGuess() async {
-    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
-    final StrategyMarketPage page = await repo.listMarket(pageSize: 50);
-    if (!mounted) return;
-    final List<StrategyMarketItem> sorted = <StrategyMarketItem>[...page.items]
-      ..sort((StrategyMarketItem a, StrategyMarketItem b) =>
-          b.stats.users.compareTo(a.stats.users));
-    setState(() => _guess = sorted.take(3).toList(growable: false));
   }
 
   /// 分类 label 列表（用于「标签」段联合匹配，排除「全部」）。
@@ -115,59 +90,24 @@ class _StrategySearchOverlayState
     ];
   }
 
-  Future<void> _onChanged(String raw) async {
-    final String q = raw.trim();
+  void _onChanged(String raw) {
     setState(() => _query = raw);
+    final String q = raw.trim();
+
+    // 标签段：本地按分类 label 子串匹配（依赖 l10n，留 widget）；其余取数下沉 controller。
+    final List<StrategyCategory> tags;
     if (q.isEmpty) {
-      setState(() {
-        _loading = false;
-        _stratHits = <StrategyMarketItem>[];
-        _authorHits = <_AuthorHit>[];
-        _tagHits = <StrategyCategory>[];
-      });
-      return;
+      tags = <StrategyCategory>[];
+    } else {
+      final AppLocalizations l10n = AppLocalizations.of(context);
+      final String lower = q.toLowerCase();
+      tags = _categoryEntries(l10n)
+          .where((({StrategyCategory key, String label}) e) =>
+              e.label.toLowerCase().contains(lower))
+          .map((({StrategyCategory key, String label}) e) => e.key)
+          .toList(growable: false);
     }
-    final int seq = ++_reqSeq;
-    setState(() => _loading = true);
-
-    // 标签段：本地按分类 label 子串匹配（不依赖网络）。
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final String lower = q.toLowerCase();
-    final List<StrategyCategory> tags = _categoryEntries(l10n)
-        .where((({StrategyCategory key, String label}) e) =>
-            e.label.toLowerCase().contains(lower))
-        .map((({StrategyCategory key, String label}) e) => e.key)
-        .toList(growable: false);
-
-    // 策略 / 作者段：复用 listMarket 的 name/author/tags 过滤。
-    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
-    final StrategyMarketPage page =
-        await repo.listMarket(query: q, pageSize: 50);
-    if (!mounted || seq != _reqSeq) return;
-
-    // 作者聚合：count 计数 + verified 取该作者任一策略的认证态（设计稿 `a.verified`）。
-    final Map<String, int> authorCount = <String, int>{};
-    final Map<String, bool> authorVerified = <String, bool>{};
-    for (final StrategyMarketItem it in page.items) {
-      final String a = it.card.author;
-      authorCount[a] = (authorCount[a] ?? 0) + 1;
-      authorVerified[a] = (authorVerified[a] ?? false) || it.card.verified;
-    }
-    final List<_AuthorHit> authors = authorCount.entries
-        .where((MapEntry<String, int> e) =>
-            e.key.toLowerCase().contains(lower))
-        .map((MapEntry<String, int> e) => _AuthorHit(
-            name: e.key,
-            count: e.value,
-            verified: authorVerified[e.key] ?? false))
-        .toList(growable: false);
-
-    setState(() {
-      _loading = false;
-      _tagHits = tags;
-      _authorHits = authors;
-      _stratHits = page.items;
-    });
+    ref.read(strategySearchControllerProvider.notifier).search(q, tags);
   }
 
   void _setQuery(String term) {
@@ -209,6 +149,7 @@ class _StrategySearchOverlayState
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final StrategySearchState st = ref.watch(strategySearchControllerProvider);
     final bool hasQuery = _query.trim().isNotEmpty;
     return Scaffold(
       backgroundColor: c.bg,
@@ -218,8 +159,8 @@ class _StrategySearchOverlayState
             _inputRow(context, l10n, c),
             Expanded(
               child: hasQuery
-                  ? _resultsView(l10n, c)
-                  : _emptyStateView(l10n, c),
+                  ? _resultsView(st, l10n, c)
+                  : _emptyStateView(st, l10n, c),
             ),
           ],
         ),
@@ -292,7 +233,11 @@ class _StrategySearchOverlayState
     );
   }
 
-  Widget _emptyStateView(AppLocalizations l10n, QzColorScheme c) {
+  Widget _emptyStateView(
+    StrategySearchState st,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     final List<String> history = ref.watch(strategySearchHistoryProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -332,16 +277,20 @@ class _StrategySearchOverlayState
           ),
         ],
         _sectionLabel(l10n.strategySearchGuessLabel, c),
-        for (final StrategyMarketItem it in _guess) _stratRow(it, l10n, c),
+        for (final StrategyMarketItem it in st.guess) _stratRow(it, l10n, c),
       ],
     );
   }
 
-  Widget _resultsView(AppLocalizations l10n, QzColorScheme c) {
-    final bool noResults = !_loading &&
-        _stratHits.isEmpty &&
-        _authorHits.isEmpty &&
-        _tagHits.isEmpty;
+  Widget _resultsView(
+    StrategySearchState st,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
+    final bool noResults = !st.loading &&
+        st.stratHits.isEmpty &&
+        st.authorHits.isEmpty &&
+        st.tagHits.isEmpty;
     if (noResults) {
       return Center(
         key: const Key('strategy-search-no-results'),
@@ -359,30 +308,31 @@ class _StrategySearchOverlayState
       padding: const EdgeInsets.fromLTRB(
           QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, QzSpacing.xl),
       children: <Widget>[
-        if (_tagHits.isNotEmpty) ...<Widget>[
+        if (st.tagHits.isNotEmpty) ...<Widget>[
           _sectionLabel(l10n.strategySearchTagSection, c),
           Wrap(
             spacing: QzSpacing.sm,
             runSpacing: QzSpacing.sm,
             children: <Widget>[
-              for (final StrategyCategory cat in _tagHits)
+              for (final StrategyCategory cat in st.tagHits)
                 _tagChip(cat, l10n, c),
             ],
           ),
         ],
-        if (_authorHits.isNotEmpty) ...<Widget>[
+        if (st.authorHits.isNotEmpty) ...<Widget>[
           _sectionLabel(
-            '${l10n.strategySearchAuthorSection} · ${_authorHits.length}',
+            '${l10n.strategySearchAuthorSection} · ${st.authorHits.length}',
             c,
           ),
-          for (final _AuthorHit a in _authorHits) _authorRow(a, l10n, c),
+          for (final AuthorHit a in st.authorHits) _authorRow(a, l10n, c),
         ],
-        if (_stratHits.isNotEmpty) ...<Widget>[
+        if (st.stratHits.isNotEmpty) ...<Widget>[
           _sectionLabel(
-            '${l10n.strategySearchStrategySection} · ${_stratHits.length}',
+            '${l10n.strategySearchStrategySection} · ${st.stratHits.length}',
             c,
           ),
-          for (final StrategyMarketItem it in _stratHits) _stratRow(it, l10n, c),
+          for (final StrategyMarketItem it in st.stratHits)
+            _stratRow(it, l10n, c),
         ],
       ],
     );
@@ -458,7 +408,7 @@ class _StrategySearchOverlayState
     );
   }
 
-  Widget _authorRow(_AuthorHit a, AppLocalizations l10n, QzColorScheme c) {
+  Widget _authorRow(AuthorHit a, AppLocalizations l10n, QzColorScheme c) {
     final String initial = a.name.isEmpty ? '?' : a.name.characters.first;
     return GestureDetector(
       key: Key('strategy-search-author-${a.name}'),

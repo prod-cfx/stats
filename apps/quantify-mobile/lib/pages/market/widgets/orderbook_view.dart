@@ -1,17 +1,16 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/orderbook_models.dart';
 import '../../../data/models/trade_models.dart' show splitSymbolAssets;
-import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 import '../../../widgets/qz_empty_state.dart';
 import '../../../widgets/qz_spinner.dart';
+import 'orderbook_view_controller.dart';
+import 'orderbook_view_state.dart';
 part 'orderbook_view.parts.part.dart';
 
 /// 盘口视图模式（设计稿 `m-screens-3.jsx:508-528`）。
@@ -73,62 +72,9 @@ class OrderbookView extends ConsumerStatefulWidget {
 }
 
 class _OrderbookViewState extends ConsumerState<OrderbookView> {
-  OrderbookSnapshot? _snapshot;
-  StreamSubscription<OrderbookSnapshot>? _sub;
-  bool _loading = true;
-  Object? _error;
-
+  // 纯 UI 本地态：视图模式 + 聚合精度（非取数，保留 widget 内 setState）。
   ObView _view = ObView.both;
   double _precision = 0.01;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(OrderbookView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.symbol != widget.symbol) {
-      _sub?.cancel();
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final repo = ref.read(orderbookRepositoryProvider);
-    try {
-      final OrderbookSnapshot initial = await repo.getSnapshot(widget.symbol);
-      if (!mounted) return;
-      setState(() {
-        _snapshot = initial;
-        _loading = false;
-      });
-      _sub = repo.watchOrderbook(widget.symbol).listen((
-        OrderbookSnapshot next,
-      ) {
-        if (!mounted) return;
-        setState(() => _snapshot = next);
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
-  }
 
   Future<void> _openPrecisionSheet() async {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -180,13 +126,16 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: QzSpinner());
-    if (_error != null || _snapshot == null) {
+    final OrderbookViewState st = ref.watch(
+      orderbookViewControllerProvider(widget.symbol),
+    );
+    if (st.loading) return const Center(child: QzSpinner());
+    if (st.error != null || st.snapshot == null) {
       return QzEmptyState(
         title: AppLocalizations.of(context).orderbookLoadError,
       );
     }
-    final OrderbookSnapshot snap = _snapshot!;
+    final OrderbookSnapshot snap = st.snapshot!;
     final List<OrderbookLevel> bids = aggregateLevels(
       snap.bids,
       _precision,
