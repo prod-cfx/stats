@@ -1,7 +1,7 @@
 {
   "name": "@ai/admin-front",
   "type": "module",
-  "version": "0.2.6-beta.3",
+  "version": "1.0.9",
   "private": true,
   "scripts": {
     "prestart:dev": "pnpm --filter @ai/shared run build",
