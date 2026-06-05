@@ -11,6 +11,49 @@ import 'package:dio/dio.dart';
 /// **契约说明**：后端为 mobile 提供的 OpenAPI 契约尚未定稿（issue #2189
 /// blocked-on）。各 Service 使用的 path 为 RESTful 占位约定，后端契约就绪后
 /// 按真实 endpoint 校正；client 本身与 path 无耦合，故契约变更不影响本类。
+/// 构造一个已挂载鉴权 + 错误归一拦截器的 [Dio]，供手写 [ApiClient] 与
+/// generated SDK 共享同一网络行为（baseUrl / Bearer token / [ApiException] 归一）。
+Dio buildApiDio({
+  required String baseUrl,
+  String Function()? tokenSupplier,
+  Duration connectTimeout = const Duration(seconds: 10),
+  Duration receiveTimeout = const Duration(seconds: 30),
+}) {
+  final Dio dio = Dio(
+    BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: connectTimeout,
+      receiveTimeout: receiveTimeout,
+      headers: <String, dynamic>{'Accept': 'application/json'},
+    ),
+  );
+  dio.interceptors.add(buildApiInterceptor(tokenSupplier: tokenSupplier));
+  return dio;
+}
+
+/// 鉴权 + 错误归一拦截器。token 每次请求从 [tokenSupplier] 读取最新值。
+InterceptorsWrapper buildApiInterceptor({String Function()? tokenSupplier}) {
+  return InterceptorsWrapper(
+    onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
+      final String token = tokenSupplier?.call() ?? '';
+      if (token.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+      handler.next(options);
+    },
+    onError: (DioException e, ErrorInterceptorHandler handler) {
+      handler.reject(
+        DioException(
+          requestOptions: e.requestOptions,
+          error: ApiException.fromDio(e),
+          type: e.type,
+          response: e.response,
+        ),
+      );
+    },
+  );
+}
+
 class ApiClient {
   ApiClient({
     required String baseUrl,
@@ -19,36 +62,12 @@ class ApiClient {
     Duration receiveTimeout = const Duration(seconds: 30),
     Dio? dio,
   }) : _dio = dio ??
-            Dio(
-              BaseOptions(
-                baseUrl: baseUrl,
-                connectTimeout: connectTimeout,
-                receiveTimeout: receiveTimeout,
-                headers: <String, dynamic>{'Accept': 'application/json'},
-              ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
-          final String token = tokenSupplier?.call() ?? '';
-          if (token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          handler.next(options);
-        },
-        onError: (DioException e, ErrorInterceptorHandler handler) {
-          handler.reject(
-            DioException(
-              requestOptions: e.requestOptions,
-              error: ApiException.fromDio(e),
-              type: e.type,
-              response: e.response,
-            ),
-          );
-        },
-      ),
-    );
-  }
+            buildApiDio(
+              baseUrl: baseUrl,
+              tokenSupplier: tokenSupplier,
+              connectTimeout: connectTimeout,
+              receiveTimeout: receiveTimeout,
+            );
 
   final Dio _dio;
 

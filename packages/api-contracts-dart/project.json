@@ -1,0 +1,26 @@
+{
+  "name": "api-contracts-dart",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/api-contracts-dart/lib",
+  "projectType": "library",
+  "tags": ["scope:contracts", "type:lib"],
+  "targets": {
+    "generate": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/lib", "{projectRoot}/openapi/openapi.json"],
+      "options": { "command": "cd packages/api-contracts-dart && pnpm generate" }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/lib", "{projectRoot}/openapi/openapi.json"],
+      "inputs": [
+        "{projectRoot}/scripts/**/*",
+        "{projectRoot}/pubspec.yaml",
+        "{projectRoot}/.openapi-generator-ignore",
+        "{workspaceRoot}/apps/backend/src/**/*",
+        "{workspaceRoot}/apps/backend/prisma/schema/**/*"
+      ],
+      "options": { "command": "cd packages/api-contracts-dart && pnpm generate" }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+test/
+doc/
+.openapi-generator/
+openapitools.json
+node_modules/
+.dart_tool/
+.packages
+pubspec.lock
+build/
+*.dart-e

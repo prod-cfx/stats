@@ -1,0 +1,7 @@
+README.md
+pubspec.yaml
+.gitignore
+analysis_options.yaml
+package.json
+project.json
+scripts/**

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/generated_backend_api.dart';
 import '../services/services.dart';
 
 /// 后端 baseUrl（`USE_MOCK=false` 时生效）。
@@ -16,6 +17,14 @@ const String _kApiBaseUrl = String.fromEnvironment(
 /// 注入 tokenSupplier）；本迭代先保留匿名 client。
 final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((Ref ref) {
   return ApiClient(baseUrl: _kApiBaseUrl);
+});
+
+/// generated backend SDK provider。复用 [apiClientProvider] 的底层 [Dio]
+/// （`.raw`），确保 generated SDK 与手写 [ApiClient] 共享 baseUrl、Bearer token
+/// 与 [ApiException] 归一行为。
+final Provider<GeneratedBackendApi> generatedBackendApiProvider =
+    Provider<GeneratedBackendApi>((Ref ref) {
+  return GeneratedBackendApi(dio: ref.watch(apiClientProvider).raw);
 });
 
 // ── 各域 Service（stateless，注入共享 ApiClient）─────────────────────────

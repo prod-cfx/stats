@@ -36,8 +36,24 @@ class Ticker {
     kind: _parseKind(map['kind']),
   );
 
+  /// 从 backend `TickerResponseDto` 的 string numeric 字段构造。
+  factory Ticker.fromBackendFields({
+    required String symbol,
+    required String currentPrice,
+    String? priceChangePercent24h,
+    required String volumeUsd,
+  }) {
+    return Ticker(
+      symbol: symbol,
+      price: _parseDouble(currentPrice),
+      changePercent: _parseDouble(priceChangePercent24h),
+      volume24h: _parseDouble(volumeUsd),
+    );
+  }
+
   static double _parseDouble(Object? raw) {
     if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw) ?? 0.0;
     return 0.0;
   }
 

@@ -52,7 +52,7 @@ final Provider<TickerRepository> tickerRepositoryProvider =
     Provider<TickerRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockTickerRepository()
-          : ApiTickerRepository(ref.watch(tickerServiceProvider));
+          : ApiTickerRepository(ref.watch(generatedBackendApiProvider));
     });
 
 // ── market 域数据 Provider（issue #2216）──────────────────────────────────

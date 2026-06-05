@@ -1,0 +1,7 @@
+{
+  "name": "@ai/backend-api-contracts-dart",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": { "generate": "./scripts/generate.sh" },
+  "devDependencies": { "@openapitools/openapi-generator-cli": "^2.13.4" }
+}
