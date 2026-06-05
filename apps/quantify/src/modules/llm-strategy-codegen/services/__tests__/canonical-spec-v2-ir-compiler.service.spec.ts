@@ -1483,6 +1483,8 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect.objectContaining({ id: 'macd_line_12_26_9_15m' }),
       expect.objectContaining({ id: 'macd_signal_12_26_9_15m' }),
     ]))
+    expect(result.ir.dataRequirements.maxLookback).toBeGreaterThanOrEqual(47)
+    expect(result.ir.dataRequirements.warmupBars).toBeGreaterThanOrEqual(47)
   })
 
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {

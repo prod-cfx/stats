@@ -136,6 +136,16 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     })
   })
 
+  it('MACD 16/34/12 DIF DEA 金叉死叉使用同一显式三元组', () => {
+    const patch = dispatcher.dispatch('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。')
+    const triggers = collectRuleConditionLeaves(patch)
+    const crossOverTrigger = triggers.find(t => t.key === 'indicator.cross_over' && t.params?.indicator === 'macd')
+    const crossUnderTrigger = triggers.find(t => t.key === 'indicator.cross_under' && t.params?.indicator === 'macd')
+
+    expect(crossOverTrigger?.params).toMatchObject({ indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 })
+    expect(crossUnderTrigger?.params).toMatchObject({ indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 })
+  })
+
   it('range low buy clause with 买入 resolves entry predicate and 25% sizing', () => {
     const patch = dispatcher.dispatch('基于 OKX 模拟盘 BTC-USDT 现货 15m，创建区间低买高卖策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。')
     const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
