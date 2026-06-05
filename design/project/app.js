@@ -982,94 +982,489 @@
   // =========================================================
   // STRATEGY MARKETPLACE
   // =========================================================
-  const STRAT_LIST = [
-    { id: "ma", name: "MA 均线交叉", tags: ["趋势跟随", "均线", "OKX 模拟盘"], desc: "短均线上穿长均线做多，跌回长均线下方退出。",
-      pair: "BTC-USDT-SWAP / 15m", env: "OKX 模拟盘", market: "永续", pos: "35%", lev: "2x",
-      win: 58.14, mdd: 0.78, ret: 1.78 },
-    { id: "boll", name: "布林带均值回归", tags: ["均值回归", "布林带", "OKX 模拟盘"], desc: "价格触及布林带外轨后等待回归，中轨附近止盈。",
-      pair: "ETH-USDT-SWAP / 15m", env: "OKX 模拟盘", market: "永续", pos: "35%", lev: "2x",
-      win: 79.49, mdd: 1.64, ret: 2.8 },
-    { id: "range", name: "区间低买高卖", tags: ["区间", "低买高卖", "OKX 模拟盘"], desc: "区间下沿买入，回到区间上沿卖出，适合震荡行情。",
-      pair: "BTC-USDT / 15m", env: "OKX 模拟盘", market: "现货", pos: "25%", lev: "无杠杆",
-      win: 82.61, mdd: 0.93, ret: 0.67 },
-    { id: "rsi", name: "RSI 超买超卖", tags: ["RSI", "反转", "OKX 模拟盘"], desc: "RSI 低位买入、高位退出，适合短周期反转。",
-      pair: "ETH-USDT / 15m", env: "OKX 模拟盘", market: "现货", pos: "25%", lev: "无杠杆",
-      win: 78.95, mdd: 1.76, ret: 0.89 },
-    { id: "brk", name: "突破追踪", tags: ["突破", "趋势", "OKX 模拟盘"], desc: "价格突破近期区间后跟随趋势，跌回区间则退出。",
-      pair: "BTC-USDT-SWAP / 15m", env: "OKX 模拟盘", market: "永续", pos: "25%", lev: "2x",
-      win: 70.59, mdd: 1.04, ret: 0.78 },
-    { id: "macd", name: "MACD 金叉死叉", tags: ["MACD", "动能", "OKX 模拟盘"], desc: "MACD 金叉做多，死叉退出，适合趋势确认。",
-      pair: "ETH-USDT-SWAP / 15m", env: "OKX 模拟盘", market: "永续", pos: "35%", lev: "2x",
-      win: 58.33, mdd: 1.34, ret: 2.09 },
+  // deterministic equity-curve generator → array of ~28 points trending to `up`
+  const stratSeed = (key, n, up, vol) => {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    const rnd = () => { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 16) / 65535; };
+    const arr = []; let p = 100;
+    for (let i = 0; i < n; i++) {
+      const target = 100 * (1 + up * (i / (n - 1)));
+      p += (target - p) * 0.5 + (rnd() - 0.5) * vol;
+      arr.push(p);
+    }
+    return arr;
+  };
+
+  // taxonomy + categories
+  const STRAT_TAGS = ["全部", "趋势", "突破", "反转", "网格", "DCA", "盘口", "衍生品事件", "风控稳健"];
+  const TAG_TONE = {
+    "趋势": "var(--info)", "突破": "var(--ok)", "反转": "var(--warn)",
+    "网格": "var(--accent)", "DCA": "var(--accent)", "盘口": "var(--danger)",
+    "衍生品事件": "var(--info)", "风控稳健": "var(--ok)",
+  };
+  const STRAT_STATUS = {
+    hot:      { label: "🔥 热门", bg: "rgba(220,70,70,0.12)",  fg: "var(--danger)" },
+    new:      { label: "NEW",     bg: "rgba(22,163,107,0.14)", fg: "var(--ok)" },
+    official: { label: "官方",     bg: "var(--accent-soft)",    fg: "var(--accent)" },
+    pro:      { label: "PRO",     bg: "linear-gradient(135deg,#F59E0B,#EF4444)", fg: "#fff" },
+  };
+  const STRAT_SORTS = [
+    { k: "hot",    label: "热门",   fn: (a, b) => b.users - a.users },
+    { k: "cagr",   label: "收益",   fn: (a, b) => b.cagr - a.cagr },
+    { k: "sharpe", label: "Sharpe", fn: (a, b) => b.sharpe - a.sharpe },
+    { k: "mdd",    label: "低回撤", fn: (a, b) => b.mdd - a.mdd },
+    { k: "new",    label: "最新",   fn: (a, b) => b.pub - a.pub },
   ];
 
+  // rich strategy dataset — 22 strategies across the new taxonomy
+  const S = (o) => ({ ...o, seed: stratSeed(o.id, 28, o.cagr / 100, o._vol || (Math.abs(o.cagr) * 0.18 + 1.6)) });
+  const STRAT_LIST = [
+    S({ id: "grid-btc", name: "BTC 网格 · 波段", tag: "网格", sym: "BTC", tone: "#F7931A", pub: 14,
+      desc: "区间震荡时收益稳定，单次回撤可控。低波动期表现最佳。", market: "现货", lev: "无杠杆",
+      cagr: 47.3, sharpe: 2.14, mdd: -9.8, win: 62.4, users: 4218, pair: "BTC/USDT", period: "30D",
+      author: "量化小酌", authorTone: "#7C5CFF", verified: true, status: "hot", _vol: 1.6 }),
+    S({ id: "trend-eth", name: "ETH 趋势跟踪 · 4H", tag: "趋势", sym: "ETH", tone: "#627EEA", pub: 11,
+      desc: "均线突破开多，跌破止损。趋势行情捕捉率高。", market: "永续", lev: "3x",
+      cagr: 31.6, sharpe: 1.78, mdd: -12.4, win: 54.1, users: 2812, pair: "ETH/USDT", period: "90D",
+      author: "CryptoQuant", authorTone: "#06B6D4", verified: true, status: "official", _vol: 3.4 }),
+    S({ id: "funding", name: "资金费率套利 · 永续", tag: "衍生品事件", sym: "⚡", tone: "#16A36B", pub: 20,
+      desc: "抓取负费率窗口对冲套利，市场中性收益。", market: "永续", lev: "1x",
+      cagr: 18.9, sharpe: 3.42, mdd: -3.1, win: 81.6, users: 1124, pair: "多币种", period: "14D",
+      author: "Sigma 实验室", authorTone: "#16A36B", verified: true, status: "new", _vol: 0.8 }),
+    S({ id: "rsi-sol", name: "SOL 均值回归 · 15m", tag: "反转", sym: "SOL", tone: "#9945FF", pub: 9,
+      desc: "RSI 触底反弹，目标均线。高频小止盈策略。", market: "现货", lev: "无杠杆",
+      cagr: 22.5, sharpe: 1.42, mdd: -8.1, win: 58.3, users: 962, pair: "SOL/USDT", period: "30D",
+      author: "aurora.eth", authorTone: "#F59E0B", verified: false, status: null, _vol: 3.2 }),
+    S({ id: "hedge", name: "多空对冲 · BTC/ETH", tag: "风控稳健", sym: "⇄", tone: "#0EA5E9", pub: 8,
+      desc: "BTC 多 / ETH 空配对交易，β 对冲降低系统性风险。", market: "永续", lev: "2x",
+      cagr: 14.8, sharpe: 2.86, mdd: -4.2, win: 69.2, users: 540, pair: "BTC-ETH", period: "90D",
+      author: "PairTrader", authorTone: "#0EA5E9", verified: true, status: null, _vol: 1.2 }),
+    S({ id: "hft-bnb", name: "BNB 高频做市 · 1m", tag: "盘口", sym: "BNB", tone: "#F0B90B", pub: 13,
+      desc: "毫秒级双边挂单，赚取价差。需 VIP 手续费费率。", market: "现货", lev: "无杠杆",
+      cagr: 62.4, sharpe: 2.65, mdd: -15.2, win: 71.0, users: 386, pair: "BNB/USDT", period: "7D",
+      author: "HFT Pro", authorTone: "#EF4444", verified: true, status: "pro", _vol: 4.5 }),
+    S({ id: "dca", name: "DCA 定投 · 月度", tag: "DCA", sym: "DCA", tone: "#7C5CFF", pub: 6,
+      desc: "每月固定金额买入，最简单稳健的长期策略。", market: "现货", lev: "无杠杆",
+      cagr: 23.8, sharpe: 1.18, mdd: -22.4, win: 48.5, users: 8910, pair: "BTC/USDT", period: "1Y",
+      author: "Quantify 官方", authorTone: "#7C5CFF", verified: true, status: "official", _vol: 2.2 }),
+    S({ id: "ma-cross", name: "MA 均线交叉 · 15m", tag: "趋势", sym: "BTC", tone: "#F7931A", pub: 5,
+      desc: "短均线上穿长均线做多，跌回长均线下方退出。", market: "永续", lev: "2x",
+      cagr: 28.4, sharpe: 1.64, mdd: -7.8, win: 58.1, users: 3210, pair: "BTC-USDT-SWAP", period: "30D",
+      author: "趋势猎人", authorTone: "#F7931A", verified: false, status: null, _vol: 2.4 }),
+    S({ id: "boll", name: "布林带均值回归 · 15m", tag: "反转", sym: "ETH", tone: "#627EEA", pub: 7,
+      desc: "价格触及布林带外轨后等待回归，中轨附近止盈。", market: "永续", lev: "2x",
+      cagr: 33.6, sharpe: 1.90, mdd: -9.1, win: 79.5, users: 2740, pair: "ETH-USDT-SWAP", period: "30D",
+      author: "均值派", authorTone: "#627EEA", verified: true, status: null, _vol: 2.0 }),
+    S({ id: "macd", name: "MACD 金叉死叉 · 1H", tag: "趋势", sym: "ETH", tone: "#627EEA", pub: 4,
+      desc: "MACD 金叉做多，死叉退出，适合趋势确认场景。", market: "永续", lev: "2x",
+      cagr: 25.1, sharpe: 1.50, mdd: -11.2, win: 55.0, users: 1860, pair: "ETH-USDT-SWAP", period: "90D",
+      author: "动能工坊", authorTone: "#8B5CF6", verified: false, status: null, _vol: 3.0 }),
+    S({ id: "factor", name: "多因子选币 · 日线", tag: "风控稳健", sym: "✦", tone: "#8B5CF6", pub: 12,
+      desc: "动量 / 波动 / 流动性多因子打分，每日轮动持仓。", market: "现货", lev: "无杠杆",
+      cagr: 41.2, sharpe: 2.32, mdd: -13.5, win: 60.4, users: 1502, pair: "Top20", period: "180D",
+      author: "AlphaLab", authorTone: "#8B5CF6", verified: true, status: "official", _vol: 3.0 }),
+    S({ id: "ai-trend", name: "AI 趋势预测 · 4H", tag: "趋势", sym: "✸", tone: "#06B6D4", pub: 21,
+      desc: "LSTM 预测方向概率，置信度驱动仓位。模型每周再训练。", market: "永续", lev: "3x",
+      cagr: 55.8, sharpe: 2.05, mdd: -16.8, win: 57.2, users: 874, pair: "BTC/ETH", period: "60D",
+      author: "Neura Quant", authorTone: "#06B6D4", verified: true, status: "pro", _vol: 4.0 }),
+    S({ id: "calendar", name: "跨期套利 · BTC", tag: "衍生品事件", sym: "⌗", tone: "#0EA5E9", pub: 10,
+      desc: "当季与次季合约价差回归，低风险市场中性。", market: "永续", lev: "1x",
+      cagr: 12.4, sharpe: 3.10, mdd: -2.4, win: 84.0, users: 430, pair: "BTC 季度", period: "90D",
+      author: "Basis Capital", authorTone: "#0EA5E9", verified: true, status: null, _vol: 0.7 }),
+    S({ id: "tri-arb", name: "三角套利 · 现货", tag: "盘口", sym: "△", tone: "#16A36B", pub: 19,
+      desc: "三币对汇率失衡瞬时套利，秒级成交。", market: "现货", lev: "无杠杆",
+      cagr: 9.8, sharpe: 4.05, mdd: -1.2, win: 88.5, users: 312, pair: "BTC/ETH/USDT", period: "30D",
+      author: "Sigma 实验室", authorTone: "#16A36B", verified: true, status: "new", _vol: 0.5 }),
+    S({ id: "brk-eth", name: "ETH 突破追踪 · 15m", tag: "突破", sym: "ETH", tone: "#627EEA", pub: 3,
+      desc: "价格突破近期区间后跟随趋势，跌回区间则退出。", market: "永续", lev: "2x",
+      cagr: 30.2, sharpe: 1.46, mdd: -10.4, win: 52.8, users: 1290, pair: "ETH-USDT-SWAP", period: "30D",
+      author: "突破猎手", authorTone: "#627EEA", verified: false, status: null, _vol: 3.2 }),
+    S({ id: "martin", name: "网格马丁格尔 · DOGE", tag: "网格", sym: "DOGE", tone: "#C2A633", pub: 2,
+      desc: "下跌加仓摊低成本，高收益高风险，需严格控制资金。", market: "现货", lev: "无杠杆",
+      cagr: 70.5, sharpe: 1.32, mdd: -28.6, win: 65.0, users: 2240, pair: "DOGE/USDT", period: "30D",
+      author: "高波猎手", authorTone: "#C2A633", verified: false, status: "hot", _vol: 5.0 }),
+    S({ id: "rsi-sol2", name: "RSI 超卖反弹 · 5m", tag: "反转", sym: "SOL", tone: "#9945FF", pub: 1,
+      desc: "RSI < 30 分批买入，反弹至中位止盈。", market: "现货", lev: "无杠杆",
+      cagr: 19.6, sharpe: 1.28, mdd: -8.9, win: 61.2, users: 980, pair: "SOL/USDT", period: "30D",
+      author: "反转研究所", authorTone: "#9945FF", verified: false, status: null, _vol: 2.8 }),
+    S({ id: "neutral", name: "量价多因子 · 中性", tag: "风控稳健", sym: "◆", tone: "#2A6FDB", pub: 15,
+      desc: "多空各持半仓，剥离市场 β，纯赚 α 收益。", market: "永续", lev: "2x",
+      cagr: 16.4, sharpe: 2.74, mdd: -5.1, win: 72.0, users: 620, pair: "Top30", period: "180D",
+      author: "中性工坊", authorTone: "#2A6FDB", verified: true, status: null, _vol: 1.4 }),
+    S({ id: "chan-brk", name: "BTC 通道突破 · 1H", tag: "突破", sym: "BTC", tone: "#F7931A", pub: 22,
+      desc: "唐奇安通道上轨突破开多，配 ATR 移动止损吃趋势。", market: "永续", lev: "3x",
+      cagr: 38.7, sharpe: 1.71, mdd: -13.8, win: 49.6, users: 706, pair: "BTC-USDT-SWAP", period: "60D",
+      author: "Turtle Lab", authorTone: "#F7931A", verified: true, status: "new", _vol: 3.6 }),
+    S({ id: "dca-eth", name: "ETH 智能定投 · 周度", tag: "DCA", sym: "ETH", tone: "#627EEA", pub: 18,
+      desc: "恐慌贪婪指数加权定投，越跌越买、越贪越缓。", market: "现货", lev: "无杠杆",
+      cagr: 27.5, sharpe: 1.34, mdd: -19.2, win: 51.0, users: 1980, pair: "ETH/USDT", period: "1Y",
+      author: "Quantify 官方", authorTone: "#7C5CFF", verified: true, status: "official", _vol: 2.4 }),
+    S({ id: "ob-imbalance", name: "盘口失衡 · 微观结构", tag: "盘口", sym: "▦", tone: "#EF4444", pub: 17,
+      desc: "监测买卖盘挂单失衡与大单冲击，毫秒级抢跑。", market: "永续", lev: "5x",
+      cagr: 58.2, sharpe: 2.48, mdd: -17.5, win: 68.3, users: 248, pair: "BTC-USDT-SWAP", period: "7D",
+      author: "MicroEdge", authorTone: "#EF4444", verified: true, status: "pro", _vol: 4.4 }),
+    S({ id: "liq-hunt", name: "爆仓猎手 · 清算反弹", tag: "衍生品事件", sym: "✺", tone: "#D97706", pub: 16,
+      desc: "监控大额清算簇，瀑布后逆势抢反弹，严格止损。", market: "永续", lev: "3x",
+      cagr: 44.1, sharpe: 1.58, mdd: -20.3, win: 56.7, users: 534, pair: "多币种", period: "30D",
+      author: "清算雷达", authorTone: "#D97706", verified: true, status: "hot", _vol: 4.2 }),
+    S({ id: "sui-mom", name: "SUI 动量轮动 · 1H", tag: "趋势", sym: "SUI", tone: "#4CA8E8", pub: 23,
+      desc: "捕捉新公链强势币动量，相对强弱排名轮动持仓。", market: "永续", lev: "2x",
+      cagr: 49.6, sharpe: 1.69, mdd: -18.1, win: 53.4, users: 612, pair: "SUI/USDT", period: "60D",
+      author: "Momentum Lab", authorTone: "#4CA8E8", verified: true, status: "new", _vol: 3.8 }),
+    S({ id: "eth-fade", name: "ETH 超买回落 · 30m", tag: "反转", sym: "ETH", tone: "#627EEA", pub: 7.5,
+      desc: "RSI 超买 + 量价背离做空回落，快进快出。", market: "永续", lev: "2x",
+      cagr: 21.3, sharpe: 1.39, mdd: -9.6, win: 60.1, users: 740, pair: "ETH-USDT-SWAP", period: "30D",
+      author: "反转研究所", authorTone: "#9945FF", verified: false, status: null, _vol: 2.6 }),
+    S({ id: "sol-grid", name: "SOL 中性网格 · 6H", tag: "网格", sym: "SOL", tone: "#9945FF", pub: 13.5,
+      desc: "中性区间双向挂单，自动调宽网格适应波动放大。", market: "现货", lev: "无杠杆",
+      cagr: 35.8, sharpe: 1.96, mdd: -11.4, win: 64.7, users: 1340, pair: "SOL/USDT", period: "30D",
+      author: "网格工坊", authorTone: "#9945FF", verified: true, status: null, _vol: 2.0 }),
+    S({ id: "vol-arb", name: "期权波动率套利 · BTC", tag: "衍生品事件", sym: "σ", tone: "#7C5CFF", pub: 24,
+      desc: "卖出高隐含波动率期权 + Delta 对冲，赚波动率溢价。", market: "期权", lev: "1x",
+      cagr: 17.2, sharpe: 3.28, mdd: -3.8, win: 79.0, users: 286, pair: "BTC 期权", period: "90D",
+      author: "Vega Capital", authorTone: "#7C5CFF", verified: true, status: "pro", _vol: 0.9 }),
+    S({ id: "cash-carry", name: "稳健套保 · 现货+期货", tag: "风控稳健", sym: "⛨", tone: "#16A36B", pub: 9.5,
+      desc: "现货多头 + 永续空头吃正基差，几乎零方向暴露。", market: "永续", lev: "1x",
+      cagr: 11.6, sharpe: 3.85, mdd: -1.6, win: 86.2, users: 468, pair: "BTC 现+永", period: "180D",
+      author: "Basis Capital", authorTone: "#0EA5E9", verified: true, status: null, _vol: 0.5 }),
+  ];
+
+  const ensureStratState = () => {
+    if (!appState.stratPlaza) {
+      appState.stratPlaza = { tag: "全部", sort: "hot", query: "", favOnly: false, favs: {}, page: 1 };
+      saveState(appState);
+    }
+    if (!appState.stratPlaza.favs) appState.stratPlaza.favs = {};
+    if (!appState.stratPlaza.page) appState.stratPlaza.page = 1;
+    return appState.stratPlaza;
+  };
+
+  // small sparkline svg string
+  const stratSpark = (seed, w, h, idx, colOverride) => {
+    const min = Math.min(...seed), max = Math.max(...seed), span = max - min || 1;
+    const up = seed[seed.length - 1] >= seed[0];
+    const col = colOverride || (up ? "var(--mk-up)" : "var(--mk-dn)");
+    const pad = 3;
+    const pts = seed.map((v, i) =>
+      `${((i / (seed.length - 1)) * w).toFixed(1)},${((h - pad) - ((v - min) / span) * (h - pad * 2)).toFixed(1)}`
+    ).join(" ");
+    const gid = "spk" + idx;
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block;overflow:visible">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${col}" stop-opacity="0.26"/>
+        <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <polygon fill="url(#${gid})" points="0,${h} ${pts} ${w},${h}"/>
+      <polyline fill="none" stroke="${col}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" points="${pts}"/>
+    </svg>`;
+  };
+
+  // smooth bezier hero curve svg (white on violet)
+  const stratHeroChart = (seed) => {
+    const W = 460, H = 220, PAD_T = 26, PAD_B = 8;
+    const min = Math.min(...seed), max = Math.max(...seed), span = max - min || 1;
+    const pts = seed.map((v, i) => [
+      (i / (seed.length - 1)) * W,
+      PAD_T + (1 - (v - min) / span) * (H - PAD_T - PAD_B),
+    ]);
+    let line = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      const t = 0.18;
+      const c1x = p1[0] + (p2[0] - p0[0]) * t, c1y = p1[1] + (p2[1] - p0[1]) * t;
+      const c2x = p2[0] - (p3[0] - p1[0]) * t, c2y = p2[1] - (p3[1] - p1[1]) * t;
+      line += ` C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+    const area = `${line} L ${W},${H} L 0,${H} Z`;
+    const end = pts[pts.length - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="heroFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#A78BFA" stop-opacity="0.40"/>
+          <stop offset="62%" stop-color="#A78BFA" stop-opacity="0.10"/>
+          <stop offset="100%" stop-color="#A78BFA" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="heroStroke" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#A78BFA" stop-opacity="0.55"/>
+          <stop offset="100%" stop-color="#fff" stop-opacity="0.95"/>
+        </linearGradient>
+      </defs>
+      ${[0.3, 0.55, 0.8].map((g) => `<line x1="0" x2="${W}" y1="${(H * g).toFixed(0)}" y2="${(H * g).toFixed(0)}" stroke="#fff" stroke-opacity="0.06" stroke-width="1" stroke-dasharray="2 6"/>`).join("")}
+      <path d="${area}" fill="url(#heroFill)"/>
+      <path d="${line}" fill="none" stroke="url(#heroStroke)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      <circle cx="${end[0].toFixed(1)}" cy="${end[1].toFixed(1)}" r="3.6" fill="#fff" stroke="#A78BFA" stroke-width="1.6"/>
+    </svg>`;
+  };
+
+  const fmtUsers = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + "k" : "" + n);
+
+  // load a strategy template into a fresh AI conversation
+  const loadStratToChat = (s) => {
+    const aiSt = ensureAIState();
+    const id = "c" + (aiSt.conversations.length + 1);
+    aiSt.conversations.unshift({
+      id, title: s.name, updated: Date.now(),
+      messages: [{ from: "user", text: `运行模版：${s.name}` }, { from: "bot", html: generateStrategyReply(s.name) }]
+    });
+    aiSt.activeId = id;
+    saveState(appState);
+    navigate("#/ai");
+  };
+
   const renderMarketPage = () => {
+    const st = ensureStratState();
     const page = el("main", { class: "page-wide" });
 
     page.appendChild(el("div", { class: "page-head" },
       el("div", {},
         el("h1", {}, "策略广场"),
-        el("p", {}, "精选优质策略模版，一键运行或二次开发")
+        el("p", {}, "精选优质量化策略 · 涵盖趋势、突破、反转、网格、DCA、盘口、衍生品事件与风控稳健")
       ),
       el("div", { class: "actions" },
         el("button", { class: "btn", onclick: () => navigate("#/ai") }, "返回 AI 量化"),
       )
     ));
     page.appendChild(el("p", { class: "market-intro" },
-      "首次对话可先从推荐策略开始，也可以继续在上面对话自定义。"
+      "一键载入对话即可继续用自然语言调整参数，或直接部署到模拟盘运行。"
     ));
 
-    const grid = el("div", { class: "market-grid" });
-    STRAT_LIST.forEach((s) => grid.appendChild(renderStratCard(s)));
-    page.appendChild(grid);
+    // ---- hot strategies rail (horizontally scrollable) ----
+    const hotList = STRAT_LIST.filter((s) => s.status).slice().sort((a, b) => b.users - a.users);
+    const rail = el("div", { class: "splaza-rail" });
+    hotList.forEach((s, i) => {
+      const up = s.seed[s.seed.length - 1] >= s.seed[0];
+      const badge = s.status ? STRAT_STATUS[s.status] : null;
+      rail.appendChild(el("div", { class: "srail-card", onclick: () => loadStratToChat(s) },
+        el("div", { class: "mesh" }),
+        el("div", { class: "glow" }),
+        badge ? el("span", { class: "rc-badge" }, badge.label) : null,
+        el("div", { class: "rc-body" },
+          el("div", { class: "rc-top" },
+            el("span", { class: "rc-av", style: { background: s.tone } }, s.sym),
+            el("div", { style: { minWidth: "0", flex: "1" } },
+              el("div", { class: "rc-name" }, s.name),
+              el("div", { class: "rc-author" },
+                s.author,
+                s.verified ? el("span", { html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="#8FB7FF"><path d="M12 2l2.4 1.8 3 .1 1 2.8 2.2 2L20 12l.6 3.3-2.2 2-1 2.8-3 .1L12 22l-2.4-1.8-3-.1-1-2.8-2.2-2L4 12l-.6-3.3 2.2-2 1-2.8 3-.1L12 2z"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#16122F" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' }) : null,
+              )
+            )
+          ),
+          el("div", { class: "rc-mid" },
+            el("div", { class: "rc-cagr" + (up ? "" : " dn") }, (up ? "+" : "") + s.cagr + "%", el("small", {}, "年化")),
+            el("div", { class: "rc-spark", html: stratSpark(s.seed, 120, 38, "rail" + i, "#A78BFA") })
+          ),
+          el("div", { class: "rc-foot" },
+            el("div", {}, el("div", { class: "l" }, "Sharpe"), el("div", { class: "v" }, s.sharpe.toFixed(2))),
+            el("div", {}, el("div", { class: "l" }, "回撤"), el("div", { class: "v" }, s.mdd + "%")),
+            el("div", {}, el("div", { class: "l" }, "胜率"), el("div", { class: "v" }, s.win + "%")),
+          ),
+          el("div", { class: "rc-actions" },
+            el("button", {
+              class: "rc-btn ghost",
+              onclick: (e) => { e.stopPropagation(); loadStratToChat(s); setTimeout(() => toast(`已载入：${s.name}`, "ok"), 100); },
+            }, el("span", { html: icon("bot", 13) }), "载入对话"),
+            el("button", {
+              class: "rc-btn primary",
+              onclick: (e) => { e.stopPropagation(); loadStratToChat(s); setTimeout(() => toast(`「${s.name}」已部署到 OKX 模拟盘`, "ok"), 100); },
+            }, el("span", { html: icon("play", 12) }), "运行")
+          )
+        )
+      ));
+    });
+    const railHead = el("div", { class: "splaza-rail-head" },
+      el("h2", {}, el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2c1 3.5-1 5-2.5 6.5C8 10 7 11.6 7 13.5a5 5 0 0 0 10 0c0-2-1-3.8-2.5-5.2C13 6.8 12.8 4.5 12 2z" fill="#F5953B"/><path d="M12 14c.6-1.6 2-2 2.6 0a2.6 2.6 0 1 1-5 .3c.3-1 1.4-1.4 2.4-.3z" fill="#FFD27A"/></svg>' }), "热门策略"),
+      el("span", { class: "sub" }, "社区本周关注度最高"),
+      el("div", { class: "nav" },
+        el("button", { "aria-label": "上一组", onclick: () => rail.scrollBy({ left: -340, behavior: "smooth" }), html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' }),
+        el("button", { "aria-label": "下一组", onclick: () => rail.scrollBy({ left: 340, behavior: "smooth" }), html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' }),
+      )
+    );
+    page.appendChild(el("div", { class: "splaza-rail-wrap" }, railHead, rail));
+
+    // ---- toolbar (rebuildable) ----
+    const toolbarSlot = el("div");
+    const bodySlot = el("div");
+    let countEl = null;
+    page.appendChild(toolbarSlot);
+    page.appendChild(bodySlot);
+
+    const computeList = () => {
+      const sortFn = (STRAT_SORTS.find((x) => x.k === st.sort) || STRAT_SORTS[0]).fn;
+      const q = st.query.trim().toLowerCase();
+      return STRAT_LIST
+        .filter((s) => st.favOnly ? st.favs[s.id] : (st.tag === "全部" || s.tag === st.tag))
+        .filter((s) => !q || (s.name + s.tag + s.pair + s.author + s.desc).toLowerCase().includes(q))
+        .slice().sort(sortFn);
+    };
+
+    const PER_PAGE = 9;
+    const rebuildBody = () => {
+      const list = computeList();
+      const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+      if (st.page > pages) st.page = pages;
+      if (st.page < 1) st.page = 1;
+      const start = (st.page - 1) * PER_PAGE;
+      const pageItems = list.slice(start, start + PER_PAGE);
+
+      if (countEl) countEl.textContent = "共 " + list.length + " 个";
+
+      const body = el("div", {});
+      if (list.length === 0) {
+        body.appendChild(el("div", { class: "market-grid" },
+          el("div", { class: "splaza-empty" },
+            el("div", { class: "e-ico", html: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 18.1 5.9 21l1.2-6.6L2.4 9.9 9 9z"/></svg>' }),
+            el("div", { class: "e-title" }, st.favOnly ? "还没有收藏的策略" : "没有符合条件的策略"),
+            el("div", { class: "e-sub" }, st.favOnly ? "点击策略卡右上角的 ☆ 星标，把感兴趣的策略收藏到这里。" : "试试切换其他分类或清空搜索关键词。"),
+          )
+        ));
+      } else {
+        const grid = el("div", { class: "market-grid" });
+        pageItems.forEach((s, i) => grid.appendChild(renderStratCard(s, start + i, st, rebuildBody)));
+        body.appendChild(grid);
+
+        // pager
+        if (pages > 1) {
+          const goto = (p) => { st.page = p; saveState(appState); rebuildBody(); window.scrollTo({ top: 0, behavior: "smooth" }); };
+          const pager = el("div", { class: "splaza-pager" });
+          pager.appendChild(el("button", {
+            disabled: st.page === 1, onclick: () => goto(st.page - 1),
+            html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+          }));
+          for (let p = 1; p <= pages; p++) {
+            pager.appendChild(el("button", {
+              class: p === st.page ? "is-on" : "", onclick: () => goto(p),
+            }, "" + p));
+          }
+          pager.appendChild(el("button", {
+            disabled: st.page === pages, onclick: () => goto(st.page + 1),
+            html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+          }));
+          body.appendChild(pager);
+        }
+      }
+      bodySlot.innerHTML = "";
+      bodySlot.appendChild(body);
+    };
+
+    const rebuildToolbar = () => {
+      const favCount = STRAT_LIST.filter((s) => st.favs[s.id]).length;
+
+      // ---- row 1: 收藏 + categories + search ----
+      const chips = el("div", { class: "splaza-chips" });
+      chips.appendChild(el("button", {
+        class: "splaza-chip fav" + (st.favOnly ? " is-on" : ""),
+        onclick: () => { st.favOnly = !st.favOnly; st.page = 1; saveState(appState); rebuildToolbar(); rebuildBody(); },
+      },
+        el("span", { html: `<svg width="13" height="13" viewBox="0 0 24 24" fill="${st.favOnly ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 18.1 5.9 21l1.2-6.6L2.4 9.9 9 9z"/></svg>` }),
+        "收藏" + (favCount ? " " + favCount : "")
+      ));
+      STRAT_TAGS.forEach((t) => {
+        const on = !st.favOnly && t === st.tag;
+        chips.appendChild(el("button", {
+          class: "splaza-chip" + (on ? " is-on" : ""),
+          onclick: () => { st.favOnly = false; st.tag = t; st.page = 1; saveState(appState); rebuildToolbar(); rebuildBody(); },
+        }, t));
+      });
+      const search = el("div", { class: "splaza-search" },
+        el("span", { html: icon("search", 15) }),
+        el("input", {
+          placeholder: "搜索策略 · 币对 · 作者", value: st.query,
+          oninput: (e) => { st.query = e.target.value; st.page = 1; saveState(appState); rebuildBody(); },
+        })
+      );
+      const rowCats = el("div", { class: "splaza-row cats" }, chips, search);
+
+      // ---- row 2: 排序 + options + total count ----
+      const sort = el("div", { class: "splaza-sort" },
+        ...STRAT_SORTS.map((o) => el("button", {
+          class: o.k === st.sort ? "is-on" : "",
+          onclick: () => { st.sort = o.k; st.page = 1; saveState(appState); rebuildToolbar(); rebuildBody(); },
+        }, o.label))
+      );
+      countEl = el("span", { class: "splaza-total" }, "共 " + computeList().length + " 个");
+      const rowSort = el("div", { class: "splaza-row sortrow" },
+        el("span", { class: "sr-label" }, "排序"),
+        sort,
+        el("div", { style: { flex: "1" } }),
+        countEl
+      );
+
+      toolbarSlot.innerHTML = "";
+      toolbarSlot.appendChild(el("div", { class: "splaza-toolbar" }, rowCats, rowSort));
+    };
+
+    rebuildToolbar();
+    rebuildBody();
 
     return page;
   };
 
-  const renderStratCard = (s) => {
-    return el("article", { class: "strat-card" },
-      el("div", { class: "head" },
-        el("div", { class: "ico", html: icon("activity", 18) }),
-        el("div", {},
-          el("h3", {}, s.name),
-          el("div", { class: "tags" }, ...s.tags.map((t) => el("span", {}, t)))
-        )
-      ),
-      el("p", { class: "desc" }, s.desc),
-      el("div", { class: "meta" },
-        el("div", { class: "meta-row" }, el("span", {}, "交易对 / 周期"), el("span", { class: "v" }, s.pair)),
-        el("div", { class: "meta-row" }, el("span", {}, "环境"), el("span", { class: "v" }, s.env)),
-        el("div", { class: "meta-row" }, el("span", {}, "市场"), el("span", { class: "v" }, s.market)),
-        el("div", { class: "meta-row" }, el("span", {}, "仓位 / 杠杆"), el("span", { class: "v" }, `${s.pos} / ${s.lev}`)),
-      ),
-      el("div", { class: "stats" },
-        el("div", { class: "stat" }, el("div", { class: "l" }, "胜率"), el("div", { class: "v" }, s.win.toFixed(2) + "%")),
-        el("div", { class: "stat" }, el("div", { class: "l" }, "最大回撤"), el("div", { class: "v up" }, s.mdd.toFixed(2) + "%")),
-        el("div", { class: "stat" }, el("div", { class: "l" }, "总收益"), el("div", { class: "v" }, "+" + s.ret.toFixed(2) + "%")),
-      ),
-      el("div", { class: "actions" },
+  const renderStratCard = (s, idx, st, rebuildBody) => {
+    const up = s.seed[s.seed.length - 1] >= s.seed[0];
+    const badge = s.status ? STRAT_STATUS[s.status] : null;
+    const tagTone = TAG_TONE[s.tag] || "var(--text-mid)";
+    const starred = !!st.favs[s.id];
+
+    const card = el("article", { class: "scard", onclick: () => loadStratToChat(s) },
+      el("div", { class: "scard-head" },
+        el("span", { class: "scard-av", style: { background: s.tone } }, s.sym),
+        el("div", { class: "scard-titles" },
+          el("div", { class: "scard-name-row" },
+            el("span", { class: "scard-name" }, s.name),
+            badge ? el("span", { class: "scard-badge", style: { background: badge.bg, color: badge.fg } }, badge.label) : null,
+          ),
+          el("div", { class: "scard-meta-row" },
+            el("span", { class: "scard-tag", style: { background: "color-mix(in srgb, " + tagTone + " 12%, transparent)", color: tagTone } }, s.tag),
+            el("span", { class: "scard-pair" }, s.pair),
+            el("span", { class: "scard-period" }, s.market),
+          )
+        ),
         el("button", {
-          class: "btn btn-primary",
-          onclick: () => {
-            // create a conversation with this strategy
-            const aiSt = ensureAIState();
-            const id = "c" + (aiSt.conversations.length + 1);
-            aiSt.conversations.unshift({
-              id, title: s.name, updated: Date.now(),
-              messages: [{ from: "user", text: `运行模版：${s.name}` }, { from: "bot", html: generateStrategyReply(s.name) }]
-            });
-            aiSt.activeId = id;
+          class: "scard-star" + (starred ? " is-on" : ""),
+          title: starred ? "取消收藏" : "收藏",
+          onclick: (e) => {
+            e.stopPropagation();
+            st.favs[s.id] = !st.favs[s.id];
             saveState(appState);
-            navigate("#/ai");
-            setTimeout(() => toast(`已载入：${s.name}`, "ok"), 100);
-          }
-        }, el("span", { html: icon("play", 14) }), "运行"),
+            rebuildBody();
+          },
+        }, el("span", { html: `<svg width="18" height="18" viewBox="0 0 24 24" fill="${starred ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 18.1 5.9 21l1.2-6.6L2.4 9.9 9 9z"/></svg>` }))
+      ),
+      el("div", { class: "scard-perf" },
+        el("div", { style: { flex: "1", minWidth: "0" } },
+          el("div", { class: "perf-l" }, "近 " + s.period),
+          el("div", { class: "perf-v " + (up ? "up" : "dn") }, (up ? "+" : "") + s.cagr + "%", el("small", {}, "CAGR"))
+        ),
+        el("div", { class: "perf-spark", html: stratSpark(s.seed, 116, 40, idx) })
+      ),
+      el("div", { class: "scard-stats" },
+        el("div", { class: "s" }, el("div", { class: "l" }, "Sharpe"), el("div", { class: "v" }, s.sharpe.toFixed(2))),
+        el("div", { class: "s" }, el("div", { class: "l" }, "回撤"), el("div", { class: "v dn" }, s.mdd + "%")),
+        el("div", { class: "s" }, el("div", { class: "l" }, "胜率"), el("div", { class: "v" }, s.win + "%")),
+        el("div", { class: "s" }, el("div", { class: "l" }, "跟单"), el("div", { class: "v" }, fmtUsers(s.users))),
+      ),
+      el("div", { class: "scard-foot" },
+        el("div", { class: "scard-author" },
+          el("span", { class: "a-av", style: { background: s.authorTone } }, s.author[0]),
+          el("span", { class: "a-name" }, s.author),
+          s.verified ? el("span", { html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="#3B82F6"><path d="M12 2l2.4 1.8 3 .1 1 2.8 2.2 2L20 12l.6 3.3-2.2 2-1 2.8-3 .1L12 22l-2.4-1.8-3-.1-1-2.8-2.2-2L4 12l-.6-3.3 2.2-2 1-2.8 3-.1L12 2z"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' }) : null,
+        ),
         el("button", {
-          class: "btn",
-          onclick: () => toast("打开编辑器…", "info"),
-        }, el("span", { html: icon("pencil", 14) }), "编辑")
+          class: "scard-btn",
+          onclick: (e) => { e.stopPropagation(); loadStratToChat(s); setTimeout(() => toast(`已载入：${s.name}`, "ok"), 100); },
+        }, el("span", { html: icon("bot", 13) }), "载入对话"),
+        el("button", {
+          class: "scard-btn primary",
+          onclick: (e) => {
+            e.stopPropagation();
+            loadStratToChat(s);
+            setTimeout(() => toast(`「${s.name}」已部署到 OKX 模拟盘`, "ok"), 100);
+          },
+        }, el("span", { html: icon("play", 12) }), "运行")
       )
     );
+    return card;
   };
 
   // =========================================================
