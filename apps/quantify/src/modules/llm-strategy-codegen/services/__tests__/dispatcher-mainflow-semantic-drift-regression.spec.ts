@@ -72,7 +72,7 @@ describe('GenericSeedDispatcher mainflow semantic drift regressions', () => {
     const view = projection.buildConversationView(baseState({ rules: patch.rules ?? [] }))
 
     expect(view.summary).toContain('入场：EMA20 上穿 EMA50')
-    expect(view.summary).toContain('前置：账户最大回撤超过 8% 时阻止开新仓')
+    expect(view.summary).toContain('账户最大回撤超过 8% 时阻止开新仓')
     expect(view.summary).toContain('单标的敞口超过 30% 时阻止开新仓')
     expect(view.summary).not.toContain('入场：EMA20 上穿 EMA50 → 开多，最大敞口不超过 30%')
     expect(view.summary).not.toContain('最大回撤超过 8% 时限制交易')
@@ -98,6 +98,8 @@ describe('GenericSeedDispatcher mainflow semantic drift regressions', () => {
     expect(view.summary).not.toContain('出场：价格在 MA20 上方 → 平多')
     expect(view.summary).toContain('2 倍 ATR 止损')
     expect(view.summary).toContain('3 倍 ATR 止盈')
+    expect(view.summary).not.toContain('3 倍 ATR 止损')
+    expect(view.summary).not.toContain('入场：价格在 MA20 上方 → 开多，2 倍 ATR 止损')
   })
 
   it('keeps bollinger lower long, middle exit, and upper short as separate rules', () => {

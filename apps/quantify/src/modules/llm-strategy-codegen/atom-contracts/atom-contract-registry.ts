@@ -6037,7 +6037,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['ATR 倍数止损', 'ATR', '倍 ATR', '倍ATR', 'atr multiple stop'] as const,
+        keywords: ['ATR 倍数止损', 'N 倍 ATR 止损', 'atr multiple stop'] as const,
         verbs: {
           fixed: ['止损', '作为止损', 'atr stop'] as const,
         },
@@ -6090,7 +6090,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['ATR 倍数止盈', 'ATR', '倍 ATR', '倍ATR', 'atr multiple take profit'] as const,
+        keywords: ['ATR 倍数止盈', 'N 倍 ATR 止盈', 'atr multiple take profit'] as const,
         verbs: {
           fixed: ['止盈', '作为止盈', 'atr take profit'] as const,
         },
