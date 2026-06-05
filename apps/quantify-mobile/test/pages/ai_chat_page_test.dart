@@ -165,7 +165,11 @@ void main() {
 
     // 当前 s5 — 抽屉里 s5 tile 上才有删除按钮。
     await tester.tap(find.byKey(const Key('ai-session-delete-s5')));
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    // 删除走二次确认弹窗（#2153）；点确认才真正删除。
+    expect(find.byKey(const Key('ai-session-delete-dialog')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ai-session-delete-confirm')));
     await tester.pumpAndSettle();
 
     // s5 不再存在；关掉 drawer 后顶栏标题切到 BTC。
