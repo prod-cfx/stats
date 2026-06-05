@@ -175,6 +175,9 @@ void main() {
 
   testWidgets('stopped 永久删除：确认后回弹列表', (WidgetTester tester) async {
     await _pump(tester, 'QF-5J1RT8');
+    expect(find.byKey(const Key('live-primary-action')), findsNothing);
+    expect(find.text('恢复策略'), findsNothing);
+    expect(find.text('永久删除'), findsOneWidget);
     await tester.tap(find.byKey(const Key('live-delete-button')));
     await tester.pumpAndSettle();
     // stopped 直接永久删除

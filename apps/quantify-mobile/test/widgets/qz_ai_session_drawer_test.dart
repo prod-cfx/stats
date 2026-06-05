@@ -11,6 +11,7 @@ Future<void> _pump(
   WidgetTester tester,
   List<AiSession> sessions, {
   String? currentId,
+  ValueChanged<String>? onDelete,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 900));
   await tester.pumpWidget(
@@ -27,7 +28,7 @@ Future<void> _pump(
           currentId: currentId,
           onSelect: (_) {},
           onCreate: () {},
-          onDelete: (_) {},
+          onDelete: onDelete ?? (_) {},
         ),
       ),
     ),
@@ -84,5 +85,44 @@ void main() {
     await _pump(tester, const <AiSession>[]);
     expect(find.text('方案之间上下文隔离 · 不会互相干扰'), findsOneWidget);
     expect(find.byKey(const Key('ai-session-privacy-footer')), findsOneWidget);
+  });
+
+  testWidgets('删除当前方案前先确认，取消不触发删除', (WidgetTester tester) async {
+    final DateTime now = DateTime.now();
+    final List<String> deletedIds = <String>[];
+    await _pump(
+      tester,
+      <AiSession>[
+        AiSession(
+          id: 's-wip',
+          title: 'ETH 4H 均值回归',
+          category: '均值回归',
+          updatedAt: now,
+          messages: const <ChatTurn>[],
+        ),
+      ],
+      currentId: 's-wip',
+      onDelete: deletedIds.add,
+    );
+
+    await tester.tap(find.byKey(const Key('ai-session-delete-s-wip')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ai-session-delete-dialog')), findsOneWidget);
+    expect(find.text('删除该方案？'), findsOneWidget);
+    expect(find.textContaining('全部对话上下文'), findsOneWidget);
+    expect(deletedIds, isEmpty);
+
+    await tester.tap(find.byKey(const Key('ai-session-delete-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ai-session-delete-dialog')), findsNothing);
+    expect(deletedIds, isEmpty);
+
+    await tester.tap(find.byKey(const Key('ai-session-delete-s-wip')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ai-session-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(deletedIds, <String>['s-wip']);
   });
 }

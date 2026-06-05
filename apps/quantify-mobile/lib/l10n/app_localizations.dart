@@ -272,6 +272,30 @@ abstract class AppLocalizations {
   /// **'新方案'**
   String get aiSessionUntitled;
 
+  /// No description provided for @aiSessionDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除该方案？'**
+  String get aiSessionDeleteTitle;
+
+  /// No description provided for @aiSessionDeleteBodyPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'「'**
+  String get aiSessionDeleteBodyPrefix;
+
+  /// No description provided for @aiSessionDeleteBodySuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **'」及其全部对话上下文将被永久删除，此操作无法撤销。'**
+  String get aiSessionDeleteBodySuffix;
+
+  /// No description provided for @aiSessionDeleteConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get aiSessionDeleteConfirm;
+
   /// No description provided for @aiQuickReply1.
   ///
   /// In zh, this message translates to:

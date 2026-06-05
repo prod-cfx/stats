@@ -99,6 +99,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiSessionUntitled => 'Untitled';
 
   @override
+  String get aiSessionDeleteTitle => 'Delete this strategy?';
+
+  @override
+  String get aiSessionDeleteBodyPrefix => '\"';
+
+  @override
+  String get aiSessionDeleteBodySuffix =>
+      '\" and its full chat context will be permanently deleted. This cannot be undone.';
+
+  @override
+  String get aiSessionDeleteConfirm => 'Delete';
+
+  @override
   String get aiQuickReply1 => 'Run backtest again';
 
   @override

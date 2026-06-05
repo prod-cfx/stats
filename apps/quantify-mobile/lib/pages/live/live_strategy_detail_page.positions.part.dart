@@ -435,8 +435,7 @@ class _ParamsTab extends ConsumerWidget {
 
 /// 底部 sticky 主操作（#1773）。开启/暂停/恢复/删除走 mock 状态转换。
 ///
-/// - 主按钮：running → 暂停（有持仓先弹处理对话框）；paused/warning →
-///   开启；stopped → 恢复。
+/// - 主按钮：running → 暂停（有持仓先弹处理对话框）；paused/warning → 开启。
 /// - 删除按钮：running → 先弹「需暂停」守卫；其余 → 删除确认（软删/永久）。
 class _StickyAction extends ConsumerWidget {
   const _StickyAction({required this.strategy});
@@ -451,9 +450,7 @@ class _StickyAction extends ConsumerWidget {
     final bool canStart =
         status == LiveStrategyStatus.paused ||
         status == LiveStrategyStatus.warning;
-    final String primary = stopped
-        ? l10n.liveActionResume
-        : canStart
+    final String primary = canStart
         ? l10n.liveActionStart
         : l10n.liveActionPause;
 
@@ -490,19 +487,21 @@ class _StickyAction extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(width: QzSpacing.sm),
-          Expanded(
-            flex: 2,
-            child: FilledButton(
-              key: const Key('live-primary-action'),
-              onPressed: () => _onPrimary(context, ref),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                backgroundColor: c.accent,
+          if (!stopped) ...<Widget>[
+            const SizedBox(width: QzSpacing.sm),
+            Expanded(
+              flex: 2,
+              child: FilledButton(
+                key: const Key('live-primary-action'),
+                onPressed: () => _onPrimary(context, ref),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  backgroundColor: c.accent,
+                ),
+                child: Text(primary),
               ),
-              child: Text(primary),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -515,8 +514,9 @@ class _StickyAction extends ConsumerWidget {
     switch (strategy.status) {
       case LiveStrategyStatus.paused:
       case LiveStrategyStatus.warning:
-      case LiveStrategyStatus.stopped:
         store.resume(strategy.id);
+      case LiveStrategyStatus.stopped:
+        return;
       case LiveStrategyStatus.running:
         await _pauseRunning(context, ref, store);
     }

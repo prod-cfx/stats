@@ -267,7 +267,7 @@ class _SessionTile extends StatelessWidget {
             if (isCurrent)
               IconButton(
                 key: Key('ai-session-delete-${session.id}'),
-                onPressed: onDelete,
+                onPressed: () => _confirmDelete(context),
                 visualDensity: VisualDensity.compact,
                 icon: Icon(Icons.delete_outline, size: 16, color: c.textDim),
               ),
@@ -275,6 +275,15 @@ class _SessionTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (BuildContext ctx) => _DeleteSessionDialog(session: session),
+    );
+    if (confirmed == true) onDelete();
   }
 
   String _previewText(AiSession session) {
@@ -292,6 +301,146 @@ class _SessionTile extends StatelessWidget {
     if (diff.inDays < 1) return '${diff.inHours} 小时前';
     if (diff.inDays == 1) return '昨天';
     return '${diff.inDays} 天前';
+  }
+}
+
+class _DeleteSessionDialog extends StatelessWidget {
+  const _DeleteSessionDialog({required this.session});
+
+  final AiSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    const Color danger = Color(0xFFE5484D);
+    const Color dangerSoft = Color(0xFFFFE8E8);
+    return Dialog(
+      key: const Key('ai-session-delete-dialog'),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 430),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: Color(0x1A0F1623),
+                offset: Offset(0, 12),
+                blurRadius: 40,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 30, 22, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: dangerSoft,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 30,
+                    color: danger,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  l10n.aiSessionDeleteTitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF0F1623),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: QzSpacing.sm),
+                Text.rich(
+                  TextSpan(
+                    style: TextStyle(
+                      color: const Color(0xFF8A93A6),
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                    children: <InlineSpan>[
+                      TextSpan(text: l10n.aiSessionDeleteBodyPrefix),
+                      TextSpan(
+                        text: session.title,
+                        style: const TextStyle(
+                          color: Color(0xFF334155),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(text: l10n.aiSessionDeleteBodySuffix),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: OutlinedButton(
+                          key: const Key('ai-session-delete-cancel'),
+                          onPressed: () => Navigator.of(context).pop(false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF0F1623),
+                            backgroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFFEFF1F5)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          child: Text(l10n.commonCancel),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: QzSpacing.md),
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: FilledButton(
+                          key: const Key('ai-session-delete-confirm'),
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: danger,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            shadowColor: danger.withValues(alpha: 0.28),
+                            elevation: 10,
+                          ),
+                          child: Text(l10n.aiSessionDeleteConfirm),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

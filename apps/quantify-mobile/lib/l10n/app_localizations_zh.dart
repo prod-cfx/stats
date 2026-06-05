@@ -96,6 +96,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiSessionUntitled => '新方案';
 
   @override
+  String get aiSessionDeleteTitle => '删除该方案？';
+
+  @override
+  String get aiSessionDeleteBodyPrefix => '「';
+
+  @override
+  String get aiSessionDeleteBodySuffix => '」及其全部对话上下文将被永久删除，此操作无法撤销。';
+
+  @override
+  String get aiSessionDeleteConfirm => '删除';
+
+  @override
   String get aiQuickReply1 => '再跑一次回测';
 
   @override
