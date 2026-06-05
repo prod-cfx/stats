@@ -1,6 +1,6 @@
 {
   "name": "@net/backend",
-  "version": "0.1.0",
+  "version": "1.0.7",
   "private": true,
   "description": "NestJS 应用骨架",
   "prisma": {
