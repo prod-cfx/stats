@@ -8,6 +8,7 @@ function createRepositoryMock() {
     findStaleRunning: jest.fn().mockResolvedValue([]),
     findQueuedBefore: jest.fn().mockResolvedValue([]),
     markFailed: jest.fn().mockResolvedValue(undefined),
+    markFailedIfStatus: jest.fn().mockResolvedValue(true),
   }
 }
 
@@ -34,7 +35,7 @@ describe('BacktestRecoveryService', () => {
     await service.recoverStaleJobs()
 
     expect(repository.findStaleRunning).toHaveBeenCalledWith(new Date(Date.now() - DEFAULT_BACKTEST_JOB_TIMEOUT_MS))
-    expect(repository.markFailed).toHaveBeenCalledWith('job-1', expect.objectContaining({
+    expect(repository.markFailedIfStatus).toHaveBeenCalledWith('job-1', ['running'], expect.objectContaining({
       code: ErrorCode.BACKTEST_JOB_TIMEOUT,
       message: 'Backtest job timed out',
     }))
@@ -49,7 +50,7 @@ describe('BacktestRecoveryService', () => {
     await service.recoverStaleJobs()
 
     expect(repository.findQueuedBefore).toHaveBeenCalledWith(new Date(Date.now() - 120_000))
-    expect(repository.markFailed).toHaveBeenCalledWith('job-2', expect.objectContaining({
+    expect(repository.markFailedIfStatus).toHaveBeenCalledWith('job-2', ['queued'], expect.objectContaining({
       code: ErrorCode.BACKTEST_QUEUE_TIMEOUT,
       message: 'Backtest queue wait timed out',
     }))
@@ -63,5 +64,42 @@ describe('BacktestRecoveryService', () => {
     await service.recoverStaleJobs()
 
     expect(repository.findQueuedBefore).toHaveBeenCalledWith(new Date(Date.now() - DEFAULT_BACKTEST_QUEUE_TIMEOUT_MS))
+  })
+
+  it('runs scheduled recovery every tick inside a transaction scope', async () => {
+    const repository = createRepositoryMock()
+    const cls = { run: jest.fn(async (callback: () => Promise<void>) => callback()) }
+    const txHost = { withTransaction: jest.fn(async (callback: () => Promise<void>) => callback()) }
+    const service = new BacktestRecoveryService(
+      repository as never,
+      createConfigMock() as unknown as ConfigService,
+      cls as never,
+      txHost as never,
+    )
+
+    await service.handleScheduledRecovery()
+
+    expect(cls.run).toHaveBeenCalledTimes(1)
+    expect(txHost.withTransaction).toHaveBeenCalledTimes(1)
+    expect(repository.findStaleRunning).toHaveBeenCalledTimes(1)
+    expect(repository.findQueuedBefore).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips scheduled recovery when the previous tick is still running', async () => {
+    const repository = createRepositoryMock()
+    const pending = new Promise<void>(() => {})
+    const cls = { run: jest.fn(() => pending) }
+    const txHost = { withTransaction: jest.fn() }
+    const service = new BacktestRecoveryService(
+      repository as never,
+      createConfigMock() as unknown as ConfigService,
+      cls as never,
+      txHost as never,
+    )
+
+    void service.handleScheduledRecovery()
+    await service.handleScheduledRecovery()
+
+    expect(cls.run).toHaveBeenCalledTimes(1)
   })
 })

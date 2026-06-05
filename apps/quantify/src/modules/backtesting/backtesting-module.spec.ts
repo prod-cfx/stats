@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+import { SignalGeneratorRepository } from '@/modules/strategy-signals/repositories/signal-generator.repository'
 import { BacktestingModule } from './backtesting.module'
 import { BacktestJobRepository } from './jobs/backtest-job.repository'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
@@ -45,6 +46,8 @@ describe('backtestingModule', () => {
       .useValue({ updateLastBacktestRef: jest.fn() })
       .overrideProvider(PublishedStrategySnapshotsRepository)
       .useValue({ findById: jest.fn() })
+      .overrideProvider(SignalGeneratorRepository)
+      .useValue({ findByStrategyInstanceId: jest.fn() })
       .overrideProvider(BacktestSnapshotLoaderService)
       .useValue({ load: jest.fn() })
       .overrideProvider(BacktestSymbolSupportService)

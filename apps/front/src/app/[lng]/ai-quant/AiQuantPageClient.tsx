@@ -316,12 +316,12 @@ export function AiQuantPageClient({
     if (serverOwnedConversations) {
       let cancelled = false
       setConversationSyncState('loading')
-      localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
 
       void (async () => {
         try {
           const serverConversations = await listAiQuantConversations()
           if (cancelled) return
+          localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
           const restored = serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
           const intent = getIntent(INTENT_TTL_MS)
 
@@ -375,7 +375,12 @@ export function AiQuantPageClient({
           setConversationStorageReady(true)
         } catch {
           if (cancelled) return
-          const fallback = [createConversation(t)]
+          const restored = readPersistedConversations({
+            raw: localStorage.getItem(CONVERSATIONS_STORAGE_KEY),
+            translate: t,
+            version: deployVersion,
+          }).conversations
+          const fallback = restored.length > 0 ? restored : [createConversation(t)]
           setConversations(fallback)
           setActiveConversationId(fallback[0].id)
           setConversationSyncState('error')

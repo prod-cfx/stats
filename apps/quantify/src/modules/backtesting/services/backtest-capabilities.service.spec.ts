@@ -59,10 +59,37 @@ describe('backtestCapabilitiesService', () => {
     })
   })
 
-  it('rethrows repository errors for upstream handling', async () => {
-    repository.findActiveConfig.mockRejectedValue(new Error('db down'))
+  it('returns the last successful capabilities when repository errors after a successful load', async () => {
+    repository.findActiveConfig.mockResolvedValueOnce({
+      allowedBaseTimeframes: ['1m', '5m'],
+    })
+    await expect(service.getCapabilities('req-1')).resolves.toEqual({
+      allowedBaseTimeframes: ['1m', '5m'],
+    })
 
-    await expect(service.getCapabilities('req-2')).rejects.toThrow('db down')
+    repository.findActiveConfig.mockRejectedValueOnce(new Error('db down'))
+
+    await expect(service.getCapabilities('req-2')).resolves.toEqual({
+      allowedBaseTimeframes: ['1m', '5m'],
+    })
+  })
+
+  it('returns the last successful capabilities when repository lookup is slow', async () => {
+    jest.useFakeTimers()
+    repository.findActiveConfig.mockResolvedValueOnce({
+      allowedBaseTimeframes: ['1m', '5m'],
+    })
+    await service.getCapabilities('req-1')
+
+    repository.findActiveConfig.mockReturnValueOnce(new Promise(() => {}))
+    const request = service.getCapabilities('req-2')
+
+    await jest.advanceTimersByTimeAsync(1_500)
+
+    await expect(request).resolves.toEqual({
+      allowedBaseTimeframes: ['1m', '5m'],
+    })
+    jest.useRealTimers()
   })
 
   it('preserves domain exceptions from downstream handling', async () => {

@@ -18,6 +18,54 @@ interface BacktestEquityChartProps {
   data: EquityPoint[]
 }
 
+const MAX_CHART_POINTS = 1_500
+
+function downsampleEquitySeries(data: EquityPoint[]): EquityPoint[] {
+  if (data.length <= MAX_CHART_POINTS) {
+    return data
+  }
+
+  const step = Math.ceil(data.length / (MAX_CHART_POINTS - 1))
+  const sampled: EquityPoint[] = []
+  for (let index = 0; index < data.length; index += step) {
+    sampled.push(data[index])
+  }
+  const last = data[data.length - 1]
+  if (last && sampled[sampled.length - 1] !== last) {
+    if (sampled.length >= MAX_CHART_POINTS) {
+      sampled.pop()
+    }
+    sampled.push(last)
+  }
+  return sampled
+}
+
+function calculateChartDomain(data: EquityPoint[]): {
+  minEquity: number
+  maxEquity: number
+  minDrawdown: number
+} {
+  let minEquity = Number.POSITIVE_INFINITY
+  let maxEquity = Number.NEGATIVE_INFINITY
+  let minDrawdown = Number.POSITIVE_INFINITY
+
+  for (const point of data) {
+    if (Number.isFinite(point.equity)) {
+      minEquity = Math.min(minEquity, point.equity)
+      maxEquity = Math.max(maxEquity, point.equity)
+    }
+    if (Number.isFinite(point.drawdown)) {
+      minDrawdown = Math.min(minDrawdown, point.drawdown)
+    }
+  }
+
+  return {
+    minEquity: Number.isFinite(minEquity) ? minEquity * 0.98 : 0,
+    maxEquity: Number.isFinite(maxEquity) ? maxEquity * 1.02 : 1,
+    minDrawdown: Math.min(Number.isFinite(minDrawdown) ? minDrawdown * 1.1 : 0, -10),
+  }
+}
+
 export function BacktestEquityChart({ lng, data }: BacktestEquityChartProps) {
   const [themeTick, setThemeTick] = useState(0)
 
@@ -47,12 +95,8 @@ export function BacktestEquityChart({ lng, data }: BacktestEquityChartProps) {
     )
   }
 
-  const equityValues = data.map(d => d.equity)
-  const minEquity = Math.min(...equityValues) * 0.98
-  const maxEquity = Math.max(...equityValues) * 1.02
-
-  const drawdownValues = data.map(d => d.drawdown)
-  const minDrawdown = Math.min(Math.min(...drawdownValues) * 1.1, -10)
+  const chartData = downsampleEquitySeries(data)
+  const { minEquity, maxEquity, minDrawdown } = calculateChartDomain(data)
 
   let isDark = true
   if (typeof document !== 'undefined') {
@@ -79,7 +123,7 @@ export function BacktestEquityChart({ lng, data }: BacktestEquityChartProps) {
       </h3>
       <div data-testid="backtest-equity-chart-body" className="h-[300px] w-full sm:h-[360px] lg:h-[400px]" key={themeTick}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
             <defs>
               <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#FF4D4F" stopOpacity={0.25} />

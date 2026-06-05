@@ -1374,7 +1374,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.querySelector('[data-testid="conversation-sync-loading"]')).toBeNull()
   })
 
-  it('clears stale local cache and shows an error state when server conversation hydration fails', async () => {
+  it('keeps persisted conversations and shows an error state when server conversation hydration fails', async () => {
     localStorage.clear()
     seedVersionedConversation('deploy-current', Date.now())
 
@@ -1389,9 +1389,9 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    expect(localStorage.getItem('ai_quant_conversations_v1')).toBeNull()
+    expect(localStorage.getItem('ai_quant_conversations_v1')).toContain('persisted-message')
     expect(container.querySelector('[data-testid="conversation-sync-error"]')).toBeTruthy()
-    expect(container.textContent).not.toContain('persisted-message')
+    expect(container.textContent).toContain('persisted-message')
   })
 
   it('deletes a server-owned conversation through the backend and keeps it removed locally', async () => {

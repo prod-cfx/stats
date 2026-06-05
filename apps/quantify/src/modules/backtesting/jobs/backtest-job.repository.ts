@@ -3,6 +3,8 @@ import type { Prisma, PrismaClient } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 import { TransactionHost } from '@nestjs-cls/transactional'
 
+type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+
 export interface BacktestJobFailureInput {
   code?: string
   message: string
@@ -59,21 +61,34 @@ export class BacktestJobRepository {
   }
 
   markFailed(id: string, input: BacktestJobFailureInput) {
+    const data = this.buildFailureData(input)
+    return this.getClient().backtestJob.update({
+      where: { id },
+      data,
+    })
+  }
+
+  async markFailedIfStatus(id: string, statuses: BacktestJobStatus[], input: BacktestJobFailureInput): Promise<boolean> {
+    const result = await this.getClient().backtestJob.updateMany({
+      where: { id, status: { in: statuses } },
+      data: this.buildFailureData(input),
+    })
+    return result.count === 1
+  }
+
+  private buildFailureData(input: BacktestJobFailureInput) {
     const failure: Record<string, unknown> = {
       message: input.message,
     }
     if (input.code) failure.code = input.code
     if (input.args) failure.args = input.args
 
-    return this.getClient().backtestJob.update({
-      where: { id },
-      data: {
-        status: 'failed',
-        error: input.message,
-        result: { failure } as Prisma.InputJsonValue,
-        finishedAt: input.finishedAt,
-      },
-    })
+    return {
+      status: 'failed' as const,
+      error: input.message,
+      result: { failure } as Prisma.InputJsonValue,
+      finishedAt: input.finishedAt,
+    }
   }
 
   findStaleRunning(cutoff: Date, limit = 100) {

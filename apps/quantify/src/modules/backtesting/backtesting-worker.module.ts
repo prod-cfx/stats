@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { EventEmitterModule } from '@nestjs/event-emitter'
+import { ScheduleModule } from '@nestjs/schedule'
 import { WinstonModule } from 'nest-winston'
 import { BullRootModule } from '@/common/modules/bull-root.module'
 import { CacheModule } from '@/common/modules/cache.module'
@@ -38,6 +39,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     }),
     BullRootModule,
     CacheModule,
+    ScheduleModule.forRoot(),
     BacktestingModule,
   ],
   providers: [BacktestWorkerProcessor],

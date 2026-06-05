@@ -9,9 +9,12 @@ export interface BacktestCapabilitiesDto {
   allowedBaseTimeframes: string[]
 }
 
+const BACKTEST_CAPABILITIES_LOOKUP_TIMEOUT_MS = 1_500
+
 @Injectable()
 export class BacktestCapabilitiesService {
   private readonly logger = new Logger(BacktestCapabilitiesService.name)
+  private lastSuccessfulCapabilities: BacktestCapabilitiesDto | null = null
 
   constructor(
     private readonly repository: BacktestCapabilitiesRepository,
@@ -20,7 +23,7 @@ export class BacktestCapabilitiesService {
   async getCapabilities(requestId?: string): Promise<BacktestCapabilitiesDto> {
     const startedAt = Date.now()
     try {
-      const config = await this.repository.findActiveConfig()
+      const config = await this.withLookupTimeout(this.repository.findActiveConfig())
       if (!config) {
         throw this.createUnavailableError('missing_active_config')
       }
@@ -37,8 +40,16 @@ export class BacktestCapabilitiesService {
       this.logger.log(
         `event=backtesting_capabilities_loaded stage=capability requestId=${requestId ?? 'N/A'} durationMs=${Date.now() - startedAt}`,
       )
+      this.lastSuccessfulCapabilities = response
       return response
     } catch (error) {
+      if (this.lastSuccessfulCapabilities) {
+        this.logger.warn(
+          `event=backtesting_capabilities_fallback stage=capability requestId=${requestId ?? 'N/A'} reason=${this.describeError(error)} durationMs=${Date.now() - startedAt}`,
+        )
+        return this.lastSuccessfulCapabilities
+      }
+
       this.logger.error(
         `event=backtesting_capabilities_failed stage=capability requestId=${requestId ?? 'N/A'} reason=${this.describeError(error)} durationMs=${Date.now() - startedAt}`,
       )
@@ -59,5 +70,17 @@ export class BacktestCapabilitiesService {
       return error.message
     }
     return String(error)
+  }
+
+  private withLookupTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('capabilities lookup timed out')), BACKTEST_CAPABILITIES_LOOKUP_TIMEOUT_MS)
+      timer.unref?.()
+    })
+
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timer) clearTimeout(timer)
+    })
   }
 }

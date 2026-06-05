@@ -1,4 +1,5 @@
 import { MODULE_METADATA } from '@nestjs/common/constants'
+import { ScheduleModule } from '@nestjs/schedule'
 import { BullRootModule } from '@/common/modules/bull-root.module'
 import { AppModule } from '../app.module'
 import { BacktestingModule } from './backtesting.module'
@@ -11,6 +12,10 @@ function readModuleMetadata<T>(moduleType: unknown, key: string): T[] {
   return (Reflect.getMetadata(key, moduleType) ?? []) as T[]
 }
 
+function hasDynamicModuleImport(imports: unknown[], moduleType: unknown): boolean {
+  return imports.some(item => typeof item === 'object' && item !== null && 'module' in item && item.module === moduleType)
+}
+
 describe('BacktestingWorkerModule', () => {
   it('keeps Bull processor out of the API module and registers it only in the worker module', () => {
     expect(readModuleMetadata(BacktestingModule, MODULE_METADATA.PROVIDERS)).not.toContain(BacktestWorkerProcessor)
@@ -21,6 +26,10 @@ describe('BacktestingWorkerModule', () => {
   it('configures Bull root for both API and backtest worker runtimes', () => {
     expect(readModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).toContain(BullRootModule)
     expect(readModuleMetadata(BacktestingWorkerModule, MODULE_METADATA.IMPORTS)).toContain(BullRootModule)
+  })
+
+  it('enables Nest schedule runtime in the backtest worker so stale job recovery ticks run', () => {
+    expect(hasDynamicModuleImport(readModuleMetadata(BacktestingWorkerModule, MODULE_METADATA.IMPORTS), ScheduleModule)).toBe(true)
   })
 
   it('exports worker processor dependencies from the backtesting module', () => {
