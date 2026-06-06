@@ -75,6 +75,7 @@ interface StrategyCardModel {
   symbolLabel: string
   pairLabel: string
   marketLabel: string
+  positionLabel: string
   leverageLabel: string
   periodLabel: string
   returnPct: number | null
@@ -93,11 +94,6 @@ interface StrategyCardModel {
 type TFunction = ReturnType<typeof useTranslation>['t']
 type SortKey = (typeof SORT_OPTIONS)[number]['key']
 
-function formatPositionPct(value: number): string {
-  const percent = Math.abs(value) <= 1 ? value * 100 : value
-  return `${Number(percent.toFixed(2)).toString()}%`
-}
-
 function getMarketTypeLabel(marketType: StrategyPlazaTemplate['marketType'], t: TFunction): string {
   const fallback = marketType === 'spot' ? '现货' : marketType === 'perp' ? '永续' : marketType
   return t(`aiQuant.strategyPlazaCard.marketType.${marketType}`, { defaultValue: fallback })
@@ -107,6 +103,11 @@ function getLeverageLabel(leverage: number | null, t: TFunction): string {
   return leverage
     ? `${leverage}x`
     : t('aiQuant.strategyPlazaCard.noLeverage', { defaultValue: '无杠杆' })
+}
+
+function formatPositionPct(value: number): string {
+  const percent = Math.abs(value) <= 1 ? value * 100 : value
+  return `${Number(percent.toFixed(2)).toString()}%`
 }
 
 function formatMetricPct(value: number | null, options: { sign?: boolean } = {}): string {
@@ -221,6 +222,7 @@ function toCardModel(
     symbolLabel: (template.symbol.split('-')[0] ?? 'Q').slice(0, 4) || 'Q',
     pairLabel: template.symbol,
     marketLabel: marketTypeLabel,
+    positionLabel: formatPositionPct(template.positionPct),
     leverageLabel: getLeverageLabel(template.leverage, t),
     periodLabel: template.timeframe,
     returnPct,
@@ -286,7 +288,13 @@ function Sparkline({ data, index, accent }: { data: number[]; index: string; acc
   )
 }
 
-function StatusBadge({ status }: { status: StrategyCardModel['status'] }) {
+function StatusBadge({
+  status,
+  className = '',
+}: {
+  status: StrategyCardModel['status']
+  className?: string
+}) {
   if (!status) return null
   const config = {
     hot: { label: '热门', className: 'bg-red-500/10 text-red-500' },
@@ -296,7 +304,8 @@ function StatusBadge({ status }: { status: StrategyCardModel['status'] }) {
   }[status]
   return (
     <span
-      className={`scard-badge rounded-[5px] px-1.5 py-0.5 text-[10px] font-bold tracking-[0.3px] ${config.className}`}
+      data-testid="strategy-plaza-status-badge"
+      className={`scard-badge rounded-[5px] px-1.5 py-0.5 text-[10px] font-bold tracking-[0.3px] ${config.className} ${className}`}
     >
       {config.label}
     </span>
@@ -327,6 +336,7 @@ function StrategyActionButtons({
   hasPendingAction,
   isRunning,
   isEditing,
+  variant = 'card',
   onRunStrategy,
   onEditStrategy,
   t,
@@ -335,24 +345,26 @@ function StrategyActionButtons({
   hasPendingAction: boolean
   isRunning: boolean
   isEditing: boolean
+  variant?: 'rail' | 'card'
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
   t: TFunction
 }) {
+  const hostClassName =
+    variant === 'rail' ? 'mt-3 flex w-full gap-2' : 'flex shrink-0 items-center gap-2'
+
   return (
-    <div
-      data-testid="strategy-plaza-actions"
-      className="mt-5 grid w-full grid-cols-2 gap-2 lg:mt-0"
-    >
+    <div data-testid="strategy-plaza-actions" className={hostClassName}>
       <button
         type="button"
+        data-testid="strategy-plaza-run-button"
         disabled={hasPendingAction}
         aria-busy={isRunning}
         onClick={event => {
           event.stopPropagation()
           onRunStrategy(item.template.id)
         }}
-        className={`scard-btn primary inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[9px] ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`scard-btn primary inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold whitespace-nowrap text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         {isRunning
@@ -367,7 +379,7 @@ function StrategyActionButtons({
           event.stopPropagation()
           onEditStrategy(item.template.id)
         }}
-        className="scard-btn inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-wait disabled:opacity-70"
+        className="scard-btn inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-xs leading-5 font-semibold whitespace-nowrap text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-wait disabled:opacity-70"
       >
         {isEditing ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -539,8 +551,8 @@ export function StrategyPlaza({
                 className="srail-card relative isolate flex w-[312px] shrink-0 snap-start flex-col overflow-hidden rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[18px] py-4 text-[color:var(--cf-text-strong)] shadow-sm transition hover:border-[color:var(--cf-text-strong)]/20 hover:shadow-lg"
               >
                 <div className="mesh pointer-events-none absolute inset-0 bg-[linear-gradient(color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px)] [mask-image:linear-gradient(120deg,#000_0%,transparent_70%)] bg-[length:22px_22px] opacity-40" />
+                <StatusBadge className="absolute top-3 right-3 z-[3]" status={item.status} />
                 <div className="relative z-[2]">
-                  <StatusBadge status={item.status} />
                   <div className="mt-1 flex items-center gap-2.5">
                     <span
                       className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-sm font-bold shadow-md"
@@ -604,6 +616,7 @@ export function StrategyPlaza({
                     onEditStrategy={onEditStrategy}
                     onRunStrategy={onRunStrategy}
                     t={t}
+                    variant="rail"
                   />
                 </div>
               </article>
@@ -743,6 +756,9 @@ export function StrategyPlaza({
                       <span className="scard-period shrink-0 text-[11.5px] text-[color:var(--cf-muted)]">
                         · {item.marketLabel}
                       </span>
+                      <span className="scard-period shrink-0 text-[11.5px] text-[color:var(--cf-muted)]">
+                        · {item.positionLabel} / {item.leverageLabel}
+                      </span>
                     </div>
                   </div>
                   <button
@@ -827,23 +843,10 @@ export function StrategyPlaza({
                   </div>
                 </div>
 
-                <div className="mt-auto rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-xs leading-5 text-[color:var(--cf-muted)]">
-                  <div
-                    data-testid="strategy-plaza-meta-row"
-                    className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3"
-                  >
-                    <span>
-                      {t('aiQuant.strategyPlazaCard.positionLeverage', {
-                        defaultValue: '仓位 / 杠杆',
-                      })}
-                    </span>
-                    <span className="font-mono font-semibold text-[color:var(--cf-text)] sm:text-right">
-                      {formatPositionPct(item.template.positionPct)} / {item.leverageLabel}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="scard-foot mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div
+                  data-testid="strategy-plaza-card-footer"
+                  className="scard-foot mt-auto flex items-center gap-3 border-t border-[color:var(--cf-border)] pt-3"
+                >
                   <div className="scard-author flex min-w-0 flex-1 items-center gap-1.5">
                     <span
                       className="a-av flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
@@ -883,10 +886,9 @@ export function StrategyPlaza({
           {Array.from({ length: totalPages }, (_, index) => index + 1).map(item => (
             <button
               key={item}
+              data-testid={item === currentPage ? 'strategy-plaza-page-button-active' : undefined}
               className={
-                item === currentPage
-                  ? 'is-on bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white'
-                  : ''
+                item === currentPage ? `is-on ${RUN_BUTTON_GRADIENT_CLASS} text-white` : ''
               }
               type="button"
               onClick={() => setPage(item)}

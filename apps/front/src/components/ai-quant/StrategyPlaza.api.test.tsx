@@ -244,7 +244,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(runButton?.className).toContain('to-[#B414F4]')
   })
 
-  it('renders symmetric run and edit buttons', async () => {
+  it('renders aligned run and edit buttons', async () => {
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -261,11 +261,12 @@ describe('StrategyPlaza API rendering', () => {
     )
     const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
 
-    expect(actionHost?.className).toContain('grid-cols-2')
+    expect(actionHost?.className).toContain('flex')
+    expect(actionHost?.className).not.toContain('grid-cols-2')
     expect(buttons[0]?.className).toContain('h-9')
     expect(buttons[1]?.className).toContain('h-9')
-    expect(buttons[0]?.className).toContain('w-full')
-    expect(buttons[1]?.className).toContain('w-full')
+    expect(buttons[0]?.className).toContain('flex-1')
+    expect(buttons[1]?.className).toContain('flex-1')
   })
 
   it('keeps the hot rail title concise and theme-aware', async () => {
@@ -289,6 +290,97 @@ describe('StrategyPlaza API rendering', () => {
     expect(railCard?.className).toContain('text-[color:var(--cf-text-strong)]')
     expect(railCard?.className).not.toContain('text-white')
     expect(railCard?.className).not.toContain('#16122F')
+  })
+
+  it('places hot rail status badges in the top-right corner', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
+    const badge = rail?.querySelector('[data-testid="strategy-plaza-status-badge"]')
+
+    expect(badge?.className).toContain('absolute')
+    expect(badge?.className).toContain('right-3')
+    expect(badge?.className).toContain('top-3')
+  })
+
+  it('uses the logo purple gradient for hot rail run buttons', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
+    const runButton = rail?.querySelector('[data-testid="strategy-plaza-run-button"]')
+
+    expect(runButton?.className).toContain('from-[#7C3AED]')
+    expect(runButton?.className).toContain('to-[#B414F4]')
+  })
+
+  it('renders card footer actions on one aligned row like the PC design', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const card = container.querySelector('[data-testid="strategy-plaza-card"]')
+    const footer = card?.querySelector('[data-testid="strategy-plaza-card-footer"]')
+    const positionLeverage = card?.querySelector('[data-testid="strategy-plaza-position-leverage"]')
+    const actions = card?.querySelector('[data-testid="strategy-plaza-actions"]')
+    const buttons = Array.from(actions?.querySelectorAll('button') ?? [])
+
+    expect(positionLeverage).toBeNull()
+    expect(footer?.className).toContain('flex')
+    expect(footer?.className).toContain('items-center')
+    expect(actions?.className).toContain('flex')
+    expect(actions?.className).not.toContain('grid-cols-2')
+    expect(buttons[0]?.className).toContain('h-9')
+    expect(buttons[1]?.className).toContain('h-9')
+  })
+
+  it('uses the logo purple gradient for the active pager', async () => {
+    const manyTemplates = Array.from({ length: 10 }, (_, index) => ({
+      ...template,
+      id: `ma-cross-${index}`,
+      name: `MA Cross Demo ${index}`,
+      displayOrder: index + 1,
+    }))
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={manyTemplates}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const activePage = container.querySelector('[data-testid="strategy-plaza-page-button-active"]')
+
+    expect(activePage?.className).toContain('from-[#7C3AED]')
+    expect(activePage?.className).toContain('to-[#B414F4]')
   })
 
   it('renders the PC strategy plaza rail, toolbar, rich cards and local search', async () => {
@@ -386,8 +478,8 @@ describe('StrategyPlaza API rendering', () => {
     expect(article?.className).toContain('min-w-0')
     expect(metadataRows[0]?.className).toContain('grid')
     expect(metadataRows[0]?.className).toContain('sm:flex')
-    expect(actions?.className).toContain('grid-cols-2')
-    expect(actions?.className).toContain('w-full')
+    expect(actions?.className).toContain('flex')
+    expect(actions?.className).not.toContain('grid-cols-2')
   })
 
   it('keeps loaded templates visible when showing an action error', async () => {
