@@ -17,6 +17,9 @@ export class StrategyPlazaTemplateResponseDto {
   @ApiProperty({ type: [String] })
   tags!: string[]
 
+  @ApiProperty({ enum: ['趋势', '突破', '反转', '网格', 'DCA', '盘口', '衍生品事件', '风控稳健'] })
+  category!: OfficialStrategyPlazaTemplate['category']
+
   @ApiProperty({ enum: ['low', 'medium', 'high'] })
   riskLevel!: 'low' | 'medium' | 'high'
 
@@ -67,6 +70,7 @@ export class StrategyPlazaTemplateResponseDto {
     this.description = template.description
     this.logicDescription = template.logicDescription
     this.tags = [...template.tags]
+    this.category = template.category
     this.riskLevel = template.riskLevel
     this.scenario = template.scenario
     this.exchange = template.exchange

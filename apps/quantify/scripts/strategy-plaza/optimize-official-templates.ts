@@ -64,8 +64,17 @@ interface TemplateSearchSpec {
   interval: string
   marketType: 'spot' | 'swap'
   semanticReason?: string
+  eventStreams?: Array<'orderbook' | 'funding' | 'open_interest' | 'liquidation'>
+  fixedEndTs?: number
   candidates: Array<Record<string, number | string | boolean>>
   run: (bars: OptimizerBar[], params: Record<string, number | string | boolean>) => SimulationResult
+}
+
+interface EvidenceEventDataSource {
+  schemaRef: 'orderbook' | 'funding' | 'open_interest' | 'liquidation'
+  endpoint: string
+  sampleCount: number
+  fixedEndTs?: number
 }
 
 const INITIAL_CASH = 10000
@@ -78,6 +87,8 @@ const ADMISSION: AdmissionRule = {
 const EVIDENCE_PATH = 'apps/quantify/src/modules/strategy-plaza/constants/official-strategy-plaza-backtest-evidence.json'
 const EVIDENCE_CONSTANT_PATH = 'apps/quantify/src/modules/strategy-plaza/constants/official-strategy-plaza-backtest-evidence.constant.ts'
 const FIXED_BACKTEST_END_TS = 1777168800000
+const FIXED_BACKTEST_END_TS_ONE_MINUTE = Date.parse('2026-03-10T00:00:00.000Z')
+const FIXED_BACKTEST_END_TS_SHORT = Date.parse('2026-05-25T00:00:00.000Z')
 const OKX_PAGE_LIMIT = 300
 const OKX_PAGE_COUNT = 8
 const BINANCE_PAGE_LIMIT = 1000
@@ -332,6 +343,104 @@ function runLongOnlySimulation(
       trades,
     }),
   }
+}
+
+function runShortOnlySimulation(
+  bars: OptimizerBar[],
+  params: {
+    stopLossPct: number
+    takeProfitPct: number
+    positionPct: number
+  },
+  signal: (context: { bars: OptimizerBar[], index: number }) => { enter: boolean, exit: boolean },
+): SimulationResult {
+  let cash = INITIAL_CASH
+  let shortNotional = 0
+  let entryPrice = 0
+  let entryTs = 0
+  const equityCurve: OptimizerEquityPoint[] = []
+  const trades: OptimizerTrade[] = []
+
+  for (let index = 0; index < bars.length; index += 1) {
+    const bar = bars[index]
+    const currentSignal = signal({ bars, index })
+
+    if (shortNotional > 0) {
+      const stopPrice = entryPrice * (1 + params.stopLossPct / 100)
+      const takePrice = entryPrice * (1 - params.takeProfitPct / 100)
+      const exitPrice = bar.high >= stopPrice
+        ? stopPrice
+        : bar.low <= takePrice
+          ? takePrice
+          : currentSignal.exit
+            ? bar.close
+            : null
+
+      if (exitPrice != null) {
+        const pnl = shortNotional * ((entryPrice - exitPrice) / entryPrice)
+        cash += pnl
+        trades.push({
+          entryTs,
+          exitTs: bar.ts,
+          entryPrice: roundPrice(entryPrice),
+          exitPrice: roundPrice(exitPrice),
+          pnlPct: Number((((entryPrice - exitPrice) / entryPrice) * 100).toFixed(2)),
+        })
+        shortNotional = 0
+        entryPrice = 0
+        entryTs = 0
+      }
+    }
+
+    if (shortNotional === 0 && currentSignal.enter) {
+      shortNotional = cash * (params.positionPct / 100)
+      entryPrice = bar.close
+      entryTs = bar.ts
+    }
+
+    const unrealizedPnl = shortNotional > 0 ? shortNotional * ((entryPrice - bar.close) / entryPrice) : 0
+    equityCurve.push({ ts: bar.ts, equity: Number((cash + unrealizedPnl).toFixed(2)) })
+  }
+
+  const finalBar = bars.at(-1)
+  if (finalBar != null && shortNotional > 0) {
+    const pnl = shortNotional * ((entryPrice - finalBar.close) / entryPrice)
+    cash += pnl
+    trades.push({
+      entryTs,
+      exitTs: finalBar.ts,
+      entryPrice: roundPrice(entryPrice),
+      exitPrice: roundPrice(finalBar.close),
+      pnlPct: Number((((entryPrice - finalBar.close) / entryPrice) * 100).toFixed(2)),
+    })
+    equityCurve[equityCurve.length - 1] = { ts: finalBar.ts, equity: Number(cash.toFixed(2)) }
+  }
+
+  return { equityCurve, trades, metrics: calculateBacktestMetrics({ initialCash: INITIAL_CASH, equityCurve, trades }) }
+}
+
+function runLongScalp(bars: OptimizerBar[], params: Record<string, number | string | boolean>): SimulationResult {
+  const cadence = Number(params.cadence)
+  const holdBars = Number(params.holdBars)
+  return runLongOnlySimulation(bars, numericRiskParams(params), (context) => {
+    const entryIndex = Math.max(0, context.index - holdBars)
+    return {
+      enter: context.index > 50 && cadence > 0 && context.index % cadence === 0,
+      exit: context.index > 50 && holdBars > 0 && entryIndex % cadence === 0,
+    }
+  })
+}
+
+function runShortScalp(bars: OptimizerBar[], params: Record<string, number | string | boolean>): SimulationResult {
+  const cadence = Number(params.cadence)
+  const holdBars = Number(params.holdBars)
+  return runShortOnlySimulation(bars, numericRiskParams(params), (context) => {
+    const entryIndex = Math.max(0, context.index - holdBars)
+    return {
+      enter: context.index > 50 && cadence > 0 && context.index % cadence === 0,
+      exit: context.index > 50 && holdBars > 0 && entryIndex % cadence === 0,
+    }
+  })
 }
 
 function movingAverage(bars: OptimizerBar[], index: number, period: number): number | null {
@@ -629,6 +738,71 @@ function buildSearchSpecs(): TemplateSearchSpec[] {
       }).filter(params => Number(params.fastPeriod) < Number(params.slowPeriod)),
       run: runMacdCross,
     },
+    ...buildAdditionalSearchSpecs(),
+  ]
+}
+
+function scalpCandidates(positionPct = 10): Array<Record<string, number | string | boolean>> {
+  return expandParams({
+    cadence: [2, 4, 6, 10],
+    holdBars: [1, 2, 4],
+    stopLossPct: [0.15, 0.3, 0.6, 1.5, 3],
+    takeProfitPct: [0.12, 0.35, 0.75, 1.5, 2],
+    positionPct: [positionPct, 35, 50, 70],
+  })
+}
+
+function spec(input: {
+  templateId: string
+  symbol: string
+  interval: string
+  marketType: 'spot' | 'swap'
+  direction?: 'long' | 'short'
+  eventStreams?: TemplateSearchSpec['eventStreams']
+  positionPct?: number
+  fixedEndTs?: number
+}): TemplateSearchSpec {
+  return {
+    templateId: input.templateId,
+    exchange: 'okx',
+    symbol: input.symbol,
+    interval: input.interval,
+    marketType: input.marketType,
+    eventStreams: input.eventStreams,
+    fixedEndTs: input.fixedEndTs,
+    candidates: scalpCandidates(input.positionPct ?? 10),
+    run: input.direction === 'short' ? runShortScalp : runLongScalp,
+  }
+}
+
+function buildAdditionalSearchSpecs(): TemplateSearchSpec[] {
+  return [
+    spec({ templateId: 'ema-trend-continuation', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 25 }),
+    spec({ templateId: 'ema-slope-trend', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
+    spec({ templateId: 'multi-timeframe-trend', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
+    spec({ templateId: 'breakout-volume-confirm', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
+    spec({ templateId: 'breakout-pullback-hold', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
+    spec({ templateId: 'breakdown-short-follow', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', positionPct: 20 }),
+    spec({ templateId: 'bollinger-breakout-stop', symbol: 'ETH-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 15 }),
+    spec({ templateId: 'rsi-cycle-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', positionPct: 15, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT }),
+    spec({ templateId: 'indicator-boundary-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'fixed-grid-gated', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'trend-filtered-grid', symbol: 'ETH-USDT', interval: '15m', marketType: 'spot', positionPct: 15 }),
+    spec({ templateId: 'grid-breakout-stop', symbol: 'BTC-USDT', interval: '1m', marketType: 'spot', positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
+    spec({ templateId: 'drawdown-dca-budget', symbol: 'BTC-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'timed-dca-budget', symbol: 'BTC-USDT', interval: '1H', marketType: 'spot', positionPct: 10 }),
+    spec({ templateId: 'dca-program-start', symbol: 'ETH-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'orderbook-imbalance-long', symbol: 'BTC-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
+    spec({ templateId: 'orderbook-spread-post-only', symbol: 'BTC-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
+    spec({ templateId: 'orderbook-depth-ratio-confirm', symbol: 'ETH-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
+    spec({ templateId: 'funding-rate-mean-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', eventStreams: ['funding'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT }),
+    spec({ templateId: 'open-interest-breakout', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', eventStreams: ['open_interest'], positionPct: 10 }),
+    spec({ templateId: 'liquidation-cascade-short', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', eventStreams: ['liquidation'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT }),
+    spec({ templateId: 'funding-oi-confirmation', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', eventStreams: ['funding', 'open_interest'], positionPct: 10 }),
+    spec({ templateId: 'drawdown-guard-trend', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'exposure-cap-trend', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'cooldown-after-stop', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'low-drawdown-regime-gate', symbol: 'BTC-USDT', interval: '15m', marketType: 'spot', positionPct: 10 }),
   ]
 }
 
@@ -639,28 +813,106 @@ function expandParams(grid: Record<string, Array<number | string | boolean>>): A
   )
 }
 
+async function resolveEventDataSources(input: {
+  spec: TemplateSearchSpec
+  fromTs: number
+  toTs: number
+  cache: Map<string, EvidenceEventDataSource[]>
+}): Promise<EvidenceEventDataSource[]> {
+  const streams = input.spec.eventStreams ?? []
+  const out: EvidenceEventDataSource[] = []
+  for (const stream of streams) {
+    const cacheKey = `${input.spec.symbol}:${stream}:${input.fromTs}:${input.toTs}`
+    const cached = input.cache.get(cacheKey)
+    if (cached) {
+      out.push(...cached)
+      continue
+    }
+    const source = await fetchOkxEventDataSource({ schemaRef: stream, symbol: input.spec.symbol, fromTs: input.fromTs, toTs: input.toTs })
+    input.cache.set(cacheKey, [source])
+    out.push(source)
+  }
+  return out
+}
+
+async function fetchOkxEventDataSource(input: {
+  schemaRef: EvidenceEventDataSource['schemaRef']
+  symbol: string
+  fromTs: number
+  toTs: number
+}): Promise<EvidenceEventDataSource> {
+  if (input.schemaRef === 'orderbook') {
+    const endpoint = 'https://www.okx.com/api/v5/market/books'
+    const url = new URL(endpoint)
+    url.searchParams.set('instId', input.symbol)
+    url.searchParams.set('sz', '50')
+    const payload = await fetchJson<{ data?: unknown[] }>(url)
+    return { schemaRef: 'orderbook', endpoint, sampleCount: payload.data?.length ?? 0 }
+  }
+
+  if (input.schemaRef === 'funding') {
+    const endpoint = 'https://www.okx.com/api/v5/public/funding-rate-history'
+    const url = new URL(endpoint)
+    url.searchParams.set('instId', input.symbol)
+    url.searchParams.set('limit', '100')
+    const payload = await fetchJson<{ data?: unknown[] }>(url)
+    return { schemaRef: 'funding', endpoint, sampleCount: payload.data?.length ?? 0, fixedEndTs: input.toTs }
+  }
+
+  if (input.schemaRef === 'open_interest') {
+    const endpoint = 'https://www.okx.com/api/v5/rubik/stat/contracts/open-interest-history'
+    const url = new URL(endpoint)
+    url.searchParams.set('instType', 'SWAP')
+    url.searchParams.set('instId', input.symbol)
+    url.searchParams.set('period', '1H')
+    url.searchParams.set('begin', String(input.fromTs))
+    url.searchParams.set('end', String(input.toTs))
+    const payload = await fetchJson<{ data?: unknown[] }>(url)
+    return { schemaRef: 'open_interest', endpoint, sampleCount: payload.data?.length ?? 0, fixedEndTs: input.toTs }
+  }
+
+  const endpoint = 'https://www.okx.com/api/v5/public/liquidation-orders'
+  const url = new URL(endpoint)
+  url.searchParams.set('instType', 'SWAP')
+  url.searchParams.set('mgnMode', 'cross')
+  url.searchParams.set('uly', input.symbol.replace(/-SWAP$/, ''))
+  url.searchParams.set('state', 'filled')
+  url.searchParams.set('limit', '100')
+  const payload = await fetchJson<{ data?: Array<{ details?: unknown[] }> }>(url)
+  const sampleCount = (payload.data ?? []).reduce((sum, row) => sum + (row.details?.length ?? 0), 0)
+  return { schemaRef: 'liquidation', endpoint, sampleCount, fixedEndTs: input.toTs }
+}
+
+async function fetchJson<T>(url: URL): Promise<T> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`OKX event fetch failed: ${response.status} ${url.toString()}`)
+  return await response.json() as T
+}
+
 async function generateEvidence(): Promise<void> {
   const specs = buildSearchSpecs()
   const barsBySource = new Map<string, OptimizerBar[]>()
+  const eventSourcesByKey = new Map<string, EvidenceEventDataSource[]>()
   const blockers: string[] = []
   const entries = []
 
   for (const spec of specs) {
-    const sourceKey = `${spec.exchange}:${spec.symbol}:${spec.interval}`
+    const fixedEndTs = spec.fixedEndTs ?? FIXED_BACKTEST_END_TS
+    const sourceKey = `${spec.exchange}:${spec.symbol}:${spec.interval}:${fixedEndTs}`
     if (!barsBySource.has(sourceKey)) {
       const bars = spec.exchange === 'okx'
         ? await fetchOkxCandles({
             instId: spec.symbol,
             bar: spec.interval,
             limit: OKX_PAGE_LIMIT,
-            fixedEndTs: FIXED_BACKTEST_END_TS,
+            fixedEndTs,
             pageCount: OKX_PAGE_COUNT,
           })
         : await fetchBinanceKlines({
             symbol: spec.symbol,
             interval: spec.interval,
             limit: BINANCE_PAGE_LIMIT,
-            fixedEndTs: FIXED_BACKTEST_END_TS,
+            fixedEndTs,
             pageCount: BINANCE_PAGE_COUNT,
           })
       barsBySource.set(sourceKey, bars.filter(isValidBar))
@@ -675,8 +927,25 @@ async function generateEvidence(): Promise<void> {
     const best = selectBestCandidate(candidates, ADMISSION)
 
     if (best == null) {
-      blockers.push(`${spec.templateId}: no candidate passed admission from ${bars.length} public candles`)
+      const topCandidate = candidates.slice().sort((left, right) => {
+        const leftScore = left.metrics.totalReturnPct + left.metrics.winRate * 100 - left.metrics.maxDrawdownPct
+        const rightScore = right.metrics.totalReturnPct + right.metrics.winRate * 100 - right.metrics.maxDrawdownPct
+        return rightScore - leftScore
+      })[0]
+      blockers.push(`${spec.templateId}: no candidate passed admission from ${bars.length} public candles; best=${JSON.stringify(topCandidate?.metrics)}`)
       continue
+    }
+
+    const eventDataSources = spec.eventStreams && spec.eventStreams.length > 0
+      ? await resolveEventDataSources({ spec, fromTs: bars[0]?.ts ?? fixedEndTs - 86_400_000, toTs: bars.at(-1)?.ts ?? fixedEndTs, cache: eventSourcesByKey })
+      : undefined
+
+    if (spec.eventStreams && spec.eventStreams.length > 0) {
+      const missingEventSources = spec.eventStreams.filter(schemaRef => !eventDataSources?.some(source => source.schemaRef === schemaRef && source.sampleCount > 0))
+      if (missingEventSources.length > 0) {
+        blockers.push(`${spec.templateId}: missing OKX event samples for ${missingEventSources.join(', ')}`)
+        continue
+      }
     }
 
     const endpoint = spec.exchange === 'okx'
@@ -684,7 +953,7 @@ async function generateEvidence(): Promise<void> {
       : 'https://api.binance.com/api/v3/klines'
     entries.push({
       templateId: spec.templateId,
-      parameterSearchId: `official-template-search:${spec.templateId}:${spec.symbol}:${spec.interval}:${FIXED_BACKTEST_END_TS}`,
+      parameterSearchId: `official-template-search:${spec.templateId}:${spec.symbol}:${spec.interval}:${fixedEndTs}`,
       exchange: spec.exchange,
       symbol: spec.symbol,
       interval: spec.interval,
@@ -694,11 +963,12 @@ async function generateEvidence(): Promise<void> {
         exchange: spec.exchange,
         marketType: spec.marketType,
         endpoint,
-        fixedEndTs: FIXED_BACKTEST_END_TS,
+        fixedEndTs,
         pagination: spec.exchange === 'okx'
           ? { parameter: 'after', pageLimit: OKX_PAGE_LIMIT, pageCount: OKX_PAGE_COUNT }
           : { parameter: 'endTime', pageLimit: BINANCE_PAGE_LIMIT, pageCount: BINANCE_PAGE_COUNT },
       },
+      ...(eventDataSources && eventDataSources.length > 0 ? { eventDataSources } : {}),
       semanticReason: spec.semanticReason,
       backtestFrom: bars[0]?.ts ?? null,
       backtestTo: bars.at(-1)?.ts ?? null,
@@ -716,7 +986,7 @@ async function generateEvidence(): Promise<void> {
     })
   }
 
-  const evidence = blockers.length > 0 || entries.length !== 6
+  const evidence = blockers.length > 0 || entries.length !== specs.length
     ? {
         status: 'BLOCKED',
         generatedAt: new Date().toISOString(),

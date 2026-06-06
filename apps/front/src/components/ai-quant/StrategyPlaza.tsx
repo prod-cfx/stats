@@ -145,6 +145,7 @@ function buildSeed(template: StrategyPlazaTemplate, returnPct: number | null): n
 }
 
 function inferCategory(template: StrategyPlazaTemplate, tags: string[]): string {
+  if (template.category) return template.category
   const mappedCategory = TEMPLATE_CATEGORY[template.id]
   if (mappedCategory) return mappedCategory
   const source =

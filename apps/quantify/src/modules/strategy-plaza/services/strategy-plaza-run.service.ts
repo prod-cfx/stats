@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { AccountStrategyViewService } from '@/modules/account-strategy-view/services/account-strategy-view.service'
 import { ExchangeAccountRepository } from '@/modules/exchange-accounts/repositories/exchange-account.repository'
-import { StrategyPlazaOkxDemoApiKeyRequiredException } from '../exceptions'
+import { StrategyPlazaOkxDemoApiKeyRequiredException, StrategyPlazaOkxLiveApiKeyRequiredException } from '../exceptions'
 import { StrategyPlazaOfficialSnapshotRepository } from '../repositories/strategy-plaza-official-snapshot.repository'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
@@ -18,6 +18,8 @@ export class StrategyPlazaRunService {
     userId: string
     templateId: string
     runRequestId: string
+    mode?: 'TESTNET' | 'LIVE'
+    exchangeAccountId?: string
   }) {
     const template = this.templates.getRequired(input.templateId)
     const existingSnapshot = await this.officialSnapshots.resolveExistingOfficialSnapshotForUser({
@@ -35,9 +37,23 @@ export class StrategyPlazaRunService {
       }
     }
 
-    const account = await this.exchangeAccounts.findLatestOkxDemoAccountForUser(input.userId)
+    const mode = input.mode ?? 'TESTNET'
+    const account = mode === 'LIVE'
+      ? await this.exchangeAccounts.findExchangeAccountFirst({
+          where: {
+            ...(input.exchangeAccountId ? { id: input.exchangeAccountId } : {}),
+            userId: input.userId,
+            exchangeId: 'okx',
+            isTestnet: false,
+          },
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+          select: { id: true, name: true },
+        })
+      : await this.exchangeAccounts.findLatestOkxDemoAccountForUser(input.userId)
     if (!account) {
-      throw new StrategyPlazaOkxDemoApiKeyRequiredException({ userId: input.userId })
+      throw mode === 'LIVE'
+        ? new StrategyPlazaOkxLiveApiKeyRequiredException({ userId: input.userId })
+        : new StrategyPlazaOkxDemoApiKeyRequiredException({ userId: input.userId })
     }
     const snapshot = await this.officialSnapshots.resolveOfficialSnapshotForUser({
       userId: input.userId,
@@ -61,7 +77,7 @@ export class StrategyPlazaRunService {
       publishedSnapshotId: snapshot.id,
       exchangeAccountId: account.id,
       exchangeAccountName: account.name,
-      mode: 'TESTNET',
+      mode,
       deploymentExecutionConfig: template.runConfig.deploymentExecutionConfig,
     })
   }

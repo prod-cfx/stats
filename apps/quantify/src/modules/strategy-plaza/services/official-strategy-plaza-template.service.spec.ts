@@ -1,4 +1,6 @@
 import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
+import { STAGE4_ATOM_COVERAGE_MATRIX, STAGE4_DEPLOY_READY_STATUSES } from '@/modules/llm-strategy-codegen/stage4/atom-coverage-matrix'
+import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
 import { StrategyPlazaTemplateResponseDto } from '../dto/strategy-plaza-template.response.dto'
 import { StrategyPlazaTemplateNotFoundException } from '../exceptions/strategy-plaza-template-not-found.exception'
@@ -8,44 +10,91 @@ import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-
 describe('OfficialStrategyPlazaTemplateService', () => {
   const service = new OfficialStrategyPlazaTemplateService()
 
-  it('returns exactly the six public beta templates in display order', () => {
+  it('returns official templates in display order while preserving the legacy public beta set', () => {
     const templates = service.list()
 
-    expect(templates.map(item => item.id)).toEqual([
+    expect(templates.map(item => item.displayOrder)).toEqual(
+      templates.map(item => item.displayOrder).slice().sort((left, right) => left - right),
+    )
+    expect(templates.map(item => item.id)).toEqual(expect.arrayContaining([
       'ma-cross',
       'bollinger-reversion',
       'grid-range',
       'rsi-reversal',
       'breakout-follow',
       'macd-cross',
-    ])
+    ]))
     expect(templates.every(item => item.exchange === 'okx')).toBe(true)
     expect(templates.every(item => item.environment === 'demo')).toBe(true)
     expect(templates.every(item => item.status === 'live')).toBe(true)
-    expect(templates.every(item =>
+    expect(templates.filter(item => OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.some(evidence => evidence.templateId === item.id)).every(item =>
       item.displayMetrics.returnPct != null
       && item.displayMetrics.winRatePct != null
       && item.displayMetrics.maxDrawdownPct != null,
     )).toBe(true)
-    expect(Math.max(...templates.map(item => item.displayMetrics.maxDrawdownPct ?? Number.POSITIVE_INFINITY))).toBeLessThanOrEqual(20)
+    expect(Math.max(...templates.map(item => item.displayMetrics.maxDrawdownPct ?? 0))).toBeLessThanOrEqual(20)
   })
 
-  it('keeps all six official golden snapshots on the signal-generator deploy path', () => {
+  it('returns live official templates across every Strategy Plaza category', () => {
+    const templates = service.list()
+    const counts = templates.reduce<Record<string, number>>((acc, template) => {
+      acc[template.category] = (acc[template.category] ?? 0) + 1
+      return acc
+    }, {})
+
+    expect(Object.keys(counts).sort()).toEqual([
+      'DCA',
+      '反转',
+      '衍生品事件',
+      '突破',
+      '盘口',
+      '网格',
+      '趋势',
+      '风控稳健',
+    ].sort())
+    for (const count of Object.values(counts)) {
+      expect(count).toBeGreaterThanOrEqual(3)
+      expect(count).toBeLessThanOrEqual(6)
+    }
+  })
+
+  it('requires verified backtest evidence for every live official template', () => {
+    const evidenceByTemplateId = new Set(
+      OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.map(item => item.templateId),
+    )
+    const missingEvidenceTemplateIds = service.list()
+      .filter(template => template.status === 'live')
+      .map(template => template.id)
+      .filter(templateId => !evidenceByTemplateId.has(templateId))
+
+    expect(missingEvidenceTemplateIds).toEqual([])
+  })
+
+  it('uses only rules mainflow atoms that reach backtest and deploy payload', () => {
+    const deployReadyAtomKeys = new Set(
+      STAGE4_ATOM_COVERAGE_MATRIX
+        .filter(row => STAGE4_DEPLOY_READY_STATUSES.includes(row.status))
+        .filter(row => row.reachesBacktest && row.reachesDeployPayload)
+        .flatMap(row => [row.atomKey, ...row.coveredAtomKeys]),
+    )
+    const unsupportedAtoms = service.list().flatMap(template =>
+      template.expectedAtomKeys
+        .filter(atomKey => !deployReadyAtomKeys.has(atomKey))
+        .map(atomKey => ({ templateId: template.id, atomKey })),
+    )
+
+    expect(unsupportedAtoms).toEqual([])
+  })
+
+  it('keeps official golden snapshots on the signal-generator deploy path', () => {
     const snapshots = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(template => ({
       templateId: template.id,
       publishedSnapshotId: template.runConfig.publishedSnapshotId,
       content: buildOfficialStrategySnapshotContent(template),
     }))
 
-    expect(snapshots).toHaveLength(6)
-    expect(snapshots.map(item => item.templateId)).toEqual([
-      'ma-cross',
-      'bollinger-reversion',
-      'grid-range',
-      'rsi-reversal',
-      'breakout-follow',
-      'macd-cross',
-    ])
+    expect(snapshots).toHaveLength(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.length)
+    expect(snapshots.map(item => item.templateId)).toEqual(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(template => template.id))
     expect(snapshots.every(item => item.publishedSnapshotId.endsWith('-snapshot'))).toBe(true)
     expect(snapshots.every(item =>
       item.content.executionEnvelope.runtime === 'signal-generator'
@@ -57,7 +106,7 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(snapshots.every(item => item.content.backtestConfigDefaults.range?.preset === 'CUSTOM')).toBe(true)
   })
 
-  it('builds backtest adapters for all six official signal-generator snapshots', async () => {
+  it('builds backtest adapters for all official signal-generator snapshots', async () => {
     const adapter = new BacktestStrategyAdapterService()
 
     await expect(Promise.all(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(async (template) => {
@@ -69,7 +118,7 @@ describe('OfficialStrategyPlazaTemplateService', () => {
         params: content.paramsSnapshot,
         executionEnvelope: content.executionEnvelope,
       })
-    }))).resolves.toHaveLength(6)
+    }))).resolves.toHaveLength(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.length)
   })
 
   it('exposes fixed run parameters without user override fields', () => {

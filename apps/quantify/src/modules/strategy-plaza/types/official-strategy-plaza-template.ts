@@ -1,3 +1,5 @@
+import type { OfficialStrategyPlazaCategory } from '../constants/official-strategy-plaza-category'
+
 export type StrategyPlazaTemplateId =
   | 'ma-cross'
   | 'bollinger-reversion'
@@ -5,6 +7,34 @@ export type StrategyPlazaTemplateId =
   | 'rsi-reversal'
   | 'breakout-follow'
   | 'macd-cross'
+  | 'ema-trend-continuation'
+  | 'ema-slope-trend'
+  | 'multi-timeframe-trend'
+  | 'macd-momentum-filter'
+  | 'breakout-volume-confirm'
+  | 'breakout-pullback-hold'
+  | 'breakdown-short-follow'
+  | 'bollinger-breakout-stop'
+  | 'rsi-cycle-reversion'
+  | 'indicator-boundary-reversion'
+  | 'range-edge-reversal'
+  | 'fixed-grid-gated'
+  | 'trend-filtered-grid'
+  | 'grid-breakout-stop'
+  | 'drawdown-dca-budget'
+  | 'timed-dca-budget'
+  | 'dca-program-start'
+  | 'orderbook-imbalance-long'
+  | 'orderbook-spread-post-only'
+  | 'orderbook-depth-ratio-confirm'
+  | 'funding-rate-mean-reversion'
+  | 'open-interest-breakout'
+  | 'liquidation-cascade-short'
+  | 'funding-oi-confirmation'
+  | 'drawdown-guard-trend'
+  | 'exposure-cap-trend'
+  | 'cooldown-after-stop'
+  | 'low-drawdown-regime-gate'
 
 export type StrategyPlazaMarketType = 'spot' | 'perp'
 export type StrategyPlazaRiskLevel = 'low' | 'medium' | 'high'
@@ -29,6 +59,8 @@ export interface OfficialStrategyPlazaBacktestMetrics {
   tradeCount: number
 }
 
+export type OfficialStrategyPlazaTemplateAdmission = OfficialStrategyPlazaBacktestAdmission
+
 export interface OfficialStrategyPlazaEvidenceDataSource {
   exchange: StrategyPlazaEvidenceExchange
   marketType: StrategyPlazaEvidenceMarketType
@@ -41,6 +73,13 @@ export interface OfficialStrategyPlazaEvidenceDataSource {
   }
 }
 
+export interface OfficialStrategyPlazaEvidenceEventDataSource {
+  schemaRef: 'orderbook' | 'funding' | 'open_interest' | 'liquidation'
+  endpoint: string
+  sampleCount: number
+  fixedEndTs?: number
+}
+
 export interface OfficialStrategyPlazaEvidenceTemplate {
   templateId: string
   parameterSearchId: string
@@ -50,6 +89,7 @@ export interface OfficialStrategyPlazaEvidenceTemplate {
   marketType: StrategyPlazaEvidenceMarketType
   source: string
   dataSource: OfficialStrategyPlazaEvidenceDataSource
+  eventDataSources?: OfficialStrategyPlazaEvidenceEventDataSource[]
   backtestFrom: number
   backtestTo: number
   admission: OfficialStrategyPlazaBacktestAdmission
@@ -107,6 +147,7 @@ export interface OfficialStrategyPlazaEditSeed {
 
 export interface OfficialStrategyPlazaTemplate {
   id: StrategyPlazaTemplateId
+  category: OfficialStrategyPlazaCategory
   name: string
   description: string
   logicDescription: string
@@ -119,6 +160,8 @@ export interface OfficialStrategyPlazaTemplate {
   displayOrder: number
   runConfig: OfficialStrategyPlazaRunConfig
   editSeed: OfficialStrategyPlazaEditSeed
+  expectedAtomKeys: readonly string[]
+  admission: OfficialStrategyPlazaTemplateAdmission
   displayMetrics: {
     label: 'official_sample_backtest'
     returnPct: number | null
