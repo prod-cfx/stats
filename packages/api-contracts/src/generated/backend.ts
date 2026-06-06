@@ -45,6 +45,7 @@ const UpdateSettingDto = z
     isSystem: z.boolean().optional(),
   })
   .passthrough()
+const TelegramWebAuthorizeUrlResponseDto = z.object({ authorizeUrl: z.string() }).passthrough()
 const CreateTelegramDesktopIntentRequestDto = z
   .object({
     intent: z.enum(['login', 'bind']).default('login'),
@@ -52,6 +53,18 @@ const CreateTelegramDesktopIntentRequestDto = z
     redirect: z.string(),
   })
   .partial()
+  .passthrough()
+const TelegramDesktopIntentResponseDto = z
+  .object({
+    intentId: z.string(),
+    deepLink: z.string(),
+    webLink: z.string(),
+    callbackUrl: z.string(),
+    expiresInSeconds: z.number(),
+  })
+  .passthrough()
+const TelegramDesktopIntentStatusResponseDto = z
+  .object({ status: z.enum(['pending', 'confirmed', 'expired']) })
   .passthrough()
 const TelegramDesktopExchangeRequestDto = z
   .object({ intentId: z.string(), betaCode: z.string().optional() })
@@ -79,6 +92,7 @@ const TelegramBotWebhookRequestDto = z
   })
   .partial()
   .passthrough()
+const TelegramBotWebhookResponseDto = z.object({ ok: z.boolean() }).passthrough()
 const SendVerificationCodeRequestDto = z
   .object({ email: z.string(), purpose: z.enum(['EMAIL_VERIFICATION', 'PASSWORD_RESET']) })
   .passthrough()
@@ -1624,11 +1638,15 @@ export const schemas = {
   SettingResponseDto,
   CreateSettingDto,
   UpdateSettingDto,
+  TelegramWebAuthorizeUrlResponseDto,
   CreateTelegramDesktopIntentRequestDto,
+  TelegramDesktopIntentResponseDto,
+  TelegramDesktopIntentStatusResponseDto,
   TelegramDesktopExchangeRequestDto,
   UserProfileResponseDto,
   AuthResponseDto,
   TelegramBotWebhookRequestDto,
+  TelegramBotWebhookResponseDto,
   SendVerificationCodeRequestDto,
   SendEmailLoginCodeRequestDto,
   VerifyEmailLoginCodeRequestDto,
@@ -3655,7 +3673,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: TelegramBotWebhookResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -3683,7 +3703,9 @@ const endpoints = makeApi([
         schema: CreateTelegramDesktopIntentRequestDto,
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: TelegramDesktopIntentResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -3697,7 +3719,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: TelegramDesktopIntentStatusResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -3750,7 +3774,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: TelegramWebAuthorizeUrlResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',

@@ -17,6 +17,10 @@ import { VerifyEmailRequestDto } from './dto/requests/verify-email.request.dto'
 import { VerifyEmailLoginCodeRequestDto } from './dto/requests/verify-email-login-code.request.dto'
 import { VerifyPasswordResetRequestDto } from './dto/requests/verify-password-reset.request.dto'
 import { AuthResponseDto } from './dto/responses/auth.response.dto'
+import { TelegramWebAuthorizeUrlResponseDto } from './dto/responses/telegram-web-authorize-url.response.dto'
+import { TelegramDesktopIntentResponseDto } from './dto/responses/telegram-desktop-intent.response.dto'
+import { TelegramDesktopIntentStatusResponseDto } from './dto/responses/telegram-desktop-intent-status.response.dto'
+import { TelegramBotWebhookResponseDto } from './dto/responses/telegram-bot-webhook.response.dto'
 import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
 // NestJS DI 需要运行时引用 UserAuthService，用于生成设计时类型元数据
@@ -30,11 +34,18 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { CurrentUser } from './decorators/current-user.decorator'
 import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common'
-import { ApiBody, ApiExtraModels, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { ApiBody, ApiExtraModels, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 
 @ApiTags('auth')
 @Controller('auth')
-@ApiExtraModels(BaseResponseDto, AuthResponseDto)
+@ApiExtraModels(
+  BaseResponseDto,
+  AuthResponseDto,
+  TelegramWebAuthorizeUrlResponseDto,
+  TelegramDesktopIntentResponseDto,
+  TelegramDesktopIntentStatusResponseDto,
+  TelegramBotWebhookResponseDto,
+)
 export class AuthController {
   constructor(private readonly userAuthService: UserAuthService) {}
 
@@ -70,11 +81,15 @@ export class AuthController {
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '获取 Telegram 网页授权地址' })
+  @ApiOkResponse({
+    description: '成功获取授权地址',
+    schema: buildBaseResponseSchema(TelegramWebAuthorizeUrlResponseDto),
+  })
   async getTelegramWebAuthorizeUrl(
     @Query('intent') intent?: string,
     @Query('lng') lng?: string,
     @Query('redirect') redirect?: string,
-  ): Promise<{ authorizeUrl: string }> {
+  ): Promise<TelegramWebAuthorizeUrlResponseDto> {
     if (intent !== 'login' && intent !== 'bind') {
       throw new DomainException('Invalid intent', {
         code: ErrorCode.BAD_REQUEST,
@@ -96,24 +111,26 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '创建 Telegram 桌面端登录意图' })
   @ApiBody({ type: CreateTelegramDesktopIntentRequestDto })
+  @ApiOkResponse({
+    description: '成功创建登录意图',
+    schema: buildBaseResponseSchema(TelegramDesktopIntentResponseDto),
+  })
   async createTelegramDesktopIntent(
     @Body() dto: CreateTelegramDesktopIntentRequestDto,
-  ): Promise<{
-      intentId: string
-      deepLink: string
-      webLink: string
-      callbackUrl: string
-      expiresInSeconds: number
-    }> {
+  ): Promise<TelegramDesktopIntentResponseDto> {
     return this.userAuthService.createTelegramDesktopIntent(dto)
   }
 
   @Get('telegram/desktop/intent/:intentId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '查询 Telegram 桌面端登录意图状态' })
-  async getTelegramDesktopIntentStatus(@Param('intentId') intentId: string): Promise<{
-    status: 'pending' | 'confirmed' | 'expired'
-  }> {
+  @ApiOkResponse({
+    description: '成功查询登录意图状态',
+    schema: buildBaseResponseSchema(TelegramDesktopIntentStatusResponseDto),
+  })
+  async getTelegramDesktopIntentStatus(
+    @Param('intentId') intentId: string,
+  ): Promise<TelegramDesktopIntentStatusResponseDto> {
     return this.userAuthService.getTelegramDesktopIntentStatus(intentId)
   }
 
@@ -155,10 +172,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Telegram Bot Webhook 回调' })
   @ApiBody({ type: TelegramBotWebhookRequestDto })
+  @ApiOkResponse({
+    description: 'Webhook 处理成功',
+    schema: buildBaseResponseSchema(TelegramBotWebhookResponseDto),
+  })
   async handleTelegramBotWebhook(
     @Body() dto: TelegramBotWebhookRequestDto,
     @Headers('x-telegram-bot-api-secret-token') secretToken?: string,
-  ): Promise<{ ok: true }> {
+  ): Promise<TelegramBotWebhookResponseDto> {
     await this.userAuthService.handleTelegramBotWebhook(dto, secretToken)
     return { ok: true }
   }
@@ -169,6 +190,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送验证码（注册/密码重置）' })
   @ApiBody({ type: SendVerificationCodeRequestDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '验证码已发送（无返回体）' })
   async sendVerificationCode(@Body() dto: SendVerificationCodeRequestDto): Promise<void> {
     await this.userAuthService.sendVerificationCode(dto)
   }
@@ -179,6 +201,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送邮箱登录验证码' })
   @ApiBody({ type: SendEmailLoginCodeRequestDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '登录验证码已发送（无返回体）' })
   async sendEmailLoginCode(@Body() dto: SendEmailLoginCodeRequestDto): Promise<void> {
     await this.userAuthService.sendEmailLoginCode(dto)
   }
@@ -248,6 +271,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '申请重置密码' })
   @ApiBody({ type: PasswordResetRequestDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '重置密码请求已受理（无返回体）' })
   async requestPasswordReset(@Body() dto: PasswordResetRequestDto): Promise<void> {
     await this.userAuthService.requestPasswordReset(dto)
   }
@@ -258,6 +282,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '验证重置密码验证码并更新密码' })
   @ApiBody({ type: VerifyPasswordResetRequestDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '密码已更新（无返回体）' })
   async verifyPasswordReset(@Body() dto: VerifyPasswordResetRequestDto): Promise<void> {
     await this.userAuthService.verifyPasswordReset(dto)
   }
@@ -268,6 +293,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '验证邮箱验证码' })
   @ApiBody({ type: VerifyEmailRequestDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '邮箱已验证（无返回体）' })
   async verifyEmail(@Body() dto: VerifyEmailRequestDto): Promise<void> {
     await this.userAuthService.verifyEmail(dto)
   }
@@ -278,6 +304,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '重新发送邮箱验证码' })
   @ApiBody({ type: ResendVerificationRequestDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '验证码已重新发送（无返回体）' })
   async resendVerification(@Body() dto: ResendVerificationRequestDto): Promise<void> {
     await this.userAuthService.resendVerification(dto)
   }
