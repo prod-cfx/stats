@@ -11,9 +11,11 @@ const mockOpenAuth = jest.fn()
 const mockDetailProps: Array<Record<string, unknown>> = []
 const stableSession = { userId: 'user-1' }
 let mockSession: { userId: string } | null = stableSession
+let mockSearchParams = new URLSearchParams()
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useSearchParams: () => mockSearchParams,
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -42,9 +44,7 @@ jest.mock('@/components/account/AiQuantStrategyDetail', () => ({
     mockDetailProps.push(props)
     return (
       <div>
-        <div data-testid="strategy-id">
-          {(props.strategy as { id?: string } | null)?.id ?? ''}
-        </div>
+        <div data-testid="strategy-id">{(props.strategy as { id?: string } | null)?.id ?? ''}</div>
         {'onRunBacktest' in props && (
           <button data-testid="run-backtest" type="button">
             run
@@ -75,6 +75,7 @@ describe('StrategyDetailPageClient', () => {
     root = createRoot(container)
     mockDetailProps.length = 0
     mockSession = stableSession
+    mockSearchParams = new URLSearchParams()
     mockFetchDetail.mockReset()
     mockOpenAuth.mockReset()
     mockMapDetailToRecord.mockReset()
@@ -141,6 +142,35 @@ describe('StrategyDetailPageClient', () => {
       closeRedirect: '/zh/account?tab=ai-quant',
     })
     expect(mockFetchDetail).not.toHaveBeenCalled()
+  })
+
+  it('uses a safe plaza return path for auth close and detail back link', async () => {
+    mockSearchParams = new URLSearchParams('from=%2Fzh%2Fai-quant%2Fplaza')
+    mockSession = null
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
+    })
+
+    expect(mockOpenAuth).toHaveBeenCalledWith({
+      lng: 'zh',
+      redirect: '/zh/account/ai-quant/strategy/inst-1?from=%2Fzh%2Fai-quant%2Fplaza',
+      closeRedirect: '/zh/ai-quant/plaza',
+    })
+
+    mockOpenAuth.mockReset()
+    mockSession = stableSession
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mockDetailProps.at(-1)).toMatchObject({
+      backHref: '/zh/ai-quant/plaza',
+      backLabelKey: 'aiQuant.plaza',
+    })
   })
 
   it('suppresses auth sheet after logout on the strategy detail page', async () => {

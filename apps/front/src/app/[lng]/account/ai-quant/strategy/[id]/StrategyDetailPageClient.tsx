@@ -1,6 +1,7 @@
 'use client'
 
 import type { AiQuantStrategyRecord } from '@/components/account/ai-quant-strategy-store'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
@@ -14,19 +15,29 @@ interface StrategyDetailPageClientProps {
   id: string
 }
 
+function resolvePlazaReturnHref(lng: 'zh' | 'en', value: string | null) {
+  const plazaHref = `/${lng}/ai-quant/plaza`
+  return value === plazaHref ? plazaHref : null
+}
+
 export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientProps) {
   const { session, isLoading } = useAuth()
   const { openAuth } = useAuthSheet()
+  const searchParams = useSearchParams()
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(true)
-  const strategyRedirect = `/${lng}/account/ai-quant/strategy/${id}`
+  const plazaReturnHref = resolvePlazaReturnHref(lng, searchParams?.get('from') ?? null)
+  const strategyRedirect = plazaReturnHref
+    ? `/${lng}/account/ai-quant/strategy/${id}?from=${encodeURIComponent(plazaReturnHref)}`
+    : `/${lng}/account/ai-quant/strategy/${id}`
+  const closeRedirect = plazaReturnHref ?? `/${lng}/account?tab=ai-quant`
 
   useEffect(() => {
     if (!isLoading && !session) {
       if (shouldSuppressAuthGate()) return
-      openAuth({ lng, redirect: strategyRedirect, closeRedirect: `/${lng}/account?tab=ai-quant` })
+      openAuth({ lng, redirect: strategyRedirect, closeRedirect })
     }
-  }, [isLoading, lng, openAuth, session, strategyRedirect])
+  }, [closeRedirect, isLoading, lng, openAuth, session, strategyRedirect])
 
   useEffect(() => {
     if (isLoading || !session) return
@@ -78,5 +89,12 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     )
   }
 
-  return <AiQuantStrategyDetail lng={lng} strategy={strategy} />
+  return (
+    <AiQuantStrategyDetail
+      lng={lng}
+      strategy={strategy}
+      backHref={plazaReturnHref ?? undefined}
+      backLabelKey={plazaReturnHref ? 'aiQuant.plaza' : undefined}
+    />
+  )
 }

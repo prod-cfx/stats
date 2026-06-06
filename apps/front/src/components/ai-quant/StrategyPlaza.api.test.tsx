@@ -223,6 +223,27 @@ describe('StrategyPlaza API rendering', () => {
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
   })
 
+  it('uses the logo purple gradient on run actions', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const runButton = actionHost?.querySelector('button')
+
+    expect(runButton?.className).toContain('from-[#7C3AED]')
+    expect(runButton?.className).toContain('to-[#B414F4]')
+  })
+
   it('renders the PC strategy plaza rail, toolbar, rich cards and local search', async () => {
     await act(async () => {
       root.render(

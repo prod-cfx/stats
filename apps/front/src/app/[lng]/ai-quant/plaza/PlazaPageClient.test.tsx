@@ -79,7 +79,9 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ href, children }: { href: string, children: React.ReactNode }) => <a href={href}>{children}</a>,
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -108,7 +110,9 @@ jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
 jest.mock('@/components/ai-quant/StrategyPlaza', () => ({
   StrategyPlaza: (props: typeof plazaProps) => {
     plazaProps = props
-    return <div data-testid="strategy-plaza">{props?.templates.map(item => item.name).join('|')}</div>
+    return (
+      <div data-testid="strategy-plaza">{props?.templates.map(item => item.name).join('|')}</div>
+    )
   },
 }))
 
@@ -119,8 +123,9 @@ jest.mock('@/lib/api', () => ({
     mockRunStrategyPlazaTemplate(...args),
   startStrategyPlazaEditSession: (...args: Parameters<typeof mockStartStrategyPlazaEditSession>) =>
     mockStartStrategyPlazaEditSession(...args),
-  createStrategyPlazaRunRequestId: (...args: Parameters<typeof mockCreateStrategyPlazaRunRequestId>) =>
-    mockCreateStrategyPlazaRunRequestId(...args),
+  createStrategyPlazaRunRequestId: (
+    ...args: Parameters<typeof mockCreateStrategyPlazaRunRequestId>
+  ) => mockCreateStrategyPlazaRunRequestId(...args),
 }))
 
 async function flushPromises() {
@@ -134,7 +139,8 @@ describe('AiQuantPlazaPageClient', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -168,7 +174,9 @@ describe('AiQuantPlazaPageClient', () => {
     })
     await flushPromises()
 
-    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+    const backLink = Array.from(container.querySelectorAll('a')).find(link =>
+      link.textContent?.includes('返回'),
+    )
 
     expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
   })
@@ -184,7 +192,9 @@ describe('AiQuantPlazaPageClient', () => {
     })
     await flushPromises()
 
-    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+    const backLink = Array.from(container.querySelectorAll('a')).find(link =>
+      link.textContent?.includes('返回'),
+    )
 
     expect(backLink?.getAttribute('href')).toBe('/zh/ai-quant')
   })
@@ -238,7 +248,9 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockRunStrategyPlazaTemplate).toHaveBeenCalledWith('ma-cross', 'plaza-run-1')
-    expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-1')
+    expect(mockPush).toHaveBeenCalledWith(
+      '/zh/account/ai-quant/strategy/strategy-1?from=%2Fzh%2Fai-quant%2Fplaza',
+    )
   })
 
   it('shows an existing strategy dialog and lets users open the existing strategy detail', async () => {
@@ -275,16 +287,14 @@ describe('AiQuantPlazaPageClient', () => {
       viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-existing')
+    expect(mockPush).toHaveBeenCalledWith(
+      '/zh/account/ai-quant/strategy/strategy-existing?from=%2Fzh%2Fai-quant%2Fplaza',
+    )
   })
 
   it('stores plaza-run intent and routes to exchange API binding when OKX demo key is missing', async () => {
     mockRunStrategyPlazaTemplate.mockRejectedValue(
-      new ApiError(
-        '请先绑定 OKX 模拟盘 API Key',
-        'strategy_plaza.okx_demo_api_key_required',
-        400,
-      ),
+      new ApiError('请先绑定 OKX 模拟盘 API Key', 'strategy_plaza.okx_demo_api_key_required', 400),
     )
 
     await act(async () => {
@@ -297,7 +307,9 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    expect(mockPush).toHaveBeenCalledWith(
+      '/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api',
+    )
   })
 
   it('keeps loaded templates visible and passes action error when run fails', async () => {
@@ -318,7 +330,10 @@ describe('AiQuantPlazaPageClient', () => {
   })
 
   it('starts an authenticated edit session and opens its AI Quant conversation', async () => {
-    mockStartStrategyPlazaEditSession.mockResolvedValue({ sessionId: 'session-1', initialMessage: 'Edit MA Cross' })
+    mockStartStrategyPlazaEditSession.mockResolvedValue({
+      sessionId: 'session-1',
+      initialMessage: 'Edit MA Cross',
+    })
 
     await act(async () => {
       root.render(<AiQuantPlazaPageClient />)
@@ -330,13 +345,19 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross', 'zh')
-    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-1' })
+    expect(mockSetIntent).toHaveBeenCalledWith({
+      type: 'plaza-chat-session',
+      sessionId: 'session-1',
+    })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })
 
   it('resumes plaza-edit intent after login and opens the created AI Quant conversation', async () => {
     mockGetIntent.mockReturnValue({ type: 'plaza-edit', templateId: 'ma-cross', ts: Date.now() })
-    mockStartStrategyPlazaEditSession.mockResolvedValue({ sessionId: 'session-resume-1', initialMessage: 'Resume MA Cross edit' })
+    mockStartStrategyPlazaEditSession.mockResolvedValue({
+      sessionId: 'session-resume-1',
+      initialMessage: 'Resume MA Cross edit',
+    })
 
     await act(async () => {
       root.render(<AiQuantPlazaPageClient />)
@@ -347,7 +368,10 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledTimes(1)
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross', 'zh')
-    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-resume-1' })
+    expect(mockSetIntent).toHaveBeenCalledWith({
+      type: 'plaza-chat-session',
+      sessionId: 'session-resume-1',
+    })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })
 
@@ -363,17 +387,15 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockRunStrategyPlazaTemplate).toHaveBeenCalledTimes(1)
     expect(mockRunStrategyPlazaTemplate).toHaveBeenCalledWith('ma-cross', 'plaza-run-1')
-    expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-1')
+    expect(mockPush).toHaveBeenCalledWith(
+      '/zh/account/ai-quant/strategy/strategy-1?from=%2Fzh%2Fai-quant%2Fplaza',
+    )
   })
 
   it('re-stores plaza-run intent and routes to OKX binding when resumed run needs OKX demo key', async () => {
     mockGetIntent.mockReturnValue({ type: 'plaza-run', templateId: 'ma-cross', ts: Date.now() })
     mockRunStrategyPlazaTemplate.mockRejectedValue(
-      new ApiError(
-        '请先绑定 OKX 模拟盘 API Key',
-        'strategy_plaza.okx_demo_api_key_required',
-        400,
-      ),
+      new ApiError('请先绑定 OKX 模拟盘 API Key', 'strategy_plaza.okx_demo_api_key_required', 400),
     )
 
     await act(async () => {
@@ -383,6 +405,8 @@ describe('AiQuantPlazaPageClient', () => {
 
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    expect(mockPush).toHaveBeenCalledWith(
+      '/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api',
+    )
   })
 })

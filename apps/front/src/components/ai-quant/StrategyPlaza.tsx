@@ -33,6 +33,7 @@ const SORT_OPTIONS = [
   { key: 'new', label: '最新' },
 ] as const
 const PAGE_SIZE = 9
+const RUN_BUTTON_GRADIENT_CLASS = 'bg-gradient-to-r from-[#7C3AED] to-[#B414F4]'
 
 const TEMPLATE_CATEGORY: Partial<Record<string, (typeof CATEGORY_LABELS)[number]>> = {
   'ma-cross': '趋势',
@@ -352,7 +353,7 @@ function StrategyActionButtons({
           event.stopPropagation()
           onRunStrategy(item.template.id)
         }}
-        className="scard-btn primary inline-flex min-h-8 items-center justify-center gap-1.5 rounded-[9px] bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 text-xs leading-5 font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+        className={`scard-btn primary inline-flex min-h-8 items-center justify-center gap-1.5 rounded-[9px] ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         {isRunning
