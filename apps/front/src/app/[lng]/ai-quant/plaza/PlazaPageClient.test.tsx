@@ -208,6 +208,7 @@ describe('AiQuantPlazaPageClient', () => {
     await flushPromises()
 
     expect(container.textContent).toContain('MA Cross Demo')
+    expect(container.textContent).not.toContain(mockTranslations['aiQuant.plazaPage.guestHint'])
 
     await act(async () => {
       plazaProps?.onRunStrategy('ma-cross')
@@ -216,6 +217,22 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
     expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant/plaza' })
     expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
+  })
+
+  it('renders a larger plaza title with one subtitle line', async () => {
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    const title = Array.from(container.querySelectorAll('h1')).find(
+      heading => heading.textContent === '策略广场',
+    )
+
+    expect(title?.className).toContain('!text-3xl')
+    expect(container.textContent).toContain('精选策略模板')
+    expect(container.textContent).not.toContain('登录后可以一键运行或编辑策略模板')
+    expect(container.textContent).not.toContain('首次对话可先从推荐策略开始')
   })
 
   it('stores plaza-edit intent before login and redirects back to plaza', async () => {

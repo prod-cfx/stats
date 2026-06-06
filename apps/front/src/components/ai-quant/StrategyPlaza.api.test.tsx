@@ -244,6 +244,53 @@ describe('StrategyPlaza API rendering', () => {
     expect(runButton?.className).toContain('to-[#B414F4]')
   })
 
+  it('renders symmetric run and edit buttons', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
+
+    expect(actionHost?.className).toContain('grid-cols-2')
+    expect(buttons[0]?.className).toContain('h-9')
+    expect(buttons[1]?.className).toContain('h-9')
+    expect(buttons[0]?.className).toContain('w-full')
+    expect(buttons[1]?.className).toContain('w-full')
+  })
+
+  it('keeps the hot rail title concise and theme-aware', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
+    const railCard = rail?.querySelector('article')
+
+    expect(container.textContent).toContain('热门策略')
+    expect(container.textContent).not.toContain('社区本周关注度最高')
+    expect(railCard?.className).toContain('bg-[color:var(--cf-surface)]')
+    expect(railCard?.className).toContain('text-[color:var(--cf-text-strong)]')
+    expect(railCard?.className).not.toContain('text-white')
+    expect(railCard?.className).not.toContain('#16122F')
+  })
+
   it('renders the PC strategy plaza rail, toolbar, rich cards and local search', async () => {
     await act(async () => {
       root.render(
@@ -260,7 +307,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.querySelector('[data-testid="strategy-plaza-toolbar"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="strategy-plaza-grid"]')).not.toBeNull()
     expect(container.textContent).toContain('热门策略')
-    expect(container.textContent).toContain('社区本周关注度最高')
+    expect(container.textContent).not.toContain('社区本周关注度最高')
     expect(container.textContent).toContain('共 2 个')
 
     const search = container.querySelector<HTMLInputElement>(
@@ -339,8 +386,8 @@ describe('StrategyPlaza API rendering', () => {
     expect(article?.className).toContain('min-w-0')
     expect(metadataRows[0]?.className).toContain('grid')
     expect(metadataRows[0]?.className).toContain('sm:flex')
-    expect(actions?.className).toContain('grid-cols-1')
-    expect(actions?.className).toContain('sm:grid-cols-2')
+    expect(actions?.className).toContain('grid-cols-2')
+    expect(actions?.className).toContain('w-full')
   })
 
   it('keeps loaded templates visible when showing an action error', async () => {

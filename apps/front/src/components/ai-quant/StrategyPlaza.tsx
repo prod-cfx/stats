@@ -64,7 +64,6 @@ interface StrategyPlazaProps {
   pendingAction?: 'run' | 'edit' | null
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
-  subtitle?: string
 }
 
 interface StrategyCardModel {
@@ -343,7 +342,7 @@ function StrategyActionButtons({
   return (
     <div
       data-testid="strategy-plaza-actions"
-      className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:mt-0 lg:flex lg:items-center lg:gap-2"
+      className="mt-5 grid w-full grid-cols-2 gap-2 lg:mt-0"
     >
       <button
         type="button"
@@ -353,7 +352,7 @@ function StrategyActionButtons({
           event.stopPropagation()
           onRunStrategy(item.template.id)
         }}
-        className={`scard-btn primary inline-flex min-h-8 items-center justify-center gap-1.5 rounded-[9px] ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`scard-btn primary inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[9px] ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         {isRunning
@@ -368,7 +367,7 @@ function StrategyActionButtons({
           event.stopPropagation()
           onEditStrategy(item.template.id)
         }}
-        className="scard-btn inline-flex min-h-8 items-center justify-center gap-1.5 rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-wait disabled:opacity-70"
+        className="scard-btn inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-wait disabled:opacity-70"
       >
         {isEditing ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -392,10 +391,8 @@ export function StrategyPlaza({
   pendingAction,
   onRunStrategy,
   onEditStrategy,
-  subtitle,
 }: StrategyPlazaProps) {
   const { t } = useTranslation()
-  const displaySubtitle = subtitle || t('aiQuant.strategyPlazaSubtitle')
   const hasPendingAction = Boolean(pendingTemplateId && pendingAction)
   const railRef = useRef<HTMLDivElement>(null)
   const [category, setCategory] = useState<(typeof CATEGORY_LABELS)[number]>('全部')
@@ -453,7 +450,6 @@ export function StrategyPlaza({
   if (loading) {
     return (
       <section className="space-y-4">
-        <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map(item => (
             <article
@@ -478,7 +474,6 @@ export function StrategyPlaza({
   if (error) {
     return (
       <section className="space-y-4">
-        <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm leading-[22px] text-red-500">
           {error}
         </div>
@@ -489,7 +484,6 @@ export function StrategyPlaza({
   if (templates.length === 0) {
     return (
       <section className="space-y-4">
-        <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
         <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-8 text-center text-sm leading-[22px] text-[color:var(--cf-muted)]">
           {t('aiQuant.strategyPlazaCard.empty')}
         </div>
@@ -499,7 +493,6 @@ export function StrategyPlaza({
 
   return (
     <section className="space-y-6">
-      <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
       {actionError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm leading-[22px] text-red-500">
           {actionError}
@@ -512,7 +505,6 @@ export function StrategyPlaza({
             <Activity className="h-[18px] w-[18px] text-amber-500" />
             热门策略
           </h2>
-          <span className="text-[13px] text-[color:var(--cf-muted)]">社区本周关注度最高</span>
           <div className="ml-auto hidden gap-2 sm:flex">
             <button
               aria-label="上一组"
@@ -544,10 +536,9 @@ export function StrategyPlaza({
             return (
               <article
                 key={item.template.id}
-                className="srail-card relative isolate flex w-[312px] shrink-0 snap-start flex-col overflow-hidden rounded-[18px] border border-violet-300/20 bg-[linear-gradient(125deg,#16122F_0%,#241B52_52%,#14112C_100%)] px-[18px] py-4 text-white shadow-[0_12px_34px_rgba(20,12,48,0.30)]"
+                className="srail-card relative isolate flex w-[312px] shrink-0 snap-start flex-col overflow-hidden rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[18px] py-4 text-[color:var(--cf-text-strong)] shadow-sm transition hover:border-[color:var(--cf-text-strong)]/20 hover:shadow-lg"
               >
-                <div className="mesh pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(167,139,250,0.13)_1px,transparent_1px),linear-gradient(90deg,rgba(167,139,250,0.13)_1px,transparent_1px)] [mask-image:radial-gradient(150px_130px_at_88%_4%,#000_0%,transparent_72%)] bg-[length:22px_22px]" />
-                <div className="glow pointer-events-none absolute -top-14 -right-10 h-[190px] w-[190px] rounded-full bg-[radial-gradient(circle,rgba(139,103,255,0.40)_0%,rgba(124,92,252,0.10)_44%,transparent_72%)]" />
+                <div className="mesh pointer-events-none absolute inset-0 bg-[linear-gradient(color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px)] [mask-image:linear-gradient(120deg,#000_0%,transparent_70%)] bg-[length:22px_22px] opacity-40" />
                 <div className="relative z-[2]">
                   <StatusBadge status={item.status} />
                   <div className="mt-1 flex items-center gap-2.5">
@@ -561,7 +552,7 @@ export function StrategyPlaza({
                       <div className="truncate text-[14.5px] leading-5 font-bold tracking-[-0.2px]">
                         {item.name}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-white/70">
+                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[color:var(--cf-muted)]">
                         {item.author}
                       </div>
                     </div>
@@ -571,15 +562,17 @@ export function StrategyPlaza({
                       className={`shrink-0 font-mono text-2xl leading-none font-extrabold ${up ? 'text-[#7EFFB0]' : 'text-[#FF9DA3]'}`}
                     >
                       {formatMetricPct(item.returnPct, { sign: true })}
-                      <small className="ml-1 text-[11px] font-medium text-white/60">收益</small>
+                      <small className="ml-1 text-[11px] font-medium text-[color:var(--cf-muted)]">
+                        收益
+                      </small>
                     </div>
                     <div className="min-w-0 flex-1">
                       <Sparkline accent="#A78BFA" data={item.seed} index={`rail-${index}`} />
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-5 border-t border-white/10 pt-3">
+                  <div className="mt-3 flex gap-5 border-t border-[color:var(--cf-border)] pt-3">
                     <div>
-                      <div className="text-[9px] tracking-[0.4px] text-white/50 uppercase">
+                      <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
                         Sharpe
                       </div>
                       <div className="mt-0.5 font-mono text-[13px] font-bold">
@@ -587,7 +580,7 @@ export function StrategyPlaza({
                       </div>
                     </div>
                     <div>
-                      <div className="text-[9px] tracking-[0.4px] text-white/50 uppercase">
+                      <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
                         回撤
                       </div>
                       <div className="mt-0.5 font-mono text-[13px] font-bold">
@@ -595,7 +588,7 @@ export function StrategyPlaza({
                       </div>
                     </div>
                     <div>
-                      <div className="text-[9px] tracking-[0.4px] text-white/50 uppercase">
+                      <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
                         胜率
                       </div>
                       <div className="mt-0.5 font-mono text-[13px] font-bold">

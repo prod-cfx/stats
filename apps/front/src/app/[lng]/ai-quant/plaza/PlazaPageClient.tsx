@@ -200,7 +200,7 @@ export function AiQuantPlazaPageClient() {
 
       <div>
         <div>
-          <h1 className="!text-base !leading-6 !font-semibold text-[color:var(--cf-text-strong)]">
+          <h1 className="!text-3xl !leading-10 !font-semibold text-[color:var(--cf-text-strong)]">
             {t('aiQuant.plaza')}
           </h1>
           <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
@@ -209,12 +209,6 @@ export function AiQuantPlazaPageClient() {
         </div>
       </div>
 
-      {!isLoading && !session && (
-        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 text-sm leading-[22px] text-[color:var(--cf-muted)]">
-          {t('aiQuant.plazaPage.guestHint')}
-        </div>
-      )}
-
       <StrategyPlaza
         templates={templates}
         loading={loadingTemplates}
@@ -222,7 +216,6 @@ export function AiQuantPlazaPageClient() {
         actionError={actionError}
         pendingTemplateId={runningTemplateId}
         pendingAction={pendingAction}
-        subtitle={t('aiQuant.strategyPlazaSubtitle')}
         onRunStrategy={runTemplate}
         onEditStrategy={editTemplate}
       />
