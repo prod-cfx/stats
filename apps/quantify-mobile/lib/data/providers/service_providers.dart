@@ -10,7 +10,7 @@ import '../services/services.dart';
 /// 指向本地 quantify 服务端口。契约就绪后按环境配置校正。
 const String _kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:3010',
+  defaultValue: 'https://cfx-backend-staging.devbase.cloud/api/v1',
 );
 
 /// 统一后端 HTTP 客户端（issue #2189 / #2260）。所有 Service 共享一个

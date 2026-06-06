@@ -1,17 +1,18 @@
 import 'api_client.dart';
 
 /// 策略域 Service 集合（issue #2189）。stateless，只持 [ApiClient]。
-/// path 为占位 RESTful 约定，后端契约就绪后校正。
+/// 策略广场 path 对齐 `packages/api-contracts-dart` 生成契约。
 
 class StrategyService {
   const StrategyService(this._client);
   final ApiClient _client;
 
-  Future<dynamic> listFeatured() => _client.get('/api/strategies/featured');
+  Future<dynamic> listFeatured() => _client.get('/strategy-plaza/templates');
 
-  Future<dynamic> listMine() => _client.get('/api/strategies/mine');
+  Future<dynamic> listMine() => _client.get('/account/ai-quant/strategies');
 
-  Future<dynamic> getDetail(String id) => _client.get('/api/strategies/$id');
+  Future<dynamic> getDetail(String id) =>
+      _client.get('/strategy-plaza/templates/$id');
 
   Future<dynamic> listMarket({
     required int page,
@@ -20,7 +21,7 @@ class StrategyService {
     String? category,
   }) {
     return _client.get(
-      '/api/strategies/market',
+      '/strategy-plaza/templates',
       query: <String, dynamic>{
         'page': page,
         'pageSize': pageSize,
@@ -31,21 +32,21 @@ class StrategyService {
   }
 
   Future<dynamic> getFeaturedHero() =>
-      _client.get('/api/strategies/featured/hero');
+      _client.get('/strategy-plaza/templates');
 
   Future<dynamic> getStrategyDetail(String id) =>
-      _client.get('/api/strategies/$id/detail');
+      _client.get('/strategy-plaza/templates/$id');
 
   Future<dynamic> listSignals(String id, {required int limit}) {
     return _client.get(
-      '/api/strategies/$id/signals',
+      '/account/ai-quant/strategies/$id',
       query: <String, dynamic>{'limit': limit},
     );
   }
 
   Future<dynamic> getEquityCurve(String id, String timeframe) {
     return _client.get(
-      '/api/strategies/$id/equity',
+      '/account/ai-quant/strategies/$id',
       query: <String, dynamic>{'timeframe': timeframe},
     );
   }
@@ -55,26 +56,26 @@ class LiveStrategyService {
   const LiveStrategyService(this._client);
   final ApiClient _client;
 
-  Future<dynamic> listStrategies() => _client.get('/api/live-strategies');
+  Future<dynamic> listStrategies() => _client.get('/account/ai-quant/strategies');
 
   Future<dynamic> getStrategy(String id) =>
-      _client.get('/api/live-strategies/$id');
+      _client.get('/account/ai-quant/strategies/$id');
 
   Future<dynamic> getSummary() =>
-      _client.get('/api/live-strategies/summary');
+      _client.get('/account/ai-quant/strategies');
 
   Future<dynamic> getPosition(String id) =>
-      _client.get('/api/live-strategies/$id/position');
+      _client.get('/account/ai-quant/strategies/$id');
 
   Future<dynamic> listTrades(String id, {required int limit}) {
     return _client.get(
-      '/api/live-strategies/$id/trades',
+      '/account/ai-quant/strategies/$id',
       query: <String, dynamic>{'limit': limit},
     );
   }
 
   Future<dynamic> listParams(String id) =>
-      _client.get('/api/live-strategies/$id/params');
+      _client.get('/account/ai-quant/strategies/$id');
 }
 
 class BacktestService {
@@ -82,7 +83,7 @@ class BacktestService {
   final ApiClient _client;
 
   Future<dynamic> run(Map<String, dynamic> request) =>
-      _client.post('/api/backtests', body: request);
+      _client.post('/backtesting/jobs', body: request);
 
-  Future<dynamic> getResult(String id) => _client.get('/api/backtests/$id');
+  Future<dynamic> getResult(String id) => _client.get('/backtesting/jobs/$id/result');
 }

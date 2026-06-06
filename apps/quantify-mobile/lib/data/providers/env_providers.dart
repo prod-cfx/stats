@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 使用方式：`flutter run --dart-define=USE_MOCK=false`
 const String _kUseMockEnv = String.fromEnvironment(
   'USE_MOCK',
-  defaultValue: 'true',
+  defaultValue: 'false',
 );
 
 final Provider<bool> useMockProvider = Provider<bool>((Ref ref) {
