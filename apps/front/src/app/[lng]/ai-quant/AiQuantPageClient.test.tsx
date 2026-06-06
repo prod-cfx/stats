@@ -1,5 +1,6 @@
 /** @jest-environment jsdom */
 
+import type { StrategyPlazaTemplate } from '@/lib/api'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -8,13 +9,48 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 const mockPush = jest.fn()
 const openAuthMock = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
+const mockFetchStrategyPlazaTemplates = jest.fn<() => Promise<StrategyPlazaTemplate[]>>()
 let mockSession: { userId: string } | null = { userId: 'u-1' }
+let strategyPlazaProps: {
+  templates: StrategyPlazaTemplate[]
+  loading: boolean
+  error?: string | null
+  actionError?: string | null
+  pendingTemplateId?: string | null
+  pendingAction?: 'run' | 'edit' | null
+  onRunStrategy: (templateId: string) => void
+  onEditStrategy: (templateId: string) => void
+} | null = null
+
+const plazaTemplate: StrategyPlazaTemplate = {
+  id: 'ma-cross',
+  name: 'MA Cross Demo',
+  description: 'Use moving averages.',
+  logicDescription: 'Fast MA crosses slow MA.',
+  tags: ['trend'],
+  riskLevel: 'medium',
+  scenario: 'trend_following',
+  exchange: 'okx',
+  environment: 'demo',
+  marketType: 'perp',
+  symbol: 'BTC-USDT-SWAP',
+  timeframe: '15m',
+  positionPct: 0.25,
+  leverage: 3,
+  status: 'live',
+  displayOrder: 1,
+  displayMetrics: {
+    label: 'official_sample_backtest',
+    returnPct: null,
+    winRatePct: null,
+    maxDrawdownPct: null,
+  },
+}
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key === 'aiQuant.messages.welcome'
-      ? '```typescript\r\nreturn { ok: true }\r\n```'
-      : key,
+    t: (key: string) =>
+      key === 'aiQuant.messages.welcome' ? '```typescript\r\nreturn { ok: true }\r\n```' : key,
   }),
 }))
 
@@ -25,7 +61,15 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ href, children, ...props }: { href: string, children: React.ReactNode } & Record<string, unknown>) => <a href={href} {...props}>{children}</a>,
+  default: ({
+    href,
+    children,
+    ...props
+  }: { href: string; children: React.ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -50,7 +94,7 @@ jest.mock('@/components/ai-quant/ConversationSidebar', () => ({
     items,
     onDelete,
   }: {
-    items: Array<{ id: string, title: string }>
+    items: Array<{ id: string; title: string }>
     onDelete?: (id: string) => void
   }) => (
     <div data-testid="sidebar">
@@ -72,17 +116,16 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
 }))
 
 jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
-  GuestAiQuantLanding: ({
-    onRequireLogin,
-  }: {
-    onRequireLogin: (intent: { type: 'chat', draft: string }) => void
-  }) => (
-    <div data-testid="guest">
-      <button data-testid="guest-login-chat" onClick={() => onRequireLogin({ type: 'chat', draft: 'hello' })}>
-        login
-      </button>
-    </div>
-  ),
+  GuestAiQuantLanding: () => <div data-testid="guest" />,
+}))
+
+jest.mock('@/components/ai-quant/StrategyPlaza', () => ({
+  StrategyPlaza: (props: typeof strategyPlazaProps) => {
+    strategyPlazaProps = props
+    return (
+      <div data-testid="strategy-plaza">{props?.templates.map(item => item.name).join('|')}</div>
+    )
+  },
 }))
 
 jest.mock('@/components/ai-quant/DisplayLogicGraphPreview', () => ({
@@ -107,7 +150,7 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     onSend,
     onRunBacktest,
   }: {
-    messages: Array<{ id: string, role: string, content: string }>
+    messages: Array<{ id: string; role: string; content: string }>
     paramValues: Record<string, unknown>
     onConfirmBacktestParams: (nextValues: Record<string, unknown>) => void
     onSend: (input: string) => void | Promise<void>
@@ -122,7 +165,8 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
             backtestRangePreset: 'CUSTOM',
             backtestStart: '2026-02-01T00:00:00.000Z',
             backtestEnd: '2026-01-01T00:00:00.000Z',
-          })}
+          })
+        }
       >
         invalid
       </button>
@@ -134,7 +178,8 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
             backtestRangePreset: '7D',
             backtestStart: '',
             backtestEnd: '',
-          })}
+          })
+        }
       >
         valid
       </button>
@@ -147,7 +192,9 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
       <button data-testid="send-semantic-edit" onClick={() => onSend('把止损改成 3%')}>
         semantic-edit
       </button>
-      <button data-testid="run-backtest" onClick={onRunBacktest}>run</button>
+      <button data-testid="run-backtest" onClick={onRunBacktest}>
+        run
+      </button>
       <div data-testid="params">{JSON.stringify(paramValues)}</div>
       <div data-testid="messages">{messages.map(msg => msg.content).join('|')}</div>
     </div>
@@ -159,12 +206,14 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
     result,
     onOpenFullScreen,
   }: {
-    result: { startAt: string, endAt: string }
+    result: { startAt: string; endAt: string }
     onOpenFullScreen: () => void
   }) => (
     <>
       <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
-      <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>open</button>
+      <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>
+        open
+      </button>
     </>
   ),
 }))
@@ -203,6 +252,8 @@ jest.mock('@/lib/api', () => ({
     positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
     latestOrders: [],
   })),
+  fetchStrategyPlazaTemplates: (...args: Parameters<typeof mockFetchStrategyPlazaTemplates>) =>
+    mockFetchStrategyPlazaTemplates(...args),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   listAiQuantConversations: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
@@ -228,102 +279,107 @@ jest.mock('@/lib/toast', () => ({
 }))
 
 function seedConfirmedConversation(now = Date.now()) {
-  localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
-    {
-      id: 'conv-1',
-      title: 'conv',
-      messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
-      params: {
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        baseTimeframe: '15m',
-        buyWindowMin: 3,
-        buyDropPct: 1,
-        sellWindowMin: 15,
-        sellRisePct: 2,
-        positionPct: 10,
-      },
-      paramSchema: null,
-      paramValues: {
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        baseTimeframe: '15m',
-        buyWindowMin: 3,
-        buyDropPct: 1,
-        sellWindowMin: 15,
-        sellRisePct: 2,
-        positionPct: 10,
-        backtestInitialCash: 10000,
-        backtestLeverage: 1,
-        backtestSlippageBps: 10,
-        backtestFeeBps: 5,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
-      },
-      backtestResult: null,
-      logicGraph: {
-        version: 1,
-        status: 'confirmed',
-        trigger: [],
-        actions: [],
-        risk: [],
-        meta: {
+  localStorage.setItem(
+    'ai_quant_conversations_v1',
+    JSON.stringify([
+      {
+        id: 'conv-1',
+        title: 'conv',
+        messages: [
+          { id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' },
+        ],
+        params: {
           exchange: 'binance',
           symbol: 'BTCUSDT',
-          timeframe: '15m',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
           positionPct: 10,
         },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotParamValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        publishedSnapshotCompatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+        },
+        publishedScriptGraphVersion: 1,
+        backtestExecutionConfigExplicit: true,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: now,
       },
-      llmCodegenSessionId: null,
-      publishedStrategyInstanceId: 'strategy-1',
-      publishedSnapshotId: 'snapshot-1',
-      publishedSnapshotStrategyConfig: {
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        marketType: 'perp',
-        baseTimeframe: '15m',
-        positionPct: 10,
-      },
-      publishedSnapshotParamValues: {
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        marketType: 'perp',
-        baseTimeframe: '15m',
-        buyWindowMin: 3,
-        buyDropPct: 1,
-        sellWindowMin: 15,
-        sellRisePct: 2,
-        positionPct: 10,
-        backtestInitialCash: 10000,
-        backtestLeverage: 1,
-        backtestSlippageBps: 10,
-        backtestFeeBps: 5,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
-      },
-      publishedSnapshotBacktestConfigDefaults: {
-        initialCash: 10000,
-        leverage: 1,
-        slippageBps: 10,
-        feeBps: 5,
-        priceSource: 'close',
-        allowPartial: true,
-      },
-      publishedSnapshotCompatibilityMetadata: {
-        isLegacySnapshot: false,
-        missingBacktestConfigDefaults: false,
-        missingDeploymentExecutionDefaults: false,
-        missingDeploymentExecutionConstraints: false,
-        requiresRepublishForBacktest: false,
-        requiresRepublishForDeploy: false,
-      },
-      publishedScriptGraphVersion: 1,
-      backtestExecutionConfigExplicit: true,
-      latestSignalMessage: null,
-      backtestExecutionState: 'idle',
-      updatedAt: now,
-    },
-  ]))
+    ]),
+  )
 }
 
 function buildPersistedConversation(now = Date.now()) {
@@ -464,6 +520,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     root = createRoot(container)
     localStorage.clear()
     mockSession = { userId: 'u-1' }
+    strategyPlazaProps = null
     seedConfirmedConversation(Date.now())
     jest.clearAllMocks()
     jest.useFakeTimers()
@@ -471,6 +528,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     mockFetchBacktestCapabilities.mockResolvedValue({
       allowedBaseTimeframes: ['15m'],
     })
+    mockFetchStrategyPlazaTemplates.mockResolvedValue([plazaTemplate])
   })
 
   afterEach(async () => {
@@ -491,7 +549,9 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+    const backLink = Array.from(container.querySelectorAll('a')).find(link =>
+      link.textContent?.includes('返回'),
+    )
 
     expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
   })
@@ -505,27 +565,50 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+    const backLink = Array.from(container.querySelectorAll('a')).find(link =>
+      link.textContent?.includes('返回'),
+    )
 
     expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
   })
 
-  it('opens auth sheet for guest actions and preserves return intent', async () => {
+  it('renders the strategy plaza for guests on the AI Quant page', async () => {
     mockSession = null
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
-
     await act(async () => {
-      container.querySelector('[data-testid="guest-login-chat"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
-    expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant' })
-    expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant')
-    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"type":"chat"')
-    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"draft":"hello"')
+    expect(mockFetchStrategyPlazaTemplates).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[data-testid="guest"]')).toBeNull()
+    expect(container.querySelector('[data-testid="strategy-plaza"]')).not.toBeNull()
+    expect(container.textContent).toContain('MA Cross Demo')
+    expect(strategyPlazaProps?.templates).toEqual([plazaTemplate])
+  })
+
+  it('opens auth sheet for guest plaza run actions and preserves return intent', async () => {
+    mockSession = null
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      strategyPlazaProps?.onRunStrategy('ma-cross')
+    })
+
+    expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant/plaza' })
+    expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"type":"plaza-run"')
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"templateId":"ma-cross"')
   })
 
   it('renders a page-level back link to the same-origin source page', async () => {
@@ -540,7 +623,9 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+    const backLink = Array.from(container.querySelectorAll('a')).find(link =>
+      link.textContent?.includes('返回'),
+    )
 
     expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=settings')
   })
@@ -573,11 +658,15 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="set-invalid-range"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="set-invalid-range"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
 
@@ -594,11 +683,15 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="set-valid-preset"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await act(async () => {
       await Promise.resolve()
@@ -646,11 +739,15 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="set-valid-preset"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await act(async () => {
       await Promise.resolve()
@@ -679,11 +776,15 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="set-valid-preset"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await act(async () => {
       await Promise.resolve()
@@ -697,7 +798,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="open-fullscreen"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="open-fullscreen"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mockPush).toHaveBeenCalledTimes(1)
@@ -719,7 +822,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="set-backtest-execution"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="set-backtest-execution"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
 
@@ -738,36 +843,42 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(parsed.conversations[0]?.paramValues?.backtestInitialCash).toBe(25000)
   })
 
-  it.each([
-    ['plaza-run'],
-    ['plaza-edit'],
-  ] as const)('keeps %s intent without resuming legacy preset actions', async (type) => {
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type,
-      templateId: 'ma-cross',
-      ts: Date.now(),
-    }))
+  it.each([['plaza-run'], ['plaza-edit']] as const)(
+    'keeps %s intent without resuming legacy preset actions',
+    async type => {
+      localStorage.setItem(
+        'ai_quant_return_intent_v1',
+        JSON.stringify({
+          type,
+          templateId: 'ma-cross',
+          ts: Date.now(),
+        }),
+      )
 
-    await act(async () => {
-      root?.render(<AiQuantPageClient />)
-      await Promise.resolve()
-      await Promise.resolve()
-    })
+      await act(async () => {
+        root?.render(<AiQuantPageClient />)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
 
-    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain(`"type":"${type}"`)
-    expect(container.textContent).not.toContain('aiQuant.messages.intentMiss')
-  })
+      expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain(`"type":"${type}"`)
+      expect(container.textContent).not.toContain('aiQuant.messages.intentMiss')
+    },
+  )
 
   it('keeps strategy edit session intent without resuming legacy preset actions', async () => {
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'strategy-edit-session',
-      strategyInstanceId: 'strategy-1',
-      publishedSnapshotId: 'snapshot-1',
-      conversationId: 'conversation-1',
-      sessionId: 'session-1',
-      source: 'account-detail',
-      ts: Date.now(),
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        conversationId: 'conversation-1',
+        sessionId: 'session-1',
+        source: 'account-detail',
+        ts: Date.now(),
+      }),
+    )
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
@@ -775,7 +886,9 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"type":"strategy-edit-session"')
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain(
+      '"type":"strategy-edit-session"',
+    )
     expect(container.textContent).not.toContain('aiQuant.messages.intentMiss')
   })
 
@@ -784,10 +897,13 @@ describe('AiQuantPageClient backtest range integration', () => {
     ['run', { type: 'run', strategyId: 'momentum-steady' }],
     ['edit', { type: 'edit', strategyId: 'momentum-steady' }],
   ])('clears legacy %s intent when resuming it', async (_label, intent) => {
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      ...intent,
-      ts: Date.now(),
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        ...intent,
+        ts: Date.now(),
+      }),
+    )
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
@@ -806,7 +922,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
 
@@ -881,9 +999,7 @@ describe('AiQuantPageClient backtest range integration', () => {
         status: 'CONFIRM_GATE',
         updatedAt: '2026-04-10T12:00:00.000Z',
         conversationTitle: 'server-conv',
-        conversationMessages: [
-          { role: 'assistant', content: 'server-message' },
-        ],
+        conversationMessages: [{ role: 'assistant', content: 'server-message' }],
       },
     ])
 
@@ -923,34 +1039,36 @@ describe('AiQuantPageClient backtest range integration', () => {
       'ai_quant_conversations_v1',
       JSON.stringify({
         version: 'deploy-current',
-        conversations: [{
-          ...buildPersistedConversation(Date.now()),
-          llmCodegenSessionId: 'session-edit',
-          backtestResult: {
-            id: 'bt-old',
-            startAt: '2026-03-01T00:00:00.000Z',
-            endAt: '2026-03-08T00:00:00.000Z',
-            maxDrawdownPct: 5,
-            totalReturnPct: 12,
-            winRatePct: 60,
-            tradeCount: 8,
+        conversations: [
+          {
+            ...buildPersistedConversation(Date.now()),
+            llmCodegenSessionId: 'session-edit',
+            backtestResult: {
+              id: 'bt-old',
+              startAt: '2026-03-01T00:00:00.000Z',
+              endAt: '2026-03-08T00:00:00.000Z',
+              maxDrawdownPct: 5,
+              totalReturnPct: 12,
+              winRatePct: 60,
+              tradeCount: 8,
+            },
+            publishedScriptCode: 'export default function oldStrategy() { return true }',
+            publishedSnapshotDeploymentExecutionDefaults: {
+              leverage: 2,
+              priceSource: 'close',
+              orderType: 'market',
+              timeInForce: 'gtc',
+            },
+            publishedSnapshotDeploymentExecutionConstraints: {
+              effectiveAllowedLeverageRange: { min: 1, max: 3 },
+              supportedPriceSources: ['close'],
+              supportedOrderTypes: ['market'],
+              supportedTimeInForce: ['gtc'],
+              constraintExplanation: 'old constraints',
+            },
+            publicationGate: { passed: true, blockingMismatches: [] },
           },
-          publishedScriptCode: 'export default function oldStrategy() { return true }',
-          publishedSnapshotDeploymentExecutionDefaults: {
-            leverage: 2,
-            priceSource: 'close',
-            orderType: 'market',
-            timeInForce: 'gtc',
-          },
-          publishedSnapshotDeploymentExecutionConstraints: {
-            effectiveAllowedLeverageRange: { min: 1, max: 3 },
-            supportedPriceSources: ['close'],
-            supportedOrderTypes: ['market'],
-            supportedTimeInForce: ['gtc'],
-            constraintExplanation: 'old constraints',
-          },
-          publicationGate: { passed: true, blockingMismatches: [] },
-        }],
+        ],
       }),
     )
 
@@ -1051,18 +1169,22 @@ describe('AiQuantPageClient backtest range integration', () => {
       'ai_quant_conversations_v1',
       JSON.stringify({
         version: 'deploy-current',
-        conversations: [{
-          ...buildPersistedConversation(Date.now()),
-          llmCodegenSessionId: 'session-edit',
-          displayLogicGraph: {
-            blocks: [
-              {
-                type: 'IF',
-                items: [{ id: 'legacy-fallback', kind: 'condition', text: '不支持的条件，待补充' }],
-              },
-            ],
+        conversations: [
+          {
+            ...buildPersistedConversation(Date.now()),
+            llmCodegenSessionId: 'session-edit',
+            displayLogicGraph: {
+              blocks: [
+                {
+                  type: 'IF',
+                  items: [
+                    { id: 'legacy-fallback', kind: 'condition', text: '不支持的条件，待补充' },
+                  ],
+                },
+              ],
+            },
           },
-        }],
+        ],
       }),
     )
 
@@ -1072,14 +1194,24 @@ describe('AiQuantPageClient backtest range integration', () => {
           type: 'IF',
           items: [
             { kind: 'condition', id: 'condition-bollinger', text: '触及布林带下轨（20, 2）' },
-            { kind: 'condition', id: 'condition-volume', text: '成交量高于过去 20 根均量的 1.5 倍' },
+            {
+              kind: 'condition',
+              id: 'condition-volume',
+              text: '成交量高于过去 20 根均量的 1.5 倍',
+            },
             { kind: 'action', id: 'action-entry', text: '开多 10%' },
           ],
         },
         {
           type: 'EXECUTE',
           items: [
-            { kind: 'execute', id: 'execute-symbol', key: 'symbol', value: 'ETHUSDT', text: '标的: ETHUSDT' },
+            {
+              kind: 'execute',
+              id: 'execute-symbol',
+              key: 'symbol',
+              value: 'ETHUSDT',
+              text: '标的: ETHUSDT',
+            },
           ],
         },
       ],
@@ -1144,19 +1276,24 @@ describe('AiQuantPageClient backtest range integration', () => {
       expect(displayGraphText).toContain('成交量高于过去 20 根均量的 1.5 倍')
       expect(displayGraphText).not.toContain('不支持的条件')
     })
-    expect(container.querySelector('[data-testid="display-logic-graph"]')?.textContent)
-      .toContain('成交量高于过去 20 根均量的 1.5 倍')
-    expect(container.querySelector('[data-testid="display-logic-graph"]')?.textContent)
-      .not.toContain('不支持的条件')
+    expect(container.querySelector('[data-testid="display-logic-graph"]')?.textContent).toContain(
+      '成交量高于过去 20 根均量的 1.5 倍',
+    )
+    expect(
+      container.querySelector('[data-testid="display-logic-graph"]')?.textContent,
+    ).not.toContain('不支持的条件')
   })
 
   it('activates a plaza edit session conversation without appending to the existing conversation', async () => {
     localStorage.clear()
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'plaza-chat-session',
-      sessionId: 'plaza-session-1',
-      ts: Date.now(),
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'plaza-chat-session',
+        sessionId: 'plaza-session-1',
+        ts: Date.now(),
+      }),
+    )
 
     const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
       listAiQuantConversations: jest.Mock
@@ -1168,9 +1305,7 @@ describe('AiQuantPageClient backtest range integration', () => {
         activeCodegenSessionId: 'existing-session',
         updatedAt: '2026-04-10T12:00:00.000Z',
         conversationTitle: 'existing',
-        conversationMessages: [
-          { role: 'assistant', content: 'existing-message' },
-        ],
+        conversationMessages: [{ role: 'assistant', content: 'existing-message' }],
       },
       {
         id: 'plaza-conv',
@@ -1178,9 +1313,7 @@ describe('AiQuantPageClient backtest range integration', () => {
         activeCodegenSessionId: 'plaza-session-1',
         updatedAt: '2026-04-10T12:01:00.000Z',
         conversationTitle: 'plaza edit',
-        conversationMessages: [
-          { role: 'user', content: 'plaza-template-edit-message' },
-        ],
+        conversationMessages: [{ role: 'user', content: 'plaza-template-edit-message' }],
       },
     ])
 
@@ -1197,15 +1330,20 @@ describe('AiQuantPageClient backtest range integration', () => {
 
   it('selects existing conversation from strategy edit session intent', async () => {
     localStorage.clear()
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'strategy-edit-session',
-      strategyInstanceId: 'strategy-2',
-      publishedSnapshotId: 'snapshot-2',
-      source: 'account-detail',
-      ts: Date.now(),
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-2',
+        publishedSnapshotId: 'snapshot-2',
+        source: 'account-detail',
+        ts: Date.now(),
+      }),
+    )
 
-    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       recoverAiQuantEditConversation: jest.Mock
     }
@@ -1239,15 +1377,20 @@ describe('AiQuantPageClient backtest range integration', () => {
 
   it('recovers edit conversation when no loaded conversation matches intent', async () => {
     localStorage.clear()
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'strategy-edit-session',
-      strategyInstanceId: 'strategy-9',
-      publishedSnapshotId: 'snapshot-9',
-      source: 'account-detail',
-      ts: Date.now(),
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-9',
+        publishedSnapshotId: 'snapshot-9',
+        source: 'account-detail',
+        ts: Date.now(),
+      }),
+    )
 
-    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       recoverAiQuantEditConversation: jest.Mock
     }
@@ -1267,7 +1410,9 @@ describe('AiQuantPageClient backtest range integration', () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
     })
 
-    await waitForCondition(() => expect(container.textContent).toContain('已基于上一版策略恢复修改上下文。'))
+    await waitForCondition(() =>
+      expect(container.textContent).toContain('已基于上一版策略恢复修改上下文。'),
+    )
     expect(recoverAiQuantEditConversation).toHaveBeenCalledWith({
       strategyInstanceId: 'strategy-9',
       publishedSnapshotId: 'snapshot-9',
@@ -1281,12 +1426,17 @@ describe('AiQuantPageClient backtest range integration', () => {
 
   it('preserves strategy edit intent when recovery fails', async () => {
     localStorage.clear()
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'strategy-edit-session',
-      strategyInstanceId: 'strategy-9',
-      ts: Date.now(),
-    }))
-    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-9',
+        ts: Date.now(),
+      }),
+    )
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       recoverAiQuantEditConversation: jest.Mock
     }
@@ -1303,14 +1453,19 @@ describe('AiQuantPageClient backtest range integration', () => {
 
   it('preserves newer strategy edit intent when recovery resolves late', async () => {
     localStorage.clear()
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'strategy-edit-session',
-      strategyInstanceId: 'strategy-old',
-      publishedSnapshotId: 'snapshot-old',
-      ts: Date.now(),
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-old',
+        publishedSnapshotId: 'snapshot-old',
+        ts: Date.now(),
+      }),
+    )
 
-    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       recoverAiQuantEditConversation: jest.Mock
     }
@@ -1323,12 +1478,15 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
     await waitForCondition(() => expect(recoverAiQuantEditConversation).toHaveBeenCalled())
 
-    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
-      type: 'strategy-edit-session',
-      strategyInstanceId: 'strategy-new',
-      publishedSnapshotId: 'snapshot-new',
-      ts: Date.now() + 1,
-    }))
+    localStorage.setItem(
+      'ai_quant_return_intent_v1',
+      JSON.stringify({
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-new',
+        publishedSnapshotId: 'snapshot-new',
+        ts: Date.now() + 1,
+      }),
+    )
 
     await act(async () => {
       deferred.resolve({
@@ -1397,7 +1555,9 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('deletes a server-owned conversation through the backend and keeps it removed locally', async () => {
     localStorage.clear()
 
-    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       deleteAiQuantConversation: jest.Mock
     }
@@ -1428,7 +1588,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).toContain('server-message-1')
 
     await act(async () => {
-      (container.querySelector('[data-testid="delete-conv-1"]') as HTMLButtonElement).click()
+      ;(container.querySelector('[data-testid="delete-conv-1"]') as HTMLButtonElement).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1438,7 +1598,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).toContain('server-conv-1')
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1451,18 +1613,22 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('keeps an ordinary server-owned conversation when delete confirmation is canceled', async () => {
     localStorage.clear()
 
-    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       deleteAiQuantConversation: jest.Mock
     }
 
-    listAiQuantConversations.mockResolvedValue([{
-      id: 'conv-cancel',
-      status: 'CONFIRM_GATE',
-      updatedAt: '2026-04-10T12:00:00.000Z',
-      conversationTitle: 'cancel-conv',
-      conversationMessages: [{ role: 'assistant', content: 'cancel-message' }],
-    }])
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-cancel',
+        status: 'CONFIRM_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'cancel-conv',
+        conversationMessages: [{ role: 'assistant', content: 'cancel-message' }],
+      },
+    ])
 
     await act(async () => {
       root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
@@ -1476,7 +1642,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-secondary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-secondary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
     })
 
@@ -1495,13 +1663,15 @@ describe('AiQuantPageClient backtest range integration', () => {
       toast: { success: jest.Mock }
     }
 
-    listAiQuantConversations.mockResolvedValue([{
-      id: 'conv-toast',
-      status: 'CONFIRM_GATE',
-      updatedAt: '2026-04-10T12:00:00.000Z',
-      conversationTitle: 'toast-conv',
-      conversationMessages: [{ role: 'assistant', content: 'toast-message' }],
-    }])
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-toast',
+        status: 'CONFIRM_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'toast-conv',
+        conversationMessages: [{ role: 'assistant', content: 'toast-message' }],
+      },
+    ])
 
     await act(async () => {
       root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
@@ -1515,7 +1685,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1528,7 +1700,9 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('keeps the delete dialog open and does not show success toast when ordinary server delete fails', async () => {
     localStorage.clear()
 
-    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock(
+      '@/lib/api',
+    ) as {
       listAiQuantConversations: jest.Mock
       deleteAiQuantConversation: jest.Mock
     }
@@ -1536,13 +1710,15 @@ describe('AiQuantPageClient backtest range integration', () => {
       toast: { success: jest.Mock }
     }
 
-    listAiQuantConversations.mockResolvedValue([{
-      id: 'conv-fail',
-      status: 'CONFIRM_GATE',
-      updatedAt: '2026-04-10T12:00:00.000Z',
-      conversationTitle: 'fail-conv',
-      conversationMessages: [{ role: 'assistant', content: 'fail-message' }],
-    }])
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-fail',
+        status: 'CONFIRM_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'fail-conv',
+        conversationMessages: [{ role: 'assistant', content: 'fail-message' }],
+      },
+    ])
     deleteAiQuantConversation.mockRejectedValueOnce(new Error('gateway failed'))
 
     await act(async () => {
@@ -1557,7 +1733,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1591,7 +1769,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(localStorage.getItem('ai_quant_conversations_v1')).toContain('"id":"conv-1"')
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-secondary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-secondary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
     })
 
@@ -1604,7 +1784,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1618,20 +1800,26 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('blocks deleting a server-owned conversation while its linked strategy is running', async () => {
     localStorage.clear()
 
-    const { listAiQuantConversations, deleteAiQuantConversation, fetchAccountAiQuantStrategyDetail } = jest.requireMock('@/lib/api') as {
+    const {
+      listAiQuantConversations,
+      deleteAiQuantConversation,
+      fetchAccountAiQuantStrategyDetail,
+    } = jest.requireMock('@/lib/api') as {
       listAiQuantConversations: jest.Mock
       deleteAiQuantConversation: jest.Mock
       fetchAccountAiQuantStrategyDetail: jest.Mock
     }
 
-    listAiQuantConversations.mockResolvedValue([{
-      id: 'conv-running',
-      status: 'PUBLISHED',
-      updatedAt: '2026-04-10T12:00:00.000Z',
-      conversationTitle: 'running-conv',
-      conversationMessages: [{ role: 'assistant', content: 'running-message' }],
-      strategyInstanceId: 'strategy-running',
-    }])
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-running',
+        status: 'PUBLISHED',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'running-conv',
+        conversationMessages: [{ role: 'assistant', content: 'running-message' }],
+        strategyInstanceId: 'strategy-running',
+      },
+    ])
     fetchAccountAiQuantStrategyDetail.mockResolvedValue({
       id: 'strategy-running',
       name: 'running-strategy',
@@ -1647,7 +1835,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      (container.querySelector('[data-testid="delete-conv-running"]') as HTMLButtonElement).click()
+      ;(container.querySelector('[data-testid="delete-conv-running"]') as HTMLButtonElement).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1659,29 +1847,37 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('deletes a server-owned conversation when its linked strategy record no longer exists', async () => {
     localStorage.clear()
 
-    const { listAiQuantConversations, deleteAiQuantConversation, fetchAccountAiQuantStrategyDetail } = jest.requireMock('@/lib/api') as {
+    const {
+      listAiQuantConversations,
+      deleteAiQuantConversation,
+      fetchAccountAiQuantStrategyDetail,
+    } = jest.requireMock('@/lib/api') as {
       listAiQuantConversations: jest.Mock
       deleteAiQuantConversation: jest.Mock
       fetchAccountAiQuantStrategyDetail: jest.Mock
     }
 
-    listAiQuantConversations.mockResolvedValue([{
-      id: 'conv-missing-strategy',
-      status: 'PUBLISHED',
-      updatedAt: '2026-04-10T12:00:00.000Z',
-      conversationTitle: 'missing-strategy-conv',
-      conversationMessages: [{ role: 'assistant', content: 'missing-strategy-message' }],
-      strategyInstanceId: 'strategy-missing',
-    }])
-    fetchAccountAiQuantStrategyDetail.mockRejectedValue(Object.assign(new Error('获取 AI 量化策略详情失败'), {
-      code: 'ACCOUNT_STRATEGY_NOT_FOUND',
-      statusCode: 404,
-      details: {
-        error: {
-          code: 'ACCOUNT_STRATEGY_NOT_FOUND',
-        },
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-missing-strategy',
+        status: 'PUBLISHED',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'missing-strategy-conv',
+        conversationMessages: [{ role: 'assistant', content: 'missing-strategy-message' }],
+        strategyInstanceId: 'strategy-missing',
       },
-    }))
+    ])
+    fetchAccountAiQuantStrategyDetail.mockRejectedValue(
+      Object.assign(new Error('获取 AI 量化策略详情失败'), {
+        code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+        statusCode: 404,
+        details: {
+          error: {
+            code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+          },
+        },
+      }),
+    )
 
     await act(async () => {
       root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
@@ -1690,7 +1886,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      (container.querySelector('[data-testid="delete-conv-missing-strategy"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="delete-conv-missing-strategy"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1700,7 +1898,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).toContain('missing-strategy-conv')
 
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1725,14 +1925,16 @@ describe('AiQuantPageClient backtest range integration', () => {
       listAiQuantConversations: jest.Mock
     }
 
-    listAiQuantConversations.mockResolvedValue([{
-      id: 'conv-stopped',
-      status: 'PUBLISHED',
-      updatedAt: '2026-04-10T12:00:00.000Z',
-      conversationTitle: 'stopped-conv',
-      conversationMessages: [{ role: 'assistant', content: 'stopped-message' }],
-      strategyInstanceId: 'strategy-stopped',
-    }])
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-stopped',
+        status: 'PUBLISHED',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'stopped-conv',
+        conversationMessages: [{ role: 'assistant', content: 'stopped-message' }],
+        strategyInstanceId: 'strategy-stopped',
+      },
+    ])
     fetchAccountAiQuantStrategyDetail.mockResolvedValue({
       id: 'strategy-stopped',
       name: 'stopped-strategy',
@@ -1748,7 +1950,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     await act(async () => {
-      (container.querySelector('[data-testid="delete-conv-stopped"]') as HTMLButtonElement).click()
+      ;(container.querySelector('[data-testid="delete-conv-stopped"]') as HTMLButtonElement).click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -1760,14 +1962,17 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
     await act(async () => {
-      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      ;(
+        container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement
+      ).click()
       await Promise.resolve()
       await Promise.resolve()
     })
 
     expect(deleteAccountAiQuantStrategy).not.toHaveBeenCalled()
-    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-stopped', { deleteStoppedStrategy: true })
+    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-stopped', {
+      deleteStoppedStrategy: true,
+    })
     expect(container.textContent).not.toContain('stopped-message')
   })
-
 })
