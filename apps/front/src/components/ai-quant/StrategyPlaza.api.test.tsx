@@ -242,6 +242,9 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(runButton?.className).toContain('from-[#7C3AED]')
     expect(runButton?.className).toContain('to-[#B414F4]')
+    expect(runButton?.className.split(/\s+/)).not.toContain('primary')
+    expect(runButton?.getAttribute('style')).toContain('#7C3AED')
+    expect(runButton?.getAttribute('style')).toContain('#B414F4')
   })
 
   it('renders aligned run and edit buttons', async () => {
@@ -267,6 +270,8 @@ describe('StrategyPlaza API rendering', () => {
     expect(buttons[1]?.className).toContain('h-9')
     expect(buttons[0]?.className).toContain('flex-1')
     expect(buttons[1]?.className).toContain('flex-1')
+    expect(buttons[0]?.className.split(/\s+/)).not.toContain('primary')
+    expect(buttons[1]?.className.split(/\s+/)).not.toContain('primary')
   })
 
   it('keeps the hot rail title concise and theme-aware', async () => {
@@ -329,6 +334,9 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(runButton?.className).toContain('from-[#7C3AED]')
     expect(runButton?.className).toContain('to-[#B414F4]')
+    expect(runButton?.className.split(/\s+/)).not.toContain('primary')
+    expect(runButton?.getAttribute('style')).toContain('#7C3AED')
+    expect(runButton?.getAttribute('style')).toContain('#B414F4')
   })
 
   it('renders card footer actions on one aligned row like the PC design', async () => {
@@ -381,6 +389,31 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(activePage?.className).toContain('from-[#7C3AED]')
     expect(activePage?.className).toContain('to-[#B414F4]')
+    expect(activePage?.getAttribute('style')).toContain('#7C3AED')
+    expect(activePage?.getAttribute('style')).toContain('#B414F4')
+  })
+
+  it('limits strategy category pages to nine cards and renders pagination controls', async () => {
+    const manyTemplates = Array.from({ length: 10 }, (_, index) => ({
+      ...template,
+      id: `ma-cross-page-${index}`,
+      name: `MA Cross Page ${index}`,
+      displayOrder: index + 1,
+    }))
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={manyTemplates}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.querySelectorAll('[data-testid="strategy-plaza-card"]')).toHaveLength(9)
+    expect(container.querySelector('[data-testid="strategy-plaza-pager"]')).not.toBeNull()
   })
 
   it('renders the PC strategy plaza rail, toolbar, rich cards and local search', async () => {

@@ -34,6 +34,7 @@ const SORT_OPTIONS = [
 ] as const
 const PAGE_SIZE = 9
 const RUN_BUTTON_GRADIENT_CLASS = 'bg-gradient-to-r from-[#7C3AED] to-[#B414F4]'
+const RUN_BUTTON_GRADIENT_STYLE = 'linear-gradient(90deg, #7C3AED 0%, #B414F4 100%)'
 
 const TEMPLATE_CATEGORY: Partial<Record<string, (typeof CATEGORY_LABELS)[number]>> = {
   'ma-cross': '趋势',
@@ -364,7 +365,8 @@ function StrategyActionButtons({
           event.stopPropagation()
           onRunStrategy(item.template.id)
         }}
-        className={`scard-btn primary inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold whitespace-nowrap text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`scard-btn inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border-0 ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold whitespace-nowrap text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+        style={{ backgroundImage: RUN_BUTTON_GRADIENT_STYLE }}
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         {isRunning
@@ -875,7 +877,10 @@ export function StrategyPlaza({
       </div>
 
       {totalPages > 1 && (
-        <div className="splaza-pager mt-7 flex items-center justify-center gap-1.5">
+        <div
+          data-testid="strategy-plaza-pager"
+          className="splaza-pager mt-7 flex items-center justify-center gap-1.5"
+        >
           <button
             disabled={currentPage === 1}
             type="button"
@@ -889,6 +894,9 @@ export function StrategyPlaza({
               data-testid={item === currentPage ? 'strategy-plaza-page-button-active' : undefined}
               className={
                 item === currentPage ? `is-on ${RUN_BUTTON_GRADIENT_CLASS} text-white` : ''
+              }
+              style={
+                item === currentPage ? { backgroundImage: RUN_BUTTON_GRADIENT_STYLE } : undefined
               }
               type="button"
               onClick={() => setPage(item)}
