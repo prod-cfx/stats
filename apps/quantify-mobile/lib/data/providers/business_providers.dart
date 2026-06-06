@@ -343,6 +343,10 @@ final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
       return all.firstWhere((LiveStrategy s) => s.id == id);
     });
 
+// position/trades/params 三个 per-tab provider：契约 AccountAiQuantStrategyDetailResponseDto
+// 的 positionOverview/latestOrders/paramValues 均为无内层 schema 的 object/array<object>，
+// 在 typed array-element schema 落地前，repo 内部短路到 mock（不再发 HTTP），保持 mock 兜底。
+
 /// 单个实盘策略持仓（#1752）。null 表示无持仓（已暂停/停止）。
 /// 从 store 取最新 status 判断 mayHavePosition，确保暂停后持仓即时消失。
 final FutureProviderFamily<LiveStrategyPosition?, String>

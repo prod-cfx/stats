@@ -63,19 +63,6 @@ class LiveStrategyService {
 
   Future<dynamic> getSummary() =>
       _client.get('/account/ai-quant/strategies');
-
-  Future<dynamic> getPosition(String id) =>
-      _client.get('/account/ai-quant/strategies/$id');
-
-  Future<dynamic> listTrades(String id, {required int limit}) {
-    return _client.get(
-      '/account/ai-quant/strategies/$id',
-      query: <String, dynamic>{'limit': limit},
-    );
-  }
-
-  Future<dynamic> listParams(String id) =>
-      _client.get('/account/ai-quant/strategies/$id');
 }
 
 class BacktestService {
