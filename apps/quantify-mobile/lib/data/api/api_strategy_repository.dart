@@ -147,30 +147,13 @@ class ApiStrategyRepository implements StrategyRepository {
 
   @override
   Future<List<StrategySignal>> listStrategySignals(String id, {int limit = 20}) async {
-    final dynamic raw = await _service.listSignals(id, limit: limit);
-    final Object? list =
-        raw is Map ? pick(asMap(raw), <String>['items', 'data']) : raw;
-    final List<Map<String, dynamic>> rows = asMapList(list ?? raw);
-    if (rows.isEmpty) return _fallback.listStrategySignals(id, limit: limit);
-    return rows.map((Map<String, dynamic> m) {
-      return StrategySignal(
-        time: asDateTime(pick(m, <String>['time', 'timestamp'])),
-        side: asString(pick(m, <String>['side'])).toLowerCase() == 'sell'
-            ? StrategySignalSide.sell
-            : StrategySignalSide.buy,
-        price: asDouble(pick(m, <String>['price'])),
-        pnlPercent: asDouble(pick(m, <String>['pnlPercent'])),
-      );
-    }).toList(growable: false);
+    // 契约无广场模板 signals 端点（StrategyPlazaTemplateResponseDto 为静态配置），mock 待后端补。
+    return _fallback.listStrategySignals(id, limit: limit);
   }
 
   @override
   Future<List<double>> getEquityCurve(String id, EquityTimeframe timeframe) async {
-    final dynamic raw = await _service.getEquityCurve(id, timeframe.name);
-    final Object? list =
-        raw is Map ? pick(asMap(raw), <String>['points', 'data']) : raw;
-    final List<double> points =
-        asList(list ?? raw).map((Object? e) => asDouble(e)).toList(growable: false);
-    return points.isEmpty ? _fallback.getEquityCurve(id, timeframe) : points;
+    // 契约无广场模板 equity curve 端点（StrategyPlazaTemplateResponseDto 为静态配置），mock 待后端补。
+    return _fallback.getEquityCurve(id, timeframe);
   }
 }

@@ -36,20 +36,6 @@ class StrategyService {
 
   Future<dynamic> getStrategyDetail(String id) =>
       _client.get('/strategy-plaza/templates/$id');
-
-  Future<dynamic> listSignals(String id, {required int limit}) {
-    return _client.get(
-      '/account/ai-quant/strategies/$id',
-      query: <String, dynamic>{'limit': limit},
-    );
-  }
-
-  Future<dynamic> getEquityCurve(String id, String timeframe) {
-    return _client.get(
-      '/account/ai-quant/strategies/$id',
-      query: <String, dynamic>{'timeframe': timeframe},
-    );
-  }
 }
 
 class LiveStrategyService {
