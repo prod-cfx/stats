@@ -65,10 +65,12 @@ final FutureProvider<List<Ticker>> tickersProvider =
       return ref.watch(tickerRepositoryProvider).listTickers();
     });
 
-/// 币股 Repository（#2216）。mock 驱动；接后端属 #2189。
+/// 币股 Repository（#2216）。`USE_MOCK=false` 走真实契约（#2270，依赖 #2268）。
 final Provider<CoinStockRepository> coinStockRepositoryProvider =
     Provider<CoinStockRepository>((Ref ref) {
-      return const MockCoinStockRepository();
+      return ref.watch(useMockProvider)
+          ? const MockCoinStockRepository()
+          : ApiCoinStockRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 币股列表（#2216）。币股 hub 子屏 watch。
@@ -77,10 +79,12 @@ final FutureProvider<List<CoinStock>> coinStocksProvider =
       return ref.watch(coinStockRepositoryProvider).listCoinStocks();
     });
 
-/// 预测市场 Repository（#2216）。mock 驱动；接后端属 #2189。
+/// 预测市场 Repository（#2216）。`USE_MOCK=false` 走真实契约（#2270）。
 final Provider<PredMarketRepository> predMarketRepositoryProvider =
     Provider<PredMarketRepository>((Ref ref) {
-      return const MockPredMarketRepository();
+      return ref.watch(useMockProvider)
+          ? const MockPredMarketRepository()
+          : ApiPredMarketRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 预测市场列表（#2216）。预测市场 hub 子屏 watch。
@@ -89,10 +93,13 @@ final FutureProvider<List<PredMarket>> predMarketsProvider =
       return ref.watch(predMarketRepositoryProvider).listPredMarkets();
     });
 
-/// 巨鲸「数据」hub 附加数据 Repository（#2216）。mock 驱动；接后端属 #2189。
+/// 巨鲸「数据」hub 附加数据 Repository（#2216）。`USE_MOCK=false` 走真实
+/// 通知收件箱契约（#2270）。
 final Provider<WhaleExtrasRepository> whaleExtrasRepositoryProvider =
     Provider<WhaleExtrasRepository>((Ref ref) {
-      return const MockWhaleExtrasRepository();
+      return ref.watch(useMockProvider)
+          ? const MockWhaleExtrasRepository()
+          : ApiWhaleExtrasRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// data hub 通知列表（#2216）。data hub 控制器初始 seed。
@@ -101,10 +108,12 @@ final FutureProvider<List<WhaleNotification>> whaleExtrasProvider =
       return ref.watch(whaleExtrasRepositoryProvider).listNotifications();
     });
 
-/// 成交记录 Repository（#2216）。mock 驱动；接后端属 #2189。
+/// 成交记录 Repository（#2216）。`USE_MOCK=false` 走真实契约（#2270）。
 final Provider<TradesRepository> tradesRepositoryProvider =
     Provider<TradesRepository>((Ref ref) {
-      return const MockTradesRepository();
+      return ref.watch(useMockProvider)
+          ? const MockTradesRepository()
+          : ApiTradesRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 成交记录列表（#2216），family by `(symbol, mid)`。成交面板 watch；
@@ -119,10 +128,13 @@ final FutureProviderFamily<List<Trade>, (String, double)> tradesProvider =
           .listTrades(symbol: args.$1, mid: args.$2);
     });
 
-/// 聚合市场数据 Repository（#2216）。mock 驱动；接后端属 #2189。
+/// 聚合市场数据 Repository（#2216）。`USE_MOCK=false` 时盘口接真实契约
+/// （#2270）；OI/volume 暂复用 mock 常量（待后端 #2269）。
 final Provider<AggOrderbookRepository> aggOrderbookRepositoryProvider =
     Provider<AggOrderbookRepository>((Ref ref) {
-      return const MockAggOrderbookRepository();
+      return ref.watch(useMockProvider)
+          ? const MockAggOrderbookRepository()
+          : ApiAggOrderbookRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 聚合市场数据 bundle（#2216）。4 个 `agg_*` widget 统一 watch 此单一共享

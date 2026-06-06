@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:quantify_mobile/data/mock/fixtures/agg_orders.dart';
 import 'package:quantify_mobile/data/models/agg_orders_models.dart';
+import 'package:quantify_mobile/data/providers/env_providers.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/agg_orders_body.dart';
 import 'package:quantify_mobile/pages/market/widgets/agg_exchange_avatar.dart';
@@ -26,6 +28,9 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(430, 1600));
   await tester.pumpWidget(
     ProviderScope(
+      // 该屏断言 mock fixture 渲染；pin useMock=true（默认 USE_MOCK=false
+      // 现会走真实契约 #2270，测试环境无后端）。
+      overrides: <Override>[useMockProvider.overrideWithValue(true)],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
