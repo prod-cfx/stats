@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import '../models/auth_models.dart';
 import '../repositories/auth_repository.dart';
 import '../services/api_client.dart';
@@ -9,15 +7,12 @@ import '../services/json_codec.dart';
 /// [AuthRepository] 真实现（issue #2189）。
 ///
 /// 注入 [AuthService] 走真实 HTTP；把响应 JSON 反序列化为 [AuthSession]。
-/// `watchSession` 后端暂无推送契约，用内存 [StreamController] 广播本地登录态
-/// 变化（与 mock 同语义），登录/登出时推一帧。
+/// 纯 stateless HTTP 映射：不持有会话内存态。会话单一真相源是
+/// [SessionController]（issue #2262）。
 class ApiAuthRepository implements AuthRepository {
   ApiAuthRepository(this._service);
 
   final AuthService _service;
-  AuthSession? _session;
-  final StreamController<AuthSession?> _controller =
-      StreamController<AuthSession?>.broadcast();
 
   /// 解析鉴权响应为 [AuthSession]。
   ///
@@ -56,20 +51,13 @@ class ApiAuthRepository implements AuthRepository {
         raw.containsKey('user');
   }
 
-  void _emit(AuthSession session) {
-    _session = session;
-    _controller.add(session);
-  }
-
   @override
   Future<AuthSession> login({
     required String email,
     required String password,
   }) async {
     final dynamic raw = await _service.login(email: email, password: password);
-    final AuthSession s = _parse(raw, fallbackEmail: email);
-    _emit(s);
-    return s;
+    return _parse(raw, fallbackEmail: email);
   }
 
   @override
@@ -85,9 +73,7 @@ class ApiAuthRepository implements AuthRepository {
       nickname: nickname,
       betaCode: betaCode,
     );
-    final AuthSession s = _parse(raw, fallbackEmail: email);
-    _emit(s);
-    return s;
+    return _parse(raw, fallbackEmail: email);
   }
 
   @override
@@ -102,22 +88,12 @@ class ApiAuthRepository implements AuthRepository {
   }) async {
     final dynamic raw =
         await _service.loginWithCode(email: email, code: code);
-    final AuthSession s = _parse(raw, fallbackEmail: email);
-    _emit(s);
-    return s;
+    return _parse(raw, fallbackEmail: email);
   }
 
   @override
   Future<void> logout() async {
-    // 后端无 logout 端点（JWT 无状态）；纯本地清内存 session。token 清盘由
+    // 后端无 logout 端点（JWT 无状态）；repo 无状态可清，token 清盘由
     // SessionController.logout 删 kSessionStorageKey 完成。
-    _session = null;
-    _controller.add(null);
-  }
-
-  @override
-  Stream<AuthSession?> watchSession() async* {
-    yield _session;
-    yield* _controller.stream;
   }
 }

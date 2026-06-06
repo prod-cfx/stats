@@ -25,7 +25,6 @@ void main() {
       expect(session.userId, 'mock-user');
       expect(session.token, 'mock-token');
       expect(session.email, 'new@example.com');
-      expect(await repo.watchSession().first, isNotNull);
     });
 
     test('sendLoginCode 标记邮箱可验证码登录', () async {
@@ -49,7 +48,6 @@ void main() {
         () => repo.loginWithCode(email: 'missing@example.com', code: '123456'),
         throwsA(isA<StateError>()),
       );
-      expect(await repo.watchSession().first, isNull);
     });
 
     test('loginWithCode 空验证码失败且不推送 session', () async {
@@ -60,36 +58,12 @@ void main() {
         () => repo.loginWithCode(email: 'tester@example.com', code: ''),
         throwsA(isA<ArgumentError>()),
       );
-      expect(await repo.watchSession().first, isNull);
     });
 
-    test('login 后 watchSession 推送当前 session', () async {
+    test('logout 纯本地 no-op：不抛错', () async {
       final MockAuthRepository repo = MockAuthRepository();
       await repo.login(email: 'a@b.com', password: 'x');
-      final AuthSession? first = await repo.watchSession().first;
-      expect(first, isNotNull);
-      expect(first!.email, 'a@b.com');
-    });
-
-    test('logout 后 watchSession 推送 null', () async {
-      final MockAuthRepository repo = MockAuthRepository();
-      await repo.login(email: 'a@b.com', password: 'x');
-
-      final List<AuthSession?> events = <AuthSession?>[];
-      final Stream<AuthSession?> stream = repo.watchSession();
-      // 用 listen 而不是 take(2).toList()，避免 broadcast stream
-      // 在 `yield _session` 与 `yield* controller.stream` 之间错失事件。
-      final subscription = stream.listen(events.add);
-      // 让首帧 yield 完成。
-      await Future<void>.delayed(Duration.zero);
-      await repo.logout();
-      // 让 controller.add 经微任务派发到监听者。
-      await Future<void>.delayed(Duration.zero);
-      await subscription.cancel();
-
-      expect(events.first, isNotNull);
-      expect(events.first!.email, 'a@b.com');
-      expect(events.last, isNull);
+      await expectLater(repo.logout(), completes);
     });
   });
 }

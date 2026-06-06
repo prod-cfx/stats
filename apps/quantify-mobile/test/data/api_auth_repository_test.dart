@@ -107,8 +107,6 @@ void main() {
         repo.login(email: 'e@x.com', password: 'pw'),
         throwsA(isA<ApiException>()),
       );
-      // 未污染会话态
-      expect(await repo.watchSession().first, isNull);
     });
 
     test('data 不含鉴权字段时回退顶层（_hasAuthFields=false）', () async {
@@ -125,7 +123,7 @@ void main() {
       expect(s.userId, 'u-top');
     });
 
-    test('logout 纯本地：不调用 service，watchSession 推 null', () async {
+    test('logout 纯本地 no-op：不调用 service，不抛错', () async {
       final ApiAuthRepository repo = ApiAuthRepository(
         _StubAuthService(<String, dynamic>{
           'data': <String, dynamic>{
@@ -135,8 +133,7 @@ void main() {
         }),
       );
       await repo.login(email: 'e@x.com', password: 'pw');
-      await repo.logout();
-      expect(await repo.watchSession().first, isNull);
+      await expectLater(repo.logout(), completes);
     });
   });
 }

@@ -40,8 +40,6 @@ class _FakeAuthRepository implements AuthRepository {
   );
   @override
   Future<void> logout() async {}
-  @override
-  Stream<AuthSession?> watchSession() => const Stream<AuthSession?>.empty();
 }
 
 class _AuthProbeWidget extends ConsumerWidget {

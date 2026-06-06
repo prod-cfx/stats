@@ -1,17 +1,11 @@
-import 'dart:async';
-
 import '../models/auth_models.dart';
 import '../repositories/auth_repository.dart';
 
 /// AuthRepository 的 Mock 闭环实现，作为模式示例。
 /// - 任意凭据登录成功（200ms 延迟）
-/// - 内存保存当前 session
-/// - watchSession 通过 broadcast StreamController 推送
+/// - 纯 stateless：不持有会话内存态，会话真相源为 SessionController（issue #2262）
 class MockAuthRepository implements AuthRepository {
-  AuthSession? _session;
   final Set<String> _emailsWithLoginCode = <String>{};
-  final StreamController<AuthSession?> _controller =
-      StreamController<AuthSession?>.broadcast();
 
   @override
   Future<AuthSession> login({
@@ -19,14 +13,11 @@ class MockAuthRepository implements AuthRepository {
     required String password,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    final AuthSession session = AuthSession(
+    return AuthSession(
       userId: 'mock-user',
       token: 'mock-token',
       email: email,
     );
-    _session = session;
-    _controller.add(session);
-    return session;
   }
 
   @override
@@ -37,14 +28,11 @@ class MockAuthRepository implements AuthRepository {
     String? betaCode,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    final AuthSession session = AuthSession(
+    return AuthSession(
       userId: 'mock-user',
       token: 'mock-token',
       email: email,
     );
-    _session = session;
-    _controller.add(session);
-    return session;
   }
 
   @override
@@ -66,25 +54,13 @@ class MockAuthRepository implements AuthRepository {
     if (!_emailsWithLoginCode.contains(normalizedEmail)) {
       throw StateError('请先发送验证码');
     }
-    final AuthSession session = AuthSession(
+    return AuthSession(
       userId: 'mock-user',
       token: 'mock-token',
       email: email,
     );
-    _session = session;
-    _controller.add(session);
-    return session;
   }
 
   @override
-  Future<void> logout() async {
-    _session = null;
-    _controller.add(null);
-  }
-
-  @override
-  Stream<AuthSession?> watchSession() async* {
-    yield _session;
-    yield* _controller.stream;
-  }
+  Future<void> logout() async {}
 }

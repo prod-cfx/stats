@@ -15,5 +15,4 @@ abstract class AuthRepository {
     required String code,
   });
   Future<void> logout();
-  Stream<AuthSession?> watchSession();
 }
