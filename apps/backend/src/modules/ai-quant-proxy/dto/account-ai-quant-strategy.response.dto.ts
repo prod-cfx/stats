@@ -69,3 +69,11 @@ export class AccountAiQuantStrategyDetailResponseDto extends AccountAiQuantStrat
   @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
   deployment!: Record<string, unknown> | null
 }
+
+export class AccountAiQuantStrategyDeployResultResponseDto {
+  @ApiPropertyOptional({ nullable: true, type: AccountAiQuantStrategyDetailResponseDto })
+  data!: AccountAiQuantStrategyDetailResponseDto | null
+
+  @ApiPropertyOptional()
+  message?: string
+}

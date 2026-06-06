@@ -11,6 +11,7 @@ import { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.re
 import { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
 import { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list-query.dto'
 import {
+  AccountAiQuantStrategyDeployResultResponseDto,
   AccountAiQuantStrategyDetailResponseDto,
   AccountAiQuantStrategyListItemResponseDto,
 } from './dto/account-ai-quant-strategy.response.dto'
@@ -61,7 +62,7 @@ export class AccountAiQuantStrategiesController {
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Query() query: AccountAiQuantListQueryDto,
-  ): Promise<unknown> {
+  ): Promise<BasePaginationResponseDto<AccountAiQuantStrategyListItemResponseDto>> {
     return this.service.listAccountStrategies(userId, authorization, {
       page: query.page,
       limit: query.limit,
@@ -79,7 +80,7 @@ export class AccountAiQuantStrategiesController {
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
-  ): Promise<unknown> {
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
     return this.service.getAccountStrategyDetail(userId, authorization, id)
   }
 
@@ -92,7 +93,7 @@ export class AccountAiQuantStrategiesController {
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() dto: AccountAiQuantActionRequestDto,
-  ): Promise<unknown> {
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
     return this.service.performAccountStrategyAction(userId, authorization, id, {
       action: dto.action,
     })
@@ -106,7 +107,7 @@ export class AccountAiQuantStrategiesController {
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: AccountAiQuantDeployRequestDto,
-  ): Promise<unknown> {
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
     return this.service.deployAccountStrategy(userId, authorization, {
       name: dto.name,
       deployRequestId: dto.deployRequestId,
@@ -141,7 +142,7 @@ export class AccountAiQuantStrategiesController {
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('deployRequestId') deployRequestId: string,
-  ): Promise<unknown> {
+  ): Promise<AccountAiQuantStrategyDeployResultResponseDto> {
     return this.service.getDeployResult(userId, authorization, deployRequestId)
   }
 
@@ -154,7 +155,7 @@ export class AccountAiQuantStrategiesController {
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() dto: AccountAiQuantUpdateExecutionLeverageRequestDto,
-  ): Promise<unknown> {
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
     return this.service.updateAccountStrategyExecutionLeverage(userId, authorization, id, {
       leverage: dto.leverage,
     })

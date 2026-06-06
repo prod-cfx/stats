@@ -1,5 +1,20 @@
+import type { BaseResponseDto } from '@/common/dto/base.dto'
+import type { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
+import type {
+  AccountAiQuantStrategyDeployResultResponseDto,
+  AccountAiQuantStrategyDetailResponseDto,
+  AccountAiQuantStrategyListItemResponseDto,
+} from './dto/account-ai-quant-strategy.response.dto'
 import type { AiQuantConversationResponseDto } from './dto/ai-quant-conversation.response.dto'
+import type { BacktestingCapabilitiesResponseDto } from './dto/backtesting-capabilities.response.dto'
+import type { BacktestingCreateJobResponseDto } from './dto/backtesting-create-job.dto'
+import type { BacktestingJobResponseDto } from './dto/backtesting-job.response.dto'
+import type { BacktestingReportResponseDto } from './dto/backtesting-report.response.dto'
+import type { BacktestingSymbolSupportResponseDto } from './dto/backtesting-symbol-support.dto'
 import type { CodegenSessionResponseDto } from './dto/codegen-session.response.dto'
+import type { LlmStrategyInstanceResponseDto } from './dto/llm-strategy-instance.response.dto'
+import type { LlmStrategyInstanceSignalResponseDto } from './dto/llm-strategy-instance-signal.response.dto'
+import type { LlmSubscriptionResponseDto } from './dto/llm-subscription.response.dto'
 import type {
   StrategyPlazaEditSessionResponseDto,
   StrategyPlazaRunResponseDto,
@@ -42,22 +57,30 @@ export class AiQuantProxyService {
     userId: string,
     authorization: string | undefined,
     query: Record<string, string | number | boolean | undefined>,
-  ) {
-    return this.quantifyClient.listAccountStrategies(query, {
+  ): Promise<BasePaginationResponseDto<AccountAiQuantStrategyListItemResponseDto>> {
+    return this.quantifyClient.listAccountStrategies<BasePaginationResponseDto<AccountAiQuantStrategyListItemResponseDto>>(query, {
       userId,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getAccountStrategyDetail(userId: string, authorization: string | undefined, strategyId: string) {
-    return this.quantifyClient.getAccountStrategyDetail(strategyId, {
+  async getAccountStrategyDetail(
+    userId: string,
+    authorization: string | undefined,
+    strategyId: string,
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
+    return this.quantifyClient.getAccountStrategyDetail<AccountAiQuantStrategyDetailResponseDto>(strategyId, {
       userId,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getDeployResult(userId: string, authorization: string | undefined, deployRequestId: string) {
-    return this.quantifyClient.getDeployResult(deployRequestId, {
+  async getDeployResult(
+    userId: string,
+    authorization: string | undefined,
+    deployRequestId: string,
+  ): Promise<AccountAiQuantStrategyDeployResultResponseDto> {
+    return this.quantifyClient.getDeployResult<AccountAiQuantStrategyDeployResultResponseDto>(deployRequestId, {
       userId,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
@@ -68,8 +91,8 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     strategyId: string,
     body: Record<string, unknown>,
-  ) {
-    return this.quantifyClient.performAccountStrategyAction(
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
+    return this.quantifyClient.performAccountStrategyAction<AccountAiQuantStrategyDetailResponseDto>(
       strategyId,
       { ...body, userId },
       { userId, headers: this.userHeaders(userId, authorization) },
@@ -80,7 +103,7 @@ export class AiQuantProxyService {
     userId: string,
     authorization: string | undefined,
     body: Record<string, unknown>,
-  ) {
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
     await this.assertExchangeAccountExists(userId, body.exchangeAccountId)
 
     const payload: Record<string, unknown> = {
@@ -97,7 +120,7 @@ export class AiQuantProxyService {
 
     for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
       try {
-        return await this.quantifyClient.deployAccountStrategy(
+        return await this.quantifyClient.deployAccountStrategy<AccountAiQuantStrategyDetailResponseDto>(
           payload,
           { userId, headers: this.userHeaders(userId, authorization) },
         )
@@ -115,7 +138,8 @@ export class AiQuantProxyService {
               this.logger.warn(
                 `event=deploy_reconciled_after_transient_failure deployRequestId=${String(body.deployRequestId ?? '')} reason=${this.describeError(error)}`,
               )
-              return reconciledResult
+              // 瞬时失败后用 deploy-result 兜底，运行期结构不变；仅类型层归一到 deploy 主返回契约
+              return reconciledResult as unknown as AccountAiQuantStrategyDetailResponseDto
             }
           }
           throw this.mapQuantifyError(error)
@@ -136,8 +160,8 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     strategyId: string,
     body: Record<string, unknown>,
-  ) {
-    return this.quantifyClient.updateAccountStrategyExecutionLeverage(
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
+    return this.quantifyClient.updateAccountStrategyExecutionLeverage<AccountAiQuantStrategyDetailResponseDto>(
       strategyId,
       { userId, leverage: body.leverage },
       { userId, headers: this.userHeaders(userId, authorization) },
@@ -287,8 +311,11 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async listLlmInstances(userId: string | undefined, query: Record<string, string | number | undefined>) {
-    return this.quantifyClient.listLlmInstances({
+  async listLlmInstances(
+    userId: string | undefined,
+    query: Record<string, string | number | undefined>,
+  ): Promise<BasePaginationResponseDto<LlmStrategyInstanceResponseDto>> {
+    return this.quantifyClient.listLlmInstances<BasePaginationResponseDto<LlmStrategyInstanceResponseDto>>({
       page: query.page,
       limit: query.limit,
       llmModel: query.llmModel,
@@ -297,27 +324,34 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getLlmInstanceDetail(id: string, userId?: string) {
-    return this.quantifyClient.getLlmInstanceDetail(id, userId).catch(error => { throw this.mapQuantifyError(error) })
+  async getLlmInstanceDetail(id: string, userId?: string): Promise<LlmStrategyInstanceResponseDto> {
+    return this.quantifyClient.getLlmInstanceDetail<LlmStrategyInstanceResponseDto>(id, userId).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async listLlmInstanceSignals(userId: string, id: string, query: Record<string, string | number | undefined>) {
-    return this.quantifyClient.listLlmInstanceSignals(id, {
+  async listLlmInstanceSignals(
+    userId: string,
+    id: string,
+    query: Record<string, string | number | undefined>,
+  ): Promise<BasePaginationResponseDto<LlmStrategyInstanceSignalResponseDto>> {
+    return this.quantifyClient.listLlmInstanceSignals<BasePaginationResponseDto<LlmStrategyInstanceSignalResponseDto>>(id, {
       userId,
       page: query.page,
       limit: query.limit,
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async createLlmSubscription(userId: string, body: Record<string, unknown>) {
-    return this.quantifyClient.createLlmSubscription({
+  async createLlmSubscription(userId: string, body: Record<string, unknown>): Promise<LlmSubscriptionResponseDto> {
+    return this.quantifyClient.createLlmSubscription<LlmSubscriptionResponseDto>({
       ...body,
       userId,
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async listLlmSubscriptions(userId: string, query: Record<string, string | number | undefined>) {
-    return this.quantifyClient.listLlmSubscriptions({
+  async listLlmSubscriptions(
+    userId: string,
+    query: Record<string, string | number | undefined>,
+  ): Promise<BasePaginationResponseDto<LlmSubscriptionResponseDto>> {
+    return this.quantifyClient.listLlmSubscriptions<BasePaginationResponseDto<LlmSubscriptionResponseDto>>({
       userId,
       page: query.page,
       limit: query.limit,
@@ -325,27 +359,30 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getLlmSubscriptionDetail(userId: string, subscriptionId: string) {
-    return this.quantifyClient.getLlmSubscriptionDetail(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
+  async getLlmSubscriptionDetail(userId: string, subscriptionId: string): Promise<LlmSubscriptionResponseDto> {
+    return this.quantifyClient.getLlmSubscriptionDetail<LlmSubscriptionResponseDto>(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async updateLlmSubscription(userId: string, subscriptionId: string, body: Record<string, unknown>) {
-    return this.quantifyClient.updateLlmSubscription(subscriptionId, {
+  async updateLlmSubscription(userId: string, subscriptionId: string, body: Record<string, unknown>): Promise<LlmSubscriptionResponseDto> {
+    return this.quantifyClient.updateLlmSubscription<LlmSubscriptionResponseDto>(subscriptionId, {
       ...body,
       userId,
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async cancelLlmSubscription(userId: string, subscriptionId: string) {
+  async cancelLlmSubscription(userId: string, subscriptionId: string): Promise<void> {
     return this.quantifyClient.cancelLlmSubscription(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getBacktestCapabilities(authorization: string | undefined, requestId?: string) {
+  async getBacktestCapabilities(
+    authorization: string | undefined,
+    requestId?: string,
+  ): Promise<BaseResponseDto<BacktestingCapabilitiesResponseDto>> {
     let lastError: unknown
 
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS; attempt += 1) {
       try {
-        return await this.quantifyClient.getBacktestCapabilities({
+        return await this.quantifyClient.getBacktestCapabilities<BaseResponseDto<BacktestingCapabilitiesResponseDto>>({
           headers: this.proxyHeaders(authorization, requestId),
         })
       } catch (error) {
@@ -372,8 +409,8 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     body: Record<string, unknown>,
     requestId?: string,
-  ) {
-    return this.quantifyClient.createBacktestJob(body, {
+  ): Promise<BaseResponseDto<BacktestingCreateJobResponseDto>> {
+    return this.quantifyClient.createBacktestJob<BaseResponseDto<BacktestingCreateJobResponseDto>>(body, {
       userId,
       headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
@@ -384,17 +421,22 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     body: Record<string, unknown>,
     requestId?: string,
-  ) {
-    return this.quantifyClient.checkBacktestSymbolSupport(body, {
+  ): Promise<BacktestingSymbolSupportResponseDto> {
+    return this.quantifyClient.checkBacktestSymbolSupport<BacktestingSymbolSupportResponseDto>(body, {
       userId,
       headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJob(userId: string, authorization: string | undefined, id: string, requestId?: string) {
+  async getBacktestJob(
+    userId: string,
+    authorization: string | undefined,
+    id: string,
+    requestId?: string,
+  ): Promise<BaseResponseDto<BacktestingJobResponseDto>> {
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_JOB_RETRY_ATTEMPTS; attempt += 1) {
       try {
-        return await this.quantifyClient.getBacktestJob(id, {
+        return await this.quantifyClient.getBacktestJob<BaseResponseDto<BacktestingJobResponseDto>>(id, {
           userId,
           headers: this.userProxyHeaders(userId, authorization, requestId),
         })
@@ -417,10 +459,15 @@ export class AiQuantProxyService {
     })
   }
 
-  async getBacktestJobResult(userId: string, authorization: string | undefined, id: string, requestId?: string) {
+  async getBacktestJobResult(
+    userId: string,
+    authorization: string | undefined,
+    id: string,
+    requestId?: string,
+  ): Promise<BaseResponseDto<BacktestingReportResponseDto>> {
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_JOB_RETRY_ATTEMPTS; attempt += 1) {
       try {
-        return await this.quantifyClient.getBacktestJobResult(id, {
+        return await this.quantifyClient.getBacktestJobResult<BaseResponseDto<BacktestingReportResponseDto>>(id, {
           userId,
           headers: this.userProxyHeaders(userId, authorization, requestId),
         })
@@ -562,13 +609,13 @@ export class AiQuantProxyService {
     userId: string,
     authorization: string | undefined,
     deployRequestId: unknown,
-  ): Promise<unknown | null> {
+  ): Promise<AccountAiQuantStrategyDeployResultResponseDto | null> {
     if (typeof deployRequestId !== 'string' || deployRequestId.trim().length === 0) {
       return null
     }
 
     try {
-      return await this.quantifyClient.getDeployResult(deployRequestId.trim(), {
+      return await this.quantifyClient.getDeployResult<AccountAiQuantStrategyDeployResultResponseDto>(deployRequestId.trim(), {
         userId,
         headers: this.userHeaders(userId, authorization),
       })

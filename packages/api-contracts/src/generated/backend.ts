@@ -322,6 +322,9 @@ const AccountAiQuantDeployRequestDto = z
 const AccountAiQuantUpdateExecutionLeverageRequestDto = z
   .object({ leverage: z.number() })
   .passthrough()
+const BacktestingCapabilitiesResponseDto = z
+  .object({ allowedBaseTimeframes: z.array(z.string()) })
+  .passthrough()
 const BacktestingSymbolSupportRequestDto = z
   .object({
     exchange: z.enum(['binance', 'okx', 'hyperliquid']),
@@ -474,6 +477,30 @@ const BacktestingCreateJobResponseDto = z
     resultSummary: BacktestingCreateJobSummaryDto.optional(),
   })
   .passthrough()
+const BacktestingJobResponseDto = z
+  .object({
+    id: z.string(),
+    status: z.enum(['queued', 'running', 'succeeded', 'failed']),
+    createdAt: z.string(),
+    startedAt: z.string().optional(),
+    finishedAt: z.string().optional(),
+    error: z.string().optional(),
+    errorDetails: z.object({}).partial().passthrough().optional(),
+    inputSummary: z.object({}).partial().passthrough(),
+    resultSummary: z.object({}).partial().passthrough().optional(),
+  })
+  .passthrough()
+const BacktestingReportResponseDto = z
+  .object({
+    summary: z.object({}).partial().passthrough(),
+    equityCurve: z.array(z.object({}).partial().passthrough()),
+    trades: z.array(z.object({}).partial().passthrough()),
+    markers: z.array(z.object({}).partial().passthrough()),
+    bySymbol: z.array(z.object({}).partial().passthrough()),
+    openPositions: z.array(z.object({}).partial().passthrough()).optional(),
+    pendingSignals: z.array(z.object({}).partial().passthrough()).optional(),
+  })
+  .passthrough()
 const LlmCodegenStartRequestDto = z
   .object({
     initialMessage: z.string(),
@@ -539,7 +566,74 @@ const LlmCodegenContinueRequestDto = z
     maxTokens: z.number().optional(),
   })
   .passthrough()
+const LlmStrategyInstanceResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string(),
+    strategyName: z.string(),
+    strategyDescription: z.string().nullish(),
+    name: z.string(),
+    description: z.string().nullish(),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string(),
+    lastRunAt: z.string().nullish(),
+    isSubscribed: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const LlmStrategyInstanceSignalResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string().nullish(),
+    strategyInstanceId: z.string().nullish(),
+    llmStrategyId: z.string().nullish(),
+    llmStrategyInstanceId: z.string().nullish(),
+    symbolId: z.string(),
+    symbolCode: z.string().nullish(),
+    sourceType: z.enum(['AI_GENERATED', 'MANUAL', 'SYSTEM']),
+    signalType: z.enum(['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT']),
+    direction: z.enum(['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT']),
+    confidence: z.string().nullish(),
+    entryPrice: z.string().nullish(),
+    targetPrice: z.string().nullish(),
+    stopLoss: z.string().nullish(),
+    takeProfit: z.string().nullish(),
+    positionSizeQuote: z.string().nullish(),
+    positionSizeRatio: z.string().nullish(),
+    aiModel: z.string().nullish(),
+    aiReasoning: z.string().nullish(),
+    aiRawResponse: z.object({}).partial().passthrough().nullish(),
+    marketContext: z.object({}).partial().passthrough().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    status: z.enum(['PENDING', 'EXECUTED', 'PARTIAL', 'EXPIRED', 'CANCELLED', 'FAILED']),
+    publishedAt: z.string(),
+    expiresAt: z.string().nullish(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
 const Function = z.object({}).partial().passthrough()
+const LlmSubscriptionResponseDto = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    llmStrategyInstanceId: z.string(),
+    llmStrategyInstanceName: z.string(),
+    llmStrategyName: z.string(),
+    llmStrategyDescription: z.string().nullish(),
+    status: z.enum(['active', 'paused', 'cancelled']),
+    customParams: z.object({}).partial().passthrough().nullish(),
+    exchangeAccountId: z.string().nullish(),
+    exchangeId: z.string().nullish(),
+    exchangeName: z.string().nullish(),
+    subscribedAt: z.string(),
+    unsubscribedAt: z.string().nullish(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
 const StrategyPlazaDisplayMetricsResponseDto = z
   .object({
     label: z.literal('official_sample_backtest'),
@@ -831,6 +925,29 @@ const OpenInterestDto = z
     open_interest_change_percent_4h: z.number().optional(),
     open_interest_change_percent_24h: z.number().optional(),
     data_timestamp: z.string().optional(),
+  })
+  .passthrough()
+const OiAggregateTotalDto = z
+  .object({ qty: z.number(), usd: z.number(), h24: z.number() })
+  .passthrough()
+const OiAggregateRowDto = z
+  .object({
+    exchange: z.string(),
+    qty: z.number(),
+    usd: z.number(),
+    pct: z.number(),
+    h1: z.number(),
+    h4: z.number(),
+    h24: z.number(),
+    oiVol: z.number(),
+  })
+  .passthrough()
+const OiAggregateSnapshotDto = z
+  .object({
+    symbol: z.string(),
+    dataTimestamp: z.string(),
+    total: OiAggregateTotalDto,
+    rows: z.array(OiAggregateRowDto),
   })
   .passthrough()
 const OpenInterestStatsDto = z
@@ -1247,6 +1364,10 @@ const AggregatedVolumeResponseDto = z
     updatedAt: z.string(),
   })
   .passthrough()
+const AggregatedVolumeRowDto = z.object({ exchange: z.string(), value: z.number() }).passthrough()
+const AggregatedVolumeSnapshotResponseDto = z
+  .object({ symbol: z.string(), total: z.number(), rows: z.array(AggregatedVolumeRowDto) })
+  .passthrough()
 const TickerResponseDto = z
   .object({
     symbol: z.string(),
@@ -1490,6 +1611,7 @@ export const schemas = {
   AccountAiQuantActionRequestDto,
   AccountAiQuantDeployRequestDto,
   AccountAiQuantUpdateExecutionLeverageRequestDto,
+  BacktestingCapabilitiesResponseDto,
   BacktestingSymbolSupportRequestDto,
   BacktestingSymbolSupportResponseDto,
   BacktestingCreateJobExecutionDto,
@@ -1502,11 +1624,16 @@ export const schemas = {
   BacktestingCreateJobInputSummaryDto,
   BacktestingCreateJobSummaryDto,
   BacktestingCreateJobResponseDto,
+  BacktestingJobResponseDto,
+  BacktestingReportResponseDto,
   LlmCodegenStartRequestDto,
   CodegenConversationMessageResponseDto,
   CodegenSessionResponseDto,
   LlmCodegenContinueRequestDto,
+  LlmStrategyInstanceResponseDto,
+  LlmStrategyInstanceSignalResponseDto,
   Function,
+  LlmSubscriptionResponseDto,
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaRunRequestDto,
@@ -1535,6 +1662,9 @@ export const schemas = {
   CreateOpenInterestDto,
   BaseResponseDto,
   OpenInterestDto,
+  OiAggregateTotalDto,
+  OiAggregateRowDto,
+  OiAggregateSnapshotDto,
   OpenInterestStatsDto,
   OrderbookPairConfigResponseDto,
   CreateOrderbookPairConfigDto,
@@ -1572,6 +1702,8 @@ export const schemas = {
   ExchangeLongShortRatioResponseDto,
   MarketTradeResponseDto,
   AggregatedVolumeResponseDto,
+  AggregatedVolumeRowDto,
+  AggregatedVolumeSnapshotResponseDto,
   TickerResponseDto,
   WhaleNotificationChannelsDto,
   WhaleNotificationRuleResponseDto,
@@ -3595,10 +3727,12 @@ const endpoints = makeApi([
       {
         name: 'x-request-id',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: BacktestingCapabilitiesResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -3640,7 +3774,7 @@ const endpoints = makeApi([
       {
         name: 'x-request-id',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -3648,7 +3782,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: BacktestingJobResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -3664,7 +3800,7 @@ const endpoints = makeApi([
       {
         name: 'x-request-id',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -3672,7 +3808,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: BacktestingReportResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -3877,7 +4015,12 @@ const endpoints = makeApi([
     path: '/llm-strategy-instances',
     alias: 'LlmStrategyInstancesController_list',
     requestFormat: 'json',
-    response: z.void(),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(LlmStrategyInstanceResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3891,7 +4034,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: LlmStrategyInstanceResponseDto,
   },
   {
     method: 'get',
@@ -3905,7 +4048,12 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(LlmStrategyInstanceSignalResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'post',
@@ -3919,14 +4067,19 @@ const endpoints = makeApi([
         schema: z.object({}).partial().passthrough(),
       },
     ],
-    response: z.void(),
+    response: LlmSubscriptionResponseDto,
   },
   {
     method: 'get',
     path: '/llm-strategy-subscriptions',
     alias: 'LlmStrategySubscriptionsController_list',
     requestFormat: 'json',
-    response: z.void(),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(LlmSubscriptionResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3940,7 +4093,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: LlmSubscriptionResponseDto,
   },
   {
     method: 'patch',
@@ -3959,7 +4112,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: LlmSubscriptionResponseDto,
   },
   {
     method: 'delete',
@@ -4263,6 +4416,21 @@ const endpoints = makeApi([
     ),
   },
   {
+    method: 'get',
+    path: '/markets/volume/snapshot/:symbol',
+    alias: 'MarketsController_getAggregatedVolumeSnapshot',
+    description: `返回某币种各交易所成交量与总计，供移动端聚合盘口页 volume 表消费`,
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'symbol',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: AggregatedVolumeSnapshotResponseDto,
+  },
+  {
     method: 'post',
     path: '/open-interest',
     alias: 'OpenInterestController_upsert',
@@ -4330,6 +4498,30 @@ const endpoints = makeApi([
       {
         status: 400,
         description: `参数验证失败`,
+        schema: z.void(),
+      },
+    ],
+  },
+  {
+    method: 'get',
+    path: '/open-interest/aggregate/:symbol',
+    alias: 'OpenInterestController_getAggregateSnapshot',
+    description: `返回某币种最新时间戳下的总计与各交易所行，供移动端聚合盘口页 OI 表消费`,
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'symbol',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: BaseResponseDto.and(
+      z.object({ data: OiAggregateSnapshotDto }).partial().passthrough(),
+    ),
+    errors: [
+      {
+        status: 404,
+        description: `未找到数据`,
         schema: z.void(),
       },
     ],

@@ -41,6 +41,51 @@ describe('backend contract generated AI Quant codegen responses', () => {
     }
   })
 
+  it('does not leave ai-quant-proxy backtesting/llm proxy aliases with z.void responses (Refs #2278)', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const aliases = [
+      'BacktestingProxyController_capabilities',
+      'BacktestingProxyController_getJob',
+      'BacktestingProxyController_getJobResult',
+      'LlmStrategySubscriptionsController_create',
+      'LlmStrategySubscriptionsController_list',
+      'LlmStrategySubscriptionsController_detail',
+      'LlmStrategySubscriptionsController_update',
+      'LlmStrategyInstancesController_list',
+      'LlmStrategyInstancesController_detail',
+      'LlmStrategyInstancesController_signals',
+    ]
+
+    for (const alias of aliases) {
+      const start = source.indexOf(`alias: '${alias}'`)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const nextAlias = source.indexOf('\n  {\n    method:', start + 1)
+      const snippet = source.slice(start, nextAlias === -1 ? undefined : nextAlias)
+      expect(snippet).not.toContain('response: z.void()')
+      expect(snippet).toContain('response:')
+    }
+  })
+
+  it('binds ai-quant-proxy proxy responses to the declared DTO schemas (Refs #2278)', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const expectations: Array<[string, string]> = [
+      ['BacktestingProxyController_capabilities', 'data: BacktestingCapabilitiesResponseDto'],
+      ['BacktestingProxyController_getJob', 'data: BacktestingJobResponseDto'],
+      ['BacktestingProxyController_getJobResult', 'data: BacktestingReportResponseDto'],
+      ['LlmStrategySubscriptionsController_create', 'response: LlmSubscriptionResponseDto'],
+      ['LlmStrategySubscriptionsController_detail', 'response: LlmSubscriptionResponseDto'],
+      ['LlmStrategyInstancesController_detail', 'response: LlmStrategyInstanceResponseDto'],
+    ]
+
+    for (const [alias, expected] of expectations) {
+      const start = source.indexOf(`alias: '${alias}'`)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const nextAlias = source.indexOf('\n  {\n    method:', start + 1)
+      const snippet = source.slice(start, nextAlias === -1 ? undefined : nextAlias)
+      expect(snippet).toContain(expected)
+    }
+  })
+
   it('includes deployment execution config fields in backend AI Quant request contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
 

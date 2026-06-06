@@ -54,11 +54,11 @@ export class QuantifyAiQuantClient {
     return this.runUntypedJsonRequest(path, 'PATCH', options, body)
   }
 
-  async listAccountStrategies(
+  async listAccountStrategies<T = unknown>(
     query: Record<string, string | number | boolean | undefined>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(
+    return this.runRequest<T>(
       signal =>
         this.client.AccountStrategyViewController_list({
           queries: {
@@ -76,8 +76,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getAccountStrategyDetail(strategyId: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(
+  async getAccountStrategyDetail<T = unknown>(strategyId: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest<T>(
       signal =>
         this.client.AccountStrategyViewController_detail({
           params: { id: strategyId },
@@ -88,8 +88,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getDeployResult(deployRequestId: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.get(
+  async getDeployResult<T = unknown>(deployRequestId: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.get<T>(
       `/account/ai-quant/strategies/deploy-requests/${encodeURIComponent(deployRequestId)}/result`,
       {
         ...options,
@@ -98,12 +98,12 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async performAccountStrategyAction(
+  async performAccountStrategyAction<T = unknown>(
     strategyId: string,
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(
+    return this.runRequest<T>(
       signal =>
         this.client.AccountStrategyViewController_action(body, {
           params: { id: strategyId },
@@ -114,8 +114,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async deployAccountStrategy(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(
+  async deployAccountStrategy<T = unknown>(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest<T>(
       signal =>
         this.client.AccountStrategyViewController_deploy(body, {
           headers: buildUserHeaders(options.userId, options.headers?.authorization),
@@ -125,12 +125,12 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async updateAccountStrategyExecutionLeverage(
+  async updateAccountStrategyExecutionLeverage<T = unknown>(
     strategyId: string,
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(
+    return this.runRequest<T>(
       signal =>
         this.client.AccountStrategyViewController_updateDeploymentLeverage(body, {
           params: { id: strategyId },
@@ -242,8 +242,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async listLlmInstances(query: Record<string, string | number | undefined>) {
-    return this.runRequest(() =>
+  async listLlmInstances<T = unknown>(query: Record<string, string | number | undefined>) {
+    return this.runRequest<T>(() =>
       this.client.LiveLlmStrategyInstancesController_list({
         queries: {
           page: numberOrUndefined(query.page),
@@ -256,8 +256,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getLlmInstanceDetail(id: string, userId?: string) {
-    return this.runRequest(() =>
+  async getLlmInstanceDetail<T = unknown>(id: string, userId?: string) {
+    return this.runRequest<T>(() =>
       this.client.LiveLlmStrategyInstancesController_detail({
         params: { id },
         queries: { userId: stringOrUndefined(userId) },
@@ -265,11 +265,11 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async listLlmInstanceSignals(
+  async listLlmInstanceSignals<T = unknown>(
     id: string,
     query: Record<string, string | number | undefined> & { userId: string },
   ) {
-    return this.runRequest(() =>
+    return this.runRequest<T>(() =>
       this.client.LiveLlmStrategyInstancesController_listSignals({
         params: { id },
         queries: {
@@ -281,14 +281,14 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async createLlmSubscription(body: Record<string, unknown>) {
-    return this.runRequest(() =>
+  async createLlmSubscription<T = unknown>(body: Record<string, unknown>) {
+    return this.runRequest<T>(() =>
       this.client.LlmStrategySubscriptionsController_subscribe(body as never),
     )
   }
 
-  async listLlmSubscriptions(query: Record<string, string | number | undefined> & { userId: string }) {
-    return this.runRequest(() =>
+  async listLlmSubscriptions<T = unknown>(query: Record<string, string | number | undefined> & { userId: string }) {
+    return this.runRequest<T>(() =>
       this.client.LlmStrategySubscriptionsController_listMySubscriptions({
         queries: {
           userId: query.userId,
@@ -300,8 +300,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getLlmSubscriptionDetail(subscriptionId: string, userId: string) {
-    return this.runRequest(() =>
+  async getLlmSubscriptionDetail<T = unknown>(subscriptionId: string, userId: string) {
+    return this.runRequest<T>(() =>
       this.client.LlmStrategySubscriptionsController_detail({
         params: { subscriptionId },
         queries: { userId },
@@ -309,8 +309,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async updateLlmSubscription(subscriptionId: string, body: Record<string, unknown>) {
-    return this.runRequest(() =>
+  async updateLlmSubscription<T = unknown>(subscriptionId: string, body: Record<string, unknown>) {
+    return this.runRequest<T>(() =>
       this.client.LlmStrategySubscriptionsController_update(body as never, {
         params: { subscriptionId },
       }),
@@ -326,8 +326,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getBacktestCapabilities(options: QuantifyRequestOptions) {
-    return this.runRequest(
+  async getBacktestCapabilities<T = unknown>(options: QuantifyRequestOptions) {
+    return this.runRequest<T>(
       signal =>
         this.client.BacktestingController_getCapabilities({
           headers: buildProxyHeaders(options.headers?.authorization, headerValue(options.headers, 'x-request-id')),
@@ -337,11 +337,11 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async createBacktestJob(
+  async createBacktestJob<T = unknown>(
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(
+    return this.runRequest<T>(
       signal =>
         this.client.BacktestingController_createJob(body, {
           headers: buildUserProxyHeaders(
@@ -355,11 +355,11 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async checkBacktestSymbolSupport(
+  async checkBacktestSymbolSupport<T = unknown>(
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(
+    return this.runRequest<T>(
       signal =>
         this.client.BacktestingController_checkSymbolSupport(body, {
           headers: buildUserProxyHeaders(
@@ -373,8 +373,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getBacktestJob(id: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(
+  async getBacktestJob<T = unknown>(id: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest<T>(
       signal =>
         this.client.BacktestingController_getJob({
           params: { id },
@@ -389,8 +389,8 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getBacktestJobResult(id: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(
+  async getBacktestJobResult<T = unknown>(id: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest<T>(
       signal =>
         this.client.BacktestingController_getJobResult({
           params: { id },
