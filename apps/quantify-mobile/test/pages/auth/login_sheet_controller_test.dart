@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/auth_repository.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
@@ -25,6 +26,19 @@ class _FailingSendCodeRepository extends MockAuthRepository {
 class _InstantSendCodeRepository extends MockAuthRepository {
   @override
   Future<void> sendLoginCode({required String email}) async {}
+}
+
+/// 注册失败的 AuthRepository：覆盖「注册失败落 error」路径。
+class _FailingRegisterRepository extends MockAuthRepository {
+  @override
+  Future<AuthSession> register({
+    required String email,
+    required String password,
+    String? nickname,
+    String? betaCode,
+  }) async {
+    throw StateError('mock register failed');
+  }
 }
 
 /// issue #2187 验收：`login_sheet` controller 发码成功→codeSent=true + 倒计时
@@ -152,6 +166,42 @@ void main() {
       expect(read(c).errorEpoch, 1);
       expect(read(c).errorPrefixKind, LoginErrorKind.login);
       expect(read(c).emailLoading, isFalse);
+    });
+
+    test('setMode 切到注册态', () async {
+      final ProviderContainer c = await makeContainer();
+      expect(read(c).mode, AuthSheetMode.login);
+      ctrl(c).setMode(AuthSheetMode.register);
+      expect(read(c).mode, AuthSheetMode.register);
+    });
+
+    test('注册成功：返回 true，registerLoading 归位', () async {
+      final ProviderContainer c = await makeContainer();
+      final bool ok = await ctrl(c).submitRegister(
+        email: 'new@quantify.dev',
+        password: 'pw12345678',
+        betaCode: 'BETA',
+      );
+      expect(ok, isTrue);
+      expect(read(c).registerLoading, isFalse);
+      expect(
+        c.read(sessionControllerProvider).value?.email,
+        'new@quantify.dev',
+      );
+    });
+
+    test('注册失败：返回 false 且落 register 前缀 error', () async {
+      final ProviderContainer c = await makeContainer(
+        authRepository: _FailingRegisterRepository(),
+      );
+      final bool ok = await ctrl(c).submitRegister(
+        email: 'new@quantify.dev',
+        password: 'pw12345678',
+      );
+      expect(ok, isFalse);
+      expect(read(c).errorEpoch, 1);
+      expect(read(c).errorPrefixKind, LoginErrorKind.register);
+      expect(read(c).registerLoading, isFalse);
     });
   });
 }

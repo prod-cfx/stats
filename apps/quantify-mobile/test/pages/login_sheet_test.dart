@@ -194,6 +194,51 @@ void main() {
     );
   });
 
+  testWidgets('LoginSheet 切到注册态显示密码框并隐藏验证码框', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSheetHarness(tester);
+
+    expect(find.byKey(const Key('register-password-field')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('auth-mode-register')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('register-password-field')), findsOneWidget);
+    expect(find.byKey(const Key('register-beta-code-field')), findsOneWidget);
+    expect(find.byKey(const Key('login-code-field')), findsNothing);
+    expect(find.byKey(const Key('register-submit')), findsOneWidget);
+  });
+
+  testWidgets('LoginSheet 注册成功关闭面板并跳转 /ai', (
+    WidgetTester tester,
+  ) async {
+    final (:ProviderContainer container, :InMemoryTokenStorage storage) =
+        await _pumpSheetHarness(tester);
+
+    await tester.tap(find.byKey(const Key('auth-mode-register')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('login-email-field')),
+      'new@quantify.dev',
+    );
+    await tester.enterText(
+      find.byKey(const Key('register-password-field')),
+      'pw12345678',
+    );
+    await tester.tap(find.byKey(const Key('register-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('login-sheet')), findsNothing);
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsOneWidget);
+    expect(storage.snapshot.containsKey(kSessionStorageKey), isTrue);
+    expect(
+      container.read(sessionControllerProvider).value?.email,
+      'new@quantify.dev',
+    );
+  });
+
   testWidgets('LoginSheet close button dismisses without navigation', (
     WidgetTester tester,
   ) async {

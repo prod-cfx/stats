@@ -869,6 +869,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authTelegramLoginFailedPrefix => 'Telegram 登录失败：';
 
   @override
+  String get authRegisterTabLogin => '登录';
+
+  @override
+  String get authRegisterTabRegister => '注册';
+
+  @override
+  String get authRegisterPasswordLabel => '密码';
+
+  @override
+  String get authRegisterPasswordHint => '至少 8 位';
+
+  @override
+  String get authRegisterPasswordRequired => '请输入密码';
+
+  @override
+  String get authRegisterPasswordInvalid => '密码至少 6 位';
+
+  @override
+  String get authRegisterBetaCodeLabel => '邀请码（选填）';
+
+  @override
+  String get authRegisterBetaCodeHint => '邀请码';
+
+  @override
+  String get authRegisterButton => '注册';
+
+  @override
+  String get authRegisterFailedPrefix => '注册失败：';
+
+  @override
   String get authLoginTermsPrefix => '继续即表示同意 ';
 
   @override

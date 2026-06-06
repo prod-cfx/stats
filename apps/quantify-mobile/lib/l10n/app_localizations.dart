@@ -1734,6 +1734,66 @@ abstract class AppLocalizations {
   /// **'Telegram 登录失败：'**
   String get authTelegramLoginFailedPrefix;
 
+  /// No description provided for @authRegisterTabLogin.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录'**
+  String get authRegisterTabLogin;
+
+  /// No description provided for @authRegisterTabRegister.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册'**
+  String get authRegisterTabRegister;
+
+  /// No description provided for @authRegisterPasswordLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码'**
+  String get authRegisterPasswordLabel;
+
+  /// No description provided for @authRegisterPasswordHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少 8 位'**
+  String get authRegisterPasswordHint;
+
+  /// No description provided for @authRegisterPasswordRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入密码'**
+  String get authRegisterPasswordRequired;
+
+  /// No description provided for @authRegisterPasswordInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'密码至少 8 位'**
+  String get authRegisterPasswordInvalid;
+
+  /// No description provided for @authRegisterBetaCodeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'邀请码（选填）'**
+  String get authRegisterBetaCodeLabel;
+
+  /// No description provided for @authRegisterBetaCodeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'邀请码'**
+  String get authRegisterBetaCodeHint;
+
+  /// No description provided for @authRegisterButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册'**
+  String get authRegisterButton;
+
+  /// No description provided for @authRegisterFailedPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册失败：'**
+  String get authRegisterFailedPrefix;
+
   /// No description provided for @authLoginTermsPrefix.
   ///
   /// In zh, this message translates to:

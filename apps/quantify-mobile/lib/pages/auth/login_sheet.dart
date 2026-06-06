@@ -39,11 +39,15 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _code = TextEditingController();
+  final TextEditingController _password = TextEditingController();
+  final TextEditingController _betaCode = TextEditingController();
 
   @override
   void dispose() {
     _email.dispose();
     _code.dispose();
+    _password.dispose();
+    _betaCode.dispose();
     super.dispose();
   }
 
@@ -58,6 +62,13 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     if (v == null || v.isEmpty) return l10n.authLoginCodeRequired;
     if (!RegExp(r'^\d{6}$').hasMatch(v)) return l10n.authLoginCodeInvalid;
+    return null;
+  }
+
+  String? _validatePassword(String? v) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    if (v == null || v.isEmpty) return l10n.authRegisterPasswordRequired;
+    if (v.length < 6) return l10n.authRegisterPasswordInvalid;
     return null;
   }
 
@@ -86,6 +97,21 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
     });
   }
 
+  Future<void> _submitRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+    final String beta = _betaCode.text.trim();
+    final bool ok = await _controller.submitRegister(
+      email: _email.text.trim(),
+      password: _password.text,
+      betaCode: beta.isEmpty ? null : beta,
+    );
+    if (!mounted || !ok) return;
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onAuthenticated?.call();
+    });
+  }
+
   Future<void> _submitTelegram() async {
     final bool ok = await _controller.submitTelegram();
     if (!mounted || !ok) return;
@@ -100,9 +126,11 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
     final String? msg = st.errorMessage;
     if (msg == null || msg.isEmpty) return;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String prefix = st.errorPrefixKind == LoginErrorKind.telegram
-        ? l10n.authTelegramLoginFailedPrefix
-        : l10n.authLoginFailedPrefix;
+    final String prefix = switch (st.errorPrefixKind) {
+      LoginErrorKind.telegram => l10n.authTelegramLoginFailedPrefix,
+      LoginErrorKind.register => l10n.authRegisterFailedPrefix,
+      LoginErrorKind.login => l10n.authLoginFailedPrefix,
+    };
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$prefix$msg')),
     );
@@ -138,6 +166,7 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
 
     final LoginSheetState st = ref.watch(loginSheetControllerProvider);
     final bool busy = st.busy;
+    final bool isRegister = st.mode == AuthSheetMode.register;
     final String sendCodeLabel = st.codeCountdown > 0
         ? l10n.authLoginCountdown(st.codeCountdown)
         : (st.codeSent ? l10n.authLoginResend : l10n.authLoginSendCode);
@@ -215,6 +244,17 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                     ),
                   ),
                   Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
+                    child: _AuthModeToggle(
+                      mode: st.mode,
+                      enabled: !busy,
+                      loginLabel: l10n.authRegisterTabLogin,
+                      registerLabel: l10n.authRegisterTabRegister,
+                      onChanged: _controller.setMode,
+                      colors: c,
+                    ),
+                  ),
+                  Padding(
                     padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
                     child: Form(
                       key: _formKey,
@@ -235,26 +275,54 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                             colors: c,
                           ),
                           const SizedBox(height: 10),
-                          LoginTextField(
-                            fieldKey: const Key('login-code-field'),
-                            shellKey: const Key('login-code-field-shell'),
-                            labelKey: const Key('login-code-label'),
-                            controller: _code,
-                            enabled: !busy,
-                            label: l10n.authLoginCodeLabel,
-                            hintText: l10n.authLoginCodeHint,
-                            keyboardType: TextInputType.number,
-                            validator: _validateCode,
-                            colors: c,
-                            suffix: SendCodeButton(
-                              key: const Key('login-send-code'),
-                              label: sendCodeLabel,
-                              loading: st.codeLoading,
-                              enabled: !busy && st.codeCountdown == 0,
-                              onPressed: _sendLoginCode,
+                          if (isRegister) ...<Widget>[
+                            LoginTextField(
+                              fieldKey: const Key('register-password-field'),
+                              shellKey:
+                                  const Key('register-password-field-shell'),
+                              labelKey: const Key('register-password-label'),
+                              controller: _password,
+                              enabled: !busy,
+                              label: l10n.authRegisterPasswordLabel,
+                              hintText: l10n.authRegisterPasswordHint,
+                              obscureText: true,
+                              validator: _validatePassword,
                               colors: c,
                             ),
-                          ),
+                            const SizedBox(height: 10),
+                            LoginTextField(
+                              fieldKey: const Key('register-beta-code-field'),
+                              shellKey:
+                                  const Key('register-beta-code-field-shell'),
+                              labelKey: const Key('register-beta-code-label'),
+                              controller: _betaCode,
+                              enabled: !busy,
+                              label: l10n.authRegisterBetaCodeLabel,
+                              hintText: l10n.authRegisterBetaCodeHint,
+                              validator: (_) => null,
+                              colors: c,
+                            ),
+                          ] else
+                            LoginTextField(
+                              fieldKey: const Key('login-code-field'),
+                              shellKey: const Key('login-code-field-shell'),
+                              labelKey: const Key('login-code-label'),
+                              controller: _code,
+                              enabled: !busy,
+                              label: l10n.authLoginCodeLabel,
+                              hintText: l10n.authLoginCodeHint,
+                              keyboardType: TextInputType.number,
+                              validator: _validateCode,
+                              colors: c,
+                              suffix: SendCodeButton(
+                                key: const Key('login-send-code'),
+                                label: sendCodeLabel,
+                                loading: st.codeLoading,
+                                enabled: !busy && st.codeCountdown == 0,
+                                onPressed: _sendLoginCode,
+                                colors: c,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -262,10 +330,17 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
                     child: GradientPrimaryButton(
-                      key: const Key('login-submit'),
-                      label: l10n.authLoginButton,
-                      loading: st.emailLoading,
-                      onPressed: busy ? null : _submitEmail,
+                      key: isRegister
+                          ? const Key('register-submit')
+                          : const Key('login-submit'),
+                      label: isRegister
+                          ? l10n.authRegisterButton
+                          : l10n.authLoginButton,
+                      loading:
+                          isRegister ? st.registerLoading : st.emailLoading,
+                      onPressed: busy
+                          ? null
+                          : (isRegister ? _submitRegister : _submitEmail),
                       colors: c,
                     ),
                   ),
@@ -310,6 +385,84 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 登录/注册分段切换。两段等宽，选中段高亮。
+class _AuthModeToggle extends StatelessWidget {
+  const _AuthModeToggle({
+    required this.mode,
+    required this.enabled,
+    required this.loginLabel,
+    required this.registerLabel,
+    required this.onChanged,
+    required this.colors,
+  });
+
+  final AuthSheetMode mode;
+  final bool enabled;
+  final String loginLabel;
+  final String registerLabel;
+  final ValueChanged<AuthSheetMode> onChanged;
+  final QzColorScheme colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: colors.bgSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.borderSoft),
+      ),
+      child: Row(
+        children: <Widget>[
+          _segment(
+            key: const Key('auth-mode-login'),
+            label: loginLabel,
+            selected: mode == AuthSheetMode.login,
+            target: AuthSheetMode.login,
+          ),
+          _segment(
+            key: const Key('auth-mode-register'),
+            label: registerLabel,
+            selected: mode == AuthSheetMode.register,
+            target: AuthSheetMode.register,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment({
+    required Key key,
+    required String label,
+    required bool selected,
+    required AuthSheetMode target,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        key: key,
+        onTap: enabled && !selected ? () => onChanged(target) : null,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? colors.bgElev : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? colors.text : colors.textDim,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
             ),
           ),
         ),

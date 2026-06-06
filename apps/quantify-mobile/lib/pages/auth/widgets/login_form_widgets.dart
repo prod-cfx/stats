@@ -76,6 +76,7 @@ class LoginTextField extends StatelessWidget {
     required this.colors,
     this.keyboardType,
     this.suffix,
+    this.obscureText = false,
   });
 
   final Key fieldKey;
@@ -89,6 +90,7 @@ class LoginTextField extends StatelessWidget {
   final QzColorScheme colors;
   final TextInputType? keyboardType;
   final Widget? suffix;
+  final bool obscureText;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +125,7 @@ class LoginTextField extends StatelessWidget {
                   controller: controller,
                   enabled: enabled,
                   keyboardType: keyboardType,
+                  obscureText: obscureText,
                   autocorrect: false,
                   style: TextStyle(color: colors.text, fontSize: 14),
                   decoration: InputDecoration(

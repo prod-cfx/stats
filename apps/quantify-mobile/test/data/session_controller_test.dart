@@ -106,6 +106,29 @@ void main() {
       expect(persisted['token'], 'mock-token');
     });
 
+    test('register 写盘并发出 session', () async {
+      final InMemoryTokenStorage storage = InMemoryTokenStorage();
+      final ProviderContainer c = _container(storage: storage);
+      addTearDown(c.dispose);
+
+      await c.read(sessionControllerProvider.future);
+      await c.read(sessionControllerProvider.notifier).register(
+            email: 'reg@y.com',
+            password: 'pwpwpwpw',
+            betaCode: 'BETA',
+          );
+
+      final AuthSession? cur = c.read(sessionControllerProvider).value;
+      expect(cur, isNotNull);
+      expect(cur!.email, 'reg@y.com');
+      expect(storage.snapshot[kSessionStorageKey], isNotNull);
+      final Map<String, dynamic> persisted =
+          jsonDecode(storage.snapshot[kSessionStorageKey]!)
+              as Map<String, dynamic>;
+      expect(persisted['email'], 'reg@y.com');
+      expect(persisted['token'], 'mock-token');
+    });
+
     test('loginTelegram 走 mock email 通道', () async {
       final InMemoryTokenStorage storage = InMemoryTokenStorage();
       final ProviderContainer c = _container(storage: storage);

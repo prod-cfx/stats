@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/session_controller.dart';
 import '../services/generated_backend_api.dart';
 import '../services/services.dart';
 
@@ -12,11 +13,19 @@ const String _kApiBaseUrl = String.fromEnvironment(
   defaultValue: 'http://localhost:3010',
 );
 
-/// 统一后端 HTTP 客户端（issue #2189）。所有 Service 共享一个 [ApiClient]
-/// 实例。鉴权 token 由 [AuthRepository] 的会话态提供（接通登录态后可在此
-/// 注入 tokenSupplier）；本迭代先保留匿名 client。
+/// 统一后端 HTTP 客户端（issue #2189 / #2260）。所有 Service 共享一个
+/// [ApiClient] 实例。
+///
+/// 注入 `tokenSupplier`：每次请求经 `ref.read` 读最新 [SessionController] 会话
+/// token，登录态变化无需重建网络栈（用 `ref.read` 而非 `ref.watch` 避免 token
+/// 刷新触发整栈重建）。supplier 闭包在请求期才求值，故 `apiClientProvider` 与
+/// `sessionControllerProvider`（其 build 仅读 storage）无构建期循环。
 final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((Ref ref) {
-  return ApiClient(baseUrl: _kApiBaseUrl);
+  return ApiClient(
+    baseUrl: _kApiBaseUrl,
+    tokenSupplier: () =>
+        ref.read(sessionControllerProvider).value?.token ?? '',
+  );
 });
 
 /// generated backend SDK provider。复用 [apiClientProvider] 的底层 [Dio]

@@ -82,6 +82,48 @@ class LoginSheetController extends Notifier<LoginSheetState> {
     }
   }
 
+  /// 切换登录/注册模式。
+  void setMode(AuthSheetMode mode) {
+    if (state.mode == mode) return;
+    state = state.copyWith(mode: mode);
+  }
+
+  /// 邮箱密码注册。返回 `true` = 会话已建立，widget 可关闭 sheet 并跳转。
+  ///
+  /// `register` 自身 `AsyncValue.guard` 不抛——失败落 `session.hasError`，故成功
+  /// 路径后再查一次；保留 `catch` 兜底防御非预期抛出。
+  Future<bool> submitRegister({
+    required String email,
+    required String password,
+    String? betaCode,
+  }) async {
+    state = state.copyWith(registerLoading: true);
+    try {
+      await ref.read(sessionControllerProvider.notifier).register(
+            email: email,
+            password: password,
+            betaCode: betaCode,
+          );
+      if (!mounted) return false;
+      final AsyncValue<AuthSession?> session =
+          ref.read(sessionControllerProvider);
+      if (session.hasError) {
+        _emitError(
+          session.error ?? StateError('register failed'),
+          LoginErrorKind.register,
+        );
+        return false;
+      }
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      _emitError(e, LoginErrorKind.register);
+      return false;
+    } finally {
+      if (mounted) state = state.copyWith(registerLoading: false);
+    }
+  }
+
   /// Telegram 登录。返回 `true` = 会话已建立。
   Future<bool> submitTelegram() async {
     state = state.copyWith(telegramLoading: true);

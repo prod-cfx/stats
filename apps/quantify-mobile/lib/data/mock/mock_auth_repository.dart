@@ -30,6 +30,24 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AuthSession> register({
+    required String email,
+    required String password,
+    String? nickname,
+    String? betaCode,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final AuthSession session = AuthSession(
+      userId: 'mock-user',
+      token: 'mock-token',
+      email: email,
+    );
+    _session = session;
+    _controller.add(session);
+    return session;
+  }
+
+  @override
   Future<void> sendLoginCode({required String email}) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     _emailsWithLoginCode.add(email.trim().toLowerCase());

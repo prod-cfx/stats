@@ -15,6 +15,19 @@ void main() {
       expect(session.email, 'tester@example.com');
     });
 
+    test('register 返回 mock session 并保留输入 email', () async {
+      final MockAuthRepository repo = MockAuthRepository();
+      final AuthSession session = await repo.register(
+        email: 'new@example.com',
+        password: 'pw12345678',
+        betaCode: 'BETA',
+      );
+      expect(session.userId, 'mock-user');
+      expect(session.token, 'mock-token');
+      expect(session.email, 'new@example.com');
+      expect(await repo.watchSession().first, isNotNull);
+    });
+
     test('sendLoginCode 标记邮箱可验证码登录', () async {
       final MockAuthRepository repo = MockAuthRepository();
       await repo.sendLoginCode(email: 'tester@example.com');

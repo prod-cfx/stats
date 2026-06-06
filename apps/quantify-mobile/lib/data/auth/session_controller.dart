@@ -59,6 +59,25 @@ class SessionController extends AsyncNotifier<AuthSession?> {
     });
   }
 
+  Future<void> register({
+    required String email,
+    required String password,
+    String? nickname,
+    String? betaCode,
+  }) async {
+    state = const AsyncLoading<AuthSession?>();
+    state = await AsyncValue.guard<AuthSession?>(() async {
+      final AuthSession session = await _repo.register(
+        email: email,
+        password: password,
+        nickname: nickname,
+        betaCode: betaCode,
+      );
+      await _storage.write(kSessionStorageKey, jsonEncode(session.toMap()));
+      return session;
+    });
+  }
+
   Future<void> sendLoginCode({required String email}) async {
     await _repo.sendLoginCode(email: email);
   }

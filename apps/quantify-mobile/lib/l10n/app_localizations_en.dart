@@ -912,6 +912,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authTelegramLoginFailedPrefix => 'Telegram login failed: ';
 
   @override
+  String get authRegisterTabLogin => 'Sign in';
+
+  @override
+  String get authRegisterTabRegister => 'Sign up';
+
+  @override
+  String get authRegisterPasswordLabel => 'Password';
+
+  @override
+  String get authRegisterPasswordHint => 'At least 6 characters';
+
+  @override
+  String get authRegisterPasswordRequired => 'Please enter a password';
+
+  @override
+  String get authRegisterPasswordInvalid =>
+      'Password must be at least 6 characters';
+
+  @override
+  String get authRegisterBetaCodeLabel => 'Invite code (optional)';
+
+  @override
+  String get authRegisterBetaCodeHint => 'Invite code';
+
+  @override
+  String get authRegisterButton => 'Create account';
+
+  @override
+  String get authRegisterFailedPrefix => 'Sign up failed: ';
+
+  @override
   String get authLoginTermsPrefix => 'By continuing you agree to our ';
 
   @override

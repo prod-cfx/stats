@@ -1,12 +1,16 @@
 import 'package:flutter/foundation.dart';
 
 /// 登录失败的来源，决定 widget 选哪条前缀文案
-/// （`authLoginFailedPrefix` / `authTelegramLoginFailedPrefix`）。
-enum LoginErrorKind { login, telegram }
+/// （`authLoginFailedPrefix` / `authTelegramLoginFailedPrefix` /
+/// `authRegisterFailedPrefix`）。
+enum LoginErrorKind { login, telegram, register }
 
-/// `login_sheet` 的不可变流程/异步态（issue #2187 三件套）。
+/// 登录面板当前模式：邮箱验证码登录 / 邮箱密码注册。
+enum AuthSheetMode { login, register }
+
+/// `login_sheet` 的不可变流程/异步态（issue #2187 三件套 + #2260 注册）。
 ///
-/// 仅承载表单流程态与异步 loading：发码/邮箱登录/Telegram 登录的 loading、
+/// 承载表单模式与异步 loading：发码/邮箱登录/Telegram 登录/注册的 loading、
 /// 验证码已发标记与倒计时秒数，以及一次性错误信号。`TextEditingController` /
 /// `GlobalKey<FormState>` 等输入控制器按范式留在 widget。
 ///
@@ -16,9 +20,11 @@ enum LoginErrorKind { login, telegram }
 @immutable
 class LoginSheetState {
   const LoginSheetState({
+    this.mode = AuthSheetMode.login,
     this.emailLoading = false,
     this.codeLoading = false,
     this.telegramLoading = false,
+    this.registerLoading = false,
     this.codeSent = false,
     this.codeCountdown = 0,
     this.errorMessage,
@@ -26,9 +32,13 @@ class LoginSheetState {
     this.errorEpoch = 0,
   });
 
+  /// 当前面板模式（登录 / 注册）。
+  final AuthSheetMode mode;
+
   final bool emailLoading;
   final bool codeLoading;
   final bool telegramLoading;
+  final bool registerLoading;
   final bool codeSent;
   final int codeCountdown;
 
@@ -42,12 +52,15 @@ class LoginSheetState {
   final int errorEpoch;
 
   /// 任一异步动作进行中——widget 据此禁用全部按钮/输入。
-  bool get busy => emailLoading || codeLoading || telegramLoading;
+  bool get busy =>
+      emailLoading || codeLoading || telegramLoading || registerLoading;
 
   LoginSheetState copyWith({
+    AuthSheetMode? mode,
     bool? emailLoading,
     bool? codeLoading,
     bool? telegramLoading,
+    bool? registerLoading,
     bool? codeSent,
     int? codeCountdown,
     String? errorMessage,
@@ -55,9 +68,11 @@ class LoginSheetState {
     int? errorEpoch,
   }) {
     return LoginSheetState(
+      mode: mode ?? this.mode,
       emailLoading: emailLoading ?? this.emailLoading,
       codeLoading: codeLoading ?? this.codeLoading,
       telegramLoading: telegramLoading ?? this.telegramLoading,
+      registerLoading: registerLoading ?? this.registerLoading,
       codeSent: codeSent ?? this.codeSent,
       codeCountdown: codeCountdown ?? this.codeCountdown,
       errorMessage: errorMessage ?? this.errorMessage,

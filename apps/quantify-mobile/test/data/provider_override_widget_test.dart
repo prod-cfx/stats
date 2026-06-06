@@ -17,6 +17,17 @@ class _FakeAuthRepository implements AuthRepository {
     email: 'fake@example.com',
   );
   @override
+  Future<AuthSession> register({
+    required String email,
+    required String password,
+    String? nickname,
+    String? betaCode,
+  }) async => const AuthSession(
+    userId: 'fake',
+    token: 'fake',
+    email: 'fake@example.com',
+  );
+  @override
   Future<void> sendLoginCode({required String email}) async {}
   @override
   Future<AuthSession> loginWithCode({
