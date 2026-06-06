@@ -67,6 +67,7 @@ interface StrategyPlazaProps {
   pendingAction?: 'run' | 'edit' | null
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
+  showHotRail?: boolean
 }
 
 interface StrategyCardModel {
@@ -407,6 +408,7 @@ export function StrategyPlaza({
   pendingAction,
   onRunStrategy,
   onEditStrategy,
+  showHotRail = true,
 }: StrategyPlazaProps) {
   const { t } = useTranslation()
   const hasPendingAction = Boolean(pendingTemplateId && pendingAction)
@@ -515,119 +517,121 @@ export function StrategyPlaza({
         </div>
       )}
 
-      <div className="splaza-rail-wrap">
-        <div className="splaza-rail-head mb-3 flex items-center gap-3">
-          <h2 className="m-0 flex items-center gap-2 !text-[17px] !leading-6 !font-bold text-[color:var(--cf-text-strong)]">
-            <Activity className="h-[18px] w-[18px] text-amber-500" />
-            热门策略
-          </h2>
-          <div className="ml-auto hidden gap-2 sm:flex">
-            <button
-              aria-label="上一组"
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
-              type="button"
-              onClick={() => railRef.current?.scrollBy?.({ left: -340, behavior: 'smooth' })}
-            >
-              ‹
-            </button>
-            <button
-              aria-label="下一组"
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
-              type="button"
-              onClick={() => railRef.current?.scrollBy?.({ left: 340, behavior: 'smooth' })}
-            >
-              ›
-            </button>
+      {showHotRail && (
+        <div className="splaza-rail-wrap">
+          <div className="splaza-rail-head mb-3 flex items-center gap-3">
+            <h2 className="m-0 flex items-center gap-2 !text-[17px] !leading-6 !font-bold text-[color:var(--cf-text-strong)]">
+              <Activity className="h-[18px] w-[18px] text-amber-500" />
+              热门策略
+            </h2>
+            <div className="ml-auto hidden gap-2 sm:flex">
+              <button
+                aria-label="上一组"
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                type="button"
+                onClick={() => railRef.current?.scrollBy?.({ left: -340, behavior: 'smooth' })}
+              >
+                ‹
+              </button>
+              <button
+                aria-label="下一组"
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                type="button"
+                onClick={() => railRef.current?.scrollBy?.({ left: 340, behavior: 'smooth' })}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+          <div
+            ref={railRef}
+            data-testid="strategy-plaza-hot-rail"
+            className="splaza-rail flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {hotCards.map((item, index) => {
+              const isRunning = pendingTemplateId === item.template.id && pendingAction === 'run'
+              const isEditing = pendingTemplateId === item.template.id && pendingAction === 'edit'
+              const up = item.seed[item.seed.length - 1] >= item.seed[0]
+              return (
+                <article
+                  key={item.template.id}
+                  className="srail-card relative isolate flex w-[312px] shrink-0 snap-start flex-col overflow-hidden rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[18px] py-4 text-[color:var(--cf-text-strong)] shadow-sm transition hover:border-[color:var(--cf-text-strong)]/20 hover:shadow-lg"
+                >
+                  <div className="mesh pointer-events-none absolute inset-0 bg-[linear-gradient(color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px)] [mask-image:linear-gradient(120deg,#000_0%,transparent_70%)] bg-[length:22px_22px] opacity-40" />
+                  <StatusBadge className="absolute top-3 right-3 z-[3]" status={item.status} />
+                  <div className="relative z-[2]">
+                    <div className="mt-1 flex items-center gap-2.5">
+                      <span
+                        className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-sm font-bold shadow-md"
+                        style={{ background: item.tone }}
+                      >
+                        {item.symbolLabel}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[14.5px] leading-5 font-bold tracking-[-0.2px]">
+                          {item.name}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[color:var(--cf-muted)]">
+                          {item.author}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-end gap-2.5">
+                      <div
+                        className={`shrink-0 font-mono text-2xl leading-none font-extrabold ${up ? 'text-[#7EFFB0]' : 'text-[#FF9DA3]'}`}
+                      >
+                        {formatMetricPct(item.returnPct, { sign: true })}
+                        <small className="ml-1 text-[11px] font-medium text-[color:var(--cf-muted)]">
+                          收益
+                        </small>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <Sparkline accent="#A78BFA" data={item.seed} index={`rail-${index}`} />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-5 border-t border-[color:var(--cf-border)] pt-3">
+                      <div>
+                        <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
+                          Sharpe
+                        </div>
+                        <div className="mt-0.5 font-mono text-[13px] font-bold">
+                          {item.sharpe.toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
+                          回撤
+                        </div>
+                        <div className="mt-0.5 font-mono text-[13px] font-bold">
+                          {formatMetricPct(item.maxDrawdownPct)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
+                          胜率
+                        </div>
+                        <div className="mt-0.5 font-mono text-[13px] font-bold">
+                          {formatMetricPct(item.winRatePct)}
+                        </div>
+                      </div>
+                    </div>
+                    <StrategyActionButtons
+                      hasPendingAction={hasPendingAction}
+                      isEditing={isEditing}
+                      isRunning={isRunning}
+                      item={item}
+                      onEditStrategy={onEditStrategy}
+                      onRunStrategy={onRunStrategy}
+                      t={t}
+                      variant="rail"
+                    />
+                  </div>
+                </article>
+              )
+            })}
           </div>
         </div>
-        <div
-          ref={railRef}
-          data-testid="strategy-plaza-hot-rail"
-          className="splaza-rail flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {hotCards.map((item, index) => {
-            const isRunning = pendingTemplateId === item.template.id && pendingAction === 'run'
-            const isEditing = pendingTemplateId === item.template.id && pendingAction === 'edit'
-            const up = item.seed[item.seed.length - 1] >= item.seed[0]
-            return (
-              <article
-                key={item.template.id}
-                className="srail-card relative isolate flex w-[312px] shrink-0 snap-start flex-col overflow-hidden rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[18px] py-4 text-[color:var(--cf-text-strong)] shadow-sm transition hover:border-[color:var(--cf-text-strong)]/20 hover:shadow-lg"
-              >
-                <div className="mesh pointer-events-none absolute inset-0 bg-[linear-gradient(color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px)] [mask-image:linear-gradient(120deg,#000_0%,transparent_70%)] bg-[length:22px_22px] opacity-40" />
-                <StatusBadge className="absolute top-3 right-3 z-[3]" status={item.status} />
-                <div className="relative z-[2]">
-                  <div className="mt-1 flex items-center gap-2.5">
-                    <span
-                      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-sm font-bold shadow-md"
-                      style={{ background: item.tone }}
-                    >
-                      {item.symbolLabel}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14.5px] leading-5 font-bold tracking-[-0.2px]">
-                        {item.name}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[color:var(--cf-muted)]">
-                        {item.author}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-end gap-2.5">
-                    <div
-                      className={`shrink-0 font-mono text-2xl leading-none font-extrabold ${up ? 'text-[#7EFFB0]' : 'text-[#FF9DA3]'}`}
-                    >
-                      {formatMetricPct(item.returnPct, { sign: true })}
-                      <small className="ml-1 text-[11px] font-medium text-[color:var(--cf-muted)]">
-                        收益
-                      </small>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <Sparkline accent="#A78BFA" data={item.seed} index={`rail-${index}`} />
-                    </div>
-                  </div>
-                  <div className="mt-3 flex gap-5 border-t border-[color:var(--cf-border)] pt-3">
-                    <div>
-                      <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
-                        Sharpe
-                      </div>
-                      <div className="mt-0.5 font-mono text-[13px] font-bold">
-                        {item.sharpe.toFixed(2)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
-                        回撤
-                      </div>
-                      <div className="mt-0.5 font-mono text-[13px] font-bold">
-                        {formatMetricPct(item.maxDrawdownPct)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
-                        胜率
-                      </div>
-                      <div className="mt-0.5 font-mono text-[13px] font-bold">
-                        {formatMetricPct(item.winRatePct)}
-                      </div>
-                    </div>
-                  </div>
-                  <StrategyActionButtons
-                    hasPendingAction={hasPendingAction}
-                    isEditing={isEditing}
-                    isRunning={isRunning}
-                    item={item}
-                    onEditStrategy={onEditStrategy}
-                    onRunStrategy={onRunStrategy}
-                    t={t}
-                    variant="rail"
-                  />
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      </div>
+      )}
 
       <div data-testid="strategy-plaza-toolbar" className="splaza-toolbar space-y-3">
         <div className="splaza-row cats flex flex-col gap-3 lg:flex-row lg:items-center">

@@ -6,7 +6,7 @@ import type {
   StrategyPlazaRunResult,
   StrategyPlazaTemplate,
 } from '@/lib/api'
-import { Check, ChevronLeft } from 'lucide-react'
+import { ArrowUp, Check, ChevronLeft, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -41,6 +41,75 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function GuestPlazaChatEntry({
+  onRequireLogin,
+}: {
+  onRequireLogin: (intent: QuantReturnIntentInput) => void
+}) {
+  const { t } = useTranslation()
+  const defaultDraft = '3分钟跌1%买入，15分钟涨2%卖出，单笔10%资金'
+  const [draft, setDraft] = useState('')
+
+  const submitDraft = () => {
+    onRequireLogin({ type: 'chat', draft: draft.trim() || defaultDraft })
+  }
+
+  return (
+    <section
+      data-testid="guest-plaza-chat-entry"
+      className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-sm"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="!text-base !leading-6 !font-semibold text-[color:var(--cf-text-strong)]">
+            {t('aiQuant.guestLanding.title')}
+          </h2>
+          <p className="!text-sm !leading-[22px] !font-normal text-[color:var(--cf-muted)]">
+            {t('aiQuant.guestLanding.subtitle')}
+          </p>
+        </div>
+      </div>
+
+      <div className="group focus-within:border-primary/50 focus-within:ring-primary/20 hover:border-primary/30 relative mt-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-3 shadow-inner transition-colors focus-within:ring-1">
+        <textarea
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              if (draft.trim()) submitDraft()
+            }
+          }}
+          placeholder={t('aiQuant.inputPlaceholder')}
+          className="min-h-[88px] w-full resize-none bg-transparent !text-base !leading-[22px] !font-normal text-[color:var(--cf-text)] outline-none placeholder:text-[color:var(--cf-muted)] md:!text-sm"
+        />
+        <div className="mt-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setDraft(defaultDraft)}
+            className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-1.5 !text-xs !leading-5 !font-semibold text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-bg)] hover:text-[color:var(--cf-text)]"
+          >
+            {t('aiQuant.guestLanding.tryExample')}
+          </button>
+          <button
+            type="button"
+            data-testid="guest-plaza-chat-send"
+            onClick={submitDraft}
+            title={t('aiQuant.send')}
+            aria-label={t('aiQuant.send')}
+            className="bg-primary hover:bg-primary/90 flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm transition-colors"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export function AiQuantPlazaPageClient() {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
@@ -67,6 +136,11 @@ export function AiQuantPlazaPageClient() {
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
     openAuth({ lng, redirect: `/${lng}/ai-quant/plaza` })
+  }
+
+  const goLoginWithChatIntent = (intent: QuantReturnIntentInput) => {
+    setIntent(intent)
+    openAuth({ lng, redirect: `/${lng}/ai-quant` })
   }
 
   useEffect(() => {
@@ -209,6 +283,8 @@ export function AiQuantPlazaPageClient() {
         </div>
       </div>
 
+      {!isLoading && !session && <GuestPlazaChatEntry onRequireLogin={goLoginWithChatIntent} />}
+
       <StrategyPlaza
         templates={templates}
         loading={loadingTemplates}
@@ -218,6 +294,7 @@ export function AiQuantPlazaPageClient() {
         pendingAction={pendingAction}
         onRunStrategy={runTemplate}
         onEditStrategy={editTemplate}
+        showHotRail={isLoading || Boolean(session)}
       />
 
       {existingStrategy && (

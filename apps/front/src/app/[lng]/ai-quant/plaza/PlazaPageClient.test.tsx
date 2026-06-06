@@ -19,6 +19,11 @@ const openAuthMock = jest.fn()
 const mockTranslations: Record<string, string> = {
   'aiQuant.guestLanding.plazaSubtitle': '精选策略模板',
   'aiQuant.plaza': '策略广场',
+  'aiQuant.guestLanding.title': 'AI 量化策略生成',
+  'aiQuant.guestLanding.subtitle': '描述你的交易想法，AI 将为你自动生成可回测的量化策略代码。',
+  'aiQuant.guestLanding.tryExample': '试一试示例',
+  'aiQuant.inputPlaceholder': '3分钟跌1%买入，15分钟涨2%卖出，单笔10%资金',
+  'aiQuant.send': '发送',
   'aiQuant.plazaPage.back': '返回',
   'aiQuant.plazaPage.editSessionFailed': '创建策略广场编辑会话失败',
   'aiQuant.plazaPage.guestHint': '登录后可以一键运行或编辑策略模板，未登录也可以先浏览策略广场。',
@@ -39,6 +44,7 @@ let plazaProps: {
   pendingAction?: 'run' | 'edit' | null
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
+  showHotRail?: boolean
 } | null = null
 
 const template: StrategyPlazaTemplate = {
@@ -217,6 +223,53 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
     expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant/plaza' })
     expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
+  })
+
+  it('replaces the guest hot rail with the AI Quant chat entry', async () => {
+    mockSession = null
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    expect(container.textContent).toContain('AI 量化策略生成')
+    expect(container.textContent).toContain('描述你的交易想法')
+    expect(plazaProps?.showHotRail).toBe(false)
+
+    const exampleButton = Array.from(container.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('试一试示例'),
+    )
+    expect(exampleButton).toBeTruthy()
+
+    await act(async () => {
+      exampleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="guest-plaza-chat-send"]',
+    )
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockSetIntent).toHaveBeenCalledWith({
+      type: 'chat',
+      draft: '3分钟跌1%买入，15分钟涨2%卖出，单笔10%资金',
+    })
+    expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant' })
+  })
+
+  it('keeps the hot rail visible for authenticated plaza visitors', async () => {
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    expect(container.textContent).not.toContain('AI 量化策略生成')
+    expect(plazaProps?.showHotRail).toBe(true)
   })
 
   it('renders a larger plaza title with one subtitle line', async () => {
