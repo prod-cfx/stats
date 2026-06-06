@@ -98,22 +98,45 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Future<BacktestSummary?> latestBacktest(String sessionId) async {
-    final Map<String, dynamic> m =
-        asMap(await _service.latestBacktest(sessionId));
-    if (m.isEmpty) return null;
-    return BacktestSummary(
-      id: asString(pick(m, <String>['id'])),
-      totalReturnPercent: asDouble(pick(m, <String>['totalReturnPercent'])),
-      maxDrawdownPercent: asDouble(pick(m, <String>['maxDrawdownPercent'])),
-      trades: asInt(pick(m, <String>['trades'])),
-    );
+    // 契约无会话级回测结果端点（/conversations/{id} 仅 DELETE）；typed summary
+    // 仅在列表 DTO lastBacktestRef.summary。unsupported → null。
+    return null;
   }
+
+  /// deploy 结果轮询上限（有界，防死循环）。
+  static const int _deployPollLimit = 3;
 
   @override
   Future<AiSession?> markDeployed(String sessionId, String instanceId) async {
-    final Map<String, dynamic> m =
-        asMap(await _service.markDeployed(sessionId, instanceId));
-    if (m.isEmpty) return null;
-    return _parseSession(m);
+    // PRE-WIRE: 异步 deploy（deploy → 轮询 deploy-requests/{id}/result，上限
+    // 3 次）。UI 尚未调用（#2064/#2065 回执流），name/exchangeAccount/
+    // deploymentExecutionConfig 字段映射待 UI 接入定稿。
+    // deployRequestId 确定性派生作幂等键（不引 uuid）；instanceId 暂映射
+    // publishedSnapshotId（best-effort 预埋）。
+    final String deployRequestId = '$sessionId-$instanceId';
+    final Map<String, dynamic> body = <String, dynamic>{
+      'name': instanceId,
+      'deployRequestId': deployRequestId,
+      'publishedSnapshotId': instanceId,
+    };
+
+    await _service.deployStrategy(body);
+
+    for (int i = 0; i < _deployPollLimit; i++) {
+      final Map<String, dynamic> envelope =
+          asMap(await _service.getDeployResult(deployRequestId));
+      // 信封含 data 键：data==null 视为 pending，继续轮询；非空才解析。
+      // 无 data 键则回退原 map（仿 ApiAuthRepository 扁平响应回退）。
+      final bool hasData = envelope.containsKey('data');
+      final Object? data = envelope['data'];
+      if (hasData) {
+        if (data == null) continue; // pending
+        final Map<String, dynamic> result = asMap(data);
+        if (result.isNotEmpty) return _parseSession(result);
+        continue;
+      }
+      if (envelope.isNotEmpty) return _parseSession(envelope);
+    }
+    return null; // 始终 pending：返回 null，不抛、不死循环。
   }
 }

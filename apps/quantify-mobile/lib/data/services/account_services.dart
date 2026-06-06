@@ -47,12 +47,14 @@ class AiChatService {
   Future<dynamic> getSession(String sessionId) =>
       _client.get('/account/ai-quant/conversations/$sessionId');
 
-  Future<dynamic> latestBacktest(String sessionId) =>
-      _client.get('/account/ai-quant/conversations/$sessionId');
+  /// 异步 deploy 第一段：提交部署请求，返回详情信封。
+  /// 契约 body 为 AccountAiQuantDeployRequestDto。
+  Future<dynamic> deployStrategy(Map<String, dynamic> body) =>
+      _client.post('/account/ai-quant/strategies/deploy', body: body);
 
-  Future<dynamic> markDeployed(String sessionId, String instanceId) =>
-      _client.post(
-        '/account/ai-quant/strategies/deploy',
-        body: <String, dynamic>{'instanceId': instanceId},
+  /// 异步 deploy 第二段：按 deployRequestId 轮询结果，
+  /// `data == null` 表示 pending。
+  Future<dynamic> getDeployResult(String deployRequestId) => _client.get(
+        '/account/ai-quant/strategies/deploy-requests/$deployRequestId/result',
       );
 }
