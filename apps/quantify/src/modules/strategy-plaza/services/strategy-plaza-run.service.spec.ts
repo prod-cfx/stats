@@ -222,6 +222,36 @@ describe('StrategyPlazaRunService', () => {
     expect(accountStrategyViewService.deployStrategy).not.toHaveBeenCalled()
   })
 
+  it('does not reuse an existing plaza strategy when the user explicitly requests live deployment', async () => {
+    const { accountStrategyViewService, exchangeAccounts, officialSnapshots, service } = buildService({
+      existingStrategyInstanceId: 'strategy-existing-testnet',
+      existingStrategyDetail: {
+        id: 'strategy-existing-testnet',
+        name: 'MA 均线交叉',
+        status: 'running',
+      },
+    })
+
+    await service.runTemplate({
+      userId: 'user-1',
+      templateId: 'ma-cross',
+      runRequestId: 'run-live-123456',
+      mode: 'LIVE',
+      exchangeAccountId: 'acct-okx-live',
+    })
+
+    expect(officialSnapshots.resolveExistingOfficialSnapshotForUser).not.toHaveBeenCalled()
+    expect(exchangeAccounts.findExchangeAccountFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'acct-okx-live', isTestnet: false }),
+    }))
+    expect(accountStrategyViewService.getStrategyDetail).not.toHaveBeenCalled()
+    expect(accountStrategyViewService.deployStrategy).toHaveBeenCalledWith(expect.objectContaining({
+      deployRequestId: 'plaza:ma-cross:run-live-123456',
+      mode: 'LIVE',
+      exchangeAccountId: 'acct-okx-live',
+    }))
+  })
+
   it('returns an existing plaza strategy even when the OKX demo key is missing', async () => {
     const { accountStrategyViewService, exchangeAccounts, service } = buildService({
       account: null,

@@ -22,10 +22,13 @@ export class StrategyPlazaRunService {
     exchangeAccountId?: string
   }) {
     const template = this.templates.getRequired(input.templateId)
-    const existingSnapshot = await this.officialSnapshots.resolveExistingOfficialSnapshotForUser({
-      userId: input.userId,
-      template,
-    })
+    const mode = input.mode ?? 'TESTNET'
+    const existingSnapshot = mode === 'TESTNET'
+      ? await this.officialSnapshots.resolveExistingOfficialSnapshotForUser({
+          userId: input.userId,
+          template,
+        })
+      : null
 
     if (existingSnapshot?.existingStrategyInstanceId) {
       return {
@@ -37,7 +40,6 @@ export class StrategyPlazaRunService {
       }
     }
 
-    const mode = input.mode ?? 'TESTNET'
     const account = mode === 'LIVE'
       ? await this.exchangeAccounts.findExchangeAccountFirst({
           where: {
@@ -60,7 +62,7 @@ export class StrategyPlazaRunService {
       template,
     })
 
-    if (snapshot.existingStrategyInstanceId) {
+    if (mode === 'TESTNET' && snapshot.existingStrategyInstanceId) {
       return {
         result: 'existing' as const,
         strategy: await this.accountStrategyViewService.getStrategyDetail(
