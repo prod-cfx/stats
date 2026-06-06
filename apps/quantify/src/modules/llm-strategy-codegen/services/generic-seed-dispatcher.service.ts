@@ -857,7 +857,9 @@ function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
   const hasPriceSubject = /价格|price|close/iu.test(clause)
   const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
   if (periodMatches.length !== 1) return null
-  const hasSingleIndicatorCross = /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
+  const hasSingleIndicatorCross = hasPriceSubject
+    ? /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
+    : /(?:突破|跌破|break(?:s|out)?|breakdown)/iu.test(clause)
   if (!hasPriceSubject && !hasSingleIndicatorCross) return null
   const period = Number(periodMatches[0]?.[1])
   return Number.isFinite(period) && period > 0 ? period : null
@@ -2109,7 +2111,7 @@ export class GenericSeedDispatcher {
     }
     for (const item of out) {
       if (item.key === 'orderbook.imbalance') {
-        item.params = { ...this.extractOrderbookImbalanceParams(userMessage), ...item.params }
+        item.params = { ...item.params, ...this.extractOrderbookImbalanceParams(userMessage) }
       }
       if (item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
         item.params = { ...this.extractFundingRateParams(userMessage), ...item.params }
@@ -2612,6 +2614,13 @@ export class GenericSeedDispatcher {
     const fixedNotional = this.extractFixedNotionalValue(userMessage)
     for (const effect of out) {
       if (effect.kind !== 'atom') continue
+      if (effect.key === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key) {
+        const fixedGridParams = this.readFixedGridProgramParamsFromMessage(userMessage)
+        Object.assign(effect.params, {
+          programKind: 'fixed_grid_gated',
+          ...fixedGridParams,
+        })
+      }
       if (
         (effect.key === ATOM_CONTRACT_REGISTRY['risk.atr_stop'].key || effect.key === ATOM_CONTRACT_REGISTRY['risk.atr_multiple_stop'].key)
         && typeof effect.params.multiple !== 'number'
@@ -2824,6 +2833,7 @@ export class GenericSeedDispatcher {
 
   private hasRegimeGateIntent(userMessage: string): boolean {
     if (/regime|gate|趋势过滤|趋势向上/iu.test(userMessage)) return true
+    if (/(?:orderbook|订单簿|盘口|深度|价差|资金费率|funding\s*rate|未平仓量|持仓量|open\s*interest|\bOI\b|清算|liquidation)[^，。；;]*(?:才允许|只允许)[^，。；;]*(?:开仓|入场|进场|开多|开空|做多|做空|open|enter)/iu.test(userMessage)) return false
     if (!/才允许|只允许/iu.test(userMessage)) return false
     return !this.hasMultiTimeframeGateIntent(userMessage)
   }
