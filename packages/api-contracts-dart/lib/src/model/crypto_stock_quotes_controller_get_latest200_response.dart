@@ -5,8 +5,6 @@
 // ignore_for_file: unused_element
 import 'package:backend_api_contracts/src/model/crypto_stock_quote_response_dto.dart';
 import 'package:built_collection/built_collection.dart';
-import 'package:backend_api_contracts/src/model/base_response_dto.dart';
-import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -16,9 +14,15 @@ part 'crypto_stock_quotes_controller_get_latest200_response.g.dart';
 ///
 /// Properties:
 /// * [data] 
-/// * [message] - 提示信息
+/// * [message] 
 @BuiltValue()
-abstract class CryptoStockQuotesControllerGetLatest200Response implements BaseResponseDto, Built<CryptoStockQuotesControllerGetLatest200Response, CryptoStockQuotesControllerGetLatest200ResponseBuilder> {
+abstract class CryptoStockQuotesControllerGetLatest200Response implements Built<CryptoStockQuotesControllerGetLatest200Response, CryptoStockQuotesControllerGetLatest200ResponseBuilder> {
+  @BuiltValueField(wireName: r'data')
+  BuiltList<CryptoStockQuoteResponseDto>? get data;
+
+  @BuiltValueField(wireName: r'message')
+  String? get message;
+
   CryptoStockQuotesControllerGetLatest200Response._();
 
   factory CryptoStockQuotesControllerGetLatest200Response([void updates(CryptoStockQuotesControllerGetLatest200ResponseBuilder b)]) = _$CryptoStockQuotesControllerGetLatest200Response;
@@ -42,11 +46,13 @@ class _$CryptoStockQuotesControllerGetLatest200ResponseSerializer implements Pri
     CryptoStockQuotesControllerGetLatest200Response object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'data';
-    yield serializers.serialize(
-      object.data,
-      specifiedType: const FullType(JsonObject),
-    );
+    if (object.data != null) {
+      yield r'data';
+      yield serializers.serialize(
+        object.data,
+        specifiedType: const FullType(BuiltList, [FullType(CryptoStockQuoteResponseDto)]),
+      );
+    }
     if (object.message != null) {
       yield r'message';
       yield serializers.serialize(
@@ -80,9 +86,9 @@ class _$CryptoStockQuotesControllerGetLatest200ResponseSerializer implements Pri
         case r'data':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(JsonObject),
-          ) as JsonObject;
-          result.data = valueDes;
+            specifiedType: const FullType(BuiltList, [FullType(CryptoStockQuoteResponseDto)]),
+          ) as BuiltList<CryptoStockQuoteResponseDto>;
+          result.data.replace(valueDes);
           break;
         case r'message':
           final valueDes = serializers.deserialize(

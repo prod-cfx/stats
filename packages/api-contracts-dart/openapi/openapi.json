@@ -5524,21 +5524,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/BaseResponseDto"
-                    },
-                    {
-                      "properties": {
-                        "data": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/CryptoStockQuoteResponseDto"
-                          }
-                        }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CryptoStockQuoteResponseDto"
                       }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
                     }
-                  ]
+                  }
                 }
               }
             }

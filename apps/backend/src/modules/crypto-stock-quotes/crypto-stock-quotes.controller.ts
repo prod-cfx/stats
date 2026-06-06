@@ -28,17 +28,6 @@ import {
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesService } from './crypto-stock-quotes.service'
 
-const baseResponseSchema = (dataSchema: Record<string, unknown>) => ({
-  allOf: [
-    { $ref: getSchemaPath(BaseResponseDto) },
-    {
-      properties: {
-        data: dataSchema,
-      },
-    },
-  ],
-})
-
 @ApiTags('crypto-stock-quotes')
 @ApiBearerAuth('bearer')
 @ApiExtraModels(BaseResponseDto, CryptoStockQuoteResponseDto)
@@ -69,12 +58,16 @@ export class CryptoStockQuotesController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: '查询成功',
-    schema: baseResponseSchema({
-      type: 'array',
-      items: {
-        $ref: getSchemaPath(CryptoStockQuoteResponseDto),
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(CryptoStockQuoteResponseDto) },
+        },
+        message: { type: 'string', example: 'Success' },
       },
-    }),
+    },
   })
   async getLatest(@Query() query: GetLatestCryptoStockQuotesQueryDto) {
     const data = await this.service.getLatestQuotes(query.symbols ?? null, query.source)

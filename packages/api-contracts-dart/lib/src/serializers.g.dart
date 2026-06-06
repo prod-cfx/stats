@@ -586,6 +586,12 @@ Serializers _$serializers =
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
+              const FullType(CryptoStockQuoteResponseDto),
+            ]),
+            () => ListBuilder<CryptoStockQuoteResponseDto>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
               const FullType(ExchangeLiquidationRowDto),
             ]),
             () => ListBuilder<ExchangeLiquidationRowDto>(),

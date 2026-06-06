@@ -9,7 +9,7 @@ part of 'crypto_stock_quotes_controller_get_latest200_response.dart';
 class _$CryptoStockQuotesControllerGetLatest200Response
     extends CryptoStockQuotesControllerGetLatest200Response {
   @override
-  final JsonObject data;
+  final BuiltList<CryptoStockQuoteResponseDto>? data;
   @override
   final String? message;
 
@@ -21,10 +21,8 @@ class _$CryptoStockQuotesControllerGetLatest200Response
             ..update(updates))
           ._build();
 
-  _$CryptoStockQuotesControllerGetLatest200Response._({
-    required this.data,
-    this.message,
-  }) : super._();
+  _$CryptoStockQuotesControllerGetLatest200Response._({this.data, this.message})
+    : super._();
   @override
   CryptoStockQuotesControllerGetLatest200Response rebuild(
     void Function(CryptoStockQuotesControllerGetLatest200ResponseBuilder)
@@ -68,17 +66,18 @@ class CryptoStockQuotesControllerGetLatest200ResponseBuilder
         Builder<
           CryptoStockQuotesControllerGetLatest200Response,
           CryptoStockQuotesControllerGetLatest200ResponseBuilder
-        >,
-        BaseResponseDtoBuilder {
+        > {
   _$CryptoStockQuotesControllerGetLatest200Response? _$v;
 
-  JsonObject? _data;
-  JsonObject? get data => _$this._data;
-  set data(covariant JsonObject? data) => _$this._data = data;
+  ListBuilder<CryptoStockQuoteResponseDto>? _data;
+  ListBuilder<CryptoStockQuoteResponseDto> get data =>
+      _$this._data ??= ListBuilder<CryptoStockQuoteResponseDto>();
+  set data(ListBuilder<CryptoStockQuoteResponseDto>? data) =>
+      _$this._data = data;
 
   String? _message;
   String? get message => _$this._message;
-  set message(covariant String? message) => _$this._message = message;
+  set message(String? message) => _$this._message = message;
 
   CryptoStockQuotesControllerGetLatest200ResponseBuilder() {
     CryptoStockQuotesControllerGetLatest200Response._defaults(this);
@@ -87,7 +86,7 @@ class CryptoStockQuotesControllerGetLatest200ResponseBuilder
   CryptoStockQuotesControllerGetLatest200ResponseBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
-      _data = $v.data;
+      _data = $v.data?.toBuilder();
       _message = $v.message;
       _$v = null;
     }
@@ -95,9 +94,7 @@ class CryptoStockQuotesControllerGetLatest200ResponseBuilder
   }
 
   @override
-  void replace(
-    covariant CryptoStockQuotesControllerGetLatest200Response other,
-  ) {
+  void replace(CryptoStockQuotesControllerGetLatest200Response other) {
     _$v = other as _$CryptoStockQuotesControllerGetLatest200Response;
   }
 
@@ -113,16 +110,28 @@ class CryptoStockQuotesControllerGetLatest200ResponseBuilder
   CryptoStockQuotesControllerGetLatest200Response build() => _build();
 
   _$CryptoStockQuotesControllerGetLatest200Response _build() {
-    final _$result =
-        _$v ??
-        _$CryptoStockQuotesControllerGetLatest200Response._(
-          data: BuiltValueNullFieldError.checkNotNull(
-            data,
-            r'CryptoStockQuotesControllerGetLatest200Response',
-            'data',
-          ),
-          message: message,
+    _$CryptoStockQuotesControllerGetLatest200Response _$result;
+    try {
+      _$result =
+          _$v ??
+          _$CryptoStockQuotesControllerGetLatest200Response._(
+            data: _data?.build(),
+            message: message,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'data';
+        _data?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'CryptoStockQuotesControllerGetLatest200Response',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

@@ -3716,12 +3716,10 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: BaseResponseDto.and(
-      z
-        .object({ data: z.array(CryptoStockQuoteResponseDto) })
-        .partial()
-        .passthrough(),
-    ),
+    response: z
+      .object({ data: z.array(CryptoStockQuoteResponseDto), message: z.string() })
+      .partial()
+      .passthrough(),
   },
   {
     method: 'get',
