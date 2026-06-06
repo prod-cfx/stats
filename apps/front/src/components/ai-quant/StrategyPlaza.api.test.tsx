@@ -223,7 +223,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
   })
 
-  it('uses the previous violet-to-fuchsia gradient on run actions', async () => {
+  it('uses the logic confirmation blue-purple gradient on run actions', async () => {
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -240,11 +240,10 @@ describe('StrategyPlaza API rendering', () => {
     )
     const runButton = actionHost?.querySelector('button')
 
-    expect(runButton?.className).toContain('from-violet-600')
-    expect(runButton?.className).toContain('to-fuchsia-600')
-    expect(runButton?.className.split(/\s+/)).not.toContain('primary')
-    expect(runButton?.getAttribute('style')).toContain('#7C3AED')
-    expect(runButton?.getAttribute('style')).toContain('#C026D3')
+    expect(runButton?.className).toContain('from-primary')
+    expect(runButton?.className).toContain('to-secondary')
+    expect(runButton?.getAttribute('style')).toContain('#3474ff')
+    expect(runButton?.getAttribute('style')).toContain('#8a55ff')
   })
 
   it('renders aligned run and edit buttons', async () => {
@@ -317,7 +316,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(badge?.className).toContain('top-3')
   })
 
-  it('uses the previous violet-to-fuchsia gradient for hot rail run buttons', async () => {
+  it('uses the logic confirmation blue-purple gradient for hot rail run buttons', async () => {
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -332,11 +331,10 @@ describe('StrategyPlaza API rendering', () => {
     const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
     const runButton = rail?.querySelector('[data-testid="strategy-plaza-run-button"]')
 
-    expect(runButton?.className).toContain('from-violet-600')
-    expect(runButton?.className).toContain('to-fuchsia-600')
-    expect(runButton?.className.split(/\s+/)).not.toContain('primary')
-    expect(runButton?.getAttribute('style')).toContain('#7C3AED')
-    expect(runButton?.getAttribute('style')).toContain('#C026D3')
+    expect(runButton?.className).toContain('from-primary')
+    expect(runButton?.className).toContain('to-secondary')
+    expect(runButton?.getAttribute('style')).toContain('#3474ff')
+    expect(runButton?.getAttribute('style')).toContain('#8a55ff')
   })
 
   it('renders card footer actions on one aligned row like the PC design', async () => {
@@ -366,7 +364,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(buttons[1]?.className).toContain('h-9')
   })
 
-  it('uses the logo purple gradient for the active pager', async () => {
+  it('uses dark square pagination with the logic confirmation gradient on the active page', async () => {
     const manyTemplates = Array.from({ length: 10 }, (_, index) => ({
       ...template,
       id: `ma-cross-${index}`,
@@ -385,12 +383,18 @@ describe('StrategyPlaza API rendering', () => {
       )
     })
 
+    const pager = container.querySelector('[data-testid="strategy-plaza-pager"]')
+    const buttons = Array.from(pager?.querySelectorAll('button') ?? [])
     const activePage = container.querySelector('[data-testid="strategy-plaza-page-button-active"]')
 
-    expect(activePage?.className).toContain('from-[#7C3AED]')
-    expect(activePage?.className).toContain('to-[#B414F4]')
-    expect(activePage?.getAttribute('style')).toContain('#7C3AED')
-    expect(activePage?.getAttribute('style')).toContain('#B414F4')
+    expect(pager?.className).toContain('gap-1.5')
+    expect(buttons[0]?.className).toContain('h-9')
+    expect(buttons[0]?.className).toContain('min-w-9')
+    expect(buttons[0]?.className).toContain('rounded-[9px]')
+    expect(activePage?.className).toContain('from-primary')
+    expect(activePage?.className).toContain('to-secondary')
+    expect(activePage?.getAttribute('style')).toContain('#3474ff')
+    expect(activePage?.getAttribute('style')).toContain('#8a55ff')
   })
 
   it('limits strategy category pages to nine cards and renders pagination controls', async () => {

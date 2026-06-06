@@ -33,10 +33,8 @@ const SORT_OPTIONS = [
   { key: 'new', label: '最新' },
 ] as const
 const PAGE_SIZE = 9
-const RUN_BUTTON_GRADIENT_CLASS = 'bg-gradient-to-r from-violet-600 to-fuchsia-600'
-const RUN_BUTTON_GRADIENT_STYLE = 'linear-gradient(90deg, #7C3AED 0%, #C026D3 100%)'
-const PAGER_ACTIVE_GRADIENT_CLASS = 'bg-gradient-to-r from-[#7C3AED] to-[#B414F4]'
-const PAGER_ACTIVE_GRADIENT_STYLE = 'linear-gradient(90deg, #7C3AED 0%, #B414F4 100%)'
+const LOGIC_CONFIRMATION_GRADIENT_CLASS = 'bg-gradient-to-r from-primary to-secondary'
+const LOGIC_CONFIRMATION_GRADIENT_STYLE = 'linear-gradient(90deg, #3474ff 0%, #8a55ff 100%)'
 
 const TEMPLATE_CATEGORY: Partial<Record<string, (typeof CATEGORY_LABELS)[number]>> = {
   'ma-cross': '趋势',
@@ -369,8 +367,8 @@ function StrategyActionButtons({
           event.stopPropagation()
           onRunStrategy(item.template.id)
         }}
-        className={`scard-btn inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border-0 ${RUN_BUTTON_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold whitespace-nowrap text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
-        style={{ backgroundImage: RUN_BUTTON_GRADIENT_STYLE }}
+        className={`scard-btn inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border-0 ${LOGIC_CONFIRMATION_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold whitespace-nowrap text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+        style={{ backgroundImage: LOGIC_CONFIRMATION_GRADIENT_STYLE }}
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         {isRunning
@@ -889,6 +887,7 @@ export function StrategyPlaza({
           className="splaza-pager mt-7 flex items-center justify-center gap-1.5"
         >
           <button
+            className="inline-flex h-9 min-w-9 items-center justify-center rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[11px] font-mono text-[13px] font-medium text-[color:var(--cf-muted)] transition hover:border-[color:var(--cf-border-strong)] hover:text-[color:var(--cf-text-strong)] disabled:cursor-default disabled:opacity-40"
             disabled={currentPage === 1}
             type="button"
             onClick={() => setPage(value => Math.max(1, value - 1))}
@@ -900,10 +899,12 @@ export function StrategyPlaza({
               key={item}
               data-testid={item === currentPage ? 'strategy-plaza-page-button-active' : undefined}
               className={
-                item === currentPage ? `is-on ${PAGER_ACTIVE_GRADIENT_CLASS} text-white` : ''
+                item === currentPage
+                  ? `is-on inline-flex h-9 min-w-9 items-center justify-center rounded-[9px] border-0 ${LOGIC_CONFIRMATION_GRADIENT_CLASS} px-[11px] font-mono text-[13px] font-bold text-white shadow-sm transition`
+                  : 'inline-flex h-9 min-w-9 items-center justify-center rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[11px] font-mono text-[13px] font-medium text-[color:var(--cf-muted)] transition hover:border-[color:var(--cf-border-strong)] hover:text-[color:var(--cf-text-strong)]'
               }
               style={
-                item === currentPage ? { backgroundImage: PAGER_ACTIVE_GRADIENT_STYLE } : undefined
+                item === currentPage ? { backgroundImage: LOGIC_CONFIRMATION_GRADIENT_STYLE } : undefined
               }
               type="button"
               onClick={() => setPage(item)}
@@ -912,6 +913,7 @@ export function StrategyPlaza({
             </button>
           ))}
           <button
+            className="inline-flex h-9 min-w-9 items-center justify-center rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[11px] font-mono text-[13px] font-medium text-[color:var(--cf-muted)] transition hover:border-[color:var(--cf-border-strong)] hover:text-[color:var(--cf-text-strong)] disabled:cursor-default disabled:opacity-40"
             disabled={currentPage === totalPages}
             type="button"
             onClick={() => setPage(value => Math.min(totalPages, value + 1))}
