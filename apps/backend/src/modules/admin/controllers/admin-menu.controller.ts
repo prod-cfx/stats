@@ -5,6 +5,9 @@ import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { CreateAdminMenuDto, UpdateAdminMenuDto } from '../dto/admin-menu.dto'
+import { AdminMenuResponseDto, AdminMenuTreeNodeResponseDto } from '../dto/admin-menu.response.dto'
+import { AdminDeleteResultResponseDto } from '../dto/admin-operation-result.response.dto'
+import { AdminMenuPermissionDto } from '../dto/admin-user-info.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { AdminMenuService } from '../services/admin-menu.service'
 
@@ -18,7 +21,7 @@ export class AdminMenuController {
   @Get()
   @ReadAny(AppResource.ADMIN_MENU)
   @ApiOperation({ summary: '获取菜单树' })
-  @ApiOkResponse({ description: '获取成功' })
+  @ApiOkResponse({ description: '获取成功', type: AdminMenuTreeNodeResponseDto, isArray: true })
   async findMenuTree() {
     return this.adminMenuService.findMenuTree()
   }
@@ -26,7 +29,7 @@ export class AdminMenuController {
   @Get('flat')
   @ReadAny(AppResource.ADMIN_MENU)
   @ApiOperation({ summary: '获取菜单扁平化列表' })
-  @ApiOkResponse({ description: '获取成功' })
+  @ApiOkResponse({ description: '获取成功', type: AdminMenuResponseDto, isArray: true })
   async findFlat() {
     return this.adminMenuService.findFlat()
   }
@@ -34,7 +37,7 @@ export class AdminMenuController {
   @Get('permission')
   @ReadAny(AppResource.ADMIN_MENU)
   @ApiOperation({ summary: '获取当前管理员有权限的菜单和按钮列表' })
-  @ApiOkResponse({ description: '获取成功' })
+  @ApiOkResponse({ description: '获取成功', type: AdminMenuPermissionDto, isArray: true })
   async findPermissionMenus(@CurrentUser('id') adminId: string) {
     return this.adminMenuService.findPermissionMenus(adminId)
   }
@@ -42,7 +45,7 @@ export class AdminMenuController {
   @Get(':id')
   @ReadAny(AppResource.ADMIN_MENU)
   @ApiOperation({ summary: '根据 ID 获取菜单详情' })
-  @ApiOkResponse({ description: '获取成功' })
+  @ApiOkResponse({ description: '获取成功', type: AdminMenuResponseDto })
   async findById(@Param('id') id: string) {
     return this.adminMenuService.findById(id)
   }
@@ -52,7 +55,7 @@ export class AdminMenuController {
   @Transactional()
   @ApiOperation({ summary: '创建菜单' })
   @ApiBody({ type: CreateAdminMenuDto })
-  @ApiOkResponse({ description: '创建成功' })
+  @ApiOkResponse({ description: '创建成功', type: AdminMenuResponseDto })
   async create(@Body() dto: CreateAdminMenuDto) {
     return this.adminMenuService.create(dto)
   }
@@ -62,7 +65,7 @@ export class AdminMenuController {
   @Transactional()
   @ApiOperation({ summary: '更新菜单' })
   @ApiBody({ type: UpdateAdminMenuDto })
-  @ApiOkResponse({ description: '更新成功' })
+  @ApiOkResponse({ description: '更新成功', type: AdminMenuResponseDto })
   async update(@Param('id') id: string, @Body() dto: UpdateAdminMenuDto) {
     return this.adminMenuService.update(id, dto)
   }
@@ -71,9 +74,9 @@ export class AdminMenuController {
   @DeleteAny(AppResource.ADMIN_MENU)
   @Transactional()
   @ApiOperation({ summary: '删除菜单（包含直接子菜单）' })
-  @ApiOkResponse({ description: '删除成功' })
-  async delete(@Param('id') id: string) {
+  @ApiOkResponse({ description: '删除成功', type: AdminDeleteResultResponseDto })
+  async delete(@Param('id') id: string): Promise<{ success: boolean }> {
     await this.adminMenuService.delete(id)
+    return { success: true }
   }
 }
-

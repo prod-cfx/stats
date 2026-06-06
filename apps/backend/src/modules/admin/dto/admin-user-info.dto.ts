@@ -1,7 +1,7 @@
 import { AdminMenuType } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
 
-class AdminMenuPermissionDto {
+export class AdminMenuPermissionDto {
   @ApiProperty({ description: '菜单/权限节点 ID', example: 'menu_01HXYZ' })
   id!: string
 

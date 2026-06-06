@@ -15,7 +15,9 @@ import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+import { AdminDeleteResultResponseDto } from '../dto/admin-operation-result.response.dto'
 import { CreateAdminRoleDto, UpdateAdminRoleDto } from '../dto/admin-role.dto'
+import { AdminRoleResponseDto } from '../dto/admin-role.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { AdminRoleService } from '../services/admin-role.service'
 
@@ -86,7 +88,7 @@ export class AdminRoleController {
   @Get(':id')
   @ReadAny(AppResource.ROLE)
   @ApiOperation({ summary: '获取角色详情' })
-  @ApiOkResponse({ description: '获取成功' })
+  @ApiOkResponse({ description: '获取成功', type: AdminRoleResponseDto })
   async findOne(@Param('id') id: string) {
     return this.adminRoleService.findById(id)
   }
@@ -96,7 +98,7 @@ export class AdminRoleController {
   @Transactional()
   @ApiOperation({ summary: '创建角色' })
   @ApiBody({ type: CreateAdminRoleDto })
-  @ApiOkResponse({ description: '创建成功' })
+  @ApiOkResponse({ description: '创建成功', type: AdminRoleResponseDto })
   async create(@Body() dto: CreateAdminRoleDto) {
     return this.adminRoleService.create(dto)
   }
@@ -106,7 +108,7 @@ export class AdminRoleController {
   @Transactional()
   @ApiOperation({ summary: '更新角色' })
   @ApiBody({ type: UpdateAdminRoleDto })
-  @ApiOkResponse({ description: '更新成功' })
+  @ApiOkResponse({ description: '更新成功', type: AdminRoleResponseDto })
   async update(@Param('id') id: string, @Body() dto: UpdateAdminRoleDto) {
     return this.adminRoleService.update(id, dto)
   }
@@ -115,9 +117,10 @@ export class AdminRoleController {
   @DeleteAny(AppResource.ROLE)
   @Transactional()
   @ApiOperation({ summary: '删除角色' })
-  @ApiOkResponse({ description: '删除成功' })
-  async delete(@Param('id') id: string) {
+  @ApiOkResponse({ description: '删除成功', type: AdminDeleteResultResponseDto })
+  async delete(@Param('id') id: string): Promise<{ success: boolean }> {
     await this.adminRoleService.delete(id)
+    return { success: true }
   }
 }
 

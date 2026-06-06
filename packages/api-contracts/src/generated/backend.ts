@@ -771,6 +771,19 @@ const CreateAdminRoleDto = z
     apiPermissions: z.array(z.string()).optional(),
   })
   .passthrough()
+const AdminRoleResponseDto = z
+  .object({
+    id: z.string(),
+    code: z.string(),
+    name: z.string(),
+    description: z.string().nullish(),
+    menuPermissions: z.array(z.string()),
+    featurePermissions: z.array(z.string()),
+    apiPermissions: z.array(z.string()),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
 const UpdateAdminRoleDto = z
   .object({
     name: z.string(),
@@ -780,6 +793,25 @@ const UpdateAdminRoleDto = z
     apiPermissions: z.array(z.string()),
   })
   .partial()
+  .passthrough()
+const AdminDeleteResultResponseDto = z.object({ success: z.boolean() }).passthrough()
+const AdminMenuTreeNodeResponseDto = z
+  .object({
+    id: z.string(),
+    parentId: z.string().nullish(),
+    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
+    title: z.string(),
+    icon: z.string().nullish(),
+    code: z.string().nullish(),
+    path: z.string().nullish(),
+    description: z.string().nullish(),
+    i18nKey: z.string().nullish(),
+    sort: z.number(),
+    isShow: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+    children: z.array(z.object({}).partial().passthrough()),
+  })
   .passthrough()
 const CreateAdminMenuDto = z
   .object({
@@ -793,6 +825,23 @@ const CreateAdminMenuDto = z
     i18nKey: z.string().optional(),
     sort: z.number().optional().default(0),
     isShow: z.boolean().optional().default(true),
+  })
+  .passthrough()
+const AdminMenuResponseDto = z
+  .object({
+    id: z.string(),
+    parentId: z.string().nullish(),
+    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
+    title: z.string(),
+    icon: z.string().nullish(),
+    code: z.string().nullish(),
+    path: z.string().nullish(),
+    description: z.string().nullish(),
+    i18nKey: z.string().nullish(),
+    sort: z.number(),
+    isShow: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
   })
   .passthrough()
 const UpdateAdminMenuDto = z
@@ -1651,8 +1700,12 @@ export const schemas = {
   CreateAdminUserDto,
   UpdateAdminUserDto,
   CreateAdminRoleDto,
+  AdminRoleResponseDto,
   UpdateAdminRoleDto,
+  AdminDeleteResultResponseDto,
+  AdminMenuTreeNodeResponseDto,
   CreateAdminMenuDto,
+  AdminMenuResponseDto,
   UpdateAdminMenuDto,
   AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
@@ -2445,7 +2498,7 @@ const endpoints = makeApi([
     path: '/admin/menu',
     alias: 'AdminMenuController_findMenuTree[0]',
     requestFormat: 'json',
-    response: z.void(),
+    response: z.array(AdminMenuTreeNodeResponseDto),
   },
   {
     method: 'post',
@@ -2459,7 +2512,7 @@ const endpoints = makeApi([
         schema: CreateAdminMenuDto,
       },
     ],
-    response: z.void(),
+    response: AdminMenuResponseDto,
   },
   {
     method: 'get',
@@ -2473,7 +2526,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminMenuResponseDto,
   },
   {
     method: 'put',
@@ -2492,7 +2545,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminMenuResponseDto,
   },
   {
     method: 'delete',
@@ -2506,28 +2559,28 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z.object({ success: z.boolean() }).passthrough(),
   },
   {
     method: 'get',
     path: '/admin/menu/flat',
     alias: 'AdminMenuController_findFlat[0]',
     requestFormat: 'json',
-    response: z.void(),
+    response: z.array(AdminMenuResponseDto),
   },
   {
     method: 'get',
     path: '/admin/menu/permission',
     alias: 'AdminMenuController_findPermissionMenus[0]',
     requestFormat: 'json',
-    response: z.void(),
+    response: z.array(AdminMenuPermissionDto),
   },
   {
     method: 'get',
     path: '/admin/menus',
     alias: 'AdminMenuController_findMenuTree[1]',
     requestFormat: 'json',
-    response: z.void(),
+    response: z.array(AdminMenuTreeNodeResponseDto),
   },
   {
     method: 'post',
@@ -2541,7 +2594,7 @@ const endpoints = makeApi([
         schema: CreateAdminMenuDto,
       },
     ],
-    response: z.void(),
+    response: AdminMenuResponseDto,
   },
   {
     method: 'get',
@@ -2555,7 +2608,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminMenuResponseDto,
   },
   {
     method: 'put',
@@ -2574,7 +2627,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminMenuResponseDto,
   },
   {
     method: 'delete',
@@ -2588,21 +2641,21 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z.object({ success: z.boolean() }).passthrough(),
   },
   {
     method: 'get',
     path: '/admin/menus/flat',
     alias: 'AdminMenuController_findFlat[1]',
     requestFormat: 'json',
-    response: z.void(),
+    response: z.array(AdminMenuResponseDto),
   },
   {
     method: 'get',
     path: '/admin/menus/permission',
     alias: 'AdminMenuController_findPermissionMenus[1]',
     requestFormat: 'json',
-    response: z.void(),
+    response: z.array(AdminMenuPermissionDto),
   },
   {
     method: 'get',
@@ -2789,7 +2842,7 @@ const endpoints = makeApi([
         schema: CreateAdminRoleDto,
       },
     ],
-    response: z.void(),
+    response: AdminRoleResponseDto,
   },
   {
     method: 'get',
@@ -2803,7 +2856,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminRoleResponseDto,
   },
   {
     method: 'put',
@@ -2822,7 +2875,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminRoleResponseDto,
   },
   {
     method: 'delete',
@@ -2836,7 +2889,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z.object({ success: z.boolean() }).passthrough(),
   },
   {
     method: 'get',
@@ -2901,7 +2954,7 @@ const endpoints = makeApi([
         schema: CreateAdminRoleDto,
       },
     ],
-    response: z.void(),
+    response: AdminRoleResponseDto,
   },
   {
     method: 'get',
@@ -2915,7 +2968,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminRoleResponseDto,
   },
   {
     method: 'put',
@@ -2934,7 +2987,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AdminRoleResponseDto,
   },
   {
     method: 'delete',
@@ -2948,7 +3001,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z.object({ success: z.boolean() }).passthrough(),
   },
   {
     method: 'get',
