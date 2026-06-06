@@ -11,7 +11,7 @@ export class BacktestingSymbolSupportRequestDto {
   @IsIn(['spot', 'perp'])
   marketType!: 'spot' | 'perp'
 
-  @ApiProperty()
+  @ApiProperty({ description: '交易对符号', example: 'BTCUSDT' })
   @IsString()
   @IsNotEmpty()
   symbol!: string

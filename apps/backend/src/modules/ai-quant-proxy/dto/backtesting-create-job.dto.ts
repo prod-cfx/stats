@@ -65,66 +65,66 @@ class BacktestingCreateJobLeverageConstraint implements ValidatorConstraintInter
 }
 
 export class BacktestingCreateJobBarDto {
-  @ApiProperty()
+  @ApiProperty({ description: '交易对符号', example: 'BTCUSDT' })
   @IsString()
   @IsNotEmpty()
   symbol!: string
 
-  @ApiProperty({ enum: MARKET_TIMEFRAMES })
+  @ApiProperty({ description: 'K 线周期', enum: MARKET_TIMEFRAMES, example: '1h' })
   @IsIn(MARKET_TIMEFRAMES)
   timeframe!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: 'K 线开盘时间（毫秒时间戳）', example: 1706000000000 })
   @IsNumber()
   openTime!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: 'K 线收盘时间（毫秒时间戳）', example: 1706003600000 })
   @IsNumber()
   closeTime!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '开盘价', example: 87010.5 })
   @IsNumber()
   open!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '最高价', example: 87500 })
   @IsNumber()
   high!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '最低价', example: 86000 })
   @IsNumber()
   low!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '收盘价', example: 87200.3 })
   @IsNumber()
   close!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '成交量', example: 1234.56 })
   @IsNumber()
   volume!: number
 }
 
 export class BacktestingCreateJobExecutionDto {
-  @ApiProperty()
+  @ApiProperty({ description: '滑点（基点 bps）', example: 5 })
   @IsNumber()
   @Min(0)
   slippageBps!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '手续费（基点 bps）', example: 10 })
   @IsNumber()
   @Min(0)
   feeBps!: number
 
-  @ApiProperty({ enum: ['open', 'close', 'mid'] })
+  @ApiProperty({ description: '成交参考价来源', enum: ['open', 'close', 'mid'], example: 'close' })
   @IsIn(['open', 'close', 'mid'])
   priceSource!: 'open' | 'close' | 'mid'
 }
 
 export class BacktestingCreateJobRangeDto {
-  @ApiProperty()
+  @ApiProperty({ description: '区间起始时间（毫秒时间戳）', example: 1706000000000 })
   @IsNumber()
   fromTs!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '区间结束时间（毫秒时间戳）', example: 1708678400000 })
   @IsNumber()
   toTs!: number
 }
@@ -186,7 +186,7 @@ export class BacktestingCreateJobRequestDto {
   @IsIn(MARKET_TIMEFRAMES, { each: true })
   stateTimeframes!: string[]
 
-  @ApiProperty()
+  @ApiProperty({ description: '初始资金', example: 10000 })
   @IsNumber()
   @Min(0)
   initialCash!: number
@@ -249,7 +249,7 @@ export class BacktestingCreateJobErrorDetailsDto {
   @ApiPropertyOptional()
   code?: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '错误信息', example: 'insufficient data for requested range' })
   message!: string
 
   @ApiPropertyOptional({ type: Object, additionalProperties: true })
@@ -257,22 +257,22 @@ export class BacktestingCreateJobErrorDetailsDto {
 }
 
 export class BacktestingCreateJobSummaryDto {
-  @ApiProperty()
+  @ApiProperty({ description: '净利润（计价货币）', example: 1523.4 })
   netProfit!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '净利润百分比（%）', example: 15.23 })
   netProfitPct!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '最大回撤百分比（%）', example: 8.5 })
   maxDrawdownPct!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '胜率（0-1 之间的小数）', example: 0.62 })
   winRate!: number
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ description: '盈亏比（无可用数据时为 null）', example: 1.8, nullable: true })
   profitFactor!: number | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '总交易次数', example: 42 })
   totalTrades!: number
 
   @ApiPropertyOptional()
@@ -283,16 +283,16 @@ export class BacktestingCreateJobSummaryDto {
 }
 
 export class BacktestingCreateJobInputSummaryDto {
-  @ApiProperty({ type: [String] })
+  @ApiProperty({ description: '回测标的交易对列表', type: [String], example: ['BTCUSDT'] })
   symbols!: string[]
 
-  @ApiProperty()
+  @ApiProperty({ description: '基础 K 线周期', example: '1h' })
   baseTimeframe!: string
 
-  @ApiProperty({ type: [String] })
+  @ApiProperty({ description: '状态 K 线周期列表', type: [String], example: ['4h', '1d'] })
   stateTimeframes!: string[]
 
-  @ApiProperty()
+  @ApiProperty({ description: '初始资金', example: 10000 })
   initialCash!: number
 
   @ApiPropertyOptional({ nullable: true })
@@ -310,13 +310,13 @@ export class BacktestingCreateJobInputSummaryDto {
   @ApiPropertyOptional({ type: BacktestingCreateJobRangeDto })
   appliedRange?: BacktestingCreateJobRangeDto
 
-  @ApiProperty()
+  @ApiProperty({ description: '是否允许部分数据回测', example: false })
   allowPartial!: boolean
 
-  @ApiProperty()
+  @ApiProperty({ description: '本次回测是否使用了部分数据', example: false })
   isPartial!: boolean
 
-  @ApiProperty()
+  @ApiProperty({ description: '策略 ID', example: 'strat_01HXYZ' })
   strategyId!: string
 
   @ApiPropertyOptional()
@@ -339,13 +339,13 @@ export class BacktestingCreateJobInputSummaryDto {
 }
 
 export class BacktestingCreateJobResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '回测任务 ID', example: 'job_01HXYZ' })
   id!: string
 
-  @ApiProperty({ enum: ['queued', 'running', 'succeeded', 'failed'] })
+  @ApiProperty({ description: '回测任务状态', enum: ['queued', 'running', 'succeeded', 'failed'], example: 'queued' })
   status!: 'queued' | 'running' | 'succeeded' | 'failed'
 
-  @ApiProperty()
+  @ApiProperty({ description: '任务创建时间（ISO 8601）', example: '2026-06-06T08:00:00.000Z' })
   createdAt!: string
 
   @ApiPropertyOptional()

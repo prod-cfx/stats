@@ -25,19 +25,19 @@ export class AdminDataPullTaskListQueryDto extends BasePaginationRequestDto {
  * 单条任务执行记录
  */
 export class AdminDataPullExecutionResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '执行记录 ID', example: 1001 })
   id!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '所属任务 ID', example: 42 })
   taskId!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '执行状态（可能取值：success / failed / running）', example: 'success' })
   status!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '本次拉取条数', example: 120 })
   fetchedCount!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '执行开始时间', example: '2026-06-06T08:00:00.000Z' })
   startedAt!: Date
 
   @ApiPropertyOptional({ nullable: true })
@@ -208,13 +208,13 @@ export class UpdateAdminDataPullTaskDto {
 }
 
 export class AdminDataPullTaskResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '任务 ID', example: 42 })
   id!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '任务唯一标识', example: 'binance.kline_1m' })
   key!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '任务名称', example: 'Binance K 线 1m 拉取' })
   name!: string
 
   @ApiPropertyOptional({ nullable: true })
@@ -229,7 +229,7 @@ export class AdminDataPullTaskResponseDto {
   @ApiPropertyOptional({ nullable: true })
   intervalSeconds?: number | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '是否启用任务', example: true })
   enabled!: boolean
 
   @ApiPropertyOptional({ nullable: true })
@@ -250,10 +250,10 @@ export class AdminDataPullTaskResponseDto {
   @ApiPropertyOptional({ nullable: true, type: Object })
   meta?: Record<string, any> | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '任务创建时间', example: '2026-06-06T08:00:00.000Z' })
   createdAt!: Date
 
-  @ApiProperty()
+  @ApiProperty({ description: '任务更新时间', example: '2026-06-06T09:00:00.000Z' })
   updatedAt!: Date
 }
 

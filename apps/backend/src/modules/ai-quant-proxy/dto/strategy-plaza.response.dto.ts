@@ -16,66 +16,66 @@ export class StrategyPlazaDisplayMetricsResponseDto {
 }
 
 export class StrategyPlazaTemplateResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '策略模板 ID', example: 'tpl_01HXYZ' })
   id!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '策略模板名称', example: '趋势跟随策略' })
   name!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '策略描述', example: '基于均线交叉的趋势跟随策略' })
   description!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '策略逻辑说明', example: '快线上穿慢线买入，下穿卖出' })
   logicDescription!: string
 
-  @ApiProperty({ type: [String] })
+  @ApiProperty({ description: '标签列表', type: [String], example: ['trend', 'ma'] })
   tags!: string[]
 
-  @ApiProperty({ enum: ['low', 'medium', 'high'] })
+  @ApiProperty({ description: '风险等级', enum: ['low', 'medium', 'high'], example: 'medium' })
   riskLevel!: 'low' | 'medium' | 'high'
 
-  @ApiProperty()
+  @ApiProperty({ description: '适用场景', example: '震荡偏趋势行情' })
   scenario!: string
 
-  @ApiProperty({ enum: ['okx'] })
+  @ApiProperty({ description: '交易所', enum: ['okx'], example: 'okx' })
   exchange!: 'okx'
 
-  @ApiProperty({ enum: ['demo'] })
+  @ApiProperty({ description: '运行环境', enum: ['demo'], example: 'demo' })
   environment!: 'demo'
 
-  @ApiProperty({ enum: ['spot', 'perp'] })
+  @ApiProperty({ description: '市场类型', enum: ['spot', 'perp'], example: 'spot' })
   marketType!: 'spot' | 'perp'
 
-  @ApiProperty()
+  @ApiProperty({ description: '交易对符号', example: 'BTCUSDT' })
   symbol!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: 'K 线周期', example: '1h' })
   timeframe!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '仓位百分比（%）', example: 50 })
   positionPct!: number
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({ description: '杠杆倍数（现货为 null）', example: 3, nullable: true })
   leverage!: number | null
 
-  @ApiProperty({ enum: ['live', 'hidden'] })
+  @ApiProperty({ description: '展示状态', enum: ['live', 'hidden'], example: 'live' })
   status!: 'live' | 'hidden'
 
-  @ApiProperty()
+  @ApiProperty({ description: '展示排序值', example: 10 })
   displayOrder!: number
 
-  @ApiProperty({ type: StrategyPlazaDisplayMetricsResponseDto })
+  @ApiProperty({ description: '展示用回测指标', type: StrategyPlazaDisplayMetricsResponseDto })
   displayMetrics!: StrategyPlazaDisplayMetricsResponseDto
 }
 
 export class StrategyPlazaEditSessionResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '编辑会话 ID', example: 'sess_01HXYZ' })
   sessionId!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '关联策略模板 ID', example: 'tpl_01HXYZ' })
   templateId!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '初始消息内容', example: '基于该模板帮我调整参数' })
   initialMessage!: string
 }
 

@@ -3,10 +3,10 @@ import { ApiProperty } from '@nestjs/swagger'
 import { WhaleNotificationChannelsDto } from './whale-notification-channels.dto'
 
 export class WhaleNotificationRuleResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '通知规则 ID', example: 'rule_01HXYZ' })
   id!: string
 
-  @ApiProperty({ enum: WhaleNotificationRuleType })
+  @ApiProperty({ description: '规则类型', enum: WhaleNotificationRuleType })
   type!: WhaleNotificationRuleType
 
   @ApiProperty({ required: false })
@@ -24,12 +24,12 @@ export class WhaleNotificationRuleResponseDto {
   @ApiProperty({ type: WhaleNotificationChannelsDto })
   channels!: WhaleNotificationChannelsDto
 
-  @ApiProperty()
+  @ApiProperty({ description: '规则是否启用', example: true })
   isActive!: boolean
 
-  @ApiProperty()
+  @ApiProperty({ description: '创建时间（ISO 8601）', example: '2026-06-06T08:00:00.000Z' })
   createdAt!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '更新时间（ISO 8601）', example: '2026-06-06T09:00:00.000Z' })
   updatedAt!: string
 }

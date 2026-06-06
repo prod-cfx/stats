@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class AccountAiQuantDeployRequestDto {
-  @ApiProperty()
+  @ApiProperty({ description: '部署后的策略实例名称', example: '我的实盘策略' })
   @IsString()
   @IsNotEmpty()
   name!: string

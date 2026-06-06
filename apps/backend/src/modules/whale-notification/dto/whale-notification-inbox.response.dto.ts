@@ -12,24 +12,24 @@ class WhaleNotificationDeliveryMapDto {
 }
 
 export class WhaleNotificationInboxResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '站内信 ID', example: 'inbox_01HXYZ' })
   id!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '通知标题', example: '鲸鱼大额转账预警' })
   title!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '通知内容', example: '检测到 1000 BTC 转入交易所' })
   content!: string
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ description: '触发该通知的规则 ID', example: 'rule_01HXYZ', required: false })
   ruleId?: string
 
   @ApiProperty({ type: WhaleNotificationDeliveryMapDto })
   channels!: WhaleNotificationDeliveryMapDto
 
-  @ApiProperty({ example: false })
+  @ApiProperty({ description: '是否已读', example: false })
   read!: boolean
 
-  @ApiProperty()
+  @ApiProperty({ description: '创建时间（ISO 8601）', example: '2026-06-06T08:00:00.000Z' })
   createdAt!: string
 }

@@ -28,7 +28,7 @@ class ProxyStringRecordConstraint implements ValidatorConstraintInterface {
 }
 
 export class LlmCodegenContinueRequestDto {
-  @ApiProperty()
+  @ApiProperty({ description: '用户在代码生成会话中发送的消息', example: '帮我加一个止损条件' })
   @IsString()
   message!: string
 

@@ -2,22 +2,22 @@ import { AdminMenuType } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
 
 class AdminMenuPermissionDto {
-  @ApiProperty()
+  @ApiProperty({ description: '菜单/权限节点 ID', example: 'menu_01HXYZ' })
   id!: string
 
-  @ApiProperty({ nullable: true, required: false })
+  @ApiProperty({ description: '父级菜单 ID（顶级为 null）', example: null, nullable: true, required: false })
   parentId!: string | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '菜单名称', example: '用户管理' })
   name!: string
 
-  @ApiProperty({ nullable: true, required: false })
+  @ApiProperty({ description: '前端路由（无路由时为 null）', example: '/users', nullable: true, required: false })
   route!: string | null
 
-  @ApiProperty({ nullable: true, required: false })
+  @ApiProperty({ description: '菜单图标（无图标时为 null）', example: 'user', nullable: true, required: false })
   icon!: string | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '排序值', example: 10 })
   sortOrder!: number
 
   @ApiProperty({ description: '菜单/功能权限 code', nullable: true })

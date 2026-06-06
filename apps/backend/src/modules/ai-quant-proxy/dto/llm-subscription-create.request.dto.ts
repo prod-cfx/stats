@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsNotEmpty, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator'
 
 export class LlmSubscriptionCreateRequestDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'LLM 策略实例 ID', example: 'llm_inst_01HXYZ' })
   @IsString()
   @IsNotEmpty()
   llmStrategyInstanceId!: string
@@ -13,7 +13,7 @@ export class LlmSubscriptionCreateRequestDto {
   @IsObject()
   customParams?: Record<string, unknown> | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '交易所账户 ID', example: 'exacc_01HXYZ' })
   @IsString()
   @IsNotEmpty()
   exchangeAccountId!: string

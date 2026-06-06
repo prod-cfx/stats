@@ -7,7 +7,7 @@ export class AccountExchangeAccountResponseDto {
   @ApiProperty({ enum: ['binance', 'okx', 'hyperliquid'] })
   exchangeId!: 'binance' | 'okx' | 'hyperliquid'
 
-  @ApiProperty()
+  @ApiProperty({ description: '该交易所是否已绑定账户', example: true })
   isBound!: boolean
 
   @ApiPropertyOptional({ nullable: true })

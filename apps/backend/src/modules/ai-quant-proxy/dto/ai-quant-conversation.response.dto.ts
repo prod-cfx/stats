@@ -1,64 +1,64 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 class AiQuantConversationMessageResponseDto {
-  @ApiProperty({ description: 'Conversation message role', enum: ['user', 'assistant'] })
+  @ApiProperty({ description: '对话消息角色', enum: ['user', 'assistant'] })
   role!: 'user' | 'assistant'
 
-  @ApiProperty({ description: 'Conversation message content' })
+  @ApiProperty({ description: '对话消息内容' })
   content!: string
 }
 
 class AiQuantConversationLastBacktestSummaryResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '最大回撤百分比（%）', example: 8.5 })
   maxDrawdownPct!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '总收益率百分比（%）', example: 15.2 })
   totalReturnPct!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '胜率百分比（%）', example: 62 })
   winRatePct!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '总成交笔数', example: 42 })
   tradeCount!: number
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '当前持仓笔数', example: 1 })
   openTradeCount?: number
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '当前持仓未实现盈亏', example: 120.5 })
   openPnl?: number
 
-  @ApiPropertyOptional({ enum: ['spot', 'perp'] })
+  @ApiPropertyOptional({ description: '市场类型', enum: ['spot', 'perp'], example: 'perp' })
   marketType?: 'spot' | 'perp'
 }
 
 export class AiQuantConversationBacktestRangeResponseDto {
-  @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
+  @ApiProperty({ description: '回测区间预设', enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'], example: '30D' })
   preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '自定义区间开始时间（ISO 8601）', example: '2026-05-01T00:00:00.000Z' })
   startAt?: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '自定义区间结束时间（ISO 8601）', example: '2026-06-01T00:00:00.000Z' })
   endAt?: string
 }
 
 export class AiQuantConversationBacktestExecutionResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '初始资金', example: 10000 })
   initialCash!: number
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({ description: '杠杆倍数（现货为 null）', example: 3, nullable: true })
   leverage!: number | null
 
-  @ApiProperty()
+  @ApiProperty({ description: '滑点（基点 bps）', example: 5 })
   slippageBps!: number
 
-  @ApiProperty()
+  @ApiProperty({ description: '手续费（基点 bps）', example: 10 })
   feeBps!: number
 
-  @ApiProperty({ enum: ['open', 'close', 'mid'] })
+  @ApiProperty({ description: '成交参考价来源', enum: ['open', 'close', 'mid'], example: 'close' })
   priceSource!: 'open' | 'close' | 'mid'
 
-  @ApiProperty()
+  @ApiProperty({ description: '是否允许部分数据回测', example: false })
   allowPartial!: boolean
 }
 
@@ -71,98 +71,98 @@ export class AiQuantConversationBacktestConfigResponseDto {
 }
 
 class AiQuantConversationLastBacktestRefResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: '回测任务 ID', example: 'job_01HXYZ' })
   jobId!: string
 
-  @ApiProperty()
+  @ApiProperty({ description: '已发布快照 ID', example: 'snap_01HXYZ' })
   publishedSnapshotId!: string
 
-  @ApiProperty({ type: AiQuantConversationBacktestConfigResponseDto })
+  @ApiProperty({ description: '回测配置', type: AiQuantConversationBacktestConfigResponseDto })
   config!: AiQuantConversationBacktestConfigResponseDto
 
-  @ApiProperty({ type: AiQuantConversationLastBacktestSummaryResponseDto })
+  @ApiProperty({ description: '回测结果摘要', type: AiQuantConversationLastBacktestSummaryResponseDto })
   summary!: AiQuantConversationLastBacktestSummaryResponseDto
 
-  @ApiProperty()
+  @ApiProperty({ description: '回测完成时间（ISO 8601）', example: '2026-06-06T08:00:00.000Z' })
   completedAt!: string
 }
 
 export class AiQuantConversationResponseDto {
-  @ApiProperty({ description: 'Conversation id' })
+  @ApiProperty({ description: '对话 ID' })
   id!: string
 
-  @ApiPropertyOptional({ description: 'Current linked codegen session id' })
+  @ApiPropertyOptional({ description: '当前关联的代码生成会话 ID' })
   activeCodegenSessionId?: string | null
 
-  @ApiPropertyOptional({ description: 'Conversation title' })
+  @ApiPropertyOptional({ description: '对话标题' })
   conversationTitle?: string
 
-  @ApiPropertyOptional({ description: 'Structured conversation transcript', type: [AiQuantConversationMessageResponseDto] })
+  @ApiPropertyOptional({ description: '结构化对话记录', type: [AiQuantConversationMessageResponseDto] })
   conversationMessages?: Array<{
     role: 'user' | 'assistant'
     content: string
   }>
 
-  @ApiPropertyOptional({ description: 'Current codegen status' })
+  @ApiPropertyOptional({ description: '当前代码生成状态' })
   status?: string
 
-  @ApiPropertyOptional({ description: 'Conversation created timestamp' })
+  @ApiPropertyOptional({ description: '对话创建时间' })
   createdAt?: string
 
-  @ApiPropertyOptional({ description: 'Conversation updated timestamp' })
+  @ApiPropertyOptional({ description: '对话更新时间' })
   updatedAt?: string
 
-  @ApiPropertyOptional({ description: 'Current explicit backtest draft configuration', type: AiQuantConversationBacktestConfigResponseDto, nullable: true })
+  @ApiPropertyOptional({ description: '当前显式回测草稿配置', type: AiQuantConversationBacktestConfigResponseDto, nullable: true })
   backtestDraftConfig?: AiQuantConversationBacktestConfigResponseDto | null
 
-  @ApiPropertyOptional({ description: 'Most recent recoverable backtest reference', type: AiQuantConversationLastBacktestRefResponseDto, nullable: true })
+  @ApiPropertyOptional({ description: '最近可恢复的回测引用', type: AiQuantConversationLastBacktestRefResponseDto, nullable: true })
   lastBacktestRef?: AiQuantConversationLastBacktestRefResponseDto | null
 
-  @ApiPropertyOptional({ description: 'Pending canonical digest awaiting confirmation' })
+  @ApiPropertyOptional({ description: '待确认的规范化摘要' })
   canonicalDigest?: string | null
 
-  @ApiPropertyOptional({ description: 'Structured strategy description payload', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '结构化策略描述载荷', type: 'object', additionalProperties: true })
   specDesc?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Semantic graph payload', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '语义图载荷', type: 'object', additionalProperties: true })
   semanticGraph?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Semantic graph validation report', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '语义图校验报告', type: 'object', additionalProperties: true })
   validationReport?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Clarification gate payload', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '澄清门载荷', type: 'object', additionalProperties: true })
   clarificationGate?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Publication gate payload', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '发布门载荷', type: 'object', additionalProperties: true })
   publicationGate?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published script code' })
+  @ApiPropertyOptional({ description: '已发布脚本代码' })
   scriptCode?: string | null
 
-  @ApiPropertyOptional({ description: 'Published snapshot id' })
+  @ApiPropertyOptional({ description: '已发布快照 ID' })
   publishedSnapshotId?: string | null
 
-  @ApiPropertyOptional({ description: 'Snapshot-bound param values for published backtest/display semantics', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '快照绑定的参数值（用于已发布回测/展示语义）', type: 'object', additionalProperties: true })
   publishedSnapshotParamValues?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published snapshot formal strategy configuration', type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({ description: '已发布快照的正式策略配置', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotStrategyConfig?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published snapshot formal backtest defaults', type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({ description: '已发布快照的正式回测默认值', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotBacktestConfigDefaults?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published snapshot formal deploy defaults', type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({ description: '已发布快照的正式部署默认值', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotDeploymentExecutionDefaults?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published snapshot formal deploy constraints', type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({ description: '已发布快照的正式部署约束', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotDeploymentExecutionConstraints?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published snapshot compatibility metadata', type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({ description: '已发布快照的兼容性元数据', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotCompatibilityMetadata?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: 'Published strategy instance id' })
+  @ApiPropertyOptional({ description: '已发布策略实例 ID' })
   strategyInstanceId?: string | null
 
-  @ApiPropertyOptional({ description: 'Terminal reject reason' })
+  @ApiPropertyOptional({ description: '终止拒绝原因' })
   rejectReason?: string | null
 }
