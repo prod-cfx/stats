@@ -1,5 +1,6 @@
 import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
 import { STAGE4_ATOM_COVERAGE_MATRIX, STAGE4_DEPLOY_READY_STATUSES } from '@/modules/llm-strategy-codegen/stage4/atom-coverage-matrix'
+import type { StrategyExecutionContextV1 } from '@ai/shared'
 import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
 import { StrategyPlazaTemplateResponseDto } from '../dto/strategy-plaza-template.response.dto'
@@ -119,6 +120,38 @@ describe('OfficialStrategyPlazaTemplateService', () => {
         executionEnvelope: content.executionEnvelope,
       })
     }))).resolves.toHaveLength(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.length)
+  })
+
+  it('low drawdown regime gate official script opens when EMA20 crosses above EMA50 under the EMA50 regime', async () => {
+    const template = service.getRequired('low-drawdown-regime-gate')
+    const content = buildOfficialStrategySnapshotContent(template)
+    const strategy = await new BacktestStrategyAdapterService().build({
+      id: template.id,
+      protocolVersion: 'v1',
+      scriptCode: content.scriptSnapshot,
+      params: content.paramsSnapshot,
+      executionEnvelope: content.executionEnvelope,
+    })
+    const bars = Array.from({ length: 60 }, (_, index) => ({
+      timestamp: index + 1,
+      time: index + 1,
+      open: index === 59 ? 100 : 100,
+      high: index === 59 ? 121 : 101,
+      low: 99,
+      close: index === 59 ? 120 : 100,
+      volume: 1,
+    }))
+
+    await expect(strategy.fn({
+      bars,
+      currentPrice: 120,
+      position: { side: 'flat', qty: 0 },
+      accountDrawdownPct: 0,
+    } satisfies StrategyExecutionContextV1)).resolves.toMatchObject({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      meta: { templateId: 'low-drawdown-regime-gate' },
+    })
   })
 
   it('exposes fixed run parameters without user override fields', () => {
