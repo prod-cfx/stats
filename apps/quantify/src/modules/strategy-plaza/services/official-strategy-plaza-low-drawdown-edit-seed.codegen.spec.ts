@@ -65,11 +65,27 @@ function findRuleAtom(rules: readonly SemanticRule[], key: string): AtomExprAtom
   return collectRuleAtoms(rules).find(atom => atom.key === key)
 }
 
+function findRuleEffectAtom(rule: SemanticRule | undefined, key: string): AtomExprAtom | undefined {
+  if (!rule) return undefined
+  return listRuleEffects(rule.effects)
+    .flatMap(effect => collectAtomLeaves(effect))
+    .find(atom => atom.key === key)
+}
+
+function findRuleConditionAtom(rule: SemanticRule | undefined, key: string): AtomExprAtom | undefined {
+  if (!rule) return undefined
+  return collectAtomLeaves(rule.condition).find(atom => atom.key === key)
+}
+
 describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
   it.each([
     'low-drawdown-regime-gate',
     'orderbook-imbalance-long',
     'fixed-grid-gated',
+    'drawdown-dca-budget',
+    'timed-dca-budget',
+    'trend-filtered-grid',
+    'funding-oi-confirmation',
   ])('%s generates compiled script from the edit seed used by the edit flow', async (templateId) => {
     const message = getTemplateInitialMessage(templateId)
     const patch = new GenericSeedDispatcher().dispatch(message) as CodegenSemanticPatch
@@ -128,5 +144,51 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(view.summary).toContain('5%')
     expect(view.summary).not.toContain('挂 0 档')
     expect(view.summary).not.toContain('步长 0%')
+  })
+
+  it('keeps drawdown DCA schedule separate from the 8% average-price exit', () => {
+    const rules = buildRulesFromMessage(getTemplateInitialMessage('drawdown-dca-budget'))
+    const entryRule = rules.find(rule => rule.phase === 'entry')
+    const exitRule = rules.find(rule => rule.phase === 'exit')
+    const dcaSchedule = findRuleEffectAtom(entryRule, 'position.dca_schedule')
+    const entryPercentChange = findRuleConditionAtom(entryRule, 'price.percent_change')
+    const exitPercentChange = findRuleConditionAtom(exitRule, 'price.percent_change')
+
+    expect(dcaSchedule?.params).toMatchObject({
+      dropPct: 3,
+      maxCount: 3,
+      perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+      capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+    })
+    expect(entryPercentChange?.params.valuePct).not.toBe(-8)
+    expect(exitPercentChange?.params).toMatchObject({ basis: 'entry_avg_price', valuePct: -8 })
+  })
+
+  it('keeps timed DCA as a long-only spot program without short-market conflict', () => {
+    const rules = buildRulesFromMessage(getTemplateInitialMessage('timed-dca-budget'))
+    const atoms = collectRuleAtoms(rules)
+    const dcaProgram = findRuleAtom(rules, 'program.dca')
+    const dcaSchedule = findRuleAtom(rules, 'position.dca_schedule')
+
+    expect(dcaProgram).toBeDefined()
+    expect(dcaSchedule?.params).toMatchObject({
+      intervalHours: 24,
+      maxCount: 10,
+      perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+      capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+    })
+    expect(atoms.map(atom => atom.key)).not.toEqual(expect.arrayContaining(['action.open_short', 'action.close_short']))
+  })
+
+  it('keeps Funding plus OI threshold in rules mainflow', () => {
+    const rules = buildRulesFromMessage(getTemplateInitialMessage('funding-oi-confirmation'))
+    const entryRule = rules.find(rule => rule.phase === 'entry')
+    const funding = findRuleConditionAtom(entryRule, 'fundingRate.condition')
+    const oi = findRuleConditionAtom(entryRule, 'openInterest.condition')
+    const entryConditionKeys = entryRule ? collectAtomLeaves(entryRule.condition).map(atom => atom.key) : []
+
+    expect(entryConditionKeys).toEqual(expect.arrayContaining(['indicator.cross_over', 'fundingRate.condition', 'openInterest.condition']))
+    expect(funding?.params).toMatchObject({ operator: 'GT', value: 0 })
+    expect(oi?.params).toMatchObject({ direction: 'up', operator: 'GT', value: 3 })
   })
 })
