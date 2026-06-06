@@ -94,6 +94,8 @@ export 'package:backend_api_contracts/src/model/aggregated_orderbook_controller_
 export 'package:backend_api_contracts/src/model/aggregated_orderbook_market_response_dto.dart';
 export 'package:backend_api_contracts/src/model/aggregated_orderbook_response_dto.dart';
 export 'package:backend_api_contracts/src/model/aggregated_volume_response_dto.dart';
+export 'package:backend_api_contracts/src/model/aggregated_volume_row_dto.dart';
+export 'package:backend_api_contracts/src/model/aggregated_volume_snapshot_response_dto.dart';
 export 'package:backend_api_contracts/src/model/ai_quant_conversation_backtest_config_response_dto.dart';
 export 'package:backend_api_contracts/src/model/ai_quant_conversation_backtest_draft_config_request_dto.dart';
 export 'package:backend_api_contracts/src/model/ai_quant_conversation_backtest_execution_response_dto.dart';
@@ -162,7 +164,11 @@ export 'package:backend_api_contracts/src/model/markets_controller_get_aggregate
 export 'package:backend_api_contracts/src/model/markets_controller_get_exchange_long_short_ratio200_response.dart';
 export 'package:backend_api_contracts/src/model/markets_controller_get_latest_trades200_response.dart';
 export 'package:backend_api_contracts/src/model/markets_controller_get_long_short_ratio200_response.dart';
+export 'package:backend_api_contracts/src/model/oi_aggregate_row_dto.dart';
+export 'package:backend_api_contracts/src/model/oi_aggregate_snapshot_dto.dart';
+export 'package:backend_api_contracts/src/model/oi_aggregate_total_dto.dart';
 export 'package:backend_api_contracts/src/model/open_interest_controller_batch_upsert201_response.dart';
+export 'package:backend_api_contracts/src/model/open_interest_controller_get_aggregate_snapshot200_response.dart';
 export 'package:backend_api_contracts/src/model/open_interest_controller_get_stats200_response.dart';
 export 'package:backend_api_contracts/src/model/open_interest_controller_query200_response.dart';
 export 'package:backend_api_contracts/src/model/open_interest_controller_upsert201_response.dart';

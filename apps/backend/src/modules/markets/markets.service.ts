@@ -25,6 +25,7 @@ import type { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregate
 import type { ExchangeLongShortTimeRange } from './dto/requests/get-exchange-long-short-ratio.request.dto'
 import type { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
 import type { AggregatedVolumeResponseDto } from './dto/responses/aggregated-volume.response.dto'
+import type { AggregatedVolumeSnapshotResponseDto } from './dto/responses/aggregated-volume-snapshot.response.dto'
 
 export interface MarketsFilter {
   venueType?: TradingVenueType
@@ -310,6 +311,38 @@ export class MarketsService {
     const total = result.total + 1
 
     return new BasePaginationResponseDto(total, page, limit, items)
+  }
+
+  /**
+   * 查询聚合成交量快照（总计 + 各交易所行）。
+   *
+   * 供移动端聚合盘口页 volume 表消费，字段对齐 mobile `VolSnapshot`/`VolRow`。
+   * 返回各交易所成交量（USD），total 为各所之和。
+   */
+  async getAggregatedVolumeSnapshot(
+    symbol: string,
+  ): Promise<AggregatedVolumeSnapshotResponseDto> {
+    const normalized = symbol.trim().toUpperCase()
+
+    // 复用各交易所聚合查询；snapshot 不分页，取足够大的上限覆盖全部交易所
+    const result = await this.futuresPairsMarketRepository.findVolumesBySymbol({
+      symbol: normalized,
+      limit: 1000,
+      offset: 0,
+    })
+
+    const rows = result.data.map(item => ({
+      exchange: item.exchange,
+      value: Number.parseFloat(item.volumeUsd),
+    }))
+
+    const totalVolume = rows.reduce((sum, r) => sum + r.value, 0)
+
+    return {
+      symbol: normalized,
+      total: totalVolume,
+      rows,
+    }
   }
 
   /**

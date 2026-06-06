@@ -33,6 +33,11 @@ import { AppResource } from '@/modules/auth/rbac/permissions'
 // QueryOpenInterestDto 需要运行时类构造函数，用于 class-validator 校验和 Swagger 推导，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import {
+  OiAggregateRowDto,
+  OiAggregateSnapshotDto,
+  OiAggregateTotalDto,
+} from './dto/oi-aggregate.dto'
+import {
   CreateOpenInterestDto,
   OpenInterestDto,
   OpenInterestStatsDto,
@@ -76,6 +81,9 @@ const basePaginationSchema = (itemSchema: Record<string, unknown>) => ({
   BasePaginationResponseDto,
   OpenInterestDto,
   OpenInterestStatsDto,
+  OiAggregateRowDto,
+  OiAggregateTotalDto,
+  OiAggregateSnapshotDto,
 )
 @Controller('open-interest')
 export class OpenInterestController {
@@ -194,6 +202,28 @@ export class OpenInterestController {
     }
 
     return new BaseResponseDto(this.toDto(entity))
+  }
+
+  @Get('aggregate/:symbol')
+  @ApiOperation({
+    summary: '获取聚合持仓量快照',
+    description: '返回某币种最新时间戳下的总计与各交易所行，供移动端聚合盘口页 OI 表消费',
+  })
+  @ApiParam({ name: 'symbol', description: '币种符号', example: 'BTC' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '查询成功',
+    schema: baseResponseSchema({
+      $ref: getSchemaPath(OiAggregateSnapshotDto),
+    }),
+  })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: '未找到数据' })
+  async getAggregateSnapshot(@Param('symbol') symbol: string) {
+    if (!symbol) {
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'symbol is required' } })
+    }
+    const snapshot = await this.openInterestService.getAggregateSnapshot(symbol)
+    return new BaseResponseDto(snapshot)
   }
 
   @Get('stats/:symbol')

@@ -5094,6 +5094,54 @@
         ]
       }
     },
+    "/open-interest/aggregate/{symbol}": {
+      "get": {
+        "description": "返回某币种最新时间戳下的总计与各交易所行，供移动端聚合盘口页 OI 表消费",
+        "operationId": "OpenInterestController_getAggregateSnapshot",
+        "parameters": [
+          {
+            "name": "symbol",
+            "required": true,
+            "in": "path",
+            "description": "币种符号",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/OiAggregateSnapshotDto"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到数据"
+          }
+        },
+        "summary": "获取聚合持仓量快照",
+        "tags": [
+          "持仓量数据"
+        ]
+      }
+    },
     "/open-interest/stats/{symbol}": {
       "get": {
         "operationId": "OpenInterestController_getStats",
@@ -7035,6 +7083,45 @@
           }
         ],
         "summary": "查询聚合交易量（分页）",
+        "tags": [
+          "markets"
+        ]
+      }
+    },
+    "/markets/volume/snapshot/{symbol}": {
+      "get": {
+        "description": "返回某币种各交易所成交量与总计，供移动端聚合盘口页 volume 表消费",
+        "operationId": "MarketsController_getAggregatedVolumeSnapshot",
+        "parameters": [
+          {
+            "name": "symbol",
+            "required": true,
+            "in": "path",
+            "description": "币种符号",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AggregatedVolumeSnapshotResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "查询聚合成交量快照",
         "tags": [
           "markets"
         ]
@@ -11576,6 +11663,122 @@
           "changePercent"
         ]
       },
+      "OiAggregateRowDto": {
+        "type": "object",
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "description": "交易所名称",
+            "example": "Binance"
+          },
+          "qty": {
+            "type": "number",
+            "description": "未平仓合约数量",
+            "example": 659557.3064
+          },
+          "usd": {
+            "type": "number",
+            "description": "未平仓合约价值(USD)",
+            "example": 57437891724.55
+          },
+          "pct": {
+            "type": "number",
+            "description": "占总持仓量百分比",
+            "example": 32.5
+          },
+          "h1": {
+            "type": "number",
+            "description": "1小时变化百分比",
+            "example": 2.27
+          },
+          "h4": {
+            "type": "number",
+            "description": "4小时变化百分比",
+            "example": 2.95
+          },
+          "h24": {
+            "type": "number",
+            "description": "24小时变化百分比",
+            "example": 0.9
+          },
+          "oiVol": {
+            "type": "number",
+            "description": "持仓量名义价值(USD)",
+            "example": 57437891724.55
+          }
+        },
+        "required": [
+          "exchange",
+          "qty",
+          "usd",
+          "pct",
+          "h1",
+          "h4",
+          "h24",
+          "oiVol"
+        ]
+      },
+      "OiAggregateTotalDto": {
+        "type": "object",
+        "properties": {
+          "qty": {
+            "type": "number",
+            "description": "总未平仓合约数量",
+            "example": 1980000.12
+          },
+          "usd": {
+            "type": "number",
+            "description": "总未平仓合约价值(USD)",
+            "example": 172000000000
+          },
+          "h24": {
+            "type": "number",
+            "description": "24小时变化百分比",
+            "example": 1.05
+          }
+        },
+        "required": [
+          "qty",
+          "usd",
+          "h24"
+        ]
+      },
+      "OiAggregateSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "币种符号",
+            "example": "BTC"
+          },
+          "dataTimestamp": {
+            "type": "string",
+            "description": "数据时间戳",
+            "example": "2025-12-24T10:00:00.000Z"
+          },
+          "total": {
+            "description": "总计行",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OiAggregateTotalDto"
+              }
+            ]
+          },
+          "rows": {
+            "description": "各交易所行",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OiAggregateRowDto"
+            }
+          }
+        },
+        "required": [
+          "symbol",
+          "dataTimestamp",
+          "total",
+          "rows"
+        ]
+      },
       "CreateOpenInterestDto": {
         "type": "object",
         "properties": {
@@ -13534,6 +13737,52 @@
           "source",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "AggregatedVolumeRowDto": {
+        "type": "object",
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "description": "交易所名称",
+            "example": "Binance"
+          },
+          "value": {
+            "type": "number",
+            "description": "24h 成交量（USD）",
+            "example": 12345678901.5
+          }
+        },
+        "required": [
+          "exchange",
+          "value"
+        ]
+      },
+      "AggregatedVolumeSnapshotResponseDto": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "币种符号",
+            "example": "BTC"
+          },
+          "total": {
+            "type": "number",
+            "description": "总成交量（USD）",
+            "example": 45678901234.5
+          },
+          "rows": {
+            "description": "各交易所行",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AggregatedVolumeRowDto"
+            }
+          }
+        },
+        "required": [
+          "symbol",
+          "total",
+          "rows"
         ]
       },
       "TickerResponseDto": {

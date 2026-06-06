@@ -17,13 +17,14 @@ import {
 import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetTickerRequestDto } from './dto/requests/get-ticker.request.dto'
-import { Controller, Get, Query } from '@nestjs/common'
+import { Controller, Get, Param, Query } from '@nestjs/common'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import {
   ApiBearerAuth,
   ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiTags,
   getSchemaPath,
@@ -42,6 +43,7 @@ import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { MarketTradeResponseDto } from './dto/responses/market-trade.response.dto'
 import { AggregatedVolumeResponseDto } from './dto/responses/aggregated-volume.response.dto'
+import { AggregatedVolumeRowDto, AggregatedVolumeSnapshotResponseDto } from './dto/responses/aggregated-volume-snapshot.response.dto'
 import { TickerResponseDto } from './dto/responses/ticker.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
@@ -73,6 +75,8 @@ const baseArrayResponseSchema = (itemDto: unknown) => ({
   LongShortRatioPointResponseDto,
   MarketTradeResponseDto,
   AggregatedVolumeResponseDto,
+  AggregatedVolumeRowDto,
+  AggregatedVolumeSnapshotResponseDto,
   TickerResponseDto,
 )
 @Controller('markets')
@@ -376,6 +380,21 @@ export class MarketsController {
     @Query() query: GetAggregatedVolumeRequestDto,
   ): Promise<BasePaginationResponseDto<AggregatedVolumeResponseDto>> {
     return this.marketsService.getAggregatedVolumes(query)
+  }
+
+  @Get('volume/snapshot/:symbol')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({
+    summary: '查询聚合成交量快照',
+    description: '返回某币种各交易所成交量与总计，供移动端聚合盘口页 volume 表消费',
+  })
+  @ApiParam({ name: 'symbol', description: '币种符号', example: 'BTC' })
+  @ApiOkResponse({ type: AggregatedVolumeSnapshotResponseDto })
+  async getAggregatedVolumeSnapshot(
+    @Param('symbol') symbol: string,
+  ): Promise<AggregatedVolumeSnapshotResponseDto> {
+    return this.marketsService.getAggregatedVolumeSnapshot(symbol)
   }
 
   @Get('ticker')

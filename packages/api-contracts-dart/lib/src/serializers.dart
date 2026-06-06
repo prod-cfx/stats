@@ -67,6 +67,8 @@ import 'package:backend_api_contracts/src/model/aggregated_orderbook_controller_
 import 'package:backend_api_contracts/src/model/aggregated_orderbook_market_response_dto.dart';
 import 'package:backend_api_contracts/src/model/aggregated_orderbook_response_dto.dart';
 import 'package:backend_api_contracts/src/model/aggregated_volume_response_dto.dart';
+import 'package:backend_api_contracts/src/model/aggregated_volume_row_dto.dart';
+import 'package:backend_api_contracts/src/model/aggregated_volume_snapshot_response_dto.dart';
 import 'package:backend_api_contracts/src/model/ai_quant_conversation_backtest_config_response_dto.dart';
 import 'package:backend_api_contracts/src/model/ai_quant_conversation_backtest_draft_config_request_dto.dart';
 import 'package:backend_api_contracts/src/model/ai_quant_conversation_backtest_execution_response_dto.dart';
@@ -135,7 +137,11 @@ import 'package:backend_api_contracts/src/model/markets_controller_get_aggregate
 import 'package:backend_api_contracts/src/model/markets_controller_get_exchange_long_short_ratio200_response.dart';
 import 'package:backend_api_contracts/src/model/markets_controller_get_latest_trades200_response.dart';
 import 'package:backend_api_contracts/src/model/markets_controller_get_long_short_ratio200_response.dart';
+import 'package:backend_api_contracts/src/model/oi_aggregate_row_dto.dart';
+import 'package:backend_api_contracts/src/model/oi_aggregate_snapshot_dto.dart';
+import 'package:backend_api_contracts/src/model/oi_aggregate_total_dto.dart';
 import 'package:backend_api_contracts/src/model/open_interest_controller_batch_upsert201_response.dart';
+import 'package:backend_api_contracts/src/model/open_interest_controller_get_aggregate_snapshot200_response.dart';
 import 'package:backend_api_contracts/src/model/open_interest_controller_get_stats200_response.dart';
 import 'package:backend_api_contracts/src/model/open_interest_controller_query200_response.dart';
 import 'package:backend_api_contracts/src/model/open_interest_controller_upsert201_response.dart';
@@ -273,6 +279,8 @@ part 'serializers.g.dart';
   AggregatedOrderbookMarketResponseDto,
   AggregatedOrderbookResponseDto,
   AggregatedVolumeResponseDto,
+  AggregatedVolumeRowDto,
+  AggregatedVolumeSnapshotResponseDto,
   AiQuantConversationBacktestConfigResponseDto,
   AiQuantConversationBacktestDraftConfigRequestDto,
   AiQuantConversationBacktestExecutionResponseDto,
@@ -341,7 +349,11 @@ part 'serializers.g.dart';
   MarketsControllerGetExchangeLongShortRatio200Response,
   MarketsControllerGetLatestTrades200Response,
   MarketsControllerGetLongShortRatio200Response,
+  OiAggregateRowDto,
+  OiAggregateSnapshotDto,
+  OiAggregateTotalDto,
   OpenInterestControllerBatchUpsert201Response,
+  OpenInterestControllerGetAggregateSnapshot200Response,
   OpenInterestControllerGetStats200Response,
   OpenInterestControllerQuery200Response,
   OpenInterestControllerUpsert201Response,

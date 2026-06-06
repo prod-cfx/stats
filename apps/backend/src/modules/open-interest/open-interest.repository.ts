@@ -71,6 +71,27 @@ export class OpenInterestRepository {
     })
   }
 
+  /**
+   * 获取某币种最新时间戳下所有交易所（含 "All" 汇总）的持仓量行。
+   * 用于聚合盘口页 OI 表的快照消费。
+   */
+  async findLatestSnapshotRows(symbol: string) {
+    const latest = await this.txHost.tx.openInterest.findFirst({
+      where: { symbol },
+      orderBy: { dataTimestamp: 'desc' },
+      select: { dataTimestamp: true },
+    })
+
+    if (!latest) {
+      return []
+    }
+
+    return this.txHost.tx.openInterest.findMany({
+      where: { symbol, dataTimestamp: latest.dataTimestamp },
+      orderBy: { openInterestUsd: 'desc' },
+    })
+  }
+
   async queryRawStats(symbol: string, startTime: Date, endTime: Date) {
     interface StatsRow {
       min: Prisma.Decimal | null

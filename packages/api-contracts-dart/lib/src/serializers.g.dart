@@ -106,6 +106,8 @@ Serializers _$serializers =
           ..add(AggregatedOrderbookResponseDto.serializer)
           ..add(AggregatedVolumeResponseDto.serializer)
           ..add(AggregatedVolumeResponseDtoInstrumentTypeEnum.serializer)
+          ..add(AggregatedVolumeRowDto.serializer)
+          ..add(AggregatedVolumeSnapshotResponseDto.serializer)
           ..add(AiQuantConversationBacktestConfigResponseDto.serializer)
           ..add(AiQuantConversationBacktestDraftConfigRequestDto.serializer)
           ..add(AiQuantConversationBacktestExecutionResponseDto.serializer)
@@ -224,7 +226,13 @@ Serializers _$serializers =
           )
           ..add(MarketsControllerGetLatestTrades200Response.serializer)
           ..add(MarketsControllerGetLongShortRatio200Response.serializer)
+          ..add(OiAggregateRowDto.serializer)
+          ..add(OiAggregateSnapshotDto.serializer)
+          ..add(OiAggregateTotalDto.serializer)
           ..add(OpenInterestControllerBatchUpsert201Response.serializer)
+          ..add(
+            OpenInterestControllerGetAggregateSnapshot200Response.serializer,
+          )
           ..add(OpenInterestControllerGetStats200Response.serializer)
           ..add(OpenInterestControllerQuery200Response.serializer)
           ..add(OpenInterestControllerUpsert201Response.serializer)
@@ -399,6 +407,12 @@ Serializers _$serializers =
               const FullType(AggregatedOrderbookMarketResponseDto),
             ]),
             () => ListBuilder<AggregatedOrderbookMarketResponseDto>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(AggregatedVolumeRowDto),
+            ]),
+            () => ListBuilder<AggregatedVolumeRowDto>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
@@ -661,6 +675,12 @@ Serializers _$serializers =
               const FullType(LiquidationSummaryItemDto),
             ]),
             () => ListBuilder<LiquidationSummaryItemDto>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(OiAggregateRowDto),
+            ]),
+            () => ListBuilder<OiAggregateRowDto>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OpenOrderDto)]),

@@ -1,4 +1,8 @@
 import type {
+  OiAggregateRowDto,
+  OiAggregateSnapshotDto,
+} from './dto/oi-aggregate.dto'
+import type {
   CreateOpenInterestDto,
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
@@ -117,6 +121,59 @@ export class OpenInterestService {
    */
   async getLatest(exchange: string, symbol: string) {
     return this.openInterestRepository.findLatest(exchange, symbol)
+  }
+
+  /**
+   * 获取某币种的聚合持仓量快照（总计 + 各交易所行）。
+   *
+   * 供移动端聚合盘口页 OI 表消费，字段对齐 mobile `OiSnapshot`/`OiRow`/`OiTotal`。
+   * "All" 行作为总计；其余交易所行作为明细，pct 按各所 USD 占总和计算。
+   */
+  async getAggregateSnapshot(symbol: string): Promise<OiAggregateSnapshotDto> {
+    const normalized = symbol.trim().toUpperCase()
+    const records = await this.openInterestRepository.findLatestSnapshotRows(normalized)
+
+    if (records.length === 0) {
+      throw new DomainException('open_interest.not_found', { code: ErrorCode.OPEN_INTEREST_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { symbol: normalized } })
+    }
+
+    const allRow = records.find(r => r.exchange === 'All')
+    const exchangeRows = records.filter(r => r.exchange !== 'All')
+
+    // 总 USD：优先用 "All" 汇总行，缺失则按各所求和
+    const totalUsd = allRow
+      ? Number(allRow.openInterestUsd)
+      : exchangeRows.reduce((sum, r) => sum + Number(r.openInterestUsd), 0)
+
+    const rows: OiAggregateRowDto[] = exchangeRows.map((r) => {
+      const usd = Number(r.openInterestUsd)
+      return {
+        exchange: r.exchange,
+        qty: Number(r.openInterestQuantity),
+        usd,
+        pct: totalUsd > 0 ? (usd / totalUsd) * 100 : 0,
+        h1: r.openInterestChangePercent1h != null ? Number(r.openInterestChangePercent1h) : 0,
+        h4: r.openInterestChangePercent4h != null ? Number(r.openInterestChangePercent4h) : 0,
+        h24: r.openInterestChangePercent24h != null ? Number(r.openInterestChangePercent24h) : 0,
+        oiVol: usd,
+      }
+    })
+
+    const totalQty = allRow
+      ? Number(allRow.openInterestQuantity)
+      : exchangeRows.reduce((sum, r) => sum + Number(r.openInterestQuantity), 0)
+    const totalH24 = allRow?.openInterestChangePercent24h != null
+      ? Number(allRow.openInterestChangePercent24h)
+      : 0
+
+    const timestamp = (allRow ?? records[0]).dataTimestamp
+
+    return {
+      symbol: normalized,
+      dataTimestamp: timestamp instanceof Date ? timestamp.toISOString() : String(timestamp),
+      total: { qty: totalQty, usd: totalUsd, h24: totalH24 },
+      rows,
+    }
   }
 
   /**
