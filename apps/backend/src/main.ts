@@ -2,11 +2,12 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { SwaggerModule } from '@nestjs/swagger'
 import { loadEnvironment } from '@net/config'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
 import { buildValidatedCorsOrigins } from './common/utils/cors-origins'
 import { AppModule } from './modules/app.module'
+import { buildSwaggerDocument } from './swagger/build-swagger-document'
 import 'reflect-metadata'
 
 async function bootstrap() {
@@ -68,13 +69,7 @@ async function bootstrap() {
   })
 
   if (env.APP_ENV !== 'production') {
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('AI Backend API')
-      .setDescription('Internal API documentation')
-      .setVersion('1.0')
-      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
-      .build()
-    const document = SwaggerModule.createDocument(app, swaggerConfig)
+    const document = buildSwaggerDocument(app)
     SwaggerModule.setup('docs', app, document, {
       useGlobalPrefix: true,
       jsonDocumentUrl: 'docs-json',

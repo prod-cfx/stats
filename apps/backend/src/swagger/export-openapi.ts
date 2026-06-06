@@ -1,25 +1,14 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { NestFactory } from '@nestjs/core'
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { BaseResponseDto } from '../common/dto/base.dto'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { AppModule } from '../modules/app.module'
-import { CryptoStockQuoteResponseDto } from '../modules/crypto-stock-quotes/dto/crypto-stock-quote.dto'
+import { buildSwaggerDocument } from './build-swagger-document'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['error', 'warn'] })
 
-  const config = new DocumentBuilder()
-    .setTitle('AI Backend API')
-    .setDescription('Auto generated OpenAPI for contracts')
-    .setVersion('1.0')
-    .build()
-
-  const document = SwaggerModule.createDocument(app, config, {
-    // 显式注册额外模型，确保在 components.schemas 中生成完整契约
-    extraModels: [BaseResponseDto, CryptoStockQuoteResponseDto],
-  })
+  const document = buildSwaggerDocument(app)
 
   const findWorkspaceRoot = (startDir: string) => {
     let current = startDir
