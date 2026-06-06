@@ -223,7 +223,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
   })
 
-  it('uses the logo purple gradient on run actions', async () => {
+  it('uses the previous violet-to-fuchsia gradient on run actions', async () => {
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -240,11 +240,11 @@ describe('StrategyPlaza API rendering', () => {
     )
     const runButton = actionHost?.querySelector('button')
 
-    expect(runButton?.className).toContain('from-[#7C3AED]')
-    expect(runButton?.className).toContain('to-[#B414F4]')
+    expect(runButton?.className).toContain('from-violet-600')
+    expect(runButton?.className).toContain('to-fuchsia-600')
     expect(runButton?.className.split(/\s+/)).not.toContain('primary')
     expect(runButton?.getAttribute('style')).toContain('#7C3AED')
-    expect(runButton?.getAttribute('style')).toContain('#B414F4')
+    expect(runButton?.getAttribute('style')).toContain('#C026D3')
   })
 
   it('renders aligned run and edit buttons', async () => {
@@ -317,7 +317,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(badge?.className).toContain('top-3')
   })
 
-  it('uses the logo purple gradient for hot rail run buttons', async () => {
+  it('uses the previous violet-to-fuchsia gradient for hot rail run buttons', async () => {
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -332,11 +332,11 @@ describe('StrategyPlaza API rendering', () => {
     const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
     const runButton = rail?.querySelector('[data-testid="strategy-plaza-run-button"]')
 
-    expect(runButton?.className).toContain('from-[#7C3AED]')
-    expect(runButton?.className).toContain('to-[#B414F4]')
+    expect(runButton?.className).toContain('from-violet-600')
+    expect(runButton?.className).toContain('to-fuchsia-600')
     expect(runButton?.className.split(/\s+/)).not.toContain('primary')
     expect(runButton?.getAttribute('style')).toContain('#7C3AED')
-    expect(runButton?.getAttribute('style')).toContain('#B414F4')
+    expect(runButton?.getAttribute('style')).toContain('#C026D3')
   })
 
   it('renders card footer actions on one aligned row like the PC design', async () => {

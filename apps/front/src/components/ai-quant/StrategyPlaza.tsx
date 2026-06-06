@@ -33,8 +33,10 @@ const SORT_OPTIONS = [
   { key: 'new', label: '最新' },
 ] as const
 const PAGE_SIZE = 9
-const RUN_BUTTON_GRADIENT_CLASS = 'bg-gradient-to-r from-[#7C3AED] to-[#B414F4]'
-const RUN_BUTTON_GRADIENT_STYLE = 'linear-gradient(90deg, #7C3AED 0%, #B414F4 100%)'
+const RUN_BUTTON_GRADIENT_CLASS = 'bg-gradient-to-r from-violet-600 to-fuchsia-600'
+const RUN_BUTTON_GRADIENT_STYLE = 'linear-gradient(90deg, #7C3AED 0%, #C026D3 100%)'
+const PAGER_ACTIVE_GRADIENT_CLASS = 'bg-gradient-to-r from-[#7C3AED] to-[#B414F4]'
+const PAGER_ACTIVE_GRADIENT_STYLE = 'linear-gradient(90deg, #7C3AED 0%, #B414F4 100%)'
 
 const TEMPLATE_CATEGORY: Partial<Record<string, (typeof CATEGORY_LABELS)[number]>> = {
   'ma-cross': '趋势',
@@ -893,10 +895,10 @@ export function StrategyPlaza({
               key={item}
               data-testid={item === currentPage ? 'strategy-plaza-page-button-active' : undefined}
               className={
-                item === currentPage ? `is-on ${RUN_BUTTON_GRADIENT_CLASS} text-white` : ''
+                item === currentPage ? `is-on ${PAGER_ACTIVE_GRADIENT_CLASS} text-white` : ''
               }
               style={
-                item === currentPage ? { backgroundImage: RUN_BUTTON_GRADIENT_STYLE } : undefined
+                item === currentPage ? { backgroundImage: PAGER_ACTIVE_GRADIENT_STYLE } : undefined
               }
               type="button"
               onClick={() => setPage(item)}
