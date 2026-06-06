@@ -10,7 +10,8 @@ let mockTranslations: Record<string, string> = {}
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => mockTranslations[key] ?? options?.defaultValue ?? key,
+    t: (key: string, options?: { defaultValue?: string }) =>
+      mockTranslations[key] ?? options?.defaultValue ?? key,
   }),
 }))
 
@@ -66,7 +67,8 @@ describe('StrategyPlaza API rendering', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
     mockTranslations = {}
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -104,7 +106,8 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.textContent).toContain('Use moving averages to follow confirmed trends.')
     expect(container.textContent).toContain('Trend Follow')
     expect(container.textContent).toContain('Moving Average')
-    expect(container.textContent).toContain('BTC-USDT-SWAP / 15m')
+    expect(container.textContent).toContain('BTC-USDT-SWAP')
+    expect(container.textContent).toContain('近 15m')
     expect(container.textContent).toContain('OKX Demo')
     expect(container.textContent).toContain('Perp')
     expect(container.textContent).toContain('25%')
@@ -119,7 +122,8 @@ describe('StrategyPlaza API rendering', () => {
   it('uses localized range buy/sell copy for the former grid-range card', async () => {
     mockTranslations = {
       'aiQuant.strategies.grid-range.name': 'Range Buy/Sell',
-      'aiQuant.strategies.grid-range.desc': 'Buy near the lower range and sell near the upper range.',
+      'aiQuant.strategies.grid-range.desc':
+        'Buy near the lower range and sell near the upper range.',
       'aiQuant.strategies.grid-range.tags.range': 'Range',
       'aiQuant.strategies.grid-range.tags.buyLowSellHigh': 'Buy Low/Sell High',
       'aiQuant.strategies.grid-range.tags.okxDemo': 'OKX Demo',
@@ -139,7 +143,9 @@ describe('StrategyPlaza API rendering', () => {
     })
 
     expect(container.textContent).toContain('Range Buy/Sell')
-    expect(container.textContent).toContain('Buy near the lower range and sell near the upper range.')
+    expect(container.textContent).toContain(
+      'Buy near the lower range and sell near the upper range.',
+    )
     expect(container.textContent).toContain('Range')
     expect(container.textContent).toContain('Buy Low/Sell High')
     expect(container.textContent).toContain('OKX Demo')
@@ -150,7 +156,8 @@ describe('StrategyPlaza API rendering', () => {
   it('uses localized copy for backend Chinese MA crossover templates', async () => {
     mockTranslations = {
       'aiQuant.strategies.ma-cross.name': 'MA Crossover',
-      'aiQuant.strategies.ma-cross.desc': 'Go long when the short moving average crosses above the long moving average.',
+      'aiQuant.strategies.ma-cross.desc':
+        'Go long when the short moving average crosses above the long moving average.',
       'aiQuant.strategies.ma-cross.tags.trend': 'Trend Follow',
       'aiQuant.strategies.ma-cross.tags.ma': 'Moving Average',
       'aiQuant.strategies.ma-cross.tags.okxDemo': 'OKX Demo',
@@ -177,7 +184,9 @@ describe('StrategyPlaza API rendering', () => {
     })
 
     expect(container.textContent).toContain('MA Crossover')
-    expect(container.textContent).toContain('Go long when the short moving average crosses above the long moving average.')
+    expect(container.textContent).toContain(
+      'Go long when the short moving average crosses above the long moving average.',
+    )
     expect(container.textContent).toContain('Trend Follow')
     expect(container.textContent).toContain('Moving Average')
     expect(container.textContent).toContain('OKX Demo')
@@ -201,7 +210,10 @@ describe('StrategyPlaza API rendering', () => {
       )
     })
 
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
     await act(async () => {
       buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -209,6 +221,273 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(onRunStrategy).toHaveBeenCalledWith('ma-cross')
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
+  })
+
+  it('uses the previous violet-to-fuchsia gradient on run actions', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const runButton = actionHost?.querySelector('button')
+
+    expect(runButton?.className).toContain('from-violet-600')
+    expect(runButton?.className).toContain('to-fuchsia-600')
+    expect(runButton?.className.split(/\s+/)).not.toContain('primary')
+    expect(runButton?.getAttribute('style')).toContain('#7C3AED')
+    expect(runButton?.getAttribute('style')).toContain('#C026D3')
+  })
+
+  it('renders aligned run and edit buttons', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
+
+    expect(actionHost?.className).toContain('flex')
+    expect(actionHost?.className).not.toContain('grid-cols-2')
+    expect(buttons[0]?.className).toContain('h-9')
+    expect(buttons[1]?.className).toContain('h-9')
+    expect(buttons[0]?.className).toContain('flex-1')
+    expect(buttons[1]?.className).toContain('flex-1')
+    expect(buttons[0]?.className.split(/\s+/)).not.toContain('primary')
+    expect(buttons[1]?.className.split(/\s+/)).not.toContain('primary')
+  })
+
+  it('keeps the hot rail title concise and theme-aware', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
+    const railCard = rail?.querySelector('article')
+
+    expect(container.textContent).toContain('热门策略')
+    expect(container.textContent).not.toContain('社区本周关注度最高')
+    expect(railCard?.className).toContain('bg-[color:var(--cf-surface)]')
+    expect(railCard?.className).toContain('text-[color:var(--cf-text-strong)]')
+    expect(railCard?.className).not.toContain('text-white')
+    expect(railCard?.className).not.toContain('#16122F')
+  })
+
+  it('places hot rail status badges in the top-right corner', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
+    const badge = rail?.querySelector('[data-testid="strategy-plaza-status-badge"]')
+
+    expect(badge?.className).toContain('absolute')
+    expect(badge?.className).toContain('right-3')
+    expect(badge?.className).toContain('top-3')
+  })
+
+  it('uses the previous violet-to-fuchsia gradient for hot rail run buttons', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const rail = container.querySelector('[data-testid="strategy-plaza-hot-rail"]')
+    const runButton = rail?.querySelector('[data-testid="strategy-plaza-run-button"]')
+
+    expect(runButton?.className).toContain('from-violet-600')
+    expect(runButton?.className).toContain('to-fuchsia-600')
+    expect(runButton?.className.split(/\s+/)).not.toContain('primary')
+    expect(runButton?.getAttribute('style')).toContain('#7C3AED')
+    expect(runButton?.getAttribute('style')).toContain('#C026D3')
+  })
+
+  it('renders card footer actions on one aligned row like the PC design', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const card = container.querySelector('[data-testid="strategy-plaza-card"]')
+    const footer = card?.querySelector('[data-testid="strategy-plaza-card-footer"]')
+    const positionLeverage = card?.querySelector('[data-testid="strategy-plaza-position-leverage"]')
+    const actions = card?.querySelector('[data-testid="strategy-plaza-actions"]')
+    const buttons = Array.from(actions?.querySelectorAll('button') ?? [])
+
+    expect(positionLeverage).toBeNull()
+    expect(footer?.className).toContain('flex')
+    expect(footer?.className).toContain('items-center')
+    expect(actions?.className).toContain('flex')
+    expect(actions?.className).not.toContain('grid-cols-2')
+    expect(buttons[0]?.className).toContain('h-9')
+    expect(buttons[1]?.className).toContain('h-9')
+  })
+
+  it('uses the logo purple gradient for the active pager', async () => {
+    const manyTemplates = Array.from({ length: 10 }, (_, index) => ({
+      ...template,
+      id: `ma-cross-${index}`,
+      name: `MA Cross Demo ${index}`,
+      displayOrder: index + 1,
+    }))
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={manyTemplates}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const activePage = container.querySelector('[data-testid="strategy-plaza-page-button-active"]')
+
+    expect(activePage?.className).toContain('from-[#7C3AED]')
+    expect(activePage?.className).toContain('to-[#B414F4]')
+    expect(activePage?.getAttribute('style')).toContain('#7C3AED')
+    expect(activePage?.getAttribute('style')).toContain('#B414F4')
+  })
+
+  it('limits strategy category pages to nine cards and renders pagination controls', async () => {
+    const manyTemplates = Array.from({ length: 10 }, (_, index) => ({
+      ...template,
+      id: `ma-cross-page-${index}`,
+      name: `MA Cross Page ${index}`,
+      displayOrder: index + 1,
+    }))
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={manyTemplates}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.querySelectorAll('[data-testid="strategy-plaza-card"]')).toHaveLength(9)
+    expect(container.querySelector('[data-testid="strategy-plaza-pager"]')).not.toBeNull()
+  })
+
+  it('renders the PC strategy plaza rail, toolbar, rich cards and local search', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="strategy-plaza-hot-rail"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="strategy-plaza-toolbar"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="strategy-plaza-grid"]')).not.toBeNull()
+    expect(container.textContent).toContain('热门策略')
+    expect(container.textContent).not.toContain('社区本周关注度最高')
+    expect(container.textContent).toContain('共 2 个')
+
+    const search = container.querySelector<HTMLInputElement>(
+      '[data-testid="strategy-plaza-search"]',
+    )
+    expect(search).not.toBeNull()
+    expect(search?.getAttribute('placeholder')).toBe('搜索策略 · 币对 · 作者')
+
+    await act(async () => {
+      search!.value = '网格'
+      search!.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    const grid = container.querySelector('[data-testid="strategy-plaza-grid"]')
+    expect(grid?.textContent).toContain('网格区间')
+    expect(grid?.textContent).not.toContain('MA Cross Demo')
+    expect(container.textContent).toContain('共 1 个')
+  })
+
+  it('filters by category and shows an empty favorite state from PC plaza design', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template, gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const gridChip = Array.from(container.querySelectorAll('button')).find(
+      button => button.textContent === '网格',
+    )
+    expect(gridChip).not.toBeUndefined()
+
+    await act(async () => {
+      gridChip!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const grid = container.querySelector('[data-testid="strategy-plaza-grid"]')
+    expect(grid?.textContent).toContain('网格区间')
+    expect(grid?.textContent).not.toContain('MA Cross Demo')
+
+    const favoriteChip = Array.from(container.querySelectorAll('button')).find(
+      button => button.textContent === '收藏',
+    )
+    expect(favoriteChip).not.toBeUndefined()
+
+    await act(async () => {
+      favoriteChip!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('还没有收藏的策略')
+    expect(container.textContent).toContain('点击策略卡右上角的 ☆ 星标，把感兴趣的策略收藏到这里。')
   })
 
   it('keeps card metadata and actions from overflowing on mobile', async () => {
@@ -225,15 +504,15 @@ describe('StrategyPlaza API rendering', () => {
       )
     })
 
-    const article = container.querySelector('article')
-    const metadataRows = container.querySelectorAll('[data-testid="strategy-plaza-meta-row"]')
-    const actions = container.querySelector('[data-testid="strategy-plaza-actions"]')
+    const article = container.querySelector('[data-testid="strategy-plaza-card"]')
+    const metadataRows = article?.querySelectorAll('[data-testid="strategy-plaza-meta-row"]') ?? []
+    const actions = article?.querySelector('[data-testid="strategy-plaza-actions"]')
 
     expect(article?.className).toContain('min-w-0')
     expect(metadataRows[0]?.className).toContain('grid')
     expect(metadataRows[0]?.className).toContain('sm:flex')
-    expect(actions?.className).toContain('grid-cols-1')
-    expect(actions?.className).toContain('sm:grid-cols-2')
+    expect(actions?.className).toContain('flex')
+    expect(actions?.className).not.toContain('grid-cols-2')
   })
 
   it('keeps loaded templates visible when showing an action error', async () => {
@@ -270,7 +549,10 @@ describe('StrategyPlaza API rendering', () => {
       )
     })
 
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
     expect(buttons).toHaveLength(2)
     expect(buttons[0]?.disabled).toBe(true)
     expect(buttons[0]?.getAttribute('aria-busy')).toBe('true')
@@ -300,7 +582,10 @@ describe('StrategyPlaza API rendering', () => {
       )
     })
 
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
     expect(buttons).toHaveLength(2)
     expect(buttons[0]?.disabled).toBe(true)
     expect(buttons[1]?.disabled).toBe(true)

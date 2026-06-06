@@ -239,6 +239,26 @@ describe('AiQuantStrategyDetail', () => {
     container.remove()
   })
 
+  it('uses the provided plaza back link when opened from strategy plaza', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy()}
+          backHref="/zh/ai-quant/plaza"
+          backLabelKey="aiQuant.plaza"
+        />,
+      )
+    })
+
+    const plazaBackLink = Array.from(container.querySelectorAll('a')).find(link =>
+      link.textContent?.includes('策略广场'),
+    )
+
+    expect(plazaBackLink?.getAttribute('href')).toBe('/zh/ai-quant/plaza')
+    expect(findLink('返回列表')).toBeUndefined()
+  })
+
   it('shows truthful source, audit, rule summary, and OKX fee currency on detail page', async () => {
     await act(async () => {
       root.render(
@@ -1125,11 +1145,17 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    const title = Array.from(container.querySelectorAll('h1')).find(node => node.textContent === 'Very long strategy name for mobile detail header')
+    const title = Array.from(container.querySelectorAll('h1')).find(
+      node => node.textContent === 'Very long strategy name for mobile detail header',
+    )
     const header = title?.closest('section')
     const metrics = container.querySelector('[data-testid="strategy-detail-metric-grid"]')
-    const tradesTable = container.querySelector('[data-testid="strategy-detail-latest-trades-table"]')
-    const equityPanel = container.querySelector('[data-testid="strategy-detail-equity-chart-panel"]')
+    const tradesTable = container.querySelector(
+      '[data-testid="strategy-detail-latest-trades-table"]',
+    )
+    const equityPanel = container.querySelector(
+      '[data-testid="strategy-detail-equity-chart-panel"]',
+    )
 
     expect(header?.className).toContain('overflow-hidden')
     expect(title?.className).toContain('break-words')

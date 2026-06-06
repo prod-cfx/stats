@@ -1,18 +1,18 @@
 'use client'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
-import type {AiQuantDeletionDialogKind} from '@/components/ai-quant/AiQuantDeletionDialog';
+import type { AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
-import type { AccountAiQuantStrategyDetail } from '@/lib/api'
+import type { AccountAiQuantStrategyDetail, StrategyPlazaTemplate } from '@/lib/api'
 import { Bot, ChevronLeft, KeyRound, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AiQuantDeletionDialog  } from '@/components/ai-quant/AiQuantDeletionDialog'
+import { AiQuantDeletionDialog } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
@@ -23,12 +23,12 @@ import {
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { DisplayLogicGraphPreview } from '@/components/ai-quant/DisplayLogicGraphPreview'
-import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
+import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
@@ -43,6 +43,7 @@ import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAiQuantConversation,
   fetchAccountAiQuantStrategyDetail,
+  fetchStrategyPlazaTemplates,
   fetchUserExchangeAccountStatuses,
   listAiQuantConversations,
   performAccountAiQuantStrategyAction,
@@ -83,12 +84,12 @@ import {
   serializePersistedConversations,
   shouldInvalidatePublicationForParamChange,
 } from './ai-quant-page-conversation'
-import {
-  confirmAiQuantDeploy,
-  createDeployRequestId,
-} from './ai-quant-page-deploy'
+import { confirmAiQuantDeploy, createDeployRequestId } from './ai-quant-page-deploy'
 
-export { buildCodegenReplyContent, resolvePublishedStrategyInstanceId } from './ai-quant-page-codegen'
+export {
+  buildCodegenReplyContent,
+  resolvePublishedStrategyInstanceId,
+} from './ai-quant-page-codegen'
 export type { QuantParams } from './ai-quant-page-conversation'
 
 const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
@@ -103,10 +104,14 @@ function readPositiveFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
-function resolvePreferredDeployLeverage(conversation: ConversationState | null | undefined): number | null {
-  return readPositiveFiniteNumber(conversation?.backtestDraftConfig?.execution.leverage)
-    ?? readPositiveFiniteNumber(conversation?.paramValues.backtestLeverage)
-    ?? readPositiveFiniteNumber(conversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage)
+function resolvePreferredDeployLeverage(
+  conversation: ConversationState | null | undefined,
+): number | null {
+  return (
+    readPositiveFiniteNumber(conversation?.backtestDraftConfig?.execution.leverage) ??
+    readPositiveFiniteNumber(conversation?.paramValues.backtestLeverage) ??
+    readPositiveFiniteNumber(conversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage)
+  )
 }
 
 function resolveLocalizedRuntimeErrorMessage(
@@ -147,7 +152,7 @@ function hasRenderableDisplayLogicGraph(
   if (!graph || typeof graph !== 'object') return false
   const candidate = graph as { blocks?: unknown }
   if (!Array.isArray(candidate.blocks)) return false
-  return candidate.blocks.every((block) => {
+  return candidate.blocks.every(block => {
     if (!block || typeof block !== 'object') return false
     return Array.isArray((block as { items?: unknown }).items)
   })
@@ -157,21 +162,28 @@ function isSameStrategyEditIntent(
   current: ReturnType<typeof getIntent>,
   expected: StrategyEditIntent,
 ): boolean {
-  return current?.type === 'strategy-edit-session'
-    && current.strategyInstanceId === expected.strategyInstanceId
-    && current.publishedSnapshotId === expected.publishedSnapshotId
-    && current.conversationId === expected.conversationId
-    && current.sessionId === expected.sessionId
-    && current.source === expected.source
-    && current.ts === expected.ts
+  return (
+    current?.type === 'strategy-edit-session' &&
+    current.strategyInstanceId === expected.strategyInstanceId &&
+    current.publishedSnapshotId === expected.publishedSnapshotId &&
+    current.conversationId === expected.conversationId &&
+    current.sessionId === expected.sessionId &&
+    current.source === expected.source &&
+    current.ts === expected.ts
+  )
 }
 
 function isAccountStrategyNotFoundError(error: unknown): boolean {
   if (error instanceof ApiError) {
     if (error.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE) return true
-    const details = error.details as { error?: { code?: unknown }; code?: unknown } | null | undefined
-    return details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
-      || details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+    const details = error.details as
+      | { error?: { code?: unknown }; code?: unknown }
+      | null
+      | undefined
+    return (
+      details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE ||
+      details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+    )
   }
 
   if (!error || typeof error !== 'object') return false
@@ -180,23 +192,25 @@ function isAccountStrategyNotFoundError(error: unknown): boolean {
     statusCode?: unknown
     details?: { error?: { code?: unknown }; code?: unknown }
   }
-  return candidate.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
-    || candidate.details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
-    || candidate.details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+  return (
+    candidate.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE ||
+    candidate.details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE ||
+    candidate.details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+  )
 }
 
 function isDeploymentDetailForPublishedSnapshot(
   detail: AccountAiQuantStrategyDetail | null,
   publishedSnapshotId: string | null | undefined,
 ): boolean {
-  const currentPublishedSnapshotId = typeof publishedSnapshotId === 'string'
-    ? publishedSnapshotId.trim()
-    : ''
+  const currentPublishedSnapshotId =
+    typeof publishedSnapshotId === 'string' ? publishedSnapshotId.trim() : ''
   if (!currentPublishedSnapshotId) return true
 
-  const deployedPublishedSnapshotId = typeof detail?.snapshot?.publishedSnapshotId === 'string'
-    ? detail.snapshot.publishedSnapshotId.trim()
-    : ''
+  const deployedPublishedSnapshotId =
+    typeof detail?.snapshot?.publishedSnapshotId === 'string'
+      ? detail.snapshot.publishedSnapshotId.trim()
+      : ''
   return deployedPublishedSnapshotId === currentPublishedSnapshotId
 }
 
@@ -208,6 +222,7 @@ export function AiQuantPageClient({
   const capabilityFailedMessage = t(CAPABILITY_FAILED_MESSAGE_KEY, {
     defaultValue: CAPABILITY_FAILED_MESSAGE_DEFAULT,
   })
+  const plazaLoadFailedMessage = t('aiQuant.plazaPage.loadFailed')
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
@@ -238,13 +253,24 @@ export function AiQuantPageClient({
   )
   const [conversationStorageReady, setConversationStorageReady] = useState(false)
   const [conversationSyncState, setConversationSyncState] = useState<ConversationSyncState>('idle')
-  const [deploymentDetail, setDeploymentDetail] = useState<AccountAiQuantStrategyDetail | null>(null)
+  const [deploymentDetail, setDeploymentDetail] = useState<AccountAiQuantStrategyDetail | null>(
+    null,
+  )
   const [deploymentDetailStatus, setDeploymentDetailStatus] =
     useState<DeploymentDetailStatus>('idle')
   const [deploymentActionPending, setDeploymentActionPending] = useState(false)
   const [editGuardOpen, setEditGuardOpen] = useState(false)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [deploymentGuardErrorMessage, setDeploymentGuardErrorMessage] = useState<string | null>(
+    null,
+  )
+  const [guestPlazaTemplates, setGuestPlazaTemplates] = useState<StrategyPlazaTemplate[]>([])
+  const [guestPlazaLoading, setGuestPlazaLoading] = useState(true)
+  const [guestPlazaError, setGuestPlazaError] = useState<string | null>(null)
+  const [guestPlazaPendingTemplateId, setGuestPlazaPendingTemplateId] = useState<string | null>(
+    null,
+  )
+  const [guestPlazaPendingAction, setGuestPlazaPendingAction] = useState<'run' | 'edit' | null>(
     null,
   )
   const [conversationDeleteDialog, setConversationDeleteDialog] =
@@ -273,6 +299,32 @@ export function AiQuantPageClient({
   }, [defaultReturnHref])
 
   useEffect(() => {
+    if (isLoading || session) return
+    let cancelled = false
+
+    setGuestPlazaLoading(true)
+    setGuestPlazaError(null)
+    void fetchStrategyPlazaTemplates()
+      .then(templates => {
+        if (!cancelled) setGuestPlazaTemplates(templates)
+      })
+      .catch(error => {
+        if (!cancelled) {
+          const message =
+            error instanceof Error && error.message.trim() ? error.message : plazaLoadFailedMessage
+          setGuestPlazaError(message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setGuestPlazaLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLoading, plazaLoadFailedMessage, session])
+
+  useEffect(() => {
     if (!activeConversationId && conversations.length) {
       setActiveConversationId(conversations[0].id)
     }
@@ -296,12 +348,12 @@ export function AiQuantPageClient({
     setDeploymentGuardErrorMessage(null)
 
     void fetchAccountAiQuantStrategyDetail(publishedStrategyInstanceId, session.userId)
-      .then((detail) => {
+      .then(detail => {
         if (cancelled) return
         setDeploymentDetail(detail)
         setDeploymentDetailStatus('ready')
       })
-      .catch((error) => {
+      .catch(error => {
         if (cancelled) return
         setDeploymentDetail(null)
         setDeploymentDetailStatus(isAccountStrategyNotFoundError(error) ? 'not_found' : 'error')
@@ -322,7 +374,9 @@ export function AiQuantPageClient({
           const serverConversations = await listAiQuantConversations()
           if (cancelled) return
           localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
-          const restored = serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
+          const restored = serverConversations.map(conversation =>
+            createConversationFromServerConversation(conversation, t),
+          )
           const intent = getIntent(INTENT_TTL_MS)
 
           if (intent?.type === 'strategy-edit-session') {
@@ -485,7 +539,9 @@ export function AiQuantPageClient({
         setConversations(prev =>
           prev.map(conv => {
             const alreadyAppended = conv.messages.some(
-              msg => msg.content === CAPABILITY_FAILED_MESSAGE_KEY || msg.content === capabilityFailedMessage,
+              msg =>
+                msg.content === CAPABILITY_FAILED_MESSAGE_KEY ||
+                msg.content === capabilityFailedMessage,
             )
             if (alreadyAppended) return conv
             return {
@@ -550,7 +606,7 @@ export function AiQuantPageClient({
       backtestCapabilities,
       setConversations,
       t,
-    }).then((result) => {
+    }).then(result => {
       if (result !== 'restarted') {
         return
       }
@@ -568,13 +624,7 @@ export function AiQuantPageClient({
         }),
       )
     })
-  }, [
-    activeConversation,
-    backtestCapabilities,
-    setConversations,
-    session?.userId,
-    t,
-  ])
+  }, [activeConversation, backtestCapabilities, setConversations, session?.userId, t])
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId
@@ -654,15 +704,17 @@ export function AiQuantPageClient({
   )
   const deployAccounts = useMemo(() => exchangeAccounts, [exchangeAccounts])
   const deployLeverageOptions = useMemo(() => {
-    const range = activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange
+    const range =
+      activeConversation?.publishedSnapshotDeploymentExecutionConstraints
+        ?.effectiveAllowedLeverageRange
     const options = range
       ? Array.from({ length: range.max - range.min + 1 }).map((_, index) => range.min + index)
       : []
     const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
     if (
-      preferredLeverage !== null
-      && Number.isInteger(preferredLeverage)
-      && !options.includes(preferredLeverage)
+      preferredLeverage !== null &&
+      Number.isInteger(preferredLeverage) &&
+      !options.includes(preferredLeverage)
     ) {
       options.push(preferredLeverage)
       options.sort((a, b) => a - b)
@@ -671,7 +723,8 @@ export function AiQuantPageClient({
   }, [
     activeConversation?.backtestDraftConfig?.execution.leverage,
     activeConversation?.paramValues.backtestLeverage,
-    activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange,
+    activeConversation?.publishedSnapshotDeploymentExecutionConstraints
+      ?.effectiveAllowedLeverageRange,
     activeConversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage,
   ])
 
@@ -689,10 +742,15 @@ export function AiQuantPageClient({
     if (deploymentDetailStatus !== 'ready') {
       return 'unknown' as const
     }
-    if (!isDeploymentDetailForPublishedSnapshot(deploymentDetail, activeConversation?.publishedSnapshotId)) {
+    if (
+      !isDeploymentDetailForPublishedSnapshot(
+        deploymentDetail,
+        activeConversation?.publishedSnapshotId,
+      )
+    ) {
       return 'not_deployed' as const
     }
-    return deploymentDetail?.status === 'running' ? 'running' as const : 'stopped' as const
+    return deploymentDetail?.status === 'running' ? ('running' as const) : ('stopped' as const)
   }, [
     activeConversation?.publishedStrategyInstanceId,
     activeConversation?.publishedSnapshotId,
@@ -714,13 +772,15 @@ export function AiQuantPageClient({
     }
     return t('aiQuant.deploy')
   }, [deploymentDetailStatus, deploymentState, t])
-  const activePublishedDeployTruth = useMemo(() => resolveEffectivePublishedBacktestInputs({
-    publishedSnapshotId: activeConversation?.publishedSnapshotId ?? null,
-    publishedSnapshotStrategyConfig: activeConversation?.publishedSnapshotStrategyConfig ?? null,
-  }), [
-    activeConversation?.publishedSnapshotId,
-    activeConversation?.publishedSnapshotStrategyConfig,
-  ])
+  const activePublishedDeployTruth = useMemo(
+    () =>
+      resolveEffectivePublishedBacktestInputs({
+        publishedSnapshotId: activeConversation?.publishedSnapshotId ?? null,
+        publishedSnapshotStrategyConfig:
+          activeConversation?.publishedSnapshotStrategyConfig ?? null,
+      }),
+    [activeConversation?.publishedSnapshotId, activeConversation?.publishedSnapshotStrategyConfig],
+  )
   const activeBacktestMarketType = useMemo(() => {
     const resultMarketType = activeConversation?.backtestResult?.marketType
     if (resultMarketType === 'spot' || resultMarketType === 'perp') {
@@ -749,10 +809,11 @@ export function AiQuantPageClient({
       ? activeConversation.publishedSnapshotId
       : null
   const clarificationBlocked = activeConversation?.clarificationGate?.blocked === true
-  const semanticViewConfirmable = canConfirmSemanticView({
-    logicGraph: activeConversation?.logicGraph,
-    pendingCanonicalDigest: activeConversation?.pendingCanonicalDigest,
-  }) && !clarificationBlocked
+  const semanticViewConfirmable =
+    canConfirmSemanticView({
+      logicGraph: activeConversation?.logicGraph,
+      pendingCanonicalDigest: activeConversation?.pendingCanonicalDigest,
+    }) && !clarificationBlocked
   const codegenBusy = activeConversation
     ? codegenBusyConversationIds.includes(activeConversation.id)
     : false
@@ -828,7 +889,9 @@ export function AiQuantPageClient({
     }
 
     if (serverOwnedConversations && serverConversationId) {
-      void updateAiQuantConversationBacktestDraft(serverConversationId, backtestDraftConfig).catch(() => {})
+      void updateAiQuantConversationBacktestDraft(serverConversationId, backtestDraftConfig).catch(
+        () => {},
+      )
     }
   }
 
@@ -858,10 +921,7 @@ export function AiQuantPageClient({
         {
           id: `graph-revise-${Date.now()}`,
           role: 'assistant',
-          content: buildStrategyRevisionPromptMessage(
-            curr,
-            t('aiQuant.messages.graphRevise'),
-          ),
+          content: buildStrategyRevisionPromptMessage(curr, t('aiQuant.messages.graphRevise')),
         },
       ],
       updatedAt: Date.now(),
@@ -884,7 +944,10 @@ export function AiQuantPageClient({
     setDeploymentGuardErrorMessage(null)
 
     try {
-      const latestDetail = await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
+      const latestDetail = await fetchAccountAiQuantStrategyDetail(
+        strategyInstanceId,
+        session.userId,
+      )
       if (!isMountedRef.current) return
       setDeploymentDetail(latestDetail)
       setDeploymentDetailStatus('ready')
@@ -1038,53 +1101,68 @@ export function AiQuantPageClient({
     })
 
     try {
-      const detail = activeConversation.id === targetConversation.id
-        && deploymentDetail?.id === strategyInstanceId
-        && deploymentDetailStatus === 'ready'
-        ? deploymentDetail
-        : await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
-      const status = detail.status === 'running' || detail.status === 'stopped' || detail.status === 'draft'
-        ? detail.status
-        : 'unknown'
-      setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
-        ? {
-            ...curr,
-            strategy: detail,
-            status,
-          }
-        : curr)
-    } catch (error) {
-      if (isAccountStrategyNotFoundError(error)) {
-        setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+      const detail =
+        activeConversation.id === targetConversation.id &&
+        deploymentDetail?.id === strategyInstanceId &&
+        deploymentDetailStatus === 'ready'
+          ? deploymentDetail
+          : await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
+      const status =
+        detail.status === 'running' || detail.status === 'stopped' || detail.status === 'draft'
+          ? detail.status
+          : 'unknown'
+      setConversationDeleteDialog(curr =>
+        curr && curr.conversation.id === conversationId
           ? {
               ...curr,
-              strategyInstanceId: '',
-              strategy: null,
-              status: 'conversation-only',
-              pending: false,
-              errorMessage: null,
+              strategy: detail,
+              status,
             }
-          : curr)
+          : curr,
+      )
+    } catch (error) {
+      if (isAccountStrategyNotFoundError(error)) {
+        setConversationDeleteDialog(curr =>
+          curr && curr.conversation.id === conversationId
+            ? {
+                ...curr,
+                strategyInstanceId: '',
+                strategy: null,
+                status: 'conversation-only',
+                pending: false,
+                errorMessage: null,
+              }
+            : curr,
+        )
         return
       }
 
-      setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
-        ? {
-            ...curr,
-            status: 'unknown',
-            errorMessage: error instanceof Error && error.message.trim()
-              ? error.message
-              : t('aiQuant.deleteDialog.unknownDescription'),
-          }
-        : curr)
+      setConversationDeleteDialog(curr =>
+        curr && curr.conversation.id === conversationId
+          ? {
+              ...curr,
+              status: 'unknown',
+              errorMessage:
+                error instanceof Error && error.message.trim()
+                  ? error.message
+                  : t('aiQuant.deleteDialog.unknownDescription'),
+            }
+          : curr,
+      )
     }
   }
 
   async function confirmDeleteConversation() {
     if (!conversationDeleteDialog || conversationDeleteDialog.pending) return
-    if (conversationDeleteDialog.status === 'running' || conversationDeleteDialog.status === 'unknown') return
+    if (
+      conversationDeleteDialog.status === 'running' ||
+      conversationDeleteDialog.status === 'unknown'
+    )
+      return
 
-    setConversationDeleteDialog(curr => curr ? { ...curr, pending: true, errorMessage: null } : curr)
+    setConversationDeleteDialog(curr =>
+      curr ? { ...curr, pending: true, errorMessage: null } : curr,
+    )
     try {
       await deleteConversationByMode({
         conversation: conversationDeleteDialog.conversation,
@@ -1092,21 +1170,26 @@ export function AiQuantPageClient({
         deleteStoppedStrategy: conversationDeleteDialog.deleteStoppedStrategy,
       })
       toast.success({
-        title: t(conversationDeleteDialog.deleteStoppedStrategy
-          ? 'aiQuant.deleteDialog.conversationAndStrategyDeleted'
-          : 'aiQuant.deleteDialog.conversationDeleted'),
+        title: t(
+          conversationDeleteDialog.deleteStoppedStrategy
+            ? 'aiQuant.deleteDialog.conversationAndStrategyDeleted'
+            : 'aiQuant.deleteDialog.conversationDeleted',
+        ),
       })
       setConversationDeleteDialog(null)
     } catch (error) {
-      setConversationDeleteDialog(curr => curr
-        ? {
-            ...curr,
-            pending: false,
-            errorMessage: error instanceof Error && error.message.trim()
-              ? error.message
-              : t('aiQuant.deleteDialog.deleteFailed'),
-          }
-        : curr)
+      setConversationDeleteDialog(curr =>
+        curr
+          ? {
+              ...curr,
+              pending: false,
+              errorMessage:
+                error instanceof Error && error.message.trim()
+                  ? error.message
+                  : t('aiQuant.deleteDialog.deleteFailed'),
+            }
+          : curr,
+      )
     }
   }
 
@@ -1249,12 +1332,14 @@ export function AiQuantPageClient({
     const confirmPattern =
       /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
     if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
-      if (!confirmCurrentLogicGraph({
-        conversationId: currentConversationId,
-        params: currentParams,
-        sessionId: currentSessionId,
-        message: trimmedInput,
-      })) {
+      if (
+        !confirmCurrentLogicGraph({
+          conversationId: currentConversationId,
+          params: currentParams,
+          sessionId: currentSessionId,
+          message: trimmedInput,
+        })
+      ) {
         return
       }
       return
@@ -1314,16 +1399,14 @@ export function AiQuantPageClient({
         ...curr,
         paramValues: nextValues,
         params: normalizeParamsFromValues(nextValues, curr.params),
-        backtestDraftConfig:
-          shouldInvalidateBacktest
-            ? buildBacktestDraftConfigFromValues(nextValues)
-            : curr.backtestDraftConfig,
+        backtestDraftConfig: shouldInvalidateBacktest
+          ? buildBacktestDraftConfigFromValues(nextValues)
+          : curr.backtestDraftConfig,
         backtestResult: shouldInvalidateBacktest ? null : curr.backtestResult,
         backtestExecutionState: shouldInvalidateBacktest ? 'idle' : curr.backtestExecutionState,
-        backtestExecutionConfigExplicit:
-          BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
-            ? hasExplicitBacktestExecutionOverrides(nextValues)
-            : curr.backtestExecutionConfigExplicit,
+        backtestExecutionConfigExplicit: BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
+          ? hasExplicitBacktestExecutionOverrides(nextValues)
+          : curr.backtestExecutionConfigExplicit,
         updatedAt: Date.now(),
       }
       return shouldInvalidatePublicationForParamChange(key)
@@ -1345,22 +1428,25 @@ export function AiQuantPageClient({
     const prompt = `${presetName}：${nextParams.buyWindowMin}m drop ${nextParams.buyDropPct}% buy`
 
     updateActiveConversation(curr => ({
-      ...invalidateConversationPublication({
-        ...curr,
-        params: nextParams,
-        paramValues: { ...curr.paramValues, ...nextParams },
-        messages: [
-          ...curr.messages,
-          {
-            id: `pick-${Date.now()}`,
-            role: 'assistant',
-            content: fromLoginIntent
-              ? t('aiQuant.messages.restorePreset', { name: presetName })
-              : t('aiQuant.messages.applyPreset', { name: presetName }),
-          },
-        ],
-        updatedAt: Date.now(),
-      }, { markGraphDraft: true }),
+      ...invalidateConversationPublication(
+        {
+          ...curr,
+          params: nextParams,
+          paramValues: { ...curr.paramValues, ...nextParams },
+          messages: [
+            ...curr.messages,
+            {
+              id: `pick-${Date.now()}`,
+              role: 'assistant',
+              content: fromLoginIntent
+                ? t('aiQuant.messages.restorePreset', { name: presetName })
+                : t('aiQuant.messages.applyPreset', { name: presetName }),
+            },
+          ],
+          updatedAt: Date.now(),
+        },
+        { markGraphDraft: true },
+      ),
     }))
 
     void requestBackendGraphGeneration({
@@ -1385,22 +1471,25 @@ export function AiQuantPageClient({
     const prompt = `${presetName}, generate logic graph`
 
     updateActiveConversation(curr => ({
-      ...invalidateConversationPublication({
-        ...curr,
-        params: nextParams,
-        paramValues: { ...curr.paramValues, ...nextParams },
-        messages: [
-          ...curr.messages,
-          {
-            id: `run-pick-${Date.now()}`,
-            role: 'assistant',
-            content: fromLoginIntent
-              ? t('aiQuant.messages.restoreRun', { name: presetName })
-              : t('aiQuant.messages.applyRun', { name: presetName }),
-          },
-        ],
-        updatedAt: Date.now(),
-      }, { markGraphDraft: true }),
+      ...invalidateConversationPublication(
+        {
+          ...curr,
+          params: nextParams,
+          paramValues: { ...curr.paramValues, ...nextParams },
+          messages: [
+            ...curr.messages,
+            {
+              id: `run-pick-${Date.now()}`,
+              role: 'assistant',
+              content: fromLoginIntent
+                ? t('aiQuant.messages.restoreRun', { name: presetName })
+                : t('aiQuant.messages.applyRun', { name: presetName }),
+            },
+          ],
+          updatedAt: Date.now(),
+        },
+        { markGraphDraft: true },
+      ),
     }))
 
     void requestBackendGraphGeneration({
@@ -1429,9 +1518,21 @@ export function AiQuantPageClient({
     })
   }
 
-  const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
+  const goLoginWithPlazaIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
-    openAuth({ lng, redirect: `/${lng}/ai-quant` })
+    openAuth({ lng, redirect: `/${lng}/ai-quant/plaza` })
+  }
+
+  const runGuestPlazaTemplate = (templateId: string) => {
+    setGuestPlazaPendingTemplateId(templateId)
+    setGuestPlazaPendingAction('run')
+    goLoginWithPlazaIntent({ type: 'plaza-run', templateId })
+  }
+
+  const editGuestPlazaTemplate = (templateId: string) => {
+    setGuestPlazaPendingTemplateId(templateId)
+    setGuestPlazaPendingAction('edit')
+    goLoginWithPlazaIntent({ type: 'plaza-edit', templateId })
   }
 
   useEffect(() => {
@@ -1444,8 +1545,10 @@ export function AiQuantPageClient({
     }
 
     if (intent.type === 'plaza-chat-session') {
-      const targetConversation = conversations.find(conversation =>
-        conversation.llmCodegenSessionId === intent.sessionId || conversation.id === intent.sessionId,
+      const targetConversation = conversations.find(
+        conversation =>
+          conversation.llmCodegenSessionId === intent.sessionId ||
+          conversation.id === intent.sessionId,
       )
       if (!targetConversation) return
       clearIntent()
@@ -1562,12 +1665,29 @@ export function AiQuantPageClient({
       <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
         <Link
           href={returnHref}
-          className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
           <ChevronLeft className="h-4 w-4" />
           <span>{lng === 'en' ? 'Back' : '返回'}</span>
         </Link>
-        <GuestAiQuantLanding onRequireLogin={goLoginWithIntent} />
+        <div>
+          <h1 className="!text-3xl !leading-10 !font-semibold text-[color:var(--cf-text-strong)]">
+            {t('aiQuant.plaza')}
+          </h1>
+          <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
+            {t('aiQuant.guestLanding.plazaSubtitle')}
+          </p>
+        </div>
+        <StrategyPlaza
+          templates={guestPlazaTemplates}
+          loading={guestPlazaLoading}
+          error={guestPlazaError}
+          actionError={null}
+          pendingTemplateId={guestPlazaPendingTemplateId}
+          pendingAction={guestPlazaPendingAction}
+          onRunStrategy={runGuestPlazaTemplate}
+          onEditStrategy={editGuestPlazaTemplate}
+        />
       </main>
     )
   }
@@ -1611,12 +1731,14 @@ export function AiQuantPageClient({
         </Link>
         <div className="min-w-0 text-center leading-none">
           <div className="flex items-center justify-center gap-1.5">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="bg-primary/10 text-primary inline-flex h-6 w-6 items-center justify-center rounded-lg">
               <Bot className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.chatTitle')}</span>
+            <span className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">
+              {t('aiQuant.chatTitle')}
+            </span>
           </div>
-          <div className="mt-1 truncate text-[11px] font-medium leading-none text-[color:var(--cf-muted)]">
+          <div className="mt-1 truncate text-[11px] leading-none font-medium text-[color:var(--cf-muted)]">
             {activeConversation.title}
           </div>
         </div>
@@ -1625,7 +1747,7 @@ export function AiQuantPageClient({
           data-testid="mobile-create-conversation-header"
           onClick={() => setMobileConversationSheetOpen(true)}
           aria-label={t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
-          className="absolute right-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-primary shadow-sm"
+          className="text-primary absolute right-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] shadow-sm"
         >
           <MessageSquarePlus className="h-5 w-5" />
         </button>
@@ -1643,7 +1765,7 @@ export function AiQuantPageClient({
           <Link
             href={`/${lng}/ai-quant/plaza`}
             data-testid="ai-quant-header-plaza-link"
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <Sparkles className="h-4 w-4" />
             <span>{t('aiQuant.plazaShort')}</span>
@@ -1651,7 +1773,7 @@ export function AiQuantPageClient({
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
             data-testid="ai-quant-header-api-link"
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <KeyRound className="h-4 w-4" />
             <span>{t('aiQuant.configApiShort')}</span>
@@ -1661,15 +1783,17 @@ export function AiQuantPageClient({
 
       <div className="hidden flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex">
         <div className="min-w-0">
-          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
+          <h1 className="!text-base !leading-6 !font-semibold text-[color:var(--cf-text-strong)]">
             {t('aiQuant.title')}
           </h1>
-          <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">{t('aiQuant.subtitle')}</p>
+          <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
+            {t('aiQuant.subtitle')}
+          </p>
         </div>
         <div className="hidden items-center justify-end gap-2 sm:flex sm:shrink-0">
           <Link
             href={`/${lng}/ai-quant/plaza`}
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <Sparkles className="h-4 w-4" />
             <span className="sm:hidden">{t('aiQuant.plazaShort')}</span>
@@ -1677,7 +1801,7 @@ export function AiQuantPageClient({
           </Link>
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <KeyRound className="h-4 w-4" />
             <span className="sm:hidden">{t('aiQuant.configApiShort')}</span>
@@ -1692,12 +1816,13 @@ export function AiQuantPageClient({
           className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
         >
           {t('aiQuant.messages.conversationSyncFailed', {
-            defaultValue: 'Unable to load saved AI Quant conversations. A fresh chat has been opened.',
+            defaultValue:
+              'Unable to load saved AI Quant conversations. A fresh chat has been opened.',
           })}
         </div>
       )}
 
-      <div className="grid min-h-0 gap-0 md:gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="grid min-h-0 gap-0 md:grid-cols-[280px_minmax(0,1fr)] md:gap-4">
         <ConversationSidebar
           items={conversations.map(x => ({ id: x.id, title: x.title, updatedAt: x.updatedAt }))}
           activeId={activeConversation.id}
@@ -1731,7 +1856,7 @@ export function AiQuantPageClient({
             compactMode={compactMode}
             onClarificationAnswer={onClarificationAnswer}
             onParamChange={onParamChange}
-            onConfirmBacktestParams={(nextDraftValues) => {
+            onConfirmBacktestParams={nextDraftValues => {
               invalidateActiveConversationBacktestRecovery()
               updateActiveConversation(curr => {
                 const requestedValues = { ...curr.paramValues, ...nextDraftValues }
@@ -1784,7 +1909,7 @@ export function AiQuantPageClient({
                   key={tab.key}
                   type="button"
                   onClick={() => setRightPanelTab(tab.key)}
-                  className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition ${
+                  className={`rounded-full border px-3.5 py-1.5 !text-xs !leading-5 !font-semibold transition ${
                     rightPanelTab === tab.key
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
@@ -1801,109 +1926,106 @@ export function AiQuantPageClient({
               </div>
             )}
 
-            {rightPanelTab === 'logic'
-              ? activeConversation.logicGraph && displayLogicGraph
-                ? (
-                    <DisplayLogicGraphPreview
-                      graph={displayLogicGraph}
-                      confirmDisabled={
-                        codegenBusy ||
-                        activeConversation.logicGraph.status === 'confirmed' ||
-                        !semanticViewConfirmable
-                      }
-                      confirmed={activeConversation.logicGraph.status === 'confirmed'}
-                      publishedSnapshotId={activePublishedSnapshotId}
-                      onConfirm={() => {
-                        confirmCurrentLogicGraph({
-                          conversationId: activeConversation.id,
-                          params: activeConversation.params,
-                          sessionId: activeConversation.llmCodegenSessionId,
-                          message: t('aiQuant.messages.confirmGenerate', {
-                            defaultValue: 'Confirm code generation',
-                          }),
-                        })
-                      }}
-                      onRevise={requestLogicGraphRevision}
-                    />
+            {rightPanelTab === 'logic' ? (
+              activeConversation.logicGraph && displayLogicGraph ? (
+                <DisplayLogicGraphPreview
+                  graph={displayLogicGraph}
+                  confirmDisabled={
+                    codegenBusy ||
+                    activeConversation.logicGraph.status === 'confirmed' ||
+                    !semanticViewConfirmable
+                  }
+                  confirmed={activeConversation.logicGraph.status === 'confirmed'}
+                  publishedSnapshotId={activePublishedSnapshotId}
+                  onConfirm={() => {
+                    confirmCurrentLogicGraph({
+                      conversationId: activeConversation.id,
+                      params: activeConversation.params,
+                      sessionId: activeConversation.llmCodegenSessionId,
+                      message: t('aiQuant.messages.confirmGenerate', {
+                        defaultValue: 'Confirm code generation',
+                      }),
+                    })
+                  }}
+                  onRevise={requestLogicGraphRevision}
+                />
+              ) : activeConversation.logicGraph ? (
+                <LogicGraphPreview
+                  graph={activeConversation.logicGraph}
+                  confirmDisabled={
+                    codegenBusy ||
+                    activeConversation.logicGraph.status === 'confirmed' ||
+                    !semanticViewConfirmable
+                  }
+                  publishedSnapshotId={activePublishedSnapshotId}
+                  onConfirm={() => {
+                    confirmCurrentLogicGraph({
+                      conversationId: activeConversation.id,
+                      params: activeConversation.params,
+                      sessionId: activeConversation.llmCodegenSessionId,
+                      message: t('aiQuant.messages.confirmGenerate', {
+                        defaultValue: 'Confirm code generation',
+                      }),
+                    })
+                  }}
+                  onRevise={requestLogicGraphRevision}
+                />
+              ) : (
+                <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !leading-[22px] !font-normal text-[color:var(--cf-muted)]">
+                  {t('aiQuant.messages.logicGraphEmpty', {
+                    defaultValue: '描述策略想法后，逻辑图会显示在这里。',
+                  })}
+                </section>
+              )
+            ) : activeConversation.backtestResult ? (
+              <BacktestSummaryCard
+                result={activeConversation.backtestResult}
+                marketType={activeBacktestMarketType}
+                canDeploy={canDeploy}
+                deploymentState={deploymentState}
+                deployLabel={deployLabel}
+                drawdownLimited
+                onViewRunningStrategy={
+                  deploymentState === 'running' ? viewRunningStrategy : undefined
+                }
+                onOpenFullScreen={() => {
+                  const currentBacktest = activeConversation.backtestResult
+                  if (!currentBacktest) {
+                    return
+                  }
+                  const search = new URLSearchParams()
+                  search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
+                  if (currentBacktest.startAt) {
+                    search.set('startAt', currentBacktest.startAt)
+                  }
+                  if (currentBacktest.endAt) {
+                    search.set('endAt', currentBacktest.endAt)
+                  }
+                  router.push(
+                    `/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`,
                   )
-                : activeConversation.logicGraph
-                  ? (
-                      <LogicGraphPreview
-                        graph={activeConversation.logicGraph}
-                        confirmDisabled={
-                          codegenBusy ||
-                          activeConversation.logicGraph.status === 'confirmed' ||
-                          !semanticViewConfirmable
-                        }
-                        publishedSnapshotId={activePublishedSnapshotId}
-                        onConfirm={() => {
-                          confirmCurrentLogicGraph({
-                            conversationId: activeConversation.id,
-                            params: activeConversation.params,
-                            sessionId: activeConversation.llmCodegenSessionId,
-                            message: t('aiQuant.messages.confirmGenerate', {
-                              defaultValue: 'Confirm code generation',
-                            }),
-                          })
-                        }}
-                        onRevise={requestLogicGraphRevision}
-                      />
-                    )
-                  : (
-                      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
-                        {t('aiQuant.messages.logicGraphEmpty', {
-                          defaultValue: '描述策略想法后，逻辑图会显示在这里。',
-                        })}
-                      </section>
-                    )
-              : activeConversation.backtestResult
-                ? (
-                    <BacktestSummaryCard
-                      result={activeConversation.backtestResult}
-                      marketType={activeBacktestMarketType}
-                      canDeploy={canDeploy}
-                      deploymentState={deploymentState}
-                      deployLabel={deployLabel}
-                      drawdownLimited
-                      onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
-                      onOpenFullScreen={() => {
-                        const currentBacktest = activeConversation.backtestResult
-                        if (!currentBacktest) {
-                          return
-                        }
-                        const search = new URLSearchParams()
-                        search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
-                        if (currentBacktest.startAt) {
-                          search.set('startAt', currentBacktest.startAt)
-                        }
-                        if (currentBacktest.endAt) {
-                          search.set('endAt', currentBacktest.endAt)
-                        }
-                        router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
-                      }}
-                      onDeploy={() => {
-                        if (deploymentState === 'running' || deploymentState === 'unknown') {
-                          return
-                        }
-                        setDeployRequestId(createDeployRequestId())
-                        const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
-                        setSelectedDeployLeverage(
-                          activePublishedDeployTruth?.marketType === 'perp'
-                            && preferredLeverage !== null
-                            ? preferredLeverage
-                            : null,
-                        )
-                        setDeployOpen(true)
-                      }}
-                    />
+                }}
+                onDeploy={() => {
+                  if (deploymentState === 'running' || deploymentState === 'unknown') {
+                    return
+                  }
+                  setDeployRequestId(createDeployRequestId())
+                  const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
+                  setSelectedDeployLeverage(
+                    activePublishedDeployTruth?.marketType === 'perp' && preferredLeverage !== null
+                      ? preferredLeverage
+                      : null,
                   )
-                : (
-                    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
-                      {t('aiQuant.messages.backtestResultEmpty', {
-                        defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
-                      })}
-                    </section>
-                  )}
+                  setDeployOpen(true)
+                }}
+              />
+            ) : (
+              <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !leading-[22px] !font-normal text-[color:var(--cf-muted)]">
+                {t('aiQuant.messages.backtestResultEmpty', {
+                  defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
+                })}
+              </section>
+            )}
           </div>
         </div>
       </div>
@@ -1929,7 +2051,7 @@ export function AiQuantPageClient({
                 <button
                   type="button"
                   onClick={() => setRightPanelTab('logic')}
-                  className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 ${
+                  className={`rounded-full border px-3.5 py-1.5 !text-xs !leading-5 !font-semibold ${
                     rightPanelTab === 'logic'
                       ? 'border-primary bg-primary text-white'
                       : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
@@ -1940,7 +2062,7 @@ export function AiQuantPageClient({
                 <button
                   type="button"
                   onClick={() => setRightPanelTab('backtest')}
-                  className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 ${
+                  className={`rounded-full border px-3.5 py-1.5 !text-xs !leading-5 !font-semibold ${
                     rightPanelTab === 'backtest'
                       ? 'border-primary bg-primary text-white'
                       : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
@@ -1959,111 +2081,109 @@ export function AiQuantPageClient({
               </button>
             </div>
             <div className="max-h-[calc(82dvh-4.75rem)] overflow-y-auto">
-              {rightPanelTab === 'logic'
-                ? activeConversation.logicGraph && displayLogicGraph
-                  ? (
-                      <DisplayLogicGraphPreview
-                        graph={displayLogicGraph}
-                        confirmDisabled={
-                          codegenBusy ||
-                          activeConversation.logicGraph.status === 'confirmed' ||
-                          !semanticViewConfirmable
-                        }
-                        confirmed={activeConversation.logicGraph.status === 'confirmed'}
-                        publishedSnapshotId={activePublishedSnapshotId}
-                        onConfirm={() => {
-                          confirmCurrentLogicGraph({
-                            conversationId: activeConversation.id,
-                            params: activeConversation.params,
-                            sessionId: activeConversation.llmCodegenSessionId,
-                            message: t('aiQuant.messages.confirmGenerate', {
-                              defaultValue: 'Confirm code generation',
-                            }),
-                          })
-                        }}
-                        onRevise={requestLogicGraphRevision}
-                      />
+              {rightPanelTab === 'logic' ? (
+                activeConversation.logicGraph && displayLogicGraph ? (
+                  <DisplayLogicGraphPreview
+                    graph={displayLogicGraph}
+                    confirmDisabled={
+                      codegenBusy ||
+                      activeConversation.logicGraph.status === 'confirmed' ||
+                      !semanticViewConfirmable
+                    }
+                    confirmed={activeConversation.logicGraph.status === 'confirmed'}
+                    publishedSnapshotId={activePublishedSnapshotId}
+                    onConfirm={() => {
+                      confirmCurrentLogicGraph({
+                        conversationId: activeConversation.id,
+                        params: activeConversation.params,
+                        sessionId: activeConversation.llmCodegenSessionId,
+                        message: t('aiQuant.messages.confirmGenerate', {
+                          defaultValue: 'Confirm code generation',
+                        }),
+                      })
+                    }}
+                    onRevise={requestLogicGraphRevision}
+                  />
+                ) : activeConversation.logicGraph ? (
+                  <LogicGraphPreview
+                    graph={activeConversation.logicGraph}
+                    confirmDisabled={
+                      codegenBusy ||
+                      activeConversation.logicGraph.status === 'confirmed' ||
+                      !semanticViewConfirmable
+                    }
+                    publishedSnapshotId={activePublishedSnapshotId}
+                    onConfirm={() => {
+                      confirmCurrentLogicGraph({
+                        conversationId: activeConversation.id,
+                        params: activeConversation.params,
+                        sessionId: activeConversation.llmCodegenSessionId,
+                        message: t('aiQuant.messages.confirmGenerate', {
+                          defaultValue: 'Confirm code generation',
+                        }),
+                      })
+                    }}
+                    onRevise={requestLogicGraphRevision}
+                  />
+                ) : (
+                  <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !leading-[22px] !font-normal text-[color:var(--cf-muted)]">
+                    {t('aiQuant.messages.logicGraphEmpty', {
+                      defaultValue: '描述策略想法后，逻辑图会显示在这里。',
+                    })}
+                  </section>
+                )
+              ) : activeConversation.backtestResult ? (
+                <BacktestSummaryCard
+                  result={activeConversation.backtestResult}
+                  marketType={activeBacktestMarketType}
+                  canDeploy={canDeploy}
+                  deploymentState={deploymentState}
+                  deployLabel={deployLabel}
+                  fullScreenButtonClassName="mr-5"
+                  drawdownLimited
+                  onViewRunningStrategy={
+                    deploymentState === 'running' ? viewRunningStrategy : undefined
+                  }
+                  onOpenFullScreen={() => {
+                    const currentBacktest = activeConversation.backtestResult
+                    if (!currentBacktest) {
+                      return
+                    }
+                    const search = new URLSearchParams()
+                    search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
+                    if (currentBacktest.startAt) {
+                      search.set('startAt', currentBacktest.startAt)
+                    }
+                    if (currentBacktest.endAt) {
+                      search.set('endAt', currentBacktest.endAt)
+                    }
+                    router.push(
+                      `/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`,
                     )
-                  : activeConversation.logicGraph
-                    ? (
-                        <LogicGraphPreview
-                          graph={activeConversation.logicGraph}
-                          confirmDisabled={
-                            codegenBusy ||
-                            activeConversation.logicGraph.status === 'confirmed' ||
-                            !semanticViewConfirmable
-                          }
-                          publishedSnapshotId={activePublishedSnapshotId}
-                          onConfirm={() => {
-                            confirmCurrentLogicGraph({
-                              conversationId: activeConversation.id,
-                              params: activeConversation.params,
-                              sessionId: activeConversation.llmCodegenSessionId,
-                              message: t('aiQuant.messages.confirmGenerate', {
-                                defaultValue: 'Confirm code generation',
-                              }),
-                            })
-                          }}
-                          onRevise={requestLogicGraphRevision}
-                        />
-                      )
-                    : (
-                        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
-                          {t('aiQuant.messages.logicGraphEmpty', {
-                            defaultValue: '描述策略想法后，逻辑图会显示在这里。',
-                          })}
-                        </section>
-                      )
-                : activeConversation.backtestResult
-                  ? (
-                      <BacktestSummaryCard
-                        result={activeConversation.backtestResult}
-                        marketType={activeBacktestMarketType}
-                        canDeploy={canDeploy}
-                        deploymentState={deploymentState}
-                        deployLabel={deployLabel}
-                        fullScreenButtonClassName="mr-5"
-                        drawdownLimited
-                        onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
-                        onOpenFullScreen={() => {
-                          const currentBacktest = activeConversation.backtestResult
-                          if (!currentBacktest) {
-                            return
-                          }
-                          const search = new URLSearchParams()
-                          search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
-                          if (currentBacktest.startAt) {
-                            search.set('startAt', currentBacktest.startAt)
-                          }
-                          if (currentBacktest.endAt) {
-                            search.set('endAt', currentBacktest.endAt)
-                          }
-                          router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
-                        }}
-                        onDeploy={() => {
-                          if (deploymentState === 'running' || deploymentState === 'unknown') {
-                            return
-                          }
-                          setMobilePanelSheetOpen(false)
-                          setDeployRequestId(createDeployRequestId())
-                          const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
-                          setSelectedDeployLeverage(
-                            activePublishedDeployTruth?.marketType === 'perp'
-                              && preferredLeverage !== null
-                              ? preferredLeverage
-                              : null,
-                          )
-                          setDeployOpen(true)
-                        }}
-                      />
+                  }}
+                  onDeploy={() => {
+                    if (deploymentState === 'running' || deploymentState === 'unknown') {
+                      return
+                    }
+                    setMobilePanelSheetOpen(false)
+                    setDeployRequestId(createDeployRequestId())
+                    const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
+                    setSelectedDeployLeverage(
+                      activePublishedDeployTruth?.marketType === 'perp' &&
+                        preferredLeverage !== null
+                        ? preferredLeverage
+                        : null,
                     )
-                  : (
-                      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
-                        {t('aiQuant.messages.backtestResultEmpty', {
-                          defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
-                        })}
-                      </section>
-                    )}
+                    setDeployOpen(true)
+                  }}
+                />
+              ) : (
+                <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !leading-[22px] !font-normal text-[color:var(--cf-muted)]">
+                  {t('aiQuant.messages.backtestResultEmpty', {
+                    defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
+                  })}
+                </section>
+              )}
             </div>
           </div>
         </div>
@@ -2121,20 +2241,22 @@ export function AiQuantPageClient({
         })()}
         pending={conversationDeleteDialog?.pending ?? false}
         errorMessage={conversationDeleteDialog?.errorMessage ?? null}
-        conversation={conversationDeleteDialog
-          ? { title: conversationDeleteDialog.conversation.title }
-          : null}
-        strategy={conversationDeleteDialog && conversationDeleteDialog.strategyInstanceId
-          ? {
-              name: conversationDeleteDialog.strategy?.name ?? null,
-              id: conversationDeleteDialog.strategyInstanceId,
-            }
-          : undefined}
+        conversation={
+          conversationDeleteDialog ? { title: conversationDeleteDialog.conversation.title } : null
+        }
+        strategy={
+          conversationDeleteDialog && conversationDeleteDialog.strategyInstanceId
+            ? {
+                name: conversationDeleteDialog.strategy?.name ?? null,
+                id: conversationDeleteDialog.strategyInstanceId,
+              }
+            : undefined
+        }
         deleteStoppedStrategy={conversationDeleteDialog?.deleteStoppedStrategy ?? false}
-        onToggleDeleteStoppedStrategy={(next) => {
-          setConversationDeleteDialog(curr => curr
-            ? { ...curr, deleteStoppedStrategy: next }
-            : curr)
+        onToggleDeleteStoppedStrategy={next => {
+          setConversationDeleteDialog(curr =>
+            curr ? { ...curr, deleteStoppedStrategy: next } : curr,
+          )
         }}
         onConfirm={() => {
           if (!conversationDeleteDialog) return
@@ -2171,10 +2293,15 @@ export function AiQuantPageClient({
         marketType={activePublishedDeployTruth?.marketType ?? null}
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
-        leverageOptions={activePublishedDeployTruth?.marketType === 'perp' ? deployLeverageOptions : []}
+        leverageOptions={
+          activePublishedDeployTruth?.marketType === 'perp' ? deployLeverageOptions : []
+        }
         selectedLeverage={selectedDeployLeverage ?? undefined}
         onSelectLeverage={setSelectedDeployLeverage}
-        leverageExplanation={activeConversation.publishedSnapshotDeploymentExecutionConstraints?.constraintExplanation ?? null}
+        leverageExplanation={
+          activeConversation.publishedSnapshotDeploymentExecutionConstraints
+            ?.constraintExplanation ?? null
+        }
         deploymentBaseline={activeConversation.publishedSnapshotDeploymentExecutionDefaults ?? null}
         mode={deploymentState === 'stopped' ? 'redeploy' : 'deploy'}
         driftReasons={[]}
