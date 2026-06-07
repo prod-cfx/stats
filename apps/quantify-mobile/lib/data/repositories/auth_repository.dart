@@ -14,5 +14,9 @@ abstract class AuthRepository {
     required String email,
     required String code,
   });
+  Future<AuthSession> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  });
+  Future<AuthSession> loginGuest();
   Future<void> logout();
 }

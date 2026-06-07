@@ -236,6 +236,20 @@ export class AuthController {
     return this.userAuthService.telegramExchange(dto)
   }
 
+  @Post('guest')
+  @UseGuards(AuthRateLimitGuard)
+  @Transactional()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '游客登录换取会话' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '游客登录成功',
+    schema: buildBaseResponseSchema(AuthResponseDto),
+  })
+  async loginGuest(): Promise<AuthResponseDto> {
+    return this.userAuthService.loginGuest()
+  }
+
   @Post('register')
   @UseGuards(AuthRateLimitGuard)
   @Transactional()

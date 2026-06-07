@@ -62,6 +62,7 @@ const TELEGRAM_AUTH_MAX_AGE_SECONDS = 5 * 60
 const TELEGRAM_DESKTOP_INTENT_PREFIX = 'tg_login_'
 const TELEGRAM_DESKTOP_INTENT_TTL_SECONDS = 5 * 60
 const TELEGRAM_BOT_NAME_CACHE_TTL_SECONDS = 60 * 10
+const GUEST_PLACEHOLDER_DOMAIN = 'guest.local'
 
 interface TelegramDesktopIntentPayload {
   status: 'pending' | 'confirmed'
@@ -533,6 +534,13 @@ export class UserAuthService {
     return this.buildAuthResponse(user, roles)
   }
 
+  async loginGuest(): Promise<AuthResponseDto> {
+    const user = await this.createGuestUser()
+    await this.ensureDefaultRoleAssignment(user.id)
+    const roles = await this.getUserRoles(user.id)
+    return this.buildAuthResponse(user, roles)
+  }
+
   async bindEmail(userId: string, dto: BindEmailRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
 
@@ -942,6 +950,21 @@ export class UserAuthService {
 
     await this.ensureDefaultRoleAssignment(user.id)
     return user
+  }
+
+  private async createGuestUser() {
+    const guestId = randomBytes(16).toString('hex')
+    const email = `guest_${guestId}@${GUEST_PLACEHOLDER_DOMAIN}`
+    const passwordHash = await hash(`guest:${guestId}:${Date.now()}`, PASSWORD_SALT_ROUNDS)
+
+    return this.userAuthRepository.createUser({
+      email,
+      passwordHash,
+      nickname: 'Guest',
+      emailVerified: false,
+      emailVerifiedAt: null,
+      isGuest: true,
+    })
   }
 
   /**

@@ -12,6 +12,7 @@ describe('authController after-commit metadata', () => {
 
   it('does not mark routes without afterCommit tasks', () => {
     expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.login)).toBeUndefined()
+    expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.loginGuest)).toBeUndefined()
     expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.register)).toBeUndefined()
   })
 })

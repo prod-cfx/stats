@@ -1,6 +1,9 @@
 import '../models/auth_models.dart';
 import '../repositories/auth_repository.dart';
 
+const String _telegramMockEmail = 'telegram-user@mock';
+const String _guestMockEmail = 'guest@quantify.local';
+
 /// AuthRepository 的 Mock 闭环实现，作为模式示例。
 /// - 任意凭据登录成功（200ms 延迟）
 /// - 纯 stateless：不持有会话内存态，会话真相源为 SessionController（issue #2262）
@@ -13,11 +16,7 @@ class MockAuthRepository implements AuthRepository {
     required String password,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    return AuthSession(
-      userId: 'mock-user',
-      token: 'mock-token',
-      email: email,
-    );
+    return AuthSession(userId: 'mock-user', token: 'mock-token', email: email);
   }
 
   @override
@@ -28,11 +27,7 @@ class MockAuthRepository implements AuthRepository {
     String? betaCode,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    return AuthSession(
-      userId: 'mock-user',
-      token: 'mock-token',
-      email: email,
-    );
+    return AuthSession(userId: 'mock-user', token: 'mock-token', email: email);
   }
 
   @override
@@ -54,10 +49,29 @@ class MockAuthRepository implements AuthRepository {
     if (!_emailsWithLoginCode.contains(normalizedEmail)) {
       throw StateError('请先发送验证码');
     }
-    return AuthSession(
-      userId: 'mock-user',
+    return AuthSession(userId: 'mock-user', token: 'mock-token', email: email);
+  }
+
+  @override
+  Future<AuthSession> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    return const AuthSession(
+      userId: 'mock-telegram-user',
       token: 'mock-token',
-      email: email,
+      email: _telegramMockEmail,
+    );
+  }
+
+  @override
+  Future<AuthSession> loginGuest() async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    return const AuthSession(
+      userId: 'guest-mock',
+      token: 'guest-mock-token',
+      email: _guestMockEmail,
+      isGuest: true,
     );
   }
 

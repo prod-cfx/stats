@@ -7,14 +7,62 @@ import 'package:quantify_mobile/data/auth/session_controller.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/auth_repository.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 
-ProviderContainer _container({InMemoryTokenStorage? storage}) {
+class _RecordingAuthRepository extends MockAuthRepository {
+  _RecordingAuthRepository({this.telegramError, this.guestError});
+
+  Object? telegramError;
+  Object? guestError;
+  int emailLoginCalls = 0;
+  int telegramCalls = 0;
+  int guestCalls = 0;
+
+  @override
+  Future<AuthSession> login({
+    required String email,
+    required String password,
+  }) async {
+    emailLoginCalls++;
+    return super.login(email: email, password: password);
+  }
+
+  @override
+  Future<AuthSession> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) async {
+    telegramCalls++;
+    if (telegramError != null) throw telegramError!;
+    return const AuthSession(
+      userId: 'tg-real-user',
+      token: 'tg-real-token',
+      email: 'tg-real@example.com',
+    );
+  }
+
+  @override
+  Future<AuthSession> loginGuest() async {
+    guestCalls++;
+    if (guestError != null) throw guestError!;
+    return const AuthSession(
+      userId: 'guest-real-user',
+      token: 'guest-real-token',
+      email: 'guest-real@example.com',
+      isGuest: true,
+    );
+  }
+}
+
+ProviderContainer _container({
+  InMemoryTokenStorage? storage,
+  AuthRepository? repo,
+}) {
   final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
   return ProviderContainer(
     overrides: <Override>[
       tokenStorageProvider.overrideWithValue(s),
-      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      authRepositoryProvider.overrideWithValue(repo ?? MockAuthRepository()),
     ],
   );
 }
@@ -112,11 +160,9 @@ void main() {
       addTearDown(c.dispose);
 
       await c.read(sessionControllerProvider.future);
-      await c.read(sessionControllerProvider.notifier).register(
-            email: 'reg@y.com',
-            password: 'pwpwpwpw',
-            betaCode: 'BETA',
-          );
+      await c
+          .read(sessionControllerProvider.notifier)
+          .register(email: 'reg@y.com', password: 'pwpwpwpw', betaCode: 'BETA');
 
       final AuthSession? cur = c.read(sessionControllerProvider).value;
       expect(cur, isNotNull);
@@ -129,9 +175,10 @@ void main() {
       expect(persisted['token'], 'mock-token');
     });
 
-    test('loginTelegram 走 mock email 通道', () async {
+    test('loginTelegram 调 repository，不走 mock email 空密码通道', () async {
       final InMemoryTokenStorage storage = InMemoryTokenStorage();
-      final ProviderContainer c = _container(storage: storage);
+      final _RecordingAuthRepository repo = _RecordingAuthRepository();
+      final ProviderContainer c = _container(storage: storage, repo: repo);
       addTearDown(c.dispose);
 
       await c.read(sessionControllerProvider.future);
@@ -139,7 +186,59 @@ void main() {
 
       final AuthSession? cur = c.read(sessionControllerProvider).value;
       expect(cur, isNotNull);
-      expect(cur!.email, kTelegramMockEmail);
+      expect(cur!.email, 'tg-real@example.com');
+      expect(cur.token, 'tg-real-token');
+      expect(repo.telegramCalls, 1);
+      expect(repo.emailLoginCalls, 0);
+      expect(storage.snapshot[kSessionStorageKey], isNotNull);
+    });
+
+    test('loginGuest 调 repository，不构造 guest-local token', () async {
+      final InMemoryTokenStorage storage = InMemoryTokenStorage();
+      final _RecordingAuthRepository repo = _RecordingAuthRepository();
+      final ProviderContainer c = _container(storage: storage, repo: repo);
+      addTearDown(c.dispose);
+
+      await c.read(sessionControllerProvider.future);
+      await c.read(sessionControllerProvider.notifier).loginGuest();
+
+      final AuthSession? cur = c.read(sessionControllerProvider).value;
+      expect(cur, isNotNull);
+      expect(cur!.isGuest, isTrue);
+      expect(cur.token, 'guest-real-token');
+      expect(cur.token, isNot('guest-local'));
+      expect(repo.guestCalls, 1);
+      expect(storage.snapshot[kSessionStorageKey], isNotNull);
+    });
+
+    test('loginTelegram 失败不写入 storage，保持未登录错误态', () async {
+      final InMemoryTokenStorage storage = InMemoryTokenStorage();
+      final _RecordingAuthRepository repo = _RecordingAuthRepository(
+        telegramError: StateError('telegram unavailable'),
+      );
+      final ProviderContainer c = _container(storage: storage, repo: repo);
+      addTearDown(c.dispose);
+
+      await c.read(sessionControllerProvider.future);
+      await c.read(sessionControllerProvider.notifier).loginTelegram();
+
+      expect(c.read(sessionControllerProvider).hasError, isTrue);
+      expect(storage.snapshot.containsKey(kSessionStorageKey), isFalse);
+    });
+
+    test('loginGuest 失败不写入 storage，保持未登录错误态', () async {
+      final InMemoryTokenStorage storage = InMemoryTokenStorage();
+      final _RecordingAuthRepository repo = _RecordingAuthRepository(
+        guestError: StateError('guest unavailable'),
+      );
+      final ProviderContainer c = _container(storage: storage, repo: repo);
+      addTearDown(c.dispose);
+
+      await c.read(sessionControllerProvider.future);
+      await c.read(sessionControllerProvider.notifier).loginGuest();
+
+      expect(c.read(sessionControllerProvider).hasError, isTrue);
+      expect(storage.snapshot.containsKey(kSessionStorageKey), isFalse);
     });
 
     test('logout 清盘并把 state 重置为 null', () async {

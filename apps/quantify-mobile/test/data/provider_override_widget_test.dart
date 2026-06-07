@@ -39,6 +39,21 @@ class _FakeAuthRepository implements AuthRepository {
     email: 'fake@example.com',
   );
   @override
+  Future<AuthSession> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) async => const AuthSession(
+    userId: 'fake-telegram',
+    token: 'fake',
+    email: 'fake-telegram@example.com',
+  );
+  @override
+  Future<AuthSession> loginGuest() async => const AuthSession(
+    userId: 'fake-guest',
+    token: 'fake',
+    email: 'fake-guest@example.com',
+    isGuest: true,
+  );
+  @override
   Future<void> logout() async {}
 }
 

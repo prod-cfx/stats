@@ -2,7 +2,7 @@ import type { User } from '@/prisma/prisma.types'
 import type { TelegramExchangeRequestDto } from '../dto/requests/telegram-exchange.request.dto'
 import type { VerifyEmailLoginCodeRequestDto } from '../dto/requests/verify-email-login-code.request.dto'
 import { createHash, createHmac } from 'node:crypto'
-import { UserCredentialType } from '@ai/shared'
+import { PrincipalType, UserCredentialType } from '@ai/shared'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
@@ -250,6 +250,41 @@ describe('UserAuthService beta code creation flows', () => {
     await service.telegramDesktopExchange({ intentId: 'intent-1' })
 
     expect(betaCodeService.consumeForNewUser).not.toHaveBeenCalled()
+  })
+
+  it('creates a backend-issued guest session', async () => {
+    const { service, repository } = await createContext()
+    repository.createUser.mockResolvedValue(createUser({
+      id: 'guest-1',
+      email: 'guest_abc@guest.local',
+      emailVerified: false,
+      emailVerifiedAt: null,
+      isGuest: true,
+      nickname: 'Guest',
+    }))
+
+    const result = await service.loginGuest()
+
+    expect(repository.createUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: expect.stringMatching(/^guest_[0-9a-f]+@guest\.local$/),
+      emailVerified: false,
+      emailVerifiedAt: null,
+      isGuest: true,
+      nickname: 'Guest',
+    }))
+    expect(repository.createRoleAssignment).toHaveBeenCalledWith({
+      principalId: 'guest-1',
+      principalType: PrincipalType.USER,
+      roleId: 'role-user',
+    })
+    expect(result).toEqual(expect.objectContaining({
+      accessToken: 'access-token',
+      user: expect.objectContaining({
+        id: 'guest-1',
+        email: 'guest_abc@guest.local',
+        isGuest: true,
+      }),
+    }))
   })
 })
 

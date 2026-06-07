@@ -8,7 +8,7 @@ import 'package:quantify_mobile/data/services/auth_service.dart';
 /// `{data: {accessToken, user:{...}}}` 的解析；不发真实 HTTP。
 class _StubAuthService extends AuthService {
   _StubAuthService(this.response)
-      : super(ApiClient(baseUrl: 'http://localhost'));
+    : super(ApiClient(baseUrl: 'http://localhost'));
 
   final Object? response;
 
@@ -29,6 +29,12 @@ class _StubAuthService extends AuthService {
     required String email,
     required String code,
   }) => _reply();
+  @override
+  Future<dynamic> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) => _reply();
+  @override
+  Future<dynamic> loginGuest() => _reply();
 }
 
 void main() {
@@ -43,8 +49,10 @@ void main() {
           'message': 'ok',
         }),
       );
-      final AuthSession s =
-          await repo.login(email: 'fallback@x.com', password: 'pw');
+      final AuthSession s = await repo.login(
+        email: 'fallback@x.com',
+        password: 'pw',
+      );
       expect(s.token, 'jwt-123');
       expect(s.userId, 'u-9');
       expect(s.email, 'real@x.com');
@@ -74,8 +82,10 @@ void main() {
           'user': <String, dynamic>{'id': 'u-flat', 'email': 'flat@x.com'},
         }),
       );
-      final AuthSession s =
-          await repo.login(email: 'fallback@x.com', password: 'pw');
+      final AuthSession s = await repo.login(
+        email: 'fallback@x.com',
+        password: 'pw',
+      );
       expect(s.token, 'flat-jwt');
       expect(s.userId, 'u-flat');
       expect(s.email, 'flat@x.com');
@@ -99,14 +109,47 @@ void main() {
 
     test('token 缺失（4xx {message} 信封）抛 ApiException，不建空会话', () async {
       final ApiAuthRepository repo = ApiAuthRepository(
-        _StubAuthService(<String, dynamic>{
-          'message': 'invalid credentials',
-        }),
+        _StubAuthService(<String, dynamic>{'message': 'invalid credentials'}),
       );
       await expectLater(
         repo.login(email: 'e@x.com', password: 'pw'),
         throwsA(isA<ApiException>()),
       );
+    });
+
+    test('telegram 登录解析真实 session，不需要 mock email/空密码', () async {
+      final ApiAuthRepository repo = ApiAuthRepository(
+        _StubAuthService(<String, dynamic>{
+          'data': <String, dynamic>{
+            'accessToken': 'tg-jwt',
+            'user': <String, dynamic>{'id': 'tg-1', 'email': 'tg@real.com'},
+          },
+        }),
+      );
+      final AuthSession s = await repo.loginTelegram(
+        payload: <String, dynamic>{'id': '42', 'hash': 'signed'},
+      );
+      expect(s.token, 'tg-jwt');
+      expect(s.userId, 'tg-1');
+      expect(s.email, 'tg@real.com');
+    });
+
+    test('guest 登录解析后标记 isGuest=true', () async {
+      final ApiAuthRepository repo = ApiAuthRepository(
+        _StubAuthService(<String, dynamic>{
+          'data': <String, dynamic>{
+            'accessToken': 'guest-jwt',
+            'user': <String, dynamic>{
+              'id': 'guest-1',
+              'email': 'guest@real.local',
+            },
+          },
+        }),
+      );
+      final AuthSession s = await repo.loginGuest();
+      expect(s.token, 'guest-jwt');
+      expect(s.userId, 'guest-1');
+      expect(s.isGuest, isTrue);
     });
 
     test('data 不含鉴权字段时回退顶层（_hasAuthFields=false）', () async {
@@ -117,8 +160,10 @@ void main() {
           'user': <String, dynamic>{'id': 'u-top', 'email': 'top@x.com'},
         }),
       );
-      final AuthSession s =
-          await repo.login(email: 'fallback@x.com', password: 'pw');
+      final AuthSession s = await repo.login(
+        email: 'fallback@x.com',
+        password: 'pw',
+      );
       expect(s.token, 'top-jwt');
       expect(s.userId, 'u-top');
     });

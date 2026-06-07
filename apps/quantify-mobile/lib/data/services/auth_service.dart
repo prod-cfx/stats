@@ -46,6 +46,16 @@ class AuthService {
     );
   }
 
+  Future<dynamic> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) {
+    return _client.post('/auth/telegram/exchange', body: payload);
+  }
+
+  Future<dynamic> loginGuest() {
+    return _client.post('/auth/guest');
+  }
+
   Future<dynamic> me() {
     return _client.get('/users/me');
   }

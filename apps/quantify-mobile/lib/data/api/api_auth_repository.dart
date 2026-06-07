@@ -22,17 +22,23 @@ class ApiAuthRepository implements AuthRepository {
     final Map<String, dynamic> root = asMap(raw);
     // 信封：仅当 data 是对象且承载鉴权字段时下钻，避免把扁平响应的
     // `data == user` 语义误判。
-    final Map<String, dynamic> body = _hasAuthFields(pick(root, <String>['data']))
+    final Map<String, dynamic> body =
+        _hasAuthFields(pick(root, <String>['data']))
         ? asMap(pick(root, <String>['data']))
         : root;
     final Map<String, dynamic> user = asMap(pick(body, <String>['user']));
     final AuthSession session = AuthSession(
-      userId: asString(pick(user, <String>['id', 'userId']) ??
-          pick(body, <String>['userId', 'id'])),
+      userId: asString(
+        pick(user, <String>['id', 'userId']) ??
+            pick(body, <String>['userId', 'id']),
+      ),
       token: asString(pick(body, <String>['accessToken', 'token'])),
       email: asString(
         pick(user, <String>['email']) ?? pick(body, <String>['email']),
         fallback: fallbackEmail,
+      ),
+      isGuest: asBool(
+        pick(user, <String>['isGuest']) ?? pick(body, <String>['isGuest']),
       ),
     );
     // token 缺失（如 4xx 信封 {message} 无 accessToken）不能静默建空会话——
@@ -86,9 +92,28 @@ class ApiAuthRepository implements AuthRepository {
     required String email,
     required String code,
   }) async {
-    final dynamic raw =
-        await _service.loginWithCode(email: email, code: code);
+    final dynamic raw = await _service.loginWithCode(email: email, code: code);
     return _parse(raw, fallbackEmail: email);
+  }
+
+  @override
+  Future<AuthSession> loginTelegram({
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  }) async {
+    final dynamic raw = await _service.loginTelegram(payload: payload);
+    return _parse(raw, fallbackEmail: '');
+  }
+
+  @override
+  Future<AuthSession> loginGuest() async {
+    final dynamic raw = await _service.loginGuest();
+    final AuthSession session = _parse(raw, fallbackEmail: '');
+    return AuthSession(
+      userId: session.userId,
+      token: session.token,
+      email: session.email,
+      isGuest: true,
+    );
   }
 
   @override

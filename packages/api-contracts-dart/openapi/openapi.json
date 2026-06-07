@@ -710,6 +710,40 @@
         ]
       }
     },
+    "/auth/guest": {
+      "post": {
+        "operationId": "AuthController_loginGuest",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "游客登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AuthResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "游客登录换取会话",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/register": {
       "post": {
         "operationId": "AuthController_register",

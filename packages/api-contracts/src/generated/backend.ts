@@ -654,6 +654,18 @@ const StrategyPlazaDisplayMetricsResponseDto = z
     returnPct: z.number().nullish(),
     winRatePct: z.number().nullish(),
     maxDrawdownPct: z.number().nullish(),
+    sharpe: z.number().nullish(),
+    profitLossRatio: z.number().nullish(),
+    tradeCount: z.number().nullish(),
+    users: z.number().nullish(),
+  })
+  .passthrough()
+const StrategyPlazaSignalResponseDto = z
+  .object({
+    time: z.string(),
+    side: z.enum(['buy', 'sell']),
+    price: z.number(),
+    pnlPercent: z.number(),
   })
   .passthrough()
 const StrategyPlazaTemplateResponseDto = z
@@ -675,6 +687,10 @@ const StrategyPlazaTemplateResponseDto = z
     status: z.enum(['live', 'hidden']),
     displayOrder: z.number(),
     displayMetrics: StrategyPlazaDisplayMetricsResponseDto,
+    sparkline: z.array(z.number()).optional(),
+    params: z.record(z.number()).optional(),
+    signals: z.array(StrategyPlazaSignalResponseDto).optional(),
+    equityCurve: z.array(z.number()).optional(),
   })
   .passthrough()
 const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string().min(8) }).passthrough()
@@ -1702,6 +1718,7 @@ export const schemas = {
   Function,
   LlmSubscriptionResponseDto,
   StrategyPlazaDisplayMetricsResponseDto,
+  StrategyPlazaSignalResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaRunRequestDto,
   StrategyPlazaRunExistingResponseDto,
@@ -3574,6 +3591,13 @@ const endpoints = makeApi([
   },
   {
     method: 'post',
+    path: '/auth/guest',
+    alias: 'AuthController_loginGuest',
+    requestFormat: 'json',
+    response: z.object({ data: AuthResponseDto, message: z.string().optional() }).passthrough(),
+  },
+  {
+    method: 'post',
     path: '/auth/login',
     alias: 'AuthController_login',
     requestFormat: 'json',
@@ -4828,6 +4852,25 @@ const endpoints = makeApi([
       .passthrough(),
   },
   {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id/equity-curve',
+    alias: 'StrategyPlazaProxyController_equityCurve',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'timeframe',
+        type: 'Query',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.object({ data: z.array(z.number()), message: z.string().optional() }).passthrough(),
+  },
+  {
     method: 'post',
     path: '/strategy-plaza/templates/:id/run',
     alias: 'StrategyPlazaProxyController_run',
@@ -4857,6 +4900,27 @@ const endpoints = makeApi([
         ]),
         message: z.string().optional(),
       })
+      .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id/signals',
+    alias: 'StrategyPlazaProxyController_signals',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z
+      .object({ data: z.array(StrategyPlazaSignalResponseDto), message: z.string().optional() })
       .passthrough(),
   },
   {
