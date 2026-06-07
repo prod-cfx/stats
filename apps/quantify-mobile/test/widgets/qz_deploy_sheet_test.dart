@@ -21,10 +21,28 @@ class _FakeApiKeyRepo implements ApiKeyRepository {
   _FakeApiKeyRepo(this._keys);
   _FakeApiKeyRepo.empty() : _keys = <ExchangeApiKey>[];
   final List<ExchangeApiKey> _keys;
+  final List<String> preflightAccountIds = <String>[];
 
   @override
   Future<List<ExchangeApiKey>> listKeys() async =>
       List<ExchangeApiKey>.unmodifiable(_keys);
+
+  @override
+  Future<DeployPreflightResult> checkDeployPreflight({
+    required String exchangeAccountId,
+    required DeploymentContext deploymentContext,
+  }) async {
+    preflightAccountIds.add(exchangeAccountId);
+    final bool hasAccount = _keys.any(
+      (ExchangeApiKey key) => key.id == exchangeAccountId,
+    );
+    if (!hasAccount) return const DeployPreflightResult.failed();
+    return const DeployPreflightResult(
+      apiConnected: true,
+      balanceReady: true,
+      latencyReady: true,
+    );
+  }
 
   @override
   Future<ExchangeApiKey> addKey({
@@ -44,8 +62,23 @@ class _FakeAiChatRepo implements AiChatRepository {
 
   final AiSession? session;
   final Object? error;
-  final List<(String sessionId, String instanceId)> deployCalls =
-      <(String, String)>[];
+  final List<
+    ({
+      String sessionId,
+      String publishedSnapshotId,
+      String? exchangeAccountId,
+      Map<String, Object?>? deploymentExecutionConfig,
+    })
+  >
+  deployCalls =
+      <
+        ({
+          String sessionId,
+          String publishedSnapshotId,
+          String? exchangeAccountId,
+          Map<String, Object?>? deploymentExecutionConfig,
+        })
+      >[];
 
   @override
   Future<List<AiSession>> listSessions() async => <AiSession>[];
@@ -70,12 +103,35 @@ class _FakeAiChatRepo implements AiChatRepository {
   Future<BacktestSummary?> latestBacktest(String sessionId) async => null;
 
   @override
-  Future<AiSession?> markDeployed(String sessionId, String instanceId) async {
-    deployCalls.add((sessionId, instanceId));
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? exchangeAccountId,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async {
+    deployCalls.add((
+      sessionId: sessionId,
+      publishedSnapshotId: publishedSnapshotId,
+      exchangeAccountId: exchangeAccountId,
+      deploymentExecutionConfig: deploymentExecutionConfig,
+    ));
     if (error != null) throw error!;
     return session;
   }
 }
+
+const DeploymentContext _context = DeploymentContext(
+  sessionId: 'sess-real-2327',
+  publishedSnapshotId: 'snap-real-2327',
+  exchangeAccountId: 'k1',
+  amount: 5000,
+  perTradePct: 20,
+  maxDailyLossPct: 10,
+  notifyOpen: true,
+  notifyClose: true,
+  notifyStopLoss: true,
+  symbol: 'ETH/USDT · 1h',
+);
 
 AiSession _deployedSession() => AiSession(
   id: 'sess-live',
@@ -91,6 +147,7 @@ Future<DeploymentResult?> _pumpSheet(
   WidgetTester tester, {
   required ApiKeyRepository repo,
   AiChatRepository? aiRepo,
+  DeploymentContext? context = _context,
 }) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   DeploymentResult? captured;
@@ -115,7 +172,10 @@ Future<DeploymentResult?> _pumpSheet(
               child: ElevatedButton(
                 key: const Key('open'),
                 onPressed: () async {
-                  captured = await QzDeploySheet.show(ctx);
+                  captured = await QzDeploySheet.show(
+                    ctx,
+                    deploymentContext: context,
+                  );
                 },
                 child: const Text('open'),
               ),
@@ -190,24 +250,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('子账户'), findsOneWidget);
 
-      // 等扫描跑完（3 × 360ms）→ 首轮失败（#1896 失败路径），「重新检测」可见
-      await tester.pump(const Duration(milliseconds: 1200));
-      await tester.pump();
-      expect(find.text('3/3 未通过'), findsOneWidget);
-      expect(find.byKey(const Key('deploy-preflight-recheck')), findsOneWidget);
-      // 失败态确认按钮 disabled
-      expect(
-        tester
-            .widget<QzButton>(find.byKey(const Key('deploy-preflight-confirm')))
-            .onPressed,
-        isNull,
-      );
-
-      // 「重新检测」→ 复检全通过
-      await tester.tap(find.byKey(const Key('deploy-preflight-recheck')));
+      // 等扫描跑完（3 × 360ms）→ 真实账户上下文通过预检。
       await tester.pump(const Duration(milliseconds: 1200));
       await tester.pump();
       expect(find.text('3/3 通过'), findsOneWidget);
+      expect(
+        repo.preflightAccountIds,
+        containsAllInOrder(<String>['k1', 'k2']),
+      );
 
       // 「确认无误，立即部署」→ deploying 分步
       await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
@@ -220,9 +270,14 @@ void main() {
       // 拨过 5 步 × 360ms + buffer → done
       await tester.pump(const Duration(milliseconds: 2200));
       await tester.pump();
-      expect(aiRepo.deployCalls, <(String, String)>[
-        ('current-ai-session', 'k2'),
-      ]);
+      expect(aiRepo.deployCalls, hasLength(1));
+      expect(aiRepo.deployCalls.single.sessionId, 'sess-real-2327');
+      expect(aiRepo.deployCalls.single.publishedSnapshotId, 'snap-real-2327');
+      expect(aiRepo.deployCalls.single.exchangeAccountId, 'k2');
+      expect(
+        aiRepo.deployCalls.single.deploymentExecutionConfig,
+        containsPair('amount', 5000),
+      );
       // sheet 标题与 hero 同文「部署成功」→ 2 处
       expect(find.text('部署成功'), findsNWidgets(2));
       // 完整详情卡 + 下一步入口
@@ -287,25 +342,13 @@ void main() {
     );
     expect(confirmScanning.onPressed, isNull, reason: '扫描进行中不应允许部署');
 
-    // 扫完 → 首轮失败（#1896），确认仍 disabled
-    await tester.pump(const Duration(milliseconds: 1200));
-    await tester.pump();
-    expect(
-      tester
-          .widget<QzButton>(find.byKey(const Key('deploy-preflight-confirm')))
-          .onPressed,
-      isNull,
-      reason: '存在未通过项时不应允许部署',
-    );
-
-    // 「重新检测」→ 复检全通过后才允许部署
-    await tester.tap(find.byKey(const Key('deploy-preflight-recheck')));
+    // 扫完 → 真实账户上下文通过，确认可点。
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump();
     final QzButton confirmDone = tester.widget<QzButton>(
       find.byKey(const Key('deploy-preflight-confirm')),
     );
-    expect(confirmDone.onPressed, isNotNull, reason: '复检全通过后应允许部署');
+    expect(confirmDone.onPressed, isNotNull, reason: '全通过后应允许部署');
   });
 
   testWidgets('QzDeploySheet: 部署失败显示仓库错误且不进入成功态（#2310）', (
@@ -325,20 +368,39 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('deploy-preflight-recheck')));
-    await tester.pump(const Duration(milliseconds: 1200));
-    await tester.pump();
     await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
     await tester.pump();
 
     await tester.pump(const Duration(milliseconds: 2200));
     await tester.pump();
 
-    expect(aiRepo.deployCalls, <(String, String)>[
-      ('current-ai-session', 'k1'),
-    ]);
+    expect(aiRepo.deployCalls, hasLength(1));
+    expect(aiRepo.deployCalls.single.sessionId, 'sess-real-2327');
+    expect(aiRepo.deployCalls.single.publishedSnapshotId, 'snap-real-2327');
+    expect(aiRepo.deployCalls.single.exchangeAccountId, 'k1');
     expect(find.textContaining('publish failed'), findsOneWidget);
     expect(find.byKey(const Key('deploy-done-detail')), findsNothing);
     expect(find.text('部署成功'), findsNothing);
+  });
+
+  testWidgets('QzDeploySheet: 缺少真实部署上下文时展示错误态且不发部署请求', (
+    WidgetTester tester,
+  ) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    final _FakeAiChatRepo aiRepo = _FakeAiChatRepo(session: _deployedSession());
+
+    await _pumpSheet(tester, repo: repo, aiRepo: aiRepo, context: null);
+
+    expect(find.byKey(const Key('deploy-context-error')), findsOneWidget);
+    expect(find.textContaining('缺少部署上下文'), findsOneWidget);
+    expect(aiRepo.deployCalls, isEmpty);
   });
 }

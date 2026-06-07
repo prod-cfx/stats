@@ -48,13 +48,19 @@ class _FakeAiChatRepository implements AiChatRepository {
   }
 
   @override
-  Stream<ChatTurn> watchSession(String sessionId) => const Stream<ChatTurn>.empty();
+  Stream<ChatTurn> watchSession(String sessionId) =>
+      const Stream<ChatTurn>.empty();
 
   @override
   Future<BacktestSummary?> latestBacktest(String sessionId) async => null;
 
   @override
-  Future<AiSession?> markDeployed(String sessionId, String instanceId) async => null;
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? exchangeAccountId,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async => null;
 }
 
 AiSession _session(String id, {List<ChatTurn>? messages}) => AiSession(
@@ -68,9 +74,7 @@ AiSession _session(String id, {List<ChatTurn>? messages}) => AiSession(
 void main() {
   ProviderContainer makeContainer(_FakeAiChatRepository repo) {
     final ProviderContainer c = ProviderContainer(
-      overrides: <Override>[
-        aiChatRepositoryProvider.overrideWithValue(repo),
-      ],
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
     );
     addTearDown(c.dispose);
     return c;
@@ -89,7 +93,9 @@ void main() {
 
   group('AiHomePageController', () {
     test('初始态：空会话、未初始化、未发送', () {
-      final ProviderContainer c = makeContainer(_FakeAiChatRepository(const []));
+      final ProviderContainer c = makeContainer(
+        _FakeAiChatRepository(const []),
+      );
       final AiHomePageState s = read(c);
       expect(s.sessions, isEmpty);
       expect(s.initialized, isFalse);
@@ -101,7 +107,8 @@ void main() {
       final ProviderContainer c = makeContainer(
         _FakeAiChatRepository(<AiSession>[_session('a'), _session('b')]),
       );
-      pin(c);      await ctrl(c).loadSessions();
+      pin(c);
+      await ctrl(c).loadSessions();
       final AiHomePageState s = read(c);
       expect(s.initialized, isTrue);
       expect(s.order, <String>['a', 'b']);
@@ -110,9 +117,9 @@ void main() {
 
     test('send 全流转：thinking → streaming → done（逐字铺设完成）', () {
       fakeAsync((FakeAsync async) {
-        final _FakeAiChatRepository repo =
-            _FakeAiChatRepository(<AiSession>[_session('a')])
-              ..replyContent = 'abc';
+        final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
+          _session('a'),
+        ])..replyContent = 'abc';
         final ProviderContainer c = makeContainer(repo);
         pin(c);
 
@@ -160,9 +167,7 @@ void main() {
         async.flushMicrotasks();
         ctrl(c).send('second');
         async.flushMicrotasks();
-        final List<ChatTurn> userTurns = read(c)
-            .sessions['a']!
-            .messages
+        final List<ChatTurn> userTurns = read(c).sessions['a']!.messages
             .where((ChatTurn t) => t.role == 'user')
             .toList();
         expect(userTurns.length, 1);
@@ -174,7 +179,8 @@ void main() {
       final ProviderContainer c = makeContainer(
         _FakeAiChatRepository(<AiSession>[_session('a'), _session('b')]),
       );
-      pin(c);      await ctrl(c).loadSessions();
+      pin(c);
+      await ctrl(c).loadSessions();
       expect(read(c).currentId, 'a');
 
       ctrl(c).persistDraft('draft-A');
@@ -196,7 +202,8 @@ void main() {
       final ProviderContainer c = makeContainer(
         _FakeAiChatRepository(<AiSession>[_session('a'), _session('b')]),
       );
-      pin(c);      await ctrl(c).loadSessions();
+      pin(c);
+      await ctrl(c).loadSessions();
       expect(ctrl(c).switchSession('a'), isFalse);
       expect(ctrl(c).switchSession('b'), isTrue);
       expect(read(c).currentId, 'b');
@@ -206,7 +213,8 @@ void main() {
       final ProviderContainer c = makeContainer(
         _FakeAiChatRepository(<AiSession>[_session('a'), _session('b')]),
       );
-      pin(c);      await ctrl(c).loadSessions();
+      pin(c);
+      await ctrl(c).loadSessions();
       await ctrl(c).deleteSession('a');
       final AiHomePageState s = read(c);
       expect(s.sessions.containsKey('a'), isFalse);

@@ -1,4 +1,5 @@
 import '../models/api_key_models.dart';
+import '../models/deploy_models.dart';
 import '../repositories/api_key_repository.dart';
 import '../utils/mask_helpers.dart';
 import 'fixtures/api_key.dart';
@@ -10,6 +11,23 @@ class MockApiKeyRepository implements ApiKeyRepository {
   Future<List<ExchangeApiKey>> listKeys() async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     return List<ExchangeApiKey>.unmodifiable(_keys);
+  }
+
+  @override
+  Future<DeployPreflightResult> checkDeployPreflight({
+    required String exchangeAccountId,
+    required DeploymentContext deploymentContext,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final bool hasAccount = _keys.any(
+      (ExchangeApiKey key) => key.id == exchangeAccountId,
+    );
+    if (!hasAccount) return const DeployPreflightResult.failed();
+    return const DeployPreflightResult(
+      apiConnected: true,
+      balanceReady: true,
+      latencyReady: true,
+    );
   }
 
   @override

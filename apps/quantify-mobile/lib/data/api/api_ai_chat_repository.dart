@@ -165,18 +165,24 @@ class ApiAiChatRepository implements AiChatRepository {
   static const int _deployPollLimit = 3;
 
   @override
-  Future<AiSession?> markDeployed(String sessionId, String instanceId) async {
-    // PRE-WIRE: 异步 deploy（deploy → 轮询 deploy-requests/{id}/result，上限
-    // 3 次）。UI 尚未调用（#2064/#2065 回执流），name/exchangeAccount/
-    // deploymentExecutionConfig 字段映射待 UI 接入定稿。
-    // deployRequestId 确定性派生作幂等键（不引 uuid）；instanceId 暂映射
-    // publishedSnapshotId（best-effort 预埋）。
-    final String deployRequestId = '$sessionId-$instanceId';
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? exchangeAccountId,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async {
+    final String deployRequestId = '$sessionId-$publishedSnapshotId';
     final Map<String, dynamic> body = <String, dynamic>{
-      'name': instanceId,
+      'name': publishedSnapshotId,
       'deployRequestId': deployRequestId,
-      'publishedSnapshotId': instanceId,
+      'publishedSnapshotId': publishedSnapshotId,
     };
+    if (exchangeAccountId != null) {
+      body['exchangeAccountId'] = exchangeAccountId;
+    }
+    if (deploymentExecutionConfig != null) {
+      body['deploymentExecutionConfig'] = deploymentExecutionConfig;
+    }
 
     await _service.deployStrategy(body);
 

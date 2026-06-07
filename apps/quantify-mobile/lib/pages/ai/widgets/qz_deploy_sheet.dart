@@ -36,17 +36,26 @@ part 'qz_deploy_sheet.done.part.dart';
 /// 交易所 / 市场 / 资金由 AI 对话上下文决定，部署页只做只读账单确认 +
 /// 部署前检查。未绑定 API 时在检查失败项内提供 API 绑定入口。
 class QzDeploySheet extends ConsumerStatefulWidget {
-  const QzDeploySheet({super.key, this.showHeader = true});
+  const QzDeploySheet({
+    super.key,
+    this.showHeader = true,
+    this.deploymentContext,
+  });
 
   final bool showHeader;
+  final DeploymentContext? deploymentContext;
 
   /// 调起入口；返回的 `DeploymentResult` 表示部署成功，null 表示用户取消 /
   /// 关闭。
-  static Future<DeploymentResult?> show(BuildContext context) {
+  static Future<DeploymentResult?> show(
+    BuildContext context, {
+    DeploymentContext? deploymentContext,
+  }) {
     return QzSheet.show<DeploymentResult>(
       context: context,
       useRootNavigator: true,
-      builder: (BuildContext ctx) => const QzDeploySheet(),
+      builder: (BuildContext ctx) =>
+          QzDeploySheet(deploymentContext: deploymentContext),
     );
   }
 
@@ -138,11 +147,19 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   /// 部署分步动画跑完 → 调真实部署/轮询 → done；失败停留错误态。
   Future<void> _onDeployingDone() async {
     final _DeployTarget? target = _deployingTarget;
-    if (!mounted || target?.apiKey == null) return;
+    final DeploymentContext? deploymentContext = widget.deploymentContext;
+    if (!mounted || target?.apiKey == null || deploymentContext == null) return;
     try {
       final session = await ref
           .read(aiChatRepositoryProvider)
-          .markDeployed('current-ai-session', target!.apiKey!.id);
+          .markDeployed(
+            deploymentContext.sessionId,
+            deploymentContext.publishedSnapshotId,
+            exchangeAccountId: target!.apiKey!.id,
+            deploymentExecutionConfig: deploymentContext.toExecutionConfig(
+              exchangeAccountId: target.apiKey!.id,
+            ),
+          );
       if (!mounted) return;
       if (session == null || session.deployedTo == null) {
         setState(() => _deployError = '部署仍在处理中');
@@ -156,8 +173,8 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           instanceId: session.deployedTo!,
           deployedAt: now,
           strategyId: session.id,
-          symbol: session.pair,
-          amount: _amount,
+          symbol: deploymentContext.symbol ?? session.pair,
+          amount: deploymentContext.amount,
           leverage: '5x · 全仓',
           startedAt: now,
         );
@@ -216,6 +233,9 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       DeployStep.success => l10n.deploySheetTitleDone,
     };
     final AsyncValue<List<ExchangeApiKey>> keys = ref.watch(apiKeysProvider);
+    if (widget.deploymentContext == null) {
+      return _DeployContextError(showHeader: widget.showHeader);
+    }
     return keys.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: QzSpacing.lg),
@@ -285,6 +305,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       case DeployStep.confirm:
         return _PreflightPane(
           target: target,
+          deploymentContext: widget.deploymentContext!,
           amount: _amount,
           onAccountChanged: _selectAccount,
           onGoConfigure: _goConfigureApi,
@@ -318,6 +339,45 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           stickyActions: !widget.showHeader,
         );
     }
+  }
+}
+
+class _DeployContextError extends StatelessWidget {
+  const _DeployContextError({required this.showHeader});
+
+  final bool showHeader;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      key: const Key('deploy-context-error'),
+      padding: EdgeInsets.fromLTRB(
+        QzSpacing.lg,
+        showHeader ? 0 : QzSpacing.lg,
+        QzSpacing.lg,
+        QzSpacing.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            '缺少部署上下文',
+            style: TextStyle(
+              color: c.text,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: QzSpacing.sm),
+          Text(
+            '请从 AI 会话或回测结果入口重新发起部署。',
+            style: TextStyle(color: c.textDim, fontSize: 13, height: 1.5),
+          ),
+        ],
+      ),
+    );
   }
 }
 

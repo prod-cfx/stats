@@ -101,7 +101,12 @@ class MockAiChatRepository implements AiChatRepository {
   }
 
   @override
-  Future<AiSession?> markDeployed(String sessionId, String instanceId) async {
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? exchangeAccountId,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     final int idx = _sessions.indexWhere((AiSession s) => s.id == sessionId);
     if (idx < 0) return null;
@@ -110,7 +115,7 @@ class MockAiChatRepository implements AiChatRepository {
     final bool hasDeployedTurn = current.messages.any(
       (ChatTurn turn) =>
           turn.kind == ChatTurnKind.deployed &&
-          turn.deployedInstanceId == instanceId,
+          turn.deployedInstanceId == publishedSnapshotId,
     );
     final List<ChatTurn> messages = hasDeployedTurn
         ? current.messages
@@ -123,11 +128,11 @@ class MockAiChatRepository implements AiChatRepository {
               timestamp: now,
               kind: ChatTurnKind.deployed,
               deployedExchange: 'Binance',
-              deployedInstanceId: instanceId,
+              deployedInstanceId: publishedSnapshotId,
             ),
           ];
     final AiSession updated = _sessions[idx].copyWith(
-      deployedTo: instanceId,
+      deployedTo: publishedSnapshotId,
       updatedAt: now,
       messages: messages,
     );

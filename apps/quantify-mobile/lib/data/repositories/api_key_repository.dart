@@ -1,4 +1,5 @@
 import '../models/api_key_models.dart';
+import '../models/deploy_models.dart';
 
 /// 交易所 API Key Repository 接口。
 ///
@@ -8,6 +9,11 @@ import '../models/api_key_models.dart';
 /// 语义对齐，避免后续接真实 API 时改契约。
 abstract class ApiKeyRepository {
   Future<List<ExchangeApiKey>> listKeys();
+
+  Future<DeployPreflightResult> checkDeployPreflight({
+    required String exchangeAccountId,
+    required DeploymentContext deploymentContext,
+  });
 
   /// 新增一个交易所 API 凭据。
   ///

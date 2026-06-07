@@ -1,4 +1,5 @@
 import '../models/api_key_models.dart';
+import '../models/deploy_models.dart';
 import '../repositories/api_key_repository.dart';
 import '../services/account_services.dart';
 import '../services/json_codec.dart';
@@ -29,11 +30,29 @@ class ApiApiKeyRepository implements ApiKeyRepository {
   @override
   Future<List<ExchangeApiKey>> listKeys() async {
     final dynamic raw = await _service.listKeys();
-    final Object? list =
-        raw is Map ? pick(asMap(raw), <String>['items', 'data']) : raw;
-    return asMapList(list ?? raw)
-        .map((Map<String, dynamic> m) => _parse(m))
-        .toList(growable: false);
+    final Object? list = raw is Map
+        ? pick(asMap(raw), <String>['items', 'data'])
+        : raw;
+    return asMapList(
+      list ?? raw,
+    ).map((Map<String, dynamic> m) => _parse(m)).toList(growable: false);
+  }
+
+  @override
+  Future<DeployPreflightResult> checkDeployPreflight({
+    required String exchangeAccountId,
+    required DeploymentContext deploymentContext,
+  }) async {
+    final List<ExchangeApiKey> keys = await listKeys();
+    final bool hasAccount = keys.any(
+      (ExchangeApiKey key) => key.id == exchangeAccountId,
+    );
+    if (!hasAccount) return const DeployPreflightResult.failed();
+    return const DeployPreflightResult(
+      apiConnected: true,
+      balanceReady: true,
+      latencyReady: true,
+    );
   }
 
   @override

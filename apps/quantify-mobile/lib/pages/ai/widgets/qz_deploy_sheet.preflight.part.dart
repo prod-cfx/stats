@@ -1,9 +1,10 @@
 part of 'qz_deploy_sheet.dart';
 // ignore_for_file: unused_element
 
-class _PreflightPane extends StatefulWidget {
+class _PreflightPane extends ConsumerStatefulWidget {
   const _PreflightPane({
     required this.target,
+    required this.deploymentContext,
     required this.amount,
     required this.onAccountChanged,
     required this.onGoConfigure,
@@ -13,6 +14,7 @@ class _PreflightPane extends StatefulWidget {
   });
 
   final _DeployTarget target;
+  final DeploymentContext deploymentContext;
   final double amount;
   final ValueChanged<String> onAccountChanged;
   final VoidCallback onGoConfigure;
@@ -21,45 +23,45 @@ class _PreflightPane extends StatefulWidget {
   final bool stickyActions;
 
   @override
-  State<_PreflightPane> createState() => _PreflightPaneState();
+  ConsumerState<_PreflightPane> createState() => _PreflightPaneState();
 }
 
-class _PreflightPaneState extends State<_PreflightPane> {
+class _PreflightPaneState extends ConsumerState<_PreflightPane> {
   static const Duration _scanInterval = Duration(milliseconds: 360);
 
   int _scanned = 0;
   bool _rechecking = false;
-  // 首轮预检 mock 失败（去绑定 API / 余额不足 / 时延异常）；「重新检测」翻转为全 pass。
-  // 替代旧的 3 项永远 pass，覆盖设计稿失败路径（#1896）。
-  bool _recovered = false;
+  DeployPreflightResult? _result;
   Timer? _timer;
+
+  bool get _hasAccount => widget.target.apiKey != null;
 
   List<PreflightCheck> _checks(AppLocalizations l10n) => <PreflightCheck>[
     PreflightCheck(
-      ok: widget.target.authorized && _recovered,
-      title: widget.target.authorized && _recovered
+      ok: _result?.apiConnected ?? false,
+      title: (_result?.apiConnected ?? false)
           ? l10n.deployPreflightApiOkTitle(widget.target.catalog.name)
           : l10n.deployPreflightApiFailTitle,
-      sub: widget.target.authorized && _recovered
+      sub: (_result?.apiConnected ?? false)
           ? l10n.deployPreflightApiOkSub
           : l10n.deployPreflightApiFailSub,
-      actionable: !widget.target.authorized || !_recovered,
+      actionable: !(_result?.apiConnected ?? false),
     ),
     PreflightCheck(
-      ok: widget.target.authorized && _recovered,
-      title: widget.target.authorized && _recovered
+      ok: _result?.balanceReady ?? false,
+      title: (_result?.balanceReady ?? false)
           ? l10n.deployPreflightBalanceOkTitle
           : l10n.deployPreflightBalanceFailTitle,
-      sub: widget.target.authorized && _recovered
+      sub: (_result?.balanceReady ?? false)
           ? l10n.deployPreflightBalanceOkSub
           : l10n.deployPreflightBalanceFailSub,
     ),
     PreflightCheck(
-      ok: widget.target.authorized && _recovered,
-      title: widget.target.authorized && _recovered
+      ok: _result?.latencyReady ?? false,
+      title: (_result?.latencyReady ?? false)
           ? l10n.deployPreflightLatencyOkTitle
           : l10n.deployPreflightLatencyFailTitle,
-      sub: widget.target.authorized && _recovered
+      sub: (_result?.latencyReady ?? false)
           ? l10n.deployPreflightLatencyOkSub
           : l10n.deployPreflightLatencyFailSub,
     ),
@@ -68,7 +70,16 @@ class _PreflightPaneState extends State<_PreflightPane> {
   @override
   void initState() {
     super.initState();
-    _startScan();
+    _runPreflight();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PreflightPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.target.apiKey?.id != widget.target.apiKey?.id ||
+        oldWidget.deploymentContext != widget.deploymentContext) {
+      _runPreflight();
+    }
   }
 
   @override
@@ -78,6 +89,7 @@ class _PreflightPaneState extends State<_PreflightPane> {
   }
 
   void _startScan() {
+    _timer?.cancel();
     _timer = Timer(_scanInterval, () {
       if (!mounted) return;
       setState(() => _scanned += 1);
@@ -89,13 +101,29 @@ class _PreflightPaneState extends State<_PreflightPane> {
     });
   }
 
-  void _recheck() {
+  Future<void> _runPreflight() async {
     setState(() {
-      _rechecking = true;
-      _recovered = widget.target.authorized; // 复检：已绑定账户才 mock 全 pass。
+      _result = null;
       _scanned = 0;
     });
     _startScan();
+    if (!_hasAccount) {
+      setState(() => _result = const DeployPreflightResult.failed());
+      return;
+    }
+    final DeployPreflightResult result = await ref
+        .read(apiKeyRepositoryProvider)
+        .checkDeployPreflight(
+          exchangeAccountId: widget.target.apiKey!.id,
+          deploymentContext: widget.deploymentContext,
+        );
+    if (!mounted) return;
+    setState(() => _result = result);
+  }
+
+  void _recheck() {
+    setState(() => _rechecking = true);
+    unawaited(_runPreflight());
   }
 
   @override
@@ -103,7 +131,7 @@ class _PreflightPaneState extends State<_PreflightPane> {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final List<PreflightCheck> checks = _checks(l10n);
-    final bool scanning = _scanned < checks.length;
+    final bool scanning = _scanned < checks.length || _result == null;
     final int pass = checks.where((PreflightCheck c) => c.ok).length;
     final int fail = checks.length - pass;
     final bool allPass = fail == 0;
@@ -219,7 +247,7 @@ class _PreflightPaneState extends State<_PreflightPane> {
             ),
         ],
       ),
-      if (!widget.target.authorized) ...<Widget>[
+      if (!(_result?.apiConnected ?? false)) ...<Widget>[
         const SizedBox(height: QzSpacing.sm),
         QzButton(
           key: const Key('deploy-go-configure'),
@@ -326,4 +354,3 @@ class _PreflightActions extends StatelessWidget {
     );
   }
 }
-

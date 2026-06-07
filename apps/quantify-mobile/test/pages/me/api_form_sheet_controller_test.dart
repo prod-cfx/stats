@@ -3,6 +3,7 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
+import 'package:quantify_mobile/data/models/deploy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/api_key_repository.dart';
 import 'package:quantify_mobile/pages/me/api_form_sheet_controller.dart';
@@ -10,6 +11,12 @@ import 'package:quantify_mobile/pages/me/api_form_sheet_state.dart';
 
 /// 保存失败的 ApiKeyRepository：`addKey` 抛错，覆盖 saving 流转的失败分支。
 class _FailingApiKeyRepository implements ApiKeyRepository {
+  @override
+  Future<DeployPreflightResult> checkDeployPreflight({
+    required String exchangeAccountId,
+    required DeploymentContext deploymentContext,
+  }) async => const DeployPreflightResult.failed();
+
   @override
   Future<ExchangeApiKey> addKey({
     required String exchange,
