@@ -23,4 +23,16 @@ abstract class LiveStrategyRepository {
 
   /// 策略参数列表。
   Future<List<LiveStrategyParam>> listParams(String id);
+
+  /// 暂停策略实例；失败由实现抛出，调用方负责回滚乐观状态。
+  Future<LiveStrategy> pause(String id);
+
+  /// 恢复策略实例；失败由实现抛出，调用方负责回滚乐观状态。
+  Future<LiveStrategy> resume(String id);
+
+  /// 软删策略实例，保留历史记录。
+  Future<void> softDelete(String id);
+
+  /// 永久删除 stopped 策略实例及关联记录。
+  Future<void> permanentDelete(String id);
 }

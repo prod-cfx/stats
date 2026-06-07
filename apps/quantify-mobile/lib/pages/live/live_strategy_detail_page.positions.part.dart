@@ -514,7 +514,7 @@ class _StickyAction extends ConsumerWidget {
     switch (strategy.status) {
       case LiveStrategyStatus.paused:
       case LiveStrategyStatus.warning:
-        store.resume(strategy.id);
+        await store.resume(strategy.id);
       case LiveStrategyStatus.stopped:
         return;
       case LiveStrategyStatus.running:
@@ -532,7 +532,7 @@ class _StickyAction extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (position == null) {
-      store.pause(strategy.id);
+      await store.pause(strategy.id);
       return;
     }
     final LivePauseMode? mode = await LiveCloseWithPositionSheet.show(
@@ -541,7 +541,7 @@ class _StickyAction extends ConsumerWidget {
       position: position,
     );
     if (mode == null) return;
-    store.pause(strategy.id);
+    await store.pause(strategy.id);
   }
 
   Future<void> _onDelete(BuildContext context, WidgetRef ref) async {
@@ -565,9 +565,9 @@ class _StickyAction extends ConsumerWidget {
     );
     if (permanent == null || !context.mounted) return;
     if (permanent) {
-      store.permanentDelete(strategy.id);
+      await store.permanentDelete(strategy.id);
     } else {
-      store.softDelete(strategy.id);
+      await store.softDelete(strategy.id);
     }
     if (context.mounted) context.pop();
   }

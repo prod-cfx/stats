@@ -95,7 +95,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
       await _pauseRunning(s, store);
       return;
     }
-    store.resume(s.id);
+    await store.resume(s.id);
   }
 
   Future<void> _pauseRunning(LiveStrategy s, LiveStrategyStore store) async {
@@ -104,7 +104,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     );
     if (!mounted) return;
     if (position == null) {
-      store.pause(s.id);
+      await store.pause(s.id);
       return;
     }
     final LivePauseMode? mode = await LiveCloseWithPositionSheet.show(
@@ -113,7 +113,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
       position: position,
     );
     if (mode == null) return;
-    store.pause(s.id);
+    await store.pause(s.id);
   }
 
   Future<void> _onAskDelete(LiveStrategy s) async {
@@ -137,9 +137,9 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     );
     if (permanent == null || !mounted) return;
     if (permanent) {
-      store.permanentDelete(s.id);
+      await store.permanentDelete(s.id);
     } else {
-      store.softDelete(s.id);
+      await store.softDelete(s.id);
     }
   }
 
@@ -226,9 +226,8 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
         _FilterPills(
           filter: st.filter,
           all: all,
-          onChanged: (LiveFilter f) => ref
-              .read(liveStrategiesControllerProvider.notifier)
-              .setFilter(f),
+          onChanged: (LiveFilter f) =>
+              ref.read(liveStrategiesControllerProvider.notifier).setFilter(f),
         ),
         const SizedBox(height: QzSpacing.md),
         if (st.filter == LiveFilter.stopped && visible.isNotEmpty)

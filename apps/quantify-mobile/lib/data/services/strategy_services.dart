@@ -59,6 +59,23 @@ class LiveStrategyService {
       _client.get('/account/ai-quant/strategies/$id');
 
   Future<dynamic> getSummary() => _client.get('/account/ai-quant/strategies');
+
+  Future<dynamic> performAction(String id, String action) => _client.post(
+    '/account/ai-quant/strategies/$id/actions',
+    body: <String, dynamic>{'action': action},
+  );
+
+  Future<void> deleteStrategy(
+    String id, {
+    bool deleteStoppedStrategy = false,
+  }) async {
+    await _client.delete(
+      '/account/ai-quant/strategies/$id',
+      query: <String, dynamic>{
+        if (deleteStoppedStrategy) 'deleteStoppedStrategy': true,
+      },
+    );
+  }
 }
 
 class BacktestService {

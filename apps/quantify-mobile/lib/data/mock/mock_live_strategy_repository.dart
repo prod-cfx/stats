@@ -7,10 +7,14 @@ import 'fixtures/live_strategies.dart';
 /// 纯读：固定 200ms 延迟模拟网络。聚合摘要排除 stopped，与设计稿
 /// `ScreenLiveStrats` 的 `active` 统计口径一致。
 class MockLiveStrategyRepository implements LiveStrategyRepository {
+  final List<LiveStrategy> _strategies = List<LiveStrategy>.of(
+    mockLiveStrategies,
+  );
+
   @override
   Future<List<LiveStrategy>> listStrategies() async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    return mockLiveStrategies;
+    return List<LiveStrategy>.of(_strategies);
   }
 
   @override
@@ -18,14 +22,15 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     // 未命中即抛错：详情页据此落入 error 态渲染 liveLoadError，
     // 而非静默回退首条掩盖无效 id（与 repository 注释「调用方决定空态」一致）。
-    return mockLiveStrategies.firstWhere((LiveStrategy s) => s.id == id);
+    return _strategies.firstWhere((LiveStrategy s) => s.id == id);
   }
 
   @override
   Future<LiveStrategySummary> getSummary() async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    final List<LiveStrategy> active =
-        mockLiveStrategies.where((LiveStrategy s) => s.isActive).toList();
+    final List<LiveStrategy> active = _strategies
+        .where((LiveStrategy s) => s.isActive)
+        .toList();
     double cap = 0;
     double today = 0;
     double total = 0;
@@ -51,7 +56,7 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
           break;
       }
     }
-    final int stopped = mockLiveStrategies
+    final int stopped = _strategies
         .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
         .length;
     return LiveStrategySummary(
@@ -70,8 +75,9 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
   @override
   Future<LiveStrategyPosition?> getPosition(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    final LiveStrategy s =
-        mockLiveStrategies.firstWhere((LiveStrategy x) => x.id == id);
+    final LiveStrategy s = _strategies.firstWhere(
+      (LiveStrategy x) => x.id == id,
+    );
     if (!s.mayHavePosition) return null;
     return mockLivePositions[id];
   }
@@ -86,5 +92,56 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
   Future<List<LiveStrategyParam>> listParams(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     return mockLiveParams;
+  }
+
+  @override
+  Future<LiveStrategy> pause(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    return _replace(
+      id,
+      (LiveStrategy s) => s.copyWith(
+        status: LiveStrategyStatus.paused,
+        statusNote: '已暂停 · 等待恢复',
+      ),
+    );
+  }
+
+  @override
+  Future<LiveStrategy> resume(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    return _replace(
+      id,
+      (LiveStrategy s) =>
+          s.copyWith(status: LiveStrategyStatus.running, statusNote: null),
+    );
+  }
+
+  @override
+  Future<void> softDelete(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    _replace(
+      id,
+      (LiveStrategy s) => s.copyWith(
+        status: LiveStrategyStatus.stopped,
+        statusNote: '已停止 · 28 天后永久删除',
+      ),
+    );
+  }
+
+  @override
+  Future<void> permanentDelete(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    _strategies.removeWhere((LiveStrategy s) => s.id == id);
+  }
+
+  LiveStrategy _replace(
+    String id,
+    LiveStrategy Function(LiveStrategy) transform,
+  ) {
+    final int index = _strategies.indexWhere((LiveStrategy s) => s.id == id);
+    if (index < 0) throw StateError('Live strategy not found: $id');
+    final LiveStrategy next = transform(_strategies[index]);
+    _strategies[index] = next;
+    return next;
   }
 }

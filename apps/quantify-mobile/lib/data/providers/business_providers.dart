@@ -5,7 +5,6 @@ import 'package:riverpod/misc.dart' show FutureProviderFamily;
 
 import '../../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import '../../domain/models/live_strategy_models.dart';
-import '../mock/fixtures/live_strategies.dart' show mockLivePositions;
 import '../mock/fixtures/whale_extras.dart';
 import '../models/whale_extra_models.dart';
 import '../storage/market_favorites_persistence.dart';
@@ -175,8 +174,9 @@ class MarketFavoritesNotifier extends Notifier<Set<String>> {
   @override
   Set<String> build() {
     // null = 键从未写盘 → 填种子；空集 = 用户已清空 → 保持空，不复活。
-    final Set<String>? stored =
-        ref.watch(marketFavoritesPersistenceProvider).read();
+    final Set<String>? stored = ref
+        .watch(marketFavoritesPersistenceProvider)
+        .read();
     return stored ?? <String>{...kDefaultSymbols};
   }
 
@@ -211,9 +211,8 @@ marketFavoritesProvider =
 
 /// 实盘策略有状态 store（#1773）。
 ///
-/// 单一可变真源：初始 seed 自 repository，暂停/恢复/删除等操作在客户端就地
-/// 转换状态（mock-first）。列表/摘要/详情/持仓 provider 均从此派生，保证一次
-/// 操作后全端一致刷新。真实实例接口（#1682/#1683）接通后此 store 退役。
+/// 单一可变真源：初始 seed 自 repository，暂停/恢复/删除等操作先乐观更新，
+/// 再调用 repository 写后端。失败回滚；成功后刷新列表和详情派生。
 class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
   @override
   Future<List<LiveStrategy>> build() async {
@@ -221,54 +220,100 @@ class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
   }
 
   /// 暂停：running / warning -> paused，附「等待恢复」状态注。
-  void pause(String id) {
-    _mutate(
+  Future<void> pause(String id) async {
+    final List<LiveStrategy>? previous = state.value;
+    _mutateLocal(
       id,
       (LiveStrategy s) => s.copyWith(
         status: LiveStrategyStatus.paused,
         statusNote: '已暂停 · 等待恢复',
       ),
     );
+    try {
+      await ref.read(liveStrategyRepositoryProvider).pause(id);
+      await _refreshAfterAction(id);
+    } catch (_) {
+      _restore(previous);
+      rethrow;
+    }
   }
 
   /// 恢复：任意非 running -> running，清状态注。
-  void resume(String id) {
-    _mutate(
+  Future<void> resume(String id) async {
+    final List<LiveStrategy>? previous = state.value;
+    _mutateLocal(
       id,
-      (LiveStrategy s) => s.copyWith(
-        status: LiveStrategyStatus.running,
-        statusNote: null,
-      ),
+      (LiveStrategy s) =>
+          s.copyWith(status: LiveStrategyStatus.running, statusNote: null),
     );
+    try {
+      await ref.read(liveStrategyRepositoryProvider).resume(id);
+      await _refreshAfterAction(id);
+    } catch (_) {
+      _restore(previous);
+      rethrow;
+    }
   }
 
   /// 软删：-> stopped，保留 30 天。
-  void softDelete(String id) {
-    _mutate(
+  Future<void> softDelete(String id) async {
+    final List<LiveStrategy>? previous = state.value;
+    _mutateLocal(
       id,
       (LiveStrategy s) => s.copyWith(
         status: LiveStrategyStatus.stopped,
         statusNote: '已停止 · 28 天后永久删除',
       ),
     );
+    try {
+      await ref.read(liveStrategyRepositoryProvider).softDelete(id);
+      await _refreshAfterAction(id);
+    } catch (_) {
+      _restore(previous);
+      rethrow;
+    }
   }
 
   /// 永久删除：从列表移除。
-  void permanentDelete(String id) {
+  Future<void> permanentDelete(String id) async {
     final List<LiveStrategy>? current = state.value;
+    final List<LiveStrategy>? previous = current;
     if (current == null) return;
-    state = AsyncData<List<LiveStrategy>>(
-      current.where((LiveStrategy s) => s.id != id).toList(growable: false),
-    );
+    try {
+      await ref.read(liveStrategyRepositoryProvider).permanentDelete(id);
+      Future<void>.microtask(() async {
+        state = AsyncData<List<LiveStrategy>>(
+          current.where((LiveStrategy s) => s.id != id).toList(growable: false),
+        );
+        await _refreshAfterAction(id);
+      });
+    } catch (_) {
+      _restore(previous);
+      rethrow;
+    }
   }
 
-  void _mutate(String id, LiveStrategy Function(LiveStrategy) transform) {
+  void _mutateLocal(String id, LiveStrategy Function(LiveStrategy) transform) {
     final List<LiveStrategy>? current = state.value;
     if (current == null) return;
     state = AsyncData<List<LiveStrategy>>(
       current
           .map((LiveStrategy s) => s.id == id ? transform(s) : s)
           .toList(growable: false),
+    );
+  }
+
+  void _restore(List<LiveStrategy>? previous) {
+    if (previous == null) return;
+    state = AsyncData<List<LiveStrategy>>(previous);
+  }
+
+  Future<void> _refreshAfterAction(String id) async {
+    ref.invalidate(liveStrategyTradesProvider(id));
+    ref.invalidate(liveStrategyParamsProvider(id));
+    state = const AsyncLoading<List<LiveStrategy>>();
+    state = await AsyncValue.guard(
+      () => ref.read(liveStrategyRepositoryProvider).listStrategies(),
     );
   }
 }
@@ -290,10 +335,12 @@ final FutureProvider<List<LiveStrategy>> liveStrategiesProvider =
 /// （排除 stopped），口径与设计稿 `active` 统计一致。
 final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
     FutureProvider<LiveStrategySummary>((Ref ref) async {
-      final List<LiveStrategy> all =
-          await ref.watch(liveStrategyStoreProvider.future);
-      final List<LiveStrategy> active =
-          all.where((LiveStrategy s) => s.isActive).toList();
+      final List<LiveStrategy> all = await ref.watch(
+        liveStrategyStoreProvider.future,
+      );
+      final List<LiveStrategy> active = all
+          .where((LiveStrategy s) => s.isActive)
+          .toList();
       double cap = 0;
       double today = 0;
       double total = 0;
@@ -338,14 +385,11 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
 /// 单个实盘策略详情（#1752）。派生自 store；未命中抛错（详情页落 error 态）。
 final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
     FutureProvider.family<LiveStrategy, String>((Ref ref, String id) async {
-      final List<LiveStrategy> all =
-          await ref.watch(liveStrategyStoreProvider.future);
+      final List<LiveStrategy> all = await ref.watch(
+        liveStrategyStoreProvider.future,
+      );
       return all.firstWhere((LiveStrategy s) => s.id == id);
     });
-
-// position/trades/params 三个 per-tab provider：契约 AccountAiQuantStrategyDetailResponseDto
-// 的 positionOverview/latestOrders/paramValues 均为无内层 schema 的 object/array<object>，
-// 在 typed array-element schema 落地前，repo 内部短路到 mock（不再发 HTTP），保持 mock 兜底。
 
 /// 单个实盘策略持仓（#1752）。null 表示无持仓（已暂停/停止）。
 /// 从 store 取最新 status 判断 mayHavePosition，确保暂停后持仓即时消失。
@@ -355,11 +399,12 @@ liveStrategyPositionProvider =
       Ref ref,
       String id,
     ) async {
-      final List<LiveStrategy> all =
-          await ref.watch(liveStrategyStoreProvider.future);
+      final List<LiveStrategy> all = await ref.watch(
+        liveStrategyStoreProvider.future,
+      );
       final LiveStrategy s = all.firstWhere((LiveStrategy x) => x.id == id);
       if (!s.mayHavePosition) return null;
-      return mockLivePositions[id];
+      return ref.watch(liveStrategyRepositoryProvider).getPosition(id);
     });
 
 /// 单个实盘策略历史成交（#1752）。
@@ -387,14 +432,12 @@ liveStrategyParamsProvider =
 /// 顶部铃铛 panel 与监控 Tab 内「通知中心」子 Tab 共享同一份列表与
 /// 已读状态，避免两套独立 state 漂移。mock 阶段种子来自
 /// [mockWhaleNotifications]，真实推送（#1683）接入后替换 seed 来源即可。
-class WhaleNotificationsNotifier
-    extends Notifier<List<WhaleNotification>> {
+class WhaleNotificationsNotifier extends Notifier<List<WhaleNotification>> {
   @override
   List<WhaleNotification> build() =>
       List<WhaleNotification>.of(mockWhaleNotifications);
 
-  int get unreadCount =>
-      state.where((WhaleNotification n) => n.unread).length;
+  int get unreadCount => state.where((WhaleNotification n) => n.unread).length;
 
   /// 标记单条已读（点击通知行时调用）。
   void markRead(String id) {
@@ -419,10 +462,10 @@ class WhaleNotificationsNotifier
 
 /// 通知中心共享 provider（issue #1769）。
 final NotifierProvider<WhaleNotificationsNotifier, List<WhaleNotification>>
-    whaleNotificationsProvider =
+whaleNotificationsProvider =
     NotifierProvider<WhaleNotificationsNotifier, List<WhaleNotification>>(
-  WhaleNotificationsNotifier.new,
-);
+      WhaleNotificationsNotifier.new,
+    );
 
 /// 未读通知计数派生 provider（#2192）。
 ///
