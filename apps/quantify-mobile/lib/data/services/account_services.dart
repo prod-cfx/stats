@@ -32,17 +32,22 @@ class AiChatService {
       _client.get('/account/ai-quant/conversations');
 
   Future<dynamic> createSession({String? title}) => _client.post(
-        '/llm-strategy-codegen/sessions',
-        body: <String, dynamic>{'title': ?title},
-      );
+    '/llm-strategy-codegen/sessions',
+    body: <String, dynamic>{'title': ?title},
+  );
 
   Future<void> deleteSession(String sessionId) async {
     await _client.delete('/account/ai-quant/conversations/$sessionId');
   }
 
   Future<dynamic> sendMessage(String sessionId, Map<String, dynamic> turn) =>
-      _client.post('/llm-strategy-codegen/sessions/$sessionId/messages',
-          body: turn);
+      _client.post(
+        '/llm-strategy-codegen/sessions/$sessionId/messages',
+        body: turn,
+      );
+
+  Future<dynamic> getCodegenSession(String sessionId) =>
+      _client.get('/llm-strategy-codegen/sessions/$sessionId');
 
   /// 异步 deploy 第一段：提交部署请求，返回详情信封。
   /// 契约 body 为 AccountAiQuantDeployRequestDto。
@@ -52,6 +57,6 @@ class AiChatService {
   /// 异步 deploy 第二段：按 deployRequestId 轮询结果，
   /// `data == null` 表示 pending。
   Future<dynamic> getDeployResult(String deployRequestId) => _client.get(
-        '/account/ai-quant/strategies/deploy-requests/$deployRequestId/result',
-      );
+    '/account/ai-quant/strategies/deploy-requests/$deployRequestId/result',
+  );
 }

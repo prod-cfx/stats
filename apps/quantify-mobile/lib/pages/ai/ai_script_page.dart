@@ -110,6 +110,27 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
 
   String get _script => buildStratScript(_params);
   String get _fileName => stratFileName(_params);
+  String? get _codegenStatus =>
+      _params['codegenStatus'] ??
+      _params['codegen_status'] ??
+      _params['status'];
+  String? get _codegenError => _params['codegenError'] ?? _params['error'];
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_syncCodegenStatus);
+  }
+
+  @override
+  void didUpdateWidget(covariant AiScriptPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.params != widget.params) _syncCodegenStatus();
+  }
+
+  void _syncCodegenStatus() {
+    _ctrl.syncCodegenStatus(_codegenStatus, errorMessage: _codegenError);
+  }
 
   Future<void> _copyScript() async {
     try {
@@ -196,7 +217,11 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
                     ),
                     const SizedBox(height: QzSpacing.md),
                     _SuccessHint(text: l10n.aiScriptSuccessHint),
-                  ] else
+                  ] else if (st.failed)
+                    _ScriptErrorCard(
+                      text: '${l10n.commonLoadError}: ${st.errorMessage ?? ''}',
+                    )
+                  else
                     _GeneratingCard(
                       title: l10n.aiScriptGeneratingTitle,
                       steps: l10n.aiScriptGeneratingSteps,
@@ -217,4 +242,3 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
     );
   }
 }
-

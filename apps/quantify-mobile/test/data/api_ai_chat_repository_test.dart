@@ -9,7 +9,7 @@ import 'package:quantify_mobile/data/services/api_client.dart';
 /// unsupported 行为；不发真实 HTTP（issue #2285）。
 class _StubAiChatService extends AiChatService {
   _StubAiChatService({required this.deployResults})
-      : super(ApiClient(baseUrl: 'http://localhost'));
+    : super(ApiClient(baseUrl: 'http://localhost'));
 
   /// 每次 getDeployResult 顺序返回；超出长度后复用最后一项。
   final List<Object?> deployResults;
@@ -27,8 +27,8 @@ class _StubAiChatService extends AiChatService {
 
   @override
   Future<dynamic> getDeployResult(String deployRequestId) async {
-    final Object? r = deployResults[
-        resultCallCount < deployResults.length
+    final Object? r =
+        deployResults[resultCallCount < deployResults.length
             ? resultCallCount
             : deployResults.length - 1];
     resultCallCount++;
@@ -39,30 +39,50 @@ class _StubAiChatService extends AiChatService {
 /// 替身：仅预置 listSessions 响应，校验 watchSession 从 list 真源派生
 /// （契约无单会话 GET）；不发真实 HTTP（issue #2287）。
 class _StubListAiChatService extends AiChatService {
-  _StubListAiChatService({required this.rows})
-      : super(ApiClient(baseUrl: 'http://localhost'));
+  _StubListAiChatService({required this.rows, this.codegenSessions = const []})
+    : super(ApiClient(baseUrl: 'http://localhost'));
 
   final List<Map<String, dynamic>> rows;
+  final List<Map<String, dynamic>> codegenSessions;
   int listCallCount = 0;
+  int codegenCallCount = 0;
 
   @override
   Future<dynamic> listSessions() async {
     listCallCount++;
     return rows;
   }
+
+  @override
+  Future<dynamic> getCodegenSession(String sessionId) async {
+    final Map<String, dynamic> r =
+        codegenSessions[codegenCallCount < codegenSessions.length
+            ? codegenCallCount
+            : codegenSessions.length - 1];
+    codegenCallCount++;
+    return r;
+  }
 }
 
 void main() {
-  group('ApiAiChatRepository.watchSession 从 list 派生（契约无单会话 GET）', () {
-    test('命中会话且有消息 → 发末条消息后结束', () async {
+  group('ApiAiChatRepository.watchSession 轮询真实 codegen session', () {
+    test('轮询 codegen session，产出新增 assistant 消息后结束', () async {
       final _StubListAiChatService svc = _StubListAiChatService(
-        rows: <Map<String, dynamic>>[
+        rows: const <Map<String, dynamic>>[],
+        codegenSessions: <Map<String, dynamic>>[
           <String, dynamic>{
             'id': 's-1',
-            'title': '会话1',
-            'messages': <Map<String, dynamic>>[
-              <String, dynamic>{'id': 'm-1', 'role': 'user', 'content': '早'},
-              <String, dynamic>{'id': 'm-2', 'role': 'assistant', 'content': '末条'},
+            'status': 'GENERATING',
+            'conversationMessages': <Map<String, dynamic>>[
+              <String, dynamic>{'role': 'user', 'content': '早'},
+            ],
+          },
+          <String, dynamic>{
+            'id': 's-1',
+            'status': 'PUBLISHED',
+            'conversationMessages': <Map<String, dynamic>>[
+              <String, dynamic>{'role': 'user', 'content': '早'},
+              <String, dynamic>{'role': 'assistant', 'content': '完成'},
             ],
           },
         ],
@@ -71,10 +91,10 @@ void main() {
 
       final List<ChatTurn> turns = await repo.watchSession('s-1').toList();
 
-      expect(svc.listCallCount, 1);
+      expect(svc.codegenCallCount, 2);
       expect(turns, hasLength(1));
-      expect(turns.single.id, 'm-2');
-      expect(turns.single.content, '末条');
+      expect(turns.single.role, 'assistant');
+      expect(turns.single.content, '完成');
     });
 
     test('命中会话但无消息 → 不发任何帧', () async {
@@ -102,15 +122,15 @@ void main() {
       );
       final ApiAiChatRepository repo = ApiAiChatRepository(svc);
 
-      final List<ChatTurn> turns =
-          await repo.watchSession('missing').toList();
+      final List<ChatTurn> turns = await repo.watchSession('missing').toList();
 
       expect(turns, isEmpty);
     });
 
     test('list 为空 → 静默结束', () async {
-      final _StubListAiChatService svc =
-          _StubListAiChatService(rows: <Map<String, dynamic>>[]);
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[],
+      );
       final ApiAiChatRepository repo = ApiAiChatRepository(svc);
 
       final List<ChatTurn> turns = await repo.watchSession('s-1').toList();
@@ -141,8 +161,7 @@ void main() {
       expect(svc.resultCallCount, 2);
     });
 
-    test('恒 pending（data:null）→ 返回 null 且轮询恰 3 次（有界，不死循环）',
-        () async {
+    test('恒 pending（data:null）→ 返回 null 且轮询恰 3 次（有界，不死循环）', () async {
       final _StubAiChatService svc = _StubAiChatService(
         deployResults: <Object?>[
           <String, dynamic>{'data': null},
@@ -175,38 +194,53 @@ void main() {
       expect(id0, id1);
     });
 
-    test('deploy body 含 deployRequestId / publishedSnapshotId / name',
-        () async {
-      final _StubAiChatService svc = _StubAiChatService(
-        deployResults: <Object?>[
-          <String, dynamic>{'data': null},
+    test(
+      'deploy body 含 deployRequestId / publishedSnapshotId / name',
+      () async {
+        final _StubAiChatService svc = _StubAiChatService(
+          deployResults: <Object?>[
+            <String, dynamic>{'data': null},
+          ],
+        );
+        final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+        await repo.markDeployed('sess-A', 'inst-B');
+
+        final Map<String, dynamic> body = svc.deployBodies.single;
+        expect(body['deployRequestId'], isNotNull);
+        expect(body['publishedSnapshotId'], 'inst-B');
+        expect(body.containsKey('name'), isTrue);
+      },
+    );
+  });
+
+  group('ApiAiChatRepository.latestBacktest 读取真实 lastBacktestRef', () {
+    test('从 conversation list 的 lastBacktestRef.summary 解析摘要', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'conv-1',
+            'lastBacktestRef': <String, dynamic>{
+              'jobId': 'job-1',
+              'summary': <String, dynamic>{
+                'totalReturnPct': 12.5,
+                'maxDrawdownPct': 3.4,
+                'tradeCount': 9,
+              },
+            },
+          },
         ],
       );
       final ApiAiChatRepository repo = ApiAiChatRepository(svc);
 
-      await repo.markDeployed('sess-A', 'inst-B');
+      final BacktestSummary? r = await repo.latestBacktest('conv-1');
 
-      final Map<String, dynamic> body = svc.deployBodies.single;
-      expect(body['deployRequestId'], isNotNull);
-      expect(body['publishedSnapshotId'], 'inst-B');
-      expect(body.containsKey('name'), isTrue);
-    });
-  });
-
-  group('ApiAiChatRepository.latestBacktest unsupported', () {
-    test('无条件返 null，不调用 service（service 方法已删，编译即保证）',
-        () async {
-      // service 仅需可构造；latestBacktest 不应触达任何 service 方法。
-      final _StubAiChatService svc = _StubAiChatService(
-        deployResults: <Object?>[<String, dynamic>{'data': null}],
-      );
-      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
-
-      final BacktestSummary? r = await repo.latestBacktest('any-session');
-
-      expect(r, isNull);
-      expect(svc.deployCallCount, 0);
-      expect(svc.resultCallCount, 0);
+      expect(r, isNotNull);
+      expect(r!.id, 'job-1');
+      expect(r.totalReturnPercent, 12.5);
+      expect(r.maxDrawdownPercent, 3.4);
+      expect(r.trades, 9);
+      expect(svc.listCallCount, 1);
     });
   });
 }

@@ -21,6 +21,7 @@ class _DonePane extends StatelessWidget {
         l10n.deployDoneDetailStrategyId,
         result.strategyId ?? result.instanceId,
       ],
+      <String>[l10n.deployDoneDetailInstanceId, result.instanceId],
       <String>[l10n.deployDoneDetailExchange, result.exchange.toUpperCase()],
       if (result.symbol != null)
         <String>[l10n.deployDoneDetailSymbol, result.symbol!],

@@ -24,17 +24,28 @@ void main() {
   }
 
   group('AiScriptPageController', () {
-    test('舞台机：build 为 generating，genDelay 后推进 ready', () {
-      fakeAsync((FakeAsync async) {
-        final ProviderContainer c = makeContainer();
-        pin(c);
-        expect(read(c).stage, ScriptStage.generating);
-        expect(read(c).ready, isFalse);
+    test('舞台机：build 为 generating，收到 PUBLISHED 后推进 ready', () {
+      final ProviderContainer c = makeContainer();
+      pin(c);
+      expect(read(c).stage, ScriptStage.generating);
+      expect(read(c).ready, isFalse);
 
-        async.elapse(AiScriptPageController.genDelay);
-        expect(read(c).stage, ScriptStage.ready);
-        expect(read(c).ready, isTrue);
-      });
+      ctrl(c).syncCodegenStatus('PUBLISHED');
+      expect(read(c).stage, ScriptStage.ready);
+      expect(read(c).ready, isTrue);
+    });
+
+    test('舞台机：收到失败状态后停在 failed 并保留错误', () {
+      final ProviderContainer c = makeContainer();
+      pin(c);
+
+      ctrl(c).syncCodegenStatus(
+        'CONSISTENCY_FAILED',
+        errorMessage: 'syntax mismatch',
+      );
+      expect(read(c).stage, ScriptStage.failed);
+      expect(read(c).failed, isTrue);
+      expect(read(c).errorMessage, 'syntax mismatch');
     });
 
     test('toggleExpand 翻转展开态', () {
@@ -55,18 +66,15 @@ void main() {
 
         async.elapse(AiScriptPageController.copiedHold);
         expect(read(c).copied, isFalse);
-        // 排空残留的 genTimer，避免 fakeAsync 末尾 pending timer 报错
-        async.elapse(AiScriptPageController.genDelay);
       });
     });
 
-    test('dispose 取消 timer：generating 态销毁不再推进', () {
+    test('dispose 取消复制 timer：销毁不再回调', () {
       fakeAsync((FakeAsync async) {
         final ProviderContainer c = ProviderContainer();
-        c.read(aiScriptPageControllerProvider); // 触发 build 启动 genTimer
+        c.read(aiScriptPageControllerProvider.notifier).markCopied();
         c.dispose();
-        // 即便越过 genDelay，已 dispose 的 controller 不应抛（timer 已取消）
-        async.elapse(AiScriptPageController.genDelay * 2);
+        async.elapse(AiScriptPageController.copiedHold * 2);
       });
     });
   });

@@ -256,12 +256,14 @@ final Provider<BacktestRepository> backtestRepositoryProvider =
           : ApiBacktestRepository(ref.watch(backtestServiceProvider));
     });
 
-/// 回测结果（#2215）。结果页 watch；mock-first 阶段固定 scenario id `'mock'`
-/// 收敛于此处一处，View 不再在 build() 里硬编码或新建 future。真实回测 id
-/// 参数化（改 family + 页面入参）依赖后端接入 #2189，本 Issue 不做。
-final FutureProvider<BacktestResult> backtestResultProvider =
-    FutureProvider<BacktestResult>((Ref ref) async {
-      return ref.watch(backtestRepositoryProvider).getResult('mock');
+/// 回测结果（#2215/#2310）。结果页按真实回测 job id 拉取结果；mock 环境
+/// 也走同一 `getResult(jobId)` 合约，View 不再硬编码固定 id。
+final FutureProviderFamily<BacktestResult, String> backtestResultProvider =
+    FutureProvider.family<BacktestResult, String>((
+      Ref ref,
+      String jobId,
+    ) async {
+      return ref.watch(backtestRepositoryProvider).getResult(jobId);
     });
 
 final Provider<AccountRepository> accountRepositoryProvider =

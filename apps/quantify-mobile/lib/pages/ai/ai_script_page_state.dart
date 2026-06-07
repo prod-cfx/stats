@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-/// 脚本生成舞台：生成中 → 就绪。
-enum ScriptStage { generating, ready }
+/// 脚本生成舞台：生成中 → 就绪 / 失败。
+enum ScriptStage { generating, ready, failed }
 
 /// AI 策略脚本屏的不可变页面态（issue #2186 三件套迁移）。
 ///
@@ -14,23 +14,28 @@ class AiScriptPageState {
     this.stage = ScriptStage.generating,
     this.expanded = false,
     this.copied = false,
+    this.errorMessage,
   });
 
   final ScriptStage stage;
   final bool expanded;
   final bool copied;
+  final String? errorMessage;
 
   bool get ready => stage == ScriptStage.ready;
+  bool get failed => stage == ScriptStage.failed;
 
   AiScriptPageState copyWith({
     ScriptStage? stage,
     bool? expanded,
     bool? copied,
+    String? errorMessage,
   }) {
     return AiScriptPageState(
       stage: stage ?? this.stage,
       expanded: expanded ?? this.expanded,
       copied: copied ?? this.copied,
+      errorMessage: errorMessage ?? this.errorMessage,
     );
   }
 }

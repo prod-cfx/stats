@@ -771,6 +771,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployDoneDetailStrategyId => '策略 ID';
 
   @override
+  String get deployDoneDetailInstanceId => '实例 ID';
+
+  @override
   String get deployDoneDetailExchange => '交易所';
 
   @override

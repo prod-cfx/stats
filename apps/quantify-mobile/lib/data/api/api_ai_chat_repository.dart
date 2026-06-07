@@ -13,10 +13,14 @@ ChatTurnKind _kindFromApi(Object? raw) {
 
 ChatTurn _parseTurn(Map<String, dynamic> m) {
   final Object? params = pick(m, <String>['params']);
+  final String content = asString(pick(m, <String>['content']));
   return ChatTurn(
-    id: asString(pick(m, <String>['id'])),
+    id: asString(
+      pick(m, <String>['id']),
+      fallback: 'turn-${asString(pick(m, <String>['role']))}-$content',
+    ),
     role: asString(pick(m, <String>['role']), fallback: 'assistant'),
-    content: asString(pick(m, <String>['content'])),
+    content: content,
     timestamp: asDateTime(pick(m, <String>['timestamp', 'ts'])),
     kind: _kindFromApi(pick(m, <String>['kind'])),
     params: params is Map
@@ -32,12 +36,12 @@ ChatTurn _parseTurn(Map<String, dynamic> m) {
 AiSession _parseSession(Map<String, dynamic> m) {
   return AiSession(
     id: asString(pick(m, <String>['id'])),
-    title: asString(pick(m, <String>['title'])),
+    title: asString(pick(m, <String>['title', 'conversationTitle'])),
     category: asString(pick(m, <String>['category']), fallback: '未分类'),
     updatedAt: asDateTime(pick(m, <String>['updatedAt'])),
-    messages: asMapList(pick(m, <String>['messages']))
-        .map(_parseTurn)
-        .toList(growable: false),
+    messages: asMapList(
+      pick(m, <String>['messages', 'conversationMessages']),
+    ).map(_parseTurn).toList(growable: false),
     pair: asStringOrNull(pick(m, <String>['pair'])),
     timeframe: asStringOrNull(pick(m, <String>['timeframe'])),
     cagrLabel: asStringOrNull(pick(m, <String>['cagrLabel'])),
@@ -56,18 +60,20 @@ class ApiAiChatRepository implements AiChatRepository {
   ApiAiChatRepository(this._service);
 
   final AiChatService _service;
+  static const int _sessionPollLimit = 3;
 
   List<Map<String, dynamic>> _rows(dynamic raw) {
-    final Object? list =
-        raw is Map ? pick(asMap(raw), <String>['items', 'data']) : raw;
+    final Object? list = raw is Map
+        ? pick(asMap(raw), <String>['items', 'data'])
+        : raw;
     return asMapList(list ?? raw);
   }
 
   @override
   Future<List<AiSession>> listSessions() async {
-    return _rows(await _service.listSessions())
-        .map(_parseSession)
-        .toList(growable: false);
+    return _rows(
+      await _service.listSessions(),
+    ).map(_parseSession).toList(growable: false);
   }
 
   @override
@@ -93,21 +99,65 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) async* {
-    // 契约无单会话 GET（`/conversations/{id}` 仅 DELETE/PATCH）；从 list 真源
-    // 派生目标会话。命中且有消息则发末条；未命中静默结束（不抛，UI 接入安全）。
-    final List<AiSession> sessions = await listSessions();
-    for (final AiSession session in sessions) {
-      if (session.id == sessionId) {
-        if (session.messages.isNotEmpty) yield session.messages.last;
-        return;
+    try {
+      int emitted = 0;
+      for (int i = 0; i < _sessionPollLimit; i++) {
+        final Map<String, dynamic> raw = asMap(
+          await _service.getCodegenSession(sessionId),
+        );
+        final AiSession session = _parseSession(raw);
+        final List<ChatTurn> messages = session.messages;
+        for (final ChatTurn turn in messages.skip(emitted)) {
+          if (turn.role == 'assistant') yield turn;
+        }
+        emitted = messages.length;
+        final String status = asString(pick(raw, <String>['status']));
+        if (_isTerminalCodegenStatus(status)) return;
       }
+      return;
+    } catch (_) {
+      final List<AiSession> sessions = await listSessions();
+      for (final AiSession session in sessions) {
+        if (session.id == sessionId) {
+          if (session.messages.isNotEmpty) yield session.messages.last;
+          return;
+        }
+      }
+    }
+  }
+
+  bool _isTerminalCodegenStatus(String status) {
+    switch (status.toUpperCase()) {
+      case 'PUBLISHED':
+      case 'CONSISTENCY_FAILED':
+      case 'REJECTED':
+        return true;
+      default:
+        return false;
     }
   }
 
   @override
   Future<BacktestSummary?> latestBacktest(String sessionId) async {
-    // 契约无会话级回测结果端点（/conversations/{id} 仅 DELETE）；typed summary
-    // 仅在列表 DTO lastBacktestRef.summary。unsupported → null。
+    final List<Map<String, dynamic>> rows = _rows(
+      await _service.listSessions(),
+    );
+    for (final Map<String, dynamic> row in rows) {
+      if (asString(pick(row, <String>['id'])) != sessionId) continue;
+      final Map<String, dynamic> ref = asMap(row['lastBacktestRef']);
+      final Map<String, dynamic> summary = asMap(ref['summary']);
+      if (ref.isEmpty || summary.isEmpty) return null;
+      return BacktestSummary(
+        id: asString(pick(ref, <String>['jobId', 'id'])),
+        totalReturnPercent: asDouble(
+          pick(summary, <String>['totalReturnPct', 'totalReturnPercent']),
+        ),
+        maxDrawdownPercent: asDouble(
+          pick(summary, <String>['maxDrawdownPct', 'maxDrawdownPercent']),
+        ),
+        trades: asInt(pick(summary, <String>['tradeCount', 'trades'])),
+      );
+    }
     return null;
   }
 
@@ -131,8 +181,9 @@ class ApiAiChatRepository implements AiChatRepository {
     await _service.deployStrategy(body);
 
     for (int i = 0; i < _deployPollLimit; i++) {
-      final Map<String, dynamic> envelope =
-          asMap(await _service.getDeployResult(deployRequestId));
+      final Map<String, dynamic> envelope = asMap(
+        await _service.getDeployResult(deployRequestId),
+      );
       // 信封含 data 键：data==null 视为 pending，继续轮询；非空才解析。
       // 无 data 键则回退原 map（仿 ApiAuthRepository 扁平响应回退）。
       final bool hasData = envelope.containsKey('data');

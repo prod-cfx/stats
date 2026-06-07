@@ -257,6 +257,7 @@
   "deployDoneSubtitle": "Your strategy is live on {exchange}; we'll push you when the first signal fires",
   "@deployDoneSubtitle": { "placeholders": { "exchange": {} } },
   "deployDoneDetailStrategyId": "Strategy ID",
+  "deployDoneDetailInstanceId": "Instance ID",
   "deployDoneDetailExchange": "Exchange",
   "deployDoneDetailSymbol": "Pair",
   "deployDoneDetailAmount": "Initial funds",

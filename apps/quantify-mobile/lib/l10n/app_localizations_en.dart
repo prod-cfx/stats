@@ -811,6 +811,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deployDoneDetailStrategyId => 'Strategy ID';
 
   @override
+  String get deployDoneDetailInstanceId => 'Instance ID';
+
+  @override
   String get deployDoneDetailExchange => 'Exchange';
 
   @override

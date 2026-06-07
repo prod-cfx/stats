@@ -10,7 +10,7 @@ class _DeployingPane extends StatefulWidget {
 
   final QzColorScheme scheme;
   final String exchangeName;
-  final VoidCallback onDone;
+  final Future<void> Function() onDone;
 
   static const int _stepCount = 5;
 
@@ -65,7 +65,7 @@ class _DeployingPaneState extends State<_DeployingPane> {
       if (!mounted) return;
       final int next = _idx + 1;
       if (next > _DeployingPane._stepCount) {
-        widget.onDone();
+        unawaited(widget.onDone());
         return;
       }
       setState(() => _idx = next);

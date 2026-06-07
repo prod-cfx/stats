@@ -1,8 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/backtest_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -12,37 +13,46 @@ import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「回测进行中」整屏页 — 向导第 4 步。
-class AiBacktestRunPage extends StatefulWidget {
+class AiBacktestRunPage extends ConsumerStatefulWidget {
   const AiBacktestRunPage({super.key});
 
   @override
-  State<AiBacktestRunPage> createState() => _AiBacktestRunPageState();
+  ConsumerState<AiBacktestRunPage> createState() => _AiBacktestRunPageState();
 }
 
-class _AiBacktestRunPageState extends State<AiBacktestRunPage> {
+class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
   double _progress = 0.38;
-  Timer? _timer;
+  Object? _error;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 110), (Timer timer) {
-      if (!mounted) return;
-      final double next = (_progress + 0.02).clamp(0.0, 1.0);
-      setState(() => _progress = next);
-      if (next >= 1) {
-        timer.cancel();
-        Future<void>.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) context.pushReplacement('/ai/backtest-result');
-        });
-      }
-    });
+    Future<void>.microtask(_runBacktest);
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  Future<void> _runBacktest() async {
+    try {
+      final DateTime end = DateTime.now();
+      final BacktestResult result = await ref
+          .read(backtestRepositoryProvider)
+          .run(
+            BacktestRequest(
+              strategyId: 'current-ai-session',
+              symbol: 'BTCUSDT',
+              startTime: end.subtract(const Duration(days: 30)),
+              endTime: end,
+              params: const <String, dynamic>{},
+            ),
+          );
+      if (!mounted) return;
+      setState(() => _progress = 1);
+      context.pushReplacement(
+        '/ai/backtest-result?jobId=${Uri.encodeComponent(result.id)}',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e);
+    }
   }
 
   @override
@@ -88,7 +98,10 @@ class _AiBacktestRunPageState extends State<AiBacktestRunPage> {
                       100,
                     ),
                     children: <Widget>[
-                      QzBacktestProgressCard(progress: _progress),
+                      if (_error == null)
+                        QzBacktestProgressCard(progress: _progress)
+                      else
+                        Text('${l10n.commonLoadError}: $_error'),
                     ],
                   ),
                   Positioned(

@@ -30,10 +30,8 @@ part 'qz_deploy_sheet.done.part.dart';
 /// （`confirm → deploying → success`，#2064 对齐新版部署设计）。
 /// 拆成多个 Widget 反而要把 step 状态外挂或层层 callback，按 KISS 内聚在一处。
 ///
-/// 真后端尚未接入：交易所列表读 `apiKeysProvider`；部署进度用一次性链式
-/// `Timer` 模拟分步推进；成功后生成本地实例 ID 并 `Navigator.pop`
-/// 把 `DeploymentResult` 返回给调用方（`AiHomePage` 据此在对话流追加系统消息 +
-/// 弹出 toast）。
+/// 交易所列表读 `apiKeysProvider`；部署分步动画只表达进度，最终成功态由
+/// `AiChatRepository.markDeployed` 的真实部署/轮询结果驱动。
 ///
 /// 交易所 / 市场 / 资金由 AI 对话上下文决定，部署页只做只读账单确认 +
 /// 部署前检查。未绑定 API 时在检查失败项内提供 API 绑定入口。
@@ -114,6 +112,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   DeployStep _step = DeployStep.confirm;
   _DeployTarget? _deployingTarget;
   DeploymentResult? _result;
+  Object? _deployError;
   String? _selectedAccountId;
 
   // #1772 资金配置状态。
@@ -131,30 +130,43 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     if (!target.authorized) return;
     setState(() {
       _deployingTarget = target;
+      _deployError = null;
       _step = DeployStep.deploying;
     });
   }
 
-  /// 部署分步动画跑完 → 用资金配置快照回填 `DeploymentResult` → done。
-  void _onDeployingDone() {
+  /// 部署分步动画跑完 → 调真实部署/轮询 → done；失败停留错误态。
+  Future<void> _onDeployingDone() async {
     final _DeployTarget? target = _deployingTarget;
     if (!mounted || target?.apiKey == null) return;
-    final DateTime now = DateTime.now();
-    final DeploymentResult result = DeploymentResult(
-      exchange: target!.apiKey!.exchange,
-      instanceId: 'inst-${now.microsecondsSinceEpoch}',
-      deployedAt: now,
-      strategyId:
-          'QF-${now.millisecondsSinceEpoch.toRadixString(36).toUpperCase().substring(0, 6)}',
-      symbol: 'BTC/USDT · 15m',
-      amount: _amount,
-      leverage: '5x · 全仓',
-      startedAt: now,
-    );
-    setState(() {
-      _result = result;
-      _step = DeployStep.success;
-    });
+    try {
+      final session = await ref
+          .read(aiChatRepositoryProvider)
+          .markDeployed('current-ai-session', target!.apiKey!.id);
+      if (!mounted) return;
+      if (session == null || session.deployedTo == null) {
+        setState(() => _deployError = '部署仍在处理中');
+        return;
+      }
+      final DateTime now = DateTime.now();
+      setState(() {
+        _deployError = null;
+        _result = DeploymentResult(
+          exchange: target.apiKey!.exchange,
+          instanceId: session.deployedTo!,
+          deployedAt: now,
+          strategyId: session.id,
+          symbol: session.pair,
+          amount: _amount,
+          leverage: '5x · 全仓',
+          startedAt: now,
+        );
+        _step = DeployStep.success;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deployError = e);
+    }
   }
 
   /// 兼容旧入口（空列表场景），等价于打开 Binance API 表单。
@@ -282,10 +294,22 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
         );
       case DeployStep.deploying:
         final _DeployTarget active = _deployingTarget ?? target;
-        return _DeployingPane(
-          scheme: c,
-          exchangeName: active.catalog.name,
-          onDone: _onDeployingDone,
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _DeployingPane(
+              scheme: c,
+              exchangeName: active.catalog.name,
+              onDone: _onDeployingDone,
+            ),
+            if (_deployError != null) ...<Widget>[
+              const SizedBox(height: QzSpacing.md),
+              Text(
+                '${l10n.commonLoadError}: $_deployError',
+                style: TextStyle(color: c.statusDanger, fontSize: 13),
+              ),
+            ],
+          ],
         );
       case DeployStep.success:
         return _DonePane(
@@ -493,7 +517,6 @@ String _formatStartedAt(DateTime t) {
   return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
 }
 
-
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
@@ -568,7 +591,6 @@ class _SummaryCell extends StatelessWidget {
     );
   }
 }
-
 
 /// 资金配置（#1772 DpAllocate）。
 ///

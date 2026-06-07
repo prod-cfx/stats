@@ -260,6 +260,7 @@
   "deployDoneSubtitle": "策略已在 {exchange} 实盘运行，首个信号触发后会推送提醒你",
   "@deployDoneSubtitle": { "placeholders": { "exchange": {} } },
   "deployDoneDetailStrategyId": "策略 ID",
+  "deployDoneDetailInstanceId": "实例 ID",
   "deployDoneDetailExchange": "交易所",
   "deployDoneDetailSymbol": "交易对",
   "deployDoneDetailAmount": "初始资金",

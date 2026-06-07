@@ -1542,6 +1542,12 @@ abstract class AppLocalizations {
   /// **'策略 ID'**
   String get deployDoneDetailStrategyId;
 
+  /// No description provided for @deployDoneDetailInstanceId.
+  ///
+  /// In zh, this message translates to:
+  /// **'实例 ID'**
+  String get deployDoneDetailInstanceId;
+
   /// No description provided for @deployDoneDetailExchange.
   ///
   /// In zh, this message translates to:

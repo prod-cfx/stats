@@ -15,7 +15,9 @@ import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「回测结果」整屏页 — 仍属于向导第 4 步。
 class AiBacktestResultPage extends ConsumerWidget {
-  const AiBacktestResultPage({super.key});
+  const AiBacktestResultPage({super.key, this.jobId});
+
+  final String? jobId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -50,72 +52,75 @@ class AiBacktestResultPage extends ConsumerWidget {
               done: const <int>[0, 1, 2],
             ),
             Expanded(
-              child: ref
-                  .watch(backtestResultProvider)
-                  .when(
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (Object error, StackTrace _) =>
-                        Center(child: Text(error.toString())),
-                    data: (BacktestResult result) => Stack(
-                      children: <Widget>[
-                        ListView(
-                          padding: const EdgeInsets.fromLTRB(
-                            QzSpacing.lg,
-                            QzSpacing.md,
-                            QzSpacing.lg,
-                            100,
-                          ),
-                          children: <Widget>[
-                            QzBacktestResultCard(result: result),
-                          ],
-                        ),
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            padding: const EdgeInsets.fromLTRB(
-                              QzSpacing.lg,
-                              QzSpacing.md,
-                              QzSpacing.lg,
-                              QzSpacing.lg,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: <Color>[
-                                  c.bg.withValues(alpha: 0),
-                                  c.bg,
+              child: jobId == null || jobId!.isEmpty
+                  ? Center(child: Text(l10n.commonLoadError))
+                  : ref
+                        .watch(backtestResultProvider(jobId!))
+                        .when(
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (Object error, StackTrace _) =>
+                              Center(child: Text(error.toString())),
+                          data: (BacktestResult result) => Stack(
+                            children: <Widget>[
+                              ListView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  QzSpacing.lg,
+                                  QzSpacing.md,
+                                  QzSpacing.lg,
+                                  100,
+                                ),
+                                children: <Widget>[
+                                  QzBacktestResultCard(result: result),
                                 ],
                               ),
-                            ),
-                            child: Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: _SolidSecondaryButton(
-                                    label: l10n.backtestCollapseButton,
-                                    onPressed: () => context.pop(),
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    QzSpacing.lg,
+                                    QzSpacing.md,
+                                    QzSpacing.lg,
+                                    QzSpacing.lg,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: <Color>[
+                                        c.bg.withValues(alpha: 0),
+                                        c.bg,
+                                      ],
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: <Widget>[
+                                      Expanded(
+                                        child: _SolidSecondaryButton(
+                                          label: l10n.backtestCollapseButton,
+                                          onPressed: () => context.pop(),
+                                        ),
+                                      ),
+                                      const SizedBox(width: QzSpacing.md),
+                                      Expanded(
+                                        flex: 2,
+                                        child: QzButton(
+                                          label: '一键部署到交易所',
+                                          variant: QzButtonVariant.accent,
+                                          onPressed: () =>
+                                              context.push('/ai/deploy'),
+                                          expanded: true,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: QzSpacing.md),
-                                Expanded(
-                                  flex: 2,
-                                  child: QzButton(
-                                    label: '一键部署到交易所',
-                                    variant: QzButtonVariant.accent,
-                                    onPressed: () => context.push('/ai/deploy'),
-                                    expanded: true,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
             ),
           ],
         ),

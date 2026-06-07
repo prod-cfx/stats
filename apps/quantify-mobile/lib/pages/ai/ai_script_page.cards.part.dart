@@ -210,6 +210,36 @@ class _GeneratingCard extends StatelessWidget {
   }
 }
 
+/// 生成失败态：展示 repository/codegen 错误，CTA 仍保持禁用。
+class _ScriptErrorCard extends StatelessWidget {
+  const _ScriptErrorCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return QzCard(
+      key: const Key('ai-script-error'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: QzSpacing.md),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.error_outline, color: c.statusDanger, size: 22),
+            const SizedBox(width: QzSpacing.sm),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(color: c.statusDanger, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 就绪态成功提示条。
 class _SuccessHint extends StatelessWidget {
   const _SuccessHint({required this.text});

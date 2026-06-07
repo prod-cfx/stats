@@ -51,9 +51,12 @@ class AiConfirmPage extends StatelessWidget {
   Map<String, String> get _params =>
       (params != null && params!.isNotEmpty) ? params! : _fallbackParams;
 
-  // #1892 已落地 `/ai/script` 屏，「下一步：策略脚本」直接路由过去并透传会话参数。
-  void _next(BuildContext context) =>
-      context.push('/ai/script', extra: _params);
+  // #1892 已落地 `/ai/script` 屏。「确认策略」来自会话参数气泡，说明 codegen
+  // 已产出可预览参数；向脚本页透传完成态，避免脚本页本地 Timer 伪造 ready。
+  void _next(BuildContext context) => context.push(
+    '/ai/script',
+    extra: <String, String>{..._params, 'codegenStatus': 'PUBLISHED'},
+  );
 
   void _backToChat(BuildContext context) => context.pop();
 
@@ -297,4 +300,3 @@ StrategyConfirmView _ethGridView(Map<String, String> params) {
         '会持续被动接货并产生浮亏，务必关注风控提示。',
   );
 }
-

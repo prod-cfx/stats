@@ -200,7 +200,7 @@ GoRouter buildRouter({
       GoRoute(
         path: '/ai/backtest-result',
         builder: (BuildContext context, GoRouterState state) =>
-            const AiBacktestResultPage(),
+            AiBacktestResultPage(jobId: state.uri.queryParameters['jobId']),
       ),
       GoRoute(
         path: '/ai/deploy',

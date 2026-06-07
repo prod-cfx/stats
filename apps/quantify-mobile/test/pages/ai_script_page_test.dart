@@ -39,16 +39,13 @@ void main() {
       find.byKey(const Key('ai-script-next-cta')),
     );
     expect(next.onPressed, isNull, reason: '生成中态「下一步」不可点');
-
-    // 收尾 timer，避免 pending timer 报错。
-    await tester.pump(const Duration(milliseconds: 1600));
   });
 
   testWidgets('就绪态：READY badge + 行号 + 成功提示，CTA 可点（验收 3、5）', (
     WidgetTester tester,
   ) async {
-    await _pump(tester);
-    await tester.pump(const Duration(milliseconds: 1600));
+    await _pump(tester, params: <String, String>{'codegenStatus': 'PUBLISHED'});
+    await tester.pump();
 
     expect(find.byKey(const Key('ai-script-ready-badge')), findsOneWidget);
     expect(find.byKey(const Key('ai-script-success-hint')), findsOneWidget);
@@ -62,8 +59,8 @@ void main() {
   });
 
   testWidgets('长脚本：展开折叠切换文案「查看全部 N 行 / 收起」（验收 4）', (WidgetTester tester) async {
-    await _pump(tester);
-    await tester.pump(const Duration(milliseconds: 1600));
+    await _pump(tester, params: <String, String>{'codegenStatus': 'PUBLISHED'});
+    await tester.pump();
 
     final Finder toggle = find.byKey(const Key('ai-script-expand-toggle'));
     expect(toggle, findsOneWidget);
@@ -80,11 +77,12 @@ void main() {
     await _pump(
       tester,
       params: <String, String>{
+        'codegenStatus': 'PUBLISHED',
         'symbol': 'ETH/USDT',
         'file': 'eth_range_grid.js',
       },
     );
-    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump();
 
     // recap badge + 终端头部均显示真实文件名。
     expect(find.text('eth_range_grid.js'), findsWidgets);
@@ -92,9 +90,33 @@ void main() {
   });
 
   testWidgets('无 file 字段时由 symbol 派生文件名（验收 6）', (WidgetTester tester) async {
-    await _pump(tester, params: <String, String>{'symbol': 'BTC/USDT'});
-    await tester.pump(const Duration(milliseconds: 1600));
+    await _pump(
+      tester,
+      params: <String, String>{
+        'codegenStatus': 'PUBLISHED',
+        'symbol': 'BTC/USDT',
+      },
+    );
+    await tester.pump();
     expect(find.text('btc_trend_ma.js'), findsWidgets);
+  });
+
+  testWidgets('失败态：显示 codegen 错误且 CTA 禁用（#2310）', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      params: <String, String>{
+        'codegenStatus': 'CONSISTENCY_FAILED',
+        'codegenError': 'syntax mismatch',
+      },
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('ai-script-error')), findsOneWidget);
+    expect(find.textContaining('syntax mismatch'), findsOneWidget);
+    final FilledButton next = tester.widget<FilledButton>(
+      find.byKey(const Key('ai-script-next-cta')),
+    );
+    expect(next.onPressed, isNull);
   });
 
   test('脚本页 fallback 杠杆默认 5x（#2066）', () {
