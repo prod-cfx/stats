@@ -40,7 +40,7 @@
 
 | 组件                              | 位置                        | 职责                                                              |
 | --------------------------------- | --------------------------- | ----------------------------------------------------------------- |
-| `ClsModule`                       | `common/cls.module.ts`      | 全局 CLS 上下文，挂载 `TransactionalAdapterPrisma`                |
+| `ClsModule`                       | `common/modules/cls.module.ts` | 全局 CLS 上下文，挂载 `TransactionalAdapterPrisma`             |
 | `@Transactional()`                | `@nestjs-cls/transactional` | 开启事务，纯持久化场景                                            |
 | `@TransactionalWithAfterCommit()` | `common/decorators/`        | 开启事务 + 标记 `NEEDS_AFTER_COMMIT` 元数据                       |
 | `AfterCommitInterceptor`          | `common/interceptors/`      | HTTP 响应后排空 afterCommit 任务队列（RxJS `tap()`）              |

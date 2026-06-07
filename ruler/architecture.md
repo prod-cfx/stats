@@ -4,15 +4,17 @@
 
 ```text
 apps/
-├── backend/       # NestJS 主后端 API（3000）
-├── front/         # Next.js 用户端（3001）
-├── admin-front/   # Next.js 管理端（3500）
-└── quantify/      # NestJS 量化/策略服务（3010）
+├── backend/         # NestJS 主后端 API（3000）
+├── front/           # Next.js 用户端（3001）
+├── admin-front/     # Next.js 管理端（3500）
+├── quantify/        # NestJS 量化/策略服务（3010）
+└── quantify-mobile/ # Flutter 移动端（消费 backend/quantify API）
 
 packages/
-├── shared/        # @ai/shared：跨端常量、类型、工具、脚本引擎
-├── api-contracts/ # @ai/api-contracts：由 backend OpenAPI 生成的 Zod 模型 + HTTP Client
-└── config/        # @net/config：dotenv + zod 环境加载与校验
+├── shared/             # @ai/shared：跨端常量、类型、工具、脚本引擎
+├── api-contracts/      # @ai/api-contracts：由 backend/quantify OpenAPI 生成的 Zod 模型 + HTTP Client
+├── api-contracts-dart/ # Dart 客户端合约（供 quantify-mobile 消费）
+└── config/             # @net/config：dotenv + zod 环境加载与校验
 
 dx/
 └── config/        # dx 命令、环境分层、环境策略
@@ -24,8 +26,8 @@ dx/
 - Monorepo / 构建编排：Nx `19.8.14`
 - 语言与工程化：TypeScript `5.9.2`、ESLint `9.32.x`、Prettier `3.6.2`
 - 后端主服务：NestJS `11.1.x`、Prisma `7.8.0`、PostgreSQL、Redis、Swagger/OpenAPI、Socket.IO
-- 用户端：Next.js `16.2.3`、React `19.2.4`、Redux Toolkit、Radix UI、Tailwind CSS 4
-- 管理端：Next.js `16.2.3`、React `19.2.4`、Ant Design `5.26.7`、Zustand
+- 用户端：Next.js `16.2.6`、React `19.2.4`、Redux Toolkit、Radix UI、Tailwind CSS 4
+- 管理端：Next.js `16.2.6`、React `19.2.4`、Ant Design `5.26.7`、Zustand
 - 量化服务：NestJS `11.1.x`、Prisma `7.8.0`、Bull、Mastra、AI SDK、策略/回测/消息总线相关模块
 
 ## 应用边界
@@ -62,11 +64,11 @@ dx/
 
 主要模块（`apps/quantify/src/modules/*`）：
 
-- 账户与配置：`accounts`、`exchange-accounts`、`settings`
+- 账户与配置：`accounts`、`exchange-accounts`、`account-strategy-view`、`settings`
 - 数据与分析：`market-data`、`indicators`、`backtesting`
 - 策略系统：`strategy-templates`、`strategy-subscriptions`、`strategy-instances`、`strategy-signals`、`strategy-plaza`、`strategy-runtime`
 - AI / LLM：`ai`、`mastra`、`llm-strategies`、`llm-strategy-codegen`、`llm-strategy-subscriptions`
-- 交易与基础设施：`positions`、`trading`、`trading-execution`、`grid-runtime`、`message-bus`、`health`
+- 交易与基础设施：`positions`、`trading`、`trading-execution`、`grid-runtime`、`message-bus`、`external-signal-webhooks`、`sharding`、`health`
 
 ### `apps/front`
 
@@ -86,6 +88,13 @@ dx/
 - 配置项与系统数据维护
 - 运营与审核类管理界面
 
+### `apps/quantify-mobile`
+
+Flutter 移动端应用，消费 `backend` / `quantify` API：
+
+- 通过 `packages/api-contracts-dart` 生成的 Dart 客户端访问后端
+- 开发运行复用已有 `flutter run` 会话热重载（见 development.md 第 5 节）
+
 ## 共享包职责
 
 - `packages/shared`
@@ -95,6 +104,8 @@ dx/
   - 由 `backend:swagger` + `quantify:swagger` 以及对应的 contracts 生成脚本产出
   - 同时导出 backend 与 quantify 的 Zod schemas、Zodios endpoints 与 `createApiClient`
   - 默认导出 backend；quantify 通过 `createQuantifyApiClient` / `quantifySchemas` 访问
+- `packages/api-contracts-dart`
+  - Dart 版合约（`backend_api_contracts`），由 OpenAPI 产物生成，供 `apps/quantify-mobile` 消费
 - `packages/config`
   - 封装环境变量加载、展开与 zod 校验
   - 与 `dx/config/env-policy.jsonc` 一起构成环境治理边界
@@ -105,7 +116,8 @@ dx/
 - Quantify Prisma Schema：`apps/quantify/prisma/schema/*.prisma`
 - Backend OpenAPI 导出：`apps/backend/src/swagger/export-openapi.ts`
 - Quantify OpenAPI 导出：`apps/quantify/src/swagger/export-openapi.ts`
-- 合约生成产物：`packages/api-contracts/src/generated/backend.ts`、`packages/api-contracts/src/generated/quantify.ts`
+- 合约生成产物（TS）：`packages/api-contracts/src/generated/backend.ts`、`packages/api-contracts/src/generated/quantify.ts`
+- 合约生成产物（Dart）：`packages/api-contracts-dart/lib`（供 `apps/quantify-mobile` 消费）
 
 说明：
 
@@ -114,8 +126,8 @@ dx/
 ## 命令与运行形态
 
 - 日常开发命令统一通过 `dx` 入口执行
-- `dx start all` 当前启动 `backend`、`front`、`admin`
-- `quantify` 通过 `dx start quantify --dev` 单独启动，或使用 `dx start stack` 纳入 PM2 服务栈
+- `dx start all` 当前启动 `backend`、`front`、`admin`（不含 quantify）
+- `quantify` 通过 `dx start quantify --dev` 单独启动，或使用 `dx start stack` 纳入 PM2 服务栈（含 `backend`、`front`、`admin`、`quantify`、`quantify-backtest-worker`）
 - 构建可直接按目标执行：`dx build backend --dev`、`dx build quantify --dev`、`dx build front --dev`、`dx build admin --dev`
 - API 合约生成统一执行：`dx build contracts`
 

@@ -18,15 +18,15 @@
 5. Quantify 改动：识别受影响 E2E，逐个运行 `dx test e2e quantify apps/quantify/e2e/<file-or-dir>`；最小可用校验可执行 `dx test e2e quantify apps/quantify/e2e/health`
 6. 前端改动：按改动范围执行 `dx test unit front` / `dx test unit admin`；若只需最小验证，也通过 `dx test unit <target> <file>` 聚焦单个 Jest 测试文件
 7. 共享包改动：优先执行 `dx test unit shared`，再按影响面追加应用级验证
-8. Backend / Quantify DTO 或 OpenAPI 变更：在对应服务构建或 swagger 可导出后再执行 `dx build contracts --dev`
+8. Backend / Quantify DTO 或 OpenAPI 变更：在对应服务构建或 swagger 可导出后再执行 `dx build contracts`（含 backend + quantify swagger 导出与 TS/Dart 合约生成，无 `--dev`/`--prod` 分支）
 
 ## 3) 常用命令（速查）
 
 - 启动：`dx start backend --dev` / `dx start quantify --dev` / `dx start front --dev` / `dx start admin --dev` / `dx start all`
-- 完整服务栈：`dx start stack`（PM2，包含 `backend`、`front`、`admin`、`quantify`，并执行端口/缓存清理）
+- 完整服务栈：`dx start stack`（PM2，包含 `backend`、`front`、`admin`、`quantify`、`quantify-backtest-worker`，并执行端口/缓存清理）
 - 数据库（backend）：`dx db format` / `dx db generate` / `dx db migrate --dev --name <name>` / `dx db deploy --dev|--e2e|--prod` / `dx db seed --dev`
 - 数据库（quantify）：`dx db format quantify --dev` / `dx db generate quantify --dev` / `dx db migrate quantify --dev --name <name>` / `dx db deploy quantify --dev|--e2e`
-- 合约：`dx build contracts --dev`
+- 合约：`dx build contracts`（无 `--dev`/`--prod` 分支）
 - 测试：`unit` 可以全量跑（`dx test unit all`）；E2E 不可以全量跑，必须使用 `dx test e2e <target> <file-or-dir> [-t "case name"]`
 
 ## 4) 前端日志（最小约定）
