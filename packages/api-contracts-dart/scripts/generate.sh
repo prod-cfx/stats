@@ -39,10 +39,26 @@ if command -v dart >/dev/null 2>&1; then
   dart pub get
   dart run build_runner build --delete-conflicting-outputs
   # 只分析交付产物 lib/（generated test/ 缺 package:test dev_dependency，非交付物）。
-  # dart-dio 生成代码自带 unused_import/duplicate_import 等 warning 与大量 style info，
-  # 均为生成器产物噪声、非业务缺陷；用 --no-fatal-warnings 让真正的 error 仍致命、
-  # 而生成噪声不阻断构建（验收语义：产物可编译可用即通过）。
-  dart analyze --no-fatal-warnings lib
+  # dart-dio 生成代码自带 1270+ 条 style info（use_super_parameters 等），纯生成器噪声；
+  # dart 3.12 的 dart analyze 只要有 info 就 exit 3，--no-fatal-warnings 也无法放行 info。
+  # 因此用 --format=machine 解析 severity（机器格式不着色、不本地化，按 `|` 分列稳定），
+  # 仅 ERROR 阻断；INFO/WARNING 噪声放行，且显式打印放行/阻断日志，避免 gate 假阴/假阳。
+  analyze_log="$(mktemp)"
+  set +e
+  dart analyze --format=machine lib >"$analyze_log" 2>&1
+  set -e
+  error_count="$(grep -c '^ERROR|' "$analyze_log" || true)"
+  warning_count="$(grep -c '^WARNING|' "$analyze_log" || true)"
+  info_count="$(grep -c '^INFO|' "$analyze_log" || true)"
+  echo "dart analyze: ERROR=${error_count} WARNING=${warning_count} INFO=${info_count}（INFO/WARNING 为生成器噪声，放行；仅 ERROR 阻断）"
+  if [ "$error_count" -gt 0 ]; then
+    echo "dart analyze gate FAILED: 检测到 ${error_count} 个 ERROR 级问题，阻断构建" >&2
+    grep '^ERROR|' "$analyze_log" >&2
+    rm -f "$analyze_log"
+    exit 1
+  fi
+  rm -f "$analyze_log"
+  echo "dart analyze gate PASSED: 0 ERROR（INFO/WARNING 噪声已放行）"
 else
   echo "dart command not found; run manually: cd packages/api-contracts-dart && dart pub get && dart run build_runner build --delete-conflicting-outputs && dart analyze"
 fi

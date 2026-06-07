@@ -43,8 +43,8 @@ export class AdminMenuResponseDto {
 }
 
 export class AdminMenuTreeNodeResponseDto extends AdminMenuResponseDto {
-  // openapi-zod-client 无法稳定处理递归 schema ref，子节点用宽松对象，
-  // 与 admin-user-info.dto 的 children 处理保持一致；客户端运行时再细化。
-  @ApiProperty({ description: '子菜单节点', type: 'object', additionalProperties: true, isArray: true })
-  children!: unknown[]
+  // 自引用子菜单节点数组：用 lazy type 让 swagger 生成 array of $ref(self)，
+  // dart-dio 据此映射为 BuiltList<AdminMenuTreeNodeResponseDto>（合法可编译）。
+  @ApiProperty({ description: '子菜单节点', type: () => AdminMenuTreeNodeResponseDto, isArray: true })
+  children!: AdminMenuTreeNodeResponseDto[]
 }

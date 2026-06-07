@@ -1,5 +1,5 @@
 import { AdminMenuType } from '@ai/shared'
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class AdminMenuPermissionDto {
   @ApiProperty({ description: '菜单/权限节点 ID', example: 'menu_01HXYZ' })
@@ -26,10 +26,10 @@ export class AdminMenuPermissionDto {
   @ApiProperty({ description: '菜单类型', enum: AdminMenuType })
   type!: AdminMenuType
 
-  // openapi-zod-client currently cannot handle recursive schema refs reliably.
-  // Keep OpenAPI output generation-friendly; client side can treat this as unknown and refine at runtime.
-  @ApiProperty({ type: 'object', additionalProperties: true })
-  children?: unknown
+  // 自引用子菜单节点数组：用 lazy type 生成 array of $ref(self)，
+  // 避免 additionalProperties 被 dart-dio 误译成非法 BuiltMap<JsonObject>。
+  @ApiPropertyOptional({ description: '子菜单节点', type: () => AdminMenuPermissionDto, isArray: true })
+  children?: AdminMenuPermissionDto[]
 }
 
 export class AdminUserInfoDto {
