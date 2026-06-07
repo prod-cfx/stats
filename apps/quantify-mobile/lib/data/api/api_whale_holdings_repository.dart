@@ -1,4 +1,3 @@
-import '../mock/fixtures/whale_holdings.dart';
 import '../../domain/models/whale_holding_models.dart';
 import '../repositories/whale_holdings_repository.dart';
 import '../services/json_codec.dart';
@@ -6,9 +5,7 @@ import '../services/whale_services.dart';
 
 /// [WhaleHoldingsRepository] 真实现（issue #2189）。
 ///
-/// 走真实 HTTP 拉持仓明细。[WhaleHoldingPosition] 含大量展示串（已格式化的
-/// 价值/盈亏/时间串、币种圆点色），后端不提供这些 UI 资产——空响应回退
-/// [mockWhaleHoldings] 展示骨架，富字段映射属子 issue B。
+/// 走真实 HTTP 拉持仓明细。后端返回空列表时保持真实空态，不回退 mock fixture。
 class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
   ApiWhaleHoldingsRepository(this._service);
 
@@ -24,7 +21,10 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
     return WhaleHoldingPosition(
       address: asString(pick(m, <String>['address'])),
       symbol: asString(pick(m, <String>['symbol'])),
-      symbolColorHex: asInt(pick(m, <String>['symbolColorHex']), fallback: 0xFF888888),
+      symbolColorHex: asInt(
+        pick(m, <String>['symbolColorHex']),
+        fallback: 0xFF888888,
+      ),
       mode: asString(pick(m, <String>['mode'])),
       side: _side(pick(m, <String>['side'])),
       leverage: asInt(pick(m, <String>['leverage'])),
@@ -47,10 +47,10 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
   @override
   Future<List<WhaleHoldingPosition>> getHoldings() async {
     final dynamic raw = await _service.getHoldings();
-    final Object? list =
-        raw is Map ? pick(asMap(raw), <String>['items', 'data']) : raw;
+    final Object? list = raw is Map
+        ? pick(asMap(raw), <String>['items', 'data'])
+        : raw;
     final List<Map<String, dynamic>> rows = asMapList(list ?? raw);
-    if (rows.isEmpty) return mockWhaleHoldings;
     return rows.map(_parse).toList(growable: false);
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `FutureProviderFamily` 在 Riverpod 3.x 未由 flutter_riverpod 公开导出，
 // family provider 的显式类型注解需直连 misc。
@@ -5,7 +7,6 @@ import 'package:riverpod/misc.dart' show FutureProviderFamily;
 
 import '../../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import '../../domain/models/live_strategy_models.dart';
-import '../mock/fixtures/whale_extras.dart';
 import '../models/whale_extra_models.dart';
 import '../storage/market_favorites_persistence.dart';
 import '../storage/strategy_favorites_persistence.dart';
@@ -430,12 +431,25 @@ liveStrategyParamsProvider =
 /// 巨鲸通知中心单一数据源（issue #1769）。
 ///
 /// 顶部铃铛 panel 与监控 Tab 内「通知中心」子 Tab 共享同一份列表与
-/// 已读状态，避免两套独立 state 漂移。mock 阶段种子来自
-/// [mockWhaleNotifications]，真实推送（#1683）接入后替换 seed 来源即可。
+/// 已读状态，避免两套独立 state 漂移。初始列表从 WhaleExtrasRepository
+/// 加载；真实模式后端空列表保持空态，不直接 seed mock fixture。
 class WhaleNotificationsNotifier extends Notifier<List<WhaleNotification>> {
   @override
-  List<WhaleNotification> build() =>
-      List<WhaleNotification>.of(mockWhaleNotifications);
+  List<WhaleNotification> build() {
+    unawaited(_loadInitial());
+    return const <WhaleNotification>[];
+  }
+
+  Future<void> _loadInitial() async {
+    try {
+      final List<WhaleNotification> notifications = await ref
+          .read(whaleExtrasRepositoryProvider)
+          .listNotifications();
+      state = List<WhaleNotification>.of(notifications);
+    } catch (_) {
+      state = const <WhaleNotification>[];
+    }
+  }
 
   int get unreadCount => state.where((WhaleNotification n) => n.unread).length;
 

@@ -18,26 +18,28 @@ List<WhaleHoldingPosition> filterWhaleHoldings(
   List<WhaleHoldingPosition> entries,
   WhaleHoldingFilter filter,
 ) {
-  return entries.where((WhaleHoldingPosition e) {
-    if (filter.coin != null && e.symbol != filter.coin) return false;
-    switch (filter.dir) {
-      case WhaleHoldingDirFilter.long:
-        if (!e.isLong) return false;
-      case WhaleHoldingDirFilter.short:
-        if (e.isLong) return false;
-      case WhaleHoldingDirFilter.all:
-        break;
-    }
-    switch (filter.pnl) {
-      case WhaleHoldingPnlFilter.profit:
-        if (!e.isProfit) return false;
-      case WhaleHoldingPnlFilter.loss:
-        if (e.isProfit) return false;
-      case WhaleHoldingPnlFilter.all:
-        break;
-    }
-    return true;
-  }).toList(growable: false);
+  return entries
+      .where((WhaleHoldingPosition e) {
+        if (filter.coin != null && e.symbol != filter.coin) return false;
+        switch (filter.dir) {
+          case WhaleHoldingDirFilter.long:
+            if (!e.isLong) return false;
+          case WhaleHoldingDirFilter.short:
+            if (e.isLong) return false;
+          case WhaleHoldingDirFilter.all:
+            break;
+        }
+        switch (filter.pnl) {
+          case WhaleHoldingPnlFilter.profit:
+            if (!e.isProfit) return false;
+          case WhaleHoldingPnlFilter.loss:
+            if (e.isProfit) return false;
+          case WhaleHoldingPnlFilter.all:
+            break;
+        }
+        return true;
+      })
+      .toList(growable: false);
 }
 
 /// 排序纯函数。[sort] 为 null 返回原序副本；否则按字段数值与方向重排，
@@ -46,7 +48,9 @@ List<WhaleHoldingPosition> sortWhaleHoldings(
   List<WhaleHoldingPosition> entries,
   WhaleHoldingSort? sort,
 ) {
-  final List<WhaleHoldingPosition> result = List<WhaleHoldingPosition>.of(entries);
+  final List<WhaleHoldingPosition> result = List<WhaleHoldingPosition>.of(
+    entries,
+  );
   if (sort == null) return result;
   final int mul = sort.dir == WhaleHoldingSortDir.asc ? 1 : -1;
   double value(WhaleHoldingPosition e) {
@@ -60,8 +64,10 @@ List<WhaleHoldingPosition> sortWhaleHoldings(
     }
   }
 
-  result.sort((WhaleHoldingPosition a, WhaleHoldingPosition b) =>
-      mul * value(a).compareTo(value(b)));
+  result.sort(
+    (WhaleHoldingPosition a, WhaleHoldingPosition b) =>
+        mul * value(a).compareTo(value(b)),
+  );
   return result;
 }
 
@@ -108,9 +114,8 @@ WhaleHoldingsView deriveWhaleHoldingsView(
 /// 由持仓条目派生交易统计入参（issue #1977 持仓卡「趋势/交易统计」入口）。
 ///
 /// [WhaleTradeStats] 已与 WhaleProfile 解耦，统计弹窗只需 address + stats。持仓
-/// 卡仅持有单仓展示串（盈亏/未实现盈亏），无逐资产/逐仓位明细，故派生一个轻量
-/// stats：复用已有展示串，明细列表留空（mock 阶段）。真实读路径接通后改为按
-/// 地址拉取完整 stats。
+/// 卡仅持有单仓展示串（盈亏/未实现盈亏），无逐资产/逐仓位明细，故只派生摘要，
+/// 明细保持空态。
 WhaleTradeStats whaleHoldingTradeStats(WhaleHoldingPosition e) {
   return WhaleTradeStats(
     pnlDisplay: e.pnlDisplay,
