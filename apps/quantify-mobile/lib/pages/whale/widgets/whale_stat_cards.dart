@@ -14,7 +14,7 @@ import '../../../theme/tokens.dart';
 /// 含 donut + extras 行）；第 4 张交易表现卡渲染 4 指标（设计稿 `PerfCard` `:1050`）：
 /// 胜率 [WhaleTradeStats.winRatePct] / 最大回撤 [WhaleTradeStats.maxDrawdownDisplay]
 /// / 已成交订单 [WhaleTradeStats.filledOrders] / 平仓次数 [WhaleTradeStats.closedCount]。
-/// 后 3 项当前由 fixtures 占位，真值依赖读路径 #1682。
+/// 真实模式由 profile snapshot 映射，缺字段时显示局部空值。
 class WhaleStatCards extends StatelessWidget {
   const WhaleStatCards({super.key, required this.cards, required this.stats});
 
@@ -195,7 +195,7 @@ class _ExtraRow extends StatelessWidget {
 
 /// 第 4 张交易表现卡——4 指标（设计稿 `PerfCard` `:1050`）：
 /// 胜率 + 最大回撤为主组，已成交订单 + 平仓次数为 extras 行。
-/// 最大回撤 / 已成交订单 / 平仓次数当前由 fixtures 占位，真值依赖 #1682。
+/// 最大回撤 / 已成交订单 / 平仓次数来自 `WhaleTradeStats`。
 class _PerfCard extends StatelessWidget {
   const _PerfCard({required this.stats});
   final WhaleTradeStats stats;

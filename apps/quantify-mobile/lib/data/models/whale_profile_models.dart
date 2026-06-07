@@ -4,11 +4,10 @@
 /// （`WhaleProfileDetail` / `WhaleTradeStats`）。
 ///
 /// 与 `whale_extra_models.dart` 同约定：数值字段保持已格式化字符串
-/// （如 `pnlDisplay: '+$8.4M'`），由 mock fixture 直接提供给 widget 渲染，
-/// 不在 widget 层做单位/精度转换，避免 mock 阶段引入 i18n 复杂度。
+/// （如 `pnlDisplay: '+$8.4M'`），由 repository 映射后直接提供给 widget 渲染，
+/// 不在 widget 层做单位/精度转换。
 ///
-/// 当前由 `MockWhaleProfileRepository` 驱动；真实地址详情/统计读路径
-/// （依赖 #1682）接通前保持 mock 形态。
+/// Mock 和真实 API repository 共用同一模型；真实模式缺字段时保持局部空态。
 library;
 
 /// 单条持仓（地址详情「概览」段）。
@@ -141,8 +140,7 @@ class WhaleTradeStats {
   final int? wins; // 盈利笔数
   final int? losses; // 亏损笔数
 
-  /// 交易表现卡补充指标（设计稿 `PerfCard` `:1050`）。真值依赖读路径 #1682，
-  /// 当前由 fixtures 占位。
+  /// 交易表现卡补充指标（设计稿 `PerfCard` `:1050`）。
   final String? maxDrawdownDisplay; // 最大回撤，例如 '8202846.96%'
   final int? filledOrders; // 已成交订单
   final int? closedCount; // 平仓次数
