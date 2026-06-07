@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../models/ai_chat_models.dart';
 import '../repositories/ai_chat_repository.dart';
 import '../services/account_services.dart';
@@ -51,16 +53,16 @@ AiSession _parseSession(Map<String, dynamic> m) {
 
 /// [AiChatRepository] 真实现（issue #2189）。
 ///
-/// 会话 CRUD + 发消息走真实 HTTP + JSON 反序列化。`watchSession` 后端暂无
-/// 单会话 GET / 流式契约（`/conversations/{id}` 仅 DELETE/PATCH），故从
-/// `listSessions`（`GET /conversations`，契约真源）派生目标会话末条消息后
-/// 结束（避免假装持续推送，也不误打不存在的 GET 端点）；真实 SSE/WS 接入
-/// 属后续 issue。
+/// 会话 CRUD + 发消息走真实 HTTP + JSON 反序列化。`watchSession` 使用
+/// codegen session GET 持续轮询，直到后端进入终态或调用方取消订阅。
 class ApiAiChatRepository implements AiChatRepository {
-  ApiAiChatRepository(this._service);
+  ApiAiChatRepository(
+    this._service, {
+    Duration sessionPollInterval = const Duration(milliseconds: 500),
+  }) : _sessionPollInterval = sessionPollInterval;
 
   final AiChatService _service;
-  static const int _sessionPollLimit = 3;
+  final Duration _sessionPollInterval;
 
   List<Map<String, dynamic>> _rows(dynamic raw) {
     final Object? list = raw is Map
@@ -99,29 +101,24 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) async* {
-    try {
-      int emitted = 0;
-      for (int i = 0; i < _sessionPollLimit; i++) {
-        final Map<String, dynamic> raw = asMap(
-          await _service.getCodegenSession(sessionId),
-        );
-        final AiSession session = _parseSession(raw);
-        final List<ChatTurn> messages = session.messages;
-        for (final ChatTurn turn in messages.skip(emitted)) {
-          if (turn.role == 'assistant') yield turn;
-        }
-        emitted = messages.length;
-        final String status = asString(pick(raw, <String>['status']));
-        if (_isTerminalCodegenStatus(status)) return;
+    final Set<String> emittedAssistantIds = <String>{};
+    while (true) {
+      final Map<String, dynamic> raw = asMap(
+        await _service.getCodegenSession(sessionId),
+      );
+      final AiSession session = _parseSession(raw);
+      if (session.id != sessionId) return;
+      for (final ChatTurn turn in session.messages) {
+        if (turn.role != 'assistant') continue;
+        if (!emittedAssistantIds.add(turn.id)) continue;
+        yield turn;
       }
-      return;
-    } catch (_) {
-      final List<AiSession> sessions = await listSessions();
-      for (final AiSession session in sessions) {
-        if (session.id == sessionId) {
-          if (session.messages.isNotEmpty) yield session.messages.last;
-          return;
-        }
+      final String status = asString(pick(raw, <String>['status']));
+      if (_isTerminalCodegenStatus(status)) return;
+      if (_sessionPollInterval > Duration.zero) {
+        await Future<void>.delayed(_sessionPollInterval);
+      } else {
+        await Future<void>.delayed(Duration.zero);
       }
     }
   }
