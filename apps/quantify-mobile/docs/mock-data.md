@@ -5,18 +5,20 @@
 
 ## 启动开关
 
-- 编译期常量：`String.fromEnvironment('USE_MOCK', defaultValue: 'true')`
-- 解析策略：**严格只认 `false`（不区分大小写）**；缺省值或任何其它字符串一律视为 mock
-- 关闭 mock：`flutter run --dart-define=USE_MOCK=false`
-- 关闭 mock 后，未在 PR2 接入真实 API 的 10 个 Repository 调用方法会抛 Dart 内置
-  `UnimplementedError`，消息固定格式：`真实 API 待接入: <RepositoryName>`
+- 编译期常量：`String.fromEnvironment('USE_MOCK', defaultValue: 'false')`
+- 解析策略：**严格只认 `false`（不区分大小写）为真实模式**；缺省值等价于真实模式，
+  只有显式传入其它值才启用 mock。
+- 默认真实模式：`flutter run`
+- 显式 mock 模式：`flutter run --dart-define=USE_MOCK=true`
+- 真实模式下，repository provider 必须装配 `Api*Repository`。API repository 不得 import
+  `lib/data/mock/fixtures/**` 作为长期业务兜底；真实空响应应返回空态或错误态。
 
 ## 当前进度
 
-PR1 已落 11 个 Repository 接口、Unimplemented stub 与 `AuthRepository` 示例 Mock。
-PR2 已补齐其余 10 个 `MockXxxRepository`、对应 fixtures 与两条 Stream
-（K 线 1s / 巨鲸 3s）。`useMock=true` 时全部走 Mock 实现；`useMock=false` 时调用
-方法仍抛 `UnimplementedError`，保留作为真实 API 接入前的占位语义。
+当前默认 `useMock=false`，移动端走真实 API repository；`USE_MOCK=true` 才走
+`MockXxxRepository` 与 fixtures。mock 数据继续保留，用于离线开发、widget 原型和确定性测试。
+真实模式防回退由 `test/data/providers_test.dart` 覆盖：provider 矩阵需返回 API 实现，
+`lib/data/api` 不得依赖 mock fixtures，空响应不展示 mock fixture 行。
 
 通用模式：
 - `Future` 方法：固定 `Future.delayed(Duration(milliseconds: 200))` 模拟网络延迟

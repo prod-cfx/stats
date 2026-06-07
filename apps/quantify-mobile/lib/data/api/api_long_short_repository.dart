@@ -1,4 +1,5 @@
-import '../mock/fixtures/exchange_long_short.dart';
+import 'package:flutter/material.dart';
+
 import '../models/exchange_long_short_models.dart';
 import '../models/kline_models.dart';
 import '../models/long_short_models.dart';
@@ -10,9 +11,8 @@ import 'api_kline_repository.dart';
 /// [LongShortRepository] 真实现（issue #2189）。
 ///
 /// [LongShortRatio] 字段简单，直接 JSON 反序列化。
-/// [MarketLongShortSnapshot] 含纯展示字段（交易所色标/glyph/渐变色），后端
-/// 不提供这些 UI 资产——故以 [fallbackSnapshot] 提供展示骨架，再用 JSON 中的
-/// long/short 占比覆盖 hero 数值。真实交易所明细的展示映射属子 issue B。
+/// [MarketLongShortSnapshot] 含纯展示字段（交易所色标/glyph/渐变色）。真实响应
+/// 缺字段时返回空态，不回退 mock fixture。
 class ApiLongShortRepository implements LongShortRepository {
   ApiLongShortRepository(this._service);
 
@@ -30,9 +30,14 @@ class ApiLongShortRepository implements LongShortRepository {
     final Map<String, dynamic> map = asMap(raw);
     return LongShortRatio(
       symbol: asString(pick(map, <String>['symbol']), fallback: symbol),
-      longRatio: asDouble(pick(map, <String>['longRatio', 'long']), fallback: 0.5),
-      shortRatio:
-          asDouble(pick(map, <String>['shortRatio', 'short']), fallback: 0.5),
+      longRatio: asDouble(
+        pick(map, <String>['longRatio', 'long']),
+        fallback: 0.5,
+      ),
+      shortRatio: asDouble(
+        pick(map, <String>['shortRatio', 'short']),
+        fallback: 0.5,
+      ),
       timestamp: asDateTime(pick(map, <String>['timestamp', 'ts'])),
     );
   }
@@ -41,10 +46,13 @@ class ApiLongShortRepository implements LongShortRepository {
   Future<MarketLongShortSnapshot> getSnapshot({required String symbol}) async {
     final dynamic raw = await _service.getSnapshot(symbol: symbol);
     final Map<String, dynamic> map = asMap(raw);
-    final MarketLongShortSnapshot base = fallbackSnapshot(symbol);
-    final double? longPct = asDoubleOrNull(pick(map, <String>['longPct', 'long']));
-    final double? shortPct =
-        asDoubleOrNull(pick(map, <String>['shortPct', 'short']));
+    final MarketLongShortSnapshot base = _emptySnapshot(symbol);
+    final double? longPct = asDoubleOrNull(
+      pick(map, <String>['longPct', 'long']),
+    );
+    final double? shortPct = asDoubleOrNull(
+      pick(map, <String>['shortPct', 'short']),
+    );
     if (longPct == null && shortPct == null) return base;
     final double l = longPct ?? (100 - (shortPct ?? 0));
     return MarketLongShortSnapshot(
@@ -65,4 +73,22 @@ class ApiLongShortRepository implements LongShortRepository {
       ),
     );
   }
+}
+
+MarketLongShortSnapshot _emptySnapshot(String symbol) {
+  final String baseAsset = symbol.replaceAll('USDT', '');
+  return MarketLongShortSnapshot(
+    symbol: symbol,
+    baseAsset: baseAsset.isEmpty ? symbol : baseAsset,
+    assetGlyph: baseAsset.isEmpty ? '?' : baseAsset.substring(0, 1),
+    assetGradientStart: const Color(0xFF6B7280),
+    assetGradientEnd: const Color(0xFF374151),
+    totalNotional: '\$0',
+    longNotional: '\$0',
+    shortNotional: '\$0',
+    longPct: 0,
+    shortPct: 0,
+    exchanges: const <ExchangeLongShort>[],
+    timestamp: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+  );
 }

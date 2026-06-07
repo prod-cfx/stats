@@ -1,4 +1,3 @@
-import '../mock/fixtures/backtest.dart';
 import '../models/backtest_models.dart';
 import '../repositories/backtest_repository.dart';
 import '../services/json_codec.dart';
@@ -6,9 +5,8 @@ import '../services/strategy_services.dart';
 
 /// [BacktestRepository] 真实现（issue #2189）。
 ///
-/// 走真实 HTTP 发起/查询回测。[BacktestResult] 含深层图表/交易/风险明细，后端
-/// 完整形态契约未定——以 [mockBacktestResult] 作明细骨架，覆盖 JSON 中可得的
-/// 顶层核心指标（收益/回撤/夏普/胜率/交易数 等）。完整明细映射属子 issue B。
+/// 走真实 HTTP 发起/查询回测。真实响应缺少深层图表/交易/风险明细时返回空态，
+/// 不回退 mock fixture。
 class ApiBacktestRepository implements BacktestRepository {
   ApiBacktestRepository(this._service);
 
@@ -16,7 +14,7 @@ class ApiBacktestRepository implements BacktestRepository {
 
   BacktestResult _merge(dynamic raw) {
     final Map<String, dynamic> m = asMap(raw);
-    final BacktestResult base = mockBacktestResult;
+    final BacktestResult base = _emptyBacktestResult();
     if (m.isEmpty) return base;
     return BacktestResult(
       id: asString(pick(m, <String>['id']), fallback: base.id),
@@ -24,8 +22,10 @@ class ApiBacktestRepository implements BacktestRepository {
         pick(m, <String>['totalReturnPercent']),
         fallback: base.totalReturnPercent,
       ),
-      cagrPercent:
-          asDouble(pick(m, <String>['cagrPercent']), fallback: base.cagrPercent),
+      cagrPercent: asDouble(
+        pick(m, <String>['cagrPercent']),
+        fallback: base.cagrPercent,
+      ),
       maxDrawdownPercent: asDouble(
         pick(m, <String>['maxDrawdownPercent']),
         fallback: base.maxDrawdownPercent,
@@ -44,18 +44,27 @@ class ApiBacktestRepository implements BacktestRepository {
         pick(m, <String>['avgHoldDuration']),
         fallback: base.avgHoldDuration,
       ),
-      totalTrades:
-          asInt(pick(m, <String>['totalTrades']), fallback: base.totalTrades),
-      rangeStart:
-          asDateTime(pick(m, <String>['rangeStart']), fallback: base.rangeStart),
-      rangeEnd: asDateTime(pick(m, <String>['rangeEnd']), fallback: base.rangeEnd),
+      totalTrades: asInt(
+        pick(m, <String>['totalTrades']),
+        fallback: base.totalTrades,
+      ),
+      rangeStart: asDateTime(
+        pick(m, <String>['rangeStart']),
+        fallback: base.rangeStart,
+      ),
+      rangeEnd: asDateTime(
+        pick(m, <String>['rangeEnd']),
+        fallback: base.rangeEnd,
+      ),
       equityCurve: base.equityCurve,
       drawdownMarkers: base.drawdownMarkers,
       monthlyRows: base.monthlyRows,
       trades: base.trades,
       riskRows: base.riskRows,
-      aiAssessment:
-          asString(pick(m, <String>['aiAssessment']), fallback: base.aiAssessment),
+      aiAssessment: asString(
+        pick(m, <String>['aiAssessment']),
+        fallback: base.aiAssessment,
+      ),
     );
   }
 
@@ -75,4 +84,28 @@ class ApiBacktestRepository implements BacktestRepository {
   Future<BacktestResult> getResult(String id) async {
     return _merge(await _service.getResult(id));
   }
+}
+
+BacktestResult _emptyBacktestResult() {
+  final DateTime epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  return BacktestResult(
+    id: '',
+    totalReturnPercent: 0,
+    cagrPercent: 0,
+    maxDrawdownPercent: 0,
+    sharpe: 0,
+    calmar: 0,
+    winRatePercent: 0,
+    profitLossRatio: 0,
+    avgHoldDuration: '',
+    totalTrades: 0,
+    rangeStart: epoch,
+    rangeEnd: epoch,
+    equityCurve: const <double>[],
+    drawdownMarkers: const <int>[],
+    monthlyRows: const <BacktestMonthlyRow>[],
+    trades: const <BacktestTrade>[],
+    riskRows: const <BacktestRiskRow>[],
+    aiAssessment: '',
+  );
 }
