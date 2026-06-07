@@ -141,8 +141,8 @@ void main() {
       expect(s.tradesTotal, e.trades);
       expect(s.wins, 31);
       expect(s.losses, 11);
-      expect(s.assetPerf.first.symbol, 'ZEC');
-      expect(s.positionPerf.first.sym, 'XMR');
+      expect(s.assetPerf, isEmpty);
+      expect(s.positionPerf, isEmpty);
     });
   });
 

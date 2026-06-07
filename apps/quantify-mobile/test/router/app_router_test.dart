@@ -9,14 +9,17 @@ import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
 import 'package:quantify_mobile/data/mock/fixtures/account.dart';
 import 'package:quantify_mobile/data/mock/fixtures/api_key.dart';
+import 'package:quantify_mobile/data/mock/fixtures/backtest.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
+import 'package:quantify_mobile/data/models/backtest_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/backtest_repository.dart';
 import 'package:quantify_mobile/data/repositories/kline_repository.dart';
 import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
@@ -73,24 +76,22 @@ class _NoTimerKlineRepository implements KlineRepository {
     required String symbol,
     required KlineInterval interval,
     required int limit,
-  }) async =>
-      <Candle>[
-        Candle(
-          openTime: DateTime(2024),
-          open: 100,
-          high: 101,
-          low: 99,
-          close: 100,
-          volume: 1,
-        ),
-      ];
+  }) async => <Candle>[
+    Candle(
+      openTime: DateTime(2024),
+      open: 100,
+      high: 101,
+      low: 99,
+      close: 100,
+      volume: 1,
+    ),
+  ];
 
   @override
   Stream<Candle> watchCandles({
     required String symbol,
     required KlineInterval interval,
-  }) =>
-      const Stream<Candle>.empty();
+  }) => const Stream<Candle>.empty();
 }
 
 /// 同 ticker/kline：mock 盘口 `watchOrderbook` 是 1s periodic 流，MarketDetailPage
@@ -98,7 +99,8 @@ class _NoTimerKlineRepository implements KlineRepository {
 /// still pending"。路由测试只关心落地页类型，用空快照 + 空流的假仓库覆盖。
 class _NoTimerOrderbookRepository implements OrderbookRepository {
   @override
-  Future<OrderbookSnapshot> getSnapshot(String symbol) async => OrderbookSnapshot(
+  Future<OrderbookSnapshot> getSnapshot(String symbol) async =>
+      OrderbookSnapshot(
         symbol: symbol,
         bids: const <OrderbookLevel>[],
         asks: const <OrderbookLevel>[],
@@ -108,6 +110,15 @@ class _NoTimerOrderbookRepository implements OrderbookRepository {
   @override
   Stream<OrderbookSnapshot> watchOrderbook(String symbol) =>
       const Stream<OrderbookSnapshot>.empty();
+}
+
+class _NoTimerBacktestRepository implements BacktestRepository {
+  @override
+  Future<BacktestResult> run(BacktestRequest request) async =>
+      mockBacktestResult;
+
+  @override
+  Future<BacktestResult> getResult(String id) async => mockBacktestResult;
 }
 
 /// whale 实时 tab 控制器在 `build()` 内启 1s periodic 倒计时（#1986）。路由测试
@@ -136,8 +147,12 @@ Future<BuildContext> _pumpApp(
       // widget dispose 后残留 periodic 计时器（同 #1838 思路）。
       tickerRepositoryProvider.overrideWithValue(_NoTimerTickerRepository()),
       klineRepositoryProvider.overrideWithValue(_NoTimerKlineRepository()),
-      orderbookRepositoryProvider
-          .overrideWithValue(_NoTimerOrderbookRepository()),
+      orderbookRepositoryProvider.overrideWithValue(
+        _NoTimerOrderbookRepository(),
+      ),
+      backtestRepositoryProvider.overrideWithValue(
+        _NoTimerBacktestRepository(),
+      ),
       // `/me` 落地 MeHomePage 会 watch account/apiKeys/liveStrategySummary，
       // 其 mock repo 各启 200ms `Future.delayed` 计时器；widget dispose 时
       // 该 timer 未排空 → "A Timer is still pending"（#1838）。路由测试只关心

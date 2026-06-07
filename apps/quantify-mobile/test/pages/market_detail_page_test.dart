@@ -31,7 +31,25 @@ import '../helpers/test_overrides.dart';
 
 class _FakeTickerRepository implements TickerRepository {
   @override
-  Future<List<Ticker>> listTickers() async => mockTickers;
+  Future<List<Ticker>> listTickers() async => mockTickers
+      .map(
+        (Ticker ticker) => Ticker(
+          symbol: ticker.symbol,
+          price: ticker.price,
+          changePercent: ticker.changePercent,
+          volume24h: ticker.volume24h,
+          kind: ticker.kind,
+          high24h: ticker.high24h,
+          low24h: ticker.low24h,
+          openInterest: ticker.openInterest,
+          indexPrice: ticker.indexPrice,
+          markPrice: ticker.markPrice,
+          fundingRate: ticker.fundingRate,
+          turnover24h: ticker.turnover24h,
+          netInflow24h: ticker.symbol == 'ETHUSDT' ? -740000000 : 1820000000,
+        ),
+      )
+      .toList(growable: false);
 
   @override
   Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
