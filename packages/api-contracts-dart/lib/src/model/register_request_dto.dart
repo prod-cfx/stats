@@ -11,18 +11,21 @@ part 'register_request_dto.g.dart';
 /// RegisterRequestDto
 ///
 /// Properties:
-/// * [email] 
-/// * [password] 
-/// * [nickname] 
+/// * [email] - 注册邮箱
+/// * [password] - 登录密码（至少 6 位）
+/// * [nickname] - 昵称（可选）
 /// * [betaCode] - 内测码，首次创建用户时必填
 @BuiltValue()
 abstract class RegisterRequestDto implements Built<RegisterRequestDto, RegisterRequestDtoBuilder> {
+  /// 注册邮箱
   @BuiltValueField(wireName: r'email')
   String get email;
 
+  /// 登录密码（至少 6 位）
   @BuiltValueField(wireName: r'password')
   String get password;
 
+  /// 昵称（可选）
   @BuiltValueField(wireName: r'nickname')
   String? get nickname;
 

@@ -12,33 +12,39 @@ part 'whale_notification_inbox_response_dto.g.dart';
 /// WhaleNotificationInboxResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [title] 
-/// * [content] 
-/// * [ruleId] 
+/// * [id] - 站内信 ID
+/// * [title] - 通知标题
+/// * [content] - 通知内容
+/// * [ruleId] - 触发该通知的规则 ID
 /// * [channels] 
-/// * [read] 
-/// * [createdAt] 
+/// * [read] - 是否已读
+/// * [createdAt] - 创建时间（ISO 8601）
 @BuiltValue()
 abstract class WhaleNotificationInboxResponseDto implements Built<WhaleNotificationInboxResponseDto, WhaleNotificationInboxResponseDtoBuilder> {
+  /// 站内信 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
+  /// 通知标题
   @BuiltValueField(wireName: r'title')
   String get title;
 
+  /// 通知内容
   @BuiltValueField(wireName: r'content')
   String get content;
 
+  /// 触发该通知的规则 ID
   @BuiltValueField(wireName: r'ruleId')
   String? get ruleId;
 
   @BuiltValueField(wireName: r'channels')
   WhaleNotificationDeliveryMapDto get channels;
 
+  /// 是否已读
   @BuiltValueField(wireName: r'read')
   bool get read;
 
+  /// 创建时间（ISO 8601）
   @BuiltValueField(wireName: r'createdAt')
   String get createdAt;
 

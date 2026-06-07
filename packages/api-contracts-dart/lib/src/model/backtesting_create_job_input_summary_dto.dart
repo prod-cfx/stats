@@ -13,18 +13,18 @@ part 'backtesting_create_job_input_summary_dto.g.dart';
 /// BacktestingCreateJobInputSummaryDto
 ///
 /// Properties:
-/// * [symbols] 
-/// * [baseTimeframe] 
-/// * [stateTimeframes] 
-/// * [initialCash] 
+/// * [symbols] - 回测标的交易对列表
+/// * [baseTimeframe] - 基础 K 线周期
+/// * [stateTimeframes] - 状态 K 线周期列表
+/// * [initialCash] - 初始资金
 /// * [leverage] 
 /// * [marketType] 
 /// * [dataRange] 
 /// * [requestedRange] 
 /// * [appliedRange] 
-/// * [allowPartial] 
-/// * [isPartial] 
-/// * [strategyId] 
+/// * [allowPartial] - 是否允许部分数据回测
+/// * [isPartial] - 本次回测是否使用了部分数据
+/// * [strategyId] - 策略 ID
 /// * [strategyInstanceId] 
 /// * [strategyTemplateId] 
 /// * [snapshotId] 
@@ -33,15 +33,19 @@ part 'backtesting_create_job_input_summary_dto.g.dart';
 /// * [specHash] 
 @BuiltValue()
 abstract class BacktestingCreateJobInputSummaryDto implements Built<BacktestingCreateJobInputSummaryDto, BacktestingCreateJobInputSummaryDtoBuilder> {
+  /// 回测标的交易对列表
   @BuiltValueField(wireName: r'symbols')
   BuiltList<String> get symbols;
 
+  /// 基础 K 线周期
   @BuiltValueField(wireName: r'baseTimeframe')
   String get baseTimeframe;
 
+  /// 状态 K 线周期列表
   @BuiltValueField(wireName: r'stateTimeframes')
   BuiltList<String> get stateTimeframes;
 
+  /// 初始资金
   @BuiltValueField(wireName: r'initialCash')
   num get initialCash;
 
@@ -61,12 +65,15 @@ abstract class BacktestingCreateJobInputSummaryDto implements Built<BacktestingC
   @BuiltValueField(wireName: r'appliedRange')
   BacktestingCreateJobRangeDto? get appliedRange;
 
+  /// 是否允许部分数据回测
   @BuiltValueField(wireName: r'allowPartial')
   bool get allowPartial;
 
+  /// 本次回测是否使用了部分数据
   @BuiltValueField(wireName: r'isPartial')
   bool get isPartial;
 
+  /// 策略 ID
   @BuiltValueField(wireName: r'strategyId')
   String get strategyId;
 

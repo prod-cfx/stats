@@ -57,9 +57,36 @@ export class StrategyPlazaTemplateResponseDto {
       returnPct: { type: 'number', nullable: true },
       winRatePct: { type: 'number', nullable: true },
       maxDrawdownPct: { type: 'number', nullable: true },
+      sharpe: { type: 'number', nullable: true },
+      profitLossRatio: { type: 'number', nullable: true },
+      tradeCount: { type: 'number', nullable: true },
+      users: { type: 'number', nullable: true },
     },
   })
   displayMetrics!: OfficialStrategyPlazaTemplate['displayMetrics']
+
+  @ApiPropertyOptional({ type: [Number] })
+  sparkline!: number[]
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: { type: 'number' } })
+  params!: Record<string, number>
+
+  @ApiPropertyOptional({
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        time: { type: 'string', format: 'date-time' },
+        side: { type: 'string', enum: ['buy', 'sell'] },
+        price: { type: 'number' },
+        pnlPercent: { type: 'number' },
+      },
+    },
+  })
+  signals!: NonNullable<OfficialStrategyPlazaTemplate['signals']>
+
+  @ApiPropertyOptional({ type: [Number] })
+  equityCurve!: number[]
 
   constructor(template: OfficialStrategyPlazaTemplate) {
     this.id = template.id
@@ -79,5 +106,13 @@ export class StrategyPlazaTemplateResponseDto {
     this.status = template.status
     this.displayOrder = template.displayOrder
     this.displayMetrics = { ...template.displayMetrics }
+    this.sparkline = [...(template.sparkline ?? [])]
+    this.params = {
+      positionPct: template.runConfig.positionPct,
+      ...(template.runConfig.leverage == null ? {} : { leverage: template.runConfig.leverage }),
+      ...(template.params ?? {}),
+    }
+    this.signals = [...(template.signals ?? [])]
+    this.equityCurve = [...(template.equityCurve ?? [])]
   }
 }

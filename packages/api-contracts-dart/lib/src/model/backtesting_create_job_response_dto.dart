@@ -15,9 +15,9 @@ part 'backtesting_create_job_response_dto.g.dart';
 /// BacktestingCreateJobResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [status] 
-/// * [createdAt] 
+/// * [id] - 回测任务 ID
+/// * [status] - 回测任务状态
+/// * [createdAt] - 任务创建时间（ISO 8601）
 /// * [startedAt] 
 /// * [finishedAt] 
 /// * [error] 
@@ -26,13 +26,16 @@ part 'backtesting_create_job_response_dto.g.dart';
 /// * [resultSummary] 
 @BuiltValue()
 abstract class BacktestingCreateJobResponseDto implements Built<BacktestingCreateJobResponseDto, BacktestingCreateJobResponseDtoBuilder> {
+  /// 回测任务 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
+  /// 回测任务状态
   @BuiltValueField(wireName: r'status')
   BacktestingCreateJobResponseDtoStatusEnum get status;
   // enum statusEnum {  queued,  running,  succeeded,  failed,  };
 
+  /// 任务创建时间（ISO 8601）
   @BuiltValueField(wireName: r'createdAt')
   String get createdAt;
 
@@ -249,12 +252,16 @@ class _$BacktestingCreateJobResponseDtoSerializer implements PrimitiveSerializer
 
 class BacktestingCreateJobResponseDtoStatusEnum extends EnumClass {
 
+  /// 回测任务状态
   @BuiltValueEnumConst(wireName: r'queued')
   static const BacktestingCreateJobResponseDtoStatusEnum queued = _$backtestingCreateJobResponseDtoStatusEnum_queued;
+  /// 回测任务状态
   @BuiltValueEnumConst(wireName: r'running')
   static const BacktestingCreateJobResponseDtoStatusEnum running = _$backtestingCreateJobResponseDtoStatusEnum_running;
+  /// 回测任务状态
   @BuiltValueEnumConst(wireName: r'succeeded')
   static const BacktestingCreateJobResponseDtoStatusEnum succeeded = _$backtestingCreateJobResponseDtoStatusEnum_succeeded;
+  /// 回测任务状态
   @BuiltValueEnumConst(wireName: r'failed')
   static const BacktestingCreateJobResponseDtoStatusEnum failed = _$backtestingCreateJobResponseDtoStatusEnum_failed;
 

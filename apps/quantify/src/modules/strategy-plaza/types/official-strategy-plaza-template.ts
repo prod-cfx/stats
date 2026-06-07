@@ -124,5 +124,20 @@ export interface OfficialStrategyPlazaTemplate {
     returnPct: number | null
     winRatePct: number | null
     maxDrawdownPct: number | null
+    sharpe?: number | null
+    profitLossRatio?: number | null
+    tradeCount?: number | null
+    users?: number | null
   }
+  sparkline?: number[]
+  params?: Record<string, number>
+  signals?: OfficialStrategyPlazaSignal[]
+  equityCurve?: number[]
+}
+
+export interface OfficialStrategyPlazaSignal {
+  time: string
+  side: 'buy' | 'sell'
+  price: number
+  pnlPercent: number
 }

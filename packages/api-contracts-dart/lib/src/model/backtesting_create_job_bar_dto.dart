@@ -12,42 +12,51 @@ part 'backtesting_create_job_bar_dto.g.dart';
 /// BacktestingCreateJobBarDto
 ///
 /// Properties:
-/// * [symbol] 
-/// * [timeframe] 
-/// * [openTime] 
-/// * [closeTime] 
-/// * [open] 
-/// * [high] 
-/// * [low] 
-/// * [close] 
-/// * [volume] 
+/// * [symbol] - 交易对符号
+/// * [timeframe] - K 线周期
+/// * [openTime] - K 线开盘时间（毫秒时间戳）
+/// * [closeTime] - K 线收盘时间（毫秒时间戳）
+/// * [open] - 开盘价
+/// * [high] - 最高价
+/// * [low] - 最低价
+/// * [close] - 收盘价
+/// * [volume] - 成交量
 @BuiltValue()
 abstract class BacktestingCreateJobBarDto implements Built<BacktestingCreateJobBarDto, BacktestingCreateJobBarDtoBuilder> {
+  /// 交易对符号
   @BuiltValueField(wireName: r'symbol')
   String get symbol;
 
+  /// K 线周期
   @BuiltValueField(wireName: r'timeframe')
   BacktestingCreateJobBarDtoTimeframeEnum get timeframe;
   // enum timeframeEnum {  1m,  3m,  5m,  15m,  30m,  1h,  4h,  6h,  8h,  12h,  1d,  1w,  };
 
+  /// K 线开盘时间（毫秒时间戳）
   @BuiltValueField(wireName: r'openTime')
   num get openTime;
 
+  /// K 线收盘时间（毫秒时间戳）
   @BuiltValueField(wireName: r'closeTime')
   num get closeTime;
 
+  /// 开盘价
   @BuiltValueField(wireName: r'open')
   num get open;
 
+  /// 最高价
   @BuiltValueField(wireName: r'high')
   num get high;
 
+  /// 最低价
   @BuiltValueField(wireName: r'low')
   num get low;
 
+  /// 收盘价
   @BuiltValueField(wireName: r'close')
   num get close;
 
+  /// 成交量
   @BuiltValueField(wireName: r'volume')
   num get volume;
 
@@ -236,28 +245,40 @@ class _$BacktestingCreateJobBarDtoSerializer implements PrimitiveSerializer<Back
 
 class BacktestingCreateJobBarDtoTimeframeEnum extends EnumClass {
 
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'1m')
   static const BacktestingCreateJobBarDtoTimeframeEnum n1m = _$backtestingCreateJobBarDtoTimeframeEnum_n1m;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'3m')
   static const BacktestingCreateJobBarDtoTimeframeEnum n3m = _$backtestingCreateJobBarDtoTimeframeEnum_n3m;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'5m')
   static const BacktestingCreateJobBarDtoTimeframeEnum n5m = _$backtestingCreateJobBarDtoTimeframeEnum_n5m;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'15m')
   static const BacktestingCreateJobBarDtoTimeframeEnum n15m = _$backtestingCreateJobBarDtoTimeframeEnum_n15m;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'30m')
   static const BacktestingCreateJobBarDtoTimeframeEnum n30m = _$backtestingCreateJobBarDtoTimeframeEnum_n30m;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'1h')
   static const BacktestingCreateJobBarDtoTimeframeEnum n1h = _$backtestingCreateJobBarDtoTimeframeEnum_n1h;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'4h')
   static const BacktestingCreateJobBarDtoTimeframeEnum n4h = _$backtestingCreateJobBarDtoTimeframeEnum_n4h;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'6h')
   static const BacktestingCreateJobBarDtoTimeframeEnum n6h = _$backtestingCreateJobBarDtoTimeframeEnum_n6h;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'8h')
   static const BacktestingCreateJobBarDtoTimeframeEnum n8h = _$backtestingCreateJobBarDtoTimeframeEnum_n8h;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'12h')
   static const BacktestingCreateJobBarDtoTimeframeEnum n12h = _$backtestingCreateJobBarDtoTimeframeEnum_n12h;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'1d')
   static const BacktestingCreateJobBarDtoTimeframeEnum n1d = _$backtestingCreateJobBarDtoTimeframeEnum_n1d;
+  /// K 线周期
   @BuiltValueEnumConst(wireName: r'1w')
   static const BacktestingCreateJobBarDtoTimeframeEnum n1w = _$backtestingCreateJobBarDtoTimeframeEnum_n1w;
 

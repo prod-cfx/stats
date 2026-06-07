@@ -36,10 +36,13 @@ import 'package:backend_api_contracts/src/model/admin_data_pull_task_controller_
 import 'package:backend_api_contracts/src/model/admin_data_pull_task_controller_list200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_data_pull_task_controller_list_executions200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_data_pull_task_response_dto.dart';
+import 'package:backend_api_contracts/src/model/admin_delete_result_response_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_exchange_config_controller_create_config200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_exchange_config_controller_get_all_configs200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_login_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_menu_permission_dto.dart';
+import 'package:backend_api_contracts/src/model/admin_menu_response_dto.dart';
+import 'package:backend_api_contracts/src/model/admin_menu_tree_node_response_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_orderbook_pair_config_controller_create_config201_response.dart';
 import 'package:backend_api_contracts/src/model/admin_orderbook_pair_config_controller_get_all_configs200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_orderbook_pair_config_controller_get_current_orderbook200_response.dart';
@@ -48,6 +51,7 @@ import 'package:backend_api_contracts/src/model/admin_refresh_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_register_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_role_controller_list0200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_role_controller_list0200_response_all_of_items_inner.dart';
+import 'package:backend_api_contracts/src/model/admin_role_response_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_settings_controller_create_setting201_response.dart';
 import 'package:backend_api_contracts/src/model/admin_settings_controller_get_all_settings200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_settings_controller_reload_settings200_response.dart';
@@ -77,10 +81,15 @@ import 'package:backend_api_contracts/src/model/ai_quant_conversation_last_backt
 import 'package:backend_api_contracts/src/model/ai_quant_conversation_last_backtest_summary_response_dto.dart';
 import 'package:backend_api_contracts/src/model/ai_quant_conversation_message_response_dto.dart';
 import 'package:backend_api_contracts/src/model/ai_quant_conversation_response_dto.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_create_telegram_desktop_intent200_response.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_desktop_intent_status200_response.dart';
 import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_login_config200_response.dart';
 import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_login_config200_response_data.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_web_authorize_url200_response.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_handle_telegram_bot_webhook200_response.dart';
 import 'package:backend_api_contracts/src/model/auth_controller_telegram_desktop_exchange200_response.dart';
 import 'package:backend_api_contracts/src/model/auth_response_dto.dart';
+import 'package:backend_api_contracts/src/model/backtesting_capabilities_response_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_create_job_bar_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_create_job_error_details_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_create_job_execution_dto.dart';
@@ -91,7 +100,12 @@ import 'package:backend_api_contracts/src/model/backtesting_create_job_requested
 import 'package:backend_api_contracts/src/model/backtesting_create_job_response_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_create_job_strategy_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_create_job_summary_dto.dart';
+import 'package:backend_api_contracts/src/model/backtesting_job_response_dto.dart';
+import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_capabilities200_response.dart';
 import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_create_job200_response.dart';
+import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_get_job200_response.dart';
+import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_get_job_result200_response.dart';
+import 'package:backend_api_contracts/src/model/backtesting_report_response_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_symbol_support_request_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_symbol_support_response_dto.dart';
 import 'package:backend_api_contracts/src/model/base_pagination_response_dto.dart';
@@ -130,6 +144,12 @@ import 'package:backend_api_contracts/src/model/liquidation_heatmap_response_dto
 import 'package:backend_api_contracts/src/model/liquidation_summary_item_dto.dart';
 import 'package:backend_api_contracts/src/model/llm_codegen_continue_request_dto.dart';
 import 'package:backend_api_contracts/src/model/llm_codegen_start_request_dto.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instance_response_dto.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instance_signal_response_dto.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instances_controller_list200_response.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instances_controller_signals200_response.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_subscriptions_controller_list200_response.dart';
+import 'package:backend_api_contracts/src/model/llm_subscription_response_dto.dart';
 import 'package:backend_api_contracts/src/model/login_request_dto.dart';
 import 'package:backend_api_contracts/src/model/long_short_ratio_point_response_dto.dart';
 import 'package:backend_api_contracts/src/model/market_trade_response_dto.dart';
@@ -170,15 +190,22 @@ import 'package:backend_api_contracts/src/model/strategy_plaza_display_metrics_r
 import 'package:backend_api_contracts/src/model/strategy_plaza_edit_session_response_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_detail200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_edit_session200_response.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_equity_curve200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_list200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_run200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_run200_response_data.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_signals200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_run_existing_response_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_run_request_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_signal_response_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_template_response_dto.dart';
 import 'package:backend_api_contracts/src/model/telegram_bot_webhook_request_dto.dart';
+import 'package:backend_api_contracts/src/model/telegram_bot_webhook_response_dto.dart';
 import 'package:backend_api_contracts/src/model/telegram_desktop_exchange_request_dto.dart';
+import 'package:backend_api_contracts/src/model/telegram_desktop_intent_response_dto.dart';
+import 'package:backend_api_contracts/src/model/telegram_desktop_intent_status_response_dto.dart';
 import 'package:backend_api_contracts/src/model/telegram_exchange_request_dto.dart';
+import 'package:backend_api_contracts/src/model/telegram_web_authorize_url_response_dto.dart';
 import 'package:backend_api_contracts/src/model/ticker_response_dto.dart';
 import 'package:backend_api_contracts/src/model/trader_discover_tags_response_dto.dart';
 import 'package:backend_api_contracts/src/model/trader_open_orders_response_dto.dart';
@@ -248,10 +275,13 @@ part 'serializers.g.dart';
   AdminDataPullTaskControllerList200Response,
   AdminDataPullTaskControllerListExecutions200Response,
   AdminDataPullTaskResponseDto,
+  AdminDeleteResultResponseDto,
   AdminExchangeConfigControllerCreateConfig200Response,
   AdminExchangeConfigControllerGetAllConfigs200Response,
   AdminLoginDto,
   AdminMenuPermissionDto,
+  AdminMenuResponseDto,
+  AdminMenuTreeNodeResponseDto,
   AdminOrderbookPairConfigControllerCreateConfig201Response,
   AdminOrderbookPairConfigControllerGetAllConfigs200Response,
   AdminOrderbookPairConfigControllerGetCurrentOrderbook200Response,
@@ -260,6 +290,7 @@ part 'serializers.g.dart';
   AdminRegisterDto,
   AdminRoleControllerList0200Response,
   AdminRoleControllerList0200ResponseAllOfItemsInner,
+  AdminRoleResponseDto,
   AdminSettingsControllerCreateSetting201Response,
   AdminSettingsControllerGetAllSettings200Response,
   AdminSettingsControllerReloadSettings200Response,
@@ -289,10 +320,15 @@ part 'serializers.g.dart';
   AiQuantConversationLastBacktestSummaryResponseDto,
   AiQuantConversationMessageResponseDto,
   AiQuantConversationResponseDto,
+  AuthControllerCreateTelegramDesktopIntent200Response,
+  AuthControllerGetTelegramDesktopIntentStatus200Response,
   AuthControllerGetTelegramLoginConfig200Response,
   AuthControllerGetTelegramLoginConfig200ResponseData,
+  AuthControllerGetTelegramWebAuthorizeUrl200Response,
+  AuthControllerHandleTelegramBotWebhook200Response,
   AuthControllerTelegramDesktopExchange200Response,
   AuthResponseDto,
+  BacktestingCapabilitiesResponseDto,
   BacktestingCreateJobBarDto,
   BacktestingCreateJobErrorDetailsDto,
   BacktestingCreateJobExecutionDto,
@@ -303,7 +339,12 @@ part 'serializers.g.dart';
   BacktestingCreateJobResponseDto,
   BacktestingCreateJobStrategyDto,
   BacktestingCreateJobSummaryDto,
+  BacktestingJobResponseDto,
+  BacktestingProxyControllerCapabilities200Response,
   BacktestingProxyControllerCreateJob200Response,
+  BacktestingProxyControllerGetJob200Response,
+  BacktestingProxyControllerGetJobResult200Response,
+  BacktestingReportResponseDto,
   BacktestingSymbolSupportRequestDto,
   BacktestingSymbolSupportResponseDto,
   BasePaginationResponseDto,$BasePaginationResponseDto,
@@ -342,6 +383,12 @@ part 'serializers.g.dart';
   LiquidationSummaryItemDto,
   LlmCodegenContinueRequestDto,
   LlmCodegenStartRequestDto,
+  LlmStrategyInstanceResponseDto,
+  LlmStrategyInstanceSignalResponseDto,
+  LlmStrategyInstancesControllerList200Response,
+  LlmStrategyInstancesControllerSignals200Response,
+  LlmStrategySubscriptionsControllerList200Response,
+  LlmSubscriptionResponseDto,
   LoginRequestDto,
   LongShortRatioPointResponseDto,
   MarketTradeResponseDto,
@@ -382,15 +429,22 @@ part 'serializers.g.dart';
   StrategyPlazaEditSessionResponseDto,
   StrategyPlazaProxyControllerDetail200Response,
   StrategyPlazaProxyControllerEditSession200Response,
+  StrategyPlazaProxyControllerEquityCurve200Response,
   StrategyPlazaProxyControllerList200Response,
   StrategyPlazaProxyControllerRun200Response,
   StrategyPlazaProxyControllerRun200ResponseData,
+  StrategyPlazaProxyControllerSignals200Response,
   StrategyPlazaRunExistingResponseDto,
   StrategyPlazaRunRequestDto,
+  StrategyPlazaSignalResponseDto,
   StrategyPlazaTemplateResponseDto,
   TelegramBotWebhookRequestDto,
+  TelegramBotWebhookResponseDto,
   TelegramDesktopExchangeRequestDto,
+  TelegramDesktopIntentResponseDto,
+  TelegramDesktopIntentStatusResponseDto,
   TelegramExchangeRequestDto,
+  TelegramWebAuthorizeUrlResponseDto,
   TickerResponseDto,
   TraderDiscoverTagsResponseDto,
   TraderOpenOrdersResponseDto,
@@ -445,28 +499,16 @@ Serializers serializers = (_$serializers.toBuilder()
         () => ListBuilder<BetaCodeResponseDto>(),
       )
       ..addBuilderFactory(
-        const FullType(BuiltList, [FullType(WhaleNotificationInboxResponseDto)]),
-        () => ListBuilder<WhaleNotificationInboxResponseDto>(),
-      )
-      ..addBuilderFactory(
-        const FullType(BuiltList, [FullType(AccountExchangeAccountResponseDto)]),
-        () => ListBuilder<AccountExchangeAccountResponseDto>(),
+        const FullType(BuiltList, [FullType(AdminMenuPermissionDto)]),
+        () => ListBuilder<AdminMenuPermissionDto>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(WhaleNotificationRuleResponseDto)]),
         () => ListBuilder<WhaleNotificationRuleResponseDto>(),
       )
       ..addBuilderFactory(
-        const FullType(BuiltList, [FullType(PredictionMarketCardDto)]),
-        () => ListBuilder<PredictionMarketCardDto>(),
-      )
-      ..addBuilderFactory(
         const FullType(BuiltList, [FullType(KlineBarDto)]),
         () => ListBuilder<KlineBarDto>(),
-      )
-      ..addBuilderFactory(
-        const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-        () => MapBuilder<String, JsonObject?>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(AiQuantConversationResponseDto)]),
@@ -479,6 +521,30 @@ Serializers serializers = (_$serializers.toBuilder()
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(TradingPairConfigResponseDto)]),
         () => ListBuilder<TradingPairConfigResponseDto>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(WhaleNotificationInboxResponseDto)]),
+        () => ListBuilder<WhaleNotificationInboxResponseDto>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(AccountExchangeAccountResponseDto)]),
+        () => ListBuilder<AccountExchangeAccountResponseDto>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(AdminMenuResponseDto)]),
+        () => ListBuilder<AdminMenuResponseDto>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(AdminMenuTreeNodeResponseDto)]),
+        () => ListBuilder<AdminMenuTreeNodeResponseDto>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PredictionMarketCardDto)]),
+        () => ListBuilder<PredictionMarketCardDto>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+        () => MapBuilder<String, JsonObject?>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(String)]),

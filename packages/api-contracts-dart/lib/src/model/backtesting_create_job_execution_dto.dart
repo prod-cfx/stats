@@ -12,17 +12,20 @@ part 'backtesting_create_job_execution_dto.g.dart';
 /// BacktestingCreateJobExecutionDto
 ///
 /// Properties:
-/// * [slippageBps] 
-/// * [feeBps] 
-/// * [priceSource] 
+/// * [slippageBps] - 滑点（基点 bps）
+/// * [feeBps] - 手续费（基点 bps）
+/// * [priceSource] - 成交参考价来源
 @BuiltValue()
 abstract class BacktestingCreateJobExecutionDto implements Built<BacktestingCreateJobExecutionDto, BacktestingCreateJobExecutionDtoBuilder> {
+  /// 滑点（基点 bps）
   @BuiltValueField(wireName: r'slippageBps')
   num get slippageBps;
 
+  /// 手续费（基点 bps）
   @BuiltValueField(wireName: r'feeBps')
   num get feeBps;
 
+  /// 成交参考价来源
   @BuiltValueField(wireName: r'priceSource')
   BacktestingCreateJobExecutionDtoPriceSourceEnum get priceSource;
   // enum priceSourceEnum {  open,  close,  mid,  };
@@ -140,10 +143,13 @@ class _$BacktestingCreateJobExecutionDtoSerializer implements PrimitiveSerialize
 
 class BacktestingCreateJobExecutionDtoPriceSourceEnum extends EnumClass {
 
+  /// 成交参考价来源
   @BuiltValueEnumConst(wireName: r'open')
   static const BacktestingCreateJobExecutionDtoPriceSourceEnum open = _$backtestingCreateJobExecutionDtoPriceSourceEnum_open;
+  /// 成交参考价来源
   @BuiltValueEnumConst(wireName: r'close')
   static const BacktestingCreateJobExecutionDtoPriceSourceEnum close = _$backtestingCreateJobExecutionDtoPriceSourceEnum_close;
+  /// 成交参考价来源
   @BuiltValueEnumConst(wireName: r'mid')
   static const BacktestingCreateJobExecutionDtoPriceSourceEnum mid = _$backtestingCreateJobExecutionDtoPriceSourceEnum_mid;
 

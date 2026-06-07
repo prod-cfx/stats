@@ -316,7 +316,26 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "成功获取授权地址",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TelegramWebAuthorizeUrlResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "获取 Telegram 网页授权地址",
@@ -341,7 +360,26 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "成功创建登录意图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TelegramDesktopIntentResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "创建 Telegram 桌面端登录意图",
@@ -365,7 +403,26 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "成功查询登录意图状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TelegramDesktopIntentStatusResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "查询 Telegram 桌面端登录意图状态",
@@ -487,7 +544,26 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Webhook 处理成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TelegramBotWebhookResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Telegram Bot Webhook 回调",
@@ -512,7 +588,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "验证码已发送（无返回体）"
           }
         },
         "summary": "发送验证码（注册/密码重置）",
@@ -537,7 +613,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "登录验证码已发送（无返回体）"
           }
         },
         "summary": "发送邮箱登录验证码",
@@ -738,7 +814,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "重置密码请求已受理（无返回体）"
           }
         },
         "summary": "申请重置密码",
@@ -763,7 +839,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "密码已更新（无返回体）"
           }
         },
         "summary": "验证重置密码验证码并更新密码",
@@ -788,7 +864,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "邮箱已验证（无返回体）"
           }
         },
         "summary": "验证邮箱验证码",
@@ -813,7 +889,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "验证码已重新发送（无返回体）"
           }
         },
         "summary": "重新发送邮箱验证码",
@@ -1801,7 +1877,7 @@
           },
           {
             "name": "x-request-id",
-            "required": true,
+            "required": false,
             "in": "header",
             "schema": {
               "type": "string"
@@ -1810,7 +1886,26 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BacktestingCapabilitiesResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1818,6 +1913,7 @@
             "bearer": []
           }
         ],
+        "summary": "Get backtesting capabilities through the backend proxy.",
         "tags": [
           "backtesting"
         ]
@@ -1871,6 +1967,7 @@
             "bearer": []
           }
         ],
+        "summary": "Check backtesting symbol support through the backend proxy.",
         "tags": [
           "backtesting"
         ]
@@ -1936,6 +2033,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create a backtesting job through the backend proxy.",
         "tags": [
           "backtesting"
         ]
@@ -1955,7 +2053,7 @@
           },
           {
             "name": "x-request-id",
-            "required": true,
+            "required": false,
             "in": "header",
             "schema": {
               "type": "string"
@@ -1972,7 +2070,26 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BacktestingJobResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1980,6 +2097,7 @@
             "bearer": []
           }
         ],
+        "summary": "Get a backtesting job status through the backend proxy.",
         "tags": [
           "backtesting"
         ]
@@ -1999,7 +2117,7 @@
           },
           {
             "name": "x-request-id",
-            "required": true,
+            "required": false,
             "in": "header",
             "schema": {
               "type": "string"
@@ -2016,7 +2134,26 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BacktestingReportResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2024,6 +2161,7 @@
             "bearer": []
           }
         ],
+        "summary": "Get a backtesting job result through the backend proxy.",
         "tags": [
           "backtesting"
         ]
@@ -2179,9 +2317,31 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/LlmStrategyInstanceResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
+        "summary": "List LLM strategy instances through the backend proxy.",
         "tags": [
           "llm-strategy-instances"
         ]
@@ -2202,9 +2362,17 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmStrategyInstanceResponseDto"
+                }
+              }
+            }
           }
         },
+        "summary": "Get LLM strategy instance detail through the backend proxy.",
         "tags": [
           "llm-strategy-instances"
         ]
@@ -2225,7 +2393,28 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/LlmStrategyInstanceSignalResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2233,6 +2422,7 @@
             "bearer": []
           }
         ],
+        "summary": "List LLM strategy instance signals through the backend proxy.",
         "tags": [
           "llm-strategy-instances"
         ]
@@ -2253,8 +2443,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSubscriptionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2262,6 +2459,7 @@
             "bearer": []
           }
         ],
+        "summary": "Create an LLM strategy subscription through the backend proxy.",
         "tags": [
           "llm-strategy-subscriptions"
         ]
@@ -2271,7 +2469,28 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/LlmSubscriptionResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2279,6 +2498,7 @@
             "bearer": []
           }
         ],
+        "summary": "List the authenticated user LLM strategy subscriptions through the backend proxy.",
         "tags": [
           "llm-strategy-subscriptions"
         ]
@@ -2299,7 +2519,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSubscriptionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2307,6 +2534,7 @@
             "bearer": []
           }
         ],
+        "summary": "Get an LLM strategy subscription detail through the backend proxy.",
         "tags": [
           "llm-strategy-subscriptions"
         ]
@@ -2335,7 +2563,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSubscriptionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2343,6 +2578,7 @@
             "bearer": []
           }
         ],
+        "summary": "Update an LLM strategy subscription through the backend proxy.",
         "tags": [
           "llm-strategy-subscriptions"
         ]
@@ -2360,8 +2596,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "204": {
+            "description": "Subscription cancelled; no response body."
           }
         },
         "security": [
@@ -2369,6 +2605,7 @@
             "bearer": []
           }
         ],
+        "summary": "Cancel an LLM strategy subscription through the backend proxy.",
         "tags": [
           "llm-strategy-subscriptions"
         ]
@@ -2449,6 +2686,114 @@
           }
         },
         "summary": "Publicly get strategy plaza template detail through the backend proxy.",
+        "tags": [
+          "strategy-plaza"
+        ]
+      }
+    },
+    "/strategy-plaza/templates/{id}/signals": {
+      "get": {
+        "operationId": "StrategyPlazaProxyController_signals",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy plaza template signals proxied from quantify.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StrategyPlazaSignalResponseDto"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Publicly list strategy plaza template signals through the backend proxy.",
+        "tags": [
+          "strategy-plaza"
+        ]
+      }
+    },
+    "/strategy-plaza/templates/{id}/equity-curve": {
+      "get": {
+        "operationId": "StrategyPlazaProxyController_equityCurve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeframe",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy plaza template equity curve proxied from quantify.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Publicly get strategy plaza template equity curve through the backend proxy.",
         "tags": [
           "strategy-plaza"
         ]
@@ -3537,7 +3882,14 @@
         },
         "responses": {
           "200": {
-            "description": "创建成功"
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3686,7 +4038,14 @@
         },
         "responses": {
           "200": {
-            "description": "创建成功"
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3715,7 +4074,14 @@
         ],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3752,7 +4118,14 @@
         },
         "responses": {
           "200": {
-            "description": "更新成功"
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3779,7 +4152,14 @@
         ],
         "responses": {
           "200": {
-            "description": "删除成功"
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteResultResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3808,7 +4188,14 @@
         ],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3845,7 +4232,14 @@
         },
         "responses": {
           "200": {
-            "description": "更新成功"
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3872,7 +4266,14 @@
         ],
         "responses": {
           "200": {
-            "description": "删除成功"
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteResultResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3892,7 +4293,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminMenuTreeNodeResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3920,7 +4331,14 @@
         },
         "responses": {
           "200": {
-            "description": "创建成功"
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMenuResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3940,7 +4358,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminMenuTreeNodeResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3968,7 +4396,14 @@
         },
         "responses": {
           "200": {
-            "description": "创建成功"
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMenuResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3988,7 +4423,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminMenuResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4008,7 +4453,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminMenuResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4028,7 +4483,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminMenuPermissionDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4048,7 +4513,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminMenuPermissionDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4077,7 +4552,14 @@
         ],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMenuResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4114,7 +4596,14 @@
         },
         "responses": {
           "200": {
-            "description": "更新成功"
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMenuResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4141,7 +4630,14 @@
         ],
         "responses": {
           "200": {
-            "description": "删除成功"
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteResultResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4170,7 +4666,14 @@
         ],
         "responses": {
           "200": {
-            "description": "获取成功"
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMenuResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4207,7 +4710,14 @@
         },
         "responses": {
           "200": {
-            "description": "更新成功"
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMenuResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4234,7 +4744,14 @@
         ],
         "responses": {
           "200": {
-            "description": "删除成功"
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleteResultResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -8310,13 +8827,20 @@
   },
   "info": {
     "title": "AI Backend API",
-    "description": "Auto generated OpenAPI for contracts",
+    "description": "Internal API documentation",
     "version": "1.0",
     "contact": {}
   },
   "tags": [],
   "servers": [],
   "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
     "schemas": {
       "BaseResponseDto": {
         "type": "object",
@@ -8594,6 +9118,87 @@
           "user"
         ]
       },
+      "TelegramWebAuthorizeUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "authorizeUrl": {
+            "type": "string",
+            "description": "Telegram 网页授权地址（前端跳转用）",
+            "example": "https://oauth.telegram.org/auth?bot_id=123&origin=https%3A%2F%2Fexample.com"
+          }
+        },
+        "required": [
+          "authorizeUrl"
+        ]
+      },
+      "TelegramDesktopIntentResponseDto": {
+        "type": "object",
+        "properties": {
+          "intentId": {
+            "type": "string",
+            "description": "登录意图 ID",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "deepLink": {
+            "type": "string",
+            "description": "Telegram 客户端深链（tg:// 协议）",
+            "example": "tg://resolve?domain=example_bot&start=intent_xxx"
+          },
+          "webLink": {
+            "type": "string",
+            "description": "Telegram 网页链接（无客户端时回退）",
+            "example": "https://t.me/example_bot?start=intent_xxx"
+          },
+          "callbackUrl": {
+            "type": "string",
+            "description": "登录确认回调地址",
+            "example": "https://example.com/auth/telegram/callback?intent=xxx"
+          },
+          "expiresInSeconds": {
+            "type": "number",
+            "description": "意图过期时间（秒）",
+            "example": 300
+          }
+        },
+        "required": [
+          "intentId",
+          "deepLink",
+          "webLink",
+          "callbackUrl",
+          "expiresInSeconds"
+        ]
+      },
+      "TelegramDesktopIntentStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "登录意图状态",
+            "enum": [
+              "pending",
+              "confirmed",
+              "expired"
+            ],
+            "example": "pending"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "TelegramBotWebhookResponseDto": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "Webhook 处理成功标记（固定 true）",
+            "example": true
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "CreateTelegramDesktopIntentRequestDto": {
         "type": "object",
         "properties": {
@@ -8768,13 +9373,19 @@
         "type": "object",
         "properties": {
           "email": {
-            "type": "string"
+            "type": "string",
+            "description": "注册邮箱",
+            "example": "user@example.com"
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "description": "登录密码（至少 6 位）",
+            "example": "YourPassw0rd!"
           },
           "nickname": {
-            "type": "string"
+            "type": "string",
+            "description": "昵称（可选）",
+            "example": "Alice"
           },
           "betaCode": {
             "type": "string",
@@ -8979,23 +9590,35 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "内测码 ID",
+            "example": "beta_01HXYZ"
           },
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "内测码",
+            "example": "WELCOME2026"
           },
           "maxUses": {
-            "type": "number"
+            "type": "number",
+            "description": "最大可用次数",
+            "example": 100
           },
           "usedCount": {
-            "type": "number"
+            "type": "number",
+            "description": "已使用次数",
+            "example": 12
           },
           "isActive": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否启用",
+            "example": true
           },
           "createdAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "description": "创建时间",
+            "example": "2026-06-06T08:00:00.000Z"
           }
         },
         "required": [
@@ -9056,7 +9679,9 @@
             ]
           },
           "isBound": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "该交易所是否已绑定账户",
+            "example": true
           },
           "name": {
             "type": "string",
@@ -9140,7 +9765,7 @@
         "properties": {
           "role": {
             "type": "string",
-            "description": "Conversation message role",
+            "description": "对话消息角色",
             "enum": [
               "user",
               "assistant"
@@ -9148,7 +9773,7 @@
           },
           "content": {
             "type": "string",
-            "description": "Conversation message content"
+            "description": "对话消息内容"
           }
         },
         "required": [
@@ -9161,19 +9786,25 @@
         "properties": {
           "preset": {
             "type": "string",
+            "description": "回测区间预设",
             "enum": [
               "7D",
               "30D",
               "90D",
               "1Y",
               "CUSTOM"
-            ]
+            ],
+            "example": "30D"
           },
           "startAt": {
-            "type": "string"
+            "type": "string",
+            "description": "自定义区间开始时间（ISO 8601）",
+            "example": "2026-05-01T00:00:00.000Z"
           },
           "endAt": {
-            "type": "string"
+            "type": "string",
+            "description": "自定义区间结束时间（ISO 8601）",
+            "example": "2026-06-01T00:00:00.000Z"
           }
         },
         "required": [
@@ -9184,28 +9815,40 @@
         "type": "object",
         "properties": {
           "initialCash": {
-            "type": "number"
+            "type": "number",
+            "description": "初始资金",
+            "example": 10000
           },
           "leverage": {
             "type": "number",
+            "description": "杠杆倍数（现货为 null）",
+            "example": 3,
             "nullable": true
           },
           "slippageBps": {
-            "type": "number"
+            "type": "number",
+            "description": "滑点（基点 bps）",
+            "example": 5
           },
           "feeBps": {
-            "type": "number"
+            "type": "number",
+            "description": "手续费（基点 bps）",
+            "example": 10
           },
           "priceSource": {
             "type": "string",
+            "description": "成交参考价来源",
             "enum": [
               "open",
               "close",
               "mid"
-            ]
+            ],
+            "example": "close"
           },
           "allowPartial": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否允许部分数据回测",
+            "example": false
           }
         },
         "required": [
@@ -9235,29 +9878,43 @@
         "type": "object",
         "properties": {
           "maxDrawdownPct": {
-            "type": "number"
+            "type": "number",
+            "description": "最大回撤百分比（%）",
+            "example": 8.5
           },
           "totalReturnPct": {
-            "type": "number"
+            "type": "number",
+            "description": "总收益率百分比（%）",
+            "example": 15.2
           },
           "winRatePct": {
-            "type": "number"
+            "type": "number",
+            "description": "胜率百分比（%）",
+            "example": 62
           },
           "tradeCount": {
-            "type": "number"
+            "type": "number",
+            "description": "总成交笔数",
+            "example": 42
           },
           "openTradeCount": {
-            "type": "number"
+            "type": "number",
+            "description": "当前持仓笔数",
+            "example": 1
           },
           "openPnl": {
-            "type": "number"
+            "type": "number",
+            "description": "当前持仓未实现盈亏",
+            "example": 120.5
           },
           "marketType": {
             "type": "string",
+            "description": "市场类型",
             "enum": [
               "spot",
               "perp"
-            ]
+            ],
+            "example": "perp"
           }
         },
         "required": [
@@ -9271,19 +9928,35 @@
         "type": "object",
         "properties": {
           "jobId": {
-            "type": "string"
+            "type": "string",
+            "description": "回测任务 ID",
+            "example": "job_01HXYZ"
           },
           "publishedSnapshotId": {
-            "type": "string"
+            "type": "string",
+            "description": "已发布快照 ID",
+            "example": "snap_01HXYZ"
           },
           "config": {
-            "$ref": "#/components/schemas/AiQuantConversationBacktestConfigResponseDto"
+            "description": "回测配置",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AiQuantConversationBacktestConfigResponseDto"
+              }
+            ]
           },
           "summary": {
-            "$ref": "#/components/schemas/AiQuantConversationLastBacktestSummaryResponseDto"
+            "description": "回测结果摘要",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AiQuantConversationLastBacktestSummaryResponseDto"
+              }
+            ]
           },
           "completedAt": {
-            "type": "string"
+            "type": "string",
+            "description": "回测完成时间（ISO 8601）",
+            "example": "2026-06-06T08:00:00.000Z"
           }
         },
         "required": [
@@ -9299,18 +9972,18 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Conversation id"
+            "description": "对话 ID"
           },
           "activeCodegenSessionId": {
             "type": "string",
-            "description": "Current linked codegen session id"
+            "description": "当前关联的代码生成会话 ID"
           },
           "conversationTitle": {
             "type": "string",
-            "description": "Conversation title"
+            "description": "对话标题"
           },
           "conversationMessages": {
-            "description": "Structured conversation transcript",
+            "description": "结构化对话记录",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AiQuantConversationMessageResponseDto"
@@ -9318,18 +9991,18 @@
           },
           "status": {
             "type": "string",
-            "description": "Current codegen status"
+            "description": "当前代码生成状态"
           },
           "createdAt": {
             "type": "string",
-            "description": "Conversation created timestamp"
+            "description": "对话创建时间"
           },
           "updatedAt": {
             "type": "string",
-            "description": "Conversation updated timestamp"
+            "description": "对话更新时间"
           },
           "backtestDraftConfig": {
-            "description": "Current explicit backtest draft configuration",
+            "description": "当前显式回测草稿配置",
             "nullable": true,
             "allOf": [
               {
@@ -9338,7 +10011,7 @@
             ]
           },
           "lastBacktestRef": {
-            "description": "Most recent recoverable backtest reference",
+            "description": "最近可恢复的回测引用",
             "nullable": true,
             "allOf": [
               {
@@ -9348,83 +10021,83 @@
           },
           "canonicalDigest": {
             "type": "string",
-            "description": "Pending canonical digest awaiting confirmation"
+            "description": "待确认的规范化摘要"
           },
           "specDesc": {
             "type": "object",
-            "description": "Structured strategy description payload",
+            "description": "结构化策略描述载荷",
             "additionalProperties": true
           },
           "semanticGraph": {
             "type": "object",
-            "description": "Semantic graph payload",
+            "description": "语义图载荷",
             "additionalProperties": true
           },
           "validationReport": {
             "type": "object",
-            "description": "Semantic graph validation report",
+            "description": "语义图校验报告",
             "additionalProperties": true
           },
           "clarificationGate": {
             "type": "object",
-            "description": "Clarification gate payload",
+            "description": "澄清门载荷",
             "additionalProperties": true
           },
           "publicationGate": {
             "type": "object",
-            "description": "Publication gate payload",
+            "description": "发布门载荷",
             "additionalProperties": true
           },
           "scriptCode": {
             "type": "string",
-            "description": "Published script code"
+            "description": "已发布脚本代码"
           },
           "publishedSnapshotId": {
             "type": "string",
-            "description": "Published snapshot id"
+            "description": "已发布快照 ID"
           },
           "publishedSnapshotParamValues": {
             "type": "object",
-            "description": "Snapshot-bound param values for published backtest/display semantics",
+            "description": "快照绑定的参数值（用于已发布回测/展示语义）",
             "additionalProperties": true
           },
           "publishedSnapshotStrategyConfig": {
             "type": "object",
-            "description": "Published snapshot formal strategy configuration",
+            "description": "已发布快照的正式策略配置",
             "additionalProperties": true,
             "nullable": true
           },
           "publishedSnapshotBacktestConfigDefaults": {
             "type": "object",
-            "description": "Published snapshot formal backtest defaults",
+            "description": "已发布快照的正式回测默认值",
             "additionalProperties": true,
             "nullable": true
           },
           "publishedSnapshotDeploymentExecutionDefaults": {
             "type": "object",
-            "description": "Published snapshot formal deploy defaults",
+            "description": "已发布快照的正式部署默认值",
             "additionalProperties": true,
             "nullable": true
           },
           "publishedSnapshotDeploymentExecutionConstraints": {
             "type": "object",
-            "description": "Published snapshot formal deploy constraints",
+            "description": "已发布快照的正式部署约束",
             "additionalProperties": true,
             "nullable": true
           },
           "publishedSnapshotCompatibilityMetadata": {
             "type": "object",
-            "description": "Published snapshot compatibility metadata",
+            "description": "已发布快照的兼容性元数据",
             "additionalProperties": true,
             "nullable": true
           },
           "strategyInstanceId": {
             "type": "string",
-            "description": "Published strategy instance id"
+            "description": "已发布策略实例 ID"
           },
           "rejectReason": {
             "type": "string",
-            "description": "Terminal reject reason"
+            "description": "终止拒绝原因"
           }
         },
         "required": [
@@ -9446,13 +10119,18 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "策略 ID",
+            "example": "strat_01HXYZ"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "策略名称",
+            "example": "我的趋势策略"
           },
           "status": {
             "type": "string",
+            "description": "策略运行状态",
             "enum": [
               "running",
               "stopped",
@@ -9490,14 +10168,19 @@
             "nullable": true
           },
           "isSubscribed": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "当前用户是否已订阅该策略",
+            "example": true
           },
           "metrics": {
             "type": "object",
+            "description": "策略展示指标集合",
             "additionalProperties": true
           },
           "updatedAt": {
-            "type": "string"
+            "type": "string",
+            "description": "更新时间（ISO 8601）",
+            "example": "2026-06-06T09:00:00.000Z"
           }
         },
         "required": [
@@ -9513,13 +10196,18 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "策略 ID",
+            "example": "strat_01HXYZ"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "策略名称",
+            "example": "我的趋势策略"
           },
           "status": {
             "type": "string",
+            "description": "策略运行状态",
             "enum": [
               "running",
               "stopped",
@@ -9557,14 +10245,19 @@
             "nullable": true
           },
           "isSubscribed": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "当前用户是否已订阅该策略",
+            "example": true
           },
           "metrics": {
             "type": "object",
+            "description": "策略展示指标集合",
             "additionalProperties": true
           },
           "updatedAt": {
-            "type": "string"
+            "type": "string",
+            "description": "更新时间（ISO 8601）",
+            "example": "2026-06-06T09:00:00.000Z"
           },
           "totalPnl": {
             "type": "number",
@@ -9648,7 +10341,9 @@
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "部署后的策略实例名称",
+            "example": "我的实盘策略"
           },
           "deployRequestId": {
             "type": "string",
@@ -9692,18 +10387,24 @@
         "type": "object",
         "properties": {
           "slippageBps": {
-            "type": "number"
+            "type": "number",
+            "description": "滑点（基点 bps）",
+            "example": 5
           },
           "feeBps": {
-            "type": "number"
+            "type": "number",
+            "description": "手续费（基点 bps）",
+            "example": 10
           },
           "priceSource": {
             "type": "string",
+            "description": "成交参考价来源",
             "enum": [
               "open",
               "close",
               "mid"
-            ]
+            ],
+            "example": "close"
           }
         },
         "required": [
@@ -9740,10 +10441,14 @@
         "type": "object",
         "properties": {
           "fromTs": {
-            "type": "number"
+            "type": "number",
+            "description": "区间起始时间（毫秒时间戳）",
+            "example": 1706000000000
           },
           "toTs": {
-            "type": "number"
+            "type": "number",
+            "description": "区间结束时间（毫秒时间戳）",
+            "example": 1708678400000
           }
         },
         "required": [
@@ -9779,10 +10484,13 @@
         "type": "object",
         "properties": {
           "symbol": {
-            "type": "string"
+            "type": "string",
+            "description": "交易对符号",
+            "example": "BTCUSDT"
           },
           "timeframe": {
             "type": "string",
+            "description": "K 线周期",
             "enum": [
               "1m",
               "3m",
@@ -9796,28 +10504,43 @@
               "12h",
               "1d",
               "1w"
-            ]
+            ],
+            "example": "1h"
           },
           "openTime": {
-            "type": "number"
+            "type": "number",
+            "description": "K 线开盘时间（毫秒时间戳）",
+            "example": 1706000000000
           },
           "closeTime": {
-            "type": "number"
+            "type": "number",
+            "description": "K 线收盘时间（毫秒时间戳）",
+            "example": 1706003600000
           },
           "open": {
-            "type": "number"
+            "type": "number",
+            "description": "开盘价",
+            "example": 87010.5
           },
           "high": {
-            "type": "number"
+            "type": "number",
+            "description": "最高价",
+            "example": 87500
           },
           "low": {
-            "type": "number"
+            "type": "number",
+            "description": "最低价",
+            "example": 86000
           },
           "close": {
-            "type": "number"
+            "type": "number",
+            "description": "收盘价",
+            "example": 87200.3
           },
           "volume": {
-            "type": "number"
+            "type": "number",
+            "description": "成交量",
+            "example": 1234.56
           }
         },
         "required": [
@@ -9879,7 +10602,9 @@
             }
           },
           "initialCash": {
-            "type": "number"
+            "type": "number",
+            "description": "初始资金",
+            "example": 10000
           },
           "leverage": {
             "type": "number"
@@ -9930,7 +10655,9 @@
             "type": "string"
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "错误信息",
+            "example": "insufficient data for requested range"
           },
           "args": {
             "type": "object",
@@ -9945,22 +10672,35 @@
         "type": "object",
         "properties": {
           "symbols": {
+            "description": "回测标的交易对列表",
+            "example": [
+              "BTCUSDT"
+            ],
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "baseTimeframe": {
-            "type": "string"
+            "type": "string",
+            "description": "基础 K 线周期",
+            "example": "1h"
           },
           "stateTimeframes": {
+            "description": "状态 K 线周期列表",
+            "example": [
+              "4h",
+              "1d"
+            ],
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "initialCash": {
-            "type": "number"
+            "type": "number",
+            "description": "初始资金",
+            "example": 10000
           },
           "leverage": {
             "type": "number",
@@ -9983,13 +10723,19 @@
             "$ref": "#/components/schemas/BacktestingCreateJobRangeDto"
           },
           "allowPartial": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否允许部分数据回测",
+            "example": false
           },
           "isPartial": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "本次回测是否使用了部分数据",
+            "example": false
           },
           "strategyId": {
-            "type": "string"
+            "type": "string",
+            "description": "策略 ID",
+            "example": "strat_01HXYZ"
           },
           "strategyInstanceId": {
             "type": "string"
@@ -10027,23 +10773,35 @@
         "type": "object",
         "properties": {
           "netProfit": {
-            "type": "number"
+            "type": "number",
+            "description": "净利润（计价货币）",
+            "example": 1523.4
           },
           "netProfitPct": {
-            "type": "number"
+            "type": "number",
+            "description": "净利润百分比（%）",
+            "example": 15.23
           },
           "maxDrawdownPct": {
-            "type": "number"
+            "type": "number",
+            "description": "最大回撤百分比（%）",
+            "example": 8.5
           },
           "winRate": {
-            "type": "number"
+            "type": "number",
+            "description": "胜率（0-1 之间的小数）",
+            "example": 0.62
           },
           "profitFactor": {
             "type": "number",
+            "description": "盈亏比（无可用数据时为 null）",
+            "example": 1.8,
             "nullable": true
           },
           "totalTrades": {
-            "type": "number"
+            "type": "number",
+            "description": "总交易次数",
+            "example": 42
           },
           "totalOpenTrades": {
             "type": "number"
@@ -10065,19 +10823,25 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "回测任务 ID",
+            "example": "job_01HXYZ"
           },
           "status": {
             "type": "string",
+            "description": "回测任务状态",
             "enum": [
               "queued",
               "running",
               "succeeded",
               "failed"
-            ]
+            ],
+            "example": "queued"
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "description": "任务创建时间（ISO 8601）",
+            "example": "2026-06-06T08:00:00.000Z"
           },
           "startedAt": {
             "type": "string"
@@ -10105,6 +10869,125 @@
           "inputSummary"
         ]
       },
+      "BacktestingCapabilitiesResponseDto": {
+        "type": "object",
+        "properties": {
+          "allowedBaseTimeframes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "allowedBaseTimeframes"
+        ]
+      },
+      "BacktestingJobResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "errorDetails": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "inputSummary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "resultSummary": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "createdAt",
+          "inputSummary"
+        ]
+      },
+      "BacktestingReportResponseDto": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "equityCurve": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "trades": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "markers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "bySymbol": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "openPositions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "pendingSignals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "summary",
+          "equityCurve",
+          "trades",
+          "markers",
+          "bySymbol"
+        ]
+      },
       "BacktestingSymbolSupportRequestDto": {
         "type": "object",
         "properties": {
@@ -10124,7 +11007,9 @@
             ]
           },
           "symbol": {
-            "type": "string"
+            "type": "string",
+            "description": "交易对符号",
+            "example": "BTCUSDT"
           },
           "baseTimeframe": {
             "type": "string",
@@ -10377,7 +11262,9 @@
         "type": "object",
         "properties": {
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "用户在代码生成会话中发送的消息",
+            "example": "帮我加一个止损条件"
           },
           "clarificationAnswers": {
             "type": "object",
@@ -10419,6 +11306,291 @@
           "message"
         ]
       },
+      "LlmStrategyInstanceResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "strategyId": {
+            "type": "string"
+          },
+          "strategyName": {
+            "type": "string"
+          },
+          "strategyDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "paused",
+              "stopped"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "PAPER",
+              "BACKTEST"
+            ]
+          },
+          "llmModel": {
+            "type": "string"
+          },
+          "lastRunAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "isSubscribed": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "strategyId",
+          "strategyName",
+          "name",
+          "status",
+          "mode",
+          "llmModel",
+          "isSubscribed",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "LlmStrategyInstanceSignalResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "strategyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "strategyInstanceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "llmStrategyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "llmStrategyInstanceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "symbolId": {
+            "type": "string"
+          },
+          "symbolCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "AI_GENERATED",
+              "MANUAL",
+              "SYSTEM"
+            ]
+          },
+          "signalType": {
+            "type": "string",
+            "enum": [
+              "ENTRY",
+              "EXIT",
+              "ADJUSTMENT",
+              "ALERT"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL",
+              "CLOSE_LONG",
+              "CLOSE_SHORT"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "nullable": true
+          },
+          "entryPrice": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetPrice": {
+            "type": "string",
+            "nullable": true
+          },
+          "stopLoss": {
+            "type": "string",
+            "nullable": true
+          },
+          "takeProfit": {
+            "type": "string",
+            "nullable": true
+          },
+          "positionSizeQuote": {
+            "type": "string",
+            "nullable": true
+          },
+          "positionSizeRatio": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiReasoning": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiRawResponse": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "marketContext": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "EXECUTED",
+              "PARTIAL",
+              "EXPIRED",
+              "CANCELLED",
+              "FAILED"
+            ]
+          },
+          "publishedAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbolId",
+          "sourceType",
+          "signalType",
+          "direction",
+          "status",
+          "publishedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "LlmSubscriptionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "llmStrategyInstanceId": {
+            "type": "string"
+          },
+          "llmStrategyInstanceName": {
+            "type": "string"
+          },
+          "llmStrategyName": {
+            "type": "string"
+          },
+          "llmStrategyDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "cancelled"
+            ]
+          },
+          "customParams": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "exchangeAccountId": {
+            "type": "string",
+            "nullable": true
+          },
+          "exchangeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "exchangeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "subscribedAt": {
+            "type": "string"
+          },
+          "unsubscribedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "llmStrategyInstanceId",
+          "llmStrategyInstanceName",
+          "llmStrategyName",
+          "status",
+          "subscribedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       "Function": {
         "type": "object",
         "properties": {}
@@ -10443,28 +11615,92 @@
           "maxDrawdownPct": {
             "type": "number",
             "nullable": true
+          },
+          "sharpe": {
+            "type": "number",
+            "nullable": true
+          },
+          "profitLossRatio": {
+            "type": "number",
+            "nullable": true
+          },
+          "tradeCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "users": {
+            "type": "number",
+            "nullable": true
           }
         },
         "required": [
           "label"
         ]
       },
+      "StrategyPlazaSignalResponseDto": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string",
+            "description": "信号时间",
+            "example": "2026-06-07T00:00:00.000Z"
+          },
+          "side": {
+            "type": "string",
+            "description": "信号方向",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "example": "buy"
+          },
+          "price": {
+            "type": "number",
+            "description": "信号价格",
+            "example": 101.5
+          },
+          "pnlPercent": {
+            "type": "number",
+            "description": "信号收益百分比",
+            "example": 2.5
+          }
+        },
+        "required": [
+          "time",
+          "side",
+          "price",
+          "pnlPercent"
+        ]
+      },
       "StrategyPlazaTemplateResponseDto": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "策略模板 ID",
+            "example": "tpl_01HXYZ"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "策略模板名称",
+            "example": "趋势跟随策略"
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "description": "策略描述",
+            "example": "基于均线交叉的趋势跟随策略"
           },
           "logicDescription": {
-            "type": "string"
+            "type": "string",
+            "description": "策略逻辑说明",
+            "example": "快线上穿慢线买入，下穿卖出"
           },
           "tags": {
+            "description": "标签列表",
+            "example": [
+              "trend",
+              "ma"
+            ],
             "type": "array",
             "items": {
               "type": "string"
@@ -10472,59 +11708,114 @@
           },
           "riskLevel": {
             "type": "string",
+            "description": "风险等级",
             "enum": [
               "low",
               "medium",
               "high"
-            ]
+            ],
+            "example": "medium"
           },
           "scenario": {
-            "type": "string"
+            "type": "string",
+            "description": "适用场景",
+            "example": "震荡偏趋势行情"
           },
           "exchange": {
             "type": "string",
+            "description": "交易所",
             "enum": [
               "okx"
-            ]
+            ],
+            "example": "okx"
           },
           "environment": {
             "type": "string",
+            "description": "运行环境",
             "enum": [
               "demo"
-            ]
+            ],
+            "example": "demo"
           },
           "marketType": {
             "type": "string",
+            "description": "市场类型",
             "enum": [
               "spot",
               "perp"
-            ]
+            ],
+            "example": "spot"
           },
           "symbol": {
-            "type": "string"
+            "type": "string",
+            "description": "交易对符号",
+            "example": "BTCUSDT"
           },
           "timeframe": {
-            "type": "string"
+            "type": "string",
+            "description": "K 线周期",
+            "example": "1h"
           },
           "positionPct": {
-            "type": "number"
+            "type": "number",
+            "description": "仓位百分比（%）",
+            "example": 50
           },
           "leverage": {
             "type": "number",
+            "description": "杠杆倍数（现货为 null）",
+            "example": 3,
             "nullable": true
           },
           "status": {
             "type": "string",
+            "description": "展示状态",
             "enum": [
               "live",
               "hidden"
-            ]
+            ],
+            "example": "live"
           },
           "displayOrder": {
-            "type": "number"
+            "type": "number",
+            "description": "展示排序值",
+            "example": 10
           },
           "displayMetrics": {
-            "$ref": "#/components/schemas/StrategyPlazaDisplayMetricsResponseDto"
+            "description": "展示用回测指标",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StrategyPlazaDisplayMetricsResponseDto"
+              }
+            ]
+          },
+          "sparkline": {
+            "description": "列表/hero 迷你曲线",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "params": {
+            "type": "object",
+            "description": "策略参数展示值",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "signals": {
+            "description": "策略信号列表",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrategyPlazaSignalResponseDto"
+            }
+          },
+          "equityCurve": {
+            "description": "权益曲线",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
           }
         },
         "required": [
@@ -10550,13 +11841,19 @@
         "type": "object",
         "properties": {
           "sessionId": {
-            "type": "string"
+            "type": "string",
+            "description": "编辑会话 ID",
+            "example": "sess_01HXYZ"
           },
           "templateId": {
-            "type": "string"
+            "type": "string",
+            "description": "关联策略模板 ID",
+            "example": "tpl_01HXYZ"
           },
           "initialMessage": {
-            "type": "string"
+            "type": "string",
+            "description": "初始消息内容",
+            "example": "基于该模板帮我调整参数"
           }
         },
         "required": [
@@ -10815,25 +12112,37 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "菜单/权限节点 ID",
+            "example": "menu_01HXYZ"
           },
           "parentId": {
             "type": "string",
+            "description": "父级菜单 ID（顶级为 null）",
+            "example": null,
             "nullable": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "菜单名称",
+            "example": "用户管理"
           },
           "route": {
             "type": "string",
+            "description": "前端路由（无路由时为 null）",
+            "example": "/users",
             "nullable": true
           },
           "icon": {
             "type": "string",
+            "description": "菜单图标（无图标时为 null）",
+            "example": "user",
             "nullable": true
           },
           "sortOrder": {
-            "type": "number"
+            "type": "number",
+            "description": "排序值",
+            "example": 10
           },
           "code": {
             "type": "string",
@@ -10850,8 +12159,11 @@
             ]
           },
           "children": {
-            "type": "object",
-            "additionalProperties": true
+            "description": "子菜单节点",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminMenuPermissionDto"
+            }
           }
         },
         "required": [
@@ -10859,8 +12171,7 @@
           "name",
           "sortOrder",
           "code",
-          "type",
-          "children"
+          "type"
         ]
       },
       "AdminUserInfoDto": {
@@ -10998,6 +12309,69 @@
           }
         }
       },
+      "AdminRoleResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "角色 ID"
+          },
+          "code": {
+            "type": "string",
+            "description": "角色编码"
+          },
+          "name": {
+            "type": "string",
+            "description": "角色名称"
+          },
+          "description": {
+            "type": "string",
+            "description": "角色描述",
+            "nullable": true
+          },
+          "menuPermissions": {
+            "description": "菜单权限 code 列表",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "featurePermissions": {
+            "description": "功能权限 code 列表",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "apiPermissions": {
+            "description": "API 权限 code 列表",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "更新时间"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "menuPermissions",
+          "featurePermissions",
+          "apiPermissions",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       "CreateAdminRoleDto": {
         "type": "object",
         "properties": {
@@ -11075,6 +12449,185 @@
             }
           }
         }
+      },
+      "AdminDeleteResultResponseDto": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "是否删除成功",
+            "example": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "AdminMenuTreeNodeResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "菜单 ID"
+          },
+          "parentId": {
+            "type": "string",
+            "description": "父级菜单 ID，顶级为空",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "description": "菜单类型",
+            "enum": [
+              "DIRECTORY",
+              "MENU",
+              "FEATURE"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "菜单标题"
+          },
+          "icon": {
+            "type": "string",
+            "description": "图标名称",
+            "nullable": true
+          },
+          "code": {
+            "type": "string",
+            "description": "唯一菜单/功能 code",
+            "nullable": true
+          },
+          "path": {
+            "type": "string",
+            "description": "前端路由路径",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "描述",
+            "nullable": true
+          },
+          "i18nKey": {
+            "type": "string",
+            "description": "i18n key",
+            "nullable": true
+          },
+          "sort": {
+            "type": "number",
+            "description": "排序值，越大越靠后"
+          },
+          "isShow": {
+            "type": "boolean",
+            "description": "是否在菜单中展示"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "更新时间"
+          },
+          "children": {
+            "description": "子菜单节点",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminMenuTreeNodeResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "sort",
+          "isShow",
+          "createdAt",
+          "updatedAt",
+          "children"
+        ]
+      },
+      "AdminMenuResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "菜单 ID"
+          },
+          "parentId": {
+            "type": "string",
+            "description": "父级菜单 ID，顶级为空",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "description": "菜单类型",
+            "enum": [
+              "DIRECTORY",
+              "MENU",
+              "FEATURE"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "菜单标题"
+          },
+          "icon": {
+            "type": "string",
+            "description": "图标名称",
+            "nullable": true
+          },
+          "code": {
+            "type": "string",
+            "description": "唯一菜单/功能 code",
+            "nullable": true
+          },
+          "path": {
+            "type": "string",
+            "description": "前端路由路径",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "描述",
+            "nullable": true
+          },
+          "i18nKey": {
+            "type": "string",
+            "description": "i18n key",
+            "nullable": true
+          },
+          "sort": {
+            "type": "number",
+            "description": "排序值，越大越靠后"
+          },
+          "isShow": {
+            "type": "boolean",
+            "description": "是否在菜单中展示"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "更新时间"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "sort",
+          "isShow",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "CreateAdminMenuDto": {
         "type": "object",
@@ -11176,13 +12729,19 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "number"
+            "type": "number",
+            "description": "任务 ID",
+            "example": 42
           },
           "key": {
-            "type": "string"
+            "type": "string",
+            "description": "任务唯一标识",
+            "example": "binance.kline_1m"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "任务名称",
+            "example": "Binance K 线 1m 拉取"
           },
           "source": {
             "type": "string",
@@ -11201,7 +12760,9 @@
             "nullable": true
           },
           "enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "是否启用任务",
+            "example": true
           },
           "cursor": {
             "type": "string",
@@ -11231,11 +12792,15 @@
           },
           "createdAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "description": "任务创建时间",
+            "example": "2026-06-06T08:00:00.000Z"
           },
           "updatedAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "description": "任务更新时间",
+            "example": "2026-06-06T09:00:00.000Z"
           }
         },
         "required": [
@@ -11251,20 +12816,30 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "number"
+            "type": "number",
+            "description": "执行记录 ID",
+            "example": 1001
           },
           "taskId": {
-            "type": "number"
+            "type": "number",
+            "description": "所属任务 ID",
+            "example": 42
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "执行状态（可能取值：success / failed / running）",
+            "example": "success"
           },
           "fetchedCount": {
-            "type": "number"
+            "type": "number",
+            "description": "本次拉取条数",
+            "example": 120
           },
           "startedAt": {
             "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "description": "执行开始时间",
+            "example": "2026-06-06T08:00:00.000Z"
           },
           "finishedAt": {
             "format": "date-time",
@@ -13995,10 +15570,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "通知规则 ID",
+            "example": "rule_01HXYZ"
           },
           "type": {
             "type": "string",
+            "description": "规则类型",
             "enum": [
               "ADDRESS",
               "SYMBOL"
@@ -14021,13 +15599,19 @@
             "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
           },
           "isActive": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "规则是否启用",
+            "example": true
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "description": "创建时间（ISO 8601）",
+            "example": "2026-06-06T08:00:00.000Z"
           },
           "updatedAt": {
-            "type": "string"
+            "type": "string",
+            "description": "更新时间（ISO 8601）",
+            "example": "2026-06-06T09:00:00.000Z"
           }
         },
         "required": [
@@ -14123,26 +15707,37 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "站内信 ID",
+            "example": "inbox_01HXYZ"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "通知标题",
+            "example": "鲸鱼大额转账预警"
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "通知内容",
+            "example": "检测到 1000 BTC 转入交易所"
           },
           "ruleId": {
-            "type": "string"
+            "type": "string",
+            "description": "触发该通知的规则 ID",
+            "example": "rule_01HXYZ"
           },
           "channels": {
             "$ref": "#/components/schemas/WhaleNotificationDeliveryMapDto"
           },
           "read": {
             "type": "boolean",
+            "description": "是否已读",
             "example": false
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "description": "创建时间（ISO 8601）",
+            "example": "2026-06-06T08:00:00.000Z"
           }
         },
         "required": [

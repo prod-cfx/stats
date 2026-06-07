@@ -12,28 +12,33 @@ part 'admin_data_pull_execution_response_dto.g.dart';
 /// AdminDataPullExecutionResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [taskId] 
-/// * [status] 
-/// * [fetchedCount] 
-/// * [startedAt] 
+/// * [id] - 执行记录 ID
+/// * [taskId] - 所属任务 ID
+/// * [status] - 执行状态（可能取值：success / failed / running）
+/// * [fetchedCount] - 本次拉取条数
+/// * [startedAt] - 执行开始时间
 /// * [finishedAt] 
 /// * [errorMessage] 
 /// * [meta] 
 @BuiltValue()
 abstract class AdminDataPullExecutionResponseDto implements Built<AdminDataPullExecutionResponseDto, AdminDataPullExecutionResponseDtoBuilder> {
+  /// 执行记录 ID
   @BuiltValueField(wireName: r'id')
   num get id;
 
+  /// 所属任务 ID
   @BuiltValueField(wireName: r'taskId')
   num get taskId;
 
+  /// 执行状态（可能取值：success / failed / running）
   @BuiltValueField(wireName: r'status')
   String get status;
 
+  /// 本次拉取条数
   @BuiltValueField(wireName: r'fetchedCount')
   num get fetchedCount;
 
+  /// 执行开始时间
   @BuiltValueField(wireName: r'startedAt')
   DateTime get startedAt;
 

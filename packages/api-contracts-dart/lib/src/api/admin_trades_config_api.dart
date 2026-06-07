@@ -52,7 +52,13 @@ class AdminTradesConfigApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -147,7 +153,13 @@ class AdminTradesConfigApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -198,7 +210,13 @@ class AdminTradesConfigApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -280,7 +298,13 @@ class AdminTradesConfigApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -357,7 +381,13 @@ class AdminTradesConfigApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',

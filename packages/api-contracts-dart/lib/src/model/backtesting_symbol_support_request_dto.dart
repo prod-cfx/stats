@@ -14,7 +14,7 @@ part 'backtesting_symbol_support_request_dto.g.dart';
 /// Properties:
 /// * [exchange] 
 /// * [marketType] 
-/// * [symbol] 
+/// * [symbol] - 交易对符号
 /// * [baseTimeframe] 
 @BuiltValue()
 abstract class BacktestingSymbolSupportRequestDto implements Built<BacktestingSymbolSupportRequestDto, BacktestingSymbolSupportRequestDtoBuilder> {
@@ -26,6 +26,7 @@ abstract class BacktestingSymbolSupportRequestDto implements Built<BacktestingSy
   BacktestingSymbolSupportRequestDtoMarketTypeEnum get marketType;
   // enum marketTypeEnum {  spot,  perp,  };
 
+  /// 交易对符号
   @BuiltValueField(wireName: r'symbol')
   String get symbol;
 

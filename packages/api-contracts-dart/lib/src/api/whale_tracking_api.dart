@@ -52,7 +52,13 @@ class WhaleTrackingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -127,7 +133,13 @@ class WhaleTrackingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -206,7 +218,13 @@ class WhaleTrackingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -295,7 +313,13 @@ class WhaleTrackingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -382,7 +406,13 @@ class WhaleTrackingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -465,7 +495,13 @@ class WhaleTrackingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,

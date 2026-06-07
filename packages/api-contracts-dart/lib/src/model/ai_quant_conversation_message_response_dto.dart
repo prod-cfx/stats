@@ -12,16 +12,16 @@ part 'ai_quant_conversation_message_response_dto.g.dart';
 /// AiQuantConversationMessageResponseDto
 ///
 /// Properties:
-/// * [role] - Conversation message role
-/// * [content] - Conversation message content
+/// * [role] - 对话消息角色
+/// * [content] - 对话消息内容
 @BuiltValue()
 abstract class AiQuantConversationMessageResponseDto implements Built<AiQuantConversationMessageResponseDto, AiQuantConversationMessageResponseDtoBuilder> {
-  /// Conversation message role
+  /// 对话消息角色
   @BuiltValueField(wireName: r'role')
   AiQuantConversationMessageResponseDtoRoleEnum get role;
   // enum roleEnum {  user,  assistant,  };
 
-  /// Conversation message content
+  /// 对话消息内容
   @BuiltValueField(wireName: r'content')
   String get content;
 
@@ -126,10 +126,10 @@ class _$AiQuantConversationMessageResponseDtoSerializer implements PrimitiveSeri
 
 class AiQuantConversationMessageResponseDtoRoleEnum extends EnumClass {
 
-  /// Conversation message role
+  /// 对话消息角色
   @BuiltValueEnumConst(wireName: r'user')
   static const AiQuantConversationMessageResponseDtoRoleEnum user = _$aiQuantConversationMessageResponseDtoRoleEnum_user;
-  /// Conversation message role
+  /// 对话消息角色
   @BuiltValueEnumConst(wireName: r'assistant')
   static const AiQuantConversationMessageResponseDtoRoleEnum assistant = _$aiQuantConversationMessageResponseDtoRoleEnum_assistant;
 

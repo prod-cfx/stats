@@ -11,29 +11,35 @@ part 'beta_code_response_dto.g.dart';
 /// BetaCodeResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [code] 
-/// * [maxUses] 
-/// * [usedCount] 
-/// * [isActive] 
-/// * [createdAt] 
+/// * [id] - 内测码 ID
+/// * [code] - 内测码
+/// * [maxUses] - 最大可用次数
+/// * [usedCount] - 已使用次数
+/// * [isActive] - 是否启用
+/// * [createdAt] - 创建时间
 @BuiltValue()
 abstract class BetaCodeResponseDto implements Built<BetaCodeResponseDto, BetaCodeResponseDtoBuilder> {
+  /// 内测码 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
+  /// 内测码
   @BuiltValueField(wireName: r'code')
   String get code;
 
+  /// 最大可用次数
   @BuiltValueField(wireName: r'maxUses')
   num get maxUses;
 
+  /// 已使用次数
   @BuiltValueField(wireName: r'usedCount')
   num get usedCount;
 
+  /// 是否启用
   @BuiltValueField(wireName: r'isActive')
   bool get isActive;
 
+  /// 创建时间
   @BuiltValueField(wireName: r'createdAt')
   DateTime get createdAt;
 

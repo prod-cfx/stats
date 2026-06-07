@@ -12,30 +12,36 @@ part 'ai_quant_conversation_backtest_execution_response_dto.g.dart';
 /// AiQuantConversationBacktestExecutionResponseDto
 ///
 /// Properties:
-/// * [initialCash] 
-/// * [leverage] 
-/// * [slippageBps] 
-/// * [feeBps] 
-/// * [priceSource] 
-/// * [allowPartial] 
+/// * [initialCash] - 初始资金
+/// * [leverage] - 杠杆倍数（现货为 null）
+/// * [slippageBps] - 滑点（基点 bps）
+/// * [feeBps] - 手续费（基点 bps）
+/// * [priceSource] - 成交参考价来源
+/// * [allowPartial] - 是否允许部分数据回测
 @BuiltValue()
 abstract class AiQuantConversationBacktestExecutionResponseDto implements Built<AiQuantConversationBacktestExecutionResponseDto, AiQuantConversationBacktestExecutionResponseDtoBuilder> {
+  /// 初始资金
   @BuiltValueField(wireName: r'initialCash')
   num get initialCash;
 
+  /// 杠杆倍数（现货为 null）
   @BuiltValueField(wireName: r'leverage')
   num? get leverage;
 
+  /// 滑点（基点 bps）
   @BuiltValueField(wireName: r'slippageBps')
   num get slippageBps;
 
+  /// 手续费（基点 bps）
   @BuiltValueField(wireName: r'feeBps')
   num get feeBps;
 
+  /// 成交参考价来源
   @BuiltValueField(wireName: r'priceSource')
   AiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum get priceSource;
   // enum priceSourceEnum {  open,  close,  mid,  };
 
+  /// 是否允许部分数据回测
   @BuiltValueField(wireName: r'allowPartial')
   bool get allowPartial;
 
@@ -191,10 +197,13 @@ class _$AiQuantConversationBacktestExecutionResponseDtoSerializer implements Pri
 
 class AiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum extends EnumClass {
 
+  /// 成交参考价来源
   @BuiltValueEnumConst(wireName: r'open')
   static const AiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum open = _$aiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum_open;
+  /// 成交参考价来源
   @BuiltValueEnumConst(wireName: r'close')
   static const AiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum close = _$aiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum_close;
+  /// 成交参考价来源
   @BuiltValueEnumConst(wireName: r'mid')
   static const AiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum mid = _$aiQuantConversationBacktestExecutionResponseDtoPriceSourceEnum_mid;
 

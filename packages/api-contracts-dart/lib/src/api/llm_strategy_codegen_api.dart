@@ -56,7 +56,13 @@ class LlmStrategyCodegenApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -154,7 +160,13 @@ class LlmStrategyCodegenApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -232,7 +244,13 @@ class LlmStrategyCodegenApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',

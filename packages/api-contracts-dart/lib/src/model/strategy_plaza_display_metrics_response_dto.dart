@@ -16,6 +16,10 @@ part 'strategy_plaza_display_metrics_response_dto.g.dart';
 /// * [returnPct] 
 /// * [winRatePct] 
 /// * [maxDrawdownPct] 
+/// * [sharpe] 
+/// * [profitLossRatio] 
+/// * [tradeCount] 
+/// * [users] 
 @BuiltValue()
 abstract class StrategyPlazaDisplayMetricsResponseDto implements Built<StrategyPlazaDisplayMetricsResponseDto, StrategyPlazaDisplayMetricsResponseDtoBuilder> {
   @BuiltValueField(wireName: r'label')
@@ -30,6 +34,18 @@ abstract class StrategyPlazaDisplayMetricsResponseDto implements Built<StrategyP
 
   @BuiltValueField(wireName: r'maxDrawdownPct')
   num? get maxDrawdownPct;
+
+  @BuiltValueField(wireName: r'sharpe')
+  num? get sharpe;
+
+  @BuiltValueField(wireName: r'profitLossRatio')
+  num? get profitLossRatio;
+
+  @BuiltValueField(wireName: r'tradeCount')
+  num? get tradeCount;
+
+  @BuiltValueField(wireName: r'users')
+  num? get users;
 
   StrategyPlazaDisplayMetricsResponseDto._();
 
@@ -77,6 +93,34 @@ class _$StrategyPlazaDisplayMetricsResponseDtoSerializer implements PrimitiveSer
       yield r'maxDrawdownPct';
       yield serializers.serialize(
         object.maxDrawdownPct,
+        specifiedType: const FullType.nullable(num),
+      );
+    }
+    if (object.sharpe != null) {
+      yield r'sharpe';
+      yield serializers.serialize(
+        object.sharpe,
+        specifiedType: const FullType.nullable(num),
+      );
+    }
+    if (object.profitLossRatio != null) {
+      yield r'profitLossRatio';
+      yield serializers.serialize(
+        object.profitLossRatio,
+        specifiedType: const FullType.nullable(num),
+      );
+    }
+    if (object.tradeCount != null) {
+      yield r'tradeCount';
+      yield serializers.serialize(
+        object.tradeCount,
+        specifiedType: const FullType.nullable(num),
+      );
+    }
+    if (object.users != null) {
+      yield r'users';
+      yield serializers.serialize(
+        object.users,
         specifiedType: const FullType.nullable(num),
       );
     }
@@ -133,6 +177,38 @@ class _$StrategyPlazaDisplayMetricsResponseDtoSerializer implements PrimitiveSer
           ) as num?;
           if (valueDes == null) continue;
           result.maxDrawdownPct = valueDes;
+          break;
+        case r'sharpe':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(num),
+          ) as num?;
+          if (valueDes == null) continue;
+          result.sharpe = valueDes;
+          break;
+        case r'profitLossRatio':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(num),
+          ) as num?;
+          if (valueDes == null) continue;
+          result.profitLossRatio = valueDes;
+          break;
+        case r'tradeCount':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(num),
+          ) as num?;
+          if (valueDes == null) continue;
+          result.tradeCount = valueDes;
+          break;
+        case r'users':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(num),
+          ) as num?;
+          if (valueDes == null) continue;
+          result.users = valueDes;
           break;
         default:
           unhandled.add(key);

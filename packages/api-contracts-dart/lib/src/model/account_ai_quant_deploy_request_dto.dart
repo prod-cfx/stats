@@ -13,7 +13,7 @@ part 'account_ai_quant_deploy_request_dto.g.dart';
 /// AccountAiQuantDeployRequestDto
 ///
 /// Properties:
-/// * [name] 
+/// * [name] - 部署后的策略实例名称
 /// * [deployRequestId] - 部署请求幂等 ID（前端点击一次生成一次）
 /// * [publishedSnapshotId] - Published snapshot that owns the runtime settings
 /// * [exchangeAccountId] 
@@ -21,6 +21,7 @@ part 'account_ai_quant_deploy_request_dto.g.dart';
 /// * [deploymentExecutionConfig] - Deployment execution config passthrough (currently leverage override).
 @BuiltValue()
 abstract class AccountAiQuantDeployRequestDto implements Built<AccountAiQuantDeployRequestDto, AccountAiQuantDeployRequestDtoBuilder> {
+  /// 部署后的策略实例名称
   @BuiltValueField(wireName: r'name')
   String get name;
 

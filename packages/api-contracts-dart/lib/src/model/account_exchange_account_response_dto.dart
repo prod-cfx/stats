@@ -14,7 +14,7 @@ part 'account_exchange_account_response_dto.g.dart';
 /// Properties:
 /// * [id] 
 /// * [exchangeId] 
-/// * [isBound] 
+/// * [isBound] - 该交易所是否已绑定账户
 /// * [name] 
 /// * [maskedCredential] 
 /// * [isTestnet] 
@@ -29,6 +29,7 @@ abstract class AccountExchangeAccountResponseDto implements Built<AccountExchang
   AccountExchangeAccountResponseDtoExchangeIdEnum get exchangeId;
   // enum exchangeIdEnum {  binance,  okx,  hyperliquid,  };
 
+  /// 该交易所是否已绑定账户
   @BuiltValueField(wireName: r'isBound')
   bool get isBound;
 

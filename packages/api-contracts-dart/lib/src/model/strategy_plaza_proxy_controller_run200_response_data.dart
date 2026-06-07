@@ -16,9 +16,9 @@ part 'strategy_plaza_proxy_controller_run200_response_data.g.dart';
 /// StrategyPlazaProxyControllerRun200ResponseData
 ///
 /// Properties:
-/// * [id] 
-/// * [name] 
-/// * [status] 
+/// * [id] - 策略 ID
+/// * [name] - 策略名称
+/// * [status] - 策略运行状态
 /// * [exchange] 
 /// * [symbol] 
 /// * [timeframe] 
@@ -26,9 +26,9 @@ part 'strategy_plaza_proxy_controller_run200_response_data.g.dart';
 /// * [paramSchema] 
 /// * [paramValues] 
 /// * [schemaVersion] 
-/// * [isSubscribed] 
-/// * [metrics] 
-/// * [updatedAt] 
+/// * [isSubscribed] - 当前用户是否已订阅该策略
+/// * [metrics] - 策略展示指标集合
+/// * [updatedAt] - 更新时间（ISO 8601）
 /// * [totalPnl] 
 /// * [todayPnl] 
 /// * [equitySeries] 
@@ -97,10 +97,13 @@ class _$StrategyPlazaProxyControllerRun200ResponseDataSerializer implements Prim
 
 class StrategyPlazaProxyControllerRun200ResponseDataStatusEnum extends EnumClass {
 
+  /// 策略运行状态
   @BuiltValueEnumConst(wireName: r'running')
   static const StrategyPlazaProxyControllerRun200ResponseDataStatusEnum running = _$strategyPlazaProxyControllerRun200ResponseDataStatusEnum_running;
+  /// 策略运行状态
   @BuiltValueEnumConst(wireName: r'stopped')
   static const StrategyPlazaProxyControllerRun200ResponseDataStatusEnum stopped = _$strategyPlazaProxyControllerRun200ResponseDataStatusEnum_stopped;
+  /// 策略运行状态
   @BuiltValueEnumConst(wireName: r'draft')
   static const StrategyPlazaProxyControllerRun200ResponseDataStatusEnum draft = _$strategyPlazaProxyControllerRun200ResponseDataStatusEnum_draft;
 

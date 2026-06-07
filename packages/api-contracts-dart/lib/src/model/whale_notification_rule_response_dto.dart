@@ -13,21 +13,23 @@ part 'whale_notification_rule_response_dto.g.dart';
 /// WhaleNotificationRuleResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [type] 
+/// * [id] - 通知规则 ID
+/// * [type] - 规则类型
 /// * [address] 
 /// * [symbol] 
 /// * [thresholdUsd] 
 /// * [note] 
 /// * [channels] 
-/// * [isActive] 
-/// * [createdAt] 
-/// * [updatedAt] 
+/// * [isActive] - 规则是否启用
+/// * [createdAt] - 创建时间（ISO 8601）
+/// * [updatedAt] - 更新时间（ISO 8601）
 @BuiltValue()
 abstract class WhaleNotificationRuleResponseDto implements Built<WhaleNotificationRuleResponseDto, WhaleNotificationRuleResponseDtoBuilder> {
+  /// 通知规则 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
+  /// 规则类型
   @BuiltValueField(wireName: r'type')
   WhaleNotificationRuleResponseDtoTypeEnum get type;
   // enum typeEnum {  ADDRESS,  SYMBOL,  };
@@ -47,12 +49,15 @@ abstract class WhaleNotificationRuleResponseDto implements Built<WhaleNotificati
   @BuiltValueField(wireName: r'channels')
   WhaleNotificationChannelsDto get channels;
 
+  /// 规则是否启用
   @BuiltValueField(wireName: r'isActive')
   bool get isActive;
 
+  /// 创建时间（ISO 8601）
   @BuiltValueField(wireName: r'createdAt')
   String get createdAt;
 
+  /// 更新时间（ISO 8601）
   @BuiltValueField(wireName: r'updatedAt')
   String get updatedAt;
 
@@ -259,8 +264,10 @@ class _$WhaleNotificationRuleResponseDtoSerializer implements PrimitiveSerialize
 
 class WhaleNotificationRuleResponseDtoTypeEnum extends EnumClass {
 
+  /// 规则类型
   @BuiltValueEnumConst(wireName: r'ADDRESS')
   static const WhaleNotificationRuleResponseDtoTypeEnum ADDRESS = _$whaleNotificationRuleResponseDtoTypeEnum_ADDRESS;
+  /// 规则类型
   @BuiltValueEnumConst(wireName: r'SYMBOL')
   static const WhaleNotificationRuleResponseDtoTypeEnum SYMBOL = _$whaleNotificationRuleResponseDtoTypeEnum_SYMBOL;
 

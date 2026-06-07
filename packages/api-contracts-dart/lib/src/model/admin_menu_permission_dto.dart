@@ -4,7 +4,6 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
-import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -13,32 +12,38 @@ part 'admin_menu_permission_dto.g.dart';
 /// AdminMenuPermissionDto
 ///
 /// Properties:
-/// * [id] 
-/// * [parentId] 
-/// * [name] 
-/// * [route] 
-/// * [icon] 
-/// * [sortOrder] 
+/// * [id] - 菜单/权限节点 ID
+/// * [parentId] - 父级菜单 ID（顶级为 null）
+/// * [name] - 菜单名称
+/// * [route] - 前端路由（无路由时为 null）
+/// * [icon] - 菜单图标（无图标时为 null）
+/// * [sortOrder] - 排序值
 /// * [code] - 菜单/功能权限 code
 /// * [type] - 菜单类型
-/// * [children] 
+/// * [children] - 子菜单节点
 @BuiltValue()
 abstract class AdminMenuPermissionDto implements Built<AdminMenuPermissionDto, AdminMenuPermissionDtoBuilder> {
+  /// 菜单/权限节点 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
+  /// 父级菜单 ID（顶级为 null）
   @BuiltValueField(wireName: r'parentId')
   String? get parentId;
 
+  /// 菜单名称
   @BuiltValueField(wireName: r'name')
   String get name;
 
+  /// 前端路由（无路由时为 null）
   @BuiltValueField(wireName: r'route')
   String? get route;
 
+  /// 菜单图标（无图标时为 null）
   @BuiltValueField(wireName: r'icon')
   String? get icon;
 
+  /// 排序值
   @BuiltValueField(wireName: r'sortOrder')
   num get sortOrder;
 
@@ -51,8 +56,9 @@ abstract class AdminMenuPermissionDto implements Built<AdminMenuPermissionDto, A
   AdminMenuPermissionDtoTypeEnum get type;
   // enum typeEnum {  DIRECTORY,  MENU,  FEATURE,  };
 
+  /// 子菜单节点
   @BuiltValueField(wireName: r'children')
-  BuiltMap<String, JsonObject?> get children;
+  BuiltList<AdminMenuPermissionDto>? get children;
 
   AdminMenuPermissionDto._();
 
@@ -123,11 +129,13 @@ class _$AdminMenuPermissionDtoSerializer implements PrimitiveSerializer<AdminMen
       object.type,
       specifiedType: const FullType(AdminMenuPermissionDtoTypeEnum),
     );
-    yield r'children';
-    yield serializers.serialize(
-      object.children,
-      specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-    );
+    if (object.children != null) {
+      yield r'children';
+      yield serializers.serialize(
+        object.children,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuPermissionDto)]),
+      );
+    }
   }
 
   @override
@@ -214,8 +222,8 @@ class _$AdminMenuPermissionDtoSerializer implements PrimitiveSerializer<AdminMen
         case r'children':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-          ) as BuiltMap<String, JsonObject?>;
+            specifiedType: const FullType(BuiltList, [FullType(AdminMenuPermissionDto)]),
+          ) as BuiltList<AdminMenuPermissionDto>;
           result.children.replace(valueDes);
           break;
         default:

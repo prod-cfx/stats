@@ -13,9 +13,9 @@ part 'account_ai_quant_strategy_detail_response_dto.g.dart';
 /// AccountAiQuantStrategyDetailResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [name] 
-/// * [status] 
+/// * [id] - 策略 ID
+/// * [name] - 策略名称
+/// * [status] - 策略运行状态
 /// * [exchange] 
 /// * [symbol] 
 /// * [timeframe] 
@@ -23,9 +23,9 @@ part 'account_ai_quant_strategy_detail_response_dto.g.dart';
 /// * [paramSchema] 
 /// * [paramValues] 
 /// * [schemaVersion] 
-/// * [isSubscribed] 
-/// * [metrics] 
-/// * [updatedAt] 
+/// * [isSubscribed] - 当前用户是否已订阅该策略
+/// * [metrics] - 策略展示指标集合
+/// * [updatedAt] - 更新时间（ISO 8601）
 /// * [totalPnl] 
 /// * [todayPnl] 
 /// * [equitySeries] 
@@ -37,12 +37,15 @@ part 'account_ai_quant_strategy_detail_response_dto.g.dart';
 /// * [deployment] 
 @BuiltValue()
 abstract class AccountAiQuantStrategyDetailResponseDto implements Built<AccountAiQuantStrategyDetailResponseDto, AccountAiQuantStrategyDetailResponseDtoBuilder> {
+  /// 策略 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
+  /// 策略名称
   @BuiltValueField(wireName: r'name')
   String get name;
 
+  /// 策略运行状态
   @BuiltValueField(wireName: r'status')
   AccountAiQuantStrategyDetailResponseDtoStatusEnum get status;
   // enum statusEnum {  running,  stopped,  draft,  };
@@ -68,12 +71,15 @@ abstract class AccountAiQuantStrategyDetailResponseDto implements Built<AccountA
   @BuiltValueField(wireName: r'schemaVersion')
   String? get schemaVersion;
 
+  /// 当前用户是否已订阅该策略
   @BuiltValueField(wireName: r'isSubscribed')
   bool get isSubscribed;
 
+  /// 策略展示指标集合
   @BuiltValueField(wireName: r'metrics')
   BuiltMap<String, JsonObject?> get metrics;
 
+  /// 更新时间（ISO 8601）
   @BuiltValueField(wireName: r'updatedAt')
   String get updatedAt;
 
@@ -475,10 +481,13 @@ class _$AccountAiQuantStrategyDetailResponseDtoSerializer implements PrimitiveSe
 
 class AccountAiQuantStrategyDetailResponseDtoStatusEnum extends EnumClass {
 
+  /// 策略运行状态
   @BuiltValueEnumConst(wireName: r'running')
   static const AccountAiQuantStrategyDetailResponseDtoStatusEnum running = _$accountAiQuantStrategyDetailResponseDtoStatusEnum_running;
+  /// 策略运行状态
   @BuiltValueEnumConst(wireName: r'stopped')
   static const AccountAiQuantStrategyDetailResponseDtoStatusEnum stopped = _$accountAiQuantStrategyDetailResponseDtoStatusEnum_stopped;
+  /// 策略运行状态
   @BuiltValueEnumConst(wireName: r'draft')
   static const AccountAiQuantStrategyDetailResponseDtoStatusEnum draft = _$accountAiQuantStrategyDetailResponseDtoStatusEnum_draft;
 

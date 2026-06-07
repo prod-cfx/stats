@@ -58,7 +58,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -138,7 +144,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -195,7 +207,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -267,7 +285,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -365,7 +389,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -463,7 +493,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -541,7 +577,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -627,7 +669,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -716,7 +764,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -773,7 +827,13 @@ class AccountAiQuantApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',

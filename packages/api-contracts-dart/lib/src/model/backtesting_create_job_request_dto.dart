@@ -21,7 +21,7 @@ part 'backtesting_create_job_request_dto.g.dart';
 /// * [symbols] 
 /// * [baseTimeframe] 
 /// * [stateTimeframes] 
-/// * [initialCash] 
+/// * [initialCash] - 初始资金
 /// * [leverage] 
 /// * [allowPartial] 
 /// * [conversationId] 
@@ -44,6 +44,7 @@ abstract class BacktestingCreateJobRequestDto implements Built<BacktestingCreate
   BuiltList<BacktestingCreateJobRequestDtoStateTimeframesEnum> get stateTimeframes;
   // enum stateTimeframesEnum {  1m,  3m,  5m,  15m,  30m,  1h,  4h,  6h,  8h,  12h,  1d,  1w,  };
 
+  /// 初始资金
   @BuiltValueField(wireName: r'initialCash')
   num get initialCash;
 

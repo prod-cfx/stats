@@ -227,6 +227,16 @@ export class AiQuantProxyService {
       .catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async listStrategyPlazaTemplateSignals(templateId: string, limit?: number): Promise<unknown[]> {
+    return this.quantifyClient.listStrategyPlazaTemplateSignals<unknown[]>(templateId, limit)
+      .catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async getStrategyPlazaTemplateEquityCurve(templateId: string, timeframe?: string): Promise<number[]> {
+    return this.quantifyClient.getStrategyPlazaTemplateEquityCurve<number[]>(templateId, timeframe)
+      .catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async runStrategyPlazaTemplate(
     userId: string,
     authorization: string | undefined,

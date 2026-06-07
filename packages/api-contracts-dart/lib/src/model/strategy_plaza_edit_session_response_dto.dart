@@ -11,17 +11,20 @@ part 'strategy_plaza_edit_session_response_dto.g.dart';
 /// StrategyPlazaEditSessionResponseDto
 ///
 /// Properties:
-/// * [sessionId] 
-/// * [templateId] 
-/// * [initialMessage] 
+/// * [sessionId] - 编辑会话 ID
+/// * [templateId] - 关联策略模板 ID
+/// * [initialMessage] - 初始消息内容
 @BuiltValue()
 abstract class StrategyPlazaEditSessionResponseDto implements Built<StrategyPlazaEditSessionResponseDto, StrategyPlazaEditSessionResponseDtoBuilder> {
+  /// 编辑会话 ID
   @BuiltValueField(wireName: r'sessionId')
   String get sessionId;
 
+  /// 关联策略模板 ID
   @BuiltValueField(wireName: r'templateId')
   String get templateId;
 
+  /// 初始消息内容
   @BuiltValueField(wireName: r'initialMessage')
   String get initialMessage;
 

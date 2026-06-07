@@ -48,6 +48,10 @@ describe('StrategyPlazaController', () => {
       winRatePct: 55,
       maxDrawdownPct: 8,
     },
+    signals: [
+      { time: '2026-06-07T00:00:00.000Z', side: 'buy', price: 100, pnlPercent: 1 },
+      { time: '2026-06-08T00:00:00.000Z', side: 'sell', price: 110, pnlPercent: 2 },
+    ],
   } as const
 
   async function buildController(overrides?: {
@@ -122,6 +126,16 @@ describe('StrategyPlazaController', () => {
     expect(templates.getRequired).toHaveBeenCalledWith('ma-cross')
     expect(caller.resolveCallerUserIdFromAuthorization).not.toHaveBeenCalled()
     expect(result).toEqual(expect.objectContaining({ id: 'ma-cross', timeframe: '15m' }))
+  })
+
+  it('limits public official template signals without auth', async () => {
+    const { caller, controller, templates } = await buildController()
+
+    const result = await controller.signals('ma-cross', '1')
+
+    expect(templates.getRequired).toHaveBeenCalledWith('ma-cross')
+    expect(caller.resolveCallerUserIdFromAuthorization).not.toHaveBeenCalled()
+    expect(result).toEqual([template.signals[0]])
   })
 
   it('runs a template using caller identity from auth', async () => {

@@ -49,6 +49,7 @@ Serializers _$serializers =
           ..add(AdminDataPullTaskControllerList200Response.serializer)
           ..add(AdminDataPullTaskControllerListExecutions200Response.serializer)
           ..add(AdminDataPullTaskResponseDto.serializer)
+          ..add(AdminDeleteResultResponseDto.serializer)
           ..add(AdminExchangeConfigControllerCreateConfig200Response.serializer)
           ..add(
             AdminExchangeConfigControllerGetAllConfigs200Response.serializer,
@@ -56,6 +57,10 @@ Serializers _$serializers =
           ..add(AdminLoginDto.serializer)
           ..add(AdminMenuPermissionDto.serializer)
           ..add(AdminMenuPermissionDtoTypeEnum.serializer)
+          ..add(AdminMenuResponseDto.serializer)
+          ..add(AdminMenuResponseDtoTypeEnum.serializer)
+          ..add(AdminMenuTreeNodeResponseDto.serializer)
+          ..add(AdminMenuTreeNodeResponseDtoTypeEnum.serializer)
           ..add(
             AdminOrderbookPairConfigControllerCreateConfig201Response
                 .serializer,
@@ -73,6 +78,7 @@ Serializers _$serializers =
           ..add(AdminRegisterDto.serializer)
           ..add(AdminRoleControllerList0200Response.serializer)
           ..add(AdminRoleControllerList0200ResponseAllOfItemsInner.serializer)
+          ..add(AdminRoleResponseDto.serializer)
           ..add(AdminSettingsControllerCreateSetting201Response.serializer)
           ..add(AdminSettingsControllerGetAllSettings200Response.serializer)
           ..add(AdminSettingsControllerReloadSettings200Response.serializer)
@@ -128,10 +134,17 @@ Serializers _$serializers =
           ..add(AiQuantConversationMessageResponseDto.serializer)
           ..add(AiQuantConversationMessageResponseDtoRoleEnum.serializer)
           ..add(AiQuantConversationResponseDto.serializer)
+          ..add(AuthControllerCreateTelegramDesktopIntent200Response.serializer)
+          ..add(
+            AuthControllerGetTelegramDesktopIntentStatus200Response.serializer,
+          )
           ..add(AuthControllerGetTelegramLoginConfig200Response.serializer)
           ..add(AuthControllerGetTelegramLoginConfig200ResponseData.serializer)
+          ..add(AuthControllerGetTelegramWebAuthorizeUrl200Response.serializer)
+          ..add(AuthControllerHandleTelegramBotWebhook200Response.serializer)
           ..add(AuthControllerTelegramDesktopExchange200Response.serializer)
           ..add(AuthResponseDto.serializer)
+          ..add(BacktestingCapabilitiesResponseDto.serializer)
           ..add(BacktestingCreateJobBarDto.serializer)
           ..add(BacktestingCreateJobBarDtoTimeframeEnum.serializer)
           ..add(BacktestingCreateJobErrorDetailsDto.serializer)
@@ -150,7 +163,13 @@ Serializers _$serializers =
           ..add(BacktestingCreateJobStrategyDto.serializer)
           ..add(BacktestingCreateJobStrategyDtoProtocolVersionEnum.serializer)
           ..add(BacktestingCreateJobSummaryDto.serializer)
+          ..add(BacktestingJobResponseDto.serializer)
+          ..add(BacktestingJobResponseDtoStatusEnum.serializer)
+          ..add(BacktestingProxyControllerCapabilities200Response.serializer)
           ..add(BacktestingProxyControllerCreateJob200Response.serializer)
+          ..add(BacktestingProxyControllerGetJob200Response.serializer)
+          ..add(BacktestingProxyControllerGetJobResult200Response.serializer)
+          ..add(BacktestingReportResponseDto.serializer)
           ..add(BacktestingSymbolSupportRequestDto.serializer)
           ..add(BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.serializer)
           ..add(BacktestingSymbolSupportRequestDtoExchangeEnum.serializer)
@@ -214,6 +233,19 @@ Serializers _$serializers =
           ..add(LlmCodegenContinueRequestDtoLocaleEnum.serializer)
           ..add(LlmCodegenStartRequestDto.serializer)
           ..add(LlmCodegenStartRequestDtoLocaleEnum.serializer)
+          ..add(LlmStrategyInstanceResponseDto.serializer)
+          ..add(LlmStrategyInstanceResponseDtoModeEnum.serializer)
+          ..add(LlmStrategyInstanceResponseDtoStatusEnum.serializer)
+          ..add(LlmStrategyInstanceSignalResponseDto.serializer)
+          ..add(LlmStrategyInstanceSignalResponseDtoDirectionEnum.serializer)
+          ..add(LlmStrategyInstanceSignalResponseDtoSignalTypeEnum.serializer)
+          ..add(LlmStrategyInstanceSignalResponseDtoSourceTypeEnum.serializer)
+          ..add(LlmStrategyInstanceSignalResponseDtoStatusEnum.serializer)
+          ..add(LlmStrategyInstancesControllerList200Response.serializer)
+          ..add(LlmStrategyInstancesControllerSignals200Response.serializer)
+          ..add(LlmStrategySubscriptionsControllerList200Response.serializer)
+          ..add(LlmSubscriptionResponseDto.serializer)
+          ..add(LlmSubscriptionResponseDtoStatusEnum.serializer)
           ..add(LoginRequestDto.serializer)
           ..add(LongShortRatioPointResponseDto.serializer)
           ..add(LongShortRatioPointResponseDtoIntervalEnum.serializer)
@@ -267,12 +299,16 @@ Serializers _$serializers =
           ..add(StrategyPlazaEditSessionResponseDto.serializer)
           ..add(StrategyPlazaProxyControllerDetail200Response.serializer)
           ..add(StrategyPlazaProxyControllerEditSession200Response.serializer)
+          ..add(StrategyPlazaProxyControllerEquityCurve200Response.serializer)
           ..add(StrategyPlazaProxyControllerList200Response.serializer)
           ..add(StrategyPlazaProxyControllerRun200Response.serializer)
           ..add(StrategyPlazaProxyControllerRun200ResponseData.serializer)
+          ..add(StrategyPlazaProxyControllerSignals200Response.serializer)
           ..add(StrategyPlazaRunExistingResponseDto.serializer)
           ..add(StrategyPlazaRunExistingResponseDtoResultEnum.serializer)
           ..add(StrategyPlazaRunRequestDto.serializer)
+          ..add(StrategyPlazaSignalResponseDto.serializer)
+          ..add(StrategyPlazaSignalResponseDtoSideEnum.serializer)
           ..add(StrategyPlazaTemplateResponseDto.serializer)
           ..add(StrategyPlazaTemplateResponseDtoEnvironmentEnum.serializer)
           ..add(StrategyPlazaTemplateResponseDtoExchangeEnum.serializer)
@@ -280,9 +316,14 @@ Serializers _$serializers =
           ..add(StrategyPlazaTemplateResponseDtoRiskLevelEnum.serializer)
           ..add(StrategyPlazaTemplateResponseDtoStatusEnum.serializer)
           ..add(TelegramBotWebhookRequestDto.serializer)
+          ..add(TelegramBotWebhookResponseDto.serializer)
           ..add(TelegramDesktopExchangeRequestDto.serializer)
+          ..add(TelegramDesktopIntentResponseDto.serializer)
+          ..add(TelegramDesktopIntentStatusResponseDto.serializer)
+          ..add(TelegramDesktopIntentStatusResponseDtoStatusEnum.serializer)
           ..add(TelegramExchangeRequestDto.serializer)
           ..add(TelegramExchangeRequestDtoSource_Enum.serializer)
+          ..add(TelegramWebAuthorizeUrlResponseDto.serializer)
           ..add(TickerResponseDto.serializer)
           ..add(TraderDiscoverTagsResponseDto.serializer)
           ..add(TraderOpenOrdersResponseDto.serializer)
@@ -371,8 +412,10 @@ Serializers _$serializers =
             () => ListBuilder<AdminMenuPermissionDto>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
+            const FullType(BuiltList, const [
+              const FullType(AdminMenuPermissionDto),
+            ]),
+            () => ListBuilder<AdminMenuPermissionDto>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
@@ -381,6 +424,16 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(AdminMenuTreeNodeResponseDto),
+            ]),
+            () => ListBuilder<AdminMenuTreeNodeResponseDto>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
@@ -671,6 +724,18 @@ Serializers _$serializers =
             () => ListBuilder<JsonObject>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(JsonObject)]),
+            () => ListBuilder<JsonObject>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(JsonObject)]),
+            () => ListBuilder<JsonObject>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(JsonObject)]),
+            () => ListBuilder<JsonObject>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(LiquidationSummaryItemDto),
             ]),
@@ -729,6 +794,12 @@ Serializers _$serializers =
               const FullType(SpotBalanceItemDto),
             ]),
             () => ListBuilder<SpotBalanceItemDto>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(StrategyPlazaSignalResponseDto),
+            ]),
+            () => ListBuilder<StrategyPlazaSignalResponseDto>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
@@ -851,6 +922,43 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(num)]),
+            () => ListBuilder<num>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType(num),
+            ]),
+            () => MapBuilder<String, num>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(StrategyPlazaSignalResponseDto),
+            ]),
+            () => ListBuilder<StrategyPlazaSignalResponseDto>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(num)]),
+            () => ListBuilder<num>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(TradesPairConfigResponseDto),
             ]),
@@ -901,6 +1009,10 @@ Serializers _$serializers =
             () => ListBuilder<num>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(num)]),
+            () => ListBuilder<num>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(BuiltList, const [const FullType(num)]),
             ]),
@@ -934,6 +1046,109 @@ Serializers _$serializers =
               const FullType.nullable(JsonObject),
             ]),
             () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(BuiltMap, const [
+                const FullType(String),
+                const FullType.nullable(JsonObject),
+              ]),
+            ]),
+            () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(BuiltMap, const [
+                const FullType(String),
+                const FullType.nullable(JsonObject),
+              ]),
+            ]),
+            () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(BuiltMap, const [
+                const FullType(String),
+                const FullType.nullable(JsonObject),
+              ]),
+            ]),
+            () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(BuiltMap, const [
+                const FullType(String),
+                const FullType.nullable(JsonObject),
+              ]),
+            ]),
+            () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(BuiltMap, const [
+                const FullType(String),
+                const FullType.nullable(JsonObject),
+              ]),
+            ]),
+            () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(BuiltMap, const [
+                const FullType(String),
+                const FullType.nullable(JsonObject),
+              ]),
+            ]),
+            () => ListBuilder<BuiltMap<String, JsonObject?>>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

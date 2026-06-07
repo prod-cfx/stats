@@ -16,130 +16,130 @@ part 'ai_quant_conversation_response_dto.g.dart';
 /// AiQuantConversationResponseDto
 ///
 /// Properties:
-/// * [id] - Conversation id
-/// * [activeCodegenSessionId] - Current linked codegen session id
-/// * [conversationTitle] - Conversation title
-/// * [conversationMessages] - Structured conversation transcript
-/// * [status] - Current codegen status
-/// * [createdAt] - Conversation created timestamp
-/// * [updatedAt] - Conversation updated timestamp
-/// * [backtestDraftConfig] - Current explicit backtest draft configuration
-/// * [lastBacktestRef] - Most recent recoverable backtest reference
-/// * [canonicalDigest] - Pending canonical digest awaiting confirmation
-/// * [specDesc] - Structured strategy description payload
-/// * [semanticGraph] - Semantic graph payload
-/// * [validationReport] - Semantic graph validation report
-/// * [clarificationGate] - Clarification gate payload
-/// * [publicationGate] - Publication gate payload
-/// * [scriptCode] - Published script code
-/// * [publishedSnapshotId] - Published snapshot id
-/// * [publishedSnapshotParamValues] - Snapshot-bound param values for published backtest/display semantics
-/// * [publishedSnapshotStrategyConfig] - Published snapshot formal strategy configuration
-/// * [publishedSnapshotBacktestConfigDefaults] - Published snapshot formal backtest defaults
-/// * [publishedSnapshotDeploymentExecutionDefaults] - Published snapshot formal deploy defaults
-/// * [publishedSnapshotDeploymentExecutionConstraints] - Published snapshot formal deploy constraints
-/// * [publishedSnapshotCompatibilityMetadata] - Published snapshot compatibility metadata
-/// * [strategyInstanceId] - Published strategy instance id
-/// * [rejectReason] - Terminal reject reason
+/// * [id] - 对话 ID
+/// * [activeCodegenSessionId] - 当前关联的代码生成会话 ID
+/// * [conversationTitle] - 对话标题
+/// * [conversationMessages] - 结构化对话记录
+/// * [status] - 当前代码生成状态
+/// * [createdAt] - 对话创建时间
+/// * [updatedAt] - 对话更新时间
+/// * [backtestDraftConfig] - 当前显式回测草稿配置
+/// * [lastBacktestRef] - 最近可恢复的回测引用
+/// * [canonicalDigest] - 待确认的规范化摘要
+/// * [specDesc] - 结构化策略描述载荷
+/// * [semanticGraph] - 语义图载荷
+/// * [validationReport] - 语义图校验报告
+/// * [clarificationGate] - 澄清门载荷
+/// * [publicationGate] - 发布门载荷
+/// * [scriptCode] - 已发布脚本代码
+/// * [publishedSnapshotId] - 已发布快照 ID
+/// * [publishedSnapshotParamValues] - 快照绑定的参数值（用于已发布回测/展示语义）
+/// * [publishedSnapshotStrategyConfig] - 已发布快照的正式策略配置
+/// * [publishedSnapshotBacktestConfigDefaults] - 已发布快照的正式回测默认值
+/// * [publishedSnapshotDeploymentExecutionDefaults] - 已发布快照的正式部署默认值
+/// * [publishedSnapshotDeploymentExecutionConstraints] - 已发布快照的正式部署约束
+/// * [publishedSnapshotCompatibilityMetadata] - 已发布快照的兼容性元数据
+/// * [strategyInstanceId] - 已发布策略实例 ID
+/// * [rejectReason] - 终止拒绝原因
 @BuiltValue()
 abstract class AiQuantConversationResponseDto implements Built<AiQuantConversationResponseDto, AiQuantConversationResponseDtoBuilder> {
-  /// Conversation id
+  /// 对话 ID
   @BuiltValueField(wireName: r'id')
   String get id;
 
-  /// Current linked codegen session id
+  /// 当前关联的代码生成会话 ID
   @BuiltValueField(wireName: r'activeCodegenSessionId')
   String? get activeCodegenSessionId;
 
-  /// Conversation title
+  /// 对话标题
   @BuiltValueField(wireName: r'conversationTitle')
   String? get conversationTitle;
 
-  /// Structured conversation transcript
+  /// 结构化对话记录
   @BuiltValueField(wireName: r'conversationMessages')
   BuiltList<AiQuantConversationMessageResponseDto>? get conversationMessages;
 
-  /// Current codegen status
+  /// 当前代码生成状态
   @BuiltValueField(wireName: r'status')
   String? get status;
 
-  /// Conversation created timestamp
+  /// 对话创建时间
   @BuiltValueField(wireName: r'createdAt')
   String? get createdAt;
 
-  /// Conversation updated timestamp
+  /// 对话更新时间
   @BuiltValueField(wireName: r'updatedAt')
   String? get updatedAt;
 
-  /// Current explicit backtest draft configuration
+  /// 当前显式回测草稿配置
   @BuiltValueField(wireName: r'backtestDraftConfig')
   AiQuantConversationBacktestConfigResponseDto? get backtestDraftConfig;
 
-  /// Most recent recoverable backtest reference
+  /// 最近可恢复的回测引用
   @BuiltValueField(wireName: r'lastBacktestRef')
   AiQuantConversationLastBacktestRefResponseDto? get lastBacktestRef;
 
-  /// Pending canonical digest awaiting confirmation
+  /// 待确认的规范化摘要
   @BuiltValueField(wireName: r'canonicalDigest')
   String? get canonicalDigest;
 
-  /// Structured strategy description payload
+  /// 结构化策略描述载荷
   @BuiltValueField(wireName: r'specDesc')
   BuiltMap<String, JsonObject?>? get specDesc;
 
-  /// Semantic graph payload
+  /// 语义图载荷
   @BuiltValueField(wireName: r'semanticGraph')
   BuiltMap<String, JsonObject?>? get semanticGraph;
 
-  /// Semantic graph validation report
+  /// 语义图校验报告
   @BuiltValueField(wireName: r'validationReport')
   BuiltMap<String, JsonObject?>? get validationReport;
 
-  /// Clarification gate payload
+  /// 澄清门载荷
   @BuiltValueField(wireName: r'clarificationGate')
   BuiltMap<String, JsonObject?>? get clarificationGate;
 
-  /// Publication gate payload
+  /// 发布门载荷
   @BuiltValueField(wireName: r'publicationGate')
   BuiltMap<String, JsonObject?>? get publicationGate;
 
-  /// Published script code
+  /// 已发布脚本代码
   @BuiltValueField(wireName: r'scriptCode')
   String? get scriptCode;
 
-  /// Published snapshot id
+  /// 已发布快照 ID
   @BuiltValueField(wireName: r'publishedSnapshotId')
   String? get publishedSnapshotId;
 
-  /// Snapshot-bound param values for published backtest/display semantics
+  /// 快照绑定的参数值（用于已发布回测/展示语义）
   @BuiltValueField(wireName: r'publishedSnapshotParamValues')
   BuiltMap<String, JsonObject?>? get publishedSnapshotParamValues;
 
-  /// Published snapshot formal strategy configuration
+  /// 已发布快照的正式策略配置
   @BuiltValueField(wireName: r'publishedSnapshotStrategyConfig')
   BuiltMap<String, JsonObject?>? get publishedSnapshotStrategyConfig;
 
-  /// Published snapshot formal backtest defaults
+  /// 已发布快照的正式回测默认值
   @BuiltValueField(wireName: r'publishedSnapshotBacktestConfigDefaults')
   BuiltMap<String, JsonObject?>? get publishedSnapshotBacktestConfigDefaults;
 
-  /// Published snapshot formal deploy defaults
+  /// 已发布快照的正式部署默认值
   @BuiltValueField(wireName: r'publishedSnapshotDeploymentExecutionDefaults')
   BuiltMap<String, JsonObject?>? get publishedSnapshotDeploymentExecutionDefaults;
 
-  /// Published snapshot formal deploy constraints
+  /// 已发布快照的正式部署约束
   @BuiltValueField(wireName: r'publishedSnapshotDeploymentExecutionConstraints')
   BuiltMap<String, JsonObject?>? get publishedSnapshotDeploymentExecutionConstraints;
 
-  /// Published snapshot compatibility metadata
+  /// 已发布快照的兼容性元数据
   @BuiltValueField(wireName: r'publishedSnapshotCompatibilityMetadata')
   BuiltMap<String, JsonObject?>? get publishedSnapshotCompatibilityMetadata;
 
-  /// Published strategy instance id
+  /// 已发布策略实例 ID
   @BuiltValueField(wireName: r'strategyInstanceId')
   String? get strategyInstanceId;
 
-  /// Terminal reject reason
+  /// 终止拒绝原因
   @BuiltValueField(wireName: r'rejectReason')
   String? get rejectReason;
 

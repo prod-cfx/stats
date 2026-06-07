@@ -12,18 +12,21 @@ part 'ai_quant_conversation_backtest_range_response_dto.g.dart';
 /// AiQuantConversationBacktestRangeResponseDto
 ///
 /// Properties:
-/// * [preset] 
-/// * [startAt] 
-/// * [endAt] 
+/// * [preset] - 回测区间预设
+/// * [startAt] - 自定义区间开始时间（ISO 8601）
+/// * [endAt] - 自定义区间结束时间（ISO 8601）
 @BuiltValue()
 abstract class AiQuantConversationBacktestRangeResponseDto implements Built<AiQuantConversationBacktestRangeResponseDto, AiQuantConversationBacktestRangeResponseDtoBuilder> {
+  /// 回测区间预设
   @BuiltValueField(wireName: r'preset')
   AiQuantConversationBacktestRangeResponseDtoPresetEnum get preset;
   // enum presetEnum {  7D,  30D,  90D,  1Y,  CUSTOM,  };
 
+  /// 自定义区间开始时间（ISO 8601）
   @BuiltValueField(wireName: r'startAt')
   String? get startAt;
 
+  /// 自定义区间结束时间（ISO 8601）
   @BuiltValueField(wireName: r'endAt')
   String? get endAt;
 
@@ -144,14 +147,19 @@ class _$AiQuantConversationBacktestRangeResponseDtoSerializer implements Primiti
 
 class AiQuantConversationBacktestRangeResponseDtoPresetEnum extends EnumClass {
 
+  /// 回测区间预设
   @BuiltValueEnumConst(wireName: r'7D')
   static const AiQuantConversationBacktestRangeResponseDtoPresetEnum n7d = _$aiQuantConversationBacktestRangeResponseDtoPresetEnum_n7d;
+  /// 回测区间预设
   @BuiltValueEnumConst(wireName: r'30D')
   static const AiQuantConversationBacktestRangeResponseDtoPresetEnum n30d = _$aiQuantConversationBacktestRangeResponseDtoPresetEnum_n30d;
+  /// 回测区间预设
   @BuiltValueEnumConst(wireName: r'90D')
   static const AiQuantConversationBacktestRangeResponseDtoPresetEnum n90d = _$aiQuantConversationBacktestRangeResponseDtoPresetEnum_n90d;
+  /// 回测区间预设
   @BuiltValueEnumConst(wireName: r'1Y')
   static const AiQuantConversationBacktestRangeResponseDtoPresetEnum n1y = _$aiQuantConversationBacktestRangeResponseDtoPresetEnum_n1y;
+  /// 回测区间预设
   @BuiltValueEnumConst(wireName: r'CUSTOM')
   static const AiQuantConversationBacktestRangeResponseDtoPresetEnum CUSTOM = _$aiQuantConversationBacktestRangeResponseDtoPresetEnum_CUSTOM;
 

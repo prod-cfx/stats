@@ -14,13 +14,14 @@ part 'backtesting_create_job_error_details_dto.g.dart';
 ///
 /// Properties:
 /// * [code] 
-/// * [message] 
+/// * [message] - 错误信息
 /// * [args] 
 @BuiltValue()
 abstract class BacktestingCreateJobErrorDetailsDto implements Built<BacktestingCreateJobErrorDetailsDto, BacktestingCreateJobErrorDetailsDtoBuilder> {
   @BuiltValueField(wireName: r'code')
   String? get code;
 
+  /// 错误信息
   @BuiltValueField(wireName: r'message')
   String get message;
 

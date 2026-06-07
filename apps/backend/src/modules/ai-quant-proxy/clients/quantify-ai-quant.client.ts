@@ -165,6 +165,16 @@ export class QuantifyAiQuantClient {
     return this.get<T>(`/strategy-plaza/templates/${encodeURIComponent(templateId)}`)
   }
 
+  async listStrategyPlazaTemplateSignals<T = unknown>(templateId: string, limit?: number) {
+    const query = typeof limit === 'number' ? `?limit=${encodeURIComponent(String(limit))}` : ''
+    return this.get<T>(`/strategy-plaza/templates/${encodeURIComponent(templateId)}/signals${query}`)
+  }
+
+  async getStrategyPlazaTemplateEquityCurve<T = unknown>(templateId: string, timeframe?: string) {
+    const query = timeframe?.trim() ? `?timeframe=${encodeURIComponent(timeframe.trim())}` : ''
+    return this.get<T>(`/strategy-plaza/templates/${encodeURIComponent(templateId)}/equity-curve${query}`)
+  }
+
   async runStrategyPlazaTemplate<T = unknown>(
     templateId: string,
     body: Record<string, unknown>,

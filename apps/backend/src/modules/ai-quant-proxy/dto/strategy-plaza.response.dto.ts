@@ -13,6 +13,32 @@ export class StrategyPlazaDisplayMetricsResponseDto {
 
   @ApiPropertyOptional({ nullable: true })
   maxDrawdownPct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  sharpe?: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  profitLossRatio?: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  tradeCount?: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  users?: number | null
+}
+
+export class StrategyPlazaSignalResponseDto {
+  @ApiProperty({ description: '信号时间', example: '2026-06-07T00:00:00.000Z' })
+  time!: string
+
+  @ApiProperty({ description: '信号方向', enum: ['buy', 'sell'], example: 'buy' })
+  side!: 'buy' | 'sell'
+
+  @ApiProperty({ description: '信号价格', example: 101.5 })
+  price!: number
+
+  @ApiProperty({ description: '信号收益百分比', example: 2.5 })
+  pnlPercent!: number
 }
 
 export class StrategyPlazaTemplateResponseDto {
@@ -66,6 +92,18 @@ export class StrategyPlazaTemplateResponseDto {
 
   @ApiProperty({ description: '展示用回测指标', type: StrategyPlazaDisplayMetricsResponseDto })
   displayMetrics!: StrategyPlazaDisplayMetricsResponseDto
+
+  @ApiPropertyOptional({ description: '列表/hero 迷你曲线', type: [Number] })
+  sparkline?: number[]
+
+  @ApiPropertyOptional({ description: '策略参数展示值', type: 'object', additionalProperties: { type: 'number' } })
+  params?: Record<string, number>
+
+  @ApiPropertyOptional({ description: '策略信号列表', type: [StrategyPlazaSignalResponseDto] })
+  signals?: StrategyPlazaSignalResponseDto[]
+
+  @ApiPropertyOptional({ description: '权益曲线', type: [Number] })
+  equityCurve?: number[]
 }
 
 export class StrategyPlazaEditSessionResponseDto {

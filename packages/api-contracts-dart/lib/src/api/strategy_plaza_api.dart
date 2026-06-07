@@ -11,8 +11,10 @@ import 'package:dio/dio.dart';
 import 'package:backend_api_contracts/src/api_util.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_detail200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_edit_session200_response.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_equity_curve200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_list200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_run200_response.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_signals200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_run_request_dto.dart';
 
 class StrategyPlazaApi {
@@ -133,7 +135,13 @@ class StrategyPlazaApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -172,6 +180,88 @@ class StrategyPlazaApi {
     }
 
     return Response<StrategyPlazaProxyControllerEditSession200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Publicly get strategy plaza template equity curve through the backend proxy.
+  /// 
+  ///
+  /// Parameters:
+  /// * [id] 
+  /// * [timeframe] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [StrategyPlazaProxyControllerEquityCurve200Response] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<StrategyPlazaProxyControllerEquityCurve200Response>> strategyPlazaProxyControllerEquityCurve({ 
+    required String id,
+    String? timeframe,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/strategy-plaza/templates/{id}/equity-curve'.replaceAll('{' r'id' '}', encodeQueryParameter(_serializers, id, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (timeframe != null) r'timeframe': encodeQueryParameter(_serializers, timeframe, const FullType(String)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    StrategyPlazaProxyControllerEquityCurve200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(StrategyPlazaProxyControllerEquityCurve200Response),
+      ) as StrategyPlazaProxyControllerEquityCurve200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<StrategyPlazaProxyControllerEquityCurve200Response>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -291,7 +381,13 @@ class StrategyPlazaApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -345,6 +441,88 @@ class StrategyPlazaApi {
     }
 
     return Response<StrategyPlazaProxyControllerRun200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Publicly list strategy plaza template signals through the backend proxy.
+  /// 
+  ///
+  /// Parameters:
+  /// * [id] 
+  /// * [limit] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [StrategyPlazaProxyControllerSignals200Response] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<StrategyPlazaProxyControllerSignals200Response>> strategyPlazaProxyControllerSignals({ 
+    required String id,
+    String? limit,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/strategy-plaza/templates/{id}/signals'.replaceAll('{' r'id' '}', encodeQueryParameter(_serializers, id, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(String)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    StrategyPlazaProxyControllerSignals200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(StrategyPlazaProxyControllerSignals200Response),
+      ) as StrategyPlazaProxyControllerSignals200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<StrategyPlazaProxyControllerSignals200Response>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

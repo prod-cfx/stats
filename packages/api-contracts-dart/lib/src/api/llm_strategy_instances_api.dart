@@ -9,6 +9,9 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instance_response_dto.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instances_controller_list200_response.dart';
+import 'package:backend_api_contracts/src/model/llm_strategy_instances_controller_signals200_response.dart';
 
 class LlmStrategyInstancesApi {
 
@@ -18,7 +21,7 @@ class LlmStrategyInstancesApi {
 
   const LlmStrategyInstancesApi(this._dio, this._serializers);
 
-  /// llmStrategyInstancesControllerDetail
+  /// Get LLM strategy instance detail through the backend proxy.
   /// 
   ///
   /// Parameters:
@@ -30,9 +33,9 @@ class LlmStrategyInstancesApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [LlmStrategyInstanceResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> llmStrategyInstancesControllerDetail({ 
+  Future<Response<LlmStrategyInstanceResponseDto>> llmStrategyInstancesControllerDetail({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -62,10 +65,38 @@ class LlmStrategyInstancesApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    LlmStrategyInstanceResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(LlmStrategyInstanceResponseDto),
+      ) as LlmStrategyInstanceResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LlmStrategyInstanceResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
-  /// llmStrategyInstancesControllerList
+  /// List LLM strategy instances through the backend proxy.
   /// 
   ///
   /// Parameters:
@@ -76,9 +107,9 @@ class LlmStrategyInstancesApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [LlmStrategyInstancesControllerList200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> llmStrategyInstancesControllerList({ 
+  Future<Response<LlmStrategyInstancesControllerList200Response>> llmStrategyInstancesControllerList({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -107,10 +138,38 @@ class LlmStrategyInstancesApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    LlmStrategyInstancesControllerList200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(LlmStrategyInstancesControllerList200Response),
+      ) as LlmStrategyInstancesControllerList200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LlmStrategyInstancesControllerList200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
-  /// llmStrategyInstancesControllerSignals
+  /// List LLM strategy instance signals through the backend proxy.
   /// 
   ///
   /// Parameters:
@@ -122,9 +181,9 @@ class LlmStrategyInstancesApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [LlmStrategyInstancesControllerSignals200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> llmStrategyInstancesControllerSignals({ 
+  Future<Response<LlmStrategyInstancesControllerSignals200Response>> llmStrategyInstancesControllerSignals({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -140,7 +199,13 @@ class LlmStrategyInstancesApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -154,7 +219,35 @@ class LlmStrategyInstancesApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    LlmStrategyInstancesControllerSignals200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(LlmStrategyInstancesControllerSignals200Response),
+      ) as LlmStrategyInstancesControllerSignals200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LlmStrategyInstancesControllerSignals200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
 }

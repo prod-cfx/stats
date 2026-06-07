@@ -96,7 +96,7 @@ class _$AdminMenuPermissionDto extends AdminMenuPermissionDto {
   @override
   final AdminMenuPermissionDtoTypeEnum type;
   @override
-  final BuiltMap<String, JsonObject?> children;
+  final BuiltList<AdminMenuPermissionDto>? children;
 
   factory _$AdminMenuPermissionDto([
     void Function(AdminMenuPermissionDtoBuilder)? updates,
@@ -111,7 +111,7 @@ class _$AdminMenuPermissionDto extends AdminMenuPermissionDto {
     required this.sortOrder,
     this.code,
     required this.type,
-    required this.children,
+    this.children,
   }) : super._();
   @override
   AdminMenuPermissionDto rebuild(
@@ -205,10 +205,10 @@ class AdminMenuPermissionDtoBuilder
   AdminMenuPermissionDtoTypeEnum? get type => _$this._type;
   set type(AdminMenuPermissionDtoTypeEnum? type) => _$this._type = type;
 
-  MapBuilder<String, JsonObject?>? _children;
-  MapBuilder<String, JsonObject?> get children =>
-      _$this._children ??= MapBuilder<String, JsonObject?>();
-  set children(MapBuilder<String, JsonObject?>? children) =>
+  ListBuilder<AdminMenuPermissionDto>? _children;
+  ListBuilder<AdminMenuPermissionDto> get children =>
+      _$this._children ??= ListBuilder<AdminMenuPermissionDto>();
+  set children(ListBuilder<AdminMenuPermissionDto>? children) =>
       _$this._children = children;
 
   AdminMenuPermissionDtoBuilder() {
@@ -226,7 +226,7 @@ class AdminMenuPermissionDtoBuilder
       _sortOrder = $v.sortOrder;
       _code = $v.code;
       _type = $v.type;
-      _children = $v.children.toBuilder();
+      _children = $v.children?.toBuilder();
       _$v = null;
     }
     return this;
@@ -275,13 +275,13 @@ class AdminMenuPermissionDtoBuilder
               r'AdminMenuPermissionDto',
               'type',
             ),
-            children: children.build(),
+            children: _children?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'children';
-        children.build();
+        _children?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'AdminMenuPermissionDto',

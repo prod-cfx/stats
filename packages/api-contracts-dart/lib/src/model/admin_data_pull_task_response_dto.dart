@@ -12,30 +12,33 @@ part 'admin_data_pull_task_response_dto.g.dart';
 /// AdminDataPullTaskResponseDto
 ///
 /// Properties:
-/// * [id] 
-/// * [key] 
-/// * [name] 
+/// * [id] - 任务 ID
+/// * [key] - 任务唯一标识
+/// * [name] - 任务名称
 /// * [source_] 
 /// * [type] 
 /// * [cron] 
 /// * [intervalSeconds] 
-/// * [enabled] 
+/// * [enabled] - 是否启用任务
 /// * [cursor] 
 /// * [lastStatus] 
 /// * [lastRunAt] 
 /// * [lastSuccessAt] 
 /// * [lastError] 
 /// * [meta] 
-/// * [createdAt] 
-/// * [updatedAt] 
+/// * [createdAt] - 任务创建时间
+/// * [updatedAt] - 任务更新时间
 @BuiltValue()
 abstract class AdminDataPullTaskResponseDto implements Built<AdminDataPullTaskResponseDto, AdminDataPullTaskResponseDtoBuilder> {
+  /// 任务 ID
   @BuiltValueField(wireName: r'id')
   num get id;
 
+  /// 任务唯一标识
   @BuiltValueField(wireName: r'key')
   String get key;
 
+  /// 任务名称
   @BuiltValueField(wireName: r'name')
   String get name;
 
@@ -51,6 +54,7 @@ abstract class AdminDataPullTaskResponseDto implements Built<AdminDataPullTaskRe
   @BuiltValueField(wireName: r'intervalSeconds')
   num? get intervalSeconds;
 
+  /// 是否启用任务
   @BuiltValueField(wireName: r'enabled')
   bool get enabled;
 
@@ -72,9 +76,11 @@ abstract class AdminDataPullTaskResponseDto implements Built<AdminDataPullTaskRe
   @BuiltValueField(wireName: r'meta')
   JsonObject? get meta;
 
+  /// 任务创建时间
   @BuiltValueField(wireName: r'createdAt')
   DateTime get createdAt;
 
+  /// 任务更新时间
   @BuiltValueField(wireName: r'updatedAt')
   DateTime get updatedAt;
 

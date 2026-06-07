@@ -62,6 +62,60 @@ export class StrategyPlazaController {
     return new StrategyPlazaTemplateResponseDto(this.templates.getRequired(id))
   }
 
+  @Get(':id/signals')
+  @ApiOperation({ summary: 'List strategy plaza template signals.' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiOkResponse({
+    description: 'Strategy plaza template signal list.',
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              time: { type: 'string', format: 'date-time' },
+              side: { type: 'string', enum: ['buy', 'sell'] },
+              price: { type: 'number' },
+              pnlPercent: { type: 'number' },
+            },
+          },
+        },
+        message: { type: 'string', example: 'Success' },
+      },
+    },
+  })
+  async signals(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ) {
+    const signals = this.templates.getRequired(id).signals ?? []
+    const parsedLimit = limit == null ? undefined : Number(limit)
+    if (parsedLimit == null || !Number.isFinite(parsedLimit) || parsedLimit < 0) {
+      return signals
+    }
+    return signals.slice(0, Math.floor(parsedLimit))
+  }
+
+  @Get(':id/equity-curve')
+  @ApiOperation({ summary: 'Get strategy plaza template equity curve.' })
+  @ApiOkResponse({
+    description: 'Strategy plaza template equity curve.',
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: { type: 'array', items: { type: 'number' } },
+        message: { type: 'string', example: 'Success' },
+      },
+    },
+  })
+  async equityCurve(@Param('id') id: string) {
+    return this.templates.getRequired(id).equityCurve ?? []
+  }
+
   @Post(':id/run')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '运行策略广场官方模板' })

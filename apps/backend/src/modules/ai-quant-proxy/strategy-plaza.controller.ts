@@ -10,6 +10,7 @@ import {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaEditSessionResponseDto,
   StrategyPlazaRunExistingResponseDto,
+  StrategyPlazaSignalResponseDto,
   type StrategyPlazaRunResponseDto,
   StrategyPlazaTemplateResponseDto,
 } from './dto/strategy-plaza.response.dto'
@@ -19,6 +20,7 @@ import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto
 @ApiExtraModels(
   AccountAiQuantStrategyDetailResponseDto,
   StrategyPlazaDisplayMetricsResponseDto,
+  StrategyPlazaSignalResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaEditSessionResponseDto,
   StrategyPlazaRunExistingResponseDto,
@@ -57,6 +59,55 @@ export class StrategyPlazaProxyController {
   })
   async detail(@Param('id') id: string): Promise<StrategyPlazaTemplateResponseDto> {
     return this.service.getStrategyPlazaTemplateDetail(id)
+  }
+
+  @Get(':id/signals')
+  @ApiOperation({ summary: 'Publicly list strategy plaza template signals through the backend proxy.' })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiOkResponse({
+    description: 'Strategy plaza template signals proxied from quantify.',
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(StrategyPlazaSignalResponseDto) },
+        },
+        message: { type: 'string', example: 'Success' },
+      },
+    },
+  })
+  async signals(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ): Promise<unknown[]> {
+    const parsedLimit = limit == null ? undefined : Number(limit)
+    return this.service.listStrategyPlazaTemplateSignals(
+      id,
+      Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    )
+  }
+
+  @Get(':id/equity-curve')
+  @ApiOperation({ summary: 'Publicly get strategy plaza template equity curve through the backend proxy.' })
+  @ApiQuery({ name: 'timeframe', required: false })
+  @ApiOkResponse({
+    description: 'Strategy plaza template equity curve proxied from quantify.',
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: { type: 'array', items: { type: 'number' } },
+        message: { type: 'string', example: 'Success' },
+      },
+    },
+  })
+  async equityCurve(
+    @Param('id') id: string,
+    @Query('timeframe') timeframe?: string,
+  ): Promise<number[]> {
+    return this.service.getStrategyPlazaTemplateEquityCurve(id, timeframe)
   }
 
   @Post(':id/run')

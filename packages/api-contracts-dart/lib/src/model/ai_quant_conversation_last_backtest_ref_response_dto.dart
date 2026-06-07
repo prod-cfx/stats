@@ -13,25 +13,30 @@ part 'ai_quant_conversation_last_backtest_ref_response_dto.g.dart';
 /// AiQuantConversationLastBacktestRefResponseDto
 ///
 /// Properties:
-/// * [jobId] 
-/// * [publishedSnapshotId] 
-/// * [config] 
-/// * [summary] 
-/// * [completedAt] 
+/// * [jobId] - 回测任务 ID
+/// * [publishedSnapshotId] - 已发布快照 ID
+/// * [config] - 回测配置
+/// * [summary] - 回测结果摘要
+/// * [completedAt] - 回测完成时间（ISO 8601）
 @BuiltValue()
 abstract class AiQuantConversationLastBacktestRefResponseDto implements Built<AiQuantConversationLastBacktestRefResponseDto, AiQuantConversationLastBacktestRefResponseDtoBuilder> {
+  /// 回测任务 ID
   @BuiltValueField(wireName: r'jobId')
   String get jobId;
 
+  /// 已发布快照 ID
   @BuiltValueField(wireName: r'publishedSnapshotId')
   String get publishedSnapshotId;
 
+  /// 回测配置
   @BuiltValueField(wireName: r'config')
   AiQuantConversationBacktestConfigResponseDto get config;
 
+  /// 回测结果摘要
   @BuiltValueField(wireName: r'summary')
   AiQuantConversationLastBacktestSummaryResponseDto get summary;
 
+  /// 回测完成时间（ISO 8601）
   @BuiltValueField(wireName: r'completedAt')
   String get completedAt;
 

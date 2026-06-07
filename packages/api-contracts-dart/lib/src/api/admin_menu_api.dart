@@ -9,8 +9,13 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
+import 'package:backend_api_contracts/src/model/admin_delete_result_response_dto.dart';
+import 'package:backend_api_contracts/src/model/admin_menu_permission_dto.dart';
+import 'package:backend_api_contracts/src/model/admin_menu_response_dto.dart';
+import 'package:backend_api_contracts/src/model/admin_menu_tree_node_response_dto.dart';
 import 'package:backend_api_contracts/src/model/create_admin_menu_dto.dart';
 import 'package:backend_api_contracts/src/model/update_admin_menu_dto.dart';
+import 'package:built_collection/built_collection.dart';
 
 class AdminMenuApi {
 
@@ -32,9 +37,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminMenuResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerCreate0({ 
+  Future<Response<AdminMenuResponseDto>> adminMenuControllerCreate0({ 
     required CreateAdminMenuDto createAdminMenuDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -50,7 +55,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -84,7 +95,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminMenuResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminMenuResponseDto),
+      ) as AdminMenuResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminMenuResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 创建菜单
@@ -99,9 +138,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminMenuResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerCreate1({ 
+  Future<Response<AdminMenuResponseDto>> adminMenuControllerCreate1({ 
     required CreateAdminMenuDto createAdminMenuDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -117,7 +156,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -151,7 +196,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminMenuResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminMenuResponseDto),
+      ) as AdminMenuResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminMenuResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 删除菜单（包含直接子菜单）
@@ -166,9 +239,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminDeleteResultResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerDelete0({ 
+  Future<Response<AdminDeleteResultResponseDto>> adminMenuControllerDelete0({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -184,7 +257,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -198,7 +277,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminDeleteResultResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminDeleteResultResponseDto),
+      ) as AdminDeleteResultResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminDeleteResultResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 删除菜单（包含直接子菜单）
@@ -213,9 +320,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminDeleteResultResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerDelete1({ 
+  Future<Response<AdminDeleteResultResponseDto>> adminMenuControllerDelete1({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -231,7 +338,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -245,7 +358,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminDeleteResultResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminDeleteResultResponseDto),
+      ) as AdminDeleteResultResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminDeleteResultResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 根据 ID 获取菜单详情
@@ -260,9 +401,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminMenuResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindById0({ 
+  Future<Response<AdminMenuResponseDto>> adminMenuControllerFindById0({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -278,7 +419,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -292,7 +439,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminMenuResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminMenuResponseDto),
+      ) as AdminMenuResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminMenuResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 根据 ID 获取菜单详情
@@ -307,9 +482,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminMenuResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindById1({ 
+  Future<Response<AdminMenuResponseDto>> adminMenuControllerFindById1({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -325,7 +500,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -339,7 +520,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminMenuResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminMenuResponseDto),
+      ) as AdminMenuResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminMenuResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取菜单扁平化列表
@@ -353,9 +562,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BuiltList<AdminMenuResponseDto>] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindFlat0({ 
+  Future<Response<BuiltList<AdminMenuResponseDto>>> adminMenuControllerFindFlat0({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -370,7 +579,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -384,7 +599,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BuiltList<AdminMenuResponseDto>? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuResponseDto)]),
+      ) as BuiltList<AdminMenuResponseDto>;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BuiltList<AdminMenuResponseDto>>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取菜单扁平化列表
@@ -398,9 +641,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BuiltList<AdminMenuResponseDto>] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindFlat1({ 
+  Future<Response<BuiltList<AdminMenuResponseDto>>> adminMenuControllerFindFlat1({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -415,7 +658,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -429,7 +678,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BuiltList<AdminMenuResponseDto>? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuResponseDto)]),
+      ) as BuiltList<AdminMenuResponseDto>;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BuiltList<AdminMenuResponseDto>>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取菜单树
@@ -443,9 +720,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BuiltList<AdminMenuTreeNodeResponseDto>] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindMenuTree0({ 
+  Future<Response<BuiltList<AdminMenuTreeNodeResponseDto>>> adminMenuControllerFindMenuTree0({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -460,7 +737,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -474,7 +757,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BuiltList<AdminMenuTreeNodeResponseDto>? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuTreeNodeResponseDto)]),
+      ) as BuiltList<AdminMenuTreeNodeResponseDto>;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BuiltList<AdminMenuTreeNodeResponseDto>>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取菜单树
@@ -488,9 +799,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BuiltList<AdminMenuTreeNodeResponseDto>] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindMenuTree1({ 
+  Future<Response<BuiltList<AdminMenuTreeNodeResponseDto>>> adminMenuControllerFindMenuTree1({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -505,7 +816,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -519,7 +836,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BuiltList<AdminMenuTreeNodeResponseDto>? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuTreeNodeResponseDto)]),
+      ) as BuiltList<AdminMenuTreeNodeResponseDto>;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BuiltList<AdminMenuTreeNodeResponseDto>>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取当前管理员有权限的菜单和按钮列表
@@ -533,9 +878,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BuiltList<AdminMenuPermissionDto>] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindPermissionMenus0({ 
+  Future<Response<BuiltList<AdminMenuPermissionDto>>> adminMenuControllerFindPermissionMenus0({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -550,7 +895,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -564,7 +915,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BuiltList<AdminMenuPermissionDto>? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuPermissionDto)]),
+      ) as BuiltList<AdminMenuPermissionDto>;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BuiltList<AdminMenuPermissionDto>>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取当前管理员有权限的菜单和按钮列表
@@ -578,9 +957,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BuiltList<AdminMenuPermissionDto>] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerFindPermissionMenus1({ 
+  Future<Response<BuiltList<AdminMenuPermissionDto>>> adminMenuControllerFindPermissionMenus1({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -595,7 +974,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -609,7 +994,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BuiltList<AdminMenuPermissionDto>? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BuiltList, [FullType(AdminMenuPermissionDto)]),
+      ) as BuiltList<AdminMenuPermissionDto>;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BuiltList<AdminMenuPermissionDto>>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 更新菜单
@@ -625,9 +1038,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminMenuResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerUpdate0({ 
+  Future<Response<AdminMenuResponseDto>> adminMenuControllerUpdate0({ 
     required String id,
     required UpdateAdminMenuDto updateAdminMenuDto,
     CancelToken? cancelToken,
@@ -644,7 +1057,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -678,7 +1097,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminMenuResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminMenuResponseDto),
+      ) as AdminMenuResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminMenuResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 更新菜单
@@ -694,9 +1141,9 @@ class AdminMenuApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminMenuResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminMenuControllerUpdate1({ 
+  Future<Response<AdminMenuResponseDto>> adminMenuControllerUpdate1({ 
     required String id,
     required UpdateAdminMenuDto updateAdminMenuDto,
     CancelToken? cancelToken,
@@ -713,7 +1160,13 @@ class AdminMenuApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -747,7 +1200,35 @@ class AdminMenuApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminMenuResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminMenuResponseDto),
+      ) as AdminMenuResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminMenuResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
 }

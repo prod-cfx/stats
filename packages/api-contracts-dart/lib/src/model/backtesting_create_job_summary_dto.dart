@@ -11,31 +11,37 @@ part 'backtesting_create_job_summary_dto.g.dart';
 /// BacktestingCreateJobSummaryDto
 ///
 /// Properties:
-/// * [netProfit] 
-/// * [netProfitPct] 
-/// * [maxDrawdownPct] 
-/// * [winRate] 
-/// * [profitFactor] 
-/// * [totalTrades] 
+/// * [netProfit] - 净利润（计价货币）
+/// * [netProfitPct] - 净利润百分比（%）
+/// * [maxDrawdownPct] - 最大回撤百分比（%）
+/// * [winRate] - 胜率（0-1 之间的小数）
+/// * [profitFactor] - 盈亏比（无可用数据时为 null）
+/// * [totalTrades] - 总交易次数
 /// * [totalOpenTrades] 
 /// * [openPnl] 
 @BuiltValue()
 abstract class BacktestingCreateJobSummaryDto implements Built<BacktestingCreateJobSummaryDto, BacktestingCreateJobSummaryDtoBuilder> {
+  /// 净利润（计价货币）
   @BuiltValueField(wireName: r'netProfit')
   num get netProfit;
 
+  /// 净利润百分比（%）
   @BuiltValueField(wireName: r'netProfitPct')
   num get netProfitPct;
 
+  /// 最大回撤百分比（%）
   @BuiltValueField(wireName: r'maxDrawdownPct')
   num get maxDrawdownPct;
 
+  /// 胜率（0-1 之间的小数）
   @BuiltValueField(wireName: r'winRate')
   num get winRate;
 
+  /// 盈亏比（无可用数据时为 null）
   @BuiltValueField(wireName: r'profitFactor')
   num? get profitFactor;
 
+  /// 总交易次数
   @BuiltValueField(wireName: r'totalTrades')
   num get totalTrades;
 

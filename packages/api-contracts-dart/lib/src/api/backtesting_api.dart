@@ -10,7 +10,10 @@ import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
 import 'package:backend_api_contracts/src/model/backtesting_create_job_request_dto.dart';
+import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_capabilities200_response.dart';
 import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_create_job200_response.dart';
+import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_get_job200_response.dart';
+import 'package:backend_api_contracts/src/model/backtesting_proxy_controller_get_job_result200_response.dart';
 import 'package:backend_api_contracts/src/model/backtesting_symbol_support_request_dto.dart';
 import 'package:backend_api_contracts/src/model/backtesting_symbol_support_response_dto.dart';
 
@@ -22,7 +25,7 @@ class BacktestingApi {
 
   const BacktestingApi(this._dio, this._serializers);
 
-  /// backtestingProxyControllerCapabilities
+  /// Get backtesting capabilities through the backend proxy.
   /// 
   ///
   /// Parameters:
@@ -35,11 +38,11 @@ class BacktestingApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BacktestingProxyControllerCapabilities200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> backtestingProxyControllerCapabilities({ 
+  Future<Response<BacktestingProxyControllerCapabilities200Response>> backtestingProxyControllerCapabilities({ 
     required String authorization,
-    required String xRequestId,
+    String? xRequestId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -52,11 +55,17 @@ class BacktestingApi {
       method: r'GET',
       headers: <String, dynamic>{
         r'authorization': authorization,
-        r'x-request-id': xRequestId,
+        if (xRequestId != null) r'x-request-id': xRequestId,
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -70,10 +79,38 @@ class BacktestingApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BacktestingProxyControllerCapabilities200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BacktestingProxyControllerCapabilities200Response),
+      ) as BacktestingProxyControllerCapabilities200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BacktestingProxyControllerCapabilities200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
-  /// backtestingProxyControllerCheckSymbolSupport
+  /// Check backtesting symbol support through the backend proxy.
   /// 
   ///
   /// Parameters:
@@ -109,7 +146,13 @@ class BacktestingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -174,7 +217,7 @@ class BacktestingApi {
     );
   }
 
-  /// backtestingProxyControllerCreateJob
+  /// Create a backtesting job through the backend proxy.
   /// 
   ///
   /// Parameters:
@@ -210,7 +253,13 @@ class BacktestingApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -275,13 +324,13 @@ class BacktestingApi {
     );
   }
 
-  /// backtestingProxyControllerGetJob
+  /// Get a backtesting job status through the backend proxy.
   /// 
   ///
   /// Parameters:
   /// * [authorization] 
-  /// * [xRequestId] 
   /// * [id] 
+  /// * [xRequestId] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -289,12 +338,12 @@ class BacktestingApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BacktestingProxyControllerGetJob200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> backtestingProxyControllerGetJob({ 
+  Future<Response<BacktestingProxyControllerGetJob200Response>> backtestingProxyControllerGetJob({ 
     required String authorization,
-    required String xRequestId,
     required String id,
+    String? xRequestId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -307,11 +356,17 @@ class BacktestingApi {
       method: r'GET',
       headers: <String, dynamic>{
         r'authorization': authorization,
-        r'x-request-id': xRequestId,
+        if (xRequestId != null) r'x-request-id': xRequestId,
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -325,16 +380,44 @@ class BacktestingApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BacktestingProxyControllerGetJob200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BacktestingProxyControllerGetJob200Response),
+      ) as BacktestingProxyControllerGetJob200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BacktestingProxyControllerGetJob200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
-  /// backtestingProxyControllerGetJobResult
+  /// Get a backtesting job result through the backend proxy.
   /// 
   ///
   /// Parameters:
   /// * [authorization] 
-  /// * [xRequestId] 
   /// * [id] 
+  /// * [xRequestId] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -342,12 +425,12 @@ class BacktestingApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [BacktestingProxyControllerGetJobResult200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> backtestingProxyControllerGetJobResult({ 
+  Future<Response<BacktestingProxyControllerGetJobResult200Response>> backtestingProxyControllerGetJobResult({ 
     required String authorization,
-    required String xRequestId,
     required String id,
+    String? xRequestId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -360,11 +443,17 @@ class BacktestingApi {
       method: r'GET',
       headers: <String, dynamic>{
         r'authorization': authorization,
-        r'x-request-id': xRequestId,
+        if (xRequestId != null) r'x-request-id': xRequestId,
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -378,7 +467,35 @@ class BacktestingApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    BacktestingProxyControllerGetJobResult200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(BacktestingProxyControllerGetJobResult200Response),
+      ) as BacktestingProxyControllerGetJobResult200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<BacktestingProxyControllerGetJobResult200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
 }

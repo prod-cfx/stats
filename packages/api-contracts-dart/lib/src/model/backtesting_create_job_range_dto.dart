@@ -11,13 +11,15 @@ part 'backtesting_create_job_range_dto.g.dart';
 /// BacktestingCreateJobRangeDto
 ///
 /// Properties:
-/// * [fromTs] 
-/// * [toTs] 
+/// * [fromTs] - 区间起始时间（毫秒时间戳）
+/// * [toTs] - 区间结束时间（毫秒时间戳）
 @BuiltValue()
 abstract class BacktestingCreateJobRangeDto implements Built<BacktestingCreateJobRangeDto, BacktestingCreateJobRangeDtoBuilder> {
+  /// 区间起始时间（毫秒时间戳）
   @BuiltValueField(wireName: r'fromTs')
   num get fromTs;
 
+  /// 区间结束时间（毫秒时间戳）
   @BuiltValueField(wireName: r'toTs')
   num get toTs;
 

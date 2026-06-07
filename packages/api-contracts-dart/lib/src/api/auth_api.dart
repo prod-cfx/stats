@@ -9,7 +9,11 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_create_telegram_desktop_intent200_response.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_desktop_intent_status200_response.dart';
 import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_login_config200_response.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_get_telegram_web_authorize_url200_response.dart';
+import 'package:backend_api_contracts/src/model/auth_controller_handle_telegram_bot_webhook200_response.dart';
 import 'package:backend_api_contracts/src/model/auth_controller_telegram_desktop_exchange200_response.dart';
 import 'package:backend_api_contracts/src/model/bind_email_request_dto.dart';
 import 'package:backend_api_contracts/src/model/bind_telegram_request_dto.dart';
@@ -332,9 +336,9 @@ class AuthApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AuthControllerCreateTelegramDesktopIntent200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerCreateTelegramDesktopIntent({ 
+  Future<Response<AuthControllerCreateTelegramDesktopIntent200Response>> authControllerCreateTelegramDesktopIntent({ 
     required CreateTelegramDesktopIntentRequestDto createTelegramDesktopIntentRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -384,7 +388,35 @@ class AuthApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AuthControllerCreateTelegramDesktopIntent200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerCreateTelegramDesktopIntent200Response),
+      ) as AuthControllerCreateTelegramDesktopIntent200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AuthControllerCreateTelegramDesktopIntent200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 查询 Telegram 桌面端登录意图状态
@@ -399,9 +431,9 @@ class AuthApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramDesktopIntentStatus200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerGetTelegramDesktopIntentStatus({ 
+  Future<Response<AuthControllerGetTelegramDesktopIntentStatus200Response>> authControllerGetTelegramDesktopIntentStatus({ 
     required String intentId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -431,7 +463,35 @@ class AuthApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AuthControllerGetTelegramDesktopIntentStatus200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerGetTelegramDesktopIntentStatus200Response),
+      ) as AuthControllerGetTelegramDesktopIntentStatus200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AuthControllerGetTelegramDesktopIntentStatus200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取 Telegram 登录配置
@@ -521,9 +581,9 @@ class AuthApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramWebAuthorizeUrl200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerGetTelegramWebAuthorizeUrl({ 
+  Future<Response<AuthControllerGetTelegramWebAuthorizeUrl200Response>> authControllerGetTelegramWebAuthorizeUrl({ 
     required String intent,
     required String lng,
     required String redirect,
@@ -562,7 +622,35 @@ class AuthApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AuthControllerGetTelegramWebAuthorizeUrl200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerGetTelegramWebAuthorizeUrl200Response),
+      ) as AuthControllerGetTelegramWebAuthorizeUrl200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AuthControllerGetTelegramWebAuthorizeUrl200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Telegram Bot Webhook 回调
@@ -578,9 +666,9 @@ class AuthApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AuthControllerHandleTelegramBotWebhook200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerHandleTelegramBotWebhook({ 
+  Future<Response<AuthControllerHandleTelegramBotWebhook200Response>> authControllerHandleTelegramBotWebhook({ 
     required String xTelegramBotApiSecretToken,
     required TelegramBotWebhookRequestDto telegramBotWebhookRequestDto,
     CancelToken? cancelToken,
@@ -632,7 +720,35 @@ class AuthApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AuthControllerHandleTelegramBotWebhook200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerHandleTelegramBotWebhook200Response),
+      ) as AuthControllerHandleTelegramBotWebhook200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AuthControllerHandleTelegramBotWebhook200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 用户登录

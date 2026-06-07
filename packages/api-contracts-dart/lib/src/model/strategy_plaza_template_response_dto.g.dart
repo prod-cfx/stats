@@ -369,6 +369,14 @@ class _$StrategyPlazaTemplateResponseDto
   final num displayOrder;
   @override
   final StrategyPlazaDisplayMetricsResponseDto displayMetrics;
+  @override
+  final BuiltList<num>? sparkline;
+  @override
+  final BuiltMap<String, num>? params;
+  @override
+  final BuiltList<StrategyPlazaSignalResponseDto>? signals;
+  @override
+  final BuiltList<num>? equityCurve;
 
   factory _$StrategyPlazaTemplateResponseDto([
     void Function(StrategyPlazaTemplateResponseDtoBuilder)? updates,
@@ -392,6 +400,10 @@ class _$StrategyPlazaTemplateResponseDto
     required this.status,
     required this.displayOrder,
     required this.displayMetrics,
+    this.sparkline,
+    this.params,
+    this.signals,
+    this.equityCurve,
   }) : super._();
   @override
   StrategyPlazaTemplateResponseDto rebuild(
@@ -422,7 +434,11 @@ class _$StrategyPlazaTemplateResponseDto
         leverage == other.leverage &&
         status == other.status &&
         displayOrder == other.displayOrder &&
-        displayMetrics == other.displayMetrics;
+        displayMetrics == other.displayMetrics &&
+        sparkline == other.sparkline &&
+        params == other.params &&
+        signals == other.signals &&
+        equityCurve == other.equityCurve;
   }
 
   @override
@@ -445,6 +461,10 @@ class _$StrategyPlazaTemplateResponseDto
     _$hash = $jc(_$hash, status.hashCode);
     _$hash = $jc(_$hash, displayOrder.hashCode);
     _$hash = $jc(_$hash, displayMetrics.hashCode);
+    _$hash = $jc(_$hash, sparkline.hashCode);
+    _$hash = $jc(_$hash, params.hashCode);
+    _$hash = $jc(_$hash, signals.hashCode);
+    _$hash = $jc(_$hash, equityCurve.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -468,7 +488,11 @@ class _$StrategyPlazaTemplateResponseDto
           ..add('leverage', leverage)
           ..add('status', status)
           ..add('displayOrder', displayOrder)
-          ..add('displayMetrics', displayMetrics))
+          ..add('displayMetrics', displayMetrics)
+          ..add('sparkline', sparkline)
+          ..add('params', params)
+          ..add('signals', signals)
+          ..add('equityCurve', equityCurve))
         .toString();
   }
 }
@@ -564,6 +588,27 @@ class StrategyPlazaTemplateResponseDtoBuilder
     StrategyPlazaDisplayMetricsResponseDtoBuilder? displayMetrics,
   ) => _$this._displayMetrics = displayMetrics;
 
+  ListBuilder<num>? _sparkline;
+  ListBuilder<num> get sparkline => _$this._sparkline ??= ListBuilder<num>();
+  set sparkline(ListBuilder<num>? sparkline) => _$this._sparkline = sparkline;
+
+  MapBuilder<String, num>? _params;
+  MapBuilder<String, num> get params =>
+      _$this._params ??= MapBuilder<String, num>();
+  set params(MapBuilder<String, num>? params) => _$this._params = params;
+
+  ListBuilder<StrategyPlazaSignalResponseDto>? _signals;
+  ListBuilder<StrategyPlazaSignalResponseDto> get signals =>
+      _$this._signals ??= ListBuilder<StrategyPlazaSignalResponseDto>();
+  set signals(ListBuilder<StrategyPlazaSignalResponseDto>? signals) =>
+      _$this._signals = signals;
+
+  ListBuilder<num>? _equityCurve;
+  ListBuilder<num> get equityCurve =>
+      _$this._equityCurve ??= ListBuilder<num>();
+  set equityCurve(ListBuilder<num>? equityCurve) =>
+      _$this._equityCurve = equityCurve;
+
   StrategyPlazaTemplateResponseDtoBuilder() {
     StrategyPlazaTemplateResponseDto._defaults(this);
   }
@@ -588,6 +633,10 @@ class StrategyPlazaTemplateResponseDtoBuilder
       _status = $v.status;
       _displayOrder = $v.displayOrder;
       _displayMetrics = $v.displayMetrics.toBuilder();
+      _sparkline = $v.sparkline?.toBuilder();
+      _params = $v.params?.toBuilder();
+      _signals = $v.signals?.toBuilder();
+      _equityCurve = $v.equityCurve?.toBuilder();
       _$v = null;
     }
     return this;
@@ -685,6 +734,10 @@ class StrategyPlazaTemplateResponseDtoBuilder
               'displayOrder',
             ),
             displayMetrics: displayMetrics.build(),
+            sparkline: _sparkline?.build(),
+            params: _params?.build(),
+            signals: _signals?.build(),
+            equityCurve: _equityCurve?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -694,6 +747,14 @@ class StrategyPlazaTemplateResponseDtoBuilder
 
         _$failedField = 'displayMetrics';
         displayMetrics.build();
+        _$failedField = 'sparkline';
+        _sparkline?.build();
+        _$failedField = 'params';
+        _params?.build();
+        _$failedField = 'signals';
+        _signals?.build();
+        _$failedField = 'equityCurve';
+        _equityCurve?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'StrategyPlazaTemplateResponseDto',

@@ -78,6 +78,14 @@ class _$StrategyPlazaDisplayMetricsResponseDto
   final num? winRatePct;
   @override
   final num? maxDrawdownPct;
+  @override
+  final num? sharpe;
+  @override
+  final num? profitLossRatio;
+  @override
+  final num? tradeCount;
+  @override
+  final num? users;
 
   factory _$StrategyPlazaDisplayMetricsResponseDto([
     void Function(StrategyPlazaDisplayMetricsResponseDtoBuilder)? updates,
@@ -89,6 +97,10 @@ class _$StrategyPlazaDisplayMetricsResponseDto
     this.returnPct,
     this.winRatePct,
     this.maxDrawdownPct,
+    this.sharpe,
+    this.profitLossRatio,
+    this.tradeCount,
+    this.users,
   }) : super._();
   @override
   StrategyPlazaDisplayMetricsResponseDto rebuild(
@@ -106,7 +118,11 @@ class _$StrategyPlazaDisplayMetricsResponseDto
         label == other.label &&
         returnPct == other.returnPct &&
         winRatePct == other.winRatePct &&
-        maxDrawdownPct == other.maxDrawdownPct;
+        maxDrawdownPct == other.maxDrawdownPct &&
+        sharpe == other.sharpe &&
+        profitLossRatio == other.profitLossRatio &&
+        tradeCount == other.tradeCount &&
+        users == other.users;
   }
 
   @override
@@ -116,6 +132,10 @@ class _$StrategyPlazaDisplayMetricsResponseDto
     _$hash = $jc(_$hash, returnPct.hashCode);
     _$hash = $jc(_$hash, winRatePct.hashCode);
     _$hash = $jc(_$hash, maxDrawdownPct.hashCode);
+    _$hash = $jc(_$hash, sharpe.hashCode);
+    _$hash = $jc(_$hash, profitLossRatio.hashCode);
+    _$hash = $jc(_$hash, tradeCount.hashCode);
+    _$hash = $jc(_$hash, users.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -128,7 +148,11 @@ class _$StrategyPlazaDisplayMetricsResponseDto
           ..add('label', label)
           ..add('returnPct', returnPct)
           ..add('winRatePct', winRatePct)
-          ..add('maxDrawdownPct', maxDrawdownPct))
+          ..add('maxDrawdownPct', maxDrawdownPct)
+          ..add('sharpe', sharpe)
+          ..add('profitLossRatio', profitLossRatio)
+          ..add('tradeCount', tradeCount)
+          ..add('users', users))
         .toString();
   }
 }
@@ -159,6 +183,23 @@ class StrategyPlazaDisplayMetricsResponseDtoBuilder
   set maxDrawdownPct(num? maxDrawdownPct) =>
       _$this._maxDrawdownPct = maxDrawdownPct;
 
+  num? _sharpe;
+  num? get sharpe => _$this._sharpe;
+  set sharpe(num? sharpe) => _$this._sharpe = sharpe;
+
+  num? _profitLossRatio;
+  num? get profitLossRatio => _$this._profitLossRatio;
+  set profitLossRatio(num? profitLossRatio) =>
+      _$this._profitLossRatio = profitLossRatio;
+
+  num? _tradeCount;
+  num? get tradeCount => _$this._tradeCount;
+  set tradeCount(num? tradeCount) => _$this._tradeCount = tradeCount;
+
+  num? _users;
+  num? get users => _$this._users;
+  set users(num? users) => _$this._users = users;
+
   StrategyPlazaDisplayMetricsResponseDtoBuilder() {
     StrategyPlazaDisplayMetricsResponseDto._defaults(this);
   }
@@ -170,6 +211,10 @@ class StrategyPlazaDisplayMetricsResponseDtoBuilder
       _returnPct = $v.returnPct;
       _winRatePct = $v.winRatePct;
       _maxDrawdownPct = $v.maxDrawdownPct;
+      _sharpe = $v.sharpe;
+      _profitLossRatio = $v.profitLossRatio;
+      _tradeCount = $v.tradeCount;
+      _users = $v.users;
       _$v = null;
     }
     return this;
@@ -202,6 +247,10 @@ class StrategyPlazaDisplayMetricsResponseDtoBuilder
           returnPct: returnPct,
           winRatePct: winRatePct,
           maxDrawdownPct: maxDrawdownPct,
+          sharpe: sharpe,
+          profitLossRatio: profitLossRatio,
+          tradeCount: tradeCount,
+          users: users,
         );
     replace(_$result);
     return _$result;

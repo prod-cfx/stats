@@ -9,7 +9,9 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
+import 'package:backend_api_contracts/src/model/admin_delete_result_response_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_role_controller_list0200_response.dart';
+import 'package:backend_api_contracts/src/model/admin_role_response_dto.dart';
 import 'package:backend_api_contracts/src/model/create_admin_role_dto.dart';
 import 'package:backend_api_contracts/src/model/update_admin_role_dto.dart';
 
@@ -33,9 +35,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminRoleResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerCreate0({ 
+  Future<Response<AdminRoleResponseDto>> adminRoleControllerCreate0({ 
     required CreateAdminRoleDto createAdminRoleDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -51,7 +53,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -85,7 +93,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminRoleResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminRoleResponseDto),
+      ) as AdminRoleResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminRoleResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 创建角色
@@ -100,9 +136,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminRoleResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerCreate1({ 
+  Future<Response<AdminRoleResponseDto>> adminRoleControllerCreate1({ 
     required CreateAdminRoleDto createAdminRoleDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -118,7 +154,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -152,7 +194,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminRoleResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminRoleResponseDto),
+      ) as AdminRoleResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminRoleResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 删除角色
@@ -167,9 +237,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminDeleteResultResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerDelete0({ 
+  Future<Response<AdminDeleteResultResponseDto>> adminRoleControllerDelete0({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -185,7 +255,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -199,7 +275,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminDeleteResultResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminDeleteResultResponseDto),
+      ) as AdminDeleteResultResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminDeleteResultResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 删除角色
@@ -214,9 +318,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminDeleteResultResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerDelete1({ 
+  Future<Response<AdminDeleteResultResponseDto>> adminRoleControllerDelete1({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -232,7 +336,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -246,7 +356,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminDeleteResultResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminDeleteResultResponseDto),
+      ) as AdminDeleteResultResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminDeleteResultResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取角色详情
@@ -261,9 +399,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminRoleResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerFindOne0({ 
+  Future<Response<AdminRoleResponseDto>> adminRoleControllerFindOne0({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -279,7 +417,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -293,7 +437,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminRoleResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminRoleResponseDto),
+      ) as AdminRoleResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminRoleResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取角色详情
@@ -308,9 +480,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminRoleResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerFindOne1({ 
+  Future<Response<AdminRoleResponseDto>> adminRoleControllerFindOne1({ 
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -326,7 +498,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -340,7 +518,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminRoleResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminRoleResponseDto),
+      ) as AdminRoleResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminRoleResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 获取角色列表（分页）
@@ -379,7 +585,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -468,7 +680,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       validateStatus: validateStatus,
@@ -534,9 +752,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminRoleResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerUpdate0({ 
+  Future<Response<AdminRoleResponseDto>> adminRoleControllerUpdate0({ 
     required String id,
     required UpdateAdminRoleDto updateAdminRoleDto,
     CancelToken? cancelToken,
@@ -553,7 +771,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -587,7 +811,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminRoleResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminRoleResponseDto),
+      ) as AdminRoleResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminRoleResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// 更新角色
@@ -603,9 +855,9 @@ class AdminRoleApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future]
+  /// Returns a [Future] containing a [Response] with a [AdminRoleResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> adminRoleControllerUpdate1({ 
+  Future<Response<AdminRoleResponseDto>> adminRoleControllerUpdate1({ 
     required String id,
     required UpdateAdminRoleDto updateAdminRoleDto,
     CancelToken? cancelToken,
@@ -622,7 +874,13 @@ class AdminRoleApi {
         ...?headers,
       },
       extra: <String, dynamic>{
-        'secure': <Map<String, String>>[],
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearer',
+          },
+        ],
         ...?extra,
       },
       contentType: 'application/json',
@@ -656,7 +914,35 @@ class AdminRoleApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    return _response;
+    AdminRoleResponseDto? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AdminRoleResponseDto),
+      ) as AdminRoleResponseDto;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AdminRoleResponseDto>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
 }

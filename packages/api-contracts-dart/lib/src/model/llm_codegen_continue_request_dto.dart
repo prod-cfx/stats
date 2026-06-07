@@ -13,7 +13,7 @@ part 'llm_codegen_continue_request_dto.g.dart';
 /// LlmCodegenContinueRequestDto
 ///
 /// Properties:
-/// * [message] 
+/// * [message] - 用户在代码生成会话中发送的消息
 /// * [clarificationAnswers] 
 /// * [guideConfig] 
 /// * [locale] 
@@ -25,6 +25,7 @@ part 'llm_codegen_continue_request_dto.g.dart';
 /// * [maxTokens] 
 @BuiltValue()
 abstract class LlmCodegenContinueRequestDto implements Built<LlmCodegenContinueRequestDto, LlmCodegenContinueRequestDtoBuilder> {
+  /// 用户在代码生成会话中发送的消息
   @BuiltValueField(wireName: r'message')
   String get message;
 
