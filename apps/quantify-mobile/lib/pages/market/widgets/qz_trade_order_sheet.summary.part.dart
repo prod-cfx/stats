@@ -15,7 +15,7 @@ class _EstimatesPanel extends StatelessWidget {
   final double margin;
   final double notional;
   final double? liquidation;
-  final double fee;
+  final double? fee;
   final double? tpReturn;
   final double? slLoss;
   final TradeDirection direction;
@@ -47,14 +47,12 @@ class _EstimatesPanel extends StatelessWidget {
             value: liquidation == null
                 ? l10n.tradeOrderSheetEstLiqPlaceholder
                 : liquidation!.toStringAsFixed(2),
-            tone: direction == TradeDirection.buy
-                ? c.marketDown
-                : c.marketUp,
+            tone: direction == TradeDirection.buy ? c.marketDown : c.marketUp,
           ),
           const SizedBox(height: QzSpacing.xs),
           _StatRow(
             label: l10n.tradeOrderSheetStatFee,
-            value: '${fee.toStringAsFixed(2)} USDT',
+            value: fee == null ? '--' : '${fee!.toStringAsFixed(2)} USDT',
           ),
           if (tpReturn != null) ...<Widget>[
             const SizedBox(height: QzSpacing.xs),
@@ -117,6 +115,7 @@ class _StickyFooter extends StatelessWidget {
     required this.loading,
     required this.onPressed,
     required this.accentColor,
+    this.errorText,
   });
 
   final TradeDirection direction;
@@ -126,6 +125,7 @@ class _StickyFooter extends StatelessWidget {
   final bool loading;
   final VoidCallback onPressed;
   final Color accentColor;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -140,9 +140,13 @@ class _StickyFooter extends StatelessWidget {
     } else {
       label = direction == TradeDirection.buy
           ? l10n.tradeOrderSheetSubmitConfirmBuy(
-              amount.toStringAsFixed(4), base)
+              amount.toStringAsFixed(4),
+              base,
+            )
           : l10n.tradeOrderSheetSubmitConfirmSell(
-              amount.toStringAsFixed(4), base);
+              amount.toStringAsFixed(4),
+              base,
+            );
     }
     return Column(
       children: <Widget>[
@@ -167,16 +171,15 @@ class _StickyFooter extends StatelessWidget {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Text(
                         label,
                         style: TextStyle(
-                          color: empty
-                              ? c.textMid
-                              : Colors.white,
+                          color: empty ? c.textMid : Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
@@ -186,6 +189,14 @@ class _StickyFooter extends StatelessWidget {
           ),
         ),
         const SizedBox(height: QzSpacing.xs),
+        if (errorText != null) ...<Widget>[
+          Text(
+            errorText!,
+            key: const Key('trade-order-submit-error'),
+            style: TextStyle(color: c.marketDown, fontSize: 11),
+          ),
+          const SizedBox(height: QzSpacing.xs),
+        ],
         Text(
           l10n.tradeOrderSheetRiskHint,
           style: TextStyle(color: c.textDim, fontSize: 10),

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/models/trading_order_models.dart';
+import '../../../data/providers/repository_providers.dart';
+import '../../../data/repositories/trading_order_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -20,7 +24,7 @@ enum TradeOrderKind { limit, market, conditional }
 /// 保证金模式。
 enum TradeMarginMode { cross, isolated }
 
-/// mock 提交结果。本期未接交易后端，调用方通常只关心是否成功（非 null）。
+/// 提交结果。mock 模式返回本地结果；真实模式透传后端 `orderId/requestId`。
 class TradeOrderResult {
   const TradeOrderResult({
     required this.direction,
@@ -33,6 +37,8 @@ class TradeOrderResult {
     this.triggerPrice,
     this.takeProfit,
     this.stopLoss,
+    this.orderId,
+    this.requestId,
   });
 
   final TradeDirection direction;
@@ -45,6 +51,8 @@ class TradeOrderResult {
   final double? triggerPrice;
   final double? takeProfit;
   final double? stopLoss;
+  final String? orderId;
+  final String? requestId;
 }
 
 /// 交易详情底部下单弹层。
@@ -53,9 +61,7 @@ class TradeOrderResult {
 /// 主交互：保证金模式 popover、固定倍数杠杆 popover、可拖拽百分比 slider、
 /// 止盈止损 toggle、保证金/名义价值/强平价/手续费/止盈止损预估、sticky footer。
 ///
-/// 真后端未接：提交触发 `_submitDuration` `Future.delayed` mock → pop 返回
-/// `TradeOrderResult`；调用方据此 toast / 注入「我的成交记录」。
-class QzTradeOrderSheet extends StatefulWidget {
+class QzTradeOrderSheet extends ConsumerStatefulWidget {
   const QzTradeOrderSheet({
     super.key,
     required this.symbol,
@@ -117,25 +123,15 @@ class QzTradeOrderSheet extends StatefulWidget {
   }
 
   @override
-  State<QzTradeOrderSheet> createState() => _QzTradeOrderSheetState();
+  ConsumerState<QzTradeOrderSheet> createState() => _QzTradeOrderSheetState();
 }
 
-class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
+class _QzTradeOrderSheetState extends ConsumerState<QzTradeOrderSheet> {
   /// 验收：固定倍数集合，来自设计稿 `LEVERAGES`。
   static const List<int> _leverageOptions = <int>[3, 5, 10, 20, 50, 75, 100];
 
   /// 默认杠杆。
   static const double _defaultLeverage = 10;
-
-  /// mock 提交时长。验收：≥0.5s 给用户可见的 loading；取 800ms。
-  static const Duration _submitDuration = Duration(milliseconds: 800);
-
-  /// taker 手续费率，mock。
-  static const double _takerFeeRate = 0.0005;
-
-  /// 强平价系数（mock）：long → entry × (1 − k/lev)；short → entry × (1 + k/lev)
-  /// k 取 0.9 对齐设计稿。
-  static const double _liqK = 0.9;
 
   TradeOrderKind _kind = TradeOrderKind.limit;
   TradeMarginMode _marginMode = TradeMarginMode.cross;
@@ -145,6 +141,12 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
   bool _showLevPopover = false;
   bool _showMarginPopover = false;
   bool _submitting = false;
+  bool _loadingContext = true;
+  TradingOrderContext? _orderContext;
+  TradingOrderPreview? _preview;
+  String? _submitError;
+  int _previewRequestId = 0;
+  bool _loadingPreview = false;
 
   late final TextEditingController _priceCtrl;
   late final TextEditingController _triggerCtrl;
@@ -167,6 +169,7 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
     ]) {
       c.addListener(_onFieldChanged);
     }
+    _loadOrderContext();
   }
 
   @override
@@ -184,7 +187,77 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
   }
 
   void _onFieldChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() => _submitError = null);
+    _refreshPreview();
+  }
+
+  TradingOrderRepository get _repository =>
+      ref.read(tradingOrderRepositoryProvider);
+
+  Future<void> _loadOrderContext() async {
+    try {
+      final TradingOrderContext context = await _repository.getOrderContext(
+        symbol: widget.symbol,
+      );
+      if (!mounted) return;
+      setState(() {
+        _orderContext = context;
+        _loadingContext = false;
+      });
+      _refreshPreview();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingContext = false;
+        _submitError = '下单失败，请稍后重试';
+      });
+    }
+  }
+
+  Future<void> _refreshPreview() async {
+    final TradingOrderRequest? request = _buildRequestOrNull();
+    if (request == null) {
+      setState(() {
+        _preview = null;
+        _loadingPreview = false;
+      });
+      return;
+    }
+    final int requestId = ++_previewRequestId;
+    setState(() {
+      _preview = null;
+      _loadingPreview = true;
+    });
+    try {
+      final TradingOrderPreview preview = await _repository.previewOrder(
+        request,
+      );
+      if (!mounted || requestId != _previewRequestId) return;
+      setState(() {
+        _preview = preview;
+        _loadingPreview = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _previewRequestId) return;
+      setState(
+        () {
+          _preview = const TradingOrderPreview(
+            canSubmit: false,
+            reason: 'preview failed',
+          );
+          _loadingPreview = false;
+        },
+      );
+    }
+  }
+
+  void _updateOrderInputs(VoidCallback update) {
+    setState(() {
+      update();
+      _submitError = null;
+    });
+    _refreshPreview();
   }
 
   double? _parsePositive(String text) {
@@ -199,7 +272,10 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
     return _parsePositive(_priceCtrl.text);
   }
 
-  double get _margin => widget.availableBalance * _pct / 100;
+  double get _availableBalance =>
+      _orderContext?.availableBalanceUsd ?? widget.availableBalance;
+
+  double get _margin => _availableBalance * _pct / 100;
   double get _notional => _margin * _leverage;
   double get _amount {
     final double? p = _entryPrice;
@@ -207,15 +283,10 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
     return _notional / p;
   }
 
-  double get _fee => _notional * _takerFeeRate;
+  double? get _fee => _preview?.fee ?? _orderContext?.fee;
 
   double? get _liquidationPrice {
-    final double? entry = _entryPrice;
-    if (entry == null || _leverage <= 0) return null;
-    final double k = _liqK / _leverage;
-    return widget.direction == TradeDirection.buy
-        ? entry * (1 - k)
-        : entry * (1 + k);
+    return _preview?.liquidationPrice ?? _orderContext?.liquidationPrice;
   }
 
   /// TP 必须落在「盈利方向」才计预期收益：buy → tp > entry；sell → tp < entry。
@@ -246,7 +317,10 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
 
   bool get _canSubmit {
     if (_submitting) return false;
+    if (_loadingContext) return false;
+    if (_loadingPreview) return false;
     if (_pct <= 0) return false;
+    if (_preview == null || !_preview!.canSubmit) return false;
     switch (_kind) {
       case TradeOrderKind.market:
         return widget.markPrice != null && widget.markPrice! > 0;
@@ -260,8 +334,23 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
-    setState(() => _submitting = true);
-    await Future<void>.delayed(_submitDuration);
+    final TradingOrderRequest? request = _buildRequestOrNull();
+    if (request == null) return;
+    setState(() {
+      _submitting = true;
+      _submitError = null;
+    });
+    final TradingOrderSubmitResult submitResult;
+    try {
+      submitResult = await _repository.submitOrder(request);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _submitError = '下单失败，请稍后重试';
+      });
+      return;
+    }
     if (!mounted) return;
     final double? price = _kind == TradeOrderKind.market
         ? null
@@ -279,8 +368,38 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
           : null,
       takeProfit: _tpslEnabled ? _parsePositive(_tpCtrl.text) : null,
       stopLoss: _tpslEnabled ? _parsePositive(_slCtrl.text) : null,
+      orderId: submitResult.orderId,
+      requestId: submitResult.requestId,
     );
     Navigator.of(context).pop(result);
+  }
+
+  TradingOrderRequest? _buildRequestOrNull() {
+    if (_pct <= 0) return null;
+    final double amount = _amount;
+    if (amount <= 0) return null;
+    final double? price = _kind == TradeOrderKind.market
+        ? null
+        : _parsePositive(_priceCtrl.text);
+    if (_kind != TradeOrderKind.market && price == null) return null;
+    final double? triggerPrice = _kind == TradeOrderKind.conditional
+        ? _parsePositive(_triggerCtrl.text)
+        : null;
+    if (_kind == TradeOrderKind.conditional && triggerPrice == null) {
+      return null;
+    }
+    return TradingOrderRequest(
+      symbol: widget.symbol,
+      direction: _toRepoDirection(widget.direction),
+      kind: _toRepoKind(_kind),
+      price: price,
+      amount: amount,
+      leverage: _leverage,
+      marginMode: _toRepoMarginMode(_marginMode),
+      triggerPrice: triggerPrice,
+      takeProfit: _tpslEnabled ? _parsePositive(_tpCtrl.text) : null,
+      stopLoss: _tpslEnabled ? _parsePositive(_slCtrl.text) : null,
+    );
   }
 
   void _applyReferencePrice(double? p) {
@@ -336,11 +455,11 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
                 _showLevPopover = !_showLevPopover;
                 _showMarginPopover = false;
               }),
-              onPickMargin: (TradeMarginMode m) => setState(() {
+              onPickMargin: (TradeMarginMode m) => _updateOrderInputs(() {
                 _marginMode = m;
                 _showMarginPopover = false;
               }),
-              onPickLeverage: (int lev) => setState(() {
+              onPickLeverage: (int lev) => _updateOrderInputs(() {
                 _leverage = lev.toDouble();
                 _showLevPopover = false;
               }),
@@ -356,7 +475,7 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
                     _OrderTypeTabs(
                       value: _kind,
                       onChanged: (TradeOrderKind k) =>
-                          setState(() => _kind = k),
+                          _updateOrderInputs(() => _kind = k),
                       accentColor: sideColor,
                     ),
                     const SizedBox(height: QzSpacing.md),
@@ -390,19 +509,19 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
                     ],
                     _AmountRow(
                       amount: _amount,
-                      availableBalance: widget.availableBalance,
+                      availableBalance: _availableBalance,
                     ),
                     const SizedBox(height: QzSpacing.md),
                     _PercentSlider(
                       value: _pct,
-                      onChanged: (double v) => setState(() => _pct = v),
+                      onChanged: (double v) =>
+                          _updateOrderInputs(() => _pct = v),
                       accentColor: sideColor,
                     ),
                     const SizedBox(height: QzSpacing.md),
                     _TpSlToggleRow(
                       enabled: _tpslEnabled,
-                      onChanged: (bool v) =>
-                          setState(() => _tpslEnabled = v),
+                      onChanged: (bool v) => setState(() => _tpslEnabled = v),
                       accentColor: sideColor,
                     ),
                     if (_tpslEnabled) ...<Widget>[
@@ -453,6 +572,7 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
               loading: _submitting,
               onPressed: _submit,
               accentColor: sideColor,
+              errorText: _submitError,
             ),
           ],
         ),
@@ -469,9 +589,28 @@ class _QzTradeOrderSheetState extends State<QzTradeOrderSheet> {
     }
     return symbol;
   }
+
+  static TradingOrderDirection _toRepoDirection(TradeDirection direction) {
+    return direction == TradeDirection.buy
+        ? TradingOrderDirection.buy
+        : TradingOrderDirection.sell;
+  }
+
+  static TradingOrderKind _toRepoKind(TradeOrderKind kind) {
+    return switch (kind) {
+      TradeOrderKind.limit => TradingOrderKind.limit,
+      TradeOrderKind.market => TradingOrderKind.market,
+      TradeOrderKind.conditional => TradingOrderKind.conditional,
+    };
+  }
+
+  static TradingMarginMode _toRepoMarginMode(TradeMarginMode mode) {
+    return mode == TradeMarginMode.cross
+        ? TradingMarginMode.cross
+        : TradingMarginMode.isolated;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // 子组件
 // ---------------------------------------------------------------------------
-

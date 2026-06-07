@@ -1,10 +1,56 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/data/models/trading_order_models.dart';
+import 'package:quantify_mobile/data/providers/repository_providers.dart';
+import 'package:quantify_mobile/data/repositories/trading_order_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/pages/market/widgets/qz_trade_order_sheet.dart';
+import 'package:riverpod/misc.dart' show Override;
+
+class _FakeTradingOrderRepository implements TradingOrderRepository {
+  _FakeTradingOrderRepository({
+    this.result = const TradingOrderSubmitResult(orderId: 'ord-1'),
+    this.submitError,
+    this.previewCompleter,
+  });
+
+  final TradingOrderSubmitResult result;
+  final Object? submitError;
+  final Completer<TradingOrderPreview>? previewCompleter;
+  final List<TradingOrderRequest> submissions = <TradingOrderRequest>[];
+
+  @override
+  Future<TradingOrderContext> getOrderContext({required String symbol}) async {
+    return TradingOrderContext(symbol: symbol, availableBalanceUsd: 1000);
+  }
+
+  @override
+  Future<TradingOrderPreview> previewOrder(TradingOrderRequest request) async {
+    final Completer<TradingOrderPreview>? completer = previewCompleter;
+    if (completer != null) return completer.future;
+    return const TradingOrderPreview(
+      canSubmit: true,
+      fee: 2.5,
+      liquidationPrice: 92,
+    );
+  }
+
+  @override
+  Future<TradingOrderSubmitResult> submitOrder(
+    TradingOrderRequest request,
+  ) async {
+    submissions.add(request);
+    final Object? error = submitError;
+    if (error != null) throw error;
+    return result;
+  }
+}
 
 /// 弹起 sheet 的脚手架：暴露 `captured` 闭包 + sheet ready 的 future。
 class _SheetHandle {
@@ -16,32 +62,40 @@ Future<_SheetHandle> _openSheet(
   TradeDirection direction = TradeDirection.buy,
   double markPrice = 100,
   double availableBalance = 1000,
+  TradingOrderRepository? repository,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 900));
   final _SheetHandle handle = _SheetHandle();
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildQzThemeData(
-        const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
-      ),
-      home: Scaffold(
-        body: Builder(
-          builder: (BuildContext ctx) => Center(
-            child: ElevatedButton(
-              key: const Key('open'),
-              onPressed: () async {
-                handle.captured = await QzTradeOrderSheet.show(
-                  ctx,
-                  symbol: 'BTCUSDT',
-                  direction: direction,
-                  markPrice: markPrice,
-                  availableBalance: availableBalance,
-                );
-              },
-              child: const Text('open'),
+    ProviderScope(
+      overrides: <Override>[
+        tradingOrderRepositoryProvider.overrideWithValue(
+          repository ?? _FakeTradingOrderRepository(),
+        ),
+      ],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(
+          const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (BuildContext ctx) => Center(
+              child: ElevatedButton(
+                key: const Key('open'),
+                onPressed: () async {
+                  handle.captured = await QzTradeOrderSheet.show(
+                    ctx,
+                    symbol: 'BTCUSDT',
+                    direction: direction,
+                    markPrice: markPrice,
+                    availableBalance: availableBalance,
+                  );
+                },
+                child: const Text('open'),
+              ),
             ),
           ),
         ),
@@ -115,9 +169,7 @@ void main() {
     expect(find.textContaining('市价立即成交'), findsOneWidget);
   });
 
-  testWidgets('QzTradeOrderSheet 切到条件委托：显示触发价输入', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('QzTradeOrderSheet 切到条件委托：显示触发价输入', (WidgetTester tester) async {
     await _openSheet(tester);
 
     await tester.tap(find.byKey(const Key('trade-order-tab-conditional')));
@@ -200,11 +252,79 @@ void main() {
     expect(handle.captured!.leverage, 10);
     expect(handle.captured!.amount, closeTo(25, 0.0001));
     expect(handle.captured!.price, 200);
+    expect(handle.captured!.orderId, 'ord-1');
   });
 
-  testWidgets('QzTradeOrderSheet 提交按钮：pct=0 时禁用', (
+  testWidgets('QzTradeOrderSheet 真实 repository override：成功提交真实 orderId', (
     WidgetTester tester,
   ) async {
+    final _FakeTradingOrderRepository repo = _FakeTradingOrderRepository(
+      result: const TradingOrderSubmitResult(requestId: 'req-1'),
+    );
+    final _SheetHandle handle = await _openSheet(tester, repository: repo);
+
+    await tester.tap(find.byKey(const Key('trade-order-pct-50')));
+    await tester.pumpAndSettle();
+    expect(find.text('500.00 USDT'), findsOneWidget);
+    expect(find.text('2.50 USDT'), findsOneWidget);
+    expect(find.text('92.00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trade-order-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.submissions, hasLength(1));
+    expect(repo.submissions.single.symbol, 'BTCUSDT');
+    expect(repo.submissions.single.direction, TradingOrderDirection.buy);
+    expect(handle.captured, isNotNull);
+    expect(handle.captured!.requestId, 'req-1');
+  });
+
+  testWidgets('QzTradeOrderSheet 真实 repository override：preview 未完成时禁止提交', (
+    WidgetTester tester,
+  ) async {
+    final Completer<TradingOrderPreview> previewCompleter =
+        Completer<TradingOrderPreview>();
+    final _FakeTradingOrderRepository repo = _FakeTradingOrderRepository(
+      previewCompleter: previewCompleter,
+    );
+    await _openSheet(tester, repository: repo);
+
+    await tester.tap(find.byKey(const Key('trade-order-pct-50')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('trade-order-submit')));
+    await tester.pump();
+
+    expect(repo.submissions, isEmpty);
+
+    previewCompleter.complete(
+      const TradingOrderPreview(canSubmit: true, fee: 2.5),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trade-order-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.submissions, hasLength(1));
+  });
+
+  testWidgets('QzTradeOrderSheet 真实 repository override：失败不关闭 sheet 并显示错误', (
+    WidgetTester tester,
+  ) async {
+    final _FakeTradingOrderRepository repo = _FakeTradingOrderRepository(
+      submitError: Exception('exchange rejected'),
+    );
+    final _SheetHandle handle = await _openSheet(tester, repository: repo);
+
+    await tester.tap(find.byKey(const Key('trade-order-pct-50')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trade-order-submit')));
+    await tester.pumpAndSettle();
+
+    expect(handle.captured, isNull);
+    expect(find.byKey(const Key('trade-order-submit-error')), findsOneWidget);
+    expect(find.text('下单失败，请稍后重试'), findsOneWidget);
+  });
+
+  testWidgets('QzTradeOrderSheet 提交按钮：pct=0 时禁用', (WidgetTester tester) async {
     await _openSheet(tester);
     final Opacity opacity = tester.widget<Opacity>(
       find.descendant(
