@@ -19,6 +19,7 @@ export 'api_pred_market_repository.dart';
 export 'api_strategy_repository.dart';
 export 'api_ticker_repository.dart';
 export 'api_trades_repository.dart';
+export 'api_trading_order_repository.dart';
 export 'api_whale_extras_repository.dart';
 export 'api_whale_feed_repository.dart';
 export 'api_whale_holdings_repository.dart';

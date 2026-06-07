@@ -31,6 +31,7 @@ import '../mock/mock_long_short_repository.dart';
 import '../mock/mock_orderbook_repository.dart';
 import '../mock/mock_strategy_repository.dart';
 import '../mock/mock_ticker_repository.dart';
+import '../mock/mock_trading_order_repository.dart';
 import '../mock/mock_whale_feed_repository.dart';
 import '../mock/mock_whale_holdings_repository.dart';
 import '../mock/mock_whale_leaderboard_repository.dart';
@@ -275,6 +276,18 @@ final Provider<ApiKeyRepository> apiKeyRepositoryProvider =
       return ref.watch(useMockProvider)
           ? MockApiKeyRepository()
           : ApiApiKeyRepository(ref.watch(apiKeyServiceProvider));
+    });
+
+/// 交易下单 Repository（#2307 PR1）。mock 保留当前 sheet 的原型体验；真实模式
+/// 从账户仓库读取余额，并通过后端下单接口决定提交成功/失败。
+final Provider<TradingOrderRepository> tradingOrderRepositoryProvider =
+    Provider<TradingOrderRepository>((Ref ref) {
+      return ref.watch(useMockProvider)
+          ? const MockTradingOrderRepository()
+          : ApiTradingOrderRepository(
+              apiClient: ref.watch(apiClientProvider),
+              accountRepository: ref.watch(accountRepositoryProvider),
+            );
     });
 
 /// 当前账户概要。从 `/me` 主页 watch；写入路径走 repository。
