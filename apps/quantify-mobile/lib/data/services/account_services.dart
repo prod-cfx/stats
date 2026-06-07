@@ -44,9 +44,6 @@ class AiChatService {
       _client.post('/llm-strategy-codegen/sessions/$sessionId/messages',
           body: turn);
 
-  Future<dynamic> getSession(String sessionId) =>
-      _client.get('/account/ai-quant/conversations/$sessionId');
-
   /// 异步 deploy 第一段：提交部署请求，返回详情信封。
   /// 契约 body 为 AccountAiQuantDeployRequestDto。
   Future<dynamic> deployStrategy(Map<String, dynamic> body) =>

@@ -36,7 +36,89 @@ class _StubAiChatService extends AiChatService {
   }
 }
 
+/// 替身：仅预置 listSessions 响应，校验 watchSession 从 list 真源派生
+/// （契约无单会话 GET）；不发真实 HTTP（issue #2287）。
+class _StubListAiChatService extends AiChatService {
+  _StubListAiChatService({required this.rows})
+      : super(ApiClient(baseUrl: 'http://localhost'));
+
+  final List<Map<String, dynamic>> rows;
+  int listCallCount = 0;
+
+  @override
+  Future<dynamic> listSessions() async {
+    listCallCount++;
+    return rows;
+  }
+}
+
 void main() {
+  group('ApiAiChatRepository.watchSession 从 list 派生（契约无单会话 GET）', () {
+    test('命中会话且有消息 → 发末条消息后结束', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 's-1',
+            'title': '会话1',
+            'messages': <Map<String, dynamic>>[
+              <String, dynamic>{'id': 'm-1', 'role': 'user', 'content': '早'},
+              <String, dynamic>{'id': 'm-2', 'role': 'assistant', 'content': '末条'},
+            ],
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final List<ChatTurn> turns = await repo.watchSession('s-1').toList();
+
+      expect(svc.listCallCount, 1);
+      expect(turns, hasLength(1));
+      expect(turns.single.id, 'm-2');
+      expect(turns.single.content, '末条');
+    });
+
+    test('命中会话但无消息 → 不发任何帧', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 's-1',
+            'title': '空会话',
+            'messages': <Map<String, dynamic>>[],
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final List<ChatTurn> turns = await repo.watchSession('s-1').toList();
+
+      expect(turns, isEmpty);
+    });
+
+    test('未命中会话 → 静默结束（不抛、不发帧）', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{'id': 's-1', 'title': '会话1'},
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final List<ChatTurn> turns =
+          await repo.watchSession('missing').toList();
+
+      expect(turns, isEmpty);
+    });
+
+    test('list 为空 → 静默结束', () async {
+      final _StubListAiChatService svc =
+          _StubListAiChatService(rows: <Map<String, dynamic>>[]);
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final List<ChatTurn> turns = await repo.watchSession('s-1').toList();
+
+      expect(turns, isEmpty);
+    });
+  });
+
   group('ApiAiChatRepository.markDeployed 异步两段预埋', () {
     test('首次 pending（data:null）后成功（data:{...}）→ 返回非空 session，'
         '轮询次数 ≤ 3', () async {

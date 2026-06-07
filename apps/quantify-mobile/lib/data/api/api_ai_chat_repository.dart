@@ -48,8 +48,10 @@ AiSession _parseSession(Map<String, dynamic> m) {
 /// [AiChatRepository] 真实现（issue #2189）。
 ///
 /// 会话 CRUD + 发消息走真实 HTTP + JSON 反序列化。`watchSession` 后端暂无
-/// 流式契约，发一帧最新会话末条消息后结束（避免假装持续推送）；真实 SSE/WS
-/// 接入属后续 issue。
+/// 单会话 GET / 流式契约（`/conversations/{id}` 仅 DELETE/PATCH），故从
+/// `listSessions`（`GET /conversations`，契约真源）派生目标会话末条消息后
+/// 结束（避免假装持续推送，也不误打不存在的 GET 端点）；真实 SSE/WS 接入
+/// 属后续 issue。
 class ApiAiChatRepository implements AiChatRepository {
   ApiAiChatRepository(this._service);
 
@@ -91,9 +93,15 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) async* {
-    final Map<String, dynamic> m = asMap(await _service.getSession(sessionId));
-    final AiSession session = _parseSession(m);
-    if (session.messages.isNotEmpty) yield session.messages.last;
+    // 契约无单会话 GET（`/conversations/{id}` 仅 DELETE/PATCH）；从 list 真源
+    // 派生目标会话。命中且有消息则发末条；未命中静默结束（不抛，UI 接入安全）。
+    final List<AiSession> sessions = await listSessions();
+    for (final AiSession session in sessions) {
+      if (session.id == sessionId) {
+        if (session.messages.isNotEmpty) yield session.messages.last;
+        return;
+      }
+    }
   }
 
   @override
