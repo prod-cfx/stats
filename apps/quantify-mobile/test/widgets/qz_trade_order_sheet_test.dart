@@ -18,11 +18,17 @@ class _FakeTradingOrderRepository implements TradingOrderRepository {
     this.result = const TradingOrderSubmitResult(orderId: 'ord-1'),
     this.submitError,
     this.previewCompleter,
+    this.preview = const TradingOrderPreview(
+      canSubmit: true,
+      fee: 2.5,
+      liquidationPrice: 92,
+    ),
   });
 
   final TradingOrderSubmitResult result;
   final Object? submitError;
   final Completer<TradingOrderPreview>? previewCompleter;
+  final TradingOrderPreview preview;
   final List<TradingOrderRequest> submissions = <TradingOrderRequest>[];
 
   @override
@@ -34,11 +40,7 @@ class _FakeTradingOrderRepository implements TradingOrderRepository {
   Future<TradingOrderPreview> previewOrder(TradingOrderRequest request) async {
     final Completer<TradingOrderPreview>? completer = previewCompleter;
     if (completer != null) return completer.future;
-    return const TradingOrderPreview(
-      canSubmit: true,
-      fee: 2.5,
-      liquidationPrice: 92,
-    );
+    return preview;
   }
 
   @override
@@ -305,6 +307,27 @@ void main() {
 
     expect(repo.submissions, hasLength(1));
   });
+
+  testWidgets(
+    'QzTradeOrderSheet 真实 repository override：preview false 禁用并展示原因',
+    (WidgetTester tester) async {
+      final _FakeTradingOrderRepository repo = _FakeTradingOrderRepository(
+        preview: const TradingOrderPreview(
+          canSubmit: false,
+          reason: 'insufficient balance',
+        ),
+      );
+      await _openSheet(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('trade-order-pct-50')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('trade-order-submit')));
+      await tester.pump();
+
+      expect(repo.submissions, isEmpty);
+      expect(find.text('insufficient balance'), findsOneWidget);
+    },
+  );
 
   testWidgets('QzTradeOrderSheet 真实 repository override：失败不关闭 sheet 并显示错误', (
     WidgetTester tester,

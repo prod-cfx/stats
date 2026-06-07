@@ -240,15 +240,13 @@ class _QzTradeOrderSheetState extends ConsumerState<QzTradeOrderSheet> {
       });
     } catch (_) {
       if (!mounted || requestId != _previewRequestId) return;
-      setState(
-        () {
-          _preview = const TradingOrderPreview(
-            canSubmit: false,
-            reason: 'preview failed',
-          );
-          _loadingPreview = false;
-        },
-      );
+      setState(() {
+        _preview = const TradingOrderPreview(
+          canSubmit: false,
+          reason: 'preview failed',
+        );
+        _loadingPreview = false;
+      });
     }
   }
 
@@ -330,6 +328,14 @@ class _QzTradeOrderSheetState extends ConsumerState<QzTradeOrderSheet> {
         return _parsePositive(_priceCtrl.text) != null &&
             _parsePositive(_triggerCtrl.text) != null;
     }
+  }
+
+  String? get _previewBlockReason {
+    final TradingOrderPreview? preview = _preview;
+    if (_pct <= 0 || preview == null || preview.canSubmit) return null;
+    final String? reason = preview.reason;
+    if (reason == null || reason.trim().isEmpty) return null;
+    return reason;
   }
 
   Future<void> _submit() async {
@@ -572,7 +578,7 @@ class _QzTradeOrderSheetState extends ConsumerState<QzTradeOrderSheet> {
               loading: _submitting,
               onPressed: _submit,
               accentColor: sideColor,
-              errorText: _submitError,
+              errorText: _submitError ?? _previewBlockReason,
             ),
           ],
         ),

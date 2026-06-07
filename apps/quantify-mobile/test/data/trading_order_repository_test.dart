@@ -21,9 +21,11 @@ class _AccountRepo implements AccountRepository {
 }
 
 class _CaptureApiClient extends ApiClient {
-  _CaptureApiClient(this.response) : super(baseUrl: 'http://stub.invalid');
+  _CaptureApiClient(this.response, {this.postError})
+    : super(baseUrl: 'http://stub.invalid');
 
   final Object? response;
+  final Object? postError;
   String? lastPath;
   Object? lastBody;
 
@@ -35,6 +37,8 @@ class _CaptureApiClient extends ApiClient {
   }) async {
     lastPath = path;
     lastBody = body;
+    final Object? error = postError;
+    if (error != null) throw error;
     return response;
   }
 }
@@ -102,15 +106,61 @@ void main() {
         final TradingOrderContext context = await repo.getOrderContext(
           symbol: 'ETHUSDT',
         );
-        final TradingOrderPreview preview = await repo.previewOrder(_request());
 
         expect(context.availableBalanceUsd, 1500);
         expect(context.fee, isNull);
         expect(context.liquidationPrice, isNull);
-        expect(preview.canSubmit, isFalse);
-        expect(preview.reason, contains('preview'));
       },
     );
+
+    test('preview posts order body and parses successful estimate', () async {
+      final _CaptureApiClient client = _CaptureApiClient(<String, dynamic>{
+        'data': <String, dynamic>{
+          'canSubmit': true,
+          'fee': 1.25,
+          'liquidationPrice': 90.5,
+          'minAmount': 0.01,
+          'reason': null,
+        },
+      });
+      final ApiTradingOrderRepository repo = ApiTradingOrderRepository(
+        apiClient: client,
+        accountRepository: const _AccountRepo(_account),
+      );
+
+      final TradingOrderPreview preview = await repo.previewOrder(_request());
+
+      expect(client.lastPath, '/account/trading/orders/preview');
+      expect(client.lastBody, <String, dynamic>{
+        'symbol': 'BTCUSDT',
+        'side': 'BUY',
+        'type': 'LIMIT',
+        'price': 100,
+        'amount': 2,
+        'leverage': 10,
+        'marginMode': 'CROSS',
+      });
+      expect(preview.canSubmit, isTrue);
+      expect(preview.fee, 1.25);
+      expect(preview.liquidationPrice, 90.5);
+      expect(preview.minAmount, 0.01);
+      expect(preview.reason, isNull);
+    });
+
+    test('preview converts backend rejection into disabled preview', () async {
+      final ApiTradingOrderRepository repo = ApiTradingOrderRepository(
+        apiClient: _CaptureApiClient(
+          null,
+          postError: const ApiException(message: 'insufficient balance'),
+        ),
+        accountRepository: const _AccountRepo(_account),
+      );
+
+      final TradingOrderPreview preview = await repo.previewOrder(_request());
+
+      expect(preview.canSubmit, isFalse);
+      expect(preview.reason, 'insufficient balance');
+    });
 
     test('submit posts normalized order body and parses orderId', () async {
       final _CaptureApiClient client = _CaptureApiClient(<String, dynamic>{
