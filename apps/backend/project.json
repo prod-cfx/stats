@@ -48,7 +48,8 @@
         "command": "pnpm exec ts-node -r tsconfig-paths/register src/swagger/export-openapi.ts",
         "cwd": "apps/backend",
         "env": {
-          "SKIP_PRISMA_CONNECT": "true"
+          "SKIP_PRISMA_CONNECT": "true",
+          "SKIP_REDIS_CONNECT": "true"
         }
       }
     },

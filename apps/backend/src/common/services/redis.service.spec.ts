@@ -61,6 +61,28 @@ describe('RedisService', () => {
     expect(logger.warn).toHaveBeenCalledWith('[RedisService] mock redis mode is enabled, using mock redis client')
   })
 
+  it('uses the mock client when SKIP_REDIS_CONNECT=true even in production with REDIS_URL present', () => {
+    const prev = process.env.SKIP_REDIS_CONNECT
+    process.env.SKIP_REDIS_CONNECT = 'true'
+    try {
+      const configService = createConfigService({
+        'app.appEnv': 'production',
+        'redis.url': 'redis://localhost:6379/0',
+        USE_MOCK_DATA: false,
+      })
+      const logger = createLogger()
+
+      const service = new RedisService(configService, logger)
+
+      expect(service.isReady()).toBe(true)
+      expect(Redis).not.toHaveBeenCalled()
+      expect(logger.warn).toHaveBeenCalledWith('[RedisService] mock redis mode is enabled, using mock redis client')
+    } finally {
+      if (prev === undefined) delete process.env.SKIP_REDIS_CONNECT
+      else process.env.SKIP_REDIS_CONNECT = prev
+    }
+  })
+
   it('creates a real client from REDIS_URL outside mock mode', () => {
     const configService = createConfigService({
       'app.appEnv': 'production',
