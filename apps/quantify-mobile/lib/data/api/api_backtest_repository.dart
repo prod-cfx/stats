@@ -13,7 +13,9 @@ class ApiBacktestRepository implements BacktestRepository {
   final BacktestService _service;
 
   BacktestResult _merge(dynamic raw) {
-    final Map<String, dynamic> m = asMap(raw);
+    final Map<String, dynamic> envelope = asMap(raw);
+    final Map<String, dynamic> m = asMap(envelope['data']);
+    if (m.isEmpty) m.addAll(envelope);
     final BacktestResult base = _emptyBacktestResult();
     if (m.isEmpty) return base;
     return BacktestResult(
@@ -56,11 +58,11 @@ class ApiBacktestRepository implements BacktestRepository {
         pick(m, <String>['rangeEnd']),
         fallback: base.rangeEnd,
       ),
-      equityCurve: base.equityCurve,
-      drawdownMarkers: base.drawdownMarkers,
-      monthlyRows: base.monthlyRows,
-      trades: base.trades,
-      riskRows: base.riskRows,
+      equityCurve: _parseEquityCurve(m),
+      drawdownMarkers: _parseDrawdownMarkers(m),
+      monthlyRows: _parseMonthlyRows(m),
+      trades: _parseTrades(m),
+      riskRows: _parseRiskRows(m),
       aiAssessment: asString(
         pick(m, <String>['aiAssessment']),
         fallback: base.aiAssessment,
@@ -83,6 +85,110 @@ class ApiBacktestRepository implements BacktestRepository {
   @override
   Future<BacktestResult> getResult(String id) async {
     return _merge(await _service.getResult(id));
+  }
+
+  List<double> _parseEquityCurve(Map<String, dynamic> m) {
+    final Object? raw = pick(m, <String>['equityCurve', 'equity', 'curve']);
+    return asList(raw)
+        .map((Object? item) {
+          if (item is num || item is String) return asDoubleOrNull(item);
+          final Map<String, dynamic> row = asMap(item);
+          return asDoubleOrNull(
+            pick(row, <String>['value', 'equity', 'balance', 'nav']),
+          );
+        })
+        .whereType<double>()
+        .toList(growable: false);
+  }
+
+  List<int> _parseDrawdownMarkers(Map<String, dynamic> m) {
+    final Object? raw = pick(m, <String>[
+      'drawdownMarkers',
+      'drawdowns',
+      'drawdownPoints',
+    ]);
+    return asList(raw)
+        .map((Object? item) {
+          if (item is num || item is String) return asIntOrNull(item);
+          final Map<String, dynamic> row = asMap(item);
+          return asIntOrNull(pick(row, <String>['index', 'pointIndex', 'x']));
+        })
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  List<BacktestMonthlyRow> _parseMonthlyRows(Map<String, dynamic> m) {
+    final Object? raw = pick(m, <String>[
+      'monthlyRows',
+      'monthlyReturns',
+      'monthlyReturnRows',
+    ]);
+    return asMapList(raw)
+        .map((Map<String, dynamic> row) {
+          final List<double?> values = asList(
+            pick(row, <String>['values', 'months']),
+          ).map(asDoubleOrNull).take(12).toList(growable: true);
+          while (values.length < 12) {
+            values.add(null);
+          }
+          return BacktestMonthlyRow(
+            year: asInt(pick(row, <String>['year'])),
+            values: List<double?>.unmodifiable(values),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<BacktestTrade> _parseTrades(Map<String, dynamic> m) {
+    final Object? raw = pick(m, <String>['trades', 'tradeRows', 'orders']);
+    return asMapList(raw)
+        .map((Map<String, dynamic> row) {
+          return BacktestTrade(
+            time: asDateTime(
+              pick(row, <String>['time', 'timestamp', 'openedAt']),
+            ),
+            side: asString(pick(row, <String>['side', 'direction'])),
+            entry: asDouble(pick(row, <String>['entry', 'entryPrice'])),
+            exit: asDouble(pick(row, <String>['exit', 'exitPrice'])),
+            pnlPercent: asDouble(pick(row, <String>['pnlPercent', 'pnlPct'])),
+            duration: asString(pick(row, <String>['duration', 'holdDuration'])),
+            win: asBool(pick(row, <String>['win', 'isWin'])),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<BacktestRiskRow> _parseRiskRows(Map<String, dynamic> m) {
+    final Object? raw = pick(m, <String>['riskRows', 'risks', 'riskMetrics']);
+    return asMapList(raw)
+        .map((Map<String, dynamic> row) {
+          return BacktestRiskRow(
+            label: asString(pick(row, <String>['label', 'name'])),
+            value: asString(pick(row, <String>['value', 'displayValue'])),
+            barFraction: asDouble(
+              pick(row, <String>['barFraction', 'fraction']),
+            ),
+            tone: _parseRiskTone(pick(row, <String>['tone', 'level'])),
+            note: asString(pick(row, <String>['note', 'description'])),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  BacktestRiskTone _parseRiskTone(Object? raw) {
+    switch (asString(raw).toLowerCase()) {
+      case 'danger':
+      case 'red':
+      case 'high':
+        return BacktestRiskTone.danger;
+      case 'warn':
+      case 'warning':
+      case 'yellow':
+      case 'medium':
+        return BacktestRiskTone.warn;
+      default:
+        return BacktestRiskTone.neutral;
+    }
   }
 }
 
