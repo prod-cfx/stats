@@ -38,28 +38,32 @@ class _FakeMarketFavoritesPersistence implements MarketFavoritesPersistence {
 
 void main() {
   group('useMockProvider', () {
-    test('默认 useMock=true：authRepositoryProvider 返回 MockAuthRepository', () {
+    test('默认 useMock=false：authRepositoryProvider 返回真实现 ApiAuthRepository（#2266）', () {
       final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);
 
-      expect(container.read(useMockProvider), isTrue);
-      expect(container.read(authRepositoryProvider), isA<MockAuthRepository>());
+      expect(container.read(useMockProvider), isFalse);
+      expect(container.read(authRepositoryProvider), isA<ApiAuthRepository>());
     });
 
-    test('override useMock=false：authRepositoryProvider 返回真实现 ApiAuthRepository（issue #2189）', () {
+    test('override useMock=true：authRepositoryProvider 返回 MockAuthRepository（issue #2189）', () {
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[
-          useMockProvider.overrideWithValue(false),
+          useMockProvider.overrideWithValue(true),
         ],
       );
       addTearDown(container.dispose);
 
       final AuthRepository repo = container.read(authRepositoryProvider);
-      expect(repo, isA<ApiAuthRepository>());
+      expect(repo, isA<MockAuthRepository>());
     });
 
-    test('默认 useMock=true：所有 11 个 provider 返回对应的 MockXxxRepository', () {
-      final ProviderContainer container = ProviderContainer();
+    test('override useMock=true：所有 11 个 provider 返回对应的 MockXxxRepository', () {
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[
+          useMockProvider.overrideWithValue(true),
+        ],
+      );
       addTearDown(container.dispose);
 
       expect(container.read(authRepositoryProvider), isA<MockAuthRepository>());

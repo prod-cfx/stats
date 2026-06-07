@@ -9,6 +9,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/test_overrides.dart';
 
 /// 把 overlay 直接挂在一个可弹出的 host route 上：tap host 按钮 push overlay，
 /// 这样 overlay 自身的 `Navigator.pop` 有真实路由可弹。回调命中写入 captured。
@@ -26,6 +27,7 @@ Future<({List<String> openStrat, List<StrategyCategory> pickTag, List<String> ap
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
+        useMockOverride,
         sharedPreferencesProvider.overrideWithValue(sp),
       ],
       child: MaterialApp(

@@ -24,6 +24,7 @@ import 'package:quantify_mobile/pages/market/widgets/orderbook_view.dart';
 import 'package:quantify_mobile/pages/market/widgets/trades_panel.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import '../helpers/test_overrides.dart';
 
 class _StubTickerRepository implements TickerRepository {
   @override
@@ -78,6 +79,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
+        useMockOverride,
         tickerRepositoryProvider.overrideWithValue(_StubTickerRepository()),
         orderbookRepositoryProvider.overrideWithValue(
           _StubOrderbookRepository(),

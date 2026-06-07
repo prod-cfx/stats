@@ -13,6 +13,7 @@ import 'package:quantify_mobile/pages/whale/whale_profile_page.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_pnl_chart.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import '../helpers/test_overrides.dart';
 
 /// 地址详情页守护测试（#1791 — 6 tab 重型详情）。
 ///
@@ -65,7 +66,7 @@ Future<void> _pump(
   await tester.binding.setSurfaceSize(const Size(420, 1800));
   await tester.pumpWidget(
     ProviderScope(
-      overrides: overrides,
+      overrides: <Override>[useMockOverride, ...overrides],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,

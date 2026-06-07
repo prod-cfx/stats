@@ -13,10 +13,12 @@ import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
+import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/kline_repository.dart';
+import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/main.dart';
@@ -42,6 +44,7 @@ import 'package:quantify_mobile/pages/whale/tabs/whale_live_tab_state.dart';
 import 'package:quantify_mobile/pages/whale/whale_home_page.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/test_overrides.dart';
 
 /// Pumps the app and navigates to `/ai` to bypass the debug-only landing
 /// (`/_dev/theme-preview`). Returns a [BuildContext] anchored on the AI page.
@@ -90,6 +93,23 @@ class _NoTimerKlineRepository implements KlineRepository {
       const Stream<Candle>.empty();
 }
 
+/// 同 ticker/kline：mock 盘口 `watchOrderbook` 是 1s periodic 流，MarketDetailPage
+/// 落地后由 OrderbookViewController._load 订阅，测试体结束仍 pending → "A Timer is
+/// still pending"。路由测试只关心落地页类型，用空快照 + 空流的假仓库覆盖。
+class _NoTimerOrderbookRepository implements OrderbookRepository {
+  @override
+  Future<OrderbookSnapshot> getSnapshot(String symbol) async => OrderbookSnapshot(
+        symbol: symbol,
+        bids: const <OrderbookLevel>[],
+        asks: const <OrderbookLevel>[],
+        timestamp: DateTime(2024),
+      );
+
+  @override
+  Stream<OrderbookSnapshot> watchOrderbook(String symbol) =>
+      const Stream<OrderbookSnapshot>.empty();
+}
+
 /// whale 实时 tab 控制器在 `build()` 内启 1s periodic 倒计时（#1986）。路由测试
 /// 切到 whale tab 时该 Timer 会被 StatefulShellRoute 保活，测试体结束仍 pending →
 /// "A Timer is still pending"。路由测试只关心落地页类型，用不启计时器的子类覆盖。
@@ -107,6 +127,7 @@ Future<BuildContext> _pumpApp(
   final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
   final ProviderContainer container = ProviderContainer(
     overrides: <Override>[
+      useMockOverride,
       sharedPreferencesProvider.overrideWithValue(prefs),
       tokenStorageProvider.overrideWithValue(s),
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
@@ -115,6 +136,8 @@ Future<BuildContext> _pumpApp(
       // widget dispose 后残留 periodic 计时器（同 #1838 思路）。
       tickerRepositoryProvider.overrideWithValue(_NoTimerTickerRepository()),
       klineRepositoryProvider.overrideWithValue(_NoTimerKlineRepository()),
+      orderbookRepositoryProvider
+          .overrideWithValue(_NoTimerOrderbookRepository()),
       // `/me` 落地 MeHomePage 会 watch account/apiKeys/liveStrategySummary，
       // 其 mock repo 各启 200ms `Future.delayed` 计时器；widget dispose 时
       // 该 timer 未排空 → "A Timer is still pending"（#1838）。路由测试只关心
@@ -498,6 +521,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
+        useMockOverride,
         sharedPreferencesProvider.overrideWithValue(prefs),
         tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
         authRepositoryProvider.overrideWithValue(MockAuthRepository()),
@@ -541,6 +565,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
+        useMockOverride,
         sharedPreferencesProvider.overrideWithValue(prefs),
         tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
         authRepositoryProvider.overrideWithValue(MockAuthRepository()),
@@ -603,6 +628,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[
+        useMockOverride,
         sharedPreferencesProvider.overrideWithValue(prefs),
         tokenStorageProvider.overrideWithValue(storage),
         authRepositoryProvider.overrideWithValue(MockAuthRepository()),

@@ -9,6 +9,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../helpers/test_overrides.dart';
 
 GoRouter _router(String id) {
   return GoRouter(
@@ -46,7 +47,7 @@ Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final ProviderContainer container = ProviderContainer(
-    overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
+    overrides: <Override>[useMockOverride, sharedPreferencesProvider.overrideWithValue(prefs)],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(

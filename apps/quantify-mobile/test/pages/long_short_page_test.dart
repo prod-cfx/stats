@@ -13,6 +13,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/test_overrides.dart';
 
 /// 多空比深链与主体测试（#1853）。
 ///
@@ -25,6 +26,7 @@ Future<void> _pumpBody(
   await tester.binding.setSurfaceSize(const Size(420, 1200));
   await tester.pumpWidget(
     ProviderScope(
+      overrides: <Override>[useMockOverride],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -49,6 +51,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          useMockOverride,
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: MaterialApp.router(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
+import '../helpers/test_overrides.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
@@ -28,6 +30,7 @@ Future<void> _pump(WidgetTester tester) async {
 
   await tester.pumpWidget(
     ProviderScope(
+      overrides: <Override>[useMockOverride],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -268,6 +271,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        overrides: <Override>[useMockOverride],
         child: MaterialApp.router(
           locale: const Locale('zh'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,

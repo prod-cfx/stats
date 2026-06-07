@@ -3,6 +3,7 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/test_overrides.dart';
 import 'package:quantify_mobile/main.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_guest_page.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -17,6 +18,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          useMockOverride,
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: const QuantifyMobileApp(),

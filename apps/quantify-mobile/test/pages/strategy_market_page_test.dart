@@ -16,6 +16,7 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_avatar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/test_overrides.dart';
 
 /// 简化测试用 router（**故意不含 shell**）：仅验证 `/strategy` 与
 /// `/strategy/:id` 两个 builder 命中，不验证 shell 覆盖语义（那个由
@@ -62,6 +63,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
+        useMockOverride,
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: MaterialApp.router(
@@ -107,6 +109,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          useMockOverride,
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: MaterialApp.router(
@@ -735,6 +738,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          useMockOverride,
           sharedPreferencesProvider.overrideWithValue(prefs2),
         ],
         child: MaterialApp.router(

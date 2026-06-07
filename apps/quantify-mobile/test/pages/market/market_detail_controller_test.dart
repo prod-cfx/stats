@@ -10,6 +10,7 @@ import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/pages/market/market_detail_controller.dart';
 import 'package:quantify_mobile/pages/market/market_detail_state.dart';
+import '../../helpers/test_overrides.dart';
 
 const Ticker _btc = Ticker(
   symbol: 'BTCUSDT',
@@ -70,6 +71,7 @@ void main() {
     kline = _FakeKlineRepository();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
+        useMockOverride,
         tickerRepositoryProvider
             .overrideWithValue(_FakeTickerRepository(tickersFuture)),
         klineRepositoryProvider.overrideWithValue(kline),

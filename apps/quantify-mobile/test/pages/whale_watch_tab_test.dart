@@ -13,6 +13,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_watch_tab.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import '../helpers/test_overrides.dart';
 
 class _FakeFeedRepo implements WhaleFeedRepository {
   final StreamController<WhaleEvent> _c =
@@ -52,6 +53,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
+        useMockOverride,
         whaleFeedRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(

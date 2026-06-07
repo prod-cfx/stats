@@ -9,6 +9,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../helpers/test_overrides.dart';
 
 /// 测试 router：`/me/live` 落 [LiveStrategiesPage]，`/me/live/:id` 用 stub
 /// 接收详情跳转（断言列表 tile 点击会导航）。
@@ -33,7 +34,7 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final ProviderContainer container = ProviderContainer(
-    overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
+    overrides: <Override>[useMockOverride, sharedPreferencesProvider.overrideWithValue(prefs)],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(

@@ -11,6 +11,7 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/test_overrides.dart';
 
 // _pump 是辅助函数；不需要 typed return。
 
@@ -46,7 +47,7 @@ Future<void> _pump(WidgetTester tester) async {
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: <Override>[useMockOverride, sharedPreferencesProvider.overrideWithValue(prefs)],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,

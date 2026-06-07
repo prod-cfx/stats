@@ -17,6 +17,7 @@ import 'package:quantify_mobile/pages/whale/widgets/whale_sort_bar.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_notification_bell.dart';
+import '../helpers/test_overrides.dart';
 
 class _FakeWhaleFeedRepository implements WhaleFeedRepository {
   _FakeWhaleFeedRepository({List<WhaleEvent>? history})
@@ -55,6 +56,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
+        useMockOverride,
         whaleFeedRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(

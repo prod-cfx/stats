@@ -12,6 +12,7 @@ import 'package:quantify_mobile/pages/market/widgets/long_short_bar.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/test_overrides.dart';
 
 /// issue #1851「数据」hub 导航架构的 widget 测试。
 ///
@@ -26,7 +27,7 @@ Future<void> _pumpHub(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 1400));
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: <Override>[useMockOverride, sharedPreferencesProvider.overrideWithValue(prefs)],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,

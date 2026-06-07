@@ -27,6 +27,7 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/pages/market/widgets/qz_kline_chart.dart';
 import 'package:quantify_mobile/widgets/qz_top_bar.dart';
+import '../helpers/test_overrides.dart';
 
 class _FakeTickerRepository implements TickerRepository {
   @override
@@ -134,6 +135,7 @@ Future<_FakeKlineRepository> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
+        useMockOverride,
         tickerRepositoryProvider.overrideWithValue(_FakeTickerRepository()),
         orderbookRepositoryProvider.overrideWithValue(orderbookRepo),
         klineRepositoryProvider.overrideWithValue(repo),
