@@ -27,10 +27,39 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 import '../helpers/test_overrides.dart';
 
 class _StubTickerRepository implements TickerRepository {
+  static const Ticker btc = Ticker(
+    symbol: 'BTCUSDT',
+    price: 100,
+    changePercent: 2,
+    volume24h: 1000,
+    high24h: 110,
+    low24h: 90,
+    openInterest: 2500,
+    indexPrice: 99.5,
+    markPrice: 100.5,
+    fundingRate: 0.0123,
+    turnover24h: 1000,
+  );
+
   @override
-  Future<List<Ticker>> listTickers() async => mockTickers;
+  Future<List<Ticker>> listTickers() async => <Ticker>[btc, ...mockTickers];
   @override
-  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
+  Stream<Ticker> watchTicker(String symbol) => Stream<Ticker>.value(btc);
+}
+
+Future<void> _pumpStats(WidgetTester tester, Ticker ticker) async {
+  await tester.binding.setSurfaceSize(const Size(420, 600));
+  await tester.pumpWidget(
+    MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: buildQzThemeData(QzTheme.fallback),
+      home: Scaffold(
+        body: MarketDetailStats(displaySymbol: 'BTCUSDT', ticker: ticker),
+      ),
+    ),
+  );
 }
 
 class _StubOrderbookRepository implements OrderbookRepository {
@@ -102,6 +131,51 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'MarketDetailStats renders real optional ticker fields without widget derivation',
+    (WidgetTester tester) async {
+      await _pumpStats(
+        tester,
+        const Ticker(
+          symbol: 'BTCUSDT',
+          price: 100,
+          changePercent: 2,
+          volume24h: 1000,
+          high24h: 110,
+          low24h: 90,
+          openInterest: 2500,
+          indexPrice: 99.5,
+          markPrice: 100.5,
+          fundingRate: 0.0123,
+        ),
+      );
+
+      expect(find.text('99.50'), findsOneWidget);
+      expect(find.text('100.50'), findsOneWidget);
+      expect(find.text('+1.23%'), findsOneWidget);
+      expect(find.text('2.50K'), findsOneWidget);
+      expect(find.text('110.00'), findsOneWidget);
+      expect(find.text('90.00'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'MarketDetailStats renders placeholders when backend fields are missing',
+    (WidgetTester tester) async {
+      await _pumpStats(
+        tester,
+        const Ticker(
+          symbol: 'BTCUSDT',
+          price: 100,
+          changePercent: 2,
+          volume24h: 1000,
+        ),
+      );
+
+      expect(find.text('--'), findsNWidgets(6));
+    },
+  );
+
   testWidgets('交易详情：价格头三行（指数/标记/资金费率/持仓量 + 24H 高/低/量）+ 副标题 + star/more 按钮', (
     WidgetTester tester,
   ) async {
@@ -117,6 +191,9 @@ void main() {
     expect(find.text('24H 低'), findsOneWidget);
     expect(find.text('24H 量'), findsOneWidget);
     expect(find.byType(MarketDetailStats), findsOneWidget);
+    expect(find.text('110.00'), findsWidgets);
+    expect(find.text('90.00'), findsWidgets);
+    expect(find.text('+100.00K'), findsNothing);
 
     // 顶栏副标题：默认数据源为聚合（#2113 起 _source 默认 aggregated）。
     expect(find.text('永续 · 聚合'), findsOneWidget);

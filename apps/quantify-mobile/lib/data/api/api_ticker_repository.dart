@@ -24,6 +24,11 @@ class ApiTickerRepository implements TickerRepository {
       currentPrice: dto.currentPrice,
       priceChangePercent24h: dto.priceChangePercent24h,
       volumeUsd: dto.volumeUsd,
+      high24h: dto.high24h,
+      low24h: dto.low24h,
+      openInterestUsd: dto.openInterestUsd,
+      indexPrice: dto.indexPrice,
+      fundingRate: dto.fundingRate,
     );
   }
 
@@ -32,10 +37,9 @@ class ApiTickerRepository implements TickerRepository {
     const List<String> symbols = <String>['BTC', 'ETH', 'SOL'];
     final List<Ticker> result = <Ticker>[];
     for (final String symbol in symbols) {
-      final Response<TickerResponseDto> response =
-          await _api.client.getMarketsApi().marketsControllerGetTicker(
-                symbol: symbol,
-              );
+      final Response<TickerResponseDto> response = await _api.client
+          .getMarketsApi()
+          .marketsControllerGetTicker(symbol: symbol);
       final TickerResponseDto? data = response.data;
       if (data != null) result.add(_map(data));
     }
@@ -45,10 +49,9 @@ class ApiTickerRepository implements TickerRepository {
   @override
   Stream<Ticker> watchTicker(String symbol) async* {
     Future<Ticker> fetchOne() async {
-      final Response<TickerResponseDto> response =
-          await _api.client.getMarketsApi().marketsControllerGetTicker(
-                symbol: symbol,
-              );
+      final Response<TickerResponseDto> response = await _api.client
+          .getMarketsApi()
+          .marketsControllerGetTicker(symbol: symbol);
       final TickerResponseDto? data = response.data;
       if (data == null) {
         throw const ApiException(message: 'empty ticker response');
@@ -57,7 +60,8 @@ class ApiTickerRepository implements TickerRepository {
     }
 
     yield await fetchOne();
-    yield* Stream<void>.periodic(const Duration(seconds: 2))
-        .asyncMap((_) => fetchOne());
+    yield* Stream<void>.periodic(
+      const Duration(seconds: 2),
+    ).asyncMap((_) => fetchOne());
   }
 }

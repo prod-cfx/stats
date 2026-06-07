@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
+import 'package:quantify_mobile/data/models/agg_market_data.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/agg_orderbook_repository.dart';
 import 'package:quantify_mobile/pages/market/data_hub_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/market_home_page.dart';
@@ -13,6 +16,43 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers/test_overrides.dart';
+
+const AggMarketData _realEmptyAggData = AggMarketData(
+  exchanges: <AggExchange>[
+    AggExchange(
+      key: 'binance',
+      name: 'binance',
+      letter: 'B',
+      color: Color(0xFFF59E0B),
+      fg: Color(0xFF0B0E11),
+    ),
+  ],
+  exchangeMap: <String, AggExchange>{
+    'binance': AggExchange(
+      key: 'binance',
+      name: 'binance',
+      letter: 'B',
+      color: Color(0xFFF59E0B),
+      fg: Color(0xFF0B0E11),
+    ),
+  },
+  precisions: <int>[1, 10, 100],
+  asks: <AggBookLevel>[AggBookLevel(price: 101, qty: 2, exchange: 'binance')],
+  bids: <AggBookLevel>[AggBookLevel(price: 99, qty: 3, exchange: 'binance')],
+  oiCoins: <String>[],
+  oiExchangeMap: <String, AggExchange>{},
+  oiData: <String, OiSnapshot>{},
+  volCoins: <String>[],
+  volExchangeName: <String, String>{},
+  volColor: <String, Color>{},
+  volData: <String, VolSnapshot>{},
+  coinColor: <String, Color>{},
+);
+
+class _RealEmptyAggRepository implements AggOrderbookRepository {
+  @override
+  Future<AggMarketData> getMarketData() async => _realEmptyAggData;
+}
 
 /// issue #1851「数据」hub 导航架构的 widget 测试。
 ///
@@ -27,7 +67,36 @@ Future<void> _pumpHub(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 1400));
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[useMockOverride, sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: <Override>[
+        useMockOverride,
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(QzTheme.fallback),
+        home: const DataHubPage(),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 250));
+}
+
+Future<void> _pumpHubWithRealEmptyAgg(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{});
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  await tester.binding.setSurfaceSize(const Size(420, 1400));
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: <Override>[
+        useMockOverride,
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        aggOrderbookRepositoryProvider.overrideWithValue(
+          _RealEmptyAggRepository(),
+        ),
+      ],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -105,6 +174,28 @@ void main() {
       reason: 'coinStock 应渲染 CoinStockBody',
     );
     expect(tester.takeException(), isNull, reason: '切到 coinStock 不应抛异常');
+  });
+
+  testWidgets('聚合 hub 真实空 OI/volume 展示空态且不回退 mock fixture', (
+    WidgetTester tester,
+  ) async {
+    await _pumpHubWithRealEmptyAgg(tester);
+    await tester.tap(_hubTab(DataHubScreen.aggOrders));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.byKey(const Key('agg-subtab-orders')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('agg-subtab-openInterest')));
+    await tester.pump();
+    expect(find.text('暂无数据'), findsWidgets);
+    expect(find.text('Binance'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('agg-subtab-volume')));
+    await tester.pump();
+    expect(find.text('暂无数据'), findsWidgets);
+    expect(find.text('Binance'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('通知铃铛存在，未读 > 0 显示红数字 badge（AC3）', (WidgetTester tester) async {

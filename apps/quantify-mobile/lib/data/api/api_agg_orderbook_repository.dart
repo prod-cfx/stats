@@ -4,7 +4,6 @@ import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-import '../mock/fixtures/agg_orders.dart';
 import '../models/agg_market_data.dart';
 import '../repositories/agg_orderbook_repository.dart';
 import '../services/api_client.dart';
@@ -16,13 +15,14 @@ import '../services/generated_backend_api.dart';
 /// [AggregatedOrderbookResponseDto] 的 asks/bids/venues 映射为盘口 levels 与
 /// 交易所元数据。
 ///
-/// OI/volume 元数据无匹配端点，复用 mock fixture 常量填充（OI/volume 待后端，
-/// 跟踪 #2269）。
+/// OI/volume 元数据当前契约缺字段时返回空集合，由 UI 展示明确空态；真实模式
+/// 禁止回退 mock fixture。
 class ApiAggOrderbookRepository implements AggOrderbookRepository {
   ApiAggOrderbookRepository(this._api);
 
   static const String _defaultBase = 'BTC';
   static const String _defaultType = 'SPOT';
+  static const List<int> _defaultPrecisions = <int>[1, 10, 100];
 
   /// venue → 调色板循环取色（契约无颜色元数据）。
   static const List<Color> _venuePalette = <Color>[
@@ -37,13 +37,15 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
 
   @override
   Future<AggMarketData> getMarketData() async {
-    final Response<AggregatedOrderbookControllerGetAggregatedOrderbook200Response>
-        response = await _api.client
-            .getOrderbookApi()
-            .aggregatedOrderbookControllerGetAggregatedOrderbook(
-              base_: _defaultBase,
-              type: _defaultType,
-            );
+    final Response<
+      AggregatedOrderbookControllerGetAggregatedOrderbook200Response
+    >
+    response = await _api.client
+        .getOrderbookApi()
+        .aggregatedOrderbookControllerGetAggregatedOrderbook(
+          base_: _defaultBase,
+          type: _defaultType,
+        );
     final AggregatedOrderbookResponseDto? data = response.data?.data;
     if (data == null) {
       throw const ApiException(message: 'empty aggregated orderbook response');
@@ -51,8 +53,7 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
     return buildMarketData(data);
   }
 
-  /// 契约 DTO → [AggMarketData]。盘口部分接真实；OI/volume 复用 mock 常量
-  /// （待后端 #2269）。
+  /// 契约 DTO → [AggMarketData]。盘口接真实；OI/volume 缺契约字段时为空态。
   @visibleForTesting
   static AggMarketData buildMarketData(AggregatedOrderbookResponseDto data) {
     final List<AggExchange> exchanges = buildExchanges(data.venues);
@@ -62,25 +63,25 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
     return AggMarketData(
       exchanges: exchanges,
       exchangeMap: exchangeMap,
-      precisions: kAggPrecisions,
+      precisions: _defaultPrecisions,
       asks: data.asks.map(mapLevel).toList(growable: false),
       bids: data.bids.map(mapLevel).toList(growable: false),
-      // OI/volume 待后端，跟踪 #2269 —— 暂复用 mock fixture 常量。
-      oiCoins: kOiCoins,
-      oiExchangeMap: kOiExchangeMap,
-      oiData: kOiData,
-      volCoins: kVolCoins,
-      volExchangeName: kVolExchangeName,
-      volColor: kVolColor,
-      volData: kVolData,
-      coinColor: kAggCoinColor,
+      oiCoins: const <String>[],
+      oiExchangeMap: const <String, AggExchange>{},
+      oiData: const <String, OiSnapshot>{},
+      volCoins: const <String>[],
+      volExchangeName: const <String, String>{},
+      volColor: const <String, Color>{},
+      volData: const <String, VolSnapshot>{},
+      coinColor: const <String, Color>{},
     );
   }
 
   /// 单档 level：取首个 venue 作来源；hot/best/total 走默认。
   static AggBookLevel mapLevel(AggregatedLevelDto dto) {
-    final String venue =
-        dto.details.isNotEmpty ? dto.details.first.venueId : 'AGG';
+    final String venue = dto.details.isNotEmpty
+        ? dto.details.first.venueId
+        : 'AGG';
     return AggBookLevel(
       price: dto.price.toDouble(),
       qty: dto.sizeTotal.toDouble(),

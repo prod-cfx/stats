@@ -231,13 +231,7 @@ class _MoreActionTile extends StatelessWidget {
 
 /// K 线下方 flat 4 格累计统计行（#2101）：累计成交额 / 累计净流入 / 最高 / 最低。
 ///
-/// `累计成交额`/`累计净流入` 暂无真实接口：成交额用 `volume24h * price` 估算；
-/// 净流入用 `成交额 * changePercent/100` 作占位（涨则净流入为正、跌为负），仅用于
-/// 视觉对齐设计稿 m-screens-3。高/低沿用 `MarketDetailStats` 同款 mock 推算
-/// （`price * (1 ± |changePct|/100)`），保证两处展示一致。
-///
-/// TODO(follow-up)：接入真实 24H 聚合接口（turnover / net-inflow / high / low）
-/// 后移除本 widget 内估算逻辑，直接读字段。
+/// 缺少后端字段时显示 `--`，不根据成交额、涨跌幅或最新价派生业务真值。
 class _CumulativeStatsRow extends StatelessWidget {
   const _CumulativeStatsRow({required this.ticker});
 
@@ -248,12 +242,8 @@ class _CumulativeStatsRow extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
 
-    final double absPct = ticker.changePercent.abs() / 100;
-    final double high = ticker.price * (1 + absPct);
-    final double low = math.max(0, ticker.price * (1 - absPct));
-    final double turnover = ticker.volume24h * ticker.price;
-    final double netInflow = turnover * ticker.changePercent / 100;
-    final bool inflowDown = netInflow < 0;
+    final double? netInflow = ticker.netInflow24h;
+    final bool inflowDown = (netInflow ?? 0) < 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -272,20 +262,24 @@ class _CumulativeStatsRow extends StatelessWidget {
         children: <Widget>[
           _CumStatCell(
             label: l10n.marketDetailCumTurnover,
-            value: _fmtCompact(turnover),
+            value: _fmtNullableCompact(ticker.turnover24h),
           ),
           _CumStatCell(
             label: l10n.marketDetailCumNetInflow,
-            value: _fmtSignedCompact(netInflow),
-            valueColor: inflowDown ? c.marketDown : c.marketUp,
+            value: _fmtNullableSignedCompact(netInflow),
+            valueColor: netInflow == null
+                ? null
+                : inflowDown
+                ? c.marketDown
+                : c.marketUp,
           ),
           _CumStatCell(
             label: l10n.marketDetailCumHigh,
-            value: high.toStringAsFixed(2),
+            value: _fmtNullablePrice(ticker.high24h),
           ),
           _CumStatCell(
             label: l10n.marketDetailCumLow,
-            value: low.toStringAsFixed(2),
+            value: _fmtNullablePrice(ticker.low24h),
           ),
         ],
       ),
@@ -303,6 +297,18 @@ class _CumulativeStatsRow extends StatelessWidget {
   static String _fmtSignedCompact(double v) {
     final String sign = v < 0 ? '-' : '+';
     return '$sign${_fmtCompact(v.abs())}';
+  }
+
+  static String _fmtNullableCompact(double? v) {
+    return v == null ? '--' : _fmtCompact(v);
+  }
+
+  static String _fmtNullableSignedCompact(double? v) {
+    return v == null ? '--' : _fmtSignedCompact(v);
+  }
+
+  static String _fmtNullablePrice(double? v) {
+    return v == null ? '--' : v.toStringAsFixed(2);
   }
 }
 

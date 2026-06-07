@@ -128,8 +128,8 @@ final FutureProviderFamily<List<Trade>, (String, double)> tradesProvider =
           .listTrades(symbol: args.$1, mid: args.$2);
     });
 
-/// 聚合市场数据 Repository（#2216）。`USE_MOCK=false` 时盘口接真实契约
-/// （#2270）；OI/volume 暂复用 mock 常量（待后端 #2269）。
+/// 聚合市场数据 Repository（#2216）。`USE_MOCK=false` 时盘口接真实契约；
+/// OI/volume 缺契约字段时返回空态，不回退 mock fixture。
 final Provider<AggOrderbookRepository> aggOrderbookRepositoryProvider =
     Provider<AggOrderbookRepository>((Ref ref) {
       return ref.watch(useMockProvider)
@@ -210,9 +210,7 @@ final Provider<WhaleHoldingsRepository> whaleHoldingsRepositoryProvider =
     Provider<WhaleHoldingsRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockWhaleHoldingsRepository()
-          : ApiWhaleHoldingsRepository(
-              ref.watch(whaleHoldingsServiceProvider),
-            );
+          : ApiWhaleHoldingsRepository(ref.watch(whaleHoldingsServiceProvider));
     });
 
 /// 巨鲸持仓明细列表（#1790）。持仓 tab watch；筛选与排序在 tab 本地态完成。

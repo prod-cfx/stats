@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,7 +41,9 @@ class MarketDetailPage extends ConsumerWidget {
     WidgetRef ref,
     TradeDirection direction,
   ) async {
-    final MarketDetailState s = ref.read(marketDetailControllerProvider(symbol));
+    final MarketDetailState s = ref.read(
+      marketDetailControllerProvider(symbol),
+    );
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TradeOrderResult? result = await QzTradeOrderSheet.show(
@@ -63,8 +64,7 @@ class MarketDetailPage extends ConsumerWidget {
   Future<void> _toggleFavorite(BuildContext context, WidgetRef ref) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool wasFavorite =
-        ref.read(marketFavoritesProvider).contains(symbol);
+    final bool wasFavorite = ref.read(marketFavoritesProvider).contains(symbol);
     try {
       await ref.read(marketFavoritesProvider.notifier).toggle(symbol);
     } catch (_) {
@@ -97,8 +97,9 @@ class MarketDetailPage extends ConsumerWidget {
 
   /// 「更多」中「切换交易所」入口：复用 [DataSourceSheet] 单选数据来源。
   Future<void> _openSourceSheet(BuildContext context, WidgetRef ref) async {
-    final MarketSource current =
-        ref.read(marketDetailControllerProvider(symbol)).source;
+    final MarketSource current = ref
+        .read(marketDetailControllerProvider(symbol))
+        .source;
     final MarketSource? next = await QzSheet.show<MarketSource>(
       context: context,
       useRootNavigator: true,
@@ -125,12 +126,13 @@ class MarketDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10nForBar = AppLocalizations.of(context);
-    final MarketDetailState s =
-        ref.watch(marketDetailControllerProvider(symbol));
-    final MarketDetailController controller =
-        ref.read(marketDetailControllerProvider(symbol).notifier);
-    final bool isFavorite =
-        ref.watch(marketFavoritesProvider).contains(symbol);
+    final MarketDetailState s = ref.watch(
+      marketDetailControllerProvider(symbol),
+    );
+    final MarketDetailController controller = ref.read(
+      marketDetailControllerProvider(symbol).notifier,
+    );
+    final bool isFavorite = ref.watch(marketFavoritesProvider).contains(symbol);
     return Scaffold(
       appBar: QzTopBar(
         title: _topBarTitle(symbol),
@@ -170,9 +172,7 @@ class MarketDetailPage extends ConsumerWidget {
           final AppLocalizations l10n = AppLocalizations.of(context);
           if (s.loading) return const Center(child: QzSpinner());
           if (s.error != null) {
-            return QzEmptyState(
-              title: '$symbol ${l10n.commonLoadError}',
-            );
+            return QzEmptyState(title: '$symbol ${l10n.commonLoadError}');
           }
           if (s.priceSnapshot == null) {
             return QzEmptyState(
@@ -234,4 +234,3 @@ String _topBarTitle(String symbol) {
   if (quote.isEmpty) return symbol;
   return '$base / $quote';
 }
-
