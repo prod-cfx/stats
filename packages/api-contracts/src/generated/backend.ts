@@ -738,7 +738,7 @@ const AdminMenuPermissionDto = z
     sortOrder: z.number(),
     code: z.string().nullable(),
     type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
-    children: z.object({}).partial().passthrough(),
+    children: z.array(z.object({}).partial().passthrough()).optional(),
   })
   .passthrough()
 const AdminUserInfoDto = z
