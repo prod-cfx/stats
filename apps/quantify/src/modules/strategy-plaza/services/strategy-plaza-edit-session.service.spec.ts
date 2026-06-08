@@ -1,4 +1,7 @@
 import { StrategyPlazaEditSessionService } from './strategy-plaza-edit-session.service'
+import { Test } from '@nestjs/testing'
+import { CodegenConversationService } from '@/modules/llm-strategy-codegen/services/codegen-conversation.service'
+import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
 const verifiedBacktestDraftConfig = {
   range: {
@@ -17,6 +20,24 @@ const verifiedBacktestDraftConfig = {
 }
 
 describe('StrategyPlazaEditSessionService', () => {
+  it('compiles in Nest without a custom backtest draft builder provider', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        StrategyPlazaEditSessionService,
+        { provide: OfficialStrategyPlazaTemplateService, useValue: { getRequired: jest.fn() } },
+        {
+          provide: CodegenConversationService,
+          useValue: {
+            startSession: jest.fn(),
+            updateConversationBacktestDraft: jest.fn(),
+          },
+        },
+      ],
+    }).compile()
+
+    expect(moduleRef.get(StrategyPlazaEditSessionService)).toBeInstanceOf(StrategyPlazaEditSessionService)
+  })
+
   it('starts a codegen session from the official template edit seed', async () => {
     const template = {
       id: 'ma-cross',

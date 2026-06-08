@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import type { AiQuantConversationBacktestConfigDto } from '@/modules/llm-strategy-codegen/dto/ai-quant-conversation.response.dto'
 import { CodegenConversationService } from '@/modules/llm-strategy-codegen/services/codegen-conversation.service'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
@@ -22,6 +22,7 @@ export class StrategyPlazaEditSessionService {
   constructor(
     private readonly templates: OfficialStrategyPlazaTemplateService,
     private readonly codegenConversationService: CodegenConversationService,
+    @Optional()
     private readonly backtestDraftConfigBuilder: {
       build: (template: OfficialStrategyPlazaTemplate) => AiQuantConversationBacktestConfigDto
     } = { build: template => buildPlazaEditBacktestDraftConfig(template) },
