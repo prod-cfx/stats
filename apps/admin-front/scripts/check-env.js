@@ -24,11 +24,10 @@ const normalizePublicUrlEnv = value => {
   return normalized.replace(/\/$/, '')
 }
 
-const apiBaseUrl = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_BASE_URL)
-const apiServerUrl = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL)
+const backendApiBaseUrl = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL)
 
-if (!apiBaseUrl && !apiServerUrl) {
-  console.error('\x1B[31m%s\x1B[0m', '错误: NEXT_PUBLIC_API_BASE_URL 与 NEXT_PUBLIC_API_SERVER_URL 不能同时缺失或为占位符')
+if (!backendApiBaseUrl) {
+  console.error('\x1B[31m%s\x1B[0m', '错误: NEXT_PUBLIC_BACKEND_API_BASE_URL 不能缺失或为占位符')
   process.exit(1)
 }
 

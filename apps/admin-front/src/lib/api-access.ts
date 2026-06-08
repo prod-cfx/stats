@@ -14,8 +14,7 @@ export function unwrapResponse<T>(response: T | { data?: T; message?: string }):
 }
 
 const API_BASE_URL = resolveApiBaseUrl(
-  process.env.NEXT_PUBLIC_API_BASE_URL,
-  process.env.NEXT_PUBLIC_API_SERVER_URL,
+  process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL,
 )
 
 export const client = createApiClient(API_BASE_URL, { validate: 'request' })

@@ -88,9 +88,8 @@ VERCEL_PROJECT_ID_ADMIN=prj_xxxxx
 
 ```env
 APP_ENV=staging  # 或 production
-NEXT_PUBLIC_API_SERVER_URL=https://api-staging.example.com  # 后端 API 地址
+NEXT_PUBLIC_BACKEND_API_BASE_URL=https://api-staging.example.com/api/v1  # 后端 API 地址
 NEXT_PUBLIC_WS_URL=https://api-staging.example.com  # WebSocket 地址
-NEXT_PUBLIC_API_BASE_URL=https://api-staging.example.com/api/v1
 NEXT_PUBLIC_APP_NAME=Net Web (Staging)
 ```
 
@@ -98,8 +97,7 @@ NEXT_PUBLIC_APP_NAME=Net Web (Staging)
 
 ```env
 APP_ENV=staging  # 或 production
-NEXT_PUBLIC_API_SERVER_URL=https://api-staging.example.com
-NEXT_PUBLIC_API_BASE_URL=https://api-staging.example.com/api/v1
+NEXT_PUBLIC_BACKEND_API_BASE_URL=https://api-staging.example.com/api/v1
 NEXT_PUBLIC_APP_NAME=Net Admin (Staging)
 ```
 

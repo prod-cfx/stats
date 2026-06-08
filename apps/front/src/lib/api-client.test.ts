@@ -13,8 +13,7 @@ describe('front API base URL resolution', () => {
     jest.resetModules()
     process.env = {
       ...originalEnv,
-      NEXT_PUBLIC_API_BASE_URL: '/api/v1',
-      NEXT_PUBLIC_API_SERVER_URL: 'https://backend.example.com',
+      NEXT_PUBLIC_BACKEND_API_BASE_URL: 'https://backend.example.com/api/v1',
     }
   })
 
@@ -22,17 +21,35 @@ describe('front API base URL resolution', () => {
     process.env = originalEnv
   })
 
-  it('requires explicit server URL when browser API base URL is relative', async () => {
+  it('uses full backend API base URL directly for server calls', async () => {
     const { resolveServerApiBaseUrl } = await import('./api-client')
 
-    expect(() => resolveServerApiBaseUrl('/api/v1', undefined)).toThrow('NEXT_PUBLIC_API_SERVER_URL')
-  })
-
-  it('uses absolute API base URL directly for server calls', async () => {
-    const { resolveServerApiBaseUrl } = await import('./api-client')
-
-    expect(resolveServerApiBaseUrl('https://backend.example.com/api/v1', undefined)).toBe(
+    expect(resolveServerApiBaseUrl('https://backend.example.com/api/v1')).toBe(
       'https://backend.example.com/api/v1',
     )
+  })
+
+  it('rejects host-only backend API base URL for server calls', async () => {
+    const { resolveServerApiBaseUrl } = await import('./api-client')
+
+    expect(() => resolveServerApiBaseUrl('https://backend.example.com')).toThrow('/api/v1')
+  })
+
+  it('uses only the API path for browser calls from full backend API base URL', async () => {
+    const { resolveBrowserApiBaseUrl } = await import('./api-client')
+
+    expect(resolveBrowserApiBaseUrl('https://backend.example.com/api/v1')).toBe('/api/v1')
+  })
+
+  it('rejects host-only backend API base URL because the API prefix belongs in the env value', async () => {
+    const { resolveBrowserApiBaseUrl } = await import('./api-client')
+
+    expect(() => resolveBrowserApiBaseUrl('https://backend.example.com')).toThrow('/api/v1')
+  })
+
+  it('rejects relative backend API base URL because the env value must be complete', async () => {
+    const { resolveBrowserApiBaseUrl } = await import('./api-client')
+
+    expect(() => resolveBrowserApiBaseUrl('/api/v1')).toThrow('NEXT_PUBLIC_BACKEND_API_BASE_URL')
   })
 })

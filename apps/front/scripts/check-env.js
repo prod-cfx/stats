@@ -5,16 +5,14 @@
  *
  * 在构建前检查必要的环境变量是否已配置。
  * 前端只需要知道「网关入口」而不是后端直连地址，因此以
- * NEXT_PUBLIC_API_BASE_URL 作为唯一必需的后端 API 基础地址
+ * NEXT_PUBLIC_BACKEND_API_BASE_URL 作为唯一必需的后端 API 基础地址
  *（通常形如：https://api.example.com/api/v1）。
- *
- * 注意：旧的 NEXT_PUBLIC_API_SERVER_URL 视为兼容字段，不再强制要求。
  */
 
 // 必需的环境变量：
-// - NEXT_PUBLIC_API_BASE_URL: 完整的 API 基础地址（指向网关），通常包含 /api/v1 前缀
+// - NEXT_PUBLIC_BACKEND_API_BASE_URL: 完整的 API 基础地址（指向网关），通常包含 /api/v1 前缀
 // - APP_ENV / NEXT_PUBLIC_APP_ENV: 用于区分环境，前后端需保持一致
-const requiredEnvVars = ['NEXT_PUBLIC_API_BASE_URL', 'APP_ENV', 'NEXT_PUBLIC_APP_ENV']
+const requiredEnvVars = ['NEXT_PUBLIC_BACKEND_API_BASE_URL', 'APP_ENV', 'NEXT_PUBLIC_APP_ENV']
 
 console.log('检查环境变量配置...')
 
@@ -55,7 +53,7 @@ if (process.env.NEXT_PUBLIC_APP_ENV !== appEnv) {
 // 如果是生产环境，检查 API URL 不能包含 localhost 或 127.0.0.1
 // 但需要区分真正的生产部署和本地构建测试
 if (appEnv === 'production') {
-  const apiUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '').toLowerCase()
+  const apiUrl = (process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL || '').toLowerCase()
   const isLocalBuild = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')
 
   // 检查是否是真正的生产环境部署
@@ -69,9 +67,9 @@ if (appEnv === 'production') {
   if (isRealProduction && isLocalBuild) {
     console.error(
       '\x1B[31m%s\x1B[0m',
-      '错误: 在生产环境部署中，NEXT_PUBLIC_API_SERVER_URL 不能包含 localhost 或 127.0.0.1',
+      '错误: 在生产环境部署中，NEXT_PUBLIC_BACKEND_API_BASE_URL 不能包含 localhost 或 127.0.0.1',
     )
-    console.error('\x1B[33m%s\x1B[0m', `当前值: ${process.env.NEXT_PUBLIC_API_SERVER_URL}`)
+    console.error('\x1B[33m%s\x1B[0m', `当前值: ${process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL}`)
     console.error('\x1B[36m%s\x1B[0m', '提示: 请设置正确的生产环境 API 地址')
     process.exit(1)
   } else if (isLocalBuild) {

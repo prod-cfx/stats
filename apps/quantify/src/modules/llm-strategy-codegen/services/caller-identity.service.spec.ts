@@ -20,7 +20,7 @@ describe('callerIdentityService', () => {
   function createService() {
     return new CallerIdentityService({
       getString: jest.fn((key: string) => {
-        if (key === 'NEXT_PUBLIC_API_SERVER_URL') return 'https://backend.example.com'
+        if (key === 'BACKEND_API_BASE_URL') return 'https://backend.example.com/api/v1'
         return undefined
       }),
       isDev: jest.fn().mockReturnValue(false),

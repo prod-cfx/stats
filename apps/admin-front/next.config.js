@@ -67,14 +67,11 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   async rewrites() {
-    const apiServer = (process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:3000').replace(
-      /\/$/,
-      '',
-    )
+    const backendApiBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '')
     return [
       {
         source: '/api/v1/:path*',
-        destination: `${apiServer}/api/v1/:path*`,
+        destination: `${backendApiBaseUrl}/:path*`,
       },
     ]
   },

@@ -17,7 +17,7 @@ const schema = z.object({
         .string()
         .optional()
         .transform(value => (value ? value.split(',').map(origin => origin.trim()) : [])),
-    NEXT_PUBLIC_API_SERVER_URL: z.string().optional(),
+    NEXT_PUBLIC_BACKEND_API_BASE_URL: z.string().optional(),
 })
 
 export type AppEnv = z.infer<typeof schema>

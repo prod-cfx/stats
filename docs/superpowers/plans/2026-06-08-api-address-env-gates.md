@@ -22,9 +22,9 @@
 - Modify: `apps/quantify/src/common/auth/backend-api-base-url.spec.ts`
 - Create: `apps/backend/src/common/clients/quantify-contract.shared.spec.ts`
 
-- [ ] Write failing tests that require `frontend.required._common` to include `APP_ENV`, `NEXT_PUBLIC_APP_ENV`, `NEXT_PUBLIC_API_BASE_URL`, and `NEXT_PUBLIC_WS_URL`.
-- [ ] Write failing tests that every committed `.env.{development,staging,production,test,e2e}` has a non-placeholder `NEXT_PUBLIC_API_BASE_URL`.
-- [ ] Write failing tests that `front` server URL resolution rejects missing `NEXT_PUBLIC_API_SERVER_URL` instead of using localhost.
+- [ ] Write failing tests that require `frontend.required._common` to include `APP_ENV`, `NEXT_PUBLIC_APP_ENV`, `NEXT_PUBLIC_BACKEND_API_BASE_URL`, and `NEXT_PUBLIC_WS_URL`.
+- [ ] Write failing tests that every committed `.env.{development,staging,production,test,e2e}` has a non-placeholder `NEXT_PUBLIC_BACKEND_API_BASE_URL` ending with `/api/v1`.
+- [ ] Write failing tests that `front` server URL resolution rejects missing `NEXT_PUBLIC_BACKEND_API_BASE_URL` instead of using localhost.
 - [ ] Write failing tests that `front` WebSocket URL rejects missing public URLs instead of using localhost.
 - [ ] Update existing admin tests so both public API vars missing/placeholder throws.
 - [ ] Update quantify backend URL tests so missing backend API config throws.
@@ -42,10 +42,10 @@
 
 - [ ] Add frontend common required vars in `dx/config/env-policy.jsonc`.
 - [ ] Replace placeholder public API base values in committed env files with explicit local/test/staging paths.
-- [ ] Keep `NEXT_PUBLIC_QUANTIFY_API_SERVER_URL` as optional because current frontend/admin code has no active consumer.
-- [ ] Make front SSR server base require `NEXT_PUBLIC_API_SERVER_URL` whenever `NEXT_PUBLIC_API_BASE_URL` is relative.
-- [ ] Make front WebSocket base require `NEXT_PUBLIC_WS_URL` or `NEXT_PUBLIC_API_SERVER_URL`.
-- [ ] Keep admin compatibility: `NEXT_PUBLIC_API_BASE_URL` wins, otherwise `NEXT_PUBLIC_API_SERVER_URL + /api/v1`; throw when both are missing or placeholders.
+- [ ] Keep `NEXT_PUBLIC_QUANTIFY_API_BASE_URL` as optional because current frontend/admin code has no active consumer.
+- [ ] Make front SSR server base require `NEXT_PUBLIC_BACKEND_API_BASE_URL` as a complete URL including `/api/v1`.
+- [ ] Make front WebSocket base require `NEXT_PUBLIC_WS_URL` or derive origin from `NEXT_PUBLIC_BACKEND_API_BASE_URL`.
+- [ ] Keep admin on `NEXT_PUBLIC_BACKEND_API_BASE_URL`; throw when it is missing or placeholder.
 - [ ] Make quantify-to-backend and backend-to-quantify helpers throw on missing or placeholder config.
 
 ### Task 3: Verification and PR

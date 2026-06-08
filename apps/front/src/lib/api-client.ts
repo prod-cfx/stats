@@ -15,45 +15,44 @@ function normalizePublicUrlEnv(value?: string): string | undefined {
   return normalized.replace(/\/$/, '')
 }
 
-function resolveBrowserApiBaseUrl(explicitApiBaseUrl: string | undefined): string {
-  if (!explicitApiBaseUrl) {
-    throw new Error('NEXT_PUBLIC_API_BASE_URL is required')
+export function resolveBrowserApiBaseUrl(backendApiBaseUrl: string | undefined): string {
+  if (!backendApiBaseUrl) {
+    throw new Error('NEXT_PUBLIC_BACKEND_API_BASE_URL is required')
   }
-  if (!isAbsoluteHttpUrl(explicitApiBaseUrl)) {
-    return explicitApiBaseUrl
+  if (!isAbsoluteHttpUrl(backendApiBaseUrl)) {
+    throw new Error('NEXT_PUBLIC_BACKEND_API_BASE_URL must be an absolute URL that includes /api/v1')
   }
 
   try {
-    const pathname = new URL(explicitApiBaseUrl).pathname.replace(/\/$/, '')
-    return pathname || '/api/v1'
+    const pathname = new URL(backendApiBaseUrl).pathname.replace(/\/$/, '')
+    if (!pathname) {
+      throw new Error('NEXT_PUBLIC_BACKEND_API_BASE_URL must include /api/v1')
+    }
+    return pathname
   } catch {
-    return '/api/v1'
+    throw new Error('NEXT_PUBLIC_BACKEND_API_BASE_URL must include /api/v1')
   }
 }
 
 // Browser requests should default to the same-origin Next rewrite to avoid CORS
 // preflight failures on authenticated API calls.
-const EXPLICIT_API_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_BASE_URL)
-const SERVER_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL)
+const BACKEND_API_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL)
 
-export const API_BASE_URL = resolveBrowserApiBaseUrl(EXPLICIT_API_BASE_URL)
-export const SERVER_API_BASE_URL = resolveServerApiBaseUrl(EXPLICIT_API_BASE_URL ?? API_BASE_URL, SERVER_BASE_URL)
+export const API_BASE_URL = resolveBrowserApiBaseUrl(BACKEND_API_BASE_URL)
+export const SERVER_API_BASE_URL = resolveServerApiBaseUrl(BACKEND_API_BASE_URL)
 
 function isAbsoluteHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value)
 }
 
-export function resolveServerApiBaseUrl(apiBaseUrl: string, serverBaseUrl: string | undefined): string {
-  if (isAbsoluteHttpUrl(apiBaseUrl)) {
-    return apiBaseUrl
+export function resolveServerApiBaseUrl(backendApiBaseUrl: string | undefined): string {
+  if (!backendApiBaseUrl) {
+    throw new Error('NEXT_PUBLIC_BACKEND_API_BASE_URL is required')
   }
-  if (!serverBaseUrl) {
-    throw new Error('NEXT_PUBLIC_API_SERVER_URL is required when NEXT_PUBLIC_API_BASE_URL is relative')
+  if (!backendApiBaseUrl.endsWith('/api/v1')) {
+    throw new Error('NEXT_PUBLIC_BACKEND_API_BASE_URL must include /api/v1')
   }
-  if (apiBaseUrl.startsWith('/')) {
-    return `${serverBaseUrl}${apiBaseUrl}`
-  }
-  return `${serverBaseUrl}/${apiBaseUrl}`
+  return backendApiBaseUrl
 }
 
 /**

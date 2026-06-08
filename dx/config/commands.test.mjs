@@ -173,7 +173,7 @@ describe('dx command config', () => {
     assert.deepEqual(required._common, [
       'APP_ENV',
       'NEXT_PUBLIC_APP_ENV',
-      'NEXT_PUBLIC_API_BASE_URL',
+      'NEXT_PUBLIC_BACKEND_API_BASE_URL',
       'NEXT_PUBLIC_WS_URL',
     ])
 
@@ -185,9 +185,10 @@ describe('dx command config', () => {
   it('keeps committed frontend API base env values explicit and non-placeholder', async () => {
     for (const env of ['development', 'staging', 'production', 'test', 'e2e']) {
       const source = await readEnvFile(env)
-      const value = parseEnvValue(source, 'NEXT_PUBLIC_API_BASE_URL')
-      assert.ok(value, `.env.${env} missing NEXT_PUBLIC_API_BASE_URL`)
-      assert.notEqual(value, envPolicy.secretPlaceholder, `.env.${env} must not use secret placeholder for NEXT_PUBLIC_API_BASE_URL`)
+      const value = parseEnvValue(source, 'NEXT_PUBLIC_BACKEND_API_BASE_URL')
+      assert.ok(value, `.env.${env} missing NEXT_PUBLIC_BACKEND_API_BASE_URL`)
+      assert.notEqual(value, envPolicy.secretPlaceholder, `.env.${env} must not use secret placeholder for NEXT_PUBLIC_BACKEND_API_BASE_URL`)
+      assert.match(value, /\/api\/v1\/?$/, `.env.${env} NEXT_PUBLIC_BACKEND_API_BASE_URL must include /api/v1`)
     }
   })
 })

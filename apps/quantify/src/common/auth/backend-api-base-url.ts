@@ -12,23 +12,14 @@ function normalizeEnvUrl(value: string | undefined): string | null {
   return trimmed.replace(/\/+$/, '')
 }
 
-function appendApiPrefix(baseUrl: string): string {
-  if (baseUrl.endsWith('/api/v1')) {
-    return baseUrl
-  }
-  return `${baseUrl}/api/v1`
-}
-
 export function resolveBackendApiBaseUrl(env: BackendApiBaseUrlEnv): string {
   const configuredApiUrl = normalizeEnvUrl(env.getString('BACKEND_API_BASE_URL'))
   if (configuredApiUrl) {
+    if (!configuredApiUrl.endsWith('/api/v1')) {
+      throw new Error('BACKEND_API_BASE_URL must include /api/v1')
+    }
     return configuredApiUrl
   }
 
-  const configuredServerUrl = normalizeEnvUrl(env.getString('NEXT_PUBLIC_API_SERVER_URL'))
-  if (configuredServerUrl) {
-    return appendApiPrefix(configuredServerUrl)
-  }
-
-  throw new Error('BACKEND_API_BASE_URL or NEXT_PUBLIC_API_SERVER_URL is required')
+  throw new Error('BACKEND_API_BASE_URL is required')
 }

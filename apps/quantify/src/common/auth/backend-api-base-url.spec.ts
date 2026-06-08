@@ -10,27 +10,25 @@ describe('resolveBackendApiBaseUrl', () => {
   it('uses explicit backend api base url first', () => {
     const env = createEnv({
       BACKEND_API_BASE_URL: 'https://backend.example.com/api/v1/',
-      NEXT_PUBLIC_API_SERVER_URL: 'https://public-backend.example.com',
     })
 
     expect(resolveBackendApiBaseUrl(env)).toBe('https://backend.example.com/api/v1')
   })
 
-  it('derives api base url from public backend server url when explicit value is unset', () => {
+  it('treats backend API base URL placeholder as missing', () => {
     const env = createEnv({
       BACKEND_API_BASE_URL: '__SET_IN_env.local__',
-      NEXT_PUBLIC_API_SERVER_URL: 'https://cfx-backend-staging.devbase.cloud/',
     })
 
-    expect(resolveBackendApiBaseUrl(env)).toBe('https://cfx-backend-staging.devbase.cloud/api/v1')
+    expect(() => resolveBackendApiBaseUrl(env)).toThrow('BACKEND_API_BASE_URL')
   })
 
-  it('keeps an existing api prefix when deriving from public backend server url', () => {
+  it('rejects host-only backend API base URL instead of appending api prefix', () => {
     const env = createEnv({
-      NEXT_PUBLIC_API_SERVER_URL: 'https://backend.example.com/api/v1/',
+      BACKEND_API_BASE_URL: 'https://backend.example.com',
     })
 
-    expect(resolveBackendApiBaseUrl(env)).toBe('https://backend.example.com/api/v1')
+    expect(() => resolveBackendApiBaseUrl(env)).toThrow('/api/v1')
   })
 
   it('throws when backend API config is missing', () => {
