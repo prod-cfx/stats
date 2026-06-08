@@ -22,6 +22,7 @@ class PredMarket {
     required this.yesPercent,
     required this.volume,
     required this.live,
+    this.rules = const <String>[],
     this.resolution,
     this.winStart,
     this.winEnd,
@@ -41,6 +42,9 @@ class PredMarket {
 
   /// 是否实时开放（LIVE 脉冲点 + 详情 OPEN/CLOSED）。
   final bool live;
+
+  /// 后端规则段落。真实契约有值时，详情页直接渲染这些规则。
+  final List<String> rules;
 
   /// 详情字段：解析来源。null 时由 [resolutionSource] 派生。
   final String? resolution;

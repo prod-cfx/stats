@@ -6,5 +6,9 @@ class MockPredMarketRepository implements PredMarketRepository {
   const MockPredMarketRepository();
 
   @override
-  Future<List<PredMarket>> listPredMarkets() async => kPredMarkets;
+  Future<List<PredMarket>> listPredMarkets({
+    int limit = 48,
+    bool onlyActive = true,
+    String? locale,
+  }) async => kPredMarkets;
 }

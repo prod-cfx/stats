@@ -49,10 +49,6 @@ final Provider<OrderbookService> orderbookServiceProvider =
     Provider<OrderbookService>(
       (Ref ref) => OrderbookService(ref.watch(apiClientProvider)),
     );
-final Provider<LongShortService> longShortServiceProvider =
-    Provider<LongShortService>(
-      (Ref ref) => LongShortService(ref.watch(apiClientProvider)),
-    );
 final Provider<WhaleFeedService> whaleFeedServiceProvider =
     Provider<WhaleFeedService>(
       (Ref ref) => WhaleFeedService(ref.watch(apiClientProvider)),

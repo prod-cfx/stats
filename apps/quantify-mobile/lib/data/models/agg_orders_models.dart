@@ -13,6 +13,7 @@ class AggExchange {
     required this.letter,
     required this.color,
     required this.fg,
+    this.logoUrl,
   });
 
   final String key;
@@ -20,6 +21,7 @@ class AggExchange {
   final String letter;
   final Color color;
   final Color fg;
+  final String? logoUrl;
 }
 
 /// 订单簿单档（聚合后带累计 [total]）。
@@ -46,7 +48,12 @@ class AggBookLevel {
   /// 由近及远的累计数量（[withCumulative] 填充）。
   final double total;
 
-  AggBookLevel copyWith({double? price, double? qty, bool? hot, double? total}) {
+  AggBookLevel copyWith({
+    double? price,
+    double? qty,
+    bool? hot,
+    double? total,
+  }) {
     return AggBookLevel(
       price: price ?? this.price,
       qty: qty ?? this.qty,
@@ -83,11 +90,7 @@ class OiRow {
 
 /// 持仓量总计行。
 class OiTotal {
-  const OiTotal({
-    required this.qty,
-    required this.usd,
-    required this.h24,
-  });
+  const OiTotal({required this.qty, required this.usd, required this.h24});
 
   final double qty;
   final double usd;

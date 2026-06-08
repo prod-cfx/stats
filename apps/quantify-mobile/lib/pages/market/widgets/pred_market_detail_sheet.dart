@@ -67,17 +67,33 @@ class PredMarketDetailSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  _ruleField(
-                    c,
-                    l10n.predMarketResolutionSource,
-                    market.resolutionSource,
-                  ),
-                  const SizedBox(height: 10),
-                  _ruleField(
-                    c,
-                    l10n.predMarketEventWindow,
-                    '${market.eventStart} ~ ${market.eventEnd}',
-                  ),
+                  if (market.rules.isNotEmpty)
+                    ...market.rules.map(
+                      (String rule) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          rule,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 11.5,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    )
+                  else ...<Widget>[
+                    _ruleField(
+                      c,
+                      l10n.predMarketResolutionSource,
+                      market.resolutionSource,
+                    ),
+                    const SizedBox(height: 10),
+                    _ruleField(
+                      c,
+                      l10n.predMarketEventWindow,
+                      '${market.eventStart} ~ ${market.eventEnd}',
+                    ),
+                  ],
                   _divider(c, top: 14, bottom: 12),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,

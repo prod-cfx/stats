@@ -371,7 +371,12 @@ class _Row extends StatelessWidget {
             flex: _oiFlex[0],
             child: Row(
               children: <Widget>[
-                if (ex != null) AggExchangeAvatar(exchange: ex, size: 28),
+                if (ex != null)
+                  AggExchangeAvatar(
+                    exchange: ex,
+                    size: 28,
+                    shape: AggExchangeAvatarShape.circle,
+                  ),
                 const SizedBox(width: QzSpacing.sm),
                 Flexible(
                   child: Text(

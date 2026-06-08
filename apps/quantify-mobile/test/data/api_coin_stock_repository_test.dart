@@ -18,6 +18,7 @@ CryptoStockQuoteResponseDto _dto({
   String? assetSymbol,
   String? companyType,
   List<String>? infoParagraphs,
+  String source = 'BBX_SCRAPER',
 }) {
   final DateTime t = DateTime.utc(2026, 6, 6);
   return CryptoStockQuoteResponseDto((b) {
@@ -36,7 +37,7 @@ CryptoStockQuoteResponseDto _dto({
       ..holdingQuantity = holdingQuantity
       ..assetSymbol = assetSymbol
       ..companyType = companyType
-      ..source_ = 'test'
+      ..source_ = source
       ..quoteTimestamp = t
       ..createdAt = t
       ..updatedAt = t;
@@ -101,6 +102,66 @@ void main() {
         _dto(infoParagraphs: <String>['a', 'b']),
       );
       expect(c.intro, 'a\nb');
+    });
+  });
+
+  group('ApiCoinStockRepository.mergeQuotesBySymbol', () {
+    test('prefers BBX quote fields while keeping holdings fields', () {
+      final CryptoStockQuoteResponseDto holding = _dto(
+        holdingsValue: '\$58.00B',
+        holdingsAmount: '671.27K BTC',
+        price: '100',
+        priceChangePercent: '0',
+        source: 'BBX_SCRAPER',
+      );
+      final CryptoStockQuoteResponseDto price = _dto(
+        price: '165.12',
+        priceChangePercent: '2.37',
+        source: 'BBX',
+      );
+
+      final List<CryptoStockQuoteResponseDto> merged =
+          ApiCoinStockRepository.mergeQuotesBySymbol(
+            <CryptoStockQuoteResponseDto>[holding],
+            <CryptoStockQuoteResponseDto>[price],
+          );
+
+      expect(merged, hasLength(1));
+      expect(merged.first.price, '165.12');
+      expect(merged.first.priceChangePercent, '2.37');
+      expect(merged.first.holdingsValue, '\$58.00B');
+      expect(merged.first.holdingsAmount, '671.27K BTC');
+      expect(merged.first.source_, 'BBX');
+    });
+
+    test('keeps holdings rows when no matching BBX symbol exists', () {
+      final CryptoStockQuoteResponseDto holding = _dto(symbol: 'COIN');
+      final CryptoStockQuoteResponseDto price = _dto(
+        symbol: 'MSTR',
+        source: 'BBX',
+      );
+
+      final List<CryptoStockQuoteResponseDto> merged =
+          ApiCoinStockRepository.mergeQuotesBySymbol(
+            <CryptoStockQuoteResponseDto>[holding],
+            <CryptoStockQuoteResponseDto>[price],
+          );
+
+      expect(merged, hasLength(1));
+      expect(merged.first.symbol, 'COIN');
+      expect(merged.first.source_, 'BBX_SCRAPER');
+    });
+
+    test('returns price rows when holdings source is empty', () {
+      final CryptoStockQuoteResponseDto price = _dto(source: 'BBX');
+
+      final List<CryptoStockQuoteResponseDto> merged =
+          ApiCoinStockRepository.mergeQuotesBySymbol(
+            const <CryptoStockQuoteResponseDto>[],
+            <CryptoStockQuoteResponseDto>[price],
+          );
+
+      expect(merged, <CryptoStockQuoteResponseDto>[price]);
     });
   });
 }

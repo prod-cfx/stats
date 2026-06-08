@@ -63,6 +63,17 @@ final FutureProvider<List<PredMarket>> predMarketsProvider =
       return ref.watch(predMarketRepositoryProvider).listPredMarkets();
     });
 
+/// 预测市场列表（按 locale 请求后端本地化文案）。
+final FutureProviderFamily<List<PredMarket>, String>
+predMarketsByLocaleProvider = FutureProvider.family<List<PredMarket>, String>((
+  Ref ref,
+  String locale,
+) async {
+  return ref
+      .watch(predMarketRepositoryProvider)
+      .listPredMarkets(locale: locale);
+});
+
 /// 巨鲸「数据」hub 附加数据 Repository（#2216）。走真实通知收件箱契约（#2270）。
 final Provider<WhaleExtrasRepository> whaleExtrasRepositoryProvider =
     Provider<WhaleExtrasRepository>((Ref ref) {
@@ -93,15 +104,15 @@ final FutureProviderFamily<List<Trade>, (String, double)> tradesProvider =
           .listTrades(symbol: args.$1, mid: args.$2);
     });
 
-/// 聚合市场数据 Repository（#2216）。盘口走真实契约；
-/// OI/volume 缺契约字段时返回空态，不回退 test fixture。
+/// 聚合市场数据 Repository（#2216）。聚合挂单 / 持仓量 / 成交量均走真实契约，
+/// 不回退 test fixture。
 final Provider<AggOrderbookRepository> aggOrderbookRepositoryProvider =
     Provider<AggOrderbookRepository>((Ref ref) {
       return ApiAggOrderbookRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 聚合市场数据 bundle（#2216）。4 个 `agg_*` widget 统一 watch 此单一共享
-/// Provider 取原始 levels 与各表静态数据；派生留 widget（C4 #2218 收口上移）。
+/// Provider 取原始 levels 与各表真实快照；派生留 widget（C4 #2218 收口上移）。
 final FutureProvider<AggMarketData> aggOrderbookProvider =
     FutureProvider<AggMarketData>((Ref ref) async {
       return ref.watch(aggOrderbookRepositoryProvider).getMarketData();
@@ -119,7 +130,7 @@ final Provider<OrderbookRepository> orderbookRepositoryProvider =
 
 final Provider<LongShortRepository> longShortRepositoryProvider =
     Provider<LongShortRepository>((Ref ref) {
-      return ApiLongShortRepository(ref.watch(longShortServiceProvider));
+      return ApiLongShortRepository(ref.watch(generatedBackendApiProvider));
     });
 
 final Provider<WhaleFeedRepository> whaleFeedRepositoryProvider =

@@ -68,22 +68,3 @@ class OrderbookService {
     query: <String, dynamic>{'symbol': symbol},
   );
 }
-
-class LongShortService {
-  const LongShortService(this._client);
-  final ApiClient _client;
-
-  Future<dynamic> getRatio({required String symbol, required String interval}) {
-    return _client.get(
-      '/markets/long-short-ratio',
-      query: <String, dynamic>{'symbol': symbol, 'interval': interval},
-    );
-  }
-
-  Future<dynamic> getSnapshot({required String symbol}) {
-    return _client.get(
-      '/markets/long-short-ratio/exchanges',
-      query: <String, dynamic>{'symbol': symbol},
-    );
-  }
-}

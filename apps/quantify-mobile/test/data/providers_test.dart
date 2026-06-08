@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -8,7 +9,7 @@ import 'package:quantify_mobile/data/models/exchange_long_short_models.dart';
 import 'package:quantify_mobile/data/api/api.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/services/api_client.dart';
-import 'package:quantify_mobile/data/services/market_services.dart';
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 import 'package:quantify_mobile/data/services/strategy_services.dart';
 import 'package:quantify_mobile/data/storage/market_favorites_persistence.dart';
 
@@ -189,8 +190,29 @@ void main() {
       final ApiBacktestRepository backtest = ApiBacktestRepository(
         BacktestService(client),
       );
+      final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              if (options.path == '/markets/long-short-ratio/exchanges') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: <String, Object?>{
+                      'data': <Object?>[],
+                      'message': 'Success',
+                    },
+                  ),
+                );
+                return;
+              }
+              h.next(options);
+            },
+          ),
+        );
       final ApiLongShortRepository longShort = ApiLongShortRepository(
-        LongShortService(client),
+        GeneratedBackendApi(dio: dio),
       );
 
       final BacktestResult result = await backtest.getResult('empty-job');

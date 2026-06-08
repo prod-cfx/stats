@@ -21,14 +21,14 @@ import 'widgets/pred_market_search_overlay.dart';
 class PredMarketBody extends ConsumerWidget {
   const PredMarketBody({super.key, this.markets});
 
-  /// 数据源覆盖（测试可注入）。为 null 时经 [predMarketsProvider] 取数。
+  /// 数据源覆盖（测试可注入）。为 null 时经 locale family provider 取数。
   final List<PredMarket>? markets;
 
-  /// 解析数据源：优先注入值，否则经 [predMarketsProvider] 取数（加载/错误态
+  /// 解析数据源：优先注入值，否则按 locale 取数（加载/错误态
   /// 回退空列表）。`build` 用 watch；回调内用 read。
-  List<PredMarket> _read(WidgetRef ref) {
+  List<PredMarket> _read(WidgetRef ref, String locale) {
     return markets ??
-        ref.read(predMarketsProvider).value ??
+        ref.read(predMarketsByLocaleProvider(locale)).value ??
         const <PredMarket>[];
   }
 
@@ -41,11 +41,12 @@ class PredMarketBody extends ConsumerWidget {
   }
 
   Future<void> _openSearch(BuildContext context, WidgetRef ref) async {
+    final String locale = _polymarketLocale(context);
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => PredMarketSearchOverlay(
-          markets: _read(ref),
+          markets: _read(ref, locale),
           onApplyQuery: (String q) =>
               ref.read(predMarketControllerProvider.notifier).setFilter(q),
           onOpenMarket: (PredMarket m) => _openDetail(context, m),
@@ -65,9 +66,10 @@ class PredMarketBody extends ConsumerWidget {
     final String filter = ref.watch(
       predMarketControllerProvider.select((PredMarketState s) => s.filter),
     );
+    final String locale = _polymarketLocale(context);
     final List<PredMarket> markets =
         this.markets ??
-        ref.watch(predMarketsProvider).value ??
+        ref.watch(predMarketsByLocaleProvider(locale)).value ??
         const <PredMarket>[];
     final List<PredMarket> shown = _shown(markets, filter);
     return ColoredBox(
@@ -178,13 +180,19 @@ class PredMarketBody extends ConsumerWidget {
             if (filter.isNotEmpty)
               GestureDetector(
                 key: const Key('pred-search-bar-clear'),
-                onTap: () =>
-                    ref.read(predMarketControllerProvider.notifier).setFilter(''),
+                onTap: () => ref
+                    .read(predMarketControllerProvider.notifier)
+                    .setFilter(''),
                 child: Icon(Icons.cancel, size: 16, color: c.textDim),
               ),
           ],
         ),
       ),
     );
+  }
+
+  String _polymarketLocale(BuildContext context) {
+    final String code = Localizations.localeOf(context).languageCode;
+    return code.toLowerCase().startsWith('zh') ? 'zh' : 'en';
   }
 }
