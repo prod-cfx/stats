@@ -89,6 +89,7 @@ test('quantify ci deploy starts backtest worker after dx api deploy', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
 
   assert.match(workflow, /npx -y @ranger1\/dx@\$\{\{ env\.DX_VERSION \}\} --config-dir \.\/\.tmp\/dx-config deploy quantify/)
+  assert.match(workflow, /pm2 delete quantify-api/)
   assert.match(workflow, /pm2 delete quantify-backtest-worker/)
   assert.match(workflow, /pm2 startOrReload \.\/ecosystem\.quantify\.config\.cjs --only quantify-api --update-env/)
   assert.match(workflow, /pm2 startOrReload \.\/ecosystem\.quantify\.config\.cjs --only quantify-backtest-worker --update-env/)
@@ -98,7 +99,7 @@ test('quantify ci deploy starts backtest worker after dx api deploy', () => {
   assert.match(workflow, /\$\{name\} pid mismatch/)
   assert.match(workflow, /\$\{name\} pid not alive/)
   assert.match(workflow, /\$\{name\} cwd mismatch/)
-  assert.match(workflow, /const app = requireOnlineProcess\('quantify-backtest-worker'\)/)
+  assert.match(workflow, /const \{ app, actualCwd, status \} = requireOnlineProcess\('quantify-backtest-worker'\)/)
   assert.match(workflow, /readyDeadline = Date\.now\(\) \+ 60_000/)
   assert.match(workflow, /Quantify backtest worker ready/)
   assert.match(workflow, /quantify-backtest-worker ready log missing/)

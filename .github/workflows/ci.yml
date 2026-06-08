@@ -525,6 +525,9 @@ jobs:
 
           APP_ENV="$APP_ENV_NAME" NODE_ENV="production" \
             "$DOTENV_BIN" -o -e "$ENV_FILE" -e "$ENV_LOCAL_FILE" -- \
+            pm2 delete quantify-api >/dev/null 2>&1 || true
+          APP_ENV="$APP_ENV_NAME" NODE_ENV="production" \
+            "$DOTENV_BIN" -o -e "$ENV_FILE" -e "$ENV_LOCAL_FILE" -- \
             pm2 delete quantify-backtest-worker >/dev/null 2>&1 || true
           APP_ENV="$APP_ENV_NAME" NODE_ENV="production" \
             "$DOTENV_BIN" -o -e "$ENV_FILE" -e "$ENV_LOCAL_FILE" -- \
@@ -565,10 +568,10 @@ jobs:
             if (actualCwd !== expectedCwd) {
               throw new Error(`${name} cwd mismatch: ${actualCwd}`)
             }
-            return app
+            return { app, actualCwd, status }
           }
           requireOnlineProcess('quantify-api')
-          const app = requireOnlineProcess('quantify-backtest-worker')
+          const { app, actualCwd, status } = requireOnlineProcess('quantify-backtest-worker')
           const outLog = app.pm2_env?.pm_out_log_path
           if (!outLog || !fs.existsSync(outLog)) {
             throw new Error(`quantify-backtest-worker out log missing: ${outLog || '<empty>'}`)
