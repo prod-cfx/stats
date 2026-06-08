@@ -184,6 +184,7 @@ export class BacktestRunnerService {
       dataRequirementMissingCount: 0,
       eventStreamMissingCount: 0,
     }
+    let executedFillCount = 0
     diagnostics.eventStreamMissingCount = this.resolveMissingEventStreamCount(input)
     if (diagnostics.eventStreamMissingCount > 0) {
       const report = reporter.toReport(input.initialCash)
@@ -264,7 +265,7 @@ export class BacktestRunnerService {
       const pending = pendingOrdersBySymbol.get(bar.symbol)
       if (pending && pending.deltaQty !== 0) {
         pendingOrdersBySymbol.delete(bar.symbol)
-        this.applyDeltaOrder({
+        executedFillCount += this.applyDeltaOrder({
           input,
           bar,
           ledger,
@@ -327,7 +328,7 @@ export class BacktestRunnerService {
       const isObjectIntent = intent != null && typeof intent === 'object'
       const intentRecord = intent as { type?: unknown; action?: unknown }
       const hasOrderSignal = isObjectIntent && this.hasCompiledOrderSignal(intent)
-      this.applyCompiledOrderProgramFills({
+      executedFillCount += this.applyCompiledOrderProgramFills({
         intent,
         input,
         bar,
@@ -397,7 +398,7 @@ export class BacktestRunnerService {
         if (executionPolicy.fillTiming === 'NEXT_BAR_OPEN') {
           pendingOrdersBySymbol.set(bar.symbol, selectedOrder)
         } else {
-          this.applyDeltaOrder({
+          executedFillCount += this.applyDeltaOrder({
             input,
             bar,
             ledger,
@@ -431,8 +432,7 @@ export class BacktestRunnerService {
       ...(pos.entryTimeframe ? { entryTimeframe: pos.entryTimeframe } : {}),
     }))
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
-    // fillCount 表示有效成交数；未平仓开仓也算成交，避免开仓型策略被误报 no-fill。
-    diagnostics.fillCount = report.trades.length + openPositions.length
+    diagnostics.fillCount = executedFillCount
     const requiredRuntimeKeys = this.resolveRequiredRuntimeKeys(baseBars, requestedRuntimeTimeframes, input.symbols)
     diagnostics.dataRequirementMissingCount = requiredRuntimeKeys
       .filter(key => !availableRuntimeKeys.has(key))
@@ -629,8 +629,8 @@ export class BacktestRunnerService {
     reasonSource: BacktestReasonSource
     forcedPriceSource?: BacktestRunInput['execution']['priceSource']
     limitPrice?: number
-  }) {
-    if (input.deltaQty === 0) return
+  }): number {
+    if (input.deltaQty === 0) return 0
 
     const side: 'BUY' | 'SELL' = input.deltaQty > 0 ? 'BUY' : 'SELL'
     const fill = typeof input.limitPrice === 'number'
@@ -682,6 +682,8 @@ export class BacktestRunnerService {
         reasonSource: input.reasonSource,
       })
     })
+
+    return 1
   }
 
   private applyCompiledOrderProgramFills(input: {
@@ -692,9 +694,9 @@ export class BacktestRunnerService {
     reporter: ReturnType<BacktestReporterService['create']>
     programStatesBySymbol: Map<string, Map<string, CompiledOrderProgramRuntimeState>>
     equity: number
-  }): void {
+  }): number {
     const orderState = this.extractCompiledOrderState(input.intent)
-    if (!orderState) return
+    if (!orderState) return 0
 
     const statesByProgram = this.syncCompiledOrderProgramStates({
       bar: input.bar,
@@ -702,12 +704,13 @@ export class BacktestRunnerService {
       programStatesBySymbol: input.programStatesBySymbol,
       equity: input.equity,
     })
-    if (!statesByProgram) return
+    if (!statesByProgram) return 0
 
+    let fillCount = 0
     for (const [programId, state] of statesByProgram.entries()) {
       const fills = state.orders.filter(order => this.isLimitTouched(input.bar, order))
       for (const order of fills) {
-        this.applyDeltaOrder({
+        fillCount += this.applyDeltaOrder({
           input: input.input,
           bar: input.bar,
           ledger: input.ledger,
@@ -720,6 +723,7 @@ export class BacktestRunnerService {
         this.recycleCompiledOrderProgramOrder(state, order)
       }
     }
+    return fillCount
   }
 
   private extractCompiledOrderState(intent: SignalIntent): {
