@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
+import '../fixtures/mock/fixtures/orderbook.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';

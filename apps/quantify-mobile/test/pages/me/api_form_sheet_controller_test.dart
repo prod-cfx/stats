@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
+import '../../fixtures/mock/mock_api_key_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/deploy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';

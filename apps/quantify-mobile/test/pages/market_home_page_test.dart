@@ -6,7 +6,7 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
+import '../fixtures/mock/fixtures/tickers.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';

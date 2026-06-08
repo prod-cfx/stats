@@ -42,7 +42,7 @@ Future<void> _pump(WidgetTester tester) async {
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[useMockOverride],
+      overrides: <Override>[...testRepositoryOverrides],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,

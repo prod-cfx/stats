@@ -45,8 +45,8 @@ StrategyStatusBadge? _badgeFromApi(Object? raw) {
 
 /// [StrategyRepository] 真实现（issue #2189 / #2308）。
 ///
-/// `USE_MOCK=false` 时只消费 backend/quantify OpenAPI 数据。缺失的 signals
-/// 与 equity curve 保持空集合，由页面隐藏模块或显示空态，不回退 mock。
+/// 只消费 backend/quantify OpenAPI 数据。缺失的 signals
+/// 与 equity curve 保持空集合，由页面隐藏模块或显示空态，不回退 fixture。
 class ApiStrategyRepository implements StrategyRepository {
   ApiStrategyRepository(this._service);
 

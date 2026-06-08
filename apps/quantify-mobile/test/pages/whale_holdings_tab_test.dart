@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_holdings.dart';
+import '../fixtures/mock/fixtures/whale_holdings.dart';
 import 'package:quantify_mobile/domain/models/whale_holding_models.dart';
 import 'package:quantify_mobile/domain/use_cases/whale_holding_use_cases.dart';
 import 'package:quantify_mobile/data/providers.dart';

@@ -1,10 +1,10 @@
 import '../../../data/models/agg_orders_models.dart';
 
-/// 聚合挂单派生纯函数（issue #2216 自 `data/mock/fixtures/agg_orders.dart`
+/// 聚合挂单派生纯函数（issue #2216 自 `test/fixtures/fixture/fixtures/agg_orders.dart`
 /// 迁出，使 widget 不再 import fixtures；派生暂留 widget 层，C4 #2218 由
 /// Controller 收口上移）。
 
-/// 按价格桶聚合（`bucket > 1` 时生效）。ask 向上取整、bid 向下取整，
+/// 按价格桶聚合（`bucket > 1`真实 API 模式使用）。ask 向上取整、bid 向下取整，
 /// 桶边界落在 mid 两侧不重叠。结果按价格降序（与展示顺序一致）。纯函数。
 List<AggBookLevel> aggregateLevels(
   List<AggBookLevel> rows,

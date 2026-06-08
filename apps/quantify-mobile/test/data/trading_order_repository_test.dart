@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/api/api_trading_order_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_trading_order_repository.dart';
+import '../fixtures/mock/mock_trading_order_repository.dart';
 import 'package:quantify_mobile/data/models/account_models.dart';
 import 'package:quantify_mobile/data/models/trading_order_models.dart';
 import 'package:quantify_mobile/data/repositories/account_repository.dart';

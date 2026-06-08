@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_profiles.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_profile_repository.dart';
+import '../fixtures/mock/fixtures/whale_profiles.dart';
+import '../fixtures/mock/mock_whale_profile_repository.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
 
 void main() {

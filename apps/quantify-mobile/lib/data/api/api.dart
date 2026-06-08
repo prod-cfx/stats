@@ -1,7 +1,7 @@
 /// Data API Repository 真实现 barrel（issue #2189）。
 ///
 /// 每个 `Api<Domain>Repository` 注入对应 Service，走真实 HTTP，把响应反序列化
-/// 为现有 domain model；`USE_MOCK=false` 时由 providers 装配启用。
+/// 为现有 domain model；由 providers 装配启用。
 library;
 
 export 'api_account_repository.dart';

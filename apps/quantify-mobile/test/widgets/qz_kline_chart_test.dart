@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:k_chart_plus/k_chart_plus.dart';
-import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
+import '../fixtures/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';

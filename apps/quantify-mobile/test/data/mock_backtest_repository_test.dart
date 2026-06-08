@@ -1,18 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_backtest_repository.dart';
+import '../fixtures/mock/mock_backtest_repository.dart';
 import 'package:quantify_mobile/data/models/backtest_models.dart';
 
 void main() {
   group('MockBacktestRepository', () {
     test('run 返回 fixture 结果（含扩展指标字段）', () async {
       final MockBacktestRepository repo = MockBacktestRepository();
-      final BacktestResult r = await repo.run(BacktestRequest(
-        strategyId: 's-1',
-        symbol: 'BTCUSDT',
-        startTime: DateTime.fromMillisecondsSinceEpoch(0),
-        endTime: DateTime.fromMillisecondsSinceEpoch(1000),
-        params: const <String, dynamic>{},
-      ));
+      final BacktestResult r = await repo.run(
+        BacktestRequest(
+          strategyId: 's-1',
+          symbol: 'BTCUSDT',
+          startTime: DateTime.fromMillisecondsSinceEpoch(0),
+          endTime: DateTime.fromMillisecondsSinceEpoch(1000),
+          params: const <String, dynamic>{},
+        ),
+      );
       expect(r.id, 'bt-mock-1');
       expect(r.equityCurve, isNotEmpty);
       // 扩展指标（验收 #1）：新增字段均有 mock 数据
@@ -31,8 +33,10 @@ void main() {
       expect(r.trades, isNotEmpty);
       expect(r.monthlyRows, isNotEmpty);
       // 每行月度数据固定 12 列
-      expect(r.monthlyRows.every((BacktestMonthlyRow m) => m.values.length == 12),
-          isTrue);
+      expect(
+        r.monthlyRows.every((BacktestMonthlyRow m) => m.values.length == 12),
+        isTrue,
+      );
       expect(r.riskRows, isNotEmpty);
       expect(r.drawdownMarkers, isNotEmpty);
     });

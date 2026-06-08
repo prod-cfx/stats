@@ -6,9 +6,9 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
-import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
-import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
+import '../fixtures/mock/fixtures/candles.dart';
+import '../fixtures/mock/fixtures/orderbook.dart';
+import '../fixtures/mock/fixtures/tickers.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
@@ -108,7 +108,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutTickerKlineOrderbook,
         tickerRepositoryProvider.overrideWithValue(_StubTickerRepository()),
         orderbookRepositoryProvider.overrideWithValue(
           _StubOrderbookRepository(),

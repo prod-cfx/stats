@@ -68,7 +68,7 @@ Future<void> _pumpHub(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverrides,
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: MaterialApp(
@@ -91,7 +91,7 @@ Future<void> _pumpHubWithRealEmptyAgg(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutAggOrderbook,
         sharedPreferencesProvider.overrideWithValue(prefs),
         aggOrderbookRepositoryProvider.overrideWithValue(
           _RealEmptyAggRepository(),

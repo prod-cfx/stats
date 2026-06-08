@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_strategy_repository.dart';
+import '../fixtures/mock/mock_strategy_repository.dart';
 import 'package:quantify_mobile/data/models/strategy_models.dart';
 
 void main() {
@@ -33,29 +33,36 @@ void main() {
       expect(a.card.id, 'st-grid-btc');
     });
 
-    test('listStrategySignals：默认 20 条，按时间倒序，buy/sell 都出现',
-        () async {
+    test('listStrategySignals：默认 20 条，按时间倒序，buy/sell 都出现', () async {
       final MockStrategyRepository repo = MockStrategyRepository();
-      final List<StrategySignal> sigs =
-          await repo.listStrategySignals('st-grid-btc');
+      final List<StrategySignal> sigs = await repo.listStrategySignals(
+        'st-grid-btc',
+      );
       expect(sigs, hasLength(20));
       // 时间倒序：i=0 最近，i=19 最远
       for (int i = 1; i < sigs.length; i++) {
-        expect(sigs[i].time.isBefore(sigs[i - 1].time), isTrue,
-            reason: '信号应按时间倒序');
+        expect(
+          sigs[i].time.isBefore(sigs[i - 1].time),
+          isTrue,
+          reason: '信号应按时间倒序',
+        );
       }
       // buy/sell 都出现（统计层面，避免某个 seed 全单边导致脆弱）
-      final bool hasBuy = sigs
-          .any((StrategySignal s) => s.side == StrategySignalSide.buy);
-      final bool hasSell = sigs
-          .any((StrategySignal s) => s.side == StrategySignalSide.sell);
+      final bool hasBuy = sigs.any(
+        (StrategySignal s) => s.side == StrategySignalSide.buy,
+      );
+      final bool hasSell = sigs.any(
+        (StrategySignal s) => s.side == StrategySignalSide.sell,
+      );
       expect(hasBuy || hasSell, isTrue);
     });
 
     test('listStrategySignals：limit 参数生效', () async {
       final MockStrategyRepository repo = MockStrategyRepository();
-      final List<StrategySignal> sigs =
-          await repo.listStrategySignals('st-grid-btc', limit: 5);
+      final List<StrategySignal> sigs = await repo.listStrategySignals(
+        'st-grid-btc',
+        limit: 5,
+      );
       expect(sigs, hasLength(5));
     });
   });

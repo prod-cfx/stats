@@ -69,7 +69,7 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final ProviderContainer container = ProviderContainer(
     overrides: <Override>[
-      useMockOverride,
+      ...testRepositoryOverrides,
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
   );
@@ -605,7 +605,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverrides,
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
     );
@@ -666,7 +666,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverrides,
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
     );

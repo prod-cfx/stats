@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_kline_repository.dart';
+import '../fixtures/mock/mock_kline_repository.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 
 void main() {
@@ -25,14 +25,8 @@ void main() {
       // 再 2 秒：累计 3 根，时间戳严格递增
       async.elapse(const Duration(seconds: 2));
       expect(received.length, 3);
-      expect(
-        received[1].openTime.isAfter(received[0].openTime),
-        isTrue,
-      );
-      expect(
-        received[2].openTime.isAfter(received[1].openTime),
-        isTrue,
-      );
+      expect(received[1].openTime.isAfter(received[0].openTime), isTrue);
+      expect(received[2].openTime.isAfter(received[1].openTime), isTrue);
 
       sub.cancel();
       // 取消订阅后 timer 应被释放

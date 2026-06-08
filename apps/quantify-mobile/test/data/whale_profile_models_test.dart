@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_profiles.dart';
+import '../fixtures/mock/fixtures/whale_profiles.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
 
 /// 巨鲸明细数据底座守护（#1858）。条数对齐设计稿，

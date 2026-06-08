@@ -20,13 +20,13 @@ const Ticker _btc = Ticker(
 );
 
 Candle _candle(int min) => Candle(
-      openTime: DateTime(2024, 1, 1, 0, min),
-      open: 1,
-      high: 2,
-      low: 0,
-      close: 1,
-      volume: 1,
-    );
+  openTime: DateTime(2024, 1, 1, 0, min),
+  open: 1,
+  high: 2,
+  low: 0,
+  close: 1,
+  volume: 1,
+);
 
 class _FakeTickerRepository implements TickerRepository {
   _FakeTickerRepository(this.tickersFuture);
@@ -60,8 +60,7 @@ class _FakeKlineRepository implements KlineRepository {
   Stream<Candle> watchCandles({
     required String symbol,
     required KlineInterval interval,
-  }) =>
-      const Stream<Candle>.empty();
+  }) => const Stream<Candle>.empty();
 }
 
 void main() {
@@ -71,9 +70,10 @@ void main() {
     kline = _FakeKlineRepository();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
-        useMockOverride,
-        tickerRepositoryProvider
-            .overrideWithValue(_FakeTickerRepository(tickersFuture)),
+        ...testRepositoryOverridesWithoutTickerKline,
+        tickerRepositoryProvider.overrideWithValue(
+          _FakeTickerRepository(tickersFuture),
+        ),
         klineRepositoryProvider.overrideWithValue(kline),
       ],
     );
@@ -90,14 +90,16 @@ void main() {
 
   group('MarketDetailController 异步加载', () {
     test('初始态 loading=true', () {
-      final ProviderContainer c =
-          makeContainer(Future<List<Ticker>>.value(<Ticker>[_btc]));
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+      );
       expect(read(c).loading, isTrue);
     });
 
     test('loading→data：快照填充 + 构建 mock trades + 触发 K 线加载', () async {
-      final ProviderContainer c =
-          makeContainer(Future<List<Ticker>>.value(<Ticker>[_btc]));
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+      );
       ctrl(c);
       await Future<void>.delayed(Duration.zero);
       final MarketDetailState s = read(c);
@@ -109,8 +111,9 @@ void main() {
     });
 
     test('symbol 未命中：priceSnapshot 为 null、loading=false', () async {
-      final ProviderContainer c =
-          makeContainer(Future<List<Ticker>>.value(const <Ticker>[]));
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(const <Ticker>[]),
+      );
       ctrl(c);
       await Future<void>.delayed(Duration.zero);
       final MarketDetailState s = read(c);
@@ -130,10 +133,10 @@ void main() {
       expect(s.error, isNotNull);
     });
 
-    test('K 线竞态：旧 interval 的 listCandles 响应不覆盖新 interval candles',
-        () async {
-      final ProviderContainer c =
-          makeContainer(Future<List<Ticker>>.value(<Ticker>[_btc]));
+    test('K 线竞态：旧 interval 的 listCandles 响应不覆盖新 interval candles', () async {
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+      );
       final MarketDetailController controller = ctrl(c);
       await Future<void>.delayed(Duration.zero);
       // 初次 K 线加载（h1）pending[0]。
@@ -159,8 +162,9 @@ void main() {
     });
 
     test('changeSource/changePanel 仅改展示态，不触发 K 线重载', () async {
-      final ProviderContainer c =
-          makeContainer(Future<List<Ticker>>.value(<Ticker>[_btc]));
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+      );
       final MarketDetailController controller = ctrl(c);
       await Future<void>.delayed(Duration.zero);
       final int klineCallsBefore = kline.calledIntervals.length;

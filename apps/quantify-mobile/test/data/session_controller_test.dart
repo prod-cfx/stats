@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
-import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import '../fixtures/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/auth_repository.dart';

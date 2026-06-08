@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_ai_chat_repository.dart';
+import '../fixtures/mock/mock_ai_chat_repository.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 
 void main() {

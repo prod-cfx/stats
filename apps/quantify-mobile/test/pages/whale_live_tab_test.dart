@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_events.dart';
+import '../fixtures/mock/fixtures/whale_events.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/data/models/whale_models.dart';
 import 'package:quantify_mobile/data/providers.dart';

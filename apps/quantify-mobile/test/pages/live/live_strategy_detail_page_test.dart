@@ -47,7 +47,10 @@ Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final ProviderContainer container = ProviderContainer(
-    overrides: <Override>[useMockOverride, sharedPreferencesProvider.overrideWithValue(prefs)],
+    overrides: <Override>[
+      ...testRepositoryOverrides,
+      sharedPreferencesProvider.overrideWithValue(prefs),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(

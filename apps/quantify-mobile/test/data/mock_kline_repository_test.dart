@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_kline_repository.dart';
+import '../fixtures/mock/mock_kline_repository.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 
 void main() {
@@ -18,9 +18,15 @@ void main() {
     test('listCandles 使用固定种子，两次调用结果一致', () async {
       final MockKlineRepository repo = MockKlineRepository();
       final List<Candle> a = await repo.listCandles(
-          symbol: 'BTCUSDT', interval: KlineInterval.m1, limit: 5);
+        symbol: 'BTCUSDT',
+        interval: KlineInterval.m1,
+        limit: 5,
+      );
       final List<Candle> b = await repo.listCandles(
-          symbol: 'BTCUSDT', interval: KlineInterval.m1, limit: 5);
+        symbol: 'BTCUSDT',
+        interval: KlineInterval.m1,
+        limit: 5,
+      );
       for (int i = 0; i < 5; i++) {
         expect(a[i].close, b[i].close);
       }

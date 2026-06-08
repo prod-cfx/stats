@@ -5,31 +5,8 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/models/backtest_models.dart';
 import 'package:quantify_mobile/data/models/exchange_long_short_models.dart';
-import 'package:quantify_mobile/data/mock/mock_account_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_agg_orderbook_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_ai_chat_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_backtest_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_coin_stock_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_kline_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_live_strategy_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_long_short_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_orderbook_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_pred_market_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_strategy_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_ticker_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_trades_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_trading_order_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_extras_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_feed_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_holdings_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_leaderboard_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_profile_repository.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_watch_repository.dart';
 import 'package:quantify_mobile/data/api/api.dart';
 import 'package:quantify_mobile/data/providers.dart';
-import 'package:quantify_mobile/data/repositories/repositories.dart';
 import 'package:quantify_mobile/data/services/api_client.dart';
 import 'package:quantify_mobile/data/services/market_services.dart';
 import 'package:quantify_mobile/data/services/strategy_services.dart';
@@ -70,131 +47,9 @@ class _EmptyApiClient extends ApiClient {
 }
 
 void main() {
-  group('useMockProvider', () {
-    test(
-      '默认 useMock=false：authRepositoryProvider 返回真实现 ApiAuthRepository（#2266）',
-      () {
-        final ProviderContainer container = ProviderContainer();
-        addTearDown(container.dispose);
-
-        expect(container.read(useMockProvider), isFalse);
-        expect(
-          container.read(authRepositoryProvider),
-          isA<ApiAuthRepository>(),
-        );
-      },
-    );
-
-    test(
-      'override useMock=true：authRepositoryProvider 返回 MockAuthRepository（issue #2189）',
-      () {
-        final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[useMockProvider.overrideWithValue(true)],
-        );
-        addTearDown(container.dispose);
-
-        final AuthRepository repo = container.read(authRepositoryProvider);
-        expect(repo, isA<MockAuthRepository>());
-      },
-    );
-
-    test('override useMock=true：核心 provider 返回对应的 MockXxxRepository', () {
-      final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[useMockProvider.overrideWithValue(true)],
-      );
-      addTearDown(container.dispose);
-
-      expect(container.read(authRepositoryProvider), isA<MockAuthRepository>());
-      expect(
-        container.read(tickerRepositoryProvider),
-        isA<MockTickerRepository>(),
-      );
-      expect(
-        container.read(coinStockRepositoryProvider),
-        isA<MockCoinStockRepository>(),
-      );
-      expect(
-        container.read(predMarketRepositoryProvider),
-        isA<MockPredMarketRepository>(),
-      );
-      expect(
-        container.read(whaleExtrasRepositoryProvider),
-        isA<MockWhaleExtrasRepository>(),
-      );
-      expect(
-        container.read(tradesRepositoryProvider),
-        isA<MockTradesRepository>(),
-      );
-      expect(
-        container.read(aggOrderbookRepositoryProvider),
-        isA<MockAggOrderbookRepository>(),
-      );
-      expect(
-        container.read(klineRepositoryProvider),
-        isA<MockKlineRepository>(),
-      );
-      expect(
-        container.read(orderbookRepositoryProvider),
-        isA<MockOrderbookRepository>(),
-      );
-      expect(
-        container.read(longShortRepositoryProvider),
-        isA<MockLongShortRepository>(),
-      );
-      expect(
-        container.read(whaleFeedRepositoryProvider),
-        isA<MockWhaleFeedRepository>(),
-      );
-      expect(
-        container.read(whaleProfileRepositoryProvider),
-        isA<MockWhaleProfileRepository>(),
-      );
-      expect(
-        container.read(whaleLeaderboardRepositoryProvider),
-        isA<MockWhaleLeaderboardRepository>(),
-      );
-      expect(
-        container.read(whaleHoldingsRepositoryProvider),
-        isA<MockWhaleHoldingsRepository>(),
-      );
-      expect(
-        container.read(whaleWatchRepositoryProvider),
-        isA<MockWhaleWatchRepository>(),
-      );
-      expect(
-        container.read(strategyRepositoryProvider),
-        isA<MockStrategyRepository>(),
-      );
-      expect(
-        container.read(liveStrategyRepositoryProvider),
-        isA<MockLiveStrategyRepository>(),
-      );
-      expect(
-        container.read(aiChatRepositoryProvider),
-        isA<MockAiChatRepository>(),
-      );
-      expect(
-        container.read(backtestRepositoryProvider),
-        isA<MockBacktestRepository>(),
-      );
-      expect(
-        container.read(accountRepositoryProvider),
-        isA<MockAccountRepository>(),
-      );
-      expect(
-        container.read(apiKeyRepositoryProvider),
-        isA<MockApiKeyRepository>(),
-      );
-      expect(
-        container.read(tradingOrderRepositoryProvider),
-        isA<MockTradingOrderRepository>(),
-      );
-    });
-
-    test('useMock=false：核心 provider 返回 Api* 真实现', () {
-      final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[useMockProvider.overrideWithValue(false)],
-      );
+  group('repository providers', () {
+    test('核心 provider 始终返回 Api* 真实现', () {
+      final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);
 
       expect(container.read(authRepositoryProvider), isA<ApiAuthRepository>());
@@ -282,6 +137,32 @@ void main() {
         container.read(tradingOrderRepositoryProvider),
         isA<ApiTradingOrderRepository>(),
       );
+    });
+
+    test('生产 data 层不再保留 mock repository 或 fixtures', () {
+      final Directory mockDir = Directory('lib/data/mock');
+      expect(mockDir.existsSync(), isFalse);
+    });
+
+    test('生产 data 层不再 import mock repository 或 fixtures', () {
+      final List<File> dataFiles = Directory('lib/data')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((File file) => file.path.endsWith('.dart'))
+          .toList();
+
+      final List<String> offenders = <String>[];
+      for (final File file in dataFiles) {
+        final String source = file.readAsStringSync();
+        if (source.contains('data/mock') ||
+            source.contains('../mock') ||
+            source.contains('mock_') ||
+            source.contains(RegExp(r'Mock[A-Z].*Repository'))) {
+          offenders.add(file.path);
+        }
+      }
+
+      expect(offenders, isEmpty);
     });
 
     test('Api repository 不 import mock fixtures 作为真实模式兜底', () {

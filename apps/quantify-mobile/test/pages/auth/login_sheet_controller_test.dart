@@ -2,7 +2,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
-import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import '../../fixtures/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/auth_repository.dart';
@@ -100,14 +100,17 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       fakeAsync((FakeAsync async) {
         SharedPreferences? prefs;
-        SharedPreferences.getInstance().then((SharedPreferences p) => prefs = p);
+        SharedPreferences.getInstance().then(
+          (SharedPreferences p) => prefs = p,
+        );
         async.flushMicrotasks();
         final ProviderContainer c = ProviderContainer(
           overrides: <Override>[
             sharedPreferencesProvider.overrideWithValue(prefs!),
             tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
-            authRepositoryProvider
-                .overrideWithValue(_InstantSendCodeRepository()),
+            authRepositoryProvider.overrideWithValue(
+              _InstantSendCodeRepository(),
+            ),
           ],
         );
         c.read(sessionControllerProvider.future);
@@ -148,20 +151,18 @@ void main() {
     test('邮箱登录成功（先发码）：返回 true', () async {
       final ProviderContainer c = await makeContainer();
       await ctrl(c).sendLoginCode(email: 'me@quantify.dev');
-      final bool ok = await ctrl(c).submitEmailCode(
-        email: 'me@quantify.dev',
-        code: '123456',
-      );
+      final bool ok = await ctrl(
+        c,
+      ).submitEmailCode(email: 'me@quantify.dev', code: '123456');
       expect(ok, isTrue);
       expect(read(c).emailLoading, isFalse);
     });
 
     test('邮箱登录失败（未发码）：返回 false 且落 error', () async {
       final ProviderContainer c = await makeContainer();
-      final bool ok = await ctrl(c).submitEmailCode(
-        email: 'me@quantify.dev',
-        code: '123456',
-      );
+      final bool ok = await ctrl(
+        c,
+      ).submitEmailCode(email: 'me@quantify.dev', code: '123456');
       expect(ok, isFalse);
       expect(read(c).errorEpoch, 1);
       expect(read(c).errorPrefixKind, LoginErrorKind.login);
@@ -194,10 +195,9 @@ void main() {
       final ProviderContainer c = await makeContainer(
         authRepository: _FailingRegisterRepository(),
       );
-      final bool ok = await ctrl(c).submitRegister(
-        email: 'new@quantify.dev',
-        password: 'pw12345678',
-      );
+      final bool ok = await ctrl(
+        c,
+      ).submitRegister(email: 'new@quantify.dev', password: 'pw12345678');
       expect(ok, isFalse);
       expect(read(c).errorEpoch, 1);
       expect(read(c).errorPrefixKind, LoginErrorKind.register);

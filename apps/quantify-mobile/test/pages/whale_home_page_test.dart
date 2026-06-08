@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_events.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_extras.dart';
+import '../fixtures/mock/fixtures/whale_events.dart';
+import '../fixtures/mock/fixtures/whale_extras.dart';
 import 'package:quantify_mobile/data/models/whale_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
@@ -56,7 +56,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutWhaleFeed,
         whaleFeedRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_account_repository.dart';
+import '../fixtures/mock/mock_account_repository.dart';
 import 'package:quantify_mobile/data/models/account_models.dart';
 
 void main() {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_profiles.dart';
+import '../fixtures/mock/fixtures/whale_profiles.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_trade_stats_sheet.dart';
@@ -158,10 +158,12 @@ void main() {
     final dnColor = ctx.qzScheme.marketDown;
 
     // 取一个正盈亏资产与一个负盈亏资产，断言其头部净盈亏文本颜色。
-    final WhaleAssetPerf posAsset =
-        s.assetPerf.firstWhere((WhaleAssetPerf a) => a.positive == true);
-    final WhaleAssetPerf negAsset =
-        s.assetPerf.firstWhere((WhaleAssetPerf a) => a.positive == false);
+    final WhaleAssetPerf posAsset = s.assetPerf.firstWhere(
+      (WhaleAssetPerf a) => a.positive == true,
+    );
+    final WhaleAssetPerf negAsset = s.assetPerf.firstWhere(
+      (WhaleAssetPerf a) => a.positive == false,
+    );
 
     final Text posText = tester.widget<Text>(
       find.text('\$ +${posAsset.pnlDisplay}').first,

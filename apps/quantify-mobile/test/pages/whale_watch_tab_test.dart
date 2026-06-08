@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_events.dart';
+import '../fixtures/mock/fixtures/whale_events.dart';
 import 'package:quantify_mobile/data/models/whale_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
@@ -53,7 +53,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutWhaleFeed,
         whaleFeedRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(
@@ -78,8 +78,9 @@ void main() {
     expect(find.text('通知中心'), findsOneWidget);
   });
 
-  testWidgets('默认在「实时巨鲸」子 Tab：含关注币种推送 + 倒计时 + 胜率排序（可用），无阈值输入',
-      (WidgetTester tester) async {
+  testWidgets('默认在「实时巨鲸」子 Tab：含关注币种推送 + 倒计时 + 胜率排序（可用），无阈值输入', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
     // issue #1986：实时巨鲸 feed 顶部交互区为关注币种推送 + 倒计时；创建监控 +
     // 阈值输入已迁出到「监控地址」子 Tab（详见 whale_live_tab_test 对应反向断言）。
@@ -92,7 +93,11 @@ void main() {
       matching: find.byType(OutlinedButton),
     );
     final OutlinedButton btn = tester.widget<OutlinedButton>(winSort.first);
-    expect(btn.onPressed, isNotNull, reason: 'issue #1983：胜率排序在 live feed 下应可用');
+    expect(
+      btn.onPressed,
+      isNotNull,
+      reason: 'issue #1983：胜率排序在 live feed 下应可用',
+    );
   });
 
   testWidgets('切到「监控地址」：渲染地址卡永续字段', (WidgetTester tester) async {
@@ -106,8 +111,7 @@ void main() {
     expect(find.text('创建监控'), findsWidgets);
   });
 
-  testWidgets('切到「通知中心」：渲染通知行 + 全部已读，点击后未读清零',
-      (WidgetTester tester) async {
+  testWidgets('切到「通知中心」：渲染通知行 + 全部已读，点击后未读清零', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.text('通知中心'));
     await tester.pumpAndSettle();
@@ -120,8 +124,7 @@ void main() {
     expect(find.text('全部已读'), findsOneWidget);
   });
 
-  testWidgets('监控地址空态由 fixture 决定不出现（种子非空）',
-      (WidgetTester tester) async {
+  testWidgets('监控地址空态由 fixture 决定不出现（种子非空）', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.text('监控地址'));
     await tester.pumpAndSettle();

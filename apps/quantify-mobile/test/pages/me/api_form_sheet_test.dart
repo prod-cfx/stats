@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
+import '../../fixtures/mock/mock_api_key_repository.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/me/api_form_sheet.dart';
@@ -63,8 +63,9 @@ void main() {
       expect(find.text('必须关闭'), findsOneWidget);
     });
 
-    testWidgets('Secret 标签为 Secret，无 Passphrase / 主钱包地址',
-        (WidgetTester tester) async {
+    testWidgets('Secret 标签为 Secret，无 Passphrase / 主钱包地址', (
+      WidgetTester tester,
+    ) async {
       await _pumpSheet(tester, 'Binance');
 
       expect(find.text('Secret'), findsOneWidget);
@@ -97,8 +98,7 @@ void main() {
       expect(find.text('验证并保存'), findsOneWidget);
     });
 
-    testWidgets('切到测试网：标签/域名/按钮/副标题全部就位',
-        (WidgetTester tester) async {
+    testWidgets('切到测试网：标签/域名/按钮/副标题全部就位', (WidgetTester tester) async {
       await _pumpSheet(tester, 'Binance');
       await tester.tap(find.text('测试网'));
       await tester.pumpAndSettle();
@@ -139,8 +139,9 @@ void main() {
       expect(find.text('保存测试网密钥'), findsNothing);
     });
 
-    testWidgets('显示 Passphrase，Secret 标签为 Secret Key',
-        (WidgetTester tester) async {
+    testWidgets('显示 Passphrase，Secret 标签为 Secret Key', (
+      WidgetTester tester,
+    ) async {
       await _pumpSheet(tester, 'OKX');
 
       expect(find.text('Secret Key'), findsOneWidget);
@@ -151,8 +152,9 @@ void main() {
   });
 
   group('Hyperliquid — wallet 模式', () {
-    testWidgets('字段为主钱包地址 + Agent 私钥，无 API Key/Secret/Passphrase',
-        (WidgetTester tester) async {
+    testWidgets('字段为主钱包地址 + Agent 私钥，无 API Key/Secret/Passphrase', (
+      WidgetTester tester,
+    ) async {
       await _pumpSheet(tester, 'Hyperliquid');
 
       expect(find.text('主钱包地址'), findsOneWidget);
@@ -163,8 +165,9 @@ void main() {
       expect(find.text('Passphrase'), findsNothing);
     });
 
-    testWidgets('权限区为 wallet 三行（永续/现货下单 + Agent 无权限）',
-        (WidgetTester tester) async {
+    testWidgets('权限区为 wallet 三行（永续/现货下单 + Agent 无权限）', (
+      WidgetTester tester,
+    ) async {
       await _pumpSheet(tester, 'Hyperliquid');
       await tester.drag(find.byType(ListView), const Offset(0, -800));
       await tester.pumpAndSettle();

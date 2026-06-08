@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_watch_repository.dart';
+import '../fixtures/mock/mock_whale_watch_repository.dart';
 import 'package:quantify_mobile/data/models/whale_watch_models.dart';
 
 void main() {
@@ -33,8 +33,10 @@ void main() {
       final List<WhaleSearchResult> res = await repo.search('0xa83');
       expect(res, isNotEmpty);
       expect(
-        res.any((WhaleSearchResult r) =>
-            r.kind == WhaleSearchResultKind.address && r.address != null),
+        res.any(
+          (WhaleSearchResult r) =>
+              r.kind == WhaleSearchResultKind.address && r.address != null,
+        ),
         isTrue,
       );
     });
@@ -59,7 +61,8 @@ void main() {
       final List<WhaleSearchResult> res = await repo.search('binance');
       expect(
         res.any(
-            (WhaleSearchResult r) => r.kind == WhaleSearchResultKind.exchange),
+          (WhaleSearchResult r) => r.kind == WhaleSearchResultKind.exchange,
+        ),
         isTrue,
       );
     });
@@ -68,7 +71,8 @@ void main() {
       final List<WhaleSearchResult> res = await repo.search('大额转入');
       expect(
         res.any(
-            (WhaleSearchResult r) => r.kind == WhaleSearchResultKind.eventType),
+          (WhaleSearchResult r) => r.kind == WhaleSearchResultKind.eventType,
+        ),
         isTrue,
       );
     });

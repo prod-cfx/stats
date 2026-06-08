@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/whale_extras.dart';
+import '../fixtures/mock/fixtures/whale_extras.dart';
 import 'package:quantify_mobile/data/models/whale_extra_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/widgets/whale_notification_sheet.dart';

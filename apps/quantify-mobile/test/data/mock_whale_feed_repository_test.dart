@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_feed_repository.dart';
+import '../fixtures/mock/mock_whale_feed_repository.dart';
 import 'package:quantify_mobile/data/models/whale_models.dart';
 
 void main() {

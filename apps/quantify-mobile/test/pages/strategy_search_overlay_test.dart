@@ -13,7 +13,14 @@ import '../helpers/test_overrides.dart';
 
 /// 把 overlay 直接挂在一个可弹出的 host route 上：tap host 按钮 push overlay，
 /// 这样 overlay 自身的 `Navigator.pop` 有真实路由可弹。回调命中写入 captured。
-Future<({List<String> openStrat, List<StrategyCategory> pickTag, List<String> applyQuery})> _pumpOverlay(
+Future<
+  ({
+    List<String> openStrat,
+    List<StrategyCategory> pickTag,
+    List<String> applyQuery,
+  })
+>
+_pumpOverlay(
   WidgetTester tester, {
   Map<String, Object> prefs = const <String, Object>{},
 }) async {
@@ -27,7 +34,7 @@ Future<({List<String> openStrat, List<StrategyCategory> pickTag, List<String> ap
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverrides,
         sharedPreferencesProvider.overrideWithValue(sp),
       ],
       child: MaterialApp(
@@ -75,8 +82,7 @@ Future<void> _enter(WidgetTester tester, String q) async {
 }
 
 void main() {
-  testWidgets('空查询态：展示热门搜索 + 猜你想跟 (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('空查询态：展示热门搜索 + 猜你想跟 (#1824)', (WidgetTester tester) async {
     await _pumpOverlay(tester);
     expect(find.text('热门搜索'.toUpperCase()), findsOneWidget);
     expect(find.text('猜你想跟'.toUpperCase()), findsOneWidget);
@@ -84,11 +90,12 @@ void main() {
     expect(find.text('网格'), findsWidgets);
     // 无历史时不渲染清空按钮
     expect(
-        find.byKey(const Key('strategy-search-clear-history')), findsNothing);
+      find.byKey(const Key('strategy-search-clear-history')),
+      findsNothing,
+    );
   });
 
-  testWidgets('空查询态：有历史时展示历史 + 清空按钮可清空 (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('空查询态：有历史时展示历史 + 清空按钮可清空 (#1824)', (WidgetTester tester) async {
     await _pumpOverlay(
       tester,
       prefs: <String, Object>{
@@ -103,76 +110,79 @@ void main() {
     expect(find.text('搜索历史'.toUpperCase()), findsNothing);
   });
 
-  testWidgets('有查询：命中作者 + 策略分段 (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('有查询：命中作者 + 策略分段 (#1824)', (WidgetTester tester) async {
     await _pumpOverlay(tester);
     await _enter(tester, 'Alpha');
     // Alpha Hunter 作者行 + 至少一条策略命中行存在（按 key 定位，避免与输入框
     // 占位「搜索策略 · 币对 · 作者」文案冲突）。
     expect(
-        find.byKey(const Key('strategy-search-author-Alpha Hunter')),
-        findsOneWidget);
+      find.byKey(const Key('strategy-search-author-Alpha Hunter')),
+      findsOneWidget,
+    );
     expect(
-        find.byWidgetPredicate((Widget w) {
-          final Key? k = w.key;
-          return k is ValueKey<String> &&
-              k.value.startsWith('strategy-search-strat-');
-        }),
-        findsWidgets);
+      find.byWidgetPredicate((Widget w) {
+        final Key? k = w.key;
+        return k is ValueKey<String> &&
+            k.value.startsWith('strategy-search-strat-');
+      }),
+      findsWidgets,
+    );
   });
 
-  testWidgets('策略行：名字旁有类型标签 chip + 底行胜率/跟单 (#1887)',
-      (WidgetTester tester) async {
+  testWidgets('策略行：名字旁有类型标签 chip + 底行胜率/跟单 (#1887)', (
+    WidgetTester tester,
+  ) async {
     await _pumpOverlay(tester);
     await _enter(tester, 'Alpha');
     // 至少一条策略命中行带类型标签 chip（trend 分类 fixture）
     expect(
-        find.byKey(const Key('strategy-search-strat-tag-trend')),
-        findsWidgets);
+      find.byKey(const Key('strategy-search-strat-tag-trend')),
+      findsWidgets,
+    );
     // 底行「胜率 x%」「x 跟单」文案出现（中文 locale）
     expect(
-        find.byWidgetPredicate((Widget w) =>
-            w is Text && (w.data?.startsWith('胜率 ') ?? false)),
-        findsWidgets);
+      find.byWidgetPredicate(
+        (Widget w) => w is Text && (w.data?.startsWith('胜率 ') ?? false),
+      ),
+      findsWidgets,
+    );
     expect(
-        find.byWidgetPredicate((Widget w) =>
-            w is Text && (w.data?.endsWith(' 跟单') ?? false)),
-        findsWidgets);
+      find.byWidgetPredicate(
+        (Widget w) => w is Text && (w.data?.endsWith(' 跟单') ?? false),
+      ),
+      findsWidgets,
+    );
   });
 
-  testWidgets('作者行：verified 作者显示认证标 (#1887)',
-      (WidgetTester tester) async {
+  testWidgets('作者行：verified 作者显示认证标 (#1887)', (WidgetTester tester) async {
     await _pumpOverlay(tester);
     await _enter(tester, 'Alpha');
     // 'Alpha Hunter' fixture verified:true → 认证标存在
     expect(
-        find.byKey(
-            const Key('strategy-search-author-verified-Alpha Hunter')),
-        findsOneWidget);
+      find.byKey(const Key('strategy-search-author-verified-Alpha Hunter')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('有查询：命中分类标签段 (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('有查询：命中分类标签段 (#1824)', (WidgetTester tester) async {
     final result = await _pumpOverlay(tester);
     await _enter(tester, '网格');
-    expect(
-        find.byKey(const Key('strategy-search-tag-grid')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-search-tag-grid')), findsOneWidget);
     // 点击标签 → pop + onPickTag(grid)
     await tester.tap(find.byKey(const Key('strategy-search-tag-grid')));
     await tester.pumpAndSettle();
     expect(result.pickTag, <StrategyCategory>[StrategyCategory.grid]);
   });
 
-  testWidgets('有查询：无命中显示空结果文案 (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('有查询：无命中显示空结果文案 (#1824)', (WidgetTester tester) async {
     await _pumpOverlay(tester);
     await _enter(tester, 'zzzzz-no-such-thing');
-    expect(
-        find.byKey(const Key('strategy-search-no-results')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-search-no-results')), findsOneWidget);
   });
 
-  testWidgets('选中策略：回调 onOpenStrat + 写入历史 + pop (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('选中策略：回调 onOpenStrat + 写入历史 + pop (#1824)', (
+    WidgetTester tester,
+  ) async {
     final result = await _pumpOverlay(tester);
     await _enter(tester, 'Alpha');
     final Finder row = find.byWidgetPredicate((Widget w) {
@@ -189,11 +199,14 @@ void main() {
     expect(sp.getStringList('qz.strategy.searchHistory'), contains('Alpha'));
   });
 
-  testWidgets('键盘提交自由文本：onApplyQuery + 写历史 + pop (#1824)',
-      (WidgetTester tester) async {
+  testWidgets('键盘提交自由文本：onApplyQuery + 写历史 + pop (#1824)', (
+    WidgetTester tester,
+  ) async {
     final result = await _pumpOverlay(tester);
     await tester.enterText(
-        find.byKey(const Key('strategy-search-input')), '低回撤');
+      find.byKey(const Key('strategy-search-input')),
+      '低回撤',
+    );
     await tester.pump();
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();

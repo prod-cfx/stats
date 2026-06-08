@@ -18,7 +18,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
-          useMockOverride,
+          ...testRepositoryOverrides,
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: const QuantifyMobileApp(),

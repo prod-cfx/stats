@@ -2,15 +2,7 @@
 ///
 /// 对齐设计稿 `design/project/mobile/m-screens-2.jsx` `TAG_FILTERS`：
 /// `全部 / 趋势 / 网格 / 套利 / 反转 / 对冲 / 高频`。
-enum StrategyCategory {
-  all,
-  trend,
-  grid,
-  arbitrage,
-  reversal,
-  hedge,
-  highFreq,
-}
+enum StrategyCategory { all, trend, grid, arbitrage, reversal, hedge, highFreq }
 
 /// 策略卡 status badge 类型（#1565）。
 ///
@@ -23,7 +15,7 @@ enum StrategyStatusBadge { hot, newListing, official, pro }
 /// 策略卡片元数据。
 ///
 /// 保持 const 构造以便 fixtures 维持 `const List` 字面量。sparkline 数据**不**
-/// 挂在此 model 上，由 [MockStrategyRepository] 在返回 [StrategyMarketItem] 时
+/// 挂在此 model 上，由 [test StrategyRepository] 在返回 [StrategyMarketItem] 时
 /// 基于 `Random(id.hashCode)` 派生，避免破坏 const 约束。
 class StrategyCard {
   final String id;
@@ -99,7 +91,7 @@ String deriveStrategySymbol(String pair) {
 
 /// 4 格指标 + featured hero 卡共享的"广场摘要"数据（#1565）。
 ///
-/// 由 mock 基于 `Random(id.hashCode)` 派生，保证同一 id 多次调用一致——
+/// 由 fixture 基于 `Random(id.hashCode)` 派生，保证同一 id 多次调用一致——
 /// widget test / golden 复现友好。
 class StrategyMarketStats {
   final double cagr;
@@ -120,7 +112,7 @@ class StrategyMarketStats {
 /// 策略广场列表项：卡片 + 运行时派生的 sparkline 序列 + 4 格指标。
 ///
 /// 把 sparkline / stats 拆出来是为了让 [StrategyCard] 仍是 const-friendly model
-/// （fixture 字面量保持紧凑），同时让 mock 层有自由度按 id 生成确定性数据。
+/// （fixture 字面量保持紧凑），同时让 fixture 层有自由度按 id 生成确定性数据。
 class StrategyMarketItem {
   final StrategyCard card;
   final List<double> sparkline;
@@ -155,7 +147,7 @@ enum EquityTimeframe { d7, d30, d90, y1 }
 ///
 /// 指标对齐设计稿 `StratDetail`（#1825）：累计收益 [cagr]、夏普、最大回撤、
 /// 胜率、盈亏比 [profitLossRatio]、交易次数 [tradeCount]、使用人数 [users]。
-/// 7d/30d/全部收益率保留供其他消费方使用。所有数值由 mock 基于
+/// 7d/30d/全部收益率保留供其他消费方使用。所有数值由 fixture 基于
 /// `Random(id.hashCode)` 派生，**确定性**——保证 widget test 多次 pump 同一
 /// id 结果一致。
 class StrategyDetail {
@@ -170,10 +162,10 @@ class StrategyDetail {
   /// 累计收益率（百分数，如 32.4 表示 +32.4%），equity 卡左上大号展示（#1825）。
   final double cagr;
 
-  /// 盈亏比（avg win / avg loss）。后端 StrategyDetail 暂未提供，mock 派生（#1825）。
+  /// 盈亏比（avg win / avg loss）。后端 StrategyDetail 暂未提供，fixture 派生（#1825）。
   final double profitLossRatio;
 
-  /// 历史交易次数。后端暂未提供，mock 派生（#1825）。
+  /// 历史交易次数。后端暂未提供，fixture 派生（#1825）。
   final int tradeCount;
 
   /// 使用人数（订阅者数）。来自 [StrategyCard.subscribers]（#1825）。
@@ -204,7 +196,7 @@ enum StrategySignalSide { buy, sell }
 
 /// 单条历史信号。
 ///
-/// [time] 是相对当前时间向前回退派生的时间戳；mock 用 now - i\*15min 倒推，
+/// [time] 是相对当前时间向前回退派生的时间戳；fixture 用 now - i\*15min 倒推，
 /// 保证显示"最近一条在最上"语义且测试时也能合理排序。
 class StrategySignal {
   final DateTime time;

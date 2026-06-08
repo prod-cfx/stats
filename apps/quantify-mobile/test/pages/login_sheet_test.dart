@@ -4,7 +4,7 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
-import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import '../fixtures/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/auth_repository.dart';
@@ -194,9 +194,7 @@ void main() {
     );
   });
 
-  testWidgets('LoginSheet 切到注册态显示密码框并隐藏验证码框', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('LoginSheet 切到注册态显示密码框并隐藏验证码框', (WidgetTester tester) async {
     await _pumpSheetHarness(tester);
 
     expect(find.byKey(const Key('register-password-field')), findsNothing);
@@ -210,9 +208,7 @@ void main() {
     expect(find.byKey(const Key('register-submit')), findsOneWidget);
   });
 
-  testWidgets('LoginSheet 注册成功关闭面板并跳转 /ai', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('LoginSheet 注册成功关闭面板并跳转 /ai', (WidgetTester tester) async {
     final (:ProviderContainer container, :InMemoryTokenStorage storage) =
         await _pumpSheetHarness(tester);
 

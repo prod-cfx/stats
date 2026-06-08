@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/mock_whale_feed_repository.dart';
+import '../fixtures/mock/mock_whale_feed_repository.dart';
 import 'package:quantify_mobile/data/models/whale_models.dart';
 
 void main() {
@@ -10,8 +10,9 @@ void main() {
     fakeAsync((FakeAsync async) {
       final MockWhaleFeedRepository repo = MockWhaleFeedRepository();
       final List<WhaleEvent> received = <WhaleEvent>[];
-      final StreamSubscription<WhaleEvent> sub =
-          repo.watchFeed().listen(received.add);
+      final StreamSubscription<WhaleEvent> sub = repo.watchFeed().listen(
+        received.add,
+      );
 
       // 2 秒：不足 3 秒，未推送
       async.elapse(const Duration(seconds: 2));

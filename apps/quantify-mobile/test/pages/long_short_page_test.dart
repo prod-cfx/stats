@@ -26,7 +26,7 @@ Future<void> _pumpBody(
   await tester.binding.setSurfaceSize(const Size(420, 1200));
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[useMockOverride],
+      overrides: <Override>[...testRepositoryOverrides],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -51,7 +51,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
-          useMockOverride,
+          ...testRepositoryOverrides,
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: MaterialApp.router(

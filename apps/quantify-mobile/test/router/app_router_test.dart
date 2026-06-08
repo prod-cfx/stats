@@ -7,10 +7,10 @@ import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
-import 'package:quantify_mobile/data/mock/fixtures/account.dart';
-import 'package:quantify_mobile/data/mock/fixtures/api_key.dart';
-import 'package:quantify_mobile/data/mock/fixtures/backtest.dart';
-import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import '../fixtures/mock/fixtures/account.dart';
+import '../fixtures/mock/fixtures/api_key.dart';
+import '../fixtures/mock/fixtures/backtest.dart';
+import '../fixtures/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/models/backtest_models.dart';
@@ -138,7 +138,7 @@ Future<BuildContext> _pumpApp(
   final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
   final ProviderContainer container = ProviderContainer(
     overrides: <Override>[
-      useMockOverride,
+      ...testRepositoryOverridesWithoutRouterStubs,
       sharedPreferencesProvider.overrideWithValue(prefs),
       tokenStorageProvider.overrideWithValue(s),
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
@@ -536,7 +536,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutAuth,
         sharedPreferencesProvider.overrideWithValue(prefs),
         tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
         authRepositoryProvider.overrideWithValue(MockAuthRepository()),
@@ -580,7 +580,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutAuth,
         sharedPreferencesProvider.overrideWithValue(prefs),
         tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
         authRepositoryProvider.overrideWithValue(MockAuthRepository()),
@@ -643,7 +643,7 @@ void main() {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[
-        useMockOverride,
+        ...testRepositoryOverridesWithoutAuth,
         sharedPreferencesProvider.overrideWithValue(prefs),
         tokenStorageProvider.overrideWithValue(storage),
         authRepositoryProvider.overrideWithValue(MockAuthRepository()),

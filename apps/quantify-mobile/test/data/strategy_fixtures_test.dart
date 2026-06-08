@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quantify_mobile/data/mock/fixtures/strategies.dart';
+import '../fixtures/mock/fixtures/strategies.dart';
 import 'package:quantify_mobile/data/models/strategy_models.dart';
 
 void main() {
@@ -25,8 +25,9 @@ void main() {
     });
 
     test('id 唯一', () {
-      final Set<String> ids =
-          mockFeaturedStrategies.map((StrategyCard s) => s.id).toSet();
+      final Set<String> ids = mockFeaturedStrategies
+          .map((StrategyCard s) => s.id)
+          .toSet();
       expect(ids.length, mockFeaturedStrategies.length);
     });
   });
