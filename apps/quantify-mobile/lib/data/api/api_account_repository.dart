@@ -1,37 +1,57 @@
 import 'dart:async';
 
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+
 import '../models/account_models.dart';
 import '../repositories/account_repository.dart';
-import '../services/account_services.dart';
-import '../services/json_codec.dart';
+import '../services/generated_backend_api.dart';
 
 /// [AccountRepository] 真实现（issue #2189）。
 ///
 /// `watchInfo` 后端暂无推送契约，用周期轮询取最新账户快照。
 class ApiAccountRepository implements AccountRepository {
-  ApiAccountRepository(this._service);
+  ApiAccountRepository(this._api);
 
-  final AccountService _service;
+  final GeneratedBackendApi _api;
 
-  AccountInfo _parse(dynamic raw) {
-    final Map<String, dynamic> m = asMap(raw);
+  static AccountInfo mapProfile(UserProfileResponseDto dto) {
     return AccountInfo(
-      userId: asString(pick(m, <String>['userId', 'id'])),
-      email: asString(pick(m, <String>['email'])),
-      uid: asString(pick(m, <String>['uid'])),
-      totalEquityUsd: asDouble(pick(m, <String>['totalEquityUsd'])),
-      availableBalanceUsd: asDouble(pick(m, <String>['availableBalanceUsd'])),
-      unrealizedPnlUsd: asDouble(pick(m, <String>['unrealizedPnlUsd'])),
+      userId: dto.id,
+      email: dto.email,
+      uid: dto.id,
+      totalEquityUsd: 0,
+      availableBalanceUsd: 0,
+      unrealizedPnlUsd: 0,
     );
   }
 
+  UserProfileResponseDto _deserializeProfile(Object? raw) {
+    final Object? payload = raw is Map && raw['data'] != null
+        ? raw['data']
+        : raw;
+    final UserProfileResponseDto? profile = payload is UserProfileResponseDto
+        ? payload
+        : _api.client.serializers.deserializeWith(
+            UserProfileResponseDto.serializer,
+            payload,
+          );
+    if (profile == null) {
+      throw StateError('GET /users/me returned empty profile');
+    }
+    return profile;
+  }
+
   @override
-  Future<AccountInfo> getInfo() async => _parse(await _service.getInfo());
+  Future<AccountInfo> getInfo() async {
+    final Response<Object?> response = await _api.dio.get<Object?>('/users/me');
+    return mapProfile(_deserializeProfile(response.data));
+  }
 
   @override
   Stream<AccountInfo> watchInfo() async* {
     yield await getInfo();
-    yield* Stream<void>.periodic(const Duration(seconds: 5))
-        .asyncMap((_) => getInfo());
+    yield* Stream<void>.periodic(
+      const Duration(seconds: 5),
+    ).asyncMap((_) => getInfo());
   }
 }

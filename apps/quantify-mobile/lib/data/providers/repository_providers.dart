@@ -270,7 +270,7 @@ final Provider<AccountRepository> accountRepositoryProvider =
     Provider<AccountRepository>((Ref ref) {
       return ref.watch(useMockProvider)
           ? MockAccountRepository()
-          : ApiAccountRepository(ref.watch(accountServiceProvider));
+          : ApiAccountRepository(ref.watch(generatedBackendApiProvider));
     });
 
 final Provider<ApiKeyRepository> apiKeyRepositoryProvider =
