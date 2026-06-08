@@ -1120,6 +1120,27 @@ function buildDecision(
   ctx: StrategyExecutionContextV1,
   programId: string,
 ): StrategyDecisionV1 {
+  if (action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT') {
+    const deltaQty = resolveOpenActionQty(action, ctx, Math.abs(readCurrentQty(ctx)))
+    if (deltaQty <= 0) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${programId}.noop`,
+      }
+    }
+
+    return {
+      action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: {
+        mode: 'QTY',
+        value: action.kind === 'ADD_LONG' ? deltaQty : -deltaQty,
+      },
+      reason: `compiled.${programId}`,
+      ...buildDecisionMeta(action),
+    }
+  }
+
   if (action.kind === 'CLOSE_LONG' || action.kind === 'CLOSE_SHORT') {
     const currentQty = readCurrentQty(ctx)
     if ((action.kind === 'CLOSE_LONG' && currentQty <= 0) || (action.kind === 'CLOSE_SHORT' && currentQty >= 0)) {
@@ -1203,13 +1224,10 @@ function mapAction(
     case 'CLOSE_LONG':
     case 'CLOSE_SHORT':
       return action
-    case 'ADD_LONG':
-      return 'OPEN_LONG'
-    case 'ADD_SHORT':
-      return 'OPEN_SHORT'
     case 'REDUCE_LONG':
-      return 'ADJUST_POSITION'
+    case 'ADD_LONG':
     case 'REDUCE_SHORT':
+    case 'ADD_SHORT':
       return 'ADJUST_POSITION'
   }
 }

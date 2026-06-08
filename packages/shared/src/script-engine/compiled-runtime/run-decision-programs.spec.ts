@@ -91,9 +91,11 @@ describe('DCA lifecycle triggers', () => {
     )
 
     expect(decision).toMatchObject({
-      action: 'OPEN_LONG',
-      size: { mode: 'QUOTE', value: 100 },
+      action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: { mode: 'QTY', value: 1 },
     })
+    expect(ctx.semanticRuntimeState?.dca_fired_count?.value).toBe(2)
   })
 })
 
