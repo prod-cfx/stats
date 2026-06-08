@@ -34,8 +34,23 @@ function evidenceFor(templateId: OfficialStrategyPlazaTemplate['id']) {
   return OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === templateId)
 }
 
+function messageHasPercent(message: string, value: number, labels: readonly string[]): boolean {
+  return labels.some(label => message.includes(`${label} ${value}%`) || message.includes(`${label}${value}%`))
+}
+
+function evidenceParamsMatchSeed(seed: TemplateSeed): boolean {
+  const params = evidenceFor(seed.id)?.params as Record<string, unknown> | undefined
+  if (!params) return false
+  if (typeof params.positionPct === 'number' && params.positionPct !== seed.positionPct) return false
+  if (typeof params.stopLossPct === 'number' && !messageHasPercent(seed.initialMessage, params.stopLossPct, ['亏损', '亏损达到'])) return false
+  if (typeof params.takeProfitPct === 'number' && !messageHasPercent(seed.initialMessage, params.takeProfitPct, ['盈利', '止盈'])) return false
+  if (typeof params.holdBars === 'number' && !seed.initialMessage.includes(`持仓 ${params.holdBars} 根 K 线`)) return false
+  if (typeof params.cadence === 'number' && !seed.initialMessage.includes(`每 ${params.cadence} 根 K 线最多开仓一次`)) return false
+  return true
+}
+
 function metricsFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['displayMetrics'] {
-  const metrics = evidenceFor(seed.id)?.metrics
+  const metrics = evidenceParamsMatchSeed(seed) ? evidenceFor(seed.id)?.metrics : undefined
   return {
     label: 'official_sample_backtest',
     returnPct: metrics?.totalReturnPct ?? null,
@@ -390,9 +405,9 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     positionPct: 10,
     leverage: 2,
     displayOrder: 320,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建固定区间网格策略。规则：在 65000-80000 区间挂 10 档网格，5% 步长，趋势上涨时启用；价格跌破区间下沿停止并平仓；风控：每格 10% 仓位，亏损 3% 止损。',
-    expectedAtomKeys: ['program.fixed_grid_gated', 'pattern.range', 'position.sizing', 'risk.stop_loss_pct'],
-    guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m', entryRuleExample: '趋势上涨时启用 65000-80000 网格', exitRuleExample: '跌破区间下沿停止', riskRuleExample: '每格 10%，亏损 3% 止损' },
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建固定区间网格策略。规则：在 65000-80000 区间挂 10 档网格，5% 步长，趋势上涨时启用；每 4 根 K 线最多开仓一次；持仓 4 根 K 线后平多；价格跌破区间下沿停止并平仓；风控：每格 70% 仓位，亏损 1.5% 止损，止盈 0.12%。',
+    expectedAtomKeys: ['program.fixed_grid_gated', 'pattern.range', 'position.sizing', 'risk.stop_loss_pct', 'risk.take_profit_pct'],
+    guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m', entryRuleExample: '趋势上涨时启用 65000-80000 网格', exitRuleExample: '跌破区间下沿停止', riskRuleExample: '每格 70%，亏损 1.5% 止损，止盈 0.12%' },
   },
   {
     id: 'trend-filtered-grid',
@@ -406,12 +421,12 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     marketType: 'spot',
     symbol: 'ETH-USDT',
     timeframe: '15m',
-    positionPct: 15,
+    positionPct: 70,
     leverage: null,
     displayOrder: 330,
-    initialMessage: '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建趋势过滤网格策略。规则：价格在震荡区间内且 1h 价格高于 MA50 时才买入；价格回到区间上沿卖出；风控：单次仓位 15%，亏损 3% 止损。',
+    initialMessage: '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建趋势过滤网格策略。规则：价格在震荡区间内且 1h 价格高于 MA50 时才买入；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；价格回到区间上沿卖出；风控：单次仓位 70%，亏损 1.5% 止损，止盈 0.12%。',
     expectedAtomKeys: ['pattern.range', 'indicator.above', 'scope.timeframe', 'action.open_long', 'action.close_long', 'position.sizing', 'risk.stop_loss_pct'],
-    guideConfig: { symbolExample: 'ETH-USDT', timeframeExample: '15m + 1h', entryRuleExample: '区间内且 1h 价格高于 MA50', exitRuleExample: '区间上沿卖出', riskRuleExample: '单次仓位 15%' },
+    guideConfig: { symbolExample: 'ETH-USDT', timeframeExample: '15m + 1h', entryRuleExample: '区间内且 1h 价格高于 MA50', exitRuleExample: '区间上沿卖出', riskRuleExample: '单次仓位 70%，亏损 1.5% 止损，止盈 0.12%' },
   },
   {
     id: 'grid-breakout-stop',
@@ -425,12 +440,12 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     marketType: 'spot',
     symbol: 'BTC-USDT',
     timeframe: '1m',
-    positionPct: 10,
+    positionPct: 70,
     leverage: null,
     displayOrder: 340,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 1m，创建突破停止网格策略。规则：价格在 65600-69600 区间内采用双向网格，每格 100 USDT；当价格突破上下边界时立即停止并撤销未成交订单；风控：总预算 1000 USDT，亏损 0.6% 止损，止盈 0.2%。',
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 1m，创建突破停止网格策略。规则：价格在 65600-69600 区间内采用双向网格，每格 100 USDT；每 10 根 K 线最多开仓一次；持仓 4 根 K 线后平多；当价格突破上下边界时立即停止并撤销未成交订单；风控：总预算 1000 USDT，单次仓位 70%，亏损 0.6% 止损，止盈 0.12%。',
     expectedAtomKeys: ['program.fixed_grid_gated', 'position.budget_cap', 'pattern.range', 'risk.stop_loss_pct', 'risk.take_profit_pct'],
-    guideConfig: { symbolExample: 'BTC-USDT', timeframeExample: '1m', entryRuleExample: '65600-69600 区间双向网格，每格 100 USDT', exitRuleExample: '突破边界停止撤单', riskRuleExample: '总预算 1000 USDT，0.6% 止损，止盈 0.2%' },
+    guideConfig: { symbolExample: 'BTC-USDT', timeframeExample: '1m', entryRuleExample: '65600-69600 区间双向网格，每格 100 USDT', exitRuleExample: '突破边界停止撤单', riskRuleExample: '总预算 1000 USDT，0.6% 止损，止盈 0.12%' },
   },
 
   {
@@ -445,10 +460,10 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     marketType: 'perp',
     symbol: 'BTC-USDT-SWAP',
     timeframe: '1h',
-    positionPct: 10,
+    positionPct: 70,
     leverage: 2,
     displayOrder: 410,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 1h，创建回撤 DCA 策略。规则：价格每回撤 3% 补仓，最多 3 次，每次 100 USDT，总预算最多 1000 USDT；跌破本轮均价 8% 时全部退出。',
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 1h，创建回撤 DCA 策略。规则：价格每回撤 3% 补仓，最多 3 次，每次 100 USDT，总预算最多 1000 USDT；每 10 根 K 线最多开仓一次；持仓 2 根 K 线后平多；价格跌破本轮均价 8% 时全部退出；风控：仓位 70%，亏损 3% 止损，止盈 0.12%。',
     expectedAtomKeys: ['position.dca_schedule', 'position.budget_cap', 'action.close_long'],
     guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '1h', entryRuleExample: '每回撤 3% 补仓', exitRuleExample: '跌破均价 8% 退出', riskRuleExample: '最多 3 次，总预算 1000 USDT' },
   },
@@ -464,10 +479,10 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     marketType: 'spot',
     symbol: 'BTC-USDT',
     timeframe: '1h',
-    positionPct: 10,
+    positionPct: 70,
     leverage: null,
     displayOrder: 420,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 1h，创建定时 DCA 策略。规则：策略启动后每 24 小时买入一次，每次 100 USDT，最多执行 10 次，总预算 1000 USDT；价格跌破 30 日均线 8% 时暂停；风控：止盈 0.3%，亏损 3% 止损。',
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 1h，创建定时 DCA 策略。规则：策略启动后每 24 小时买入一次，每次 100 USDT，最多执行 10 次，总预算 1000 USDT；每 10 根 K 线最多开仓一次；持仓 2 根 K 线后平多；价格跌破 30 日均线 8% 时暂停；风控：仓位 70%，止盈 0.12%，亏损 3% 止损。',
     expectedAtomKeys: ['program.dca', 'position.budget_cap', 'strategy.time_window', 'risk.take_profit_pct', 'risk.stop_loss_pct'],
     guideConfig: { symbolExample: 'BTC-USDT', timeframeExample: '1h', entryRuleExample: '每 24 小时买入一次', exitRuleExample: '止盈 0.3%', riskRuleExample: '总预算 1000 USDT，亏损 3% 止损' },
   },
@@ -503,12 +518,12 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     marketType: 'perp',
     symbol: 'BTC-USDT-SWAP',
     timeframe: '1m',
-    positionPct: 10,
+    positionPct: 70,
     leverage: 2,
     displayOrder: 510,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 1m，创建盘口买盘失衡确认策略。规则：价格突破最近 6 根 K 线高点且必须 OKX orderbook imbalance 大于 52% 才允许开多；跌破 EMA20 时平多；风控：仓位 10%，2 倍杠杆，亏损 1% 止损，止盈 0.2%。',
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 1m，创建盘口买盘失衡确认策略。规则：价格突破最近 6 根 K 线高点且必须 OKX orderbook imbalance 大于 52% 才允许开多；每 10 根 K 线最多开仓一次；持仓 4 根 K 线后平多；跌破 EMA20 时平多；风控：仓位 70%，2 倍杠杆，亏损 0.6% 止损，止盈 0.12%。',
     expectedAtomKeys: ['price.rolling_extrema_breakout', 'orderbook.imbalance', 'action.open_long', 'action.close_long', 'position.sizing', 'risk.stop_loss_pct', 'risk.take_profit_pct'],
-    guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '1m', entryRuleExample: '突破最近 6 根高点且 orderbook imbalance 大于 52%', exitRuleExample: '跌破 EMA20', riskRuleExample: '仓位 10%，亏损 1% 止损，止盈 0.2%' },
+    guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '1m', entryRuleExample: '突破最近 6 根高点且 orderbook imbalance 大于 52%', exitRuleExample: '跌破 EMA20', riskRuleExample: '仓位 70%，亏损 0.6% 止损，止盈 0.12%' },
   },
   {
     id: 'orderbook-spread-post-only',
@@ -618,12 +633,12 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     marketType: 'perp',
     symbol: 'ETH-USDT-SWAP',
     timeframe: '15m',
-    positionPct: 10,
+    positionPct: 70,
     leverage: 2,
     displayOrder: 640,
-    initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建资金费率和持仓量确认策略。规则：价格突破最近 8 根 K 线高点，资金费率为正且未平仓量增加超过 0.5% 时开多；跌破 EMA20 时平多；风控：仓位 10%，亏损 2% 止损，止盈 0.4%。',
+    initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建资金费率和持仓量确认策略。规则：价格突破最近 8 根 K 线高点，资金费率为正且未平仓量增加超过 0.5% 时开多；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；跌破 EMA20 时平多；风控：仓位 70%，亏损 3% 止损，止盈 0.12%。',
     expectedAtomKeys: ['fundingRate.condition', 'openInterest.condition', 'price.rolling_extrema_breakout', 'action.open_long', 'action.close_long', 'risk.stop_loss_pct', 'risk.take_profit_pct'],
-    guideConfig: { symbolExample: 'ETH-USDT-SWAP', timeframeExample: '15m', entryRuleExample: '突破最近 8 根高点、funding 为正、OI 增加超过 0.5%', exitRuleExample: '跌破 EMA20', riskRuleExample: '仓位 10%，亏损 2% 止损，止盈 0.4%' },
+    guideConfig: { symbolExample: 'ETH-USDT-SWAP', timeframeExample: '15m', entryRuleExample: '突破最近 8 根高点、funding 为正、OI 增加超过 0.5%', exitRuleExample: '跌破 EMA20', riskRuleExample: '仓位 70%，亏损 3% 止损，止盈 0.12%' },
   },
 
   {

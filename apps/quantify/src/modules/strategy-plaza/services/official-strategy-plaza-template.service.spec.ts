@@ -28,7 +28,7 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(templates.every(item => item.exchange === 'okx')).toBe(true)
     expect(templates.every(item => item.environment === 'demo')).toBe(true)
     expect(templates.every(item => item.status === 'live')).toBe(true)
-    expect(templates.filter(item => OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.some(evidence => evidence.templateId === item.id)).every(item =>
+    expect(templates.some(item =>
       item.displayMetrics.returnPct != null
       && item.displayMetrics.winRatePct != null
       && item.displayMetrics.maxDrawdownPct != null,
@@ -91,6 +91,38 @@ describe('OfficialStrategyPlazaTemplateService', () => {
       .filter(templateId => !evidenceByTemplateId.has(templateId))
 
     expect(missingEvidenceTemplateIds).toEqual([])
+  })
+
+  it('shows display metrics only when evidence parameters align with edit seed run config', () => {
+    const drift = service.list().flatMap((template) => {
+      if (template.displayMetrics.returnPct == null && template.displayMetrics.winRatePct == null && template.displayMetrics.maxDrawdownPct == null) {
+        return []
+      }
+      const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === template.id)
+      if (!evidence) return [`${template.id}: displayMetrics present without evidence`]
+
+      const issues: string[] = []
+      const params = evidence.params as Record<string, unknown>
+      if (typeof params.positionPct === 'number' && params.positionPct !== template.runConfig.positionPct) {
+        issues.push(`positionPct evidence=${params.positionPct} runConfig=${template.runConfig.positionPct}`)
+      }
+      if (typeof params.stopLossPct === 'number' && !template.editSeed.initialMessage.includes(`亏损 ${params.stopLossPct}%`)) {
+        issues.push(`stopLossPct evidence=${params.stopLossPct} missing from initialMessage`)
+      }
+      if (typeof params.takeProfitPct === 'number' && !template.editSeed.initialMessage.includes(`盈利 ${params.takeProfitPct}%`) && !template.editSeed.initialMessage.includes(`止盈 ${params.takeProfitPct}%`)) {
+        issues.push(`takeProfitPct evidence=${params.takeProfitPct} missing from initialMessage`)
+      }
+      if (typeof params.holdBars === 'number' && !template.editSeed.initialMessage.includes(`持仓 ${params.holdBars} 根 K 线`)) {
+        issues.push(`holdBars evidence=${params.holdBars} missing from initialMessage`)
+      }
+      if (typeof params.cadence === 'number' && !template.editSeed.initialMessage.includes(`每 ${params.cadence} 根 K 线最多开仓一次`)) {
+        issues.push(`cadence evidence=${params.cadence} missing from initialMessage`)
+      }
+
+      return issues.map(issue => `${evidence.templateId}: ${issue}`)
+    })
+
+    expect(drift).toEqual([])
   })
 
   it('uses only rules mainflow atoms that reach backtest and deploy payload', () => {

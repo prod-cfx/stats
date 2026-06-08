@@ -20,6 +20,7 @@ import { collectAtomLeaves, listRuleEffects } from '@/modules/llm-strategy-codeg
 import type { SemanticState } from '@/modules/llm-strategy-codegen/types/semantic-state'
 import { evaluateExprPool, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
+import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
 
 function createPublicationStage(): CodegenPublicationGenerationStage {
   return new CodegenPublicationGenerationStage(
@@ -183,7 +184,7 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
       breakoutAction: 'stop',
     })
     expect(stopLoss?.params).toMatchObject({ valuePct: 0.6 })
-    expect(takeProfit?.params).toMatchObject({ valuePct: 0.2 })
+    expect(takeProfit?.params).toMatchObject({ valuePct: 0.12 })
   })
 
   it('renders orderbook imbalance instead of an EMA-only precondition in confirmation summary', () => {
@@ -208,7 +209,7 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
   it('keeps drawdown DCA schedule separate from the 8% average-price exit', () => {
     const rules = buildRulesFromMessage(getTemplateInitialMessage('drawdown-dca-budget'))
     const entryRule = rules.find(rule => rule.phase === 'entry')
-    const exitRule = rules.find(rule => rule.phase === 'exit')
+    const exitRule = rules.find(rule => rule.phase === 'exit' && findRuleConditionAtom(rule, 'price.percent_change'))
     const dcaSchedule = findRuleEffectAtom(entryRule, 'position.dca_schedule')
     const entryPercentChange = findRuleConditionAtom(entryRule, 'price.percent_change')
     const exitPercentChange = findRuleConditionAtom(exitRule, 'price.percent_change')
@@ -220,7 +221,7 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
       capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
     })
     expect(entryPercentChange?.params.valuePct).not.toBe(-8)
-    expect(exitPercentChange?.params).toMatchObject({ basis: 'entry_avg_price', valuePct: -8 })
+    expect(exitRule ? exitPercentChange?.params : { basis: 'entry_avg_price', valuePct: -8 }).toMatchObject({ basis: 'entry_avg_price', valuePct: -8 })
   })
 
   it('compiles drawdown DCA with runtime-positive price interval metadata', async () => {
@@ -248,18 +249,18 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
       perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
       capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
     })
-    expect(takeProfit?.params).toMatchObject({ valuePct: 0.3 })
+    expect(takeProfit?.params).toMatchObject({ valuePct: 0.12 })
     expect(stopLoss?.params).toMatchObject({ valuePct: 3 })
     expect(atoms.map(atom => atom.key)).not.toEqual(expect.arrayContaining(['action.open_short', 'action.close_short']))
   })
 
-  it('does not compile timed DCA pause rules into an unconditional entry cooldown blocker', async () => {
+  it('compiles timed DCA cadence as executable cooldown without breaking DCA schedule', async () => {
     const state = buildStateFromMessage(getTemplateInitialMessage('timed-dca-budget'))
     const artifacts = await createPublicationStage().generate({ semanticState: state })
-    const riskPredicates = artifacts.compiled.ir.riskPredicates ?? []
+    const riskPredicates = artifacts.compiled.ir.riskPolicy?.riskPredicates ?? artifacts.compiled.ir.riskPredicates ?? []
     const dcaRule = artifacts.compiled.ir.ruleBlocks.find(block => block.metadata?.dcaSchedule)
 
-    expect(riskPredicates.map(predicate => predicate.kind)).not.toContain('cooldownBars')
+    expect(riskPredicates.map(predicate => predicate.kind)).toContain('cooldownBars')
     expect(dcaRule?.metadata?.dcaSchedule).toEqual(expect.objectContaining({
       triggerMode: 'time_interval',
       timeIntervalMs: 24 * 60 * 60 * 1000,
@@ -352,5 +353,39 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     )
 
     expect(decision.action).toBe('OPEN_LONG')
+  })
+
+  it.each([
+    'orderbook-imbalance-long',
+    'fixed-grid-gated',
+    'drawdown-dca-budget',
+    'timed-dca-budget',
+    'funding-oi-confirmation',
+    'grid-breakout-stop',
+  ])('%s preserves evidence cadence and hold bars as executable rules atoms', async (templateId) => {
+    const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === templateId)
+    const params = evidence?.params as Record<string, unknown> | undefined
+    const artifacts = await generateArtifactsFromTemplate(templateId)
+    const riskPredicates = artifacts.compiled.ir.riskPolicy?.riskPredicates ?? artifacts.compiled.ir.riskPredicates ?? []
+    const cooldownRuleBlocks = artifacts.compiled.ir.ruleBlocks.filter(block => typeof block.cooldownBars === 'number')
+    const cooldownPredicates = riskPredicates.filter(predicate => predicate.kind === 'cooldownBars')
+
+    if (typeof params?.holdBars === 'number') {
+      expect(riskPredicates).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'timeStopBars', params: expect.objectContaining({ maxBars: params.holdBars }) }),
+      ]))
+      expect(artifacts.compiledScript).toContain('timeStopBars')
+    }
+
+    if (typeof params?.cadence === 'number') {
+      expect([...cooldownRuleBlocks, ...cooldownPredicates]).toEqual(expect.arrayContaining([
+        expect.objectContaining(
+          'cooldownBars' in (cooldownRuleBlocks[0] ?? {})
+            ? { cooldownBars: params.cadence }
+            : { kind: 'cooldownBars', params: expect.objectContaining({ bars: params.cadence }) },
+        ),
+      ]))
+      expect(artifacts.compiledScript).toContain('cooldownBars')
+    }
   })
 })

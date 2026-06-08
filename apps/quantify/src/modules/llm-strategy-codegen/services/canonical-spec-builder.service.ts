@@ -949,11 +949,13 @@ export class CanonicalSpecBuilderService {
           const reversePosition = phase === 'entry'
             ? this.buildReversePositionMetadataFromMainflowActionLeaves(mainflow.byRole.action.filter(leaf => leaf.ruleId === rule.id))
             : undefined
+          const evidenceTexts = this.collectMainflowRuleEvidenceTexts(mainflow, rule)
           canonicalRules.push({
             id: `semantic-${phase}-${rule.id}`,
             phase,
             sideScope: rule.sideScope,
             priority: this.resolveSemanticRulePriority(phase, ruleIndex + 1),
+            ...(phase === 'entry' ? { cooldownBars: this.resolveCooldownBarsFromTexts(evidenceTexts) } : {}),
             condition,
             actions: normalizedActions,
             metadata: {
@@ -1021,6 +1023,30 @@ export class CanonicalSpecBuilderService {
         riskPriority -= 1
       }
 
+      const timeStopRule = this.resolveTimeStopRule(this.collectMainflowRuleEvidenceTexts(mainflow, rule))
+      if (timeStopRule && !canonicalRules.some(canonicalRule => canonicalRule.condition.kind === 'atom' && canonicalRule.condition.key === 'risk.time_stop_bars' && canonicalRule.metadata?.sourcePath === `rules[${ruleIndex}]`)) {
+        canonicalRules.push({
+          id: `semantic-risk-time-stop-${rule.id}-${riskPriority}`,
+          phase: 'risk',
+          sideScope: timeStopRule.sideScope,
+          priority: riskPriority,
+          condition: {
+            kind: 'atom',
+            key: 'risk.time_stop_bars',
+            semanticScope: 'position',
+            op: 'GTE',
+            value: timeStopRule.bars,
+            params: { maxBars: timeStopRule.bars, scope: timeStopRule.sideScope, effect: 'close_position' },
+          },
+          actions: timeStopRule.actions,
+          metadata: {
+            semanticKey: 'risk.time_stop_bars',
+            sourcePath: `rules[${ruleIndex}]`,
+          },
+        })
+        riskPriority -= 1
+      }
+
       for (const leaf of mainflow.byRole.position.filter(leaf => leaf.ruleId === rule.id && leaf.key === 'position.dca_schedule')) {
         const sameRulePositionLeaves = mainflow.byRole.position.filter(positionLeaf => positionLeaf.ruleId === rule.id)
         canonicalRules.push(this.buildCanonicalDcaRuleFromRuleEffectLeaf({
@@ -1076,6 +1102,22 @@ export class CanonicalSpecBuilderService {
       sameBarPolicy: this.readSameBarPolicy(leaf.params.sameBarPolicy),
       sizingSource: this.readReverseSizingSource(leaf.params.sizingSource),
     }
+  }
+
+  private collectMainflowRuleEvidenceTexts(
+    mainflow: RulesMainflowView,
+    rule: SemanticRule,
+  ): string[] {
+    const texts = [
+      typeof rule.evidence?.text === 'string' ? rule.evidence.text : '',
+      ...mainflow.leaves
+        .filter(leaf => leaf.ruleId === rule.id)
+        .map(leaf => leaf.evidenceText ?? ''),
+    ]
+      .map(text => text.trim())
+      .filter(text => text.length > 0)
+
+    return Array.from(new Set(texts))
   }
 
   private isRulesMainflowExitRiskConditionAtom(key: string): boolean {
@@ -1443,6 +1485,33 @@ export class CanonicalSpecBuilderService {
         },
       }
     }
+    if (input.leaf.key === 'risk.time_stop_bars') {
+      const maxBars = this.readFiniteNumber(input.leaf.params.maxBars)
+        ?? this.readFiniteNumber(input.leaf.params.bars)
+      if (maxBars === null || !Number.isInteger(maxBars) || maxBars <= 0) return null
+      const scope = input.leaf.params.scope === 'long' || input.leaf.params.scope === 'short'
+        ? input.leaf.params.scope
+        : input.rule.sideScope === 'long' || input.rule.sideScope === 'short' ? input.rule.sideScope : 'both'
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: scope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: 'risk.time_stop_bars',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: maxBars,
+          params: { maxBars, scope, effect: 'close_position' },
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
     if (input.leaf.key === FIELD_KEY.RISK_MAX_LOSS_PER_TRADE) {
       const valuePct = this.readFiniteNumber(input.leaf.params.valuePct)
       if (valuePct === null || valuePct <= 0 || valuePct >= 100) return null
@@ -1468,10 +1537,11 @@ export class CanonicalSpecBuilderService {
     if (input.leaf.key !== FIELD_KEY.RISK_STOP_LOSS_PCT && input.leaf.key !== FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
       return null
     }
-    const valuePct = typeof input.leaf.params.valuePct === 'number' ? input.leaf.params.valuePct : null
-    if (valuePct === null || !Number.isFinite(valuePct)) {
+    const rawValuePct = typeof input.leaf.params.valuePct === 'number' ? input.leaf.params.valuePct : null
+    if (rawValuePct === null || !Number.isFinite(rawValuePct)) {
       return null
     }
+    const valuePct = input.leaf.key === FIELD_KEY.RISK_STOP_LOSS_PCT ? Math.abs(rawValuePct) : rawValuePct
 
     return this.buildPercentRiskCanonicalRule({
       id: `semantic-risk-${input.rule.id}-${input.priority}`,
@@ -5853,6 +5923,7 @@ export class CanonicalSpecBuilderService {
     metadata?: CanonicalRuleV2['metadata']
   }): CanonicalRuleV2 | null {
     const basis = typeof input.basis === 'string' ? input.basis : undefined
+    const normalizedValuePct = input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? Math.abs(input.valuePct) : input.valuePct
     if (this.isExecutablePercentRiskBasis(basis)) {
       return {
         id: input.id,
@@ -5864,7 +5935,7 @@ export class CanonicalSpecBuilderService {
           key: input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? CANONICAL_RULE_KEYS.positionLossPct : input.riskKey,
           semanticScope: 'position',
           op: 'GTE',
-          value: Number((input.valuePct / 100).toFixed(4)),
+          value: Number((normalizedValuePct / 100).toFixed(4)),
           ...(basis ? { params: { basis } } : {}),
         },
         actions: input.actions,
@@ -5887,7 +5958,7 @@ export class CanonicalSpecBuilderService {
         left: { kind: 'position', field: 'pnl_pct' },
         right: {
           kind: 'constant',
-          value: input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? -input.valuePct : input.valuePct,
+          value: input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? -normalizedValuePct : normalizedValuePct,
           unit: 'percent',
         },
       },
@@ -8646,10 +8717,18 @@ export class CanonicalSpecBuilderService {
   }
 
   private resolveCooldownBars(text: string): number | undefined {
-    const matched = text.match(/冷却\s*(\d+)\s*根?K?线?/u)
+    const matched = text.match(/(?:冷却|每)\s*(\d+)\s*根?K?线?(?:[^，。；;\n]{0,12}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次)?/u)
     if (!matched?.[1]) return undefined
     const value = Number(matched[1])
     return Number.isFinite(value) && value > 0 ? value : undefined
+  }
+
+  private resolveCooldownBarsFromTexts(texts: readonly string[]): number | undefined {
+    for (const text of texts) {
+      const value = this.resolveCooldownBars(text)
+      if (typeof value === 'number') return value
+    }
+    return undefined
   }
 
   private resolveTakeProfitRule(
@@ -8723,7 +8802,7 @@ export class CanonicalSpecBuilderService {
     actions: CanonicalRuleV2['actions']
   } | null {
     for (const text of texts) {
-      const matched = text.match(/持仓(?:超过|达到)?\s*(\d+)\s*根?K?线?.{0,8}(?:平仓|平多|平空|离场|出场)/u)
+      const matched = text.match(/持仓(?:超过|达到)?\s*(\d+)\s*(?:根\s*)?K?\s*线?.{0,8}(?:平仓|平多|平空|离场|出场)/u)
       if (matched?.[1]) {
         return {
           bars: Number(matched[1]),

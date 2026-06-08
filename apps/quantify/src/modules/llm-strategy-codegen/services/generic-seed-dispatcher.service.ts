@@ -1577,6 +1577,7 @@ export class GenericSeedDispatcher {
         if (!this.typedEffectAppliesToSide(effect, sideScope)) continue
         this.appendTypedEffect(typedEffects, this.alignTypedLifecycleEffectToRuleSide(effect, sideScope))
       }
+      this.appendLifecycleRiskEffects(typedEffects, phase, sideScope, userMessage)
       if (phase === 'exit' && typedEffects.actions.length === 0 && this.hasCloseActionIntent(userMessage)) {
         this.appendTypedEffect(typedEffects, {
           kind: 'atom',
@@ -1612,7 +1613,9 @@ export class GenericSeedDispatcher {
         sideScope,
         condition,
         effects: typedEffects,
-        ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
+        ...(this.hasLifecycleEvidenceIntent(userMessage)
+          ? { evidence: { text: userMessage.trim() } }
+          : isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
       })
       }
     }
@@ -1645,6 +1648,58 @@ export class GenericSeedDispatcher {
         },
       }
     })
+  }
+
+  private hasLifecycleEvidenceIntent(userMessage: string): boolean {
+    return /每\s*\d+\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu.test(userMessage)
+      || /持仓(?:超过|达到)?\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu.test(userMessage)
+  }
+
+  private appendLifecycleRiskEffects(
+    effects: Record<RuleEffectRole, AtomExpr[]>,
+    phase: SemanticRule['phase'],
+    sideScope: SemanticRule['sideScope'],
+    userMessage: string,
+  ): void {
+    if (phase === 'entry') {
+      const cooldownBars = this.extractEntryCooldownBars(userMessage)
+      if (cooldownBars !== null) {
+        this.appendTypedEffect(effects, {
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['risk.cooldown'].key,
+          params: { phase: 'entry', durationBars: cooldownBars },
+          sideScope,
+          evidence: { text: userMessage.trim() },
+        })
+      }
+    }
+
+    if (phase === 'exit') {
+      const holdBars = this.extractTimeStopBars(userMessage)
+      if (holdBars !== null) {
+        effects.risks.push({
+          kind: 'atom',
+          key: 'risk.time_stop_bars',
+          params: { phase: 'risk', maxBars: holdBars, scope: sideScope, effect: 'close_position' },
+          sideScope,
+          evidence: { text: userMessage.trim() },
+        })
+      }
+    }
+  }
+
+  private extractEntryCooldownBars(userMessage: string): number | null {
+    const matched = userMessage.match(/每\s*(\d+)\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu)
+    if (!matched?.[1]) return null
+    const value = Number(matched[1])
+    return Number.isInteger(value) && value > 0 ? value : null
+  }
+
+  private extractTimeStopBars(userMessage: string): number | null {
+    const matched = userMessage.match(/持仓(?:超过|达到)?\s*(\d+)\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu)
+    if (!matched?.[1]) return null
+    const value = Number(matched[1])
+    return Number.isInteger(value) && value > 0 ? value : null
   }
 
   private repairDcaRulesMainflow(rules: SemanticRule[], userMessage: string): SemanticRule[] {

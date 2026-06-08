@@ -134,6 +134,22 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     expect(allText).not.toContain('指标高于阈值')
   })
 
+  it('renders semantic-only risk.time_stop_bars via legacy public name in rules tree graph', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-time-stop',
+      phase: 'exit',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'risk.time_stop_bars', params: { maxBars: 4, scope: 'long', effect: 'close_position' } },
+      effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+    }]
+    const graph = service.buildDisplayLogicGraph(baseState({ rules }))
+    const text = graph.blocks.flatMap(block => block.items).map(item => item.text).join('；')
+
+    expect(text).toContain('时间止损（K 线数）')
+    expect(text).not.toContain('risk.time_stop_bars')
+    expect(text).not.toContain('已识别条件，参数待补充')
+  })
+
   it('renders rolling channel breakout high/low references in rules tree graph', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-channel-breakout-graph',
