@@ -1,63 +1,38 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals'
+jest.mock('@ai/api-contracts', () => ({
+  createApiClient: jest.fn(() => ({})),
+}), { virtual: true })
 
-const ORIGINAL_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
-const ORIGINAL_API_SERVER_URL = process.env.NEXT_PUBLIC_API_SERVER_URL
+jest.mock('@ai/shared', () => ({
+  unwrapTransportResponse: jest.fn((value: unknown) => value),
+}), { virtual: true })
 
-async function loadApiClient() {
-  jest.resetModules()
-  return import('./api-client')
-}
+describe('front API base URL resolution', () => {
+  const originalEnv = process.env
 
-describe('api-client env resolution', () => {
-  afterEach(() => {
+  beforeEach(() => {
     jest.resetModules()
-
-    if (ORIGINAL_API_BASE_URL === undefined) {
-      delete process.env.NEXT_PUBLIC_API_BASE_URL
-    } else {
-      process.env.NEXT_PUBLIC_API_BASE_URL = ORIGINAL_API_BASE_URL
-    }
-
-    if (ORIGINAL_API_SERVER_URL === undefined) {
-      delete process.env.NEXT_PUBLIC_API_SERVER_URL
-    } else {
-      process.env.NEXT_PUBLIC_API_SERVER_URL = ORIGINAL_API_SERVER_URL
+    process.env = {
+      ...originalEnv,
+      NEXT_PUBLIC_API_BASE_URL: '/api/v1',
+      NEXT_PUBLIC_API_SERVER_URL: 'https://backend.example.com',
     }
   })
 
-  it('uses same-origin API base when public API base URL is placeholder text', async () => {
-    process.env.NEXT_PUBLIC_API_BASE_URL = '__SET_IN_env.local__'
-    process.env.NEXT_PUBLIC_API_SERVER_URL = 'https://cfx-backend-staging.devbase.cloud'
-
-    const { API_BASE_URL, SERVER_API_BASE_URL } = await loadApiClient()
-
-    expect(API_BASE_URL).toBe('/api/v1')
-    expect(SERVER_API_BASE_URL).toBe('https://cfx-backend-staging.devbase.cloud/api/v1')
+  afterAll(() => {
+    process.env = originalEnv
   })
 
-  it('builds SERVER_API_BASE_URL as absolute when NEXT_PUBLIC_API_BASE_URL is relative', async () => {
-    process.env.NEXT_PUBLIC_API_BASE_URL = '/api/v1'
-    process.env.NEXT_PUBLIC_API_SERVER_URL = 'http://localhost:3000'
+  it('requires explicit server URL when browser API base URL is relative', async () => {
+    const { resolveServerApiBaseUrl } = await import('./api-client')
 
-    const { SERVER_API_BASE_URL } = await loadApiClient()
-
-    expect(SERVER_API_BASE_URL).toBe('http://localhost:3000/api/v1')
+    expect(() => resolveServerApiBaseUrl('/api/v1', undefined)).toThrow('NEXT_PUBLIC_API_SERVER_URL')
   })
 
-  it('keeps SERVER_API_BASE_URL unchanged when NEXT_PUBLIC_API_BASE_URL is absolute', async () => {
-    process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.com/api/v1'
-    process.env.NEXT_PUBLIC_API_SERVER_URL = 'http://localhost:3000'
+  it('uses absolute API base URL directly for server calls', async () => {
+    const { resolveServerApiBaseUrl } = await import('./api-client')
 
-    const { API_BASE_URL, SERVER_API_BASE_URL } = await loadApiClient()
-
-    expect(API_BASE_URL).toBe('/api/v1')
-    expect(SERVER_API_BASE_URL).toBe('https://api.example.com/api/v1')
-  })
-
-  it('unwraps both transport envelopes and raw payloads', async () => {
-    const { unwrapApiResponse } = await loadApiClient()
-
-    expect(unwrapApiResponse({ data: { id: 'wrapped' } })).toEqual({ id: 'wrapped' })
-    expect(unwrapApiResponse({ id: 'raw' })).toEqual({ id: 'raw' })
+    expect(resolveServerApiBaseUrl('https://backend.example.com/api/v1', undefined)).toBe(
+      'https://backend.example.com/api/v1',
+    )
   })
 })

@@ -17,7 +17,7 @@ function normalizePublicUrlEnv(value?: string): string | undefined {
 
 function resolveBrowserApiBaseUrl(explicitApiBaseUrl: string | undefined): string {
   if (!explicitApiBaseUrl) {
-    return '/api/v1'
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required')
   }
   if (!isAbsoluteHttpUrl(explicitApiBaseUrl)) {
     return explicitApiBaseUrl
@@ -34,8 +34,7 @@ function resolveBrowserApiBaseUrl(explicitApiBaseUrl: string | undefined): strin
 // Browser requests should default to the same-origin Next rewrite to avoid CORS
 // preflight failures on authenticated API calls.
 const EXPLICIT_API_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_BASE_URL)
-const SERVER_BASE_URL =
-  normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL) ?? 'http://localhost:3000'
+const SERVER_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL)
 
 export const API_BASE_URL = resolveBrowserApiBaseUrl(EXPLICIT_API_BASE_URL)
 export const SERVER_API_BASE_URL = resolveServerApiBaseUrl(EXPLICIT_API_BASE_URL ?? API_BASE_URL, SERVER_BASE_URL)
@@ -44,9 +43,12 @@ function isAbsoluteHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value)
 }
 
-function resolveServerApiBaseUrl(apiBaseUrl: string, serverBaseUrl: string): string {
+export function resolveServerApiBaseUrl(apiBaseUrl: string, serverBaseUrl: string | undefined): string {
   if (isAbsoluteHttpUrl(apiBaseUrl)) {
     return apiBaseUrl
+  }
+  if (!serverBaseUrl) {
+    throw new Error('NEXT_PUBLIC_API_SERVER_URL is required when NEXT_PUBLIC_API_BASE_URL is relative')
   }
   if (apiBaseUrl.startsWith('/')) {
     return `${serverBaseUrl}${apiBaseUrl}`

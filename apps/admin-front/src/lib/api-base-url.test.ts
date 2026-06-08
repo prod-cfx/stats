@@ -17,4 +17,10 @@ describe('resolveApiBaseUrl', () => {
       ),
     ).toBe('https://cfx-backend-staging.devbase.cloud/api/v1')
   })
+
+  it('throws when both public API address variables are missing or placeholders', async () => {
+    const { resolveApiBaseUrl } = await import('./api-base-url')
+
+    expect(() => resolveApiBaseUrl('__SET_IN_env.local__', undefined)).toThrow('NEXT_PUBLIC_API_BASE_URL')
+  })
 })

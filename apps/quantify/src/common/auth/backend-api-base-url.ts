@@ -1,6 +1,5 @@
 import type { EnvService } from '@/common/services/env.service'
 
-const DEFAULT_BACKEND_API_BASE_URL = 'http://127.0.0.1:3000/api/v1'
 const ENV_PLACEHOLDER_VALUE = '__SET_IN_env.local__'
 
 type BackendApiBaseUrlEnv = Pick<EnvService, 'getString'>
@@ -31,5 +30,5 @@ export function resolveBackendApiBaseUrl(env: BackendApiBaseUrlEnv): string {
     return appendApiPrefix(configuredServerUrl)
   }
 
-  return DEFAULT_BACKEND_API_BASE_URL
+  throw new Error('BACKEND_API_BASE_URL or NEXT_PUBLIC_API_SERVER_URL is required')
 }

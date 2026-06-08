@@ -6,6 +6,7 @@ const [commands, rootPackage] = await Promise.all([
   readJson(new URL('./commands.json', import.meta.url)),
   readJson(new URL('../../package.json', import.meta.url)),
 ])
+const envPolicy = await readJson(new URL('./env-policy.jsonc', import.meta.url))
 const localEcosystem = await import('../../ecosystem.config.cjs')
 
 const EXPECTED_UNIT_ALL_TARGETS = [
@@ -20,6 +21,15 @@ const EXPECTED_UNIT_ALL_TARGETS = [
 
 async function readJson(url) {
   return JSON.parse(await readFile(url, 'utf8'))
+}
+
+async function readEnvFile(env) {
+  return readFile(new URL(`../../.env.${env}`, import.meta.url), 'utf8')
+}
+
+function parseEnvValue(source, key) {
+  const match = source.match(new RegExp(`^${key}=(.*)$`, 'm'))
+  return match?.[1]?.trim()
 }
 
 function extractDxTestUnitTargets(command) {
@@ -156,5 +166,28 @@ describe('dx command config', () => {
         example.command.startsWith('dx test e2e'),
       ),
     )
+  })
+
+  it('requires frontend public API and websocket addresses in every environment', () => {
+    const required = envPolicy.targets.frontend.required
+    assert.deepEqual(required._common, [
+      'APP_ENV',
+      'NEXT_PUBLIC_APP_ENV',
+      'NEXT_PUBLIC_API_BASE_URL',
+      'NEXT_PUBLIC_WS_URL',
+    ])
+
+    for (const env of envPolicy.environments) {
+      assert.deepEqual(required[env] ?? [], [])
+    }
+  })
+
+  it('keeps committed frontend API base env values explicit and non-placeholder', async () => {
+    for (const env of ['development', 'staging', 'production', 'test', 'e2e']) {
+      const source = await readEnvFile(env)
+      const value = parseEnvValue(source, 'NEXT_PUBLIC_API_BASE_URL')
+      assert.ok(value, `.env.${env} missing NEXT_PUBLIC_API_BASE_URL`)
+      assert.notEqual(value, envPolicy.secretPlaceholder, `.env.${env} must not use secret placeholder for NEXT_PUBLIC_API_BASE_URL`)
+    }
   })
 })

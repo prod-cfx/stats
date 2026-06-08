@@ -33,7 +33,7 @@ describe('resolveBackendApiBaseUrl', () => {
     expect(resolveBackendApiBaseUrl(env)).toBe('https://backend.example.com/api/v1')
   })
 
-  it('falls back to local backend api url for development defaults', () => {
-    expect(resolveBackendApiBaseUrl(createEnv({}))).toBe('http://127.0.0.1:3000/api/v1')
+  it('throws when backend API config is missing', () => {
+    expect(() => resolveBackendApiBaseUrl(createEnv({}))).toThrow('BACKEND_API_BASE_URL')
   })
 })

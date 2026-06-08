@@ -16,6 +16,10 @@ export function resolveApiBaseUrl(
     return normalizedApiBaseUrl
   }
 
-  const normalizedApiServerUrl = normalizePublicUrlEnv(apiServerUrl) ?? 'http://localhost:3000'
+  const normalizedApiServerUrl = normalizePublicUrlEnv(apiServerUrl)
+  if (!normalizedApiServerUrl) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL or NEXT_PUBLIC_API_SERVER_URL is required')
+  }
+
   return `${normalizedApiServerUrl}/api/v1`
 }
