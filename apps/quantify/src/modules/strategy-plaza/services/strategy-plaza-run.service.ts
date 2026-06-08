@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { AccountStrategyViewService } from '@/modules/account-strategy-view/services/account-strategy-view.service'
 import { ExchangeAccountRepository } from '@/modules/exchange-accounts/repositories/exchange-account.repository'
 import { StrategyPlazaOkxDemoApiKeyRequiredException, StrategyPlazaOkxLiveApiKeyRequiredException } from '../exceptions'
-import { StrategyPlazaOfficialSnapshotRepository } from '../repositories/strategy-plaza-official-snapshot.repository'
+import { StrategyPlazaCompiledSnapshotService } from './strategy-plaza-compiled-snapshot.service'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
 @Injectable()
@@ -10,7 +10,7 @@ export class StrategyPlazaRunService {
   constructor(
     private readonly templates: OfficialStrategyPlazaTemplateService,
     private readonly exchangeAccounts: ExchangeAccountRepository,
-    private readonly officialSnapshots: StrategyPlazaOfficialSnapshotRepository,
+    private readonly compiledSnapshots: StrategyPlazaCompiledSnapshotService,
     private readonly accountStrategyViewService: AccountStrategyViewService,
   ) {}
 
@@ -24,7 +24,7 @@ export class StrategyPlazaRunService {
     const template = this.templates.getRequired(input.templateId)
     const mode = input.mode ?? 'TESTNET'
     const existingSnapshot = mode === 'TESTNET'
-      ? await this.officialSnapshots.resolveExistingOfficialSnapshotForUser({
+      ? await this.compiledSnapshots.resolveExistingCompiledSnapshotForUser({
           userId: input.userId,
           template,
         })
@@ -57,7 +57,7 @@ export class StrategyPlazaRunService {
         ? new StrategyPlazaOkxLiveApiKeyRequiredException({ userId: input.userId })
         : new StrategyPlazaOkxDemoApiKeyRequiredException({ userId: input.userId })
     }
-    const snapshot = await this.officialSnapshots.resolveOfficialSnapshotForUser({
+    const snapshot = await this.compiledSnapshots.resolveCompiledSnapshotForUser({
       userId: input.userId,
       template,
     })

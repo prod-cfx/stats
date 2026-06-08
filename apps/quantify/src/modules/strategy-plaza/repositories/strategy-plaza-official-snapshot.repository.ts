@@ -33,6 +33,8 @@ type TemplateRuntimeContent = Pick<
   | 'lockedParams'
 >
 
+export type StrategyPlazaSourceSnapshotContent = Omit<Prisma.PublishedStrategySnapshotCreateInput, 'id' | 'session'>
+
 type UserOfficialSnapshotResolution = Pick<PublishedStrategySnapshot, 'id'> & {
   existingStrategyInstanceId?: string
 }
@@ -48,6 +50,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
   async resolveOfficialSnapshotForUser(input: {
     userId: string
     template: OfficialStrategyPlazaTemplate
+    sourceContent?: StrategyPlazaSourceSnapshotContent
   }): Promise<UserOfficialSnapshotResolution> {
     return this.txHost.withTransaction(async () => this.resolveOfficialSnapshotForUserInTransaction(input))
   }
@@ -55,9 +58,10 @@ export class StrategyPlazaOfficialSnapshotRepository {
   async resolveExistingOfficialSnapshotForUser(input: {
     userId: string
     template: OfficialStrategyPlazaTemplate
+    sourceContent?: StrategyPlazaSourceSnapshotContent
   }): Promise<UserOfficialSnapshotResolution | null> {
     return this.txHost.withTransaction(async () => {
-      const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
+      const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template, input.sourceContent)
       const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
       const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
       if (!existing) return null
@@ -71,9 +75,10 @@ export class StrategyPlazaOfficialSnapshotRepository {
   private async resolveOfficialSnapshotForUserInTransaction(input: {
     userId: string
     template: OfficialStrategyPlazaTemplate
+    sourceContent?: StrategyPlazaSourceSnapshotContent
   }): Promise<UserOfficialSnapshotResolution> {
     const client = this.txHost.tx
-    const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
+    const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template, input.sourceContent)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
     const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
     if (existing) {
@@ -233,9 +238,10 @@ export class StrategyPlazaOfficialSnapshotRepository {
 
   private async resolveOrCreateOfficialSourceSnapshot(
     template: OfficialStrategyPlazaTemplate,
+    sourceContent?: StrategyPlazaSourceSnapshotContent,
   ): Promise<PublishedStrategySnapshot> {
     const client = this.txHost.tx
-    const content = this.buildOfficialSourceSnapshotContent(template)
+    const content = sourceContent ?? this.buildOfficialSourceSnapshotContent(template)
     const existingSourceSnapshot = await client.publishedStrategySnapshot.findUnique({
       where: { id: template.runConfig.publishedSnapshotId },
     })
