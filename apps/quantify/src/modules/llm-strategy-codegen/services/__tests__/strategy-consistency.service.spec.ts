@@ -1914,6 +1914,69 @@ strategy
     expect(report.scriptProfile.rules.some(rule => rule.key === 'risk.time_stop_bars')).toBe(true)
   })
 
+  it.each([
+    ['orderbook-imbalance-long', 'BTCUSDT', '1m', 70],
+    ['fixed-grid-gated', 'BTCUSDT', '15m', 70],
+    ['funding-oi-confirmation', 'ETHUSDT', '15m', 70],
+  ] as const)(
+    'passes when compiled risk predicates preserve risk-phase time-stop bars semantics for %s',
+    (_caseId, symbol, timeframe, positionPct) => {
+      const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
+        symbols: [symbol],
+        timeframes: [timeframe],
+        entryRules: ['价格突破最近 6 根 K 线高点时开多'],
+        exitRules: ['跌破 EMA20 时平多'],
+        riskRules: { positionPct, exchange: 'okx', marketType: 'perp' },
+      })
+
+      canonicalSpec.rules.push({
+        id: 'risk-time-stop-bars',
+        phase: 'risk',
+        sideScope: 'long',
+        priority: 90,
+        condition: {
+          kind: 'atom',
+          key: 'risk.time_stop_bars',
+          semanticScope: 'position',
+          op: 'GTE',
+          params: { maxBars: 4, scope: 'long', effect: 'close_position' },
+        },
+        actions: [{ type: 'CLOSE_LONG' }],
+      })
+
+      const compiled = new CanonicalSpecV2IrCompilerService().compile({
+        canonicalSpec,
+        fallback: {
+          exchange: 'okx',
+          symbol,
+          baseTimeframe: timeframe,
+          positionPct,
+        },
+      })
+      const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+      const script = new CompiledScriptEmitterService().emit({
+        ast,
+        executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+      })
+
+      const report = consistency.evaluate({
+        canonicalSpec,
+        scriptCode: script,
+      })
+
+      expect(compiled.ir.riskPolicy.riskPredicates?.some(predicate => predicate.kind === 'timeStopBars')).toBe(true)
+      expect(report.status).toBe('PASSED')
+      expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'risk.time_stop_bars',
+          phase: 'risk',
+          sideScope: 'long',
+          action: 'CLOSE_LONG',
+        }),
+      ]))
+    },
+  )
+
   it('passes when canonical spec v2 compiles short breakout and short-side trade management', () => {
     const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],

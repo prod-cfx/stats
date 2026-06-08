@@ -372,7 +372,7 @@ export class StrategyConsistencyService {
         pushRule({
           key,
           action: profile.action,
-          phase: this.resolvePhaseFromAction(profile.action),
+          phase: key === 'risk.time_stop_bars' ? 'risk' : this.resolvePhaseFromAction(profile.action),
           sideScope: this.resolveRuleSideScope(profile.sideScope, profile.action),
         })
       })
@@ -1398,6 +1398,7 @@ export class StrategyConsistencyService {
     if (kind === 'atrTrailingStop') return 'risk.atr_stop'
     if (kind === 'rememberedLevelStop') return 'risk.remembered_level_stop'
     if (kind === 'cooldownBars') return 'risk.cooldown_bars'
+    if (kind === 'timeStopBars') return 'risk.time_stop_bars'
     return null
   }
 
