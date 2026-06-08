@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/api/api_whale_holdings_repository.dart';
 import 'package:quantify_mobile/data/api/api_whale_leaderboard_repository.dart';
@@ -5,7 +6,9 @@ import 'package:quantify_mobile/data/api/api_whale_profile_repository.dart';
 import 'package:quantify_mobile/data/api/api_whale_watch_repository.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
 import 'package:quantify_mobile/data/services/api_client.dart';
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 import 'package:quantify_mobile/data/services/whale_services.dart';
+import 'package:quantify_mobile/domain/models/whale_leader_models.dart';
 
 class _FakeApiClient extends ApiClient {
   _FakeApiClient(this.response) : super(baseUrl: 'http://localhost');
@@ -17,14 +20,68 @@ class _FakeApiClient extends ApiClient {
       response;
 }
 
+GeneratedBackendApi _discoverApi(Object data, List<String> calls) {
+  final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+    ..interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
+          calls.add(options.path);
+          handler.resolve(
+            Response<Object>(
+              requestOptions: options,
+              statusCode: 200,
+              data: data,
+            ),
+          );
+        },
+      ),
+    );
+  return GeneratedBackendApi(dio: dio);
+}
+
+Map<String, Object?> _discoverTrader({
+  required String variant,
+  required String address,
+  required String avatarColor,
+  required num totalValueUsd,
+  required num pnlUsd,
+  required num winRatePct,
+  String? handle,
+  String? tag,
+  num? trades,
+  num? positions,
+  List<Map<String, Object?>>? aiTags,
+}) {
+  return <String, Object?>{
+    'variant': variant,
+    'address': address,
+    'handle': handle,
+    'tag': tag,
+    'totalValueUsd': totalValueUsd,
+    'pnlUsd': pnlUsd,
+    'pnlLabelKey': 'realizedPnl1m',
+    'trades': trades,
+    'positions': positions,
+    'winRatePct': winRatePct,
+    'winRateLabelKey': 'winRate1m',
+    'avatarColor': avatarColor,
+    'aiTags': aiTags,
+  };
+}
+
 void main() {
   group('ApiWhale*Repository 真实空态', () {
-    test('leaderboard 空响应返回空列表，不回退 mockWhaleLeaders', () async {
+    test('leaderboard 空 discover DTO 返回空列表，不回退 mockWhaleLeaders', () async {
+      final List<String> calls = <String>[];
       final repo = ApiWhaleLeaderboardRepository(
-        WhaleLeaderboardService(_FakeApiClient(<String, dynamic>{'data': []})),
+        _discoverApi(<String, Object>{
+          'recommended': <Map<String, Object>>[],
+          'details': <Map<String, Object>>[],
+        }, calls),
       );
 
       expect(await repo.getLeaderboard(), isEmpty);
+      expect(calls, <String>['/whale-tracking/discover']);
     });
 
     test('holdings 空响应返回空列表，不回退 mockWhaleHoldings', () async {
@@ -57,5 +114,82 @@ void main() {
       expect(profile.perpHoldings, isEmpty);
       expect(profile.stats.assetPerf, isEmpty);
     });
+  });
+
+  group('ApiWhaleLeaderboardRepository discover contract mapping', () {
+    test(
+      'maps recommended and detail DTOs from generated WhaleTrackingApi',
+      () async {
+        final List<String> calls = <String>[];
+        final repo = ApiWhaleLeaderboardRepository(
+          _discoverApi(<String, Object?>{
+            'recommended': <Map<String, Object?>>[
+              _discoverTrader(
+                variant: 'recommended',
+                address: '0xabcdefabcdefabcdef01',
+                handle: '@alpha',
+                tag: r'$50M HYPERUNIT WHALE',
+                avatarColor: '#60a5fa',
+                totalValueUsd: 123456789,
+                pnlUsd: -2500000,
+                trades: 42,
+                positions: 7,
+                winRatePct: 73.81,
+                aiTags: <Map<String, Object?>>[
+                  <String, Object?>{
+                    'key': 'treasuryKeeper',
+                    'color': '#92400E',
+                    'bgColor': '#FEF3C7',
+                    'descriptionKey': 'treasuryKeeper',
+                  },
+                ],
+              ),
+            ],
+            'details': <Map<String, Object?>>[
+              _discoverTrader(
+                variant: 'detail',
+                address: '0x11112222333344445555',
+                avatarColor: '#34d399',
+                totalValueUsd: 9876543,
+                pnlUsd: 123400,
+                trades: 9,
+                positions: 3,
+                winRatePct: 61.5,
+                aiTags: <Map<String, Object?>>[
+                  <String, Object?>{
+                    'key': 'bullWarGod',
+                    'color': '#1E40AF',
+                    'bgColor': '#DBEAFE',
+                  },
+                ],
+              ),
+            ],
+          }, calls),
+        );
+
+        final List<WhaleLeaderEntry> entries = await repo.getLeaderboard();
+
+        expect(calls, <String>['/whale-tracking/discover']);
+        expect(entries, hasLength(2));
+        expect(entries.first.id, '0xabcdefabcdefabcdef01');
+        expect(entries.first.avatarText, 'AB');
+        expect(entries.first.avatarBgHex, 0xFF60A5FA);
+        expect(entries.first.tier, r'$50M HYPERUNIT WHALE');
+        expect(entries.first.aumDisplay, r'$123.46M');
+        expect(entries.first.pnlDisplay, r'-$2.50M');
+        expect(entries.first.pnlPositive, isFalse);
+        expect(entries.first.trades, 42);
+        expect(entries.first.positions, 7);
+        expect(entries.first.winRate, 73.81);
+        expect(entries.first.tags, <String>['金库管家']);
+
+        expect(entries.last.id, '0x11112222333344445555');
+        expect(entries.last.avatarText, isNull);
+        expect(entries.last.aumValue, 9876543);
+        expect(entries.last.pnlDisplay, r'+$123.40K');
+        expect(entries.last.pnlPositive, isTrue);
+        expect(entries.last.tags, <String>['多头战神']);
+      },
+    );
   });
 }

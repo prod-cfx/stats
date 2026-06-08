@@ -57,10 +57,6 @@ final Provider<WhaleFeedService> whaleFeedServiceProvider =
     Provider<WhaleFeedService>(
       (Ref ref) => WhaleFeedService(ref.watch(apiClientProvider)),
     );
-final Provider<WhaleLeaderboardService> whaleLeaderboardServiceProvider =
-    Provider<WhaleLeaderboardService>(
-      (Ref ref) => WhaleLeaderboardService(ref.watch(apiClientProvider)),
-    );
 final Provider<WhaleHoldingsService> whaleHoldingsServiceProvider =
     Provider<WhaleHoldingsService>(
       (Ref ref) => WhaleHoldingsService(ref.watch(apiClientProvider)),

@@ -146,7 +146,7 @@ final FutureProviderFamily<WhaleProfile, String> whaleProfileProvider =
 final Provider<WhaleLeaderboardRepository> whaleLeaderboardRepositoryProvider =
     Provider<WhaleLeaderboardRepository>((Ref ref) {
       return ApiWhaleLeaderboardRepository(
-        ref.watch(whaleLeaderboardServiceProvider),
+        ref.watch(generatedBackendApiProvider),
       );
     });
 

@@ -15,13 +15,6 @@ class WhaleFeedService {
   }
 }
 
-class WhaleLeaderboardService {
-  const WhaleLeaderboardService(this._client);
-  final ApiClient _client;
-
-  Future<dynamic> getLeaderboard() => _client.get('/whale-tracking/discover');
-}
-
 class WhaleHoldingsService {
   const WhaleHoldingsService(this._client);
   final ApiClient _client;
@@ -44,7 +37,7 @@ class WhaleWatchService {
   Future<dynamic> listRules() => _client.get('/whale-notification/rules');
 
   Future<dynamic> search(String query) => _client.get(
-        '/whale-tracking/discover',
-        query: <String, dynamic>{'q': query},
-      );
+    '/whale-tracking/discover',
+    query: <String, dynamic>{'q': query},
+  );
 }
