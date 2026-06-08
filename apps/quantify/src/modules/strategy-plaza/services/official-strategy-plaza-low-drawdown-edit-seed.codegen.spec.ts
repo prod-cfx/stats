@@ -140,6 +140,17 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     })
   })
 
+  it('keeps fixed grid start gate active after the first bar', async () => {
+    const artifacts = await generateArtifactsFromTemplate('fixed-grid-gated')
+    const predicateIds = artifacts.compiled.ir.signalCatalog.predicates.map(item => item.id)
+
+    expect(predicateIds).toEqual(expect.arrayContaining([
+      expect.stringContaining('active_range'),
+    ]))
+    expect(predicateIds.join(' ')).not.toContain('execution_on_start')
+    expect(artifacts.compiledScript).not.toContain('BAR_INDEX')
+  })
+
   it.each([
     'fixed-grid-gated',
     'trend-filtered-grid',

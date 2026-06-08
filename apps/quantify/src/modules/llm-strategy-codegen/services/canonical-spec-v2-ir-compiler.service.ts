@@ -1220,11 +1220,13 @@ export class CanonicalSpecV2IrCompilerService {
   ): IrOrchestrationGate[] {
     const gates = spec.orchestration?.gates ?? []
     return gates.map((gate: CanonicalOrchestrationGate) => {
-      const exprId = this.compileCondition(
-        gate.activeWhen,
-        context,
-        `orchestration_gate_${gate.id}`,
-      )
+      const exprId = this.isExecutionOnStartCondition(gate.activeWhen)
+        ? this.upsertAlwaysActivePredicate(context, `orchestration_gate_${gate.id}_always_active`)
+        : this.compileCondition(
+            gate.activeWhen,
+            context,
+            `orchestration_gate_${gate.id}`,
+          )
       return {
         id: gate.id,
         ...(gate.sourcePath ? { sourcePath: gate.sourcePath } : {}),
@@ -1377,6 +1379,20 @@ export class CanonicalSpecV2IrCompilerService {
     return result
   }
 
+  private isExecutionOnStartCondition(condition: CanonicalConditionNode): boolean {
+    return condition.kind === 'atom' && condition.key === 'execution.on_start'
+  }
+
+  private upsertAlwaysActivePredicate(context: CompileContext, seed: string): string {
+    const one = this.ensureConstSeries(context, 1)
+    return this.upsertPredicate(
+      context.predicateMap,
+      seed,
+      'EQ',
+      [one, one],
+    )
+  }
+
   private resolveOrchestrationProgramActiveExprId(
     program: CanonicalOrchestrationProgram,
     gateRefToExprId: ReadonlyMap<string, string>,
@@ -1386,13 +1402,7 @@ export class CanonicalSpecV2IrCompilerService {
       return gateRefToExprId.get(program.activeWhenRef)
     }
 
-    const one = this.ensureConstSeries(context, 1)
-    return this.upsertPredicate(
-      context.predicateMap,
-      `orchestration_program_${program.id}_always_active`,
-      'EQ',
-      [one, one],
-    )
+    return this.upsertAlwaysActivePredicate(context, `orchestration_program_${program.id}_always_active`)
   }
 
   private compileExpressionCondition(
