@@ -10,20 +10,24 @@ import '../services/generated_backend_api.dart';
 /// [TickerRepository] 真实现（issue #2250）。
 ///
 /// 通过 generated [MarketsApi] 调用真实 backend `/markets/ticker`。backend 暂无
-/// list endpoint，[listTickers] 先按固定 pilot symbols 逐个请求；
+/// list endpoint，[listTickers] 先按固定 pilot symbols 逐个请求 spot/perp；
 /// [watchTicker] 保留 [Stream.periodic] 周期轮询语义，仅把底层 fetch 换为
 /// generated SDK。
 class ApiTickerRepository implements TickerRepository {
   ApiTickerRepository(this._api);
 
+  static const List<String> _pilotSymbols = <String>['BTC', 'ETH', 'SOL'];
+  static const String _perpExchange = 'Binance';
+
   final GeneratedBackendApi _api;
 
-  Ticker _map(TickerResponseDto dto) {
+  Ticker _map(TickerResponseDto dto, {MarketKind kind = MarketKind.spot}) {
     return Ticker.fromBackendFields(
       symbol: dto.symbol,
       currentPrice: dto.currentPrice,
       priceChangePercent24h: dto.priceChangePercent24h,
       volumeUsd: dto.volumeUsd,
+      kind: kind,
       high24h: dto.high24h,
       low24h: dto.low24h,
       openInterestUsd: dto.openInterestUsd,
@@ -32,16 +36,35 @@ class ApiTickerRepository implements TickerRepository {
     );
   }
 
+  Future<Ticker?> _fetchTicker({
+    required String symbol,
+    required MarketKind kind,
+    String? exchange,
+  }) async {
+    final Response<TickerResponseDto> response = await _api.client
+        .getMarketsApi()
+        .marketsControllerGetTicker(symbol: symbol, exchange: exchange);
+    final TickerResponseDto? data = response.data;
+    if (data == null) return null;
+    return _map(data, kind: kind);
+  }
+
   @override
   Future<List<Ticker>> listTickers() async {
-    const List<String> symbols = <String>['BTC', 'ETH', 'SOL'];
     final List<Ticker> result = <Ticker>[];
-    for (final String symbol in symbols) {
-      final Response<TickerResponseDto> response = await _api.client
-          .getMarketsApi()
-          .marketsControllerGetTicker(symbol: symbol);
-      final TickerResponseDto? data = response.data;
-      if (data != null) result.add(_map(data));
+    for (final String symbol in _pilotSymbols) {
+      final Ticker? spot = await _fetchTicker(
+        symbol: symbol,
+        kind: MarketKind.spot,
+      );
+      if (spot != null) result.add(spot);
+
+      final Ticker? perp = await _fetchTicker(
+        symbol: symbol,
+        kind: MarketKind.perp,
+        exchange: _perpExchange,
+      );
+      if (perp != null) result.add(perp);
     }
     return result;
   }
@@ -56,7 +79,13 @@ class ApiTickerRepository implements TickerRepository {
       if (data == null) {
         throw const ApiException(message: 'empty ticker response');
       }
-      return _map(data);
+      final MarketKind kind =
+          data.openInterestUsd != null ||
+              data.fundingRate != null ||
+              data.indexPrice != null
+          ? MarketKind.perp
+          : MarketKind.spot;
+      return _map(data, kind: kind);
     }
 
     yield await fetchOne();
