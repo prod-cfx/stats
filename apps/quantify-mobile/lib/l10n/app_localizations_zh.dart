@@ -881,7 +881,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authRegisterPasswordLabel => '密码';
 
   @override
-  String get authRegisterPasswordHint => '至少 8 位';
+  String get authRegisterPasswordHint => '至少 6 位';
 
   @override
   String get authRegisterPasswordRequired => '请输入密码';

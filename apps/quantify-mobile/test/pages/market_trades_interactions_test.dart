@@ -10,9 +10,24 @@ List<Trade> _trades() {
   final DateTime base = DateTime(2026, 1, 1, 12);
   return <Trade>[
     Trade(time: base, price: 100, qty: 0.05, isBuy: true),
-    Trade(time: base.subtract(const Duration(seconds: 1)), price: 101, qty: 0.5, isBuy: false),
-    Trade(time: base.subtract(const Duration(seconds: 2)), price: 99, qty: 0.4, isBuy: true),
-    Trade(time: base.subtract(const Duration(seconds: 3)), price: 102, qty: 0.02, isBuy: false),
+    Trade(
+      time: base.subtract(const Duration(seconds: 1)),
+      price: 101,
+      qty: 0.5,
+      isBuy: false,
+    ),
+    Trade(
+      time: base.subtract(const Duration(seconds: 2)),
+      price: 99,
+      qty: 0.4,
+      isBuy: true,
+    ),
+    Trade(
+      time: base.subtract(const Duration(seconds: 3)),
+      price: 102,
+      qty: 0.02,
+      isBuy: false,
+    ),
   ];
 }
 
@@ -41,6 +56,19 @@ void main() {
       expect(big.length, 2); // 0.5 + 0.4
       expect(big.every((Trade t) => t.qty >= kBigTradeQtyThreshold), isTrue);
     });
+
+    test('真实小单低于固定阈值时回退到成交额 Top 档', () {
+      final DateTime base = DateTime(2026, 1, 1, 12);
+      final List<Trade> big = filterBigTrades(<Trade>[
+        Trade(time: base, price: 63000, qty: 0.0001, isBuy: true),
+        Trade(time: base, price: 63000, qty: 0.0043, isBuy: false),
+        Trade(time: base, price: 63000, qty: 0.0034, isBuy: true),
+        Trade(time: base, price: 63000, qty: 0.00009, isBuy: false),
+      ]);
+
+      expect(big, hasLength(1));
+      expect(big.single.qty, 0.0043);
+    });
   });
 
   group('sortTrades', () {
@@ -56,9 +84,7 @@ void main() {
     });
   });
 
-  testWidgets('列头按设计稿顺序：价格 / 数量 / 成交时间', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('列头按设计稿顺序：价格 / 数量 / 成交时间', (WidgetTester tester) async {
     await _pump(tester);
     final Finder price = find.text('价格(USDT)');
     final Finder qty = find.text('数量(BTC)');
@@ -75,9 +101,7 @@ void main() {
     expect(qtyDx < timeDx, isTrue);
   });
 
-  testWidgets('默认最新成交显示全部行，切大额成交行数减少', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('默认最新成交显示全部行，切大额成交行数减少', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.text('最新成交'), findsOneWidget);
     expect(find.text('大额成交'), findsOneWidget);

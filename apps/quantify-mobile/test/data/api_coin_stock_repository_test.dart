@@ -65,15 +65,17 @@ void main() {
     });
 
     test('positive change → +x.xx% and up=true', () {
-      final CoinStock c =
-          ApiCoinStockRepository.mapCoinStock(_dto(priceChangePercent: '1.683'));
+      final CoinStock c = ApiCoinStockRepository.mapCoinStock(
+        _dto(priceChangePercent: '1.683'),
+      );
       expect(c.ch, '+1.68%');
       expect(c.up, isTrue);
     });
 
     test('negative change → -x.xx% and up=false', () {
-      final CoinStock c =
-          ApiCoinStockRepository.mapCoinStock(_dto(priceChangePercent: '-2.5'));
+      final CoinStock c = ApiCoinStockRepository.mapCoinStock(
+        _dto(priceChangePercent: '-2.5'),
+      );
       expect(c.ch, '-2.50%');
       expect(c.up, isFalse);
     });
@@ -84,6 +86,14 @@ void main() {
       );
       expect(c.holdV, '1000');
       expect(c.holdQ, '12');
+    });
+
+    test('empty assetSymbol falls back to OTHER', () {
+      final CoinStock c = ApiCoinStockRepository.mapCoinStock(
+        _dto(assetSymbol: '  '),
+      );
+      expect(c.coin, 'OTHER');
+      expect(c.hold, 'OTHER');
     });
 
     test('infoParagraphs joined into intro', () {

@@ -28,11 +28,20 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// hub header（横滑 tab + 铃铛 badge）与 hub 集成本身的覆盖见
 /// `data_hub_page_test.dart`。
 class _FakeTickerRepository implements TickerRepository {
+  _FakeTickerRepository({List<List<Ticker>>? responses})
+    : _responses = responses ?? const <List<Ticker>>[mockTickers];
+
+  final List<List<Ticker>> _responses;
+  int listCalls = 0;
   final Map<String, StreamController<Ticker>> controllers =
       <String, StreamController<Ticker>>{};
 
   @override
-  Future<List<Ticker>> listTickers() async => mockTickers;
+  Future<List<Ticker>> listTickers() async {
+    final int index = listCalls.clamp(0, _responses.length - 1);
+    listCalls++;
+    return _responses[index];
+  }
 
   @override
   Stream<Ticker> watchTicker(String symbol) {
@@ -108,21 +117,20 @@ void main() {
     expect(find.byKey(const Key('market-notification-bell')), findsNothing);
   });
 
-  testWidgets('默认自选 tab 展示 5 条 + 推流变价生效（#1600）', (WidgetTester tester) async {
+  testWidgets('默认自选 tab 展示 5 条，行级推流不会自动变价（#1600）', (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
     // 默认 watchlist tab：固定 5 条收藏（_kFavoriteSet）。
     expect(find.byType(TickerRow), findsNWidgets(5));
 
-    // BTCUSDT 在自选中，推一笔变价应反映在 UI。
-    // broadcast stream 是异步派发，需要 pumpAndSettle 让订阅完成 + 断言 key 存在。
     await tester.pumpAndSettle();
     expect(
       repo.controllers.containsKey('BTCUSDT'),
-      isTrue,
-      reason: 'BTCUSDT 行在自选 tab 应已挂载并注册 listener',
+      isFalse,
+      reason: 'TickerRow 不再订阅 watchTicker，列表数据由列表刷新更新',
     );
+    repo.watchTicker('BTCUSDT');
     repo.controllers['BTCUSDT']!.add(
       const Ticker(
         symbol: 'BTCUSDT',
@@ -133,7 +141,68 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('70,123.45'), findsNothing);
+  });
+
+  testWidgets('下拉刷新重新拉取行情列表', (WidgetTester tester) async {
+    final List<Ticker> refreshed = mockTickers
+        .map(
+          (Ticker ticker) => ticker.symbol == 'BTCUSDT'
+              ? const Ticker(
+                  symbol: 'BTCUSDT',
+                  price: 70123.45,
+                  changePercent: 2.22,
+                  volume24h: 2.13e10,
+                  kind: MarketKind.perp,
+                )
+              : ticker,
+        )
+        .toList();
+    final _FakeTickerRepository repo = _FakeTickerRepository(
+      responses: <List<Ticker>>[mockTickers, refreshed],
+    );
+    await _pump(tester, repo);
+
+    expect(repo.listCalls, 1);
+    expect(find.text('70,123.45'), findsNothing);
+
+    final RefreshIndicator indicator = tester.widget<RefreshIndicator>(
+      find.byType(RefreshIndicator),
+    );
+    await indicator.onRefresh();
+    await tester.pump();
+
+    expect(repo.listCalls, 2);
     expect(find.text('70,123.45'), findsOneWidget);
+  });
+
+  testWidgets('行情列表定时刷新重新拉取数据', (WidgetTester tester) async {
+    final List<Ticker> refreshed = mockTickers
+        .map(
+          (Ticker ticker) => ticker.symbol == 'BTCUSDT'
+              ? const Ticker(
+                  symbol: 'BTCUSDT',
+                  price: 71234.56,
+                  changePercent: 2.22,
+                  volume24h: 2.13e10,
+                  kind: MarketKind.perp,
+                )
+              : ticker,
+        )
+        .toList();
+    final _FakeTickerRepository repo = _FakeTickerRepository(
+      responses: <List<Ticker>>[mockTickers, refreshed],
+    );
+    await _pump(tester, repo);
+
+    expect(repo.listCalls, 1);
+    expect(find.text('71,234.56'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+
+    expect(repo.listCalls, 2);
+    expect(find.text('71,234.56'), findsOneWidget);
   });
 
   testWidgets('5 tabs 切换：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜 过滤与排序生效', (
@@ -368,7 +437,10 @@ void main() {
     final TickerRow firstRow = tester.widget<TickerRow>(
       find.byType(TickerRow).first,
     );
-    final String expectedSymbol = firstRow.ticker.symbol;
+    final String expectedSymbol = firstRow.ticker.symbol.replaceFirst(
+      'USDT',
+      '',
+    );
 
     await tester.tap(find.byType(TickerRow).first);
     await tester.pumpAndSettle();

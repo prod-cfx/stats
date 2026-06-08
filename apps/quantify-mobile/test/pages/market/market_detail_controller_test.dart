@@ -5,12 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
+import 'package:quantify_mobile/data/models/trade_models.dart';
 import 'package:quantify_mobile/data/repositories/kline_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
+import 'package:quantify_mobile/data/repositories/trades_repository.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/pages/market/market_detail_controller.dart';
 import 'package:quantify_mobile/pages/market/market_detail_state.dart';
-import '../../helpers/test_overrides.dart';
 
 const Ticker _btc = Ticker(
   symbol: 'BTCUSDT',
@@ -19,24 +20,38 @@ const Ticker _btc = Ticker(
   volume24h: 10,
 );
 
-Candle _candle(int min) => Candle(
+Candle _candle(int min, {double close = 1}) => Candle(
   openTime: DateTime(2024, 1, 1, 0, min),
   open: 1,
-  high: 2,
+  high: close + 1,
   low: 0,
-  close: 1,
+  close: close,
   volume: 1,
 );
 
 class _FakeTickerRepository implements TickerRepository {
-  _FakeTickerRepository(this.tickersFuture);
+  _FakeTickerRepository(this.tickersFuture, {Stream<Ticker>? stream})
+    : stream = stream ?? const Stream<Ticker>.empty();
   final Future<List<Ticker>> tickersFuture;
+  final Stream<Ticker> stream;
 
   @override
   Future<List<Ticker>> listTickers() => tickersFuture;
 
   @override
-  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
+  Stream<Ticker> watchTicker(String symbol) => stream;
+}
+
+class _FakeTradesRepository implements TradesRepository {
+  const _FakeTradesRepository(this.trades);
+
+  final List<Trade> trades;
+
+  @override
+  Future<List<Trade>> listTrades({
+    required String symbol,
+    required double mid,
+  }) async => trades;
 }
 
 /// 可控时序假 K 线仓库：listCandles 用 Completer 队列驱动竞态。
@@ -66,13 +81,19 @@ class _FakeKlineRepository implements KlineRepository {
 void main() {
   late _FakeKlineRepository kline;
 
-  ProviderContainer makeContainer(Future<List<Ticker>> tickersFuture) {
+  ProviderContainer makeContainer(
+    Future<List<Ticker>> tickersFuture, {
+    Stream<Ticker>? tickerStream,
+    List<Trade> trades = const <Trade>[],
+  }) {
     kline = _FakeKlineRepository();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
-        ...testRepositoryOverridesWithoutTickerKline,
         tickerRepositoryProvider.overrideWithValue(
-          _FakeTickerRepository(tickersFuture),
+          _FakeTickerRepository(tickersFuture, stream: tickerStream),
+        ),
+        tradesRepositoryProvider.overrideWithValue(
+          _FakeTradesRepository(trades),
         ),
         klineRepositoryProvider.overrideWithValue(kline),
       ],
@@ -108,6 +129,24 @@ void main() {
       expect(s.trades, isNotNull);
       // K 线加载已发起。
       expect(kline.pending, hasLength(1));
+    });
+
+    test('route base symbol matches slash ticker symbol', () async {
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(const <Ticker>[
+          Ticker(
+            symbol: 'BTC/USDT',
+            price: 100,
+            changePercent: 1,
+            volume24h: 10,
+          ),
+        ]),
+      );
+      ctrl(c);
+      await Future<void>.delayed(Duration.zero);
+      final MarketDetailState s = read(c);
+      expect(s.loading, isFalse);
+      expect(s.priceSnapshot?.symbol, 'BTC/USDT');
     });
 
     test('symbol 未命中：priceSnapshot 为 null、loading=false', () async {
@@ -159,6 +198,62 @@ void main() {
       ]);
       await Future<void>.delayed(Duration.zero);
       expect(read(c).candles, hasLength(2));
+    });
+
+    test('K 线最新 close 更新详情主价格', () async {
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+      );
+      ctrl(c);
+      await Future<void>.delayed(Duration.zero);
+      expect(read(c).priceSnapshot?.price, 100);
+      expect(kline.pending, hasLength(1));
+
+      kline.pending[0].complete(<Candle>[_candle(0, close: 123.45)]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(read(c).priceSnapshot?.price, 123.45);
+    });
+
+    test('成交买卖额补齐累计净流入', () async {
+      final DateTime now = DateTime(2026, 1, 1, 12);
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+        trades: <Trade>[
+          Trade(time: now, price: 100, qty: 2, isBuy: true),
+          Trade(time: now, price: 90, qty: 1, isBuy: false),
+        ],
+      );
+      ctrl(c);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(read(c).priceSnapshot?.netInflow24h, 110);
+    });
+
+    test('ticker 推流改价时保留已补齐累计净流入', () async {
+      final StreamController<Ticker> tickerStream = StreamController<Ticker>();
+      final DateTime now = DateTime(2026, 1, 1, 12);
+      final ProviderContainer c = makeContainer(
+        Future<List<Ticker>>.value(<Ticker>[_btc]),
+        tickerStream: tickerStream.stream,
+        trades: <Trade>[Trade(time: now, price: 100, qty: 2, isBuy: true)],
+      );
+      ctrl(c);
+      await Future<void>.delayed(Duration.zero);
+      expect(read(c).priceSnapshot?.netInflow24h, 200);
+
+      tickerStream.add(
+        const Ticker(
+          symbol: 'BTCUSDT',
+          price: 101,
+          changePercent: 2,
+          volume24h: 20,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(read(c).priceSnapshot?.price, 101);
+      expect(read(c).priceSnapshot?.netInflow24h, 200);
     });
 
     test('changeSource/changePanel 仅改展示态，不触发 K 线重载', () async {

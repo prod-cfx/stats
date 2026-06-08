@@ -1,12 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
-import 'package:quantify_mobile/data/providers.dart';
-import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/widgets/ticker_row.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -14,28 +8,15 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_avatar.dart';
 import 'package:quantify_mobile/widgets/qz_stat_chip.dart';
 
-class _StubTickerRepository implements TickerRepository {
-  @override
-  Future<List<Ticker>> listTickers() async => const <Ticker>[];
-
-  @override
-  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
-}
-
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.binding.setSurfaceSize(const Size(420, 200));
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: <Override>[
-        tickerRepositoryProvider.overrideWithValue(_StubTickerRepository()),
-      ],
-      child: MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: buildQzThemeData(QzTheme.fallback),
-        home: Scaffold(body: child),
-      ),
+    MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: buildQzThemeData(QzTheme.fallback),
+      home: Scaffold(body: child),
     ),
   );
   await tester.pump();

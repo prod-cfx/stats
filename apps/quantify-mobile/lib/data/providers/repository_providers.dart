@@ -114,7 +114,7 @@ final Provider<KlineRepository> klineRepositoryProvider =
 
 final Provider<OrderbookRepository> orderbookRepositoryProvider =
     Provider<OrderbookRepository>((Ref ref) {
-      return ApiOrderbookRepository(ref.watch(orderbookServiceProvider));
+      return ApiOrderbookRepository(ref.watch(generatedBackendApiProvider));
     });
 
 final Provider<LongShortRepository> longShortRepositoryProvider =

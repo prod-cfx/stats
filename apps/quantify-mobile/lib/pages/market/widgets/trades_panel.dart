@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,20 +13,42 @@ import '../../../theme/tokens.dart';
 /// 成交面板子标签（设计稿 `m-screens-3.jsx:631-668`）。
 enum TradesTab { latest, big }
 
-/// 大额成交过滤阈值（base 资产数量）。mock qty 区间 0.01–0.51，0.3 能稳定切出
-/// 一个明显更短的子集，便于交互与测试。真实接入后由后端按成交额阈值给出。
+/// 大额成交过滤阈值（base 资产数量）。真实最新成交常低于该值；这种情况下
+/// 回退到本批成交额 Top 档，避免“大额成交”面板空白。
 const double kBigTradeQtyThreshold = 0.3;
+const int kBigTradeFallbackMaxRows = 10;
+const double kBigTradeFallbackRatio = 0.2;
 
 /// 过滤大额成交。纯函数，便于单测。
-List<Trade> filterBigTrades(List<Trade> trades) =>
-    trades.where((Trade t) => t.qty >= kBigTradeQtyThreshold).toList();
+List<Trade> filterBigTrades(List<Trade> trades) {
+  final List<Trade> byQty = trades
+      .where((Trade t) => t.qty >= kBigTradeQtyThreshold)
+      .toList(growable: false);
+  if (byQty.isNotEmpty || trades.isEmpty) return byQty;
+
+  final List<double> notionals = trades
+      .map((Trade t) => t.price.abs() * t.qty.abs())
+      .where((double v) => v.isFinite && v > 0)
+      .toList(growable: false);
+  if (notionals.isEmpty) return const <Trade>[];
+  notionals.sort((double a, double b) => b.compareTo(a));
+  final int fallbackRows = math.min(
+    kBigTradeFallbackMaxRows,
+    math.max(1, (trades.length * kBigTradeFallbackRatio).ceil()),
+  );
+  final double cutoff = notionals[math.min(fallbackRows, notionals.length) - 1];
+  return trades
+      .where((Trade t) => t.price.abs() * t.qty.abs() >= cutoff)
+      .toList(growable: false);
+}
 
 /// 按时间倒序（默认）或数量降序排序。纯函数，便于单测。
 List<Trade> sortTrades(List<Trade> trades, {required bool byQty}) {
   final List<Trade> out = <Trade>[...trades];
-  out.sort((Trade a, Trade b) => byQty
-      ? b.qty.compareTo(a.qty)
-      : b.time.compareTo(a.time));
+  out.sort(
+    (Trade a, Trade b) =>
+        byQty ? b.qty.compareTo(a.qty) : b.time.compareTo(a.time),
+  );
   return out;
 }
 
@@ -63,12 +87,11 @@ class _TradesPanelState extends ConsumerState<TradesPanel> {
     // 成交源经 tradesProvider 注入（mock 同步可用；加载/错误态回退空列表）。
     final List<Trade> source =
         widget.trades ??
-        ref
-                .watch(tradesProvider((widget.symbol, widget.mid)))
-                .value ??
-            const <Trade>[];
-    final List<Trade> filtered =
-        _tab == TradesTab.big ? filterBigTrades(source) : source;
+        ref.watch(tradesProvider((widget.symbol, widget.mid))).value ??
+        const <Trade>[];
+    final List<Trade> filtered = _tab == TradesTab.big
+        ? filterBigTrades(source)
+        : source;
     final List<Trade> rows = sortTrades(filtered, byQty: _sortByQty);
     final (String base, String quote) = splitSymbolAssets(widget.symbol);
 
@@ -189,8 +212,9 @@ class _SubTabBar extends StatelessWidget {
                     style: TextStyle(
                       color: tab == item.$1 ? c.text : c.textMid,
                       fontSize: 12,
-                      fontWeight:
-                          tab == item.$1 ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: tab == item.$1
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                     ),
                   ),
                 ),

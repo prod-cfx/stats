@@ -37,10 +37,21 @@ class OrderbookViewController extends Notifier<OrderbookViewState> {
       final OrderbookSnapshot initial = await repo.getSnapshot(symbol);
       if (_disposed) return;
       state = state.copyWith(snapshot: initial, loading: false, error: null);
-      _sub = repo.watchOrderbook(symbol).listen((OrderbookSnapshot next) {
-        if (_disposed) return;
-        state = state.copyWith(snapshot: next);
-      });
+      _sub = repo
+          .watchOrderbook(symbol)
+          .listen(
+            (OrderbookSnapshot next) {
+              if (_disposed) return;
+              state = state.copyWith(snapshot: next);
+            },
+            onError: (Object error) {
+              if (_disposed || state.snapshot != null) return;
+              state = state.copyWith(
+                error: ErrorRouter.normalize(error),
+                loading: false,
+              );
+            },
+          );
     } catch (error) {
       if (_disposed) return;
       state = state.copyWith(

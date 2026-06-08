@@ -157,7 +157,8 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
     ].reduce((double a, double b) => a > b ? a : b);
 
     final (String base, String quote) = splitSymbolAssets(widget.symbol);
-    final double mid = widget.mid ?? _deriveMid(bids, asks);
+    final double mid =
+        snap.midPrice ?? _deriveMid(bids, asks) ?? widget.mid ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,11 +188,11 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
     return out;
   }
 
-  double _deriveMid(List<OrderbookLevel> bids, List<OrderbookLevel> asks) {
+  double? _deriveMid(List<OrderbookLevel> bids, List<OrderbookLevel> asks) {
     final double? bestBid = bids.isNotEmpty ? bids.first.price : null;
     final double? bestAsk = asks.isNotEmpty ? asks.first.price : null;
     if (bestBid != null && bestAsk != null) return (bestBid + bestAsk) / 2;
-    return bestBid ?? bestAsk ?? 0;
+    return bestBid ?? bestAsk;
   }
 
   Widget _body(
@@ -239,4 +240,3 @@ String _fmtPrecision(double p) {
   if (p >= 1) return p.toStringAsFixed(0);
   return p.toString();
 }
-

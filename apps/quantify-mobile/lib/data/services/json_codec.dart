@@ -8,7 +8,9 @@ library;
 Map<String, dynamic> asMap(Object? raw) {
   if (raw is Map<String, dynamic>) return raw;
   if (raw is Map) {
-    return raw.map((Object? k, Object? v) => MapEntry<String, dynamic>('$k', v));
+    return raw.map(
+      (Object? k, Object? v) => MapEntry<String, dynamic>('$k', v),
+    );
   }
   return <String, dynamic>{};
 }
@@ -79,11 +81,19 @@ DateTime asDateTime(Object? raw, {DateTime? fallback}) {
   if (raw is String) {
     final DateTime? parsed = DateTime.tryParse(raw);
     if (parsed != null) return parsed;
+    final int? epoch = int.tryParse(raw);
+    if (epoch != null) return _dateTimeFromEpoch(epoch);
   }
   if (raw is num) {
-    return DateTime.fromMillisecondsSinceEpoch(raw.toInt());
+    return _dateTimeFromEpoch(raw.toInt());
   }
   return fallback ?? DateTime.now();
+}
+
+DateTime _dateTimeFromEpoch(int value) {
+  return DateTime.fromMillisecondsSinceEpoch(
+    value > 9999999999 ? value : value * 1000,
+  );
 }
 
 /// 取首个非空字段：按 [keys] 顺序返回第一个存在的值。

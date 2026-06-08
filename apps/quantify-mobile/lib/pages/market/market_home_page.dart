@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ticker_models.dart';
+import '../../data/models/trade_models.dart' show splitSymbolAssets;
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -42,17 +43,15 @@ class MarketHomeBody extends ConsumerWidget {
     WidgetRef ref,
     MarketHomeState s,
   ) async {
-    final List<String> updated = await Navigator.of(
-          context,
-          rootNavigator: true,
-        ).push<List<String>>(
+    final List<String> updated =
+        await Navigator.of(context, rootNavigator: true).push<List<String>>(
           MaterialPageRoute<List<String>>(
             fullscreenDialog: true,
             builder: (_) => _MarketSearchRoute(
               tickers: s.tickers,
               history: s.searchHistory,
               onSelectTicker: (Ticker ticker) =>
-                  context.push('/market/${ticker.symbol}'),
+                  context.push(_marketDetailPath(ticker.symbol)),
             ),
           ),
         ) ??
@@ -129,39 +128,7 @@ class MarketHomeBody extends ConsumerWidget {
                     change: _columnChangeLabel(l10n, s.tab),
                   ),
                 Expanded(
-                  child: Builder(
-                    builder: (BuildContext context) {
-                      if (s.loading) return const Center(child: QzSpinner());
-                      if (s.error != null) {
-                        return QzEmptyState(title: l10n.marketHomeLoadError);
-                      }
-                      if (visible.isEmpty) {
-                        final String title = s.tab == MarketTab.watchlist
-                            ? l10n.marketHomeWatchlistEmpty
-                            : l10n.marketHomeEmpty;
-                        return QzEmptyState(title: title);
-                      }
-                      return ListView.separated(
-                        // 不继承 MediaQuery 顶部 inset（刘海/状态栏），否则
-                        // 列头与首行间被注入空白（issue: 行情列表顶部留白 #2122）。
-                        // 底部留白对齐策略广场，避免 shell 透明底栏盖住最后一行。
-                        padding: const EdgeInsets.only(bottom: 100),
-                        itemCount: visible.length,
-                        separatorBuilder: (BuildContext context, int index) =>
-                            Divider(height: 1, color: c.borderSoft),
-                        itemBuilder: (BuildContext context, int index) {
-                          final Ticker ticker = visible[index];
-                          return TickerRow(
-                            key: Key('ticker-row-${ticker.symbol}'),
-                            ticker: ticker,
-                            nameSuffix: s.tab == MarketTab.perp ? '永续' : null,
-                            onTap: () =>
-                                context.push('/market/${ticker.symbol}'),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                  child: _MarketTickerList(state: s, visible: visible),
                 ),
               ],
             ),
@@ -183,5 +150,88 @@ class MarketHomeBody extends ConsumerWidget {
         return l10n.marketHomeColumnChange;
     }
   }
+
+  String _marketDetailPath(String symbol) {
+    final (String base, _) = splitSymbolAssets(symbol);
+    return '/market/${Uri.encodeComponent(base.isEmpty ? symbol : base)}';
+  }
 }
 
+class _MarketTickerList extends ConsumerWidget {
+  const _MarketTickerList({required this.state, required this.visible});
+
+  final MarketHomeState state;
+  final List<Ticker> visible;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return RefreshIndicator(
+      onRefresh: () =>
+          ref.read(marketHomeControllerProvider.notifier).refresh(),
+      child: _buildChild(context, l10n, c),
+    );
+  }
+
+  Widget _buildChild(
+    BuildContext context,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
+    if (state.loading) return const Center(child: QzSpinner());
+    if (state.error != null) {
+      return _ScrollableEmptyState(title: l10n.marketHomeLoadError);
+    }
+    if (visible.isEmpty) {
+      final String title = state.tab == MarketTab.watchlist
+          ? l10n.marketHomeWatchlistEmpty
+          : l10n.marketHomeEmpty;
+      return _ScrollableEmptyState(title: title);
+    }
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      // 不继承 MediaQuery 顶部 inset（刘海/状态栏），否则
+      // 列头与首行间被注入空白（issue: 行情列表顶部留白 #2122）。
+      // 底部留白对齐策略广场，避免 shell 透明底栏盖住最后一行。
+      padding: const EdgeInsets.only(bottom: 100),
+      itemCount: visible.length,
+      separatorBuilder: (BuildContext context, int index) =>
+          Divider(height: 1, color: c.borderSoft),
+      itemBuilder: (BuildContext context, int index) {
+        final Ticker ticker = visible[index];
+        return TickerRow(
+          key: Key('ticker-row-${ticker.symbol}'),
+          ticker: ticker,
+          nameSuffix: state.tab == MarketTab.perp ? '永续' : null,
+          onTap: () => context.push(_marketDetailPath(ticker.symbol)),
+        );
+      },
+    );
+  }
+
+  String _marketDetailPath(String symbol) {
+    final (String base, _) = splitSymbolAssets(symbol);
+    return '/market/${Uri.encodeComponent(base.isEmpty ? symbol : base)}';
+  }
+}
+
+class _ScrollableEmptyState extends StatelessWidget {
+  const _ScrollableEmptyState({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 100),
+      children: <Widget>[
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.5,
+          child: QzEmptyState(title: title),
+        ),
+      ],
+    );
+  }
+}

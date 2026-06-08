@@ -32,8 +32,9 @@ class ApiKlineRepository implements KlineRepository {
   final KlineService _service;
 
   List<Candle> _parseList(dynamic raw) {
-    final Object? list =
-        raw is Map ? pick(asMap(raw), <String>['items', 'data', 'candles']) : raw;
+    final Object? list = raw is Map
+        ? pick(asMap(raw), <String>['items', 'data', 'candles'])
+        : raw;
     return asMapList(list ?? raw).map(Candle.fromMap).toList(growable: false);
   }
 
@@ -57,13 +58,17 @@ class ApiKlineRepository implements KlineRepository {
     required KlineInterval interval,
   }) async* {
     Future<Candle?> fetchLast() async {
-      final dynamic raw = await _service.listCandles(
-        symbol: symbol,
-        interval: klineIntervalToApi(interval),
-        limit: 1,
-      );
-      final List<Candle> list = _parseList(raw);
-      return list.isEmpty ? null : list.last;
+      try {
+        final dynamic raw = await _service.listCandles(
+          symbol: symbol,
+          interval: klineIntervalToApi(interval),
+          limit: 1,
+        );
+        final List<Candle> list = _parseList(raw);
+        return list.isEmpty ? null : list.last;
+      } catch (_) {
+        return null;
+      }
     }
 
     final Candle? first = await fetchLast();

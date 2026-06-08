@@ -52,7 +52,7 @@ class MarketDetailController extends Notifier<MarketDetailState> {
       final List<Ticker> tickers = await tickerRepo.listTickers();
       Ticker? snapshot;
       for (final Ticker ticker in tickers) {
-        if (ticker.symbol == symbol) {
+        if (_sameMarketSymbol(ticker.symbol, symbol)) {
           snapshot = ticker;
           break;
         }
@@ -69,6 +69,7 @@ class MarketDetailController extends Notifier<MarketDetailState> {
       final List<Trade> trades = await ref
           .read(tradesRepositoryProvider)
           .listTrades(symbol: symbol, mid: snapshot.price);
+      snapshot = _tickerWithTradeStats(snapshot, trades);
       if (!mounted) return;
       state = state.copyWith(
         priceSnapshot: snapshot,
@@ -77,7 +78,9 @@ class MarketDetailController extends Notifier<MarketDetailState> {
       );
       _tickerSub = tickerRepo.watchTicker(symbol).listen((Ticker next) {
         if (!mounted) return;
-        state = state.copyWith(priceSnapshot: next);
+        state = state.copyWith(
+          priceSnapshot: _mergeTickerSnapshot(next, state.priceSnapshot),
+        );
       });
       unawaited(_loadKline(state.interval));
     } catch (error) {
@@ -87,6 +90,15 @@ class MarketDetailController extends Notifier<MarketDetailState> {
         loading: false,
       );
     }
+  }
+
+  bool _sameMarketSymbol(String left, String right) {
+    return _canonicalSymbol(left) == _canonicalSymbol(right);
+  }
+
+  String _canonicalSymbol(String value) {
+    final (String base, _) = splitSymbolAssets(value);
+    return (base.isEmpty ? value : base).toUpperCase();
   }
 
   /// 拉取指定周期历史 K 线并重新订阅推流。竞态保护见类注释。
@@ -106,13 +118,22 @@ class MarketDetailController extends Notifier<MarketDetailState> {
         limit: _klineHistoryLimit,
       );
       if (!mounted || requestId != _klineRequestId) return;
-      state = state.copyWith(candles: history, klineError: false);
+      state = state.copyWith(
+        candles: history,
+        klineError: false,
+        priceSnapshot: history.isEmpty
+            ? state.priceSnapshot
+            : _tickerWithPrice(state.priceSnapshot, history.last.close),
+      );
       _candleSub = klineRepo
           .watchCandles(symbol: symbol, interval: interval)
           .listen((Candle next) {
             if (!mounted || requestId != _klineRequestId) return;
             // 当前阶段：append-only。同 openTime upsert 留待真实 WS 接入时补。
-            state = state.copyWith(candles: <Candle>[...state.candles, next]);
+            state = state.copyWith(
+              candles: <Candle>[...state.candles, next],
+              priceSnapshot: _tickerWithPrice(state.priceSnapshot, next.close),
+            );
           });
     } catch (_) {
       if (!mounted || requestId != _klineRequestId) return;
@@ -147,6 +168,78 @@ class MarketDetailController extends Notifier<MarketDetailState> {
   void retryKline() {
     state = state.copyWith(klineError: false);
     unawaited(_loadKline(state.interval));
+  }
+
+  Ticker? _tickerWithPrice(Ticker? ticker, double price) {
+    if (ticker == null || !price.isFinite || price <= 0) return ticker;
+    return Ticker(
+      symbol: ticker.symbol,
+      price: price,
+      changePercent: ticker.changePercent,
+      volume24h: ticker.volume24h,
+      kind: ticker.kind,
+      high24h: ticker.high24h,
+      low24h: ticker.low24h,
+      openInterest: ticker.openInterest,
+      indexPrice: ticker.indexPrice,
+      markPrice: ticker.markPrice,
+      fundingRate: ticker.fundingRate,
+      turnover24h: ticker.turnover24h,
+      netInflow24h: ticker.netInflow24h,
+    );
+  }
+
+  Ticker _tickerWithTradeStats(Ticker ticker, List<Trade> trades) {
+    final double? netInflow =
+        ticker.netInflow24h ?? _netInflowFromTrades(trades);
+    if (netInflow == ticker.netInflow24h) return ticker;
+    return Ticker(
+      symbol: ticker.symbol,
+      price: ticker.price,
+      changePercent: ticker.changePercent,
+      volume24h: ticker.volume24h,
+      kind: ticker.kind,
+      high24h: ticker.high24h,
+      low24h: ticker.low24h,
+      openInterest: ticker.openInterest,
+      indexPrice: ticker.indexPrice,
+      markPrice: ticker.markPrice,
+      fundingRate: ticker.fundingRate,
+      turnover24h: ticker.turnover24h,
+      netInflow24h: netInflow,
+    );
+  }
+
+  Ticker _mergeTickerSnapshot(Ticker next, Ticker? previous) {
+    if (previous == null) return next;
+    return Ticker(
+      symbol: next.symbol,
+      price: next.price,
+      changePercent: next.changePercent,
+      volume24h: next.volume24h,
+      kind: next.kind,
+      high24h: next.high24h ?? previous.high24h,
+      low24h: next.low24h ?? previous.low24h,
+      openInterest: next.openInterest ?? previous.openInterest,
+      indexPrice: next.indexPrice ?? previous.indexPrice,
+      markPrice: next.markPrice ?? previous.markPrice,
+      fundingRate: next.fundingRate ?? previous.fundingRate,
+      turnover24h: next.turnover24h ?? previous.turnover24h,
+      netInflow24h: next.netInflow24h ?? previous.netInflow24h,
+    );
+  }
+
+  double? _netInflowFromTrades(List<Trade> trades) {
+    if (trades.isEmpty) return null;
+    double net = 0;
+    bool hasValue = false;
+    for (final Trade trade in trades) {
+      final double notional = trade.price * trade.qty;
+      if (!notional.isFinite || notional <= 0) continue;
+      hasValue = true;
+      net += trade.isBuy ? notional : -notional;
+    }
+    return hasValue ? net : null;
   }
 }
 

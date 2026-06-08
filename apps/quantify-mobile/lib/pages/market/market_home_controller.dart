@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/error/error_router.dart';
@@ -11,29 +13,47 @@ import 'market_home_state.dart';
 /// `build()` 触发首次加载（`listTickers` 一次性，无流）；`selectTab` 切二级
 /// 筛选；`setSearchHistory` 由全屏搜索路由 pop 回填历史。
 class MarketHomeController extends Notifier<MarketHomeState> {
+  static const Duration _refreshInterval = Duration(seconds: 10);
+
   final NotifierLifecycle _life = NotifierLifecycle();
+  Timer? _refreshTimer;
+  bool _loading = false;
 
   bool get mounted => _life.mounted;
 
   @override
   MarketHomeState build() {
     _life.attach(ref);
+    ref.onDispose(() => _refreshTimer?.cancel());
+    _refreshTimer = Timer.periodic(
+      _refreshInterval,
+      (_) => unawaited(_load(showLoading: false)),
+    );
     Future<void>.microtask(_load);
     return const MarketHomeState();
   }
 
-  Future<void> _load() async {
+  Future<void> refresh() => _load(showLoading: false, force: true);
+
+  Future<void> _load({bool showLoading = true, bool force = false}) async {
+    if (_loading && !force) return;
+    _loading = true;
+    if (showLoading && mounted) {
+      state = state.copyWith(loading: true, error: null);
+    }
     final repo = ref.read(tickerRepositoryProvider);
     try {
       final List<Ticker> tickers = await repo.listTickers();
       if (!mounted) return;
-      state = state.copyWith(tickers: tickers, loading: false);
+      state = state.copyWith(tickers: tickers, loading: false, error: null);
     } catch (error) {
       if (!mounted) return;
       state = state.copyWith(
         error: ErrorRouter.normalize(error),
         loading: false,
       );
+    } finally {
+      _loading = false;
     }
   }
 
@@ -53,15 +73,13 @@ class MarketHomeController extends Notifier<MarketHomeState> {
       case MarketTab.perp:
         return tickers.where((Ticker t) => t.kind == MarketKind.perp).toList();
       case MarketTab.gainers:
-        return tickers.where((Ticker t) => t.changePercent > 0).toList()
-          ..sort(
-            (Ticker a, Ticker b) => b.changePercent.compareTo(a.changePercent),
-          );
+        return tickers.where((Ticker t) => t.changePercent > 0).toList()..sort(
+          (Ticker a, Ticker b) => b.changePercent.compareTo(a.changePercent),
+        );
       case MarketTab.losers:
-        return tickers.where((Ticker t) => t.changePercent < 0).toList()
-          ..sort(
-            (Ticker a, Ticker b) => a.changePercent.compareTo(b.changePercent),
-          );
+        return tickers.where((Ticker t) => t.changePercent < 0).toList()..sort(
+          (Ticker a, Ticker b) => a.changePercent.compareTo(b.changePercent),
+        );
     }
   }
 

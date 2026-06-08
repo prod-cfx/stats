@@ -1761,7 +1761,7 @@ abstract class AppLocalizations {
   /// No description provided for @authRegisterPasswordHint.
   ///
   /// In zh, this message translates to:
-  /// **'至少 8 位'**
+  /// **'至少 6 位'**
   String get authRegisterPasswordHint;
 
   /// No description provided for @authRegisterPasswordRequired.
@@ -1773,7 +1773,7 @@ abstract class AppLocalizations {
   /// No description provided for @authRegisterPasswordInvalid.
   ///
   /// In zh, this message translates to:
-  /// **'密码至少 8 位'**
+  /// **'密码至少 6 位'**
   String get authRegisterPasswordInvalid;
 
   /// No description provided for @authRegisterBetaCodeLabel.

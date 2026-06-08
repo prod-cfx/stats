@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/api/api_trades_repository.dart';
 import 'package:quantify_mobile/data/models/trade_models.dart';
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 
 void main() {
   group('ApiTradesRepository.parseTrade', () {
@@ -45,5 +47,54 @@ void main() {
       });
       expect(t.isBuy, isTrue);
     });
+
+    test('parses backend tradeTimestamp millis string', () {
+      final Trade t = ApiTradesRepository.parseTrade(<String, dynamic>{
+        'price': '63442',
+        'size': '0.00489',
+        'side': 'sell',
+        'tradeTimestamp': '1780922222268',
+      });
+
+      expect(t.time.millisecondsSinceEpoch, 1780922222268);
+    });
+  });
+
+  test('listTrades normalizes base symbol to pair symbol', () async {
+    String? requestedSymbol;
+    final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+            requestedSymbol = options.queryParameters['symbol'] as String?;
+            h.resolve(
+              Response<Object?>(
+                requestOptions: options,
+                statusCode: 200,
+                data: <String, Object?>{
+                  'items': <Object?>[
+                    <String, Object?>{
+                      'price': '63442',
+                      'size': '0.00489',
+                      'side': 'sell',
+                      'tradeTimestamp': '1780922222268',
+                    },
+                  ],
+                  'total': 1,
+                  'page': 1,
+                  'limit': 50,
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final List<Trade> trades = await ApiTradesRepository(
+      GeneratedBackendApi(dio: dio),
+    ).listTrades(symbol: 'BTC', mid: 63000);
+
+    expect(requestedSymbol, 'BTCUSDT');
+    expect(trades.single.price, 63442);
   });
 }

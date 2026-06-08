@@ -1,55 +1,89 @@
 import 'dart:async';
 
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:flutter/foundation.dart';
+
 import '../models/orderbook_models.dart';
 import '../repositories/orderbook_repository.dart';
-import '../services/json_codec.dart';
-import '../services/market_services.dart';
+import '../services/api_client.dart';
+import '../services/generated_backend_api.dart';
 
 /// [OrderbookRepository] 真实现（issue #2189）。
 ///
 /// `watchOrderbook` 后端暂无 WS 契约，用周期轮询取最新快照。
 class ApiOrderbookRepository implements OrderbookRepository {
-  ApiOrderbookRepository(this._service);
+  ApiOrderbookRepository(this._api);
 
-  final OrderbookService _service;
+  static const String _defaultType = 'perp';
+  static const int _defaultDepth = 100;
 
-  List<OrderbookLevel> _levels(Object? raw) {
-    return asList(raw).map((Object? e) {
-      // 兼容两种形态：`[price, qty]` 数组或 `{price, quantity}` 对象。
-      if (e is List && e.length >= 2) {
-        return OrderbookLevel(price: asDouble(e[0]), quantity: asDouble(e[1]));
+  final GeneratedBackendApi _api;
+
+  @visibleForTesting
+  static String orderbookBaseFromSymbol(String symbol) {
+    final String normalized = symbol
+        .trim()
+        .toUpperCase()
+        .replaceAll('-', '')
+        .replaceAll('/', '')
+        .replaceAll('_', '');
+    for (final String quote in <String>['USDT', 'USDC', 'USD']) {
+      if (normalized.endsWith(quote) && normalized.length > quote.length) {
+        return normalized.substring(0, normalized.length - quote.length);
       }
-      final Map<String, dynamic> m = asMap(e);
-      return OrderbookLevel(
-        price: asDouble(pick(m, <String>['price', 'p'])),
-        quantity: asDouble(pick(m, <String>['quantity', 'qty', 'q'])),
-      );
-    }).toList(growable: false);
+    }
+    return normalized;
   }
 
-  OrderbookSnapshot _parse(String symbol, dynamic raw) {
-    final Map<String, dynamic> map = asMap(raw);
+  @visibleForTesting
+  static OrderbookSnapshot buildSnapshot(
+    String symbol,
+    AggregatedOrderbookResponseDto data,
+  ) {
     return OrderbookSnapshot(
-      symbol: asString(pick(map, <String>['symbol']), fallback: symbol),
-      bids: _levels(pick(map, <String>['bids'])),
-      asks: _levels(pick(map, <String>['asks'])),
-      timestamp: asDateTime(pick(map, <String>['timestamp', 'ts'])),
+      symbol: symbol,
+      bids: data.bids.map(mapLevel).toList(growable: false),
+      asks: data.asks.map(mapLevel).toList(growable: false),
+      midPrice: data.midPrice.toDouble(),
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        data.updatedAt.toInt(),
+        isUtc: true,
+      ),
     );
   }
 
-  @override
-  Future<OrderbookSnapshot> getSnapshot(String symbol) async {
-    final dynamic raw = await _service.getSnapshot(symbol);
-    return _parse(symbol, raw);
+  @visibleForTesting
+  static OrderbookLevel mapLevel(AggregatedLevelDto dto) => OrderbookLevel(
+    price: dto.price.toDouble(),
+    quantity: dto.sizeTotal.toDouble(),
+  );
+
+  Future<OrderbookSnapshot> _fetch(String symbol) async {
+    final Response<
+      AggregatedOrderbookControllerGetAggregatedOrderbook200Response
+    >
+    response = await _api.client
+        .getOrderbookApi()
+        .aggregatedOrderbookControllerGetAggregatedOrderbook(
+          base_: orderbookBaseFromSymbol(symbol),
+          type: _defaultType,
+          depth: _defaultDepth,
+        );
+    final AggregatedOrderbookResponseDto? data = response.data?.data;
+    if (data == null) {
+      throw const ApiException(message: 'empty orderbook response');
+    }
+    return buildSnapshot(symbol, data);
   }
 
   @override
-  Stream<OrderbookSnapshot> watchOrderbook(String symbol) async* {
-    Future<OrderbookSnapshot> fetch() async =>
-        _parse(symbol, await _service.getSnapshot(symbol));
+  Future<OrderbookSnapshot> getSnapshot(String symbol) => _fetch(symbol);
 
-    yield await fetch();
-    yield* Stream<void>.periodic(const Duration(seconds: 2))
-        .asyncMap((_) => fetch());
+  @override
+  Stream<OrderbookSnapshot> watchOrderbook(String symbol) async* {
+    yield await _fetch(symbol);
+    yield* Stream<void>.periodic(
+      const Duration(seconds: 2),
+    ).asyncMap((_) => _fetch(symbol));
   }
 }

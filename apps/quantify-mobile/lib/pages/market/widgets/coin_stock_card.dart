@@ -189,13 +189,14 @@ class CoinStockCard extends StatelessWidget {
   }
 
   Widget _avatar(Color bg) {
+    final String label = stock.coin.trim();
     return Container(
       width: 30,
       height: 30,
       alignment: Alignment.center,
       decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
       child: Text(
-        stock.coin == 'OTHER' ? '?' : stock.coin.substring(0, 1),
+        label.isEmpty || label == 'OTHER' ? '?' : label.substring(0, 1),
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,

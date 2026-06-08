@@ -23,8 +23,7 @@ class ApiCoinStockRepository implements CoinStockRepository {
         .getCryptoStockQuotesApi()
         .cryptoStockQuotesControllerGetLatest();
     final List<CryptoStockQuoteResponseDto> data =
-        response.data?.data?.toList() ??
-            const <CryptoStockQuoteResponseDto>[];
+        response.data?.data?.toList() ?? const <CryptoStockQuoteResponseDto>[];
     return data.map(mapCoinStock).toList(growable: false);
   }
 
@@ -32,7 +31,7 @@ class ApiCoinStockRepository implements CoinStockRepository {
   /// 契约缺失字段（hq/listed）给空串。
   @visibleForTesting
   static CoinStock mapCoinStock(CryptoStockQuoteResponseDto dto) {
-    final String asset = dto.assetSymbol ?? '';
+    final String asset = _normalizeAsset(dto.assetSymbol);
     final double? changePct = double.tryParse(dto.priceChangePercent ?? '');
     return CoinStock(
       coin: asset,
@@ -58,5 +57,10 @@ class ApiCoinStockRepository implements CoinStockRepository {
     if (pct == null) return '';
     final String sign = pct >= 0 ? '+' : '';
     return '$sign${pct.toStringAsFixed(2)}%';
+  }
+
+  static String _normalizeAsset(String? raw) {
+    final String asset = raw?.trim().toUpperCase() ?? '';
+    return asset.isEmpty ? 'OTHER' : asset;
   }
 }

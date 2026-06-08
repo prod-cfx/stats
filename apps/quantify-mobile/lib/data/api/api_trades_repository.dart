@@ -6,6 +6,7 @@ import '../models/trade_models.dart';
 import '../repositories/trades_repository.dart';
 import '../services/generated_backend_api.dart';
 import '../services/json_codec.dart';
+import '../services/market_symbol.dart';
 
 /// [TradesRepository] 真实现（issue #2270）。
 ///
@@ -28,10 +29,10 @@ class ApiTradesRepository implements TradesRepository {
   }) async {
     final Response<MarketsControllerGetLatestTrades200Response> response =
         await _api.client.getMarketsApi().marketsControllerGetLatestTrades(
-              exchange: _defaultExchange,
-              instrumentType: _defaultInstrumentType,
-              symbol: symbol,
-            );
+          exchange: _defaultExchange,
+          instrumentType: _defaultInstrumentType,
+          symbol: normalizeKlineSymbol(symbol),
+        );
     final List<Trade> result = <Trade>[];
     final items = response.data?.items;
     if (items == null) return result;
@@ -44,7 +45,16 @@ class ApiTradesRepository implements TradesRepository {
   /// 把单条成交 JSON map 解析为 [Trade]，字段名兼容常见别名。
   static Trade parseTrade(Map<String, dynamic> m) {
     return Trade(
-      time: asDateTime(pick(m, <String>['time', 'ts', 'timestamp', 'tradeTime'])),
+      time: asDateTime(
+        pick(m, <String>[
+          'time',
+          'ts',
+          'timestamp',
+          'tradeTimestamp',
+          'tradeTime',
+          'createdAt',
+        ]),
+      ),
       price: asDouble(pick(m, <String>['price', 'px'])),
       qty: asDouble(pick(m, <String>['size', 'qty', 'quantity', 'amount'])),
       isBuy: _isBuy(pick(m, <String>['side', 'isBuy', 'isBuyerMaker'])),
