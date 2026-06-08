@@ -133,8 +133,8 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(fixedGrid).toBeDefined()
     expect(fixedGrid?.params).toMatchObject({
       programKind: 'fixed_grid_gated',
-      lowerBound: 50000,
-      upperBound: 60000,
+      lowerBound: 65000,
+      upperBound: 80000,
       levelCount: 10,
       stepPct: 5,
     })
@@ -161,8 +161,8 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(fixedGrid).toBeDefined()
     expect(fixedGrid?.params).toMatchObject({
       programKind: 'fixed_grid_gated',
-      lowerBound: 79200,
-      upperBound: 80200,
+      lowerBound: 65600,
+      upperBound: 69600,
       absoluteSpacing: 10,
       breakoutAction: 'stop',
     })
@@ -180,7 +180,7 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
   it('renders fixed grid explicit range count and step in confirmation summary', () => {
     const view = new SemanticStateProjectionService().buildConversationView(buildStateFromMessage(getTemplateInitialMessage('fixed-grid-gated')))
 
-    expect(view.summary).toContain('50000-60000')
+    expect(view.summary).toContain('65000-80000')
     expect(view.summary).toContain('10 档')
     expect(view.summary).toContain('5%')
     expect(view.summary).not.toContain('挂 0 档')
@@ -205,6 +205,16 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(exitPercentChange?.params).toMatchObject({ basis: 'entry_avg_price', valuePct: -8 })
   })
 
+  it('compiles drawdown DCA with runtime-positive price interval metadata', async () => {
+    const artifacts = await generateArtifactsFromTemplate('drawdown-dca-budget')
+    const dcaRule = artifacts.compiled.ir.ruleBlocks.find(block => block.metadata?.dcaSchedule)
+
+    expect(dcaRule?.metadata?.dcaSchedule).toEqual(expect.objectContaining({
+      triggerMode: 'price_interval',
+      priceIntervalPct: 3,
+    }))
+  })
+
   it('keeps timed DCA as a long-only spot program without short-market conflict', () => {
     const rules = buildRulesFromMessage(getTemplateInitialMessage('timed-dca-budget'))
     const atoms = collectRuleAtoms(rules)
@@ -225,8 +235,13 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     const state = buildStateFromMessage(getTemplateInitialMessage('timed-dca-budget'))
     const artifacts = await createPublicationStage().generate({ semanticState: state })
     const riskPredicates = artifacts.compiled.ir.riskPredicates ?? []
+    const dcaRule = artifacts.compiled.ir.ruleBlocks.find(block => block.metadata?.dcaSchedule)
 
     expect(riskPredicates.map(predicate => predicate.kind)).not.toContain('cooldownBars')
+    expect(dcaRule?.metadata?.dcaSchedule).toEqual(expect.objectContaining({
+      triggerMode: 'time_interval',
+      timeIntervalMs: 24 * 60 * 60 * 1000,
+    }))
     expect(artifacts.compiledScript).toContain('ADD_LONG')
   })
 

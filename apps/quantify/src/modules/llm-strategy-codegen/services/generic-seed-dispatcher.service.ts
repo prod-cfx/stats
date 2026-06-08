@@ -1765,13 +1765,14 @@ export class GenericSeedDispatcher {
     if (dropPct !== null && dropPct > 0) {
       params.dropPct = dropPct
       params.triggerMode = 'price_interval'
-      params.priceIntervalPct = -dropPct
+      params.priceIntervalPct = dropPct
     }
 
     const intervalHours = this.extractFirstNumber(userMessage, '每\\s*(\\d+(?:\\.\\d+)?)\\s*(?:小时|h|hour|hours)')
     if (intervalHours !== null && intervalHours > 0) {
       params.intervalHours = intervalHours
       params.triggerMode = 'time_interval'
+      params.timeIntervalMs = intervalHours * 60 * 60 * 1000
     }
 
     const maxCount = this.extractFirstNumber(userMessage, '最多(?:执行)?\\s*(\\d{1,4})\\s*(?:次|笔|单)')

@@ -1202,6 +1202,10 @@ export class CanonicalSpecBuilderService {
     }
 
     const triggerMode = typeof leaf.params.triggerMode === 'string' ? leaf.params.triggerMode : undefined
+    const priceIntervalPct = this.readFiniteNumber(leaf.params.priceIntervalPct)
+    const intervalHours = this.readFiniteNumber(leaf.params.intervalHours)
+    const timeIntervalMs = this.readFiniteNumber(leaf.params.timeIntervalMs)
+      ?? (intervalHours !== null && intervalHours > 0 ? intervalHours * 60 * 60 * 1000 : null)
     const exitRule = leaf.params.exitRule && typeof leaf.params.exitRule === 'object' && !Array.isArray(leaf.params.exitRule)
       ? leaf.params.exitRule as Record<string, string>
       : undefined
@@ -1210,11 +1214,11 @@ export class CanonicalSpecBuilderService {
       capitalCap,
       stateKey: `dca_fired_count_${this.stableRulesPathId(sourcePath)}`,
       ...(triggerMode !== undefined ? { triggerMode } : {}),
-      ...this.optionalNumberField('priceIntervalPct', this.readFiniteNumber(leaf.params.priceIntervalPct)),
+      ...this.optionalNumberField('priceIntervalPct', priceIntervalPct !== null ? Math.abs(priceIntervalPct) : null),
       ...this.optionalNumberField('dropPct', this.readFiniteNumber(leaf.params.dropPct)),
       ...this.optionalNumberField('priceIntervalQuote', this.readFiniteNumber(leaf.params.priceIntervalQuote)),
       ...this.optionalNumberField('timeIntervalBars', this.readFiniteNumber(leaf.params.timeIntervalBars)),
-      ...this.optionalNumberField('timeIntervalMs', this.readFiniteNumber(leaf.params.timeIntervalMs)),
+      ...this.optionalNumberField('timeIntervalMs', timeIntervalMs),
       ...this.readDrawdownPerOrderSizing(leaf.params.drawdownPerOrderSizing),
       exitRule: exitRule ?? { type: 'cap_only' },
     }
@@ -4452,7 +4456,9 @@ export class CanonicalSpecBuilderService {
       const priceIntervalPct = this.readFiniteNumber(dcaSchedule.params.priceIntervalPct)
       const priceIntervalQuote = this.readFiniteNumber(dcaSchedule.params.priceIntervalQuote)
       const timeIntervalBars = this.readFiniteNumber(dcaSchedule.params.timeIntervalBars)
+      const intervalHours = this.readFiniteNumber(dcaSchedule.params.intervalHours)
       const timeIntervalMs = this.readFiniteNumber(dcaSchedule.params.timeIntervalMs)
+        ?? (intervalHours !== null && intervalHours > 0 ? intervalHours * 60 * 60 * 1000 : null)
       const exitRule = dcaSchedule.params.exitRule && typeof dcaSchedule.params.exitRule === 'object' && !Array.isArray(dcaSchedule.params.exitRule)
         ? dcaSchedule.params.exitRule as Record<string, string>
         : undefined
@@ -4467,7 +4473,7 @@ export class CanonicalSpecBuilderService {
           ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
           stateKey: 'dca_fired_count',
           ...(triggerMode !== undefined ? { triggerMode } : {}),
-          ...this.optionalNumberField('priceIntervalPct', priceIntervalPct),
+          ...this.optionalNumberField('priceIntervalPct', priceIntervalPct !== null ? Math.abs(priceIntervalPct) : null),
           ...this.optionalNumberField('priceIntervalQuote', priceIntervalQuote),
           ...this.optionalNumberField('timeIntervalBars', timeIntervalBars),
           ...this.optionalNumberField('timeIntervalMs', timeIntervalMs),

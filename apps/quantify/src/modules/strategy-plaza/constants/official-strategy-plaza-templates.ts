@@ -390,9 +390,9 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     positionPct: 10,
     leverage: 2,
     displayOrder: 320,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建固定区间网格策略。规则：在 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用；价格跌破区间下沿停止并平仓；风控：每格 10% 仓位，亏损 3% 止损。',
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建固定区间网格策略。规则：在 65000-80000 区间挂 10 档网格，5% 步长，趋势上涨时启用；价格跌破区间下沿停止并平仓；风控：每格 10% 仓位，亏损 3% 止损。',
     expectedAtomKeys: ['program.fixed_grid_gated', 'pattern.range', 'position.sizing', 'risk.stop_loss_pct'],
-    guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m', entryRuleExample: '趋势上涨时启用 50000-60000 网格', exitRuleExample: '跌破区间下沿停止', riskRuleExample: '每格 10%，亏损 3% 止损' },
+    guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m', entryRuleExample: '趋势上涨时启用 65000-80000 网格', exitRuleExample: '跌破区间下沿停止', riskRuleExample: '每格 10%，亏损 3% 止损' },
   },
   {
     id: 'trend-filtered-grid',
@@ -428,9 +428,9 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     positionPct: 10,
     leverage: null,
     displayOrder: 340,
-    initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 1m，创建突破停止网格策略。规则：价格在 79200-80200 区间内采用双向网格，每格 10 USDT；当价格突破上下边界时立即停止并撤销未成交订单；风控：总预算 1000 USDT。',
+    initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 1m，创建突破停止网格策略。规则：价格在 65600-69600 区间内采用双向网格，每格 10 USDT；当价格突破上下边界时立即停止并撤销未成交订单；风控：总预算 1000 USDT。',
     expectedAtomKeys: ['program.fixed_grid_gated', 'position.budget_cap', 'pattern.range'],
-    guideConfig: { symbolExample: 'BTC-USDT', timeframeExample: '1m', entryRuleExample: '79200-80200 区间双向网格', exitRuleExample: '突破边界停止撤单', riskRuleExample: '总预算 1000 USDT' },
+    guideConfig: { symbolExample: 'BTC-USDT', timeframeExample: '1m', entryRuleExample: '65600-69600 区间双向网格', exitRuleExample: '突破边界停止撤单', riskRuleExample: '总预算 1000 USDT' },
   },
 
   {
