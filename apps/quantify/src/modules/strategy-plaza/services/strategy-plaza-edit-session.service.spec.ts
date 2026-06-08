@@ -1,6 +1,8 @@
 import { StrategyPlazaEditSessionService } from './strategy-plaza-edit-session.service'
 import { Test } from '@nestjs/testing'
 import { CodegenConversationService } from '@/modules/llm-strategy-codegen/services/codegen-conversation.service'
+import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
+import { buildOfficialTemplateBacktestConfigDefaults } from '../utils/official-strategy-plaza-snapshot-content'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
 const verifiedBacktestDraftConfig = {
@@ -224,5 +226,29 @@ describe('StrategyPlazaEditSessionService', () => {
       'user-1',
       verifiedBacktestDraftConfig,
     )
+  })
+
+  it('uses a short rolling backtest window for templates that depend on live external event feeds', () => {
+    const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
+    const fundingOiTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'funding-oi-confirmation')!
+
+    expect(buildOfficialTemplateBacktestConfigDefaults(orderbookTemplate)).toEqual(expect.objectContaining({
+      range: { preset: '7D' },
+    }))
+    expect(buildOfficialTemplateBacktestConfigDefaults(fundingOiTemplate)).toEqual(expect.objectContaining({
+      range: { preset: '7D' },
+    }))
+  })
+
+  it('keeps the verified fixed backtest window for templates without external event feeds', () => {
+    const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
+
+    expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({
+        preset: 'CUSTOM',
+        startAt: expect.any(String),
+        endAt: expect.any(String),
+      }),
+    }))
   })
 })

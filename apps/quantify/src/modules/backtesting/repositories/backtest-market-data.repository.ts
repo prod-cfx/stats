@@ -1,11 +1,12 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient } from '@/prisma/prisma.types'
+import type { MarketQuote, PrismaClient } from '@/prisma/prisma.types'
 import { SymbolStatus as PrismaSymbolStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class BacktestMarketDataRepository {
@@ -67,25 +68,67 @@ export class BacktestMarketDataRepository {
       const symbol = symbols.find(item => item.code === code)
       if (!symbol) continue
 
-      const quotes = await this.txHost.tx.marketQuote.findMany({
-        where: {
-          symbolId: symbol.id,
-          bidPrice: { not: null },
-          bidQty: { not: null },
-          askPrice: { not: null },
-          askQty: { not: null },
-          eventTime: {
-            gte: new Date(params.fromTs),
-            lte: new Date(params.toTs),
-          },
-        },
-        orderBy: { eventTime: 'desc' },
-        take: Math.max(1, params.limit),
+      const quotes = await this.findSampledHistoricalQuotes({
+        symbolId: symbol.id,
+        from: new Date(params.fromTs),
+        to: new Date(params.toTs),
+        limit: Math.max(1, params.limit),
       })
-      if (quotes.length > 0) return quotes.reverse()
+      if (quotes.length > 0) return quotes
     }
 
     return []
+  }
+
+  private findSampledHistoricalQuotes(params: {
+    symbolId: string
+    from: Date
+    to: Date
+    limit: number
+  }): Promise<MarketQuote[]> {
+    return this.txHost.tx.$queryRaw<MarketQuote[]>(Prisma.sql`
+      WITH quote_minutes AS (
+        SELECT generate_series(
+          date_trunc('minute', ${params.from}::timestamp),
+          date_trunc('minute', ${params.to}::timestamp),
+          interval '1 minute'
+        ) AS bucket_start
+      )
+      SELECT
+        quote.id,
+        quote.symbol_id AS "symbolId",
+        quote.event_time AS "eventTime",
+        quote.bid_price AS "bidPrice",
+        quote.bid_qty AS "bidQty",
+        quote.ask_price AS "askPrice",
+        quote.ask_qty AS "askQty",
+        quote.last_price AS "lastPrice",
+        quote.price_change AS "priceChange",
+        quote.price_change_percent AS "priceChangePercent",
+        quote.open_price AS "openPrice",
+        quote.high_price AS "highPrice",
+        quote.low_price AS "lowPrice",
+        quote.volume,
+        quote.quote_volume AS "quoteVolume",
+        quote.source,
+        quote.created_at AS "createdAt"
+      FROM quote_minutes minute
+      JOIN LATERAL (
+        SELECT *
+        FROM market_quotes quote
+        WHERE quote.symbol_id = ${params.symbolId}
+          AND quote.bid_price IS NOT NULL
+          AND quote.bid_qty IS NOT NULL
+          AND quote.ask_price IS NOT NULL
+          AND quote.ask_qty IS NOT NULL
+          AND quote.event_time >= minute.bucket_start
+          AND quote.event_time < minute.bucket_start + interval '1 minute'
+        ORDER BY quote.event_time ASC
+        LIMIT 1
+      ) quote ON true
+      ORDER BY minute.bucket_start ASC
+      LIMIT ${params.limit}
+    `)
   }
 
   private buildSymbolCodeCandidates(symbol: string): string[] {

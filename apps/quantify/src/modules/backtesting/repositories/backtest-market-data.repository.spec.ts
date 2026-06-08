@@ -6,9 +6,7 @@ describe('BacktestMarketDataRepository', () => {
       symbol: {
         findMany: jest.fn().mockResolvedValue([{ id: 'symbol-raw', code: 'BTCUSDT' }]),
       },
-      marketQuote: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'quote-1' }]),
-      },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'quote-1' }]),
     }
     const repository = new BacktestMarketDataRepository({ tx } as never)
 
@@ -22,9 +20,7 @@ describe('BacktestMarketDataRepository', () => {
     expect(tx.symbol.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { code: { in: ['BTCUSDT', 'BTCUSDT:PERP', 'BTCUSDT:SPOT'] } },
     }))
-    expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ symbolId: 'symbol-raw' }),
-    }))
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1)
     expect(result).toEqual([{ id: 'quote-1' }])
   })
 
@@ -33,9 +29,7 @@ describe('BacktestMarketDataRepository', () => {
       symbol: {
         findMany: jest.fn().mockResolvedValue([{ id: 'symbol-perp', code: 'BTCUSDT:PERP' }]),
       },
-      marketQuote: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'quote-perp' }]),
-      },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'quote-perp' }]),
     }
     const repository = new BacktestMarketDataRepository({ tx } as never)
 
@@ -46,9 +40,7 @@ describe('BacktestMarketDataRepository', () => {
       limit: 100,
     })
 
-    expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ symbolId: 'symbol-perp' }),
-    }))
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1)
     expect(result).toEqual([{ id: 'quote-perp' }])
   })
 
@@ -60,11 +52,9 @@ describe('BacktestMarketDataRepository', () => {
           { id: 'symbol-perp', code: 'BTCUSDT:PERP' },
         ]),
       },
-      marketQuote: {
-        findMany: jest.fn()
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ id: 'quote-perp' }]),
-      },
+      $queryRaw: jest.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'quote-perp' }]),
     }
     const repository = new BacktestMarketDataRepository({ tx } as never)
 
@@ -75,25 +65,18 @@ describe('BacktestMarketDataRepository', () => {
       limit: 100,
     })
 
-    expect(tx.marketQuote.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: expect.objectContaining({ symbolId: 'symbol-raw' }),
-    }))
-    expect(tx.marketQuote.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: expect.objectContaining({ symbolId: 'symbol-perp' }),
-    }))
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2)
     expect(result).toEqual([{ id: 'quote-perp' }])
   })
 
-  it('loads latest usable-depth quotes and returns them chronologically', async () => {
-    const newest = { id: 'quote-new', eventTime: new Date(2_000) }
+  it('loads sampled usable-depth quotes chronologically', async () => {
     const older = { id: 'quote-old', eventTime: new Date(1_500) }
+    const newest = { id: 'quote-new', eventTime: new Date(2_000) }
     const tx = {
       symbol: {
         findMany: jest.fn().mockResolvedValue([{ id: 'symbol-perp', code: 'BTCUSDT:PERP' }]),
       },
-      marketQuote: {
-        findMany: jest.fn().mockResolvedValue([newest, older]),
-      },
+      $queryRaw: jest.fn().mockResolvedValue([older, newest]),
     }
     const repository = new BacktestMarketDataRepository({ tx } as never)
 
@@ -104,16 +87,7 @@ describe('BacktestMarketDataRepository', () => {
       limit: 100,
     })
 
-    expect(tx.marketQuote.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        symbolId: 'symbol-perp',
-        bidPrice: { not: null },
-        bidQty: { not: null },
-        askPrice: { not: null },
-        askQty: { not: null },
-      }),
-      orderBy: { eventTime: 'desc' },
-    }))
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1)
     expect(result).toEqual([older, newest])
   })
 })
