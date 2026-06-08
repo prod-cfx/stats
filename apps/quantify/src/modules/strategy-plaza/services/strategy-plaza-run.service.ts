@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { AccountStrategyViewService } from '@/modules/account-strategy-view/services/account-strategy-view.service'
 import { ExchangeAccountRepository } from '@/modules/exchange-accounts/repositories/exchange-account.repository'
-import { StrategyPlazaOkxDemoApiKeyRequiredException } from '../exceptions'
-import { StrategyPlazaOfficialSnapshotRepository } from '../repositories/strategy-plaza-official-snapshot.repository'
+import { StrategyPlazaOkxDemoApiKeyRequiredException, StrategyPlazaOkxLiveApiKeyRequiredException } from '../exceptions'
+import { StrategyPlazaCompiledSnapshotService } from './strategy-plaza-compiled-snapshot.service'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
 @Injectable()
@@ -10,7 +10,7 @@ export class StrategyPlazaRunService {
   constructor(
     private readonly templates: OfficialStrategyPlazaTemplateService,
     private readonly exchangeAccounts: ExchangeAccountRepository,
-    private readonly officialSnapshots: StrategyPlazaOfficialSnapshotRepository,
+    private readonly compiledSnapshots: StrategyPlazaCompiledSnapshotService,
     private readonly accountStrategyViewService: AccountStrategyViewService,
   ) {}
 
@@ -18,12 +18,17 @@ export class StrategyPlazaRunService {
     userId: string
     templateId: string
     runRequestId: string
+    mode?: 'TESTNET' | 'LIVE'
+    exchangeAccountId?: string
   }) {
     const template = this.templates.getRequired(input.templateId)
-    const existingSnapshot = await this.officialSnapshots.resolveExistingOfficialSnapshotForUser({
-      userId: input.userId,
-      template,
-    })
+    const mode = input.mode ?? 'TESTNET'
+    const existingSnapshot = mode === 'TESTNET'
+      ? await this.compiledSnapshots.resolveExistingCompiledSnapshotForUser({
+          userId: input.userId,
+          template,
+        })
+      : null
 
     if (existingSnapshot?.existingStrategyInstanceId) {
       return {
@@ -35,16 +40,29 @@ export class StrategyPlazaRunService {
       }
     }
 
-    const account = await this.exchangeAccounts.findLatestOkxDemoAccountForUser(input.userId)
+    const account = mode === 'LIVE'
+      ? await this.exchangeAccounts.findExchangeAccountFirst({
+          where: {
+            ...(input.exchangeAccountId ? { id: input.exchangeAccountId } : {}),
+            userId: input.userId,
+            exchangeId: 'okx',
+            isTestnet: false,
+          },
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+          select: { id: true, name: true },
+        })
+      : await this.exchangeAccounts.findLatestOkxDemoAccountForUser(input.userId)
     if (!account) {
-      throw new StrategyPlazaOkxDemoApiKeyRequiredException({ userId: input.userId })
+      throw mode === 'LIVE'
+        ? new StrategyPlazaOkxLiveApiKeyRequiredException({ userId: input.userId })
+        : new StrategyPlazaOkxDemoApiKeyRequiredException({ userId: input.userId })
     }
-    const snapshot = await this.officialSnapshots.resolveOfficialSnapshotForUser({
+    const snapshot = await this.compiledSnapshots.resolveCompiledSnapshotForUser({
       userId: input.userId,
       template,
     })
 
-    if (snapshot.existingStrategyInstanceId) {
+    if (mode === 'TESTNET' && snapshot.existingStrategyInstanceId) {
       return {
         result: 'existing' as const,
         strategy: await this.accountStrategyViewService.getStrategyDetail(
@@ -61,7 +79,7 @@ export class StrategyPlazaRunService {
       publishedSnapshotId: snapshot.id,
       exchangeAccountId: account.id,
       exchangeAccountName: account.name,
-      mode: 'TESTNET',
+      mode,
       deploymentExecutionConfig: template.runConfig.deploymentExecutionConfig,
     })
   }

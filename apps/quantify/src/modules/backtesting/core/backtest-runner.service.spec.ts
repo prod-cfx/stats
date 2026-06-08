@@ -1,7 +1,7 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
 import type { BacktestRunInput, StrategyContext } from '../types/backtesting.types'
-import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime'
+import { evaluateExprPool, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
@@ -1362,6 +1362,60 @@ describe('backtestRunnerService', () => {
     })
 
     expect(report.openPositions?.[0]?.qty).toBeCloseTo(1.5)
+  })
+
+  it('should keep filling compiled time-interval DCA after the start predicate expires', async () => {
+    const runner = createRunner()
+    const dcaProgram = {
+      id: 'dca-time',
+      phase: 'entry' as const,
+      priority: 200,
+      when: 'execution_on_start',
+      metadata: {
+        dcaSchedule: {
+          stateKey: 'dca_fired_count',
+          triggerMode: 'time_interval',
+          timeIntervalBars: 1,
+          maxCount: 3,
+          capitalCap: 1000,
+        },
+      },
+      actions: [{ kind: 'ADD_LONG' as const, quantity: { mode: 'fixed_quote' as const, value: 100 } }],
+    }
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: [],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'compiled-dca-time',
+        params: {},
+        runtimeRequirements: {
+          helpers: ['positionLifecycle'],
+          stateKeys: ['dca_fired_count'],
+        },
+        fn: (ctx): StrategyDecisionV1 => runDecisionPrograms(
+          ctx,
+          [dcaProgram],
+          { execution_on_start: ctx.ts === 1 },
+          { forceExit: false, blockNewEntry: false, strategyHalt: false },
+          [dcaProgram.id],
+        ),
+      },
+      dataRange: { fromTs: 1, toTs: 4 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 2, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 3, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 4, open: 100, close: 100 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]?.qty).toBeCloseTo(3)
+    expect(report.diagnostics.fillCount).toBe(3)
   })
 
   it('should provide multi-leg runtime context helpers for protocol strategy scripts', async () => {

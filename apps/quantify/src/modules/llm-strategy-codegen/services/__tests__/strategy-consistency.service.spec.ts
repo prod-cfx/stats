@@ -235,7 +235,7 @@ strategy
     ]))
   })
 
-  it('treats fixed grid orchestration programs as long-short exposure during consistency checks', () => {
+  it('does not treat fixed grid sideMode=both as account long-short exposure during consistency checks', () => {
     const canonicalSpec = {
       version: 2 as const,
       market: {
@@ -269,7 +269,7 @@ strategy
       },
       rules: [],
     }
-    const { script } = compileCanonicalSpec(canonicalSpec, 'long_short')
+    const { script } = compileCanonicalSpec(canonicalSpec)
 
     const report = consistency.evaluate({
       canonicalSpec,
@@ -279,8 +279,8 @@ strategy
     expect(report.status).toBe('PASSED')
     expect(report.checks).toContainEqual(expect.objectContaining({
       key: 'compiler_consistency.execution_envelope.position_mode',
-      expected: 'long_short',
-      actual: 'long_short',
+      expected: 'long_only',
+      actual: 'long_only',
       status: 'passed',
     }))
   })

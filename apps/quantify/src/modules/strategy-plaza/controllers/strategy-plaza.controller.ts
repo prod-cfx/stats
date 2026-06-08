@@ -154,6 +154,8 @@ export class StrategyPlazaController {
       userId,
       templateId: id,
       runRequestId: dto.runRequestId,
+      mode: dto.mode,
+      exchangeAccountId: dto.exchangeAccountId,
     })
   }
 

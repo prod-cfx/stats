@@ -313,6 +313,55 @@ describe('evaluateExprPool', () => {
     expect(values.oi_up_5pct).toBe(true)
   })
 
+  it('evaluates funding plus open interest confirmation predicates together', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'funding.rate': [
+            { id: 'funding-1', ts: 9_000, payload: { fundingRate: 0.0001 } },
+          ],
+          open_interest: [
+            { id: 'oi-0', ts: 1_000, payload: { openInterest: 100 } },
+            { id: 'oi-1', ts: 9_000, payload: { openInterest: 103.5 } },
+          ],
+        },
+      },
+      [
+        {
+          id: 'funding_positive',
+          nodeType: 'predicate',
+          sourceRef: 'fundingRate.condition',
+          payload: {
+            kind: 'fundingRateCondition',
+            params: { sourceFeedId: 'funding.rate', operator: 'GT', value: 0 },
+          },
+          deps: [],
+        },
+        {
+          id: 'oi_up_gt_3pct',
+          nodeType: 'predicate',
+          sourceRef: 'openInterest.condition',
+          payload: {
+            kind: 'openInterestCondition',
+            params: { sourceFeedId: 'open_interest', direction: 'up', operator: 'GT', value: 3 },
+          },
+          deps: [],
+        },
+        {
+          id: 'funding_and_oi',
+          nodeType: 'predicate',
+          sourceRef: 'funding.oi.confirmation',
+          payload: { kind: 'AND' },
+          deps: ['funding_positive', 'oi_up_gt_3pct'],
+        },
+      ],
+      ['funding_positive', 'oi_up_gt_3pct', 'funding_and_oi'],
+    )
+
+    expect(values.funding_and_oi).toBe(true)
+  })
+
   it('evaluates indicator slope up from close series', () => {
     const values = evaluateExprPool(
       {

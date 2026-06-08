@@ -38,6 +38,7 @@ export function buildOfficialTemplateStrategyConfig(template: OfficialStrategyPl
 
 export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
   const evidence = evidenceFor(template)
+
   return {
     initialCash: 10000,
     leverage: resolveOfficialTemplateLeverage(template),

@@ -7,6 +7,7 @@ import { StrategyPlazaController } from './controllers/strategy-plaza.controller
 import { StrategyPlazaOfficialSnapshotRepository } from './repositories/strategy-plaza-official-snapshot.repository'
 import { OfficialStrategyPlazaTemplateService } from './services/official-strategy-plaza-template.service'
 import { StrategyPlazaEditSessionService } from './services/strategy-plaza-edit-session.service'
+import { StrategyPlazaCompiledSnapshotService } from './services/strategy-plaza-compiled-snapshot.service'
 import { StrategyPlazaRunService } from './services/strategy-plaza-run.service'
 
 @Module({
@@ -16,6 +17,7 @@ import { StrategyPlazaRunService } from './services/strategy-plaza-run.service'
     OfficialStrategyPlazaTemplateService,
     StrategyPlazaRunService,
     StrategyPlazaEditSessionService,
+    StrategyPlazaCompiledSnapshotService,
     StrategyPlazaOfficialSnapshotRepository,
   ],
 })

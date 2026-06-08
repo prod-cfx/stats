@@ -53,6 +53,52 @@ describe('flat exit decisions', () => {
   })
 })
 
+describe('DCA lifecycle triggers', () => {
+  it('continues a started time-interval DCA program even when the start predicate is no longer true', () => {
+    const dcaProgram = {
+      id: 'dca-time',
+      phase: 'entry' as const,
+      priority: 200,
+      when: 'execution_on_start',
+      metadata: {
+        dcaSchedule: {
+          stateKey: 'dca_fired_count',
+          triggerMode: 'time_interval',
+          timeIntervalBars: 24,
+          maxCount: 3,
+          capitalCap: 1000,
+        },
+      },
+      actions: [{ kind: 'ADD_LONG' as const, quantity: { mode: 'fixed_quote' as const, value: 100 } }],
+    }
+    const ctx = {
+      position: { qty: 0.01 },
+      portfolio: { equity: 10000 },
+      currentPrice: 100,
+      barIndex: 30,
+      __compiledDecisionState: { previousPositionQty: 0.01, lastTriggeredByProgram: {}, barIndex: 30 },
+      semanticRuntimeState: {
+        dca_fired_count: { value: 1, lastBarIndex: 1, spentQuote: 100, lastPrice: 100 },
+      },
+    } as unknown as Ctx
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [dcaProgram] as unknown as Programs,
+      { execution_on_start: false },
+      baseGuard,
+      [dcaProgram.id],
+    )
+
+    expect(decision).toMatchObject({
+      action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: { mode: 'QTY', value: 1 },
+    })
+    expect(ctx.semanticRuntimeState?.dca_fired_count?.value).toBe(2)
+  })
+})
+
 describe('partial take profit decision gate', () => {
   it('skips program whose tier is already fired', () => {
     const ctx = {

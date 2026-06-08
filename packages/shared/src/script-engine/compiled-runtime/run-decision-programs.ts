@@ -327,7 +327,7 @@ export function runDecisionPrograms(
       continue
     }
 
-    if (exprValues[program.when] !== true) {
+    if (exprValues[program.when] !== true && !canContinueStartedDcaProgram(program, ctx)) {
       continue
     }
 
@@ -528,7 +528,11 @@ function markPositionLifecycleState(
   program: DecisionProgramNode,
   decision: Readonly<StrategyDecisionV1>,
 ): void {
-  if (decision.action !== 'OPEN_LONG' && decision.action !== 'OPEN_SHORT') {
+  if (
+    decision.action !== 'OPEN_LONG'
+    && decision.action !== 'OPEN_SHORT'
+    && decision.action !== 'ADJUST_POSITION'
+  ) {
     return
   }
 
@@ -542,6 +546,19 @@ function markPositionLifecycleState(
     incrementSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
     incrementDcaSpentQuote(ctx, dcaMeta.stateKey, program)
   }
+}
+
+function canContinueStartedDcaProgram(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const dcaMeta = program.metadata?.dcaSchedule
+  if (!dcaMeta || (dcaMeta.triggerMode ?? 'signal') === 'signal') {
+    return false
+  }
+
+  const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+  return currentCount.present && currentCount.value > 0 && hasSameSidePositionSnapshot(ctx, program)
 }
 
 function evaluatePositionLifecycle(
@@ -659,14 +676,38 @@ function evaluatePositionLifecycle(
     const triggerDecision = evaluateDcaTriggerMode(program, ctx, dcaMeta)
     if (triggerDecision) return triggerDecision
 
+    const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+
     if (!hasSameSidePositionSnapshot(ctx, program)) {
+      if (readCurrentQty(ctx) !== 0 || !currentCount.present || currentCount.value !== 0) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.position_snapshot_missing`,
+        }
+      }
+
+      if (
+        Number.isFinite(dcaMeta.capitalCap)
+        && exceedsDcaCapitalCap(program, ctx, currentCount.value, dcaMeta.stateKey, dcaMeta.capitalCap)
+      ) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.dca_capital_cap`,
+        }
+      }
+
+      const initialDecision = buildFirstApplicableDecision(program, ctx)
+      if (initialDecision && initialDecision.action !== 'NOOP') {
+        markPositionLifecycleState(ctx, program, initialDecision)
+        return initialDecision
+      }
+
       return {
         action: 'NOOP',
-        reason: `compiled.${program.id}.position_snapshot_missing`,
+        reason: `compiled.${program.id}.noop`,
       }
     }
 
-    const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
     if (!currentCount.present) {
       return {
         action: 'NOOP',
@@ -1079,6 +1120,27 @@ function buildDecision(
   ctx: StrategyExecutionContextV1,
   programId: string,
 ): StrategyDecisionV1 {
+  if (action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT') {
+    const deltaQty = resolveOpenActionQty(action, ctx, Math.abs(readCurrentQty(ctx)))
+    if (deltaQty <= 0) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${programId}.noop`,
+      }
+    }
+
+    return {
+      action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: {
+        mode: 'QTY',
+        value: action.kind === 'ADD_LONG' ? deltaQty : -deltaQty,
+      },
+      reason: `compiled.${programId}`,
+      ...buildDecisionMeta(action),
+    }
+  }
+
   if (action.kind === 'CLOSE_LONG' || action.kind === 'CLOSE_SHORT') {
     const currentQty = readCurrentQty(ctx)
     if ((action.kind === 'CLOSE_LONG' && currentQty <= 0) || (action.kind === 'CLOSE_SHORT' && currentQty >= 0)) {
@@ -1162,13 +1224,10 @@ function mapAction(
     case 'CLOSE_LONG':
     case 'CLOSE_SHORT':
       return action
-    case 'ADD_LONG':
-      return 'OPEN_LONG'
-    case 'ADD_SHORT':
-      return 'OPEN_SHORT'
     case 'REDUCE_LONG':
-      return 'ADJUST_POSITION'
+    case 'ADD_LONG':
     case 'REDUCE_SHORT':
+    case 'ADD_SHORT':
       return 'ADJUST_POSITION'
   }
 }

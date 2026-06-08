@@ -31,7 +31,6 @@ import type {
   CanonicalStrategySpecV2,
 } from '../types/canonical-strategy-spec'
 import type { SemanticExpressionOperand } from '../types/semantic-state'
-import { GRID_PROGRAM_KINDS } from '../types/semantic-state'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import type {
   IrBuildContext,
@@ -346,20 +345,11 @@ export class CanonicalSpecV2IrCompilerService {
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates, context)
 
     const maxLookback = this.resolveMaxLookback(seriesMap, predicateMap)
-    // Issue #1437：网格策略走 orchestration.programs（dynamic_grid / fixed_grid_gated /
-    //   adaptive_volatility_grid）而非 orderPrograms；grid program 在 runtime 双向挂单，
-    //   天然 long_short，但 rules.actions 中无 OPEN_LONG/SHORT。原推断只看 orderPrograms +
-    //   rules → 网格 case 落 long_only，与 publication-gate 三方不一致。增加 grid 识别。
-    const hasGridProgram = orchestrationPrograms.some(p => (GRID_PROGRAM_KINDS as ReadonlySet<string>).has(p.programKind))
-    // 审查 Major #1：grid + orderPrograms 共存时仍优先 long_short（grid 双向语义覆盖
-    //   orderPrograms 单边声明）。runtime 维护双向挂单 ⇒ 单边 orderProgram 在双向
-    //   背景下仍只是其中一脚，全局 positionMode 应表达"能开两边"，与 publication-gate
-    //   `readCanonicalPositionMode` 早返 grid → long_short 行为一致；三方对账无 drift。
-    const positionMode = hasGridProgram
-      ? 'long_short' as const
-      : hasOrderPrograms
-        ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
-        : this.resolvePositionMode(input.canonicalSpec.rules)
+    // grid sideMode 表达网格挂单方向，不等于账户仓位模式。账户模式只由显式动作或
+    // orderProgram mode 决定，避免现货/单腿网格被误提升为 long_short。
+    const positionMode = hasOrderPrograms
+      ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
+      : this.resolvePositionMode(input.canonicalSpec.rules)
     const lifecyclePyramiding = this.resolveLifecyclePyramiding(input.canonicalSpec.rules, context)
 
     // Issue #1457 闸 2 (review round 1 C1) — V2 生产管线 entry rule event-leaf invariant
@@ -1230,11 +1220,13 @@ export class CanonicalSpecV2IrCompilerService {
   ): IrOrchestrationGate[] {
     const gates = spec.orchestration?.gates ?? []
     return gates.map((gate: CanonicalOrchestrationGate) => {
-      const exprId = this.compileCondition(
-        gate.activeWhen,
-        context,
-        `orchestration_gate_${gate.id}`,
-      )
+      const exprId = this.isExecutionOnStartCondition(gate.activeWhen)
+        ? this.upsertAlwaysActivePredicate(context, `orchestration_gate_${gate.id}_always_active`)
+        : this.compileCondition(
+            gate.activeWhen,
+            context,
+            `orchestration_gate_${gate.id}`,
+          )
       return {
         id: gate.id,
         ...(gate.sourcePath ? { sourcePath: gate.sourcePath } : {}),
@@ -1387,6 +1379,20 @@ export class CanonicalSpecV2IrCompilerService {
     return result
   }
 
+  private isExecutionOnStartCondition(condition: CanonicalConditionNode): boolean {
+    return condition.kind === 'atom' && condition.key === 'execution.on_start'
+  }
+
+  private upsertAlwaysActivePredicate(context: CompileContext, seed: string): string {
+    const one = this.ensureConstSeries(context, 1)
+    return this.upsertPredicate(
+      context.predicateMap,
+      seed,
+      'EQ',
+      [one, one],
+    )
+  }
+
   private resolveOrchestrationProgramActiveExprId(
     program: CanonicalOrchestrationProgram,
     gateRefToExprId: ReadonlyMap<string, string>,
@@ -1396,13 +1402,7 @@ export class CanonicalSpecV2IrCompilerService {
       return gateRefToExprId.get(program.activeWhenRef)
     }
 
-    const one = this.ensureConstSeries(context, 1)
-    return this.upsertPredicate(
-      context.predicateMap,
-      `orchestration_program_${program.id}_always_active`,
-      'EQ',
-      [one, one],
-    )
+    return this.upsertAlwaysActivePredicate(context, `orchestration_program_${program.id}_always_active`)
   }
 
   private compileExpressionCondition(

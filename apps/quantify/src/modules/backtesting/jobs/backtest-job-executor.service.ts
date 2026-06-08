@@ -231,17 +231,17 @@ export class BacktestJobExecutorService {
           endMs: input.dataRange.toTs,
         })
       } else if (stream.schemaRef === 'orderbook') {
-        const events = await this.okxMarketDataProvider.fetchOrderbookImbalanceEvents({
+        const historicalEvents = await this.loadHistoricalOrderbookEventsFromQuotes({
           symbol,
-          startMs: input.dataRange.fromTs,
-          endMs: input.dataRange.toTs,
+          fromTs: input.dataRange.fromTs,
+          toTs: input.dataRange.toTs,
         })
-        output[stream.sourceFeedId] = events.length > 0
-          ? events
-          : await this.loadHistoricalOrderbookEventsFromQuotes({
+        output[stream.sourceFeedId] = historicalEvents.length > 0
+          ? historicalEvents
+          : await this.okxMarketDataProvider.fetchOrderbookImbalanceEvents({
             symbol,
-            fromTs: input.dataRange.fromTs,
-            toTs: input.dataRange.toTs,
+            startMs: input.dataRange.fromTs,
+            endMs: input.dataRange.toTs,
           })
       } else if (stream.schemaRef === 'open_interest') {
         output[stream.sourceFeedId] = await this.okxMarketDataProvider.fetchOpenInterestEvents({
@@ -283,7 +283,7 @@ export class BacktestJobExecutorService {
       symbol: params.symbol,
       fromTs: params.fromTs,
       toTs: params.toTs,
-      limit: 10_000,
+      limit: 60_000,
     })
     return quotes
       .map(quote => this.toOrderbookRuntimeEvent(quote))

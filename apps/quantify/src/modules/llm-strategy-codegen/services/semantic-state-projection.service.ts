@@ -3798,7 +3798,7 @@ export class SemanticStateProjectionService {
         if (summary && summary.length > 0) return summary
         // 退化：未注册 summaryTemplate 时取 publicName.zh
         const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { display?: { publicName?: { zh?: string } } } | undefined>)[expr.key]
-        const publicName = contract?.display?.publicName?.zh
+        const publicName = contract?.display?.publicName?.zh ?? getLegacyEntry(expr.key)?.publicName
         if (publicName && publicName.length > 0) return publicName
         // 审查 M3 修复：未注册 / 缺失 zh 名时不把内部 atom key 泄漏到 UI；
         //   warn 到日志便于排查（与 tryAtomContractSummary 的 warn 风格一致）。

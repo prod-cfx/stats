@@ -857,7 +857,9 @@ function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
   const hasPriceSubject = /价格|price|close/iu.test(clause)
   const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
   if (periodMatches.length !== 1) return null
-  const hasSingleIndicatorCross = /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
+  const hasSingleIndicatorCross = hasPriceSubject
+    ? /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
+    : /(?:突破|跌破|break(?:s|out)?|breakdown)/iu.test(clause)
   if (!hasPriceSubject && !hasSingleIndicatorCross) return null
   const period = Number(periodMatches[0]?.[1])
   return Number.isFinite(period) && period > 0 ? period : null
@@ -1359,7 +1361,10 @@ export class GenericSeedDispatcher {
   dispatch(message?: string): DispatchResult {
     const text = (message ?? '').trim()
     const flatPatch = this.dispatchFlatPatch(text)
-    const rules = this.repairPairSpreadEntryRules(this.buildTypedRulesFromFlatPatch(flatPatch, text), text)
+    const rules = this.repairPairSpreadEntryRules(
+      this.repairDcaRulesMainflow(this.buildTypedRulesFromFlatPatch(flatPatch, text), text),
+      text,
+    )
     return {
       ...(flatPatch.contextSlots ? { contextSlots: flatPatch.contextSlots } : {}),
       ...(rules.length > 0 ? { rules } : {}),
@@ -1547,7 +1552,7 @@ export class GenericSeedDispatcher {
       if (phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program') phases.add(phase)
       if (this.isProgramEffectAtom(effect.key)) phases.add('program')
     }
-    if (/平仓|平多|平空|卖出|止盈|止损|跌破|下穿|close|sell/iu.test(userMessage)) phases.add('exit')
+    if (/平仓|平多|平空|卖出|止盈|止损|跌破|下穿|退出|close|sell/iu.test(userMessage)) phases.add('exit')
     if (/只做|只在|已有持仓|如果已有|过滤|filter|gate|(?:上方|下方)\s*[，,]\s*(?!出场|平仓|平多|平空|卖出|跌破|下穿)/iu.test(userMessage)) phases.add('gate')
     if (hasProgramStrategySignal) phases.add('program')
     if (phases.size === 0) phases.add('entry')
@@ -1572,6 +1577,7 @@ export class GenericSeedDispatcher {
         if (!this.typedEffectAppliesToSide(effect, sideScope)) continue
         this.appendTypedEffect(typedEffects, this.alignTypedLifecycleEffectToRuleSide(effect, sideScope))
       }
+      this.appendLifecycleRiskEffects(typedEffects, phase, sideScope, userMessage)
       if (phase === 'exit' && typedEffects.actions.length === 0 && this.hasCloseActionIntent(userMessage)) {
         this.appendTypedEffect(typedEffects, {
           kind: 'atom',
@@ -1580,7 +1586,7 @@ export class GenericSeedDispatcher {
             : ATOM_CONTRACT_REGISTRY['action.close_long'].key,
           params: { phase: 'exit' },
           sideScope: sideScope === 'short' ? 'short' : 'long',
-          evidence: { text: this.findEvidenceText(userMessage, '(?:平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)') ?? 'exit' },
+          evidence: { text: this.findEvidenceText(userMessage, '(?:平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|退出|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)') ?? 'exit' },
         })
       }
       const condition = conditionPredicates.length > 1
@@ -1607,7 +1613,9 @@ export class GenericSeedDispatcher {
         sideScope,
         condition,
         effects: typedEffects,
-        ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
+        ...(this.hasLifecycleEvidenceIntent(userMessage)
+          ? { evidence: { text: userMessage.trim() } }
+          : isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
       })
       }
     }
@@ -1640,6 +1648,197 @@ export class GenericSeedDispatcher {
         },
       }
     })
+  }
+
+  private hasLifecycleEvidenceIntent(userMessage: string): boolean {
+    return /每\s*\d+\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu.test(userMessage)
+      || /持仓(?:超过|达到)?\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu.test(userMessage)
+  }
+
+  private appendLifecycleRiskEffects(
+    effects: Record<RuleEffectRole, AtomExpr[]>,
+    phase: SemanticRule['phase'],
+    sideScope: SemanticRule['sideScope'],
+    userMessage: string,
+  ): void {
+    if (phase === 'entry') {
+      const cooldownBars = this.extractEntryCooldownBars(userMessage)
+      if (cooldownBars !== null) {
+        this.appendTypedEffect(effects, {
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['risk.cooldown'].key,
+          params: { phase: 'entry', durationBars: cooldownBars },
+          sideScope,
+          evidence: { text: userMessage.trim() },
+        })
+      }
+    }
+
+    if (phase === 'exit') {
+      const holdBars = this.extractTimeStopBars(userMessage)
+      if (holdBars !== null) {
+        effects.risks.push({
+          kind: 'atom',
+          key: 'risk.time_stop_bars',
+          params: { phase: 'risk', maxBars: holdBars, scope: sideScope, effect: 'close_position' },
+          sideScope,
+          evidence: { text: userMessage.trim() },
+        })
+      }
+    }
+  }
+
+  private extractEntryCooldownBars(userMessage: string): number | null {
+    const matched = userMessage.match(/每\s*(\d+)\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu)
+    if (!matched?.[1]) return null
+    const value = Number(matched[1])
+    return Number.isInteger(value) && value > 0 ? value : null
+  }
+
+  private extractTimeStopBars(userMessage: string): number | null {
+    const matched = userMessage.match(/持仓(?:超过|达到)?\s*(\d+)\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu)
+    if (!matched?.[1]) return null
+    const value = Number(matched[1])
+    return Number.isInteger(value) && value > 0 ? value : null
+  }
+
+  private repairDcaRulesMainflow(rules: SemanticRule[], userMessage: string): SemanticRule[] {
+    if (this.resolveGenericExecutionProgramKeyFromMessage(userMessage) !== 'program.dca') return rules
+
+    const scheduleParams = this.extractDcaScheduleParamsFromMessage(userMessage)
+    return rules
+      .map((rule) => {
+        if (!isRuleEffectsByRole(rule.effects)) return rule
+        if (rule.phase === 'entry') {
+          const filteredCondition = this.filterConditionAtoms(rule.condition, atom => this.isDcaExitOrPausePredicate(atom))
+            ?? this.buildOnStartCondition(userMessage, 'entry')
+          const positions = this.mergeDcaScheduleEffects(rule.effects.positions, scheduleParams)
+          return {
+            ...rule,
+            sideScope: 'long',
+            condition: filteredCondition,
+            effects: {
+              ...rule.effects,
+              positions,
+            },
+          }
+        }
+
+        if (rule.phase === 'exit') {
+          if (this.ruleConditionContainsPauseIntent(rule.condition)) return null
+          return {
+            ...rule,
+            condition: this.withDcaAveragePriceExitBasis(rule.condition),
+          }
+        }
+
+        return rule
+      })
+      .filter((rule): rule is SemanticRule => rule !== null)
+  }
+
+  private buildOnStartCondition(userMessage: string, phase: SemanticRule['phase']): AtomExpr {
+    return {
+      kind: 'atom',
+      key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
+      params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+      sideScope: phase === 'entry' ? 'long' : 'both',
+      evidence: { text: this.findEvidenceText(userMessage, '(?:策略启动|启动|DCA|dca|定投|回撤)') ?? userMessage.trim() },
+    }
+  }
+
+  private filterConditionAtoms(
+    expr: AtomExpr,
+    shouldRemove: (atom: Extract<AtomExpr, { kind: 'atom' }>) => boolean,
+  ): AtomExpr | null {
+    if (expr.kind === 'atom') return shouldRemove(expr) ? null : expr
+    if (expr.kind !== 'and' && expr.kind !== 'or') return expr
+    const children = expr.children
+      .map(child => this.filterConditionAtoms(child, shouldRemove))
+      .filter((child): child is AtomExpr => child !== null)
+    if (children.length === 0) return null
+    if (children.length === 1) return children[0]!
+    return { ...expr, children }
+  }
+
+  private isDcaExitOrPausePredicate(atom: Extract<AtomExpr, { kind: 'atom' }>): boolean {
+    const evidence = isEvidenceWithText(atom.evidence) ? atom.evidence.text : ''
+    return /(?:暂停|停止|退出|全部退出|平仓|卖出|离场)/iu.test(evidence)
+      || (atom.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key && /(?:本轮均价|均价|30\s*日均线|30d)/iu.test(evidence))
+      || atom.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key
+  }
+
+  private ruleConditionContainsPauseIntent(expr: AtomExpr): boolean {
+    if (expr.kind === 'atom') {
+      const evidence = isEvidenceWithText(expr.evidence) ? expr.evidence.text : ''
+      return /(?:暂停|停止)/iu.test(evidence)
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') return expr.children.some(child => this.ruleConditionContainsPauseIntent(child))
+    return false
+  }
+
+  private withDcaAveragePriceExitBasis(expr: AtomExpr): AtomExpr {
+    if (expr.kind === 'atom') {
+      if (expr.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key) return expr
+      const evidence = isEvidenceWithText(expr.evidence) ? expr.evidence.text : ''
+      if (!/(?:本轮均价|均价)/iu.test(evidence)) return expr
+      return {
+        ...expr,
+        params: {
+          ...expr.params,
+          basis: 'entry_avg_price',
+        },
+      }
+    }
+    if (expr.kind !== 'and' && expr.kind !== 'or') return expr
+    return { ...expr, children: expr.children.map(child => this.withDcaAveragePriceExitBasis(child)) }
+  }
+
+  private mergeDcaScheduleEffects(existing: readonly AtomExpr[], params: Record<string, unknown>): AtomExpr[] {
+    const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+    const withoutDca = existing.filter(effect => effect.kind !== 'atom' || effect.key !== dcaKey)
+    const existingDca = existing
+      .filter((effect): effect is Extract<AtomExpr, { kind: 'atom' }> => effect.kind === 'atom' && effect.key === dcaKey)
+      .reduce<Record<string, unknown>>((acc, effect) => ({ ...acc, ...effect.params }), {})
+    return [
+      ...withoutDca,
+      {
+        kind: 'atom',
+        key: dcaKey,
+        params: { ...existingDca, ...params, phase: 'entry' },
+        sideScope: 'long',
+      },
+    ]
+  }
+
+  private extractDcaScheduleParamsFromMessage(userMessage: string): Record<string, unknown> {
+    const params: Record<string, unknown> = {}
+    const perOrder = extractDcaPerOrderSizingRole(userMessage) ?? extractSizingRoleFromText(userMessage)
+    if (perOrder) params.perOrderSizing = toPerOrderSizingShape(perOrder.sizing)
+
+    const dropPct = this.extractFirstNumber(userMessage, '(?:每(?:次|当)?|价格每)?\\s*(?:下跌|回撤)[^，。；;]{0,12}?(\\d+(?:\\.\\d+)?)\\s*%')
+    if (dropPct !== null && dropPct > 0) {
+      params.dropPct = dropPct
+      params.triggerMode = 'price_interval'
+      params.priceIntervalPct = dropPct
+    }
+
+    const intervalHours = this.extractFirstNumber(userMessage, '每\\s*(\\d+(?:\\.\\d+)?)\\s*(?:小时|h|hour|hours)')
+    if (intervalHours !== null && intervalHours > 0) {
+      params.intervalHours = intervalHours
+      params.triggerMode = 'time_interval'
+      params.timeIntervalMs = intervalHours * 60 * 60 * 1000
+    }
+
+    const maxCount = this.extractFirstNumber(userMessage, '最多(?:执行)?\\s*(\\d{1,4})\\s*(?:次|笔|单)')
+    if (maxCount !== null && maxCount > 0) params.maxCount = maxCount
+
+    const cap = userMessage.match(/(?:总(?:投入|资金|预算|金额)|总预算|预算|上限|不超过)[^，。；;]{0,12}?(?:最多|最大|不超过|为|是)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
+    if (cap?.[1] && cap[2]) {
+      params.capitalCap = { kind: 'quote', value: Number(cap[1]), asset: normalizeQuoteAsset(cap[2]) }
+    }
+
+    return params
   }
 
   private ruleConditionContainsKey(condition: SemanticRule['condition'], key: string): boolean {
@@ -2109,7 +2308,7 @@ export class GenericSeedDispatcher {
     }
     for (const item of out) {
       if (item.key === 'orderbook.imbalance') {
-        item.params = { ...this.extractOrderbookImbalanceParams(userMessage), ...item.params }
+        item.params = { ...item.params, ...this.extractOrderbookImbalanceParams(userMessage) }
       }
       if (item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
         item.params = { ...this.extractFundingRateParams(userMessage), ...item.params }
@@ -2123,7 +2322,7 @@ export class GenericSeedDispatcher {
         key: ATOM_CONTRACT_REGISTRY['openInterest.condition'].key,
         phase: 'entry',
         sideScope: 'both',
-        params: {},
+        params: this.extractOpenInterestParams(userMessage),
         evidence: { text: this.findEvidenceText(userMessage, '(?:未平仓量|持仓量|open\s*interest|\bOI\b)') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
@@ -2595,6 +2794,8 @@ export class GenericSeedDispatcher {
         )?.evidence
         const fixedGridParams = programKey === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key
           ? this.readFixedGridProgramParamsFromMessage(userMessage)
+          : programKey === ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
+            ? this.readDynamicGridProgramParamsFromMessage(userMessage)
           : {}
         pushAtom({
           key: programKey,
@@ -2612,6 +2813,13 @@ export class GenericSeedDispatcher {
     const fixedNotional = this.extractFixedNotionalValue(userMessage)
     for (const effect of out) {
       if (effect.kind !== 'atom') continue
+      if (effect.key === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key) {
+        const fixedGridParams = this.readFixedGridProgramParamsFromMessage(userMessage)
+        Object.assign(effect.params, {
+          programKind: 'fixed_grid_gated',
+          ...fixedGridParams,
+        })
+      }
       if (
         (effect.key === ATOM_CONTRACT_REGISTRY['risk.atr_stop'].key || effect.key === ATOM_CONTRACT_REGISTRY['risk.atr_multiple_stop'].key)
         && typeof effect.params.multiple !== 'number'
@@ -2648,22 +2856,51 @@ export class GenericSeedDispatcher {
   }
 
   private hasFixedGridGatedProgramIntent(userMessage: string): boolean {
-    return /固定网格|门控网格|区间挂|步长|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
+    return /固定网格|门控网格|区间挂|区间内采用|双向网格|突破停止|上下边界|步长|每格\s*\d+(?:\.\d+)?\s*(?:USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
   }
 
-  private readFixedGridProgramParamsFromMessage(userMessage: string): Record<string, number> {
+  private readFixedGridProgramParamsFromMessage(userMessage: string): Record<string, unknown> {
     const rangeMatch = userMessage.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const levelMatch = userMessage.match(/(?:共|总计)?\s*(\d+)\s*[格档]/u)
     const stepMatch = userMessage.match(/(?:(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*(?:步长|网格步长))/u)
+    const absoluteSpacingMatch = userMessage.match(/每格\s*(\d+(?:\.\d+)?)\s*(?:USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
     const lowerBound = rangeMatch?.[1] ? Number(rangeMatch[1]) : null
     const upperBound = rangeMatch?.[2] ? Number(rangeMatch[2]) : null
     const levelCount = levelMatch?.[1] ? Number(levelMatch[1]) : null
     const stepPct = stepMatch?.[1] ? Number(stepMatch[1]) : (stepMatch?.[2] ? Number(stepMatch[2]) : null)
+    const absoluteSpacing = absoluteSpacingMatch?.[1] ? Number(absoluteSpacingMatch[1]) : null
     return {
       ...(lowerBound !== null && Number.isFinite(lowerBound) ? { lowerBound } : {}),
       ...(upperBound !== null && Number.isFinite(upperBound) ? { upperBound } : {}),
       ...(levelCount !== null && Number.isInteger(levelCount) ? { levelCount } : {}),
       ...(stepPct !== null && Number.isFinite(stepPct) ? { stepPct } : {}),
+      ...(absoluteSpacing !== null && Number.isFinite(absoluteSpacing) ? { absoluteSpacing } : {}),
+      ...(/(?:突破|越界|上下边界)[^，。；;]*(?:停止|撤单|取消)|(?:停止|撤单|取消)[^，。；;]*(?:突破|越界|上下边界)/u.test(userMessage) ? { breakoutAction: 'stop', onDeactivate: 'cancel' } : {}),
+    }
+  }
+
+  private readDynamicGridProgramParamsFromMessage(userMessage: string): Record<string, unknown> {
+    const levelMatch = userMessage.match(/(?:共|总计)?\s*(\d+)\s*[格档]/u)
+    const stepMatch = userMessage.match(/(?:(?:步长|网格步长|每格)\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*(?:步长|网格步长|每格))/u)
+    const levelCount = levelMatch?.[1] ? Number(levelMatch[1]) : null
+    const stepPct = stepMatch?.[1] ? Number(stepMatch[1]) : (stepMatch?.[2] ? Number(stepMatch[2]) : null)
+    const sizing = extractSizingRoleFromText(userMessage)?.sizing
+    const programSizing = sizing?.kind === 'quote'
+      ? { mode: 'fixed_quote', value: sizing.value }
+      : sizing?.kind === 'base'
+        ? { mode: 'fixed_base', value: sizing.value }
+        : sizing?.kind === 'ratio'
+          ? { mode: 'fixed_pct', value: Number((sizing.value * 100).toFixed(8)) }
+          : { mode: 'fixed_pct', value: 10 }
+    return {
+      anchorLookbackBars: 20,
+      anchorSide: 'mid',
+      anchorDriftPct: 10,
+      rebuildMinIntervalSec: 60,
+      dynamicGridStep: { mode: 'pct', value: stepPct !== null && Number.isFinite(stepPct) ? stepPct : 0.5 },
+      levelCount: levelCount !== null && Number.isInteger(levelCount) ? levelCount : 10,
+      onDeactivate: 'cancel',
+      sizing: programSizing,
     }
   }
 
@@ -2792,11 +3029,20 @@ export class GenericSeedDispatcher {
     return /未平仓量|持仓量|open\s*interest|\bOI\b/iu.test(userMessage)
   }
 
+  private extractOpenInterestParams(userMessage: string): Record<string, unknown> {
+    const value = this.extractFirstNumber(userMessage, '(?:未平仓量|持仓量|open\\s*interest|\\bOI\\b)[^，。；;]{0,24}?(?:增加|上涨|上升|增长|提高|超过|大于|>|>=)[^\\d，。；;]{0,12}?(\\d+(?:\\.\\d+)?)\\s*%')
+    return {
+      direction: /(?:减少|下降|降低|下滑|decreas|down|fall)/iu.test(userMessage) ? 'down' : 'up',
+      operator: /(?:至少|不低于|大于等于|>=|不少于)/iu.test(userMessage) ? 'GTE' : 'GT',
+      ...(value !== null ? { value } : {}),
+    }
+  }
+
   // Issue #1691: 与 hasOpenActionIntent 对称的纯出场词法。
   // 「平仓 / 平多 / 平空 / 止盈 / 止损 / 离场 / 卖出 / close / exit / sell / take-profit / stop-loss」
   // 与 generic-seed-dispatcher.helpers.ts 中 EXIT_PHRASES 词法对齐。
   private hasCloseActionIntent(userMessage: string): boolean {
-    return /平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|close|exit|sell|take[ -]?profit|stop[ -]?loss/iu.test(userMessage)
+    return /平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|退出|close|exit|sell|take[ -]?profit|stop[ -]?loss/iu.test(userMessage)
   }
 
   private hasRiskIntent(userMessage: string): boolean {
@@ -2824,6 +3070,7 @@ export class GenericSeedDispatcher {
 
   private hasRegimeGateIntent(userMessage: string): boolean {
     if (/regime|gate|趋势过滤|趋势向上/iu.test(userMessage)) return true
+    if (/(?:orderbook|订单簿|盘口|深度|价差|资金费率|funding\s*rate|未平仓量|持仓量|open\s*interest|\bOI\b|清算|liquidation)[^，。；;]*(?:才允许|只允许)[^，。；;]*(?:开仓|入场|进场|开多|开空|做多|做空|open|enter)/iu.test(userMessage)) return false
     if (!/才允许|只允许/iu.test(userMessage)) return false
     return !this.hasMultiTimeframeGateIntent(userMessage)
   }

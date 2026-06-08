@@ -5054,14 +5054,52 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
       kind: 'EQ',
       args: ['const_1', 'const_1'],
     }))
-    expect(result.ir.portfolio.positionMode).toBe('long_short')
+    expect(result.ir.portfolio.positionMode).toBe('long_only')
   })
 
-  // Issue #1437：grid orchestration program 应让 IR.portfolio.positionMode = 'long_short'
-  //   网格 program 在 runtime 双向挂单，rules.actions 无 OPEN_LONG/SHORT，原 resolvePositionMode
-  //   只看 orderPrograms + rules.actions → 落 long_only，与 publication-gate 三方不一致
-  //   触发 PUBLICATION_GATE_BLOCKED（用户实测策略 3）
-  it('Issue #1437: spec 含 fixed_grid_gated → IR.portfolio.positionMode = long_short', () => {
+  it('compiles execution.on_start orchestration program gate as continuously active', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-grid-started',
+          target: { phase: 'entry' },
+          activeWhen: { kind: 'atom', key: 'execution.on_start', params: {} },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      programs: [
+        {
+          id: 'program-grid-started',
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: 'gate-grid-started',
+          onDeactivate: 'cancel',
+          rebuildPolicy: 'static',
+          gridParams: {
+            lowerBound: 50000,
+            upperBound: 60000,
+            levelCount: 10,
+            stepPct: 5,
+          },
+          sizing: { mode: 'fixed_pct', value: 1 },
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const program = result.ir.orchestrationPrograms?.[0]
+    expect(program?.activeWhenExprId).toContain('always_active')
+    expect(result.ir.signalCatalog.predicates).toContainEqual(expect.objectContaining({
+      id: program?.activeWhenExprId,
+      kind: 'EQ',
+      args: ['const_1', 'const_1'],
+    }))
+    expect(result.ir.signalCatalog.series).not.toContainEqual(expect.objectContaining({ kind: 'BAR_INDEX' }))
+  })
+
+  // Grid sideMode is order-program behavior, not account positionMode.
+  it('keeps fixed_grid_gated side mode separate from account position mode', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
     spec.orchestration = {
@@ -5091,8 +5129,7 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
       ],
     }
     const result = compiler.compile({ canonicalSpec: spec, fallback })
-    // 关键断言：grid program 让 IR positionMode 升 long_short（原为 long_only）
-    expect(result.ir.portfolio.positionMode).toBe('long_short')
+    expect(result.ir.portfolio.positionMode).toBe('long_only')
   })
 
   it('drops orphan program when activeWhenRef points to non-existent gate', () => {

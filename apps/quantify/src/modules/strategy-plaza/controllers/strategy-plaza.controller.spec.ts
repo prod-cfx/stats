@@ -140,7 +140,11 @@ describe('StrategyPlazaController', () => {
 
   it('runs a template using caller identity from auth', async () => {
     const { caller, controller, run } = await buildController()
-    const dto: RunStrategyPlazaTemplateDto = { runRequestId: 'run-123456' }
+    const dto: RunStrategyPlazaTemplateDto = {
+      runRequestId: 'run-123456',
+      mode: 'LIVE',
+      exchangeAccountId: 'acct-okx-live',
+    }
 
     const result = await controller.run('ma-cross', dto, 'Bearer token', 'user-forwarded')
 
@@ -149,6 +153,8 @@ describe('StrategyPlazaController', () => {
       userId: 'user-1',
       templateId: 'ma-cross',
       runRequestId: 'run-123456',
+      mode: 'LIVE',
+      exchangeAccountId: 'acct-okx-live',
     })
     expect(result).toEqual({ id: 'strategy-1', status: 'running' })
   })

@@ -10,6 +10,7 @@ import {
   runMovingAverageLongOnly,
   selectBestCandidate,
 } from '../optimize-official-templates'
+import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../../../src/modules/strategy-plaza/constants/official-strategy-plaza-templates'
 
 const bars: OptimizerBar[] = [
   { ts: 1, open: 100, high: 102, low: 99, close: 101, volume: 1 },
@@ -89,7 +90,7 @@ describe('strategy plaza optimizer', () => {
     })?.params).toEqual({ fastPeriod: 8 })
   })
 
-  it('commits auditable fixed-window evidence for exactly six official templates', () => {
+  it('commits auditable fixed-window evidence for every live official template', () => {
     const evidence = JSON.parse(readFileSync(evidencePath, 'utf8')) as {
       status: string
       admission: {
@@ -112,6 +113,11 @@ describe('strategy plaza optimizer', () => {
           endpoint: string
           fixedEndTs: number
         }
+        eventDataSources?: Array<{
+          schemaRef: string
+          endpoint: string
+          sampleCount: number
+        }>
         backtestFrom?: number
         backtestTo?: number
         admission?: {
@@ -145,18 +151,14 @@ describe('strategy plaza optimizer', () => {
     expect(evidence.admission.minWinRate).toBeGreaterThanOrEqual(0.52)
     expect(evidence.admission.minTradeCount).toBeGreaterThanOrEqual(20)
     expect(evidence.admission.minTotalReturnPct).toBeGreaterThanOrEqual(0.5)
-    expect(evidence.templates.map(template => template.templateId)).toEqual([
-      'ma-cross',
-      'bollinger-reversion',
-      'grid-range',
-      'breakout-follow',
-      'rsi-reversal',
-      'macd-cross',
-    ])
+    const liveTemplateIds = OFFICIAL_STRATEGY_PLAZA_TEMPLATES
+      .filter(template => template.status === 'live')
+      .map(template => template.id)
+    expect(evidence.templates.map(template => template.templateId).sort()).toEqual(liveTemplateIds.slice().sort())
 
     for (const template of evidence.templates) {
       expect(template.parameterSearchId).toMatch(/^official-template-search:/)
-      expect(template.dataSource?.fixedEndTs).toBe(evidence.templates[0].dataSource?.fixedEndTs)
+      expect(template.dataSource?.fixedEndTs).toEqual(expect.any(Number))
       expect(template.backtestFrom).toEqual(expect.any(Number))
       expect(template.backtestTo).toEqual(expect.any(Number))
       expect(template.backtestTo).toBeLessThanOrEqual(template.dataSource?.fixedEndTs ?? 0)
@@ -172,7 +174,8 @@ describe('strategy plaza optimizer', () => {
 
     for (const template of evidence.templates) {
       expect(template.exchange).toBe('okx')
-      expect(template.interval).toBe('15m')
+      const plazaTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(item => item.id === template.templateId)
+      expect(template.interval.toLowerCase()).toBe(plazaTemplate?.runConfig.timeframe.toLowerCase())
       expect(template.dataSource).toMatchObject({
         exchange: 'okx',
         endpoint: 'https://www.okx.com/api/v5/market/history-candles',
@@ -191,6 +194,26 @@ describe('strategy plaza optimizer', () => {
       symbol: 'ETH-USDT-SWAP',
       marketType: 'swap',
     })
+
+    for (const templateId of ['orderbook-imbalance-long', 'orderbook-spread-post-only', 'orderbook-depth-ratio-confirm']) {
+      const evidenceTemplate = evidence.templates.find(template => template.templateId === templateId)
+      expect(evidenceTemplate?.eventDataSources).toEqual(expect.arrayContaining([
+        expect.objectContaining({ schemaRef: 'orderbook', endpoint: 'https://www.okx.com/api/v5/market/books', sampleCount: expect.any(Number) }),
+      ]))
+    }
+
+    for (const [templateId, schemaRef, endpoint] of [
+      ['funding-rate-mean-reversion', 'funding', 'https://www.okx.com/api/v5/public/funding-rate-history'],
+      ['open-interest-breakout', 'open_interest', 'https://www.okx.com/api/v5/rubik/stat/contracts/open-interest-history'],
+      ['liquidation-cascade-short', 'liquidation', 'https://www.okx.com/api/v5/public/liquidation-orders'],
+      ['funding-oi-confirmation', 'funding', 'https://www.okx.com/api/v5/public/funding-rate-history'],
+      ['funding-oi-confirmation', 'open_interest', 'https://www.okx.com/api/v5/rubik/stat/contracts/open-interest-history'],
+    ] as const) {
+      const evidenceTemplate = evidence.templates.find(template => template.templateId === templateId)
+      expect(evidenceTemplate?.eventDataSources).toEqual(expect.arrayContaining([
+        expect.objectContaining({ schemaRef, endpoint, sampleCount: expect.any(Number) }),
+      ]))
+    }
   })
 
   it('keeps the generated TS evidence constant synchronized with the JSON evidence', () => {

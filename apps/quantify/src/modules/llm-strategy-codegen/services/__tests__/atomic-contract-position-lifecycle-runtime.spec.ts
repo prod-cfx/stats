@@ -1031,6 +1031,44 @@ describe('atomic contract position lifecycle compiled runtime', () => {
     })
   })
 
+  it('executes first DCA order from a flat position when runtime dca state slot is initialized empty', () => {
+    const ctx = {
+      position: { side: 'flat', qty: 0 },
+      currentPrice: 100,
+      accountEquity: 1_000,
+      semanticRuntimeState: {
+        dca_fired_count: {},
+      },
+    } as Ctx
+    const decision = runLifecycleProgram(
+      {
+        id: 'dca-long',
+        phase: 'entry',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
+        },
+        actions: [
+          { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100 } },
+        ],
+      },
+      ctx,
+    )
+
+    expect(decision).toMatchObject({
+      action: 'OPEN_LONG',
+      size: { mode: 'QUOTE', value: 100 },
+      reason: 'compiled.dca-long',
+    })
+    expect(ctx.semanticRuntimeState?.dca_fired_count).toEqual({
+      value: 1,
+      spentQuote: 100,
+      lastBarIndex: 0,
+      lastPrice: 100,
+    })
+  })
+
   it('signal triggerMode allows repeated DCA while state limits still apply', () => {
     const ctx = {
       barIndex: 3,

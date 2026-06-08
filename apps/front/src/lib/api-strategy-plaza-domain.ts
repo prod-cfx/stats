@@ -18,6 +18,7 @@ export interface StrategyPlazaTemplate {
   description: string
   logicDescription: string
   tags: string[]
+  category?: '趋势' | '突破' | '反转' | '网格' | 'DCA' | '盘口' | '衍生品事件' | '风控稳健'
   riskLevel: 'low' | 'medium' | 'high'
   scenario: string
   exchange: 'okx'

@@ -1,4 +1,7 @@
 import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
+import { STAGE4_ATOM_COVERAGE_MATRIX, STAGE4_DEPLOY_READY_STATUSES } from '@/modules/llm-strategy-codegen/stage4/atom-coverage-matrix'
+import type { StrategyExecutionContextV1 } from '@ai/shared'
+import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
 import { StrategyPlazaTemplateResponseDto } from '../dto/strategy-plaza-template.response.dto'
 import { StrategyPlazaTemplateNotFoundException } from '../exceptions/strategy-plaza-template-not-found.exception'
@@ -8,44 +11,145 @@ import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-
 describe('OfficialStrategyPlazaTemplateService', () => {
   const service = new OfficialStrategyPlazaTemplateService()
 
-  it('returns exactly the six public beta templates in display order', () => {
+  it('returns official templates in display order while preserving the legacy public beta set', () => {
     const templates = service.list()
 
-    expect(templates.map(item => item.id)).toEqual([
+    expect(templates.map(item => item.displayOrder)).toEqual(
+      templates.map(item => item.displayOrder).slice().sort((left, right) => left - right),
+    )
+    expect(templates.map(item => item.id)).toEqual(expect.arrayContaining([
       'ma-cross',
       'bollinger-reversion',
       'grid-range',
       'rsi-reversal',
       'breakout-follow',
       'macd-cross',
-    ])
+    ]))
     expect(templates.every(item => item.exchange === 'okx')).toBe(true)
     expect(templates.every(item => item.environment === 'demo')).toBe(true)
     expect(templates.every(item => item.status === 'live')).toBe(true)
-    expect(templates.every(item =>
+    expect(templates.some(item =>
       item.displayMetrics.returnPct != null
       && item.displayMetrics.winRatePct != null
       && item.displayMetrics.maxDrawdownPct != null,
     )).toBe(true)
-    expect(Math.max(...templates.map(item => item.displayMetrics.maxDrawdownPct ?? Number.POSITIVE_INFINITY))).toBeLessThanOrEqual(20)
+    expect(Math.max(...templates.map(item => item.displayMetrics.maxDrawdownPct ?? 0))).toBeLessThanOrEqual(20)
   })
 
-  it('keeps all six official golden snapshots on the signal-generator deploy path', () => {
+  it('returns live official templates across every Strategy Plaza category', () => {
+    const templates = service.list()
+    const counts = templates.reduce<Record<string, number>>((acc, template) => {
+      acc[template.category] = (acc[template.category] ?? 0) + 1
+      return acc
+    }, {})
+
+    expect(Object.keys(counts).sort()).toEqual([
+      'DCA',
+      '反转',
+      '衍生品事件',
+      '突破',
+      '盘口',
+      '网格',
+      '趋势',
+      '风控稳健',
+    ].sort())
+    for (const count of Object.values(counts)) {
+      expect(count).toBeGreaterThanOrEqual(3)
+      expect(count).toBeLessThanOrEqual(6)
+    }
+  })
+
+  it('keeps optimized templates in their original Strategy Plaza categories', () => {
+    const categoryByTemplateId = new Map(service.list().map(template => [template.id, template.category]))
+
+    expect(Object.fromEntries([
+      'fixed-grid-gated',
+      'trend-filtered-grid',
+      'grid-breakout-stop',
+      'drawdown-dca-budget',
+      'timed-dca-budget',
+      'orderbook-imbalance-long',
+      'funding-oi-confirmation',
+    ].map(templateId => [templateId, categoryByTemplateId.get(templateId)]))).toEqual({
+      'fixed-grid-gated': '网格',
+      'trend-filtered-grid': '网格',
+      'grid-breakout-stop': '网格',
+      'drawdown-dca-budget': 'DCA',
+      'timed-dca-budget': 'DCA',
+      'orderbook-imbalance-long': '盘口',
+      'funding-oi-confirmation': '衍生品事件',
+    })
+  })
+
+  it('requires verified backtest evidence for every live official template', () => {
+    const evidenceByTemplateId = new Set(
+      OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.map(item => item.templateId),
+    )
+    const missingEvidenceTemplateIds = service.list()
+      .filter(template => template.status === 'live')
+      .map(template => template.id)
+      .filter(templateId => !evidenceByTemplateId.has(templateId))
+
+    expect(missingEvidenceTemplateIds).toEqual([])
+  })
+
+  it('shows display metrics only when evidence parameters align with edit seed run config', () => {
+    const drift = service.list().flatMap((template) => {
+      if (template.displayMetrics.returnPct == null && template.displayMetrics.winRatePct == null && template.displayMetrics.maxDrawdownPct == null) {
+        return []
+      }
+      const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === template.id)
+      if (!evidence) return [`${template.id}: displayMetrics present without evidence`]
+
+      const issues: string[] = []
+      const params = evidence.params as Record<string, unknown>
+      if (typeof params.positionPct === 'number' && params.positionPct !== template.runConfig.positionPct) {
+        issues.push(`positionPct evidence=${params.positionPct} runConfig=${template.runConfig.positionPct}`)
+      }
+      if (typeof params.stopLossPct === 'number' && !template.editSeed.initialMessage.includes(`亏损 ${params.stopLossPct}%`)) {
+        issues.push(`stopLossPct evidence=${params.stopLossPct} missing from initialMessage`)
+      }
+      if (typeof params.takeProfitPct === 'number' && !template.editSeed.initialMessage.includes(`盈利 ${params.takeProfitPct}%`) && !template.editSeed.initialMessage.includes(`止盈 ${params.takeProfitPct}%`)) {
+        issues.push(`takeProfitPct evidence=${params.takeProfitPct} missing from initialMessage`)
+      }
+      if (typeof params.holdBars === 'number' && !template.editSeed.initialMessage.includes(`持仓 ${params.holdBars} 根 K 线`)) {
+        issues.push(`holdBars evidence=${params.holdBars} missing from initialMessage`)
+      }
+      if (typeof params.cadence === 'number' && !template.editSeed.initialMessage.includes(`每 ${params.cadence} 根 K 线最多开仓一次`)) {
+        issues.push(`cadence evidence=${params.cadence} missing from initialMessage`)
+      }
+
+      return issues.map(issue => `${evidence.templateId}: ${issue}`)
+    })
+
+    expect(drift).toEqual([])
+  })
+
+  it('uses only rules mainflow atoms that reach backtest and deploy payload', () => {
+    const deployReadyAtomKeys = new Set(
+      STAGE4_ATOM_COVERAGE_MATRIX
+        .filter(row => STAGE4_DEPLOY_READY_STATUSES.includes(row.status))
+        .filter(row => row.reachesBacktest && row.reachesDeployPayload)
+        .flatMap(row => [row.atomKey, ...row.coveredAtomKeys]),
+    )
+    const unsupportedAtoms = service.list().flatMap(template =>
+      template.expectedAtomKeys
+        .filter(atomKey => !deployReadyAtomKeys.has(atomKey))
+        .map(atomKey => ({ templateId: template.id, atomKey })),
+    )
+
+    expect(unsupportedAtoms).toEqual([])
+  })
+
+  it('keeps official golden snapshots on the signal-generator deploy path', () => {
     const snapshots = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(template => ({
       templateId: template.id,
       publishedSnapshotId: template.runConfig.publishedSnapshotId,
       content: buildOfficialStrategySnapshotContent(template),
     }))
 
-    expect(snapshots).toHaveLength(6)
-    expect(snapshots.map(item => item.templateId)).toEqual([
-      'ma-cross',
-      'bollinger-reversion',
-      'grid-range',
-      'rsi-reversal',
-      'breakout-follow',
-      'macd-cross',
-    ])
+    expect(snapshots).toHaveLength(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.length)
+    expect(snapshots.map(item => item.templateId)).toEqual(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(template => template.id))
     expect(snapshots.every(item => item.publishedSnapshotId.endsWith('-snapshot'))).toBe(true)
     expect(snapshots.every(item =>
       item.content.executionEnvelope.runtime === 'signal-generator'
@@ -54,10 +158,17 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('grid-runtime')
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
     expect(snapshots.every(item => item.content.backtestConfigDefaults.priceSource === 'close')).toBe(true)
-    expect(snapshots.every(item => item.content.backtestConfigDefaults.range?.preset === 'CUSTOM')).toBe(true)
+    for (const snapshot of snapshots) {
+      const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === snapshot.templateId)
+      expect(snapshot.content.backtestConfigDefaults.range).toEqual({
+        preset: 'CUSTOM',
+        startAt: new Date(evidence!.backtestFrom).toISOString(),
+        endAt: new Date(evidence!.backtestTo).toISOString(),
+      })
+    }
   })
 
-  it('builds backtest adapters for all six official signal-generator snapshots', async () => {
+  it('builds backtest adapters for all official signal-generator snapshots', async () => {
     const adapter = new BacktestStrategyAdapterService()
 
     await expect(Promise.all(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(async (template) => {
@@ -69,7 +180,39 @@ describe('OfficialStrategyPlazaTemplateService', () => {
         params: content.paramsSnapshot,
         executionEnvelope: content.executionEnvelope,
       })
-    }))).resolves.toHaveLength(6)
+    }))).resolves.toHaveLength(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.length)
+  })
+
+  it('low drawdown regime gate official script opens when EMA20 crosses above EMA50 under the EMA50 regime', async () => {
+    const template = service.getRequired('low-drawdown-regime-gate')
+    const content = buildOfficialStrategySnapshotContent(template)
+    const strategy = await new BacktestStrategyAdapterService().build({
+      id: template.id,
+      protocolVersion: 'v1',
+      scriptCode: content.scriptSnapshot,
+      params: content.paramsSnapshot,
+      executionEnvelope: content.executionEnvelope,
+    })
+    const bars = Array.from({ length: 60 }, (_, index) => ({
+      timestamp: index + 1,
+      time: index + 1,
+      open: index === 59 ? 100 : 100,
+      high: index === 59 ? 121 : 101,
+      low: 99,
+      close: index === 59 ? 120 : 100,
+      volume: 1,
+    }))
+
+    await expect(strategy.fn({
+      bars,
+      currentPrice: 120,
+      position: { side: 'flat', qty: 0 },
+      accountDrawdownPct: 0,
+    } satisfies StrategyExecutionContextV1)).resolves.toMatchObject({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      meta: { templateId: 'low-drawdown-regime-gate' },
+    })
   })
 
   it('exposes fixed run parameters without user override fields', () => {
