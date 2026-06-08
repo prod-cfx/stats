@@ -75,11 +75,7 @@ function buildPlazaEditBacktestDraftConfig(
   }
 
   return {
-    range: {
-      preset: 'CUSTOM',
-      ...(typeof defaults.range?.startAt === 'string' ? { startAt: defaults.range.startAt } : {}),
-      ...(typeof defaults.range?.endAt === 'string' ? { endAt: defaults.range.endAt } : {}),
-    },
+    range: buildBacktestDraftRange(defaults.range),
     execution: {
       initialCash: typeof defaults.initialCash === 'number' ? defaults.initialCash : 10000,
       leverage: typeof defaults.leverage === 'number' ? defaults.leverage : null,
@@ -88,5 +84,25 @@ function buildPlazaEditBacktestDraftConfig(
       priceSource: defaults.priceSource === 'open' || defaults.priceSource === 'mid' ? defaults.priceSource : 'close',
       allowPartial: defaults.allowPartial === true,
     },
+  }
+}
+
+function buildBacktestDraftRange(defaultsRange: {
+  preset?: unknown
+  startAt?: unknown
+  endAt?: unknown
+} | undefined): AiQuantConversationBacktestConfigDto['range'] {
+  const preset = defaultsRange?.preset === '7D'
+    || defaultsRange?.preset === '30D'
+    || defaultsRange?.preset === '90D'
+    || defaultsRange?.preset === '1Y'
+    || defaultsRange?.preset === 'CUSTOM'
+    ? defaultsRange.preset
+    : 'CUSTOM'
+
+  return {
+    preset,
+    ...(preset === 'CUSTOM' && typeof defaultsRange?.startAt === 'string' ? { startAt: defaultsRange.startAt } : {}),
+    ...(preset === 'CUSTOM' && typeof defaultsRange?.endAt === 'string' ? { endAt: defaultsRange.endAt } : {}),
   }
 }

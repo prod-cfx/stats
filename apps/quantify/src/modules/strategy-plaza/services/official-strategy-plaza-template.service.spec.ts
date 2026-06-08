@@ -59,6 +59,28 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     }
   })
 
+  it('keeps optimized templates in their original Strategy Plaza categories', () => {
+    const categoryByTemplateId = new Map(service.list().map(template => [template.id, template.category]))
+
+    expect(Object.fromEntries([
+      'fixed-grid-gated',
+      'trend-filtered-grid',
+      'grid-breakout-stop',
+      'drawdown-dca-budget',
+      'timed-dca-budget',
+      'orderbook-imbalance-long',
+      'funding-oi-confirmation',
+    ].map(templateId => [templateId, categoryByTemplateId.get(templateId)]))).toEqual({
+      'fixed-grid-gated': '网格',
+      'trend-filtered-grid': '网格',
+      'grid-breakout-stop': '网格',
+      'drawdown-dca-budget': 'DCA',
+      'timed-dca-budget': 'DCA',
+      'orderbook-imbalance-long': '盘口',
+      'funding-oi-confirmation': '衍生品事件',
+    })
+  })
+
   it('requires verified backtest evidence for every live official template', () => {
     const evidenceByTemplateId = new Set(
       OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.map(item => item.templateId),
@@ -104,7 +126,16 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('grid-runtime')
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
     expect(snapshots.every(item => item.content.backtestConfigDefaults.priceSource === 'close')).toBe(true)
-    expect(snapshots.every(item => item.content.backtestConfigDefaults.range?.preset === 'CUSTOM')).toBe(true)
+    for (const snapshot of snapshots) {
+      const template = service.getRequired(snapshot.templateId)
+      const usesExternalEventStream = template.expectedAtomKeys.some(atomKey =>
+        atomKey.startsWith('orderbook.')
+        || atomKey.startsWith('fundingRate.')
+        || atomKey.startsWith('openInterest.')
+        || atomKey.startsWith('liquidation.'),
+      )
+      expect(snapshot.content.backtestConfigDefaults.range?.preset).toBe(usesExternalEventStream ? '7D' : 'CUSTOM')
+    }
   })
 
   it('builds backtest adapters for all official signal-generator snapshots', async () => {

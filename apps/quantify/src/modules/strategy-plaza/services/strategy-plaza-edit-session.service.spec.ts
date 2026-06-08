@@ -240,6 +240,29 @@ describe('StrategyPlazaEditSessionService', () => {
     }))
   })
 
+  it('persists the rolling external-event backtest preset when using the default draft builder', async () => {
+    const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
+    const templates = { getRequired: jest.fn().mockReturnValue(orderbookTemplate) }
+    const codegenConversationService = {
+      startSession: jest.fn().mockResolvedValue({ id: 'session-book', conversationId: 'conversation-book' }),
+      updateConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
+    }
+    const service = new StrategyPlazaEditSessionService(
+      templates as never,
+      codegenConversationService as never,
+    )
+
+    await service.startEditSession({ userId: 'user-1', templateId: 'orderbook-imbalance-long' })
+
+    expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
+      'conversation-book',
+      'user-1',
+      expect.objectContaining({
+        range: { preset: '7D' },
+      }),
+    )
+  })
+
   it('keeps the verified fixed backtest window for templates without external event feeds', () => {
     const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
 

@@ -117,12 +117,15 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
   it('keeps orderbook imbalance as an entry predicate in rules mainflow', () => {
     const rules = buildRulesFromMessage(getTemplateInitialMessage('orderbook-imbalance-long'))
     const orderbookImbalance = findRuleAtom(rules, 'orderbook.imbalance')
+    const breakout = findRuleAtom(rules, 'price.rolling_extrema_breakout')
     const entryRule = rules.find(rule => rule.phase === 'entry')
     const entryConditionKeys = entryRule ? collectAtomLeaves(entryRule.condition).map(atom => atom.key) : []
 
     expect(orderbookImbalance).toBeDefined()
-    expect(orderbookImbalance?.params).toMatchObject({ operator: 'gt', ratio: 1.5 })
-    expect(entryConditionKeys).toEqual(expect.arrayContaining(['indicator.cross_over', 'orderbook.imbalance']))
+    expect(orderbookImbalance?.params).toMatchObject({ operator: 'gt', ratio: 1.083333 })
+    expect(breakout?.params).toMatchObject({ event: 'breakout_up', extrema: 'high', lookbackBars: 6 })
+    expect(entryConditionKeys).toEqual(expect.arrayContaining(['price.rolling_extrema_breakout', 'orderbook.imbalance']))
+    expect(entryConditionKeys).not.toContain('indicator.cross_over')
     expect(entryConditionKeys).not.toContain('gate.regime')
   })
 
@@ -168,22 +171,26 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
   it('keeps breakout stop grid as explicit fixed range grid in rules mainflow', () => {
     const rules = buildRulesFromMessage(getTemplateInitialMessage('grid-breakout-stop'))
     const fixedGrid = findRuleAtom(rules, 'program.fixed_grid_gated')
+    const stopLoss = findRuleAtom(rules, 'risk.stop_loss_pct')
+    const takeProfit = findRuleAtom(rules, 'risk.take_profit_pct')
 
     expect(fixedGrid).toBeDefined()
     expect(fixedGrid?.params).toMatchObject({
       programKind: 'fixed_grid_gated',
       lowerBound: 65600,
       upperBound: 69600,
-      absoluteSpacing: 10,
+      absoluteSpacing: 100,
       breakoutAction: 'stop',
     })
+    expect(stopLoss?.params).toMatchObject({ valuePct: 0.6 })
+    expect(takeProfit?.params).toMatchObject({ valuePct: 0.2 })
   })
 
   it('renders orderbook imbalance instead of an EMA-only precondition in confirmation summary', () => {
     const view = new SemanticStateProjectionService().buildConversationView(buildStateFromMessage(getTemplateInitialMessage('orderbook-imbalance-long')))
 
     expect(view.summary).toContain('盘口失衡')
-    expect(view.summary).toContain('EMA20 上穿 EMA50')
+    expect(view.summary).toContain('突破过去 6 根 K 线')
     expect(view.summary).not.toContain('只在价格高于 EMA')
     expect(view.summary).not.toContain('只在价格低于 EMA')
   })
@@ -231,6 +238,8 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     const atoms = collectRuleAtoms(rules)
     const dcaProgram = findRuleAtom(rules, 'program.dca')
     const dcaSchedule = findRuleAtom(rules, 'position.dca_schedule')
+    const takeProfit = findRuleAtom(rules, 'risk.take_profit_pct')
+    const stopLoss = findRuleAtom(rules, 'risk.stop_loss_pct')
 
     expect(dcaProgram).toBeDefined()
     expect(dcaSchedule?.params).toMatchObject({
@@ -239,6 +248,8 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
       perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
       capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
     })
+    expect(takeProfit?.params).toMatchObject({ valuePct: 0.3 })
+    expect(stopLoss?.params).toMatchObject({ valuePct: 3 })
     expect(atoms.map(atom => atom.key)).not.toEqual(expect.arrayContaining(['action.open_short', 'action.close_short']))
   })
 
@@ -261,14 +272,17 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     const entryRule = rules.find(rule => rule.phase === 'entry')
     const funding = findRuleConditionAtom(entryRule, 'fundingRate.condition')
     const oi = findRuleConditionAtom(entryRule, 'openInterest.condition')
+    const breakout = findRuleConditionAtom(entryRule, 'price.rolling_extrema_breakout')
     const entryConditionKeys = entryRule ? collectAtomLeaves(entryRule.condition).map(atom => atom.key) : []
 
-    expect(entryConditionKeys).toEqual(expect.arrayContaining(['indicator.cross_over', 'fundingRate.condition', 'openInterest.condition']))
+    expect(entryConditionKeys).toEqual(expect.arrayContaining(['price.rolling_extrema_breakout', 'fundingRate.condition', 'openInterest.condition']))
+    expect(entryConditionKeys).not.toContain('indicator.cross_over')
+    expect(breakout?.params).toMatchObject({ event: 'breakout_up', extrema: 'high', lookbackBars: 8 })
     expect(funding?.params).toMatchObject({ operator: 'GT', value: 0 })
-    expect(oi?.params).toMatchObject({ direction: 'up', operator: 'GT', value: 3 })
+    expect(oi?.params).toMatchObject({ direction: 'up', operator: 'GT', value: 0.5 })
   })
 
-  it('fires orderbook imbalance confirmation with EMA cross in generated runtime artifacts', async () => {
+  it('fires orderbook imbalance confirmation with rolling breakout in generated runtime artifacts', async () => {
     const artifacts = await generateArtifactsFromTemplate('orderbook-imbalance-long')
     const ast = artifacts.ast
     const exprValues = evaluateExprPool(
@@ -302,7 +316,7 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(decision.action).toBe('OPEN_LONG')
   })
 
-  it('fires funding plus OI confirmation with EMA cross in generated runtime artifacts', async () => {
+  it('fires funding plus OI confirmation with rolling breakout in generated runtime artifacts', async () => {
     const artifacts = await generateArtifactsFromTemplate('funding-oi-confirmation')
     const ast = artifacts.ast
     const exprValues = evaluateExprPool(
