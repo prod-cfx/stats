@@ -51,6 +51,37 @@ jobs:
             | grep -v grep \
             || true
 
+          echo "[INFO] pm2 list:"
+          pm2 list || true
+          echo "[INFO] pm2 jlist summary:"
+          pm2 jlist 2>/dev/null | node -e '
+            let s = ""
+            process.stdin.on("data", d => s += d)
+            process.stdin.on("end", () => {
+              const apps = JSON.parse(s || "[]")
+              console.log(JSON.stringify(apps.map(app => ({
+                name: app.name,
+                status: app.pm2_env?.status,
+                pid: app.pid,
+                restart_time: app.pm2_env?.restart_time,
+                unstable_restarts: app.pm2_env?.unstable_restarts,
+                cwd: app.pm2_env?.pm_cwd,
+                out: app.pm2_env?.pm_out_log_path,
+                err: app.pm2_env?.pm_err_log_path,
+              })), null, 2))
+            })
+          ' || true
+
+          echo "[INFO] local quantify health/template curl:"
+          curl -sS -m 5 -w '\nhttp=%{http_code}\n' http://127.0.0.1:3010/api/v1/health 2>&1 | tail -c 4000 || true
+          curl -sS -m 5 -w '\nhttp=%{http_code}\n' http://127.0.0.1:3010/api/v1/strategy-plaza/templates 2>&1 | tail -c 4000 || true
+
+          echo "[INFO] recent quantify logs:"
+          for log in "$HOME/.pm2/logs/quantify-api-error.log" "$HOME/.pm2/logs/quantify-api-out.log" "$HOME/.pm2/logs/quantify-backtest-worker-error.log" "$HOME/.pm2/logs/quantify-backtest-worker-out.log"; do
+            echo "[INFO] log=$log"
+            tail -n 160 "$log" 2>&1 || true
+          done
+
           CURRENT_DIR="$(readlink "$APP_ROOT/current" 2>/dev/null || true)"
           echo "[INFO] current=${CURRENT_DIR:-missing}"
           if [ -n "$CURRENT_DIR" ]; then
