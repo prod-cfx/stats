@@ -327,7 +327,7 @@ export function runDecisionPrograms(
       continue
     }
 
-    if (exprValues[program.when] !== true) {
+    if (exprValues[program.when] !== true && !canContinueStartedDcaProgram(program, ctx)) {
       continue
     }
 
@@ -528,7 +528,11 @@ function markPositionLifecycleState(
   program: DecisionProgramNode,
   decision: Readonly<StrategyDecisionV1>,
 ): void {
-  if (decision.action !== 'OPEN_LONG' && decision.action !== 'OPEN_SHORT') {
+  if (
+    decision.action !== 'OPEN_LONG'
+    && decision.action !== 'OPEN_SHORT'
+    && decision.action !== 'ADJUST_POSITION'
+  ) {
     return
   }
 
@@ -542,6 +546,19 @@ function markPositionLifecycleState(
     incrementSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
     incrementDcaSpentQuote(ctx, dcaMeta.stateKey, program)
   }
+}
+
+function canContinueStartedDcaProgram(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const dcaMeta = program.metadata?.dcaSchedule
+  if (!dcaMeta || (dcaMeta.triggerMode ?? 'signal') === 'signal') {
+    return false
+  }
+
+  const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+  return currentCount.present && currentCount.value > 0 && hasSameSidePositionSnapshot(ctx, program)
 }
 
 function evaluatePositionLifecycle(
