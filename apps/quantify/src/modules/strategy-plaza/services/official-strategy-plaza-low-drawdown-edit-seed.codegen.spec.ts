@@ -18,6 +18,7 @@ import { StrategySummaryObservationService } from '@/modules/llm-strategy-codege
 import { SemanticStateProjectionService } from '@/modules/llm-strategy-codegen/services/semantic-state-projection.service'
 import { collectAtomLeaves, listRuleEffects } from '@/modules/llm-strategy-codegen/types/atom-expr'
 import type { SemanticState } from '@/modules/llm-strategy-codegen/types/semantic-state'
+import { evaluateExprPool, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
 
 function createPublicationStage(): CodegenPublicationGenerationStage {
@@ -77,6 +78,17 @@ function findRuleConditionAtom(rule: SemanticRule | undefined, key: string): Ato
   return collectAtomLeaves(rule.condition).find(atom => atom.key === key)
 }
 
+async function generateArtifactsFromTemplate(templateId: string) {
+  return createPublicationStage().generate({ semanticState: buildStateFromMessage(getTemplateInitialMessage(templateId)) })
+}
+
+function risingBars(count = 60) {
+  return Array.from({ length: count }, (_, index) => {
+    const close = index < count - 1 ? 100 : 130
+    return { open: close, high: close, low: close, close, volume: 1, timestamp: index + 1 }
+  })
+}
+
 describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
   it.each([
     'low-drawdown-regime-gate',
@@ -86,6 +98,7 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     'timed-dca-budget',
     'trend-filtered-grid',
     'funding-oi-confirmation',
+    'grid-breakout-stop',
   ])('%s generates compiled script from the edit seed used by the edit flow', async (templateId) => {
     const message = getTemplateInitialMessage(templateId)
     const patch = new GenericSeedDispatcher().dispatch(message) as CodegenSemanticPatch
@@ -124,6 +137,34 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
       upperBound: 60000,
       levelCount: 10,
       stepPct: 5,
+    })
+  })
+
+  it.each([
+    'fixed-grid-gated',
+    'trend-filtered-grid',
+    'grid-breakout-stop',
+  ])('%s keeps grid side mode separate from account position mode', async (templateId) => {
+    const state = buildStateFromMessage(getTemplateInitialMessage(templateId))
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const executionModel = artifacts.compiledScript.match(/const EXECUTION_MODEL = (\{.*\}) as const/u)
+
+    expect(executionModel).not.toBeNull()
+    expect(artifacts.compiled.ir.portfolio.positionMode).toBe('long_only')
+    expect(JSON.parse(executionModel?.[1] ?? '{}').positionMode).toBe('long_only')
+  })
+
+  it('keeps breakout stop grid as explicit fixed range grid in rules mainflow', () => {
+    const rules = buildRulesFromMessage(getTemplateInitialMessage('grid-breakout-stop'))
+    const fixedGrid = findRuleAtom(rules, 'program.fixed_grid_gated')
+
+    expect(fixedGrid).toBeDefined()
+    expect(fixedGrid?.params).toMatchObject({
+      programKind: 'fixed_grid_gated',
+      lowerBound: 79200,
+      upperBound: 80200,
+      absoluteSpacing: 10,
+      breakoutAction: 'stop',
     })
   })
 
@@ -180,6 +221,15 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(atoms.map(atom => atom.key)).not.toEqual(expect.arrayContaining(['action.open_short', 'action.close_short']))
   })
 
+  it('does not compile timed DCA pause rules into an unconditional entry cooldown blocker', async () => {
+    const state = buildStateFromMessage(getTemplateInitialMessage('timed-dca-budget'))
+    const artifacts = await createPublicationStage().generate({ semanticState: state })
+    const riskPredicates = artifacts.compiled.ir.riskPredicates ?? []
+
+    expect(riskPredicates.map(predicate => predicate.kind)).not.toContain('cooldownBars')
+    expect(artifacts.compiledScript).toContain('ADD_LONG')
+  })
+
   it('keeps Funding plus OI threshold in rules mainflow', () => {
     const rules = buildRulesFromMessage(getTemplateInitialMessage('funding-oi-confirmation'))
     const entryRule = rules.find(rule => rule.phase === 'entry')
@@ -190,5 +240,77 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(entryConditionKeys).toEqual(expect.arrayContaining(['indicator.cross_over', 'fundingRate.condition', 'openInterest.condition']))
     expect(funding?.params).toMatchObject({ operator: 'GT', value: 0 })
     expect(oi?.params).toMatchObject({ direction: 'up', operator: 'GT', value: 3 })
+  })
+
+  it('fires orderbook imbalance confirmation with EMA cross in generated runtime artifacts', async () => {
+    const artifacts = await generateArtifactsFromTemplate('orderbook-imbalance-long')
+    const ast = artifacts.ast
+    const exprValues = evaluateExprPool(
+      {
+        bars: risingBars(),
+        timestamp: 60,
+        position: { side: 'flat', qty: 0 },
+        accountEquity: 10_000,
+        currentPrice: 130,
+        eventInbox: {
+          'orderbook.imbalance': [{ id: 'book-1', ts: 59, payload: { bidDepth: 1_700, askDepth: 1_000 } }],
+        },
+        __compiledDecisionState: { barIndex: 60, lastTriggeredByProgram: {} },
+      } as never,
+      ast.exprPool,
+      ast.topology.exprOrder,
+      ast.executionModel,
+    )
+    const decision = runDecisionPrograms(
+      { position: { side: 'flat', qty: 0 }, accountEquity: 10_000, currentPrice: 130, __compiledDecisionState: { barIndex: 60, lastTriggeredByProgram: {} } } as never,
+      ast.decisionPrograms as never,
+      exprValues,
+      { forceExit: false, blockNewEntry: false, strategyHalt: false },
+      ast.topology.decisionOrder,
+      undefined,
+      undefined,
+      ast.orchestrationScopes,
+      ast.orchestrationLegScopes,
+    )
+
+    expect(decision.action).toBe('OPEN_LONG')
+  })
+
+  it('fires funding plus OI confirmation with EMA cross in generated runtime artifacts', async () => {
+    const artifacts = await generateArtifactsFromTemplate('funding-oi-confirmation')
+    const ast = artifacts.ast
+    const exprValues = evaluateExprPool(
+      {
+        bars: risingBars(),
+        timestamp: 60,
+        position: { side: 'flat', qty: 0 },
+        accountEquity: 10_000,
+        currentPrice: 130,
+        eventInbox: {
+          'funding.rate': [{ id: 'funding-1', ts: 59, payload: { fundingRate: 0.0001 } }],
+          open_interest: [
+            { id: 'oi-1', ts: 58, payload: { openInterest: 100 } },
+            { id: 'oi-2', ts: 59, payload: { openInterest: 104 } },
+          ],
+        },
+        __compiledDecisionState: { barIndex: 60, lastTriggeredByProgram: {} },
+      } as never,
+      ast.exprPool,
+      ast.topology.exprOrder,
+      ast.executionModel,
+    )
+    const decision = runDecisionPrograms(
+      { position: { side: 'flat', qty: 0 }, accountEquity: 10_000, currentPrice: 130, __compiledDecisionState: { barIndex: 60, lastTriggeredByProgram: {} } } as never,
+      ast.decisionPrograms as never,
+      exprValues,
+      { forceExit: false, blockNewEntry: false, strategyHalt: false },
+      ast.topology.decisionOrder,
+      undefined,
+      undefined,
+      ast.orchestrationScopes,
+      ast.orchestrationLegScopes,
+    )
+
+    expect(decision.action).toBe('OPEN_LONG')
   })
 })

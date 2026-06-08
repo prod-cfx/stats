@@ -3559,9 +3559,6 @@ export class CanonicalSpecBuilderService {
     if (marketType !== 'perp') {
       return 'spot'
     }
-    if (this.hasBothSideGridIntent(state)) {
-      return 'perp_neutral'
-    }
 
     const exposureMode = exposure ? this.readShapeString(exposure.shape, 'mode') : null
     if (exposureMode === 'long' || state.position?.positionMode === 'long_only') {
@@ -3570,27 +3567,7 @@ export class CanonicalSpecBuilderService {
     if (exposureMode === 'short' || state.position?.positionMode === 'short_only') {
       return 'perp_short'
     }
-    return 'perp_neutral'
-  }
-
-  private hasBothSideGridIntent(state: SemanticState): boolean {
-    const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
-      params?.sideMode === 'both'
-    for (const constraint of this.readSemanticPositionConstraintFacts(state)) {
-      if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
-        return true
-      }
-    }
-    for (const rule of state.rules ?? []) {
-      const leaves = [
-        ...collectAtomLeaves(rule.condition),
-        ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
-      ]
-      if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(leaf.params))) {
-        return true
-      }
-    }
-    return false
+    return 'perp_long'
   }
 
   private readShapeNumber(shape: SemanticCapabilityShape, key: string): number | null {

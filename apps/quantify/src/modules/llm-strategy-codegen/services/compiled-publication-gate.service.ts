@@ -20,7 +20,6 @@ import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semanti
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import { lookupIrFieldsForClarificationReason } from '../types/clarification-slot-ir-mapping'
-import { GRID_PROGRAM_KINDS } from '../types/semantic-state'
 import { assertStrictSymbol } from '../utils/strict-symbol.util'
 import { buildStrategyAstDigestProjection } from './canonical-strategy-ast-compiler.service'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
@@ -1154,15 +1153,8 @@ export class CompiledPublicationGateService {
     snapshot: Record<string, unknown>,
   ): 'long_only' | 'short_only' | 'long_short' | null {
     const orderProgramMode = this.readOrderProgramPositionMode(snapshot)
-    // Issue #1437：网格策略走 spec.orchestration.programs[dynamic_grid / fixed_grid_gated /
-    //   adaptive_volatility_grid] 而非 orderPrograms；grid program 天然 long_short
-    //   （runtime 双向挂单），但不会在 rules.actions 中显式 OPEN_LONG/SHORT。原实现只看
-    //   orderPrograms + rules.actions OPEN_LONG/SHORT，对 grid case 始终落 long_only → 与
-    //   IR/script 三方不一致，触发 PUBLICATION_GATE_BLOCKED（用户实测策略 3）。
-    const hasGridOrchestration = this.detectGridOrchestrationPositionMode(snapshot)
     const rules = snapshot.rules
     if (!Array.isArray(rules) || rules.length === 0) {
-      if (hasGridOrchestration) return 'long_short'
       return orderProgramMode
     }
 
@@ -1189,8 +1181,6 @@ export class CompiledPublicationGateService {
       })
     })
 
-    // Issue #1437：grid orchestration 与其它信号并列作为 long_short 真相源
-    if (hasGridOrchestration) return 'long_short'
     if (orderProgramMode === 'long_short') return 'long_short'
     if (orderProgramMode === 'long_only' && hasShortExposure) return 'long_short'
     if (orderProgramMode === 'short_only' && hasLongExposure) return 'long_short'
@@ -1198,30 +1188,6 @@ export class CompiledPublicationGateService {
     if (orderProgramMode) return orderProgramMode
     if (hasShortExposure) return 'short_only'
     return 'long_only'
-  }
-
-  /**
-   * Issue #1437：检测 spec.orchestration.programs 是否含双向网格类 programKind。
-   *   网格 program 在 runtime 双向挂单（OPEN_LONG + OPEN_SHORT 同时维护），天然
-   *   long_short，但不会在 rules.actions 中显式 OPEN_LONG/SHORT。原 positionMode
-   *   推断逻辑无法捕获，导致 publication gate 三方不一致拦截网格策略。
-   *
-   *   grid programKind（与 atom-contract-registry 中 program.* bucket=orchestration 对齐）：
-   *     - dynamic_grid（用户实测策略 3 走这条）
-   *     - fixed_grid_gated
-   *     - adaptive_volatility_grid
-   *   非网格 program（event_listener）不算 long_short 真相源。
-   */
-  private detectGridOrchestrationPositionMode(snapshot: Record<string, unknown>): boolean {
-    const orchestration = snapshot.orchestration
-    if (!orchestration || typeof orchestration !== 'object' || Array.isArray(orchestration)) return false
-    const programs = (orchestration as Record<string, unknown>).programs
-    if (!Array.isArray(programs)) return false
-    return programs.some((program) => {
-      if (!program || typeof program !== 'object' || Array.isArray(program)) return false
-      const programKind = (program as Record<string, unknown>).programKind
-      return typeof programKind === 'string' && (GRID_PROGRAM_KINDS as ReadonlySet<string>).has(programKind)
-    })
   }
 
   private readOrderProgramPositionMode(

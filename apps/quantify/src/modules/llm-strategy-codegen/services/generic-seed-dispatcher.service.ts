@@ -2800,22 +2800,26 @@ export class GenericSeedDispatcher {
   }
 
   private hasFixedGridGatedProgramIntent(userMessage: string): boolean {
-    return /固定网格|门控网格|区间挂|步长|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
+    return /固定网格|门控网格|区间挂|区间内采用|双向网格|突破停止|上下边界|步长|每格\s*\d+(?:\.\d+)?\s*(?:USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
   }
 
-  private readFixedGridProgramParamsFromMessage(userMessage: string): Record<string, number> {
+  private readFixedGridProgramParamsFromMessage(userMessage: string): Record<string, unknown> {
     const rangeMatch = userMessage.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const levelMatch = userMessage.match(/(?:共|总计)?\s*(\d+)\s*[格档]/u)
     const stepMatch = userMessage.match(/(?:(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*(?:步长|网格步长))/u)
+    const absoluteSpacingMatch = userMessage.match(/每格\s*(\d+(?:\.\d+)?)\s*(?:USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
     const lowerBound = rangeMatch?.[1] ? Number(rangeMatch[1]) : null
     const upperBound = rangeMatch?.[2] ? Number(rangeMatch[2]) : null
     const levelCount = levelMatch?.[1] ? Number(levelMatch[1]) : null
     const stepPct = stepMatch?.[1] ? Number(stepMatch[1]) : (stepMatch?.[2] ? Number(stepMatch[2]) : null)
+    const absoluteSpacing = absoluteSpacingMatch?.[1] ? Number(absoluteSpacingMatch[1]) : null
     return {
       ...(lowerBound !== null && Number.isFinite(lowerBound) ? { lowerBound } : {}),
       ...(upperBound !== null && Number.isFinite(upperBound) ? { upperBound } : {}),
       ...(levelCount !== null && Number.isInteger(levelCount) ? { levelCount } : {}),
       ...(stepPct !== null && Number.isFinite(stepPct) ? { stepPct } : {}),
+      ...(absoluteSpacing !== null && Number.isFinite(absoluteSpacing) ? { absoluteSpacing } : {}),
+      ...(/(?:突破|越界|上下边界)[^，。；;]*(?:停止|撤单|取消)|(?:停止|撤单|取消)[^，。；;]*(?:突破|越界|上下边界)/u.test(userMessage) ? { breakoutAction: 'stop', onDeactivate: 'cancel' } : {}),
     }
   }
 

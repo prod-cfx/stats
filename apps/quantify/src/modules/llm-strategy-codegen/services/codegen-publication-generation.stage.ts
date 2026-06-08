@@ -708,11 +708,6 @@ export class CodegenPublicationGenerationStage {
     if (hasShort) return 'short_only'
     if (hasLong) return 'long_only'
 
-    const hasGridProgram = (canonicalSpec.orchestration?.programs ?? []).some(program =>
-      program.programKind === 'fixed_grid_gated'
-      || program.programKind === 'dynamic_grid'
-      || program.programKind === 'adaptive_volatility_grid',
-    )
     const canonicalSpecWithOrderPrograms = canonicalSpec as unknown as { orderPrograms?: unknown }
     const orderPrograms = Array.isArray(canonicalSpecWithOrderPrograms.orderPrograms)
       ? canonicalSpecWithOrderPrograms.orderPrograms as Array<{ programKind?: unknown, mode?: unknown }>
@@ -720,7 +715,6 @@ export class CodegenPublicationGenerationStage {
     if (orderPrograms.some(program => program.mode === 'perp_neutral')) return 'long_short'
     if (orderPrograms.some(program => program.mode === 'perp_short')) return 'short_only'
     if (orderPrograms.some(program => program.programKind === 'fixed_grid_gated')) return 'long_only'
-    if (hasGridProgram) return canonicalSpec.market.marketType === 'perp' ? 'long_short' : 'long_only'
 
     const semanticMode = semanticState.position?.positionMode
     if (semanticMode === 'long_only' || semanticMode === 'short_only' || semanticMode === 'long_short') {

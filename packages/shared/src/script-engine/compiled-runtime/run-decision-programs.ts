@@ -659,14 +659,38 @@ function evaluatePositionLifecycle(
     const triggerDecision = evaluateDcaTriggerMode(program, ctx, dcaMeta)
     if (triggerDecision) return triggerDecision
 
+    const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+
     if (!hasSameSidePositionSnapshot(ctx, program)) {
+      if (readCurrentQty(ctx) !== 0 || !currentCount.present || currentCount.value !== 0) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.position_snapshot_missing`,
+        }
+      }
+
+      if (
+        Number.isFinite(dcaMeta.capitalCap)
+        && exceedsDcaCapitalCap(program, ctx, currentCount.value, dcaMeta.stateKey, dcaMeta.capitalCap)
+      ) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.dca_capital_cap`,
+        }
+      }
+
+      const initialDecision = buildFirstApplicableDecision(program, ctx)
+      if (initialDecision && initialDecision.action !== 'NOOP') {
+        markPositionLifecycleState(ctx, program, initialDecision)
+        return initialDecision
+      }
+
       return {
         action: 'NOOP',
-        reason: `compiled.${program.id}.position_snapshot_missing`,
+        reason: `compiled.${program.id}.noop`,
       }
     }
 
-    const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
     if (!currentCount.present) {
       return {
         action: 'NOOP',
