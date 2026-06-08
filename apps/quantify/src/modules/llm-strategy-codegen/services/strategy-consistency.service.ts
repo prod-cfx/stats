@@ -1285,10 +1285,6 @@ export class StrategyConsistencyService {
     spec: CanonicalStrategySpec,
   ): 'long_only' | 'short_only' | 'long_short' {
     if (spec.version === 2) {
-      if (this.hasGridOrchestrationProgram(spec.orchestration?.programs ?? [])) {
-        return spec.market.marketType === 'perp' ? 'long_short' : 'long_only'
-      }
-
       const orderProgramMode = this.resolveOrderProgramPositionMode(spec.orderPrograms ?? [])
       const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_LONG'
@@ -1635,10 +1631,6 @@ export class StrategyConsistencyService {
   private resolveExpectedPositionModeFromIr(
     ir: CanonicalStrategyIrV1,
   ): 'long_only' | 'short_only' | 'long_short' {
-    if (this.hasGridOrchestrationProgram(ir.orchestrationPrograms)) {
-      return ir.market.instrumentType === 'perpetual' ? 'long_short' : 'long_only'
-    }
-
     const orderProgramMode = this.resolveIrOrderProgramPositionMode(ir.orderPrograms)
     const hasLongExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
       action.kind === 'OPEN_LONG'
