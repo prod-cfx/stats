@@ -159,14 +159,12 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
     expect(snapshots.every(item => item.content.backtestConfigDefaults.priceSource === 'close')).toBe(true)
     for (const snapshot of snapshots) {
-      const template = service.getRequired(snapshot.templateId)
-      const usesExternalEventStream = template.expectedAtomKeys.some(atomKey =>
-        atomKey.startsWith('orderbook.')
-        || atomKey.startsWith('fundingRate.')
-        || atomKey.startsWith('openInterest.')
-        || atomKey.startsWith('liquidation.'),
-      )
-      expect(snapshot.content.backtestConfigDefaults.range?.preset).toBe(usesExternalEventStream ? '7D' : 'CUSTOM')
+      const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === snapshot.templateId)
+      expect(snapshot.content.backtestConfigDefaults.range).toEqual({
+        preset: 'CUSTOM',
+        startAt: new Date(evidence!.backtestFrom).toISOString(),
+        endAt: new Date(evidence!.backtestTo).toISOString(),
+      })
     }
   })
 

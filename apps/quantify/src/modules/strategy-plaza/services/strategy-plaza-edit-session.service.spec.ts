@@ -228,19 +228,19 @@ describe('StrategyPlazaEditSessionService', () => {
     )
   })
 
-  it('uses a short rolling backtest window for templates that depend on live external event feeds', () => {
+  it('uses the verified evidence backtest window for templates that depend on external event feeds', () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const fundingOiTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'funding-oi-confirmation')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(orderbookTemplate)).toEqual(expect.objectContaining({
-      range: { preset: '7D' },
+      range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
     }))
     expect(buildOfficialTemplateBacktestConfigDefaults(fundingOiTemplate)).toEqual(expect.objectContaining({
-      range: { preset: '7D' },
+      range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
     }))
   })
 
-  it('persists the rolling external-event backtest preset when using the default draft builder', async () => {
+  it('persists the verified external-event backtest window when using the default draft builder', async () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const templates = { getRequired: jest.fn().mockReturnValue(orderbookTemplate) }
     const codegenConversationService = {
@@ -258,7 +258,7 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-book',
       'user-1',
       expect.objectContaining({
-        range: { preset: '7D' },
+        range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
       }),
     )
   })

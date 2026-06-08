@@ -38,13 +38,6 @@ export function buildOfficialTemplateStrategyConfig(template: OfficialStrategyPl
 
 export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
   const evidence = evidenceFor(template)
-  const rollingRange = templateRequiresLiveEventWindow(template)
-    ? { preset: '7D' }
-    : {
-        preset: 'CUSTOM',
-        startAt: new Date(evidence.backtestFrom).toISOString(),
-        endAt: new Date(evidence.backtestTo).toISOString(),
-      }
 
   return {
     initialCash: 10000,
@@ -53,17 +46,12 @@ export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialSt
     feeBps: 5,
     priceSource: resolveOfficialTemplateBacktestPriceSource(template.runConfig.deploymentExecutionConfig.priceSource),
     allowPartial: false,
-    range: rollingRange,
+    range: {
+      preset: 'CUSTOM',
+      startAt: new Date(evidence.backtestFrom).toISOString(),
+      endAt: new Date(evidence.backtestTo).toISOString(),
+    },
   }
-}
-
-function templateRequiresLiveEventWindow(template: OfficialStrategyPlazaTemplate): boolean {
-  return (template.expectedAtomKeys ?? []).some(key =>
-    key.startsWith('orderbook.')
-    || key.startsWith('fundingRate.')
-    || key.startsWith('openInterest.')
-    || key.startsWith('liquidation.'),
-  )
 }
 
 export function buildOfficialTemplateDeploymentExecutionDefaults(
