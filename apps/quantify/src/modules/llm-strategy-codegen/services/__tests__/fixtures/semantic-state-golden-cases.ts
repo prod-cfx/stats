@@ -1,3 +1,4 @@
+import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../../../types/atom-expr'
 import type { SemanticState, SemanticTriggerState } from '../../../types/semantic-state'
 
 export const maGoldenCase = {
@@ -34,6 +35,28 @@ function lockedTrigger(
     status: 'locked',
     source: 'user_explicit',
     openSlots: [],
+  }
+}
+
+function atom(key: string, params: Record<string, unknown> = {}, sideScope?: 'long' | 'short' | 'both'): AtomExpr {
+  return sideScope ? { kind: 'atom', key, params, sideScope } : { kind: 'atom', key, params }
+}
+
+function emptyEffects(overrides: Partial<RuleEffectsByRole> = {}): RuleEffectsByRole {
+  return {
+    actions: [],
+    risks: [],
+    positions: [],
+    orchestration: [],
+    programs: [],
+    ...overrides,
+  }
+}
+
+function semanticRule(input: Omit<SemanticRule, 'effects'> & { effects?: Partial<RuleEffectsByRole> }): SemanticRule {
+  return {
+    ...input,
+    effects: emptyEffects(input.effects),
   }
 }
 
@@ -120,6 +143,42 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
         ...base.action,
         { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
       ],
+      rules: [
+        semanticRule({
+          id: 'entry-bollinger-volume-confirmation',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              atom('price.detect.indicator_boundary', {
+                groupId: 'entry-bollinger-volume-confirmation',
+                boundaryRole: 'lower',
+                confirmationMode: 'touch',
+                indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+              }, 'long'),
+              atom('volume.relative_average', {
+                groupId: 'entry-bollinger-volume-confirmation',
+                lookbackBars: 20,
+                multiplier: 1.5,
+                comparator: 'gt',
+              }, 'long'),
+            ],
+          },
+          effects: { actions: [atom('action.open_long')] },
+        }),
+        semanticRule({
+          id: 'exit-bollinger-upper-touch',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.detect.indicator_boundary', {
+            boundaryRole: 'upper',
+            confirmationMode: 'touch',
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+          }, 'long'),
+          effects: { actions: [atom('action.close_long')] },
+        }),
+      ],
     }
   }
 
@@ -147,6 +206,20 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
         source: 'user_explicit',
         openSlots: [],
       }],
+      rules: [semanticRule({
+        id: 'entry-breakout-retest',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('condition.sequence', {
+          sequenceKind: 'breakout_retest',
+          lookbackWindow: '24h',
+          memoryKey: 'breakout',
+        }, 'long'),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.remembered_level_stop', { levelKey: 'breakout' })],
+        },
+      })],
     }
   }
 
@@ -184,5 +257,23 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
         openSlots: [],
       },
     ],
+    rules: [semanticRule({
+      id: 'entry-ma-above-with-atr-risk',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: atom('indicator.above', {
+        indicator: 'ma',
+        referenceRole: 'trend',
+        'reference.period': 20,
+        reference: { indicator: 'ma', period: 20 },
+      }, 'long'),
+      effects: {
+        actions: [atom('action.open_long')],
+        risks: [
+          atom('risk.atr_multiple_stop', { multiple: 2 }),
+          atom('risk.atr_multiple_take_profit', { multiple: 3 }),
+        ],
+      },
+    })],
   }
 }
