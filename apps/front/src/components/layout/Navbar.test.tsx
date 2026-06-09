@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import zhCommon from '../../../public/locales/zh/common.json'
 import { Navbar } from './Navbar'
 
 const mockOpenAuth = jest.fn()
@@ -67,10 +68,10 @@ jest.mock('react-i18next', () => ({
         'nav.openMenu': '打开菜单',
         'nav.prediction_market': '预测市场',
         'nav.public_companies': '上市公司',
-        'nav.realtime_whales': '实时鲸鱼',
-        'nav.whale_holdings': '鲸鱼持仓',
+        'nav.realtime_whales': '实时',
+        'nav.whale_holdings': '持仓',
         'nav.whale_notifications': '鲸鱼通知',
-        'nav.whales': '鲸鱼',
+        'nav.whales': '巨鲸',
       }[key] ?? options?.defaultValue ?? key),
   }),
 }))
@@ -148,6 +149,13 @@ describe('Navbar mobile menu', () => {
       root.unmount()
     })
     container.remove()
+  })
+
+  it('uses compact Chinese whale navigation labels', () => {
+    expect(zhCommon.nav.whales).toBe('巨鲸')
+    expect(zhCommon.nav.realtime_whales).toBe('实时')
+    expect(zhCommon.nav.whale_holdings).toBe('持仓')
+    expect(zhCommon.nav.whale_notifications).toBe('监控')
   })
 
   it('keeps mobile submenu cards visible while exposing expanded state to assistive tech', async () => {
