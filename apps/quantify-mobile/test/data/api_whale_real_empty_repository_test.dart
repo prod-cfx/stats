@@ -5,20 +5,8 @@ import 'package:quantify_mobile/data/api/api_whale_leaderboard_repository.dart';
 import 'package:quantify_mobile/data/api/api_whale_profile_repository.dart';
 import 'package:quantify_mobile/data/api/api_whale_watch_repository.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
-import 'package:quantify_mobile/data/services/api_client.dart';
 import 'package:quantify_mobile/data/services/generated_backend_api.dart';
-import 'package:quantify_mobile/data/services/whale_services.dart';
 import 'package:quantify_mobile/domain/models/whale_leader_models.dart';
-
-class _FakeApiClient extends ApiClient {
-  _FakeApiClient(this.response) : super(baseUrl: 'http://localhost');
-
-  final dynamic response;
-
-  @override
-  Future<dynamic> get(String path, {Map<String, dynamic>? query}) async =>
-      response;
-}
 
 GeneratedBackendApi _discoverApi(Object data, List<String> calls) {
   final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
@@ -37,6 +25,81 @@ GeneratedBackendApi _discoverApi(Object data, List<String> calls) {
       ),
     );
   return GeneratedBackendApi(dio: dio);
+}
+
+GeneratedBackendApi _emptyProfileApi(List<String> calls) {
+  final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+    ..interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
+          calls.add(options.path);
+          handler.resolve(
+            Response<Object>(
+              requestOptions: options,
+              statusCode: 200,
+              data: _emptyProfileResponse(options.path),
+            ),
+          );
+        },
+      ),
+    );
+  return GeneratedBackendApi(dio: dio);
+}
+
+Object _emptyProfileResponse(String path) {
+  if (path.endsWith('/snapshot')) {
+    return <String, Object?>{
+      'perp': <String, Object?>{
+        'accountValue': 0,
+        'totalMarginUsed': 0,
+        'totalPositionValue': 0,
+        'withdrawable': 0,
+        'marginUsagePercent': 0,
+        'leverageRatio': 0,
+        'unrealizedPnl': 0,
+        'roi': 0,
+      },
+      'spot': <String, Object?>{
+        'totalValue': 0,
+        'balances': <Map<String, Object?>>[],
+      },
+      'total': <String, Object?>{
+        'accountValue': 0,
+        'perpPercent': 0,
+        'spotPercent': 0,
+      },
+    };
+  }
+  if (path.endsWith('/positions')) {
+    return <String, Object?>{
+      'perp': <Map<String, Object?>>[],
+      'spot': <Map<String, Object?>>[],
+    };
+  }
+  if (path.endsWith('/open-orders')) {
+    return <String, Object?>{'orders': <Map<String, Object?>>[]};
+  }
+  if (path.endsWith('/performance')) {
+    return <String, Object?>{
+      'summary': <String, Object?>{
+        'address': '0xempty',
+        'lookbackDays': 30,
+        'trades': 0,
+        'positions': 0,
+        'totalValueUsd': 0,
+        'longCount': 0,
+        'shortCount': 0,
+        'winRatePct': 0,
+        'pnlUsd': 0,
+      },
+      'byAsset': <Map<String, Object?>>[],
+      'trades': <Map<String, Object?>>[],
+    };
+  }
+  if (path.endsWith('/discover-tags')) {
+    return <String, Object?>{'tag': null, 'aiTags': <Map<String, Object?>>[]};
+  }
+  throw StateError('Unhandled path $path');
 }
 
 Map<String, Object?> _discoverTrader({
@@ -110,11 +173,17 @@ void main() {
     });
 
     test('profile 空响应返回空画像，不回退 buildFallbackWhaleProfile', () async {
-      final repo = ApiWhaleProfileRepository(
-        WhaleProfileService(_FakeApiClient(<String, dynamic>{})),
-      );
+      final List<String> calls = <String>[];
+      final repo = ApiWhaleProfileRepository(_emptyProfileApi(calls));
 
       final WhaleProfile profile = await repo.getProfile('0xempty');
+      expect(calls, <String>[
+        '/whale-tracking/traders/0xempty/snapshot',
+        '/whale-tracking/traders/0xempty/positions',
+        '/whale-tracking/traders/0xempty/open-orders',
+        '/whale-tracking/traders/0xempty/performance',
+        '/whale-tracking/traders/0xempty/discover-tags',
+      ]);
       expect(profile.address, '0xempty');
       expect(profile.tag, '未标记');
       expect(profile.holdings, isEmpty);

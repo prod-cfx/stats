@@ -141,7 +141,7 @@ final Provider<WhaleFeedRepository> whaleFeedRepositoryProvider =
 
 final Provider<WhaleProfileRepository> whaleProfileRepositoryProvider =
     Provider<WhaleProfileRepository>((Ref ref) {
-      return ApiWhaleProfileRepository(ref.watch(whaleProfileServiceProvider));
+      return ApiWhaleProfileRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 单个巨鲸地址画像（#1753）。地址详情页 watch；未命中已知地址由 fixture

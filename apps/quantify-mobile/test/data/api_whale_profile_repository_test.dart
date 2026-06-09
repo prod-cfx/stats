@@ -1,155 +1,297 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/api/api_whale_profile_repository.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
-import 'package:quantify_mobile/data/services/api_client.dart';
-import 'package:quantify_mobile/data/services/whale_services.dart';
-
-class _FakeApiClient extends ApiClient {
-  _FakeApiClient(this.response) : super(baseUrl: 'http://localhost');
-
-  final Object? response;
-
-  @override
-  Future<dynamic> get(String path, {Map<String, dynamic>? query}) async =>
-      response;
-}
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 
 void main() {
-  group('ApiWhaleProfileRepository deep mapping', () {
+  group('ApiWhaleProfileRepository contract mapping', () {
     test(
-      '完整响应映射 holdings / actions / stats / stat cards / performance',
+      'loads profile from whale-tracking generated contract endpoints',
       () async {
-        final ApiWhaleProfileRepository repo = ApiWhaleProfileRepository(
-          WhaleProfileService(
-            _FakeApiClient(<String, dynamic>{
-              'data': <String, dynamic>{
-                'address': '0xabc',
-                'tag': '聪明钱',
-                'tagTone': 'accent',
-                'assetSummary': 'BTC · ETH',
-                'holdingsValueDisplay': r'$12.3M',
-                'holdings': <Map<String, dynamic>>[
-                  <String, dynamic>{
-                    'symbol': 'BTC',
-                    'amountDisplay': '12 BTC',
-                    'valueDisplay': r'$1.2M',
-                    'pctDisplay': '+8.1%',
-                    'tone': 'up',
-                  },
-                ],
-                'recentActions': <Map<String, dynamic>>[
-                  <String, dynamic>{
-                    'action': '买入',
-                    'detail': '12 BTC · Binance',
-                    'timeDisplay': '刚刚',
-                    'tone': 'up',
-                  },
-                ],
-                'stats': <String, dynamic>{
-                  'pnlDisplay': r'+$8.4M',
-                  'pnlTone': 'up',
-                  'winRatePct': 72.34,
-                  'realizedDisplay': r'+$4.1M',
-                  'unrealizedDisplay': r'+$4.3M',
-                  'longPct': 64,
-                  'shortPct': 36,
-                  'maxDrawdownDisplay': '12.4%',
-                  'filledOrders': 128,
-                  'closedCount': 42,
-                  'assetPerf': <Map<String, dynamic>>[
-                    <String, dynamic>{
-                      'symbol': 'ETH',
-                      'pctDisplay': '+21.2%',
-                      'tone': 'up',
-                      'glyph': 'E',
-                      'colorHex': 0xff627eea,
-                      'tradeCount': 18,
-                      'positive': true,
-                      'pnlDisplay': r'+$210K',
-                      'feeDisplay': r'$310',
-                    },
-                  ],
-                  'positionPerf': <Map<String, dynamic>>[
-                    <String, dynamic>{
-                      'sym': 'BTC',
-                      'label': 'BTC-PERP',
-                      'glyph': 'B',
-                      'colorHex': 0xfff7931a,
-                      'side': '做多',
-                      'timeDisplay': '8 小时前',
-                      'positive': true,
-                      'pnlDisplay': r'+$82K',
-                      'sizeDisplay': '2 BTC',
-                      'feeDisplay': r'$90',
-                    },
-                  ],
-                },
-                'statCards': <String, dynamic>{
-                  'accountValueDisplay': r'$12.3M',
-                  'accountExtras': <Map<String, dynamic>>[
-                    <String, dynamic>{
-                      'dotHex': 0xff00ff00,
-                      'label': '现货',
-                      'valueDisplay': r'$7.0M',
-                    },
-                  ],
-                  'accountDonut': <String, dynamic>{
-                    'a': 0.7,
-                    'b': 0.3,
-                    'colorAHex': 0xff00ff00,
-                    'colorBHex': 0xffff0000,
-                  },
-                  'availableMarginDisplay': r'$4.2M',
-                  'marginExtras': <Map<String, dynamic>>[],
-                  'marginDonut': <String, dynamic>{
-                    'a': 0.4,
-                    'b': 0.6,
-                    'colorAHex': 0xff00ff00,
-                    'colorBHex': 0xffff0000,
-                  },
-                  'positionValueDisplay': r'$5.1M',
-                  'positionExtras': <Map<String, dynamic>>[],
-                  'positionDonut': <String, dynamic>{
-                    'a': 0.6,
-                    'b': 0.4,
-                    'colorAHex': 0xff00ff00,
-                    'colorBHex': 0xffff0000,
-                  },
-                },
+        final List<RequestOptions> requests = <RequestOptions>[];
+        final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+                requests.add(options);
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: _responseFor(options.path),
+                  ),
+                );
               },
-            }),
-          ),
+            ),
+          );
+        final ApiWhaleProfileRepository repo = ApiWhaleProfileRepository(
+          GeneratedBackendApi(dio: dio),
         );
 
         final WhaleProfile profile = await repo.getProfile('0xabc');
 
+        expect(requests.map((RequestOptions r) => r.path), <String>[
+          '/whale-tracking/traders/0xabc/snapshot',
+          '/whale-tracking/traders/0xabc/positions',
+          '/whale-tracking/traders/0xabc/open-orders',
+          '/whale-tracking/traders/0xabc/performance',
+          '/whale-tracking/traders/0xabc/discover-tags',
+        ]);
+        expect(requests[1].queryParameters['type'], 'all');
+        expect(requests[2].queryParameters.containsKey('coin'), isFalse);
+        expect(requests[3].queryParameters['limit'], 200);
+
         expect(profile.address, '0xabc');
-        expect(profile.holdings.single.symbol, 'BTC');
-        expect(profile.recentActions.single.detail, '12 BTC · Binance');
-        expect(profile.stats.pnlDisplay, r'+$8.4M');
-        expect(profile.stats.maxDrawdownDisplay, '12.4%');
-        expect(profile.stats.filledOrders, 128);
-        expect(profile.stats.closedCount, 42);
-        expect(profile.stats.assetPerf.single.symbol, 'ETH');
-        expect(profile.stats.positionPerf.single.label, 'BTC-PERP');
-        expect(profile.statCards!.accountValueDisplay, r'$12.3M');
-        expect(profile.statCards!.accountExtras.single.label, '现货');
+        expect(profile.tag, r'$10M+ HYPERUNIT WHALE');
+        expect(profile.assetSummary, 'BTC · ETH');
+        expect(profile.holdingsValueDisplay, r'$12.00M');
+        expect(profile.pnlTotalDisplay, r'+$420.00K');
+        expect(profile.statCards!.accountValueDisplay, r'$12.00M');
+        expect(profile.perpSummary!.totalValueDisplay, r'$8.00M');
+        expect(profile.perpSummary!.marginUsagePct, 25);
+        expect(profile.stats.pnlDisplay, r'+$420.00K');
+        expect(profile.stats.tradesTotal, 9);
+        expect(profile.stats.assetPerf.single.symbol, 'BTC');
+
+        expect(profile.spotHoldings, hasLength(1));
+        expect(profile.spotHoldings.single.sym, 'ETH');
+        expect(profile.spotHoldings.single.valueDisplay, r'$4.00M');
+        expect(profile.spotHoldings.single.chain, 'Hyperliquid');
+
+        expect(profile.perpHoldings, hasLength(1));
+        expect(profile.perpHoldings.single.sym, 'BTC');
+        expect(profile.perpHoldings.single.side, '做多');
+        expect(profile.perpHoldings.single.lev, '5x');
+        expect(profile.perpHoldings.single.mode, '全仓');
+        expect(profile.perpHoldings.single.pnlDisplay, r'+$250.00K');
+
+        expect(profile.openOrders, hasLength(1));
+        expect(profile.openOrders.single.id, '42');
+        expect(profile.openOrders.single.side, '买入');
+        expect(profile.openOrders.single.valueDisplay, r'$3.10M');
+
+        expect(profile.recentTrades, hasLength(1));
+        expect(profile.recentTrades.single.action, '开多');
+        expect(profile.recentTrades.single.priceDisplay, r'$65,000.00');
+        expect(profile.histOrders, hasLength(1));
+        expect(profile.histOrders.single.status, '已成交');
       },
     );
 
-    test('空响应保持真实空态，不回退 fixture', () async {
+    test('empty contract lists keep real empty detail state', () async {
+      final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              h.resolve(
+                Response<Object?>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: _emptyResponseFor(options.path),
+                ),
+              );
+            },
+          ),
+        );
       final ApiWhaleProfileRepository repo = ApiWhaleProfileRepository(
-        WhaleProfileService(_FakeApiClient(<String, dynamic>{})),
+        GeneratedBackendApi(dio: dio),
       );
 
       final WhaleProfile profile = await repo.getProfile('0xempty');
 
       expect(profile.address, '0xempty');
-      expect(profile.holdings, isEmpty);
-      expect(profile.recentActions, isEmpty);
+      expect(profile.tag, '未标记');
+      expect(profile.spotHoldings, isEmpty);
+      expect(profile.perpHoldings, isEmpty);
+      expect(profile.openOrders, isEmpty);
+      expect(profile.recentTrades, isEmpty);
+      expect(profile.histOrders, isEmpty);
       expect(profile.stats.assetPerf, isEmpty);
-      expect(profile.stats.maxDrawdownDisplay, isNull);
-      expect(profile.statCards, isNull);
     });
   });
+}
+
+Object _responseFor(String path) {
+  if (path.endsWith('/snapshot')) {
+    return <String, Object?>{
+      'perp': <String, Object?>{
+        'accountValue': 8000000,
+        'totalMarginUsed': 2000000,
+        'totalPositionValue': 9000000,
+        'withdrawable': 6000000,
+        'marginUsagePercent': 25,
+        'leverageRatio': 4.5,
+        'unrealizedPnl': 250000,
+        'roi': 12.5,
+      },
+      'spot': <String, Object?>{
+        'totalValue': 4000000,
+        'balances': <Map<String, Object?>>[
+          <String, Object?>{
+            'coin': 'ETH',
+            'total': 1200,
+            'hold': 50,
+            'value': 4000000,
+            'sharePercent': 33.333,
+          },
+        ],
+      },
+      'total': <String, Object?>{
+        'accountValue': 12000000,
+        'perpPercent': 66.667,
+        'spotPercent': 33.333,
+      },
+    };
+  }
+  if (path.endsWith('/positions')) {
+    return <String, Object?>{
+      'perp': <Map<String, Object?>>[
+        <String, Object?>{
+          'coin': 'BTC',
+          'side': 'LONG',
+          'size': 138.46,
+          'entryPrice': 63000,
+          'markPrice': 65000,
+          'liquidationPrice': 51000,
+          'positionValue': 9000000,
+          'marginUsed': 1800000,
+          'leverage': <String, Object?>{'type': 'cross', 'value': 5},
+          'unrealizedPnl': 250000,
+          'unrealizedPnlPercent': 13.8889,
+          'fundingRate': -1200,
+          'roi': 13.8889,
+        },
+      ],
+      'spot': <Map<String, Object?>>[
+        <String, Object?>{
+          'coin': 'ETH',
+          'total': 1200,
+          'hold': 50,
+          'available': 1150,
+          'value': 4000000,
+        },
+      ],
+    };
+  }
+  if (path.endsWith('/open-orders')) {
+    return <String, Object?>{
+      'orders': <Map<String, Object?>>[
+        <String, Object?>{
+          'orderId': 42,
+          'coin': 'BTC',
+          'side': 'BUY',
+          'type': 'Limit',
+          'price': 62000,
+          'size': 50,
+          'origSize': 50,
+          'value': 3100000,
+          'timestamp': '2026-06-09T01:02:03.000Z',
+          'triggerPrice': null,
+          'triggerCondition': null,
+          'reduceOnly': false,
+        },
+      ],
+    };
+  }
+  if (path.endsWith('/performance')) {
+    return <String, Object?>{
+      'summary': <String, Object?>{
+        'address': '0xabc',
+        'lookbackDays': 30,
+        'trades': 9,
+        'positions': 2,
+        'totalValueUsd': 12000000,
+        'longCount': 6,
+        'shortCount': 3,
+        'winRatePct': 66.67,
+        'pnlUsd': 420000,
+      },
+      'byAsset': <Map<String, Object?>>[
+        <String, Object?>{
+          'symbol': 'BTC',
+          'totalValueUsd': 9000000,
+          'trades': 6,
+          'longCount': 5,
+          'shortCount': 1,
+        },
+      ],
+      'trades': <Map<String, Object?>>[
+        <String, Object?>{
+          'address': '0xabc',
+          'symbol': 'BTC',
+          'side': 'LONG',
+          'positionSize': 1.25,
+          'positionValueUsd': 81250,
+          'entryPrice': 65000,
+          'liquidationPrice': 51000,
+          'positionAction': '1',
+          'createTime': '2026-06-09T01:02:03.000Z',
+        },
+      ],
+    };
+  }
+  if (path.endsWith('/discover-tags')) {
+    return <String, Object?>{
+      'tag': r'$10M+ HYPERUNIT WHALE',
+      'aiTags': <Map<String, Object?>>[],
+    };
+  }
+  throw StateError('Unhandled path $path');
+}
+
+Object _emptyResponseFor(String path) {
+  if (path.endsWith('/snapshot')) {
+    return <String, Object?>{
+      'perp': <String, Object?>{
+        'accountValue': 0,
+        'totalMarginUsed': 0,
+        'totalPositionValue': 0,
+        'withdrawable': 0,
+        'marginUsagePercent': 0,
+        'leverageRatio': 0,
+        'unrealizedPnl': 0,
+        'roi': 0,
+      },
+      'spot': <String, Object?>{
+        'totalValue': 0,
+        'balances': <Map<String, Object?>>[],
+      },
+      'total': <String, Object?>{
+        'accountValue': 0,
+        'perpPercent': 0,
+        'spotPercent': 0,
+      },
+    };
+  }
+  if (path.endsWith('/positions')) {
+    return <String, Object?>{
+      'perp': <Map<String, Object?>>[],
+      'spot': <Map<String, Object?>>[],
+    };
+  }
+  if (path.endsWith('/open-orders')) {
+    return <String, Object?>{'orders': <Map<String, Object?>>[]};
+  }
+  if (path.endsWith('/performance')) {
+    return <String, Object?>{
+      'summary': <String, Object?>{
+        'address': '0xempty',
+        'lookbackDays': 30,
+        'trades': 0,
+        'positions': 0,
+        'totalValueUsd': 0,
+        'longCount': 0,
+        'shortCount': 0,
+        'winRatePct': 0,
+        'pnlUsd': 0,
+      },
+      'byAsset': <Map<String, Object?>>[],
+      'trades': <Map<String, Object?>>[],
+    };
+  }
+  if (path.endsWith('/discover-tags')) {
+    return <String, Object?>{'tag': null, 'aiTags': <Map<String, Object?>>[]};
+  }
+  throw StateError('Unhandled path $path');
 }
