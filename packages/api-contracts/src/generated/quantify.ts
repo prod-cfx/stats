@@ -1350,6 +1350,7 @@ const StrategyPlazaTemplateResponseDto = z
     description: z.string(),
     logicDescription: z.string(),
     tags: z.array(z.string()),
+    category: z.enum(['趋势', '突破', '反转', '网格', 'DCA', '盘口', '衍生品事件', '风控稳健']),
     riskLevel: z.enum(['low', 'medium', 'high']),
     scenario: z.string(),
     exchange: z.literal('okx'),
@@ -1367,12 +1368,38 @@ const StrategyPlazaTemplateResponseDto = z
         returnPct: z.number().nullable(),
         winRatePct: z.number().nullable(),
         maxDrawdownPct: z.number().nullable(),
+        sharpe: z.number().nullable(),
+        profitLossRatio: z.number().nullable(),
+        tradeCount: z.number().nullable(),
+        users: z.number().nullable(),
       })
       .partial()
       .passthrough(),
+    sparkline: z.array(z.number()).optional(),
+    params: z.record(z.number()).optional(),
+    signals: z
+      .array(
+        z
+          .object({
+            time: z.string().datetime({ offset: true }),
+            side: z.enum(['buy', 'sell']),
+            price: z.number(),
+            pnlPercent: z.number(),
+          })
+          .partial()
+          .passthrough(),
+      )
+      .optional(),
+    equityCurve: z.array(z.number()).optional(),
   })
   .passthrough()
-const RunStrategyPlazaTemplateDto = z.object({ runRequestId: z.string() }).passthrough()
+const RunStrategyPlazaTemplateDto = z
+  .object({
+    runRequestId: z.string(),
+    mode: z.enum(['TESTNET', 'LIVE']).optional(),
+    exchangeAccountId: z.string().optional(),
+  })
+  .passthrough()
 const StrategyPlazaRunExistingResponseDto = z
   .object({ result: z.literal('existing'), strategy: AccountStrategyDetailResponseDto })
   .passthrough()
@@ -4543,6 +4570,20 @@ const endpoints = makeApi([
       .passthrough(),
   },
   {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id/equity-curve',
+    alias: 'StrategyPlazaController_equityCurve',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.object({ data: z.array(z.number()), message: z.string().optional() }).passthrough(),
+  },
+  {
     method: 'post',
     path: '/strategy-plaza/templates/:id/run',
     alias: 'StrategyPlazaController_run',
@@ -4551,7 +4592,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({ runRequestId: z.string() }).passthrough(),
+        schema: RunStrategyPlazaTemplateDto,
       },
       {
         name: 'id',
@@ -4572,6 +4613,40 @@ const endpoints = makeApi([
     response: z
       .object({
         data: z.union([AccountStrategyDetailResponseDto, StrategyPlazaRunExistingResponseDto]),
+        message: z.string().optional(),
+      })
+      .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id/signals',
+    alias: 'StrategyPlazaController_signals',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().optional(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.array(
+          z
+            .object({
+              time: z.string().datetime({ offset: true }),
+              side: z.enum(['buy', 'sell']),
+              price: z.number(),
+              pnlPercent: z.number(),
+            })
+            .partial()
+            .passthrough(),
+        ),
         message: z.string().optional(),
       })
       .passthrough(),
