@@ -65,14 +65,16 @@ void main() {
         _FakeFeedRepo(<WhaleEvent>[], StreamController<WhaleEvent>()),
       );
       expect(read(c).loading, isTrue);
+      expect(read(c).symbolFilter, '');
     });
 
     test('loading→data：历史加载完成、去重保留首次出现', () async {
       final ProviderContainer c = makeContainer(
-        _FakeFeedRepo(
-          <WhaleEvent>[_ev('a'), _ev('b'), _ev('a')],
-          StreamController<WhaleEvent>(),
-        ),
+        _FakeFeedRepo(<WhaleEvent>[
+          _ev('a'),
+          _ev('b'),
+          _ev('a'),
+        ], StreamController<WhaleEvent>()),
       );
       ctrl(c);
       await Future<void>.delayed(Duration.zero);

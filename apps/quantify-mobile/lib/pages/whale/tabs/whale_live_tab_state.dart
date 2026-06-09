@@ -35,7 +35,7 @@ class WhaleLiveTabState {
     this.items = const <WhaleLiveFeedItem>[],
     this.loading = true,
     this.error,
-    this.symbolFilter = 'BTC',
+    this.symbolFilter = '',
     this.tick = countdownStart,
     this.winSort = WhaleLiveWinSort.none,
   });
@@ -47,7 +47,7 @@ class WhaleLiveTabState {
   final bool loading;
   final DomainError? error;
 
-  /// issue #1604：默认与 hero `BTC 净流入 · 1H` 对齐。
+  /// 默认展示全部真实推送；具体币种筛选由用户显式选择。
   final String symbolFilter;
   final int tick;
   final WhaleLiveWinSort winSort;

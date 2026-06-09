@@ -5,7 +5,7 @@ import 'package:quantify_mobile/data/models/whale_models.dart';
 import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 
 void main() {
-  test('ApiWhaleFeedRepository maps generated realtime whale contract', () async {
+  test('ApiWhaleFeedRepository maps generated whale trades contract', () async {
     final List<RequestOptions> requests = <RequestOptions>[];
     final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
       ..interceptors.add(
@@ -24,13 +24,11 @@ void main() {
                     <String, Object?>{
                       'user_address': '0xabcdefabcdefabcdef01',
                       'symbol': 'BTC',
-                      'position_size': -0.25,
-                      'entry_price': 65000.5,
-                      'liq_price': 71000,
-                      'position_value_usd': 16250.125,
-                      'position_action': 1,
-                      'create_time': '2026-06-09T01:02:03.000Z',
                       'side': 'Short',
+                      'trade_size': 0.25,
+                      'price': 65000.5,
+                      'trade_value_usd': 16250.125,
+                      'trade_time': '2026-06-09T01:02:03.000Z',
                     },
                   ],
                 },
@@ -47,12 +45,18 @@ void main() {
     final List<WhaleEvent> events = await repo.listRecent(limit: 7);
 
     expect(requests, hasLength(1));
-    expect(requests.single.path, '/whale-alerts/realtime');
+    expect(requests.single.path, '/whale-alerts/trades');
     expect(requests.single.queryParameters['limit'], 7);
-    expect(requests.single.queryParameters['min_position_value_usd'], 10000);
+    expect(
+      requests.single.queryParameters.containsKey('min_trade_value_usd'),
+      isFalse,
+    );
 
     expect(events, hasLength(1));
-    expect(events.single.id, '0xabcdefabcdefabcdef01-BTC-2026-06-09T01:02:03.000Z');
+    expect(
+      events.single.id,
+      '0xabcdefabcdefabcdef01-BTC-2026-06-09T01:02:03.000Z-16250.125-65000.5',
+    );
     expect(events.single.address, '0xabcdefabcdefabcdef01');
     expect(events.single.symbol, 'BTC');
     expect(events.single.amountUsd, 16250.125);
@@ -63,6 +67,9 @@ void main() {
     expect(events.single.positionValue, 16250.125);
     expect(events.single.quantity, '0.2500 BTC');
     expect(events.single.openPrice, 65000.5);
+    expect(events.single.traderTag, '成交');
+    expect(events.single.isFresh, isTrue);
+    expect(events.single.winRate, inInclusiveRange(45, 85));
     expect(events.single.timestamp, DateTime.parse('2026-06-09T01:02:03.000Z'));
   });
 }
