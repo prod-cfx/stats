@@ -135,7 +135,7 @@ final Provider<LongShortRepository> longShortRepositoryProvider =
 
 final Provider<WhaleFeedRepository> whaleFeedRepositoryProvider =
     Provider<WhaleFeedRepository>((Ref ref) {
-      return ApiWhaleFeedRepository(ref.watch(whaleFeedServiceProvider));
+      return ApiWhaleFeedRepository(ref.watch(generatedBackendApiProvider));
     });
 
 final Provider<WhaleProfileRepository> whaleProfileRepositoryProvider =
