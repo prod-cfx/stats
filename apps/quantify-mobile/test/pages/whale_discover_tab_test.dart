@@ -182,6 +182,16 @@ void main() {
       expect(find.text('金库管家'), findsWidgets);
     });
 
+    testWidgets('列表卡只渲染 details 条目，不重复 top3 recommended', (
+      WidgetTester tester,
+    ) async {
+      await _pump(tester);
+      final int detailCount = mockWhaleLeaders
+          .where((WhaleLeaderEntry e) => e.avatarText == null)
+          .length;
+      expect(find.byType(WhaleLeaderCard), findsNWidgets(detailCount));
+    });
+
     testWidgets('点击「账户总价值」药丸即时重排列表卡顺序', (WidgetTester tester) async {
       await _pump(tester);
       // 默认胜率降序：首卡非 aum 最大者。
@@ -197,8 +207,14 @@ void main() {
       await tester.pump();
 
       final List<String> after = _cardOrder(tester);
-      // 总值降序后首卡应为 aumValue 最大者（0x8ba1...ba72，1.29 亿）。
-      expect(after.first, '0x8ba1...ba72');
+      final String maxDetailAumId = mockWhaleLeaders
+          .where((WhaleLeaderEntry e) => e.avatarText == null)
+          .reduce(
+            (WhaleLeaderEntry a, WhaleLeaderEntry b) =>
+                a.aumValue >= b.aumValue ? a : b,
+          )
+          .id;
+      expect(after.first, maxDetailAumId);
       expect(after, isNot(before));
     });
 

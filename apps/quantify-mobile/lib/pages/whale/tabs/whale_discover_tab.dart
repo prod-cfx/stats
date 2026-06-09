@@ -71,7 +71,10 @@ class WhaleDiscoverTab extends ConsumerWidget {
       ),
       data: (List<WhaleLeaderEntry> entries) {
         final List<WhaleLeaderEntry> top3 = topWhaleLeaders(entries);
-        final List<WhaleLeaderEntry> sorted = sortWhaleLeaders(entries, sort);
+        final List<WhaleLeaderEntry> details = entries
+            .where((WhaleLeaderEntry e) => e.avatarText == null)
+            .toList(growable: false);
+        final List<WhaleLeaderEntry> sorted = sortWhaleLeaders(details, sort);
         return ListView(
           padding: const EdgeInsets.only(bottom: 100),
           children: <Widget>[
