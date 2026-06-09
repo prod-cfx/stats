@@ -61,23 +61,21 @@ class ApiClient {
     Duration connectTimeout = const Duration(seconds: 10),
     Duration receiveTimeout = const Duration(seconds: 30),
     Dio? dio,
-  }) : _dio = dio ??
-            buildApiDio(
-              baseUrl: baseUrl,
-              tokenSupplier: tokenSupplier,
-              connectTimeout: connectTimeout,
-              receiveTimeout: receiveTimeout,
-            );
+  }) : _dio =
+           dio ??
+           buildApiDio(
+             baseUrl: baseUrl,
+             tokenSupplier: tokenSupplier,
+             connectTimeout: connectTimeout,
+             receiveTimeout: receiveTimeout,
+           );
 
   final Dio _dio;
 
   /// 暴露底层 Dio，供少数需要细粒度控制的场景使用；常规走 [get]/[post]/[delete]。
   Dio get raw => _dio;
 
-  Future<dynamic> get(
-    String path, {
-    Map<String, dynamic>? query,
-  }) async {
+  Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
     return _unwrap(() => _dio.get<dynamic>(path, queryParameters: query));
   }
 
@@ -115,11 +113,7 @@ class ApiClient {
 
 /// 归一化后端错误。所有 Service / Repository 只对外抛此类型。
 class ApiException implements Exception {
-  const ApiException({
-    required this.message,
-    this.statusCode,
-    this.code,
-  });
+  const ApiException({required this.message, this.statusCode, this.code});
 
   /// 人类可读错误信息。
   final String message;
@@ -141,6 +135,10 @@ class ApiException implements Exception {
       if (m is String && m.isNotEmpty) message = m;
       final Object? c = data['code'];
       if (c != null) code = c.toString();
+    } else if (data is String && data.trim().isNotEmpty) {
+      message = data.trim();
+    } else if (status != null) {
+      message = '请求失败（HTTP $status）';
     }
     return ApiException(message: message, statusCode: status, code: code);
   }

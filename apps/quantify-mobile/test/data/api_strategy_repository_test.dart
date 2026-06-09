@@ -2,8 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/api/api_strategy_repository.dart';
 import 'package:quantify_mobile/data/models/strategy_models.dart';
-import 'package:quantify_mobile/data/services/api_client.dart';
-import 'package:quantify_mobile/data/services/strategy_services.dart';
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 
 class _FixtureInterceptor extends Interceptor {
   _FixtureInterceptor(this.calls);
@@ -13,6 +12,9 @@ class _FixtureInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     calls.add(options.path);
+    if (options.path == '/strategy-plaza/templates') {
+      expect(options.queryParameters, isEmpty);
+    }
     final Object data = switch (options.path) {
       '/strategy-plaza/templates' => <String, Object>{
         'data': <Map<String, Object>>[_template('real-grid')],
@@ -84,8 +86,7 @@ Map<String, Object> _template(String id) {
 ApiStrategyRepository _buildRepo(List<String> calls) {
   final Dio dio = Dio(BaseOptions(baseUrl: 'http://stub.invalid'))
     ..interceptors.add(_FixtureInterceptor(calls));
-  final ApiClient client = ApiClient(baseUrl: 'http://stub.invalid', dio: dio);
-  return ApiStrategyRepository(StrategyService(client));
+  return ApiStrategyRepository(GeneratedBackendApi(dio: dio));
 }
 
 void main() {

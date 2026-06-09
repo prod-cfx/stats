@@ -3,18 +3,25 @@
 /// - [idle]：未发起回测，对话流不渲染进度/结果卡。
 /// - [running]：回测进行中，渲染 `QzBacktestProgressCard`（验收 #3：明确 UI 表达）。
 /// - [done]：回测完成，渲染 `QzBacktestResultCard` + 部署按钮。
-enum BacktestPhase {
-  idle,
-  running,
-  done,
-}
+enum BacktestPhase { idle, running, done }
 
 /// 回测请求与完整结果。
 class BacktestRequest {
   final String strategyId;
+  final String? publishedSnapshotId;
+  final String? conversationId;
   final String symbol;
+  final String baseTimeframe;
   final DateTime startTime;
   final DateTime endTime;
+  final double initialCash;
+  final String marketType;
+  final int? leverage;
+  final double slippageBps;
+  final double feeBps;
+  final String priceSource;
+  final bool allowPartial;
+  final String rangePreset;
   final Map<String, dynamic> params;
 
   const BacktestRequest({
@@ -23,6 +30,17 @@ class BacktestRequest {
     required this.startTime,
     required this.endTime,
     required this.params,
+    this.publishedSnapshotId,
+    this.conversationId,
+    this.baseTimeframe = '15m',
+    this.initialCash = 10000,
+    this.marketType = 'perp',
+    this.leverage = 5,
+    this.slippageBps = 5,
+    this.feeBps = 2,
+    this.priceSource = 'close',
+    this.allowPartial = true,
+    this.rangePreset = '30D',
   });
 }
 
@@ -82,10 +100,7 @@ class BacktestMonthlyRow {
   final int year;
   final List<double?> values;
 
-  const BacktestMonthlyRow({
-    required this.year,
-    required this.values,
-  });
+  const BacktestMonthlyRow({required this.year, required this.values});
 }
 
 /// 完整回测结果。对齐设计稿 `ScreenBacktestResult`：Hero 累计净值/CAGR、

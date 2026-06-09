@@ -1,13 +1,9 @@
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+
 import '../models/strategy_models.dart';
 import '../repositories/strategy_repository.dart';
-import '../services/json_codec.dart';
-import '../services/strategy_services.dart';
-
-/// [StrategyCategory] <-> 后端串。
-String? strategyCategoryToApi(StrategyCategory? c) {
-  if (c == null || c == StrategyCategory.all) return null;
-  return c.name;
-}
+import '../services/generated_backend_api.dart';
+import '../services/json_codec.dart' show asDateTime, asString;
 
 StrategyCategory _categoryFromApi(Object? raw) {
   final String s = asString(raw);
@@ -45,167 +41,119 @@ StrategyStatusBadge? _badgeFromApi(Object? raw) {
 
 /// [StrategyRepository] 真实现（issue #2189 / #2308）。
 ///
-/// 只消费 backend/quantify OpenAPI 数据。缺失的 signals
-/// 与 equity curve 保持空集合，由页面隐藏模块或显示空态，不回退 fixture。
+/// 只消费 [packages/api-contracts-dart] 生成的 backend strategy-plaza 契约。
+/// 缺失的 signals 与 equity curve 保持空集合，由页面隐藏模块或显示空态，
+/// 不回退 fixture/mock。
 class ApiStrategyRepository implements StrategyRepository {
-  ApiStrategyRepository(this._service);
+  ApiStrategyRepository(this._api);
 
-  final StrategyService _service;
+  final GeneratedBackendApi _api;
 
-  Object? _data(Object? raw) {
-    final Map<String, dynamic> m = asMap(raw);
-    return m.containsKey('data') ? m['data'] : raw;
+  StrategyPlazaApi get _strategyPlazaApi => _api.client.getStrategyPlazaApi();
+
+  Future<List<StrategyPlazaTemplateResponseDto>> _listTemplates() async {
+    final response = await _strategyPlazaApi.strategyPlazaProxyControllerList();
+    return response.data?.data.toList(growable: false) ??
+        const <StrategyPlazaTemplateResponseDto>[];
   }
 
-  Map<String, dynamic> _dataMap(Object? raw) => asMap(_data(raw));
+  List<double> _numbers(Iterable<num>? raw) =>
+      raw?.map((num e) => e.toDouble()).toList(growable: false) ??
+      const <double>[];
 
-  List<Map<String, dynamic>> _dataMapList(Object? raw) => asMapList(_data(raw));
-
-  List<double> _numbers(Object? raw) => asList(
-    _data(raw),
-  ).map((Object? e) => asDouble(e)).toList(growable: false);
-
-  Map<String, dynamic> _metrics(Map<String, dynamic> m) =>
-      asMap(pick(m, <String>['displayMetrics', 'stats', 'metrics']));
-
-  StrategyMarketStats _stats(Map<String, dynamic> m, StrategyCard card) {
-    final Map<String, dynamic> metrics = _metrics(m);
-    final double drawdown = asDouble(
-      pick(metrics, <String>['maxDrawdownPct', 'maxDrawdown']),
-    );
-    final double winRate = asDouble(
-      pick(metrics, <String>['winRatePct', 'winRate']),
-    );
+  StrategyMarketStats _stats(StrategyPlazaTemplateResponseDto dto) {
+    final StrategyPlazaDisplayMetricsResponseDto metrics = dto.displayMetrics;
+    final double drawdown = metrics.maxDrawdownPct?.toDouble() ?? 0;
+    final double winRate = metrics.winRatePct?.toDouble() ?? 0;
     return StrategyMarketStats(
-      cagr: asDouble(
-        pick(metrics, <String>['returnPct', 'cagr']),
-        fallback: card.pnlPercent,
-      ),
-      sharpe: asDouble(pick(metrics, <String>['sharpe'])),
+      cagr: metrics.returnPct?.toDouble() ?? 0,
+      sharpe: metrics.sharpe?.toDouble() ?? 0,
       maxDrawdown: drawdown > 0 ? -drawdown : drawdown,
       winRate: winRate > 1 ? winRate / 100 : winRate,
-      users: asInt(
-        pick(metrics, <String>['users']),
-        fallback: card.subscribers,
-      ),
+      users: metrics.users?.toInt() ?? 0,
     );
   }
 
-  List<double> _sparkline(Map<String, dynamic> m) => asList(
-    pick(m, <String>['sparkline']),
-  ).map((Object? e) => asDouble(e)).toList(growable: false);
-
-  StrategyCard _card(Map<String, dynamic> m) {
+  StrategyCard _card(StrategyPlazaTemplateResponseDto dto) {
     return StrategyCard(
-      id: asString(pick(m, <String>['id'])),
-      name: asString(pick(m, <String>['name'])),
-      description: asString(pick(m, <String>['description'])),
-      author: asString(pick(m, <String>['author'])),
-      pnlPercent: asDouble(
-        pick(m, <String>['pnlPercent', 'pnl', 'returnPct']),
-        fallback: asDouble(pick(_metrics(m), <String>['returnPct'])),
-      ),
-      subscribers: asInt(
-        pick(m, <String>['subscribers']),
-        fallback: asInt(pick(_metrics(m), <String>['users'])),
-      ),
-      tags: asList(
-        pick(m, <String>['tags']),
-      ).map(asString).toList(growable: false),
+      id: dto.id,
+      name: dto.name,
+      description: dto.description,
+      author: 'Quantify 官方',
+      pnlPercent: dto.displayMetrics.returnPct?.toDouble() ?? 0,
+      subscribers: dto.displayMetrics.users?.toInt() ?? 0,
+      tags: dto.tags.toList(growable: false),
       category: _categoryFromApi(
-        pick(m, <String>['category']) ??
-            asList(pick(m, <String>['tags'])).map(asString).join(','),
+        dto.tags.join(',').isEmpty ? dto.name : dto.tags.join(','),
       ),
       status:
-          _badgeFromApi(pick(m, <String>['status'])) ??
-          (asString(pick(m, <String>['status'])) == 'live'
+          _badgeFromApi(dto.status.name) ??
+          (dto.status == StrategyPlazaTemplateResponseDtoStatusEnum.live
               ? StrategyStatusBadge.official
               : null),
-      verified: asBool(pick(m, <String>['verified'])),
-      pair: asString(pick(m, <String>['pair', 'symbol'])),
-      period: asString(pick(m, <String>['period', 'timeframe'])),
+      verified: dto.status == StrategyPlazaTemplateResponseDtoStatusEnum.live,
+      pair: dto.symbol,
+      period: dto.timeframe,
     );
   }
 
-  List<StrategyCard> _cards(dynamic raw) {
-    final Object? list = raw is Map
-        ? pick(asMap(raw), <String>['items', 'data'])
-        : _data(raw);
-    return asMapList(list).map(_card).toList(growable: false);
-  }
-
-  StrategyMarketItem _marketItem(Map<String, dynamic> r) {
-    final StrategyCard card = _card(r);
+  StrategyMarketItem _marketItem(StrategyPlazaTemplateResponseDto dto) {
     return StrategyMarketItem(
-      card: card,
-      sparkline: _sparkline(r),
-      stats: _stats(r, card),
+      card: _card(dto),
+      sparkline: _numbers(dto.sparkline),
+      stats: _stats(dto),
     );
   }
 
-  StrategyDetail _detail(Map<String, dynamic> m) {
-    final StrategyCard card = _card(m);
-    final Map<String, dynamic> metrics = _metrics(m);
-    final double returnPct = asDouble(pick(metrics, <String>['returnPct']));
-    final double winRate = asDouble(
-      pick(metrics, <String>['winRatePct', 'winRate']),
-    );
-    final double drawdown = asDouble(
-      pick(metrics, <String>['maxDrawdownPct', 'maxDrawdown']),
-    );
+  StrategyDetail _detail(StrategyPlazaTemplateResponseDto dto) {
+    final StrategyPlazaDisplayMetricsResponseDto metrics = dto.displayMetrics;
+    final double returnPct = metrics.returnPct?.toDouble() ?? 0;
+    final double winRate = metrics.winRatePct?.toDouble() ?? 0;
+    final double drawdown = metrics.maxDrawdownPct?.toDouble() ?? 0;
     return StrategyDetail(
-      card: card,
-      return7d: asDouble(
-        pick(metrics, <String>['return7d']),
-        fallback: returnPct,
-      ),
-      return30d: asDouble(
-        pick(metrics, <String>['return30d']),
-        fallback: returnPct,
-      ),
-      returnAll: asDouble(
-        pick(metrics, <String>['returnAll']),
-        fallback: returnPct,
-      ),
+      card: _card(dto),
+      return7d: returnPct,
+      return30d: returnPct,
+      returnAll: returnPct,
       maxDrawdown: drawdown > 0 ? -drawdown : drawdown,
-      sharpe: asDouble(pick(metrics, <String>['sharpe'])),
+      sharpe: metrics.sharpe?.toDouble() ?? 0,
       winRate: winRate > 1 ? winRate / 100 : winRate,
       cagr: returnPct,
-      profitLossRatio: asDouble(pick(metrics, <String>['profitLossRatio'])),
-      tradeCount: asInt(pick(metrics, <String>['tradeCount'])),
-      users: asInt(
-        pick(metrics, <String>['users']),
-        fallback: card.subscribers,
-      ),
-      equityCurve: _numbers(pick(m, <String>['equityCurve'])),
+      profitLossRatio: metrics.profitLossRatio?.toDouble() ?? 0,
+      tradeCount: metrics.tradeCount?.toInt() ?? 0,
+      users: metrics.users?.toInt() ?? 0,
+      equityCurve: _numbers(dto.equityCurve),
     );
   }
 
-  StrategySignal _signal(Map<String, dynamic> m) {
-    final String side = asString(pick(m, <String>['side'])).toLowerCase();
+  StrategySignal _signal(StrategyPlazaSignalResponseDto dto) {
     return StrategySignal(
-      time: asDateTime(pick(m, <String>['time', 'createdAt', 'ts'])),
-      side: side == 'sell' ? StrategySignalSide.sell : StrategySignalSide.buy,
-      price: asDouble(pick(m, <String>['price'])),
-      pnlPercent: asDouble(pick(m, <String>['pnlPercent', 'pnl'])),
+      time: asDateTime(dto.time),
+      side: dto.side == StrategyPlazaSignalResponseDtoSideEnum.sell
+          ? StrategySignalSide.sell
+          : StrategySignalSide.buy,
+      price: dto.price.toDouble(),
+      pnlPercent: dto.pnlPercent.toDouble(),
     );
   }
 
   @override
   Future<List<StrategyCard>> listFeatured() async {
-    final List<StrategyCard> cards = _cards(await _service.listFeatured());
-    return cards;
+    final templates = await _listTemplates();
+    return templates.map(_card).toList(growable: false);
   }
 
   @override
   Future<List<StrategyCard>> listMine() async {
-    final List<StrategyCard> cards = _cards(await _service.listMine());
-    return cards;
+    return listFeatured();
   }
 
   @override
   Future<StrategyCard> getDetail(String id) async {
-    return _card(_dataMap(await _service.getDetail(id)));
+    final response = await _strategyPlazaApi.strategyPlazaProxyControllerDetail(
+      id: id,
+    );
+    return _card(response.data!.data);
   }
 
   @override
@@ -215,23 +163,37 @@ class ApiStrategyRepository implements StrategyRepository {
     String? query,
     StrategyCategory? category,
   }) async {
-    final Object? raw = await _service.listMarket(
-      page: page,
-      pageSize: pageSize,
-      query: query,
-      category: strategyCategoryToApi(category),
-    );
-    final Map<String, dynamic> m = asMap(raw);
-    final List<Map<String, dynamic>> rows = asMapList(
-      m.containsKey('items') ? m['items'] : _data(raw),
-    );
-    final bool hasMore = asBool(pick(m, <String>['hasMore']));
-    final List<StrategyMarketItem> items = rows
-        .map(_marketItem)
+    final List<StrategyPlazaTemplateResponseDto> all = await _listTemplates();
+    final String q = query?.trim().toLowerCase() ?? '';
+    final List<StrategyPlazaTemplateResponseDto> filtered = all
+        .where((dto) {
+          final StrategyCategory dtoCategory = _card(dto).category;
+          final bool categoryMatched =
+              category == null ||
+              category == StrategyCategory.all ||
+              dtoCategory == category;
+          if (!categoryMatched) return false;
+          if (q.isEmpty) return true;
+          final String haystack = <String>[
+            dto.id,
+            dto.name,
+            dto.description,
+            dto.logicDescription,
+            dto.symbol,
+            dto.timeframe,
+            ...dto.tags,
+          ].join(' ').toLowerCase();
+          return haystack.contains(q);
+        })
         .toList(growable: false);
+    final int start = (page - 1).clamp(0, 1 << 30) * pageSize;
+    final int end = (start + pageSize).clamp(0, filtered.length);
+    final List<StrategyMarketItem> items = start >= filtered.length
+        ? const <StrategyMarketItem>[]
+        : filtered.sublist(start, end).map(_marketItem).toList(growable: false);
     return StrategyMarketPage(
       items: items,
-      hasMore: hasMore,
+      hasMore: end < filtered.length,
       page: page,
       pageSize: pageSize,
     );
@@ -239,17 +201,18 @@ class ApiStrategyRepository implements StrategyRepository {
 
   @override
   Future<StrategyMarketItem> getFeaturedHero() async {
-    final List<Map<String, dynamic>> rows = _dataMapList(
-      await _service.getFeaturedHero(),
-    );
-    return rows.isEmpty
-        ? _marketItem(const <String, dynamic>{})
-        : _marketItem(rows.first);
+    final templates = await _listTemplates();
+    return templates.isEmpty
+        ? _emptyMarketItem()
+        : _marketItem(templates.first);
   }
 
   @override
   Future<StrategyDetail> getStrategyDetail(String id) async {
-    return _detail(_dataMap(await _service.getStrategyDetail(id)));
+    final response = await _strategyPlazaApi.strategyPlazaProxyControllerDetail(
+      id: id,
+    );
+    return _detail(response.data!.data);
   }
 
   @override
@@ -257,9 +220,10 @@ class ApiStrategyRepository implements StrategyRepository {
     String id, {
     int limit = 20,
   }) async {
-    return _dataMapList(
-      await _service.listStrategySignals(id, limit: limit),
-    ).map(_signal).toList(growable: false);
+    final response = await _strategyPlazaApi
+        .strategyPlazaProxyControllerSignals(id: id, limit: limit.toString());
+    return response.data?.data.map(_signal).toList(growable: false) ??
+        const <StrategySignal>[];
   }
 
   @override
@@ -267,6 +231,38 @@ class ApiStrategyRepository implements StrategyRepository {
     String id,
     EquityTimeframe timeframe,
   ) async {
-    return _numbers(await _service.getEquityCurve(id, timeframe.name));
+    final response = await _strategyPlazaApi
+        .strategyPlazaProxyControllerEquityCurve(
+          id: id,
+          timeframe: timeframe.name,
+        );
+    return _numbers(response.data?.data);
+  }
+
+  StrategyMarketItem _emptyMarketItem() {
+    const StrategyCard card = StrategyCard(
+      id: '',
+      name: '',
+      description: '',
+      author: '',
+      pnlPercent: 0,
+      subscribers: 0,
+      tags: <String>[],
+      category: StrategyCategory.all,
+      verified: false,
+      pair: '',
+      period: '',
+    );
+    return const StrategyMarketItem(
+      card: card,
+      sparkline: <double>[],
+      stats: StrategyMarketStats(
+        cagr: 0,
+        sharpe: 0,
+        maxDrawdown: 0,
+        winRate: 0,
+        users: 0,
+      ),
+    );
   }
 }

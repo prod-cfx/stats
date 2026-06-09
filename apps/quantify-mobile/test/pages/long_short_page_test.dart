@@ -7,6 +7,7 @@ import 'package:quantify_mobile/pages/market/data_hub_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
 import 'package:quantify_mobile/pages/market/widgets/long_short_bar.dart';
+import 'package:quantify_mobile/pages/market/widgets/long_short_search_overlay.dart';
 import 'package:quantify_mobile/router/app_router.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -198,5 +199,39 @@ void main() {
     await tester.tap(find.byKey(const Key('long-short-search-clear-history')));
     await tester.pumpAndSettle();
     expect(find.text('搜索历史'), findsNothing);
+  });
+
+  testWidgets('搜索 overlay 按 base asset 去重，兼容不同 symbol 形态', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1200));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(QzTheme.fallback),
+        home: const LongShortSearchOverlay(
+          symbols: <String>['BTC/USDT', 'BTCUSDT', 'BTCUSDC', 'ETHUSDT'],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('long-short-search-hot-BTC')), findsOneWidget);
+    expect(find.byKey(const Key('long-short-search-hot-ETH')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.enterText(
+      find.byKey(const Key('long-short-search-input')),
+      'btc',
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('long-short-search-result-BTC')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

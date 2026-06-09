@@ -72,12 +72,50 @@ class ApiBacktestRepository implements BacktestRepository {
 
   @override
   Future<BacktestResult> run(BacktestRequest request) async {
+    final String snapshotId = request.publishedSnapshotId?.trim() ?? '';
+    if (snapshotId.isEmpty) {
+      throw const FormatException('missing publishedSnapshotId for backtest');
+    }
+    final String marketType = request.marketType == 'spot' ? 'spot' : 'perp';
+    final Map<String, dynamic> strategyParams = <String, dynamic>{
+      ...request.params,
+      'marketType': marketType,
+    };
     final dynamic raw = await _service.run(<String, dynamic>{
-      'strategyId': request.strategyId,
-      'symbol': request.symbol,
-      'startTime': request.startTime.toIso8601String(),
-      'endTime': request.endTime.toIso8601String(),
-      'params': request.params,
+      'symbols': <String>[request.symbol],
+      'baseTimeframe': request.baseTimeframe,
+      'stateTimeframes': <String>[request.baseTimeframe],
+      'initialCash': request.initialCash,
+      if (marketType == 'perp') 'leverage': request.leverage ?? 1,
+      if (request.allowPartial) 'allowPartial': true,
+      if (request.conversationId?.trim().isNotEmpty == true)
+        'conversationId': request.conversationId!.trim(),
+      'execution': <String, dynamic>{
+        'slippageBps': request.slippageBps,
+        'feeBps': request.feeBps,
+        'priceSource': request.priceSource,
+      },
+      'strategy': <String, dynamic>{
+        'id': request.strategyId.trim().isNotEmpty
+            ? request.strategyId.trim()
+            : snapshotId,
+        'protocolVersion': 'v1',
+        'publishedSnapshotId': snapshotId,
+        'params': strategyParams,
+      },
+      'dataRange': <String, dynamic>{
+        'fromTs': request.startTime.millisecondsSinceEpoch,
+        'toTs': request.endTime.millisecondsSinceEpoch,
+      },
+      'requestedRangeInput': <String, dynamic>{
+        'preset': request.rangePreset == 'custom'
+            ? 'CUSTOM'
+            : request.rangePreset.toUpperCase(),
+        if (request.rangePreset == 'custom')
+          'startAt': request.startTime.toIso8601String(),
+        if (request.rangePreset == 'custom')
+          'endAt': request.endTime.toIso8601String(),
+      },
     });
     return _merge(raw);
   }

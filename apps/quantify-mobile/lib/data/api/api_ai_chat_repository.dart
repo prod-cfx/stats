@@ -1,8 +1,14 @@
 import 'dart:async';
 
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
+
 import '../models/ai_chat_models.dart';
 import '../repositories/ai_chat_repository.dart';
 import '../services/account_services.dart';
+import '../services/api_client.dart';
+import '../services/generated_backend_api.dart';
 import '../services/json_codec.dart';
 
 ChatTurnKind _kindFromApi(Object? raw) {
@@ -32,6 +38,12 @@ ChatTurn _parseTurn(Map<String, dynamic> m) {
         : null,
     deployedExchange: asStringOrNull(pick(m, <String>['deployedExchange'])),
     deployedInstanceId: asStringOrNull(pick(m, <String>['deployedInstanceId'])),
+    codegenSessionId: asStringOrNull(
+      pick(m, <String>['codegenSessionId', 'llmCodegenSessionId', 'sessionId']),
+    ),
+    confirmedCanonicalDigest: asStringOrNull(
+      pick(m, <String>['confirmedCanonicalDigest', 'canonicalDigest']),
+    ),
   );
 }
 
@@ -48,6 +60,74 @@ AiSession _parseSession(Map<String, dynamic> m) {
     timeframe: asStringOrNull(pick(m, <String>['timeframe'])),
     cagrLabel: asStringOrNull(pick(m, <String>['cagrLabel'])),
     deployedTo: asStringOrNull(pick(m, <String>['deployedTo'])),
+    llmCodegenSessionId: asStringOrNull(
+      pick(m, <String>['llmCodegenSessionId', 'sessionId']),
+    ),
+    pendingCanonicalDigest: asStringOrNull(
+      pick(m, <String>['pendingCanonicalDigest', 'canonicalDigest']),
+    ),
+  );
+}
+
+dynamic _jsonObjectValue(JsonObject? object) => object?.value;
+
+Map<String, dynamic> _builtJsonMap(BuiltMap<String, JsonObject?>? source) {
+  if (source == null) return <String, dynamic>{};
+  return Map<String, dynamic>.fromEntries(
+    source.entries.map(
+      (MapEntry<String, JsonObject?> entry) =>
+          MapEntry<String, dynamic>(entry.key, _jsonObjectValue(entry.value)),
+    ),
+  );
+}
+
+Map<String, String> _stringParamsFromBuilt(
+  BuiltMap<String, JsonObject?>? source,
+) {
+  return _builtJsonMap(source).map(
+    (String key, dynamic value) =>
+        MapEntry<String, String>(key, asString(value)),
+  )..removeWhere((String _, String value) => value.isEmpty);
+}
+
+ChatTurn _turnFromCodegen(CodegenSessionResponseDto response) {
+  final Map<String, String> params = _stringParamsFromBuilt(
+    response.publishedSnapshotParamValues ?? response.specDesc,
+  );
+  final bool hasParams = params.isNotEmpty;
+  final String content = response.assistantPrompt?.trim().isNotEmpty == true
+      ? response.assistantPrompt!.trim()
+      : switch (response.status.name) {
+          'PUBLISHED' => '策略已确认并生成脚本。',
+          'CONFIRM_GATE' => '策略逻辑已生成，请确认后继续生成脚本。',
+          'CONSISTENCY_FAILED' => response.rejectReason ?? '策略一致性校验未通过。',
+          'REJECTED' => response.rejectReason ?? '后端拒绝了当前策略生成结果。',
+          _ => '策略生成状态：${response.status.name}',
+        };
+
+  return ChatTurn(
+    id: 'codegen-${response.id}-${DateTime.now().microsecondsSinceEpoch}',
+    role: 'assistant',
+    content: content,
+    timestamp: DateTime.now(),
+    kind: hasParams ? ChatTurnKind.params : ChatTurnKind.text,
+    params: hasParams ? params : null,
+    codegenSessionId: response.id,
+    confirmedCanonicalDigest: response.canonicalDigest,
+  );
+}
+
+AiSession _sessionFromCodegen(CodegenSessionResponseDto response) {
+  final ChatTurn turn = _turnFromCodegen(response);
+  return AiSession(
+    id: response.id,
+    title: response.conversationTitle ?? 'AI 策略会话',
+    category: 'AI 量化',
+    updatedAt: DateTime.now(),
+    messages: <ChatTurn>[turn],
+    llmCodegenSessionId: response.id,
+    pendingCanonicalDigest: response.canonicalDigest,
+    deployedTo: response.strategyInstanceId,
   );
 }
 
@@ -58,11 +138,28 @@ AiSession _parseSession(Map<String, dynamic> m) {
 class ApiAiChatRepository implements AiChatRepository {
   ApiAiChatRepository(
     this._service, {
+    GeneratedBackendApi? generatedApi,
+    String Function()? tokenSupplier,
     Duration sessionPollInterval = const Duration(milliseconds: 500),
-  }) : _sessionPollInterval = sessionPollInterval;
+  }) : _generatedApi = generatedApi,
+       _tokenSupplier = tokenSupplier,
+       _sessionPollInterval = sessionPollInterval;
 
   final AiChatService _service;
+  final GeneratedBackendApi? _generatedApi;
+  final String Function()? _tokenSupplier;
   final Duration _sessionPollInterval;
+
+  LlmStrategyCodegenApi? get _codegenApi =>
+      _generatedApi?.client.getLlmStrategyCodegenApi();
+
+  String _authorization() {
+    final String token = _tokenSupplier?.call() ?? '';
+    if (token.isEmpty) {
+      throw const ApiException(message: 'login required', statusCode: 401);
+    }
+    return 'Bearer $token';
+  }
 
   List<Map<String, dynamic>> _rows(dynamic raw) {
     final Object? list = raw is Map
@@ -80,6 +177,17 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Future<AiSession> createSession({String? title}) async {
+    final LlmStrategyCodegenApi? api = _codegenApi;
+    if (api != null) {
+      final response = await api.llmStrategyCodegenControllerStartSession(
+        authorization: _authorization(),
+        llmCodegenStartRequestDto: LlmCodegenStartRequestDto(
+          (b) => b..locale = LlmCodegenStartRequestDtoLocaleEnum.zh,
+        ),
+      );
+      final CodegenSessionResponseDto? data = response.data;
+      if (data != null) return _sessionFromCodegen(data);
+    }
     return _parseSession(asMap(await _service.createSession(title: title)));
   }
 
@@ -89,6 +197,21 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async {
+    final LlmStrategyCodegenApi? api = _codegenApi;
+    if (api != null) {
+      final response = await api.llmStrategyCodegenControllerContinueSession(
+        authorization: _authorization(),
+        id: sessionId,
+        llmCodegenContinueRequestDto: LlmCodegenContinueRequestDto(
+          (b) => b
+            ..message = turn.content
+            ..locale = LlmCodegenContinueRequestDtoLocaleEnum.zh
+            ..confirmGenerate = false,
+        ),
+      );
+      final CodegenSessionResponseDto? data = response.data;
+      if (data != null) return _turnFromCodegen(data);
+    }
     final dynamic raw = await _service.sendMessage(sessionId, <String, dynamic>{
       'id': turn.id,
       'role': turn.role,
@@ -97,6 +220,54 @@ class ApiAiChatRepository implements AiChatRepository {
       if (turn.params != null) 'params': turn.params,
     });
     return _parseTurn(asMap(raw));
+  }
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async {
+    final LlmStrategyCodegenApi? api = _codegenApi;
+    if (api == null) {
+      throw const ApiException(message: 'generated backend API unavailable');
+    }
+    final response = await api.llmStrategyCodegenControllerGetSession(
+      authorization: _authorization(),
+      id: sessionId,
+    );
+    final CodegenSessionResponseDto? data = response.data;
+    if (data == null) {
+      throw const ApiException(message: 'empty codegen session');
+    }
+    return data;
+  }
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) async {
+    final LlmStrategyCodegenApi? api = _codegenApi;
+    if (api == null) {
+      throw const ApiException(message: 'generated backend API unavailable');
+    }
+    final response = await api.llmStrategyCodegenControllerContinueSession(
+      authorization: _authorization(),
+      id: sessionId,
+      llmCodegenContinueRequestDto: LlmCodegenContinueRequestDto((b) {
+        b
+          ..message = message
+          ..locale = LlmCodegenContinueRequestDtoLocaleEnum.zh
+          ..confirmGenerate = true;
+        if (confirmedCanonicalDigest != null &&
+            confirmedCanonicalDigest.trim().isNotEmpty) {
+          b.confirmedCanonicalDigest = confirmedCanonicalDigest.trim();
+        }
+      }),
+    );
+    final CodegenSessionResponseDto? data = response.data;
+    if (data == null) {
+      throw const ApiException(message: 'empty codegen session');
+    }
+    return data;
   }
 
   @override

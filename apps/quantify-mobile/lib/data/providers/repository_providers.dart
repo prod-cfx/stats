@@ -16,6 +16,7 @@ import '../models/whale_profile_models.dart';
 import '../../domain/models/whale_holding_models.dart';
 import '../../domain/models/whale_leader_models.dart';
 import '../api/api.dart';
+import '../auth/session_controller.dart';
 import '../repositories/repositories.dart';
 import 'service_providers.dart';
 
@@ -170,9 +171,7 @@ final FutureProvider<List<WhaleLeaderEntry>> whaleLeaderboardProvider =
 /// 巨鲸「持仓」tab 持仓明细 repository（#1790）。API 驱动；真实读路径依赖 #1682。
 final Provider<WhaleHoldingsRepository> whaleHoldingsRepositoryProvider =
     Provider<WhaleHoldingsRepository>((Ref ref) {
-      return ApiWhaleHoldingsRepository(
-        ref.watch(generatedBackendApiProvider),
-      );
+      return ApiWhaleHoldingsRepository(ref.watch(generatedBackendApiProvider));
     });
 
 /// 巨鲸持仓明细列表（#1790）。持仓 tab watch；筛选与排序在 tab 本地态完成。
@@ -189,7 +188,7 @@ final Provider<WhaleWatchRepository> whaleWatchRepositoryProvider =
 
 final Provider<StrategyRepository> strategyRepositoryProvider =
     Provider<StrategyRepository>((Ref ref) {
-      return ApiStrategyRepository(ref.watch(strategyServiceProvider));
+      return ApiStrategyRepository(ref.watch(generatedBackendApiProvider));
     });
 
 final Provider<LiveStrategyRepository> liveStrategyRepositoryProvider =
@@ -199,7 +198,12 @@ final Provider<LiveStrategyRepository> liveStrategyRepositoryProvider =
 
 final Provider<AiChatRepository> aiChatRepositoryProvider =
     Provider<AiChatRepository>((Ref ref) {
-      return ApiAiChatRepository(ref.watch(aiChatServiceProvider));
+      return ApiAiChatRepository(
+        ref.watch(aiChatServiceProvider),
+        generatedApi: ref.watch(generatedBackendApiProvider),
+        tokenSupplier: () =>
+            ref.read(sessionControllerProvider).value?.token ?? '',
+      );
     });
 
 final Provider<BacktestRepository> backtestRepositoryProvider =

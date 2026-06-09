@@ -1,6 +1,14 @@
+import 'dart:async';
+
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/ai_chat_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -30,8 +38,10 @@ part 'ai_confirm_page.bottombar.part.dart';
 ///
 /// 入参：当前会话参数经 `extra` 透传（`Map<String, String>`）。缺省时回退
 /// [_fallbackParams]，保证深链 / widget test 直接打开不崩。
-class AiConfirmPage extends StatelessWidget {
-  const AiConfirmPage({super.key, this.params});
+class AiConfirmPage extends ConsumerStatefulWidget {
+  const AiConfirmPage({super.key, this.args, this.params});
+
+  final AiConfirmArgs? args;
 
   /// 当前会话参数键值对。来自参数气泡 `onConfirm` 接线（#1831），经 router
   /// `extra` 透传。`null` 时使用 [_fallbackParams]。
@@ -48,16 +58,210 @@ class AiConfirmPage extends StatelessWidget {
     'leverage': '5x',
   };
 
-  Map<String, String> get _params =>
-      (params != null && params!.isNotEmpty) ? params! : _fallbackParams;
+  @override
+  ConsumerState<AiConfirmPage> createState() => _AiConfirmPageState();
+}
+
+class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
+  static const int _confirmGateAdvanceLimit = 2;
+  static const int _publishPollLimit = 60;
+  static const Duration _publishPollInterval = Duration(milliseconds: 500);
+
+  CodegenSessionResponseDto? _session;
+  bool _loading = false;
+  bool _confirming = false;
+  String? _error;
+
+  Map<String, String> get _params {
+    final Map<String, String> remote = _paramsFromSession(_session);
+    if (remote.isNotEmpty) return remote;
+    final Map<String, String>? argParams = widget.args?.params;
+    if (argParams != null && argParams.isNotEmpty) return argParams;
+    if (widget.params != null && widget.params!.isNotEmpty) {
+      return widget.params!;
+    }
+    return AiConfirmPage._fallbackParams;
+  }
+
+  String? get _sessionId =>
+      widget.args?.codegenSessionId?.trim().isNotEmpty == true
+      ? widget.args!.codegenSessionId!.trim()
+      : null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_sessionId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadSession());
+    }
+  }
+
+  Future<void> _loadSession() async {
+    final String? sessionId = _sessionId;
+    if (sessionId == null || _loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final CodegenSessionResponseDto session = await ref
+          .read(aiChatRepositoryProvider)
+          .getCodegenSession(sessionId);
+      if (!mounted) return;
+      setState(() => _session = session);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Map<String, String> _paramsFromSession(CodegenSessionResponseDto? session) {
+    if (session == null) return const <String, String>{};
+    return _stringParamsFromBuilt(
+      session.publishedSnapshotParamValues ?? session.specDesc,
+    );
+  }
+
+  Future<void> _next(BuildContext context) async {
+    final String? sessionId = _sessionId;
+    if (sessionId == null) {
+      _openScript(_params, status: 'PUBLISHED');
+      return;
+    }
+    if (_confirming) return;
+
+    setState(() {
+      _confirming = true;
+      _error = null;
+    });
+    try {
+      CodegenSessionResponseDto result = await ref
+          .read(aiChatRepositoryProvider)
+          .confirmStrategy(
+            sessionId,
+            message: '确认策略',
+            confirmedCanonicalDigest:
+                widget.args?.confirmedCanonicalDigest ??
+                _session?.canonicalDigest,
+          );
+
+      // 对齐 front：确认后后端可能先停在 CONFIRM_GATE，再进入生成/校验队列；
+      // 移动端必须等到发布快照可用，后续回测才有 publishedSnapshotId 契约真相。
+      result = await _advanceConfirmGate(sessionId, result);
+      result = await _waitForPublishedSnapshot(sessionId, result);
+
+      final String publishedSnapshotId =
+          result.publishedSnapshotId?.trim() ?? '';
+      if (publishedSnapshotId.isEmpty) {
+        throw const FormatException('缺少已发布策略快照，无法进入回测流程。请重新确认策略。');
+      }
+
+      if (!mounted) return;
+      setState(() => _session = result);
+      _openScript(
+        _paramsFromSession(result).isNotEmpty
+            ? _paramsFromSession(result)
+            : _params,
+        status: result.status.name,
+        sessionId: result.id,
+        publishedSnapshotId: publishedSnapshotId,
+        strategyInstanceId: result.strategyInstanceId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+
+  Future<CodegenSessionResponseDto> _advanceConfirmGate(
+    String sessionId,
+    CodegenSessionResponseDto initial,
+  ) async {
+    CodegenSessionResponseDto current = initial;
+    for (int i = 0; i < _confirmGateAdvanceLimit; i++) {
+      if (current.status != CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE) {
+        break;
+      }
+      current = await ref
+          .read(aiChatRepositoryProvider)
+          .confirmStrategy(
+            sessionId,
+            message: '确认策略',
+            confirmedCanonicalDigest: current.canonicalDigest,
+          );
+    }
+    return current;
+  }
+
+  Future<CodegenSessionResponseDto> _waitForPublishedSnapshot(
+    String sessionId,
+    CodegenSessionResponseDto initial,
+  ) async {
+    CodegenSessionResponseDto current = initial;
+    for (int i = 0; i <= _publishPollLimit; i++) {
+      if (current.status == CodegenSessionResponseDtoStatusEnum.PUBLISHED) {
+        return current;
+      }
+      if (_isTerminalFailure(current.status)) {
+        final String reason = current.rejectReason?.trim().isNotEmpty == true
+            ? current.rejectReason!.trim()
+            : '后端未发布策略快照';
+        throw FormatException('策略发布失败：$reason');
+      }
+      if (!_isProcessingStatus(current.status) &&
+          current.status != CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE) {
+        throw FormatException('策略发布状态异常：${current.status.name}');
+      }
+      if (i == _publishPollLimit) break;
+      await Future<void>.delayed(_publishPollInterval);
+      current = await ref
+          .read(aiChatRepositoryProvider)
+          .getCodegenSession(sessionId);
+    }
+    throw TimeoutException('策略发布超时，请稍后返回确认策略重试。');
+  }
+
+  bool _isProcessingStatus(CodegenSessionResponseDtoStatusEnum status) {
+    return status == CodegenSessionResponseDtoStatusEnum.GENERATING ||
+        status == CodegenSessionResponseDtoStatusEnum.VALIDATING_STATIC ||
+        status == CodegenSessionResponseDtoStatusEnum.VALIDATING_RUNTIME ||
+        status == CodegenSessionResponseDtoStatusEnum.VALIDATING_OUTPUT ||
+        status == CodegenSessionResponseDtoStatusEnum.VALIDATING_CONSISTENCY;
+  }
+
+  bool _isTerminalFailure(CodegenSessionResponseDtoStatusEnum status) {
+    return status == CodegenSessionResponseDtoStatusEnum.CONSISTENCY_FAILED ||
+        status == CodegenSessionResponseDtoStatusEnum.REJECTED;
+  }
+
+  void _openScript(
+    Map<String, String> params, {
+    required String status,
+    String? sessionId,
+    String? publishedSnapshotId,
+    String? strategyInstanceId,
+  }) {
+    context.push(
+      '/ai/script',
+      extra: <String, String>{
+        ...params,
+        'codegenStatus': status,
+        if (sessionId?.trim().isNotEmpty == true)
+          'codegenSessionId': sessionId!.trim(),
+        if (publishedSnapshotId?.trim().isNotEmpty == true)
+          'publishedSnapshotId': publishedSnapshotId!.trim(),
+        if (strategyInstanceId?.trim().isNotEmpty == true)
+          'strategyInstanceId': strategyInstanceId!.trim(),
+      },
+    );
+  }
 
   // #1892 已落地 `/ai/script` 屏。「确认策略」来自会话参数气泡，说明 codegen
   // 已产出可预览参数；向脚本页透传完成态，避免脚本页本地 Timer 伪造 ready。
-  void _next(BuildContext context) => context.push(
-    '/ai/script',
-    extra: <String, String>{..._params, 'codegenStatus': 'PUBLISHED'},
-  );
-
   void _backToChat(BuildContext context) => context.pop();
 
   @override
@@ -65,6 +269,18 @@ class AiConfirmPage extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final StrategyConfirmView view = confirmStrategyView(_params, l10n);
+    final List<Widget> statusWidgets = <Widget>[
+      if (_loading)
+        Padding(
+          padding: const EdgeInsets.only(bottom: QzSpacing.md),
+          child: LinearProgressIndicator(color: c.accent),
+        ),
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: QzSpacing.md),
+          child: _InlineError(message: _error!),
+        ),
+    ];
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
@@ -110,6 +326,7 @@ class AiConfirmPage extends StatelessWidget {
                         view: view,
                         subtitle: l10n.aiConfirmHeroSubtitle,
                       ),
+                      ...statusWidgets,
                       const SizedBox(height: QzSpacing.lg),
                       _SectionTitle(
                         title: l10n.aiConfirmLogicTitle,
@@ -143,7 +360,9 @@ class AiConfirmPage extends StatelessWidget {
                     bottom: 0,
                     child: _BottomBar(
                       backLabel: l10n.aiConfirmBackToChat,
-                      nextLabel: l10n.aiConfirmNextScript,
+                      nextLabel: _confirming
+                          ? '确认中...'
+                          : l10n.aiConfirmNextScript,
                       onBack: () => _backToChat(context),
                       onNext: () => _next(context),
                     ),
@@ -186,6 +405,21 @@ class StrategyConfirmView {
 
 /// 确认页支持的策略场景（对齐设计稿 `STRAT_SCENARIOS`）。
 enum _ConfirmScenario { btcTrend, ethGrid }
+
+dynamic _jsonObjectValue(JsonObject? object) => object?.value;
+
+Map<String, String> _stringParamsFromBuilt(
+  BuiltMap<String, JsonObject?>? source,
+) {
+  if (source == null) return const <String, String>{};
+  final Map<String, String> result = <String, String>{};
+  for (final MapEntry<String, JsonObject?> entry in source.entries) {
+    final dynamic value = _jsonObjectValue(entry.value);
+    final String text = value?.toString().trim() ?? '';
+    if (text.isNotEmpty) result[entry.key] = text;
+  }
+  return result;
+}
 
 /// 由会话参数推断展示场景（#2132）。
 ///

@@ -44,9 +44,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   void persistDraft(String text) {
     final String? id = state.currentId;
     if (id == null) return;
-    state = state.copyWith(
-      drafts: <String, String>{...state.drafts, id: text},
-    );
+    state = state.copyWith(drafts: <String, String>{...state.drafts, id: text});
   }
 
   /// 标记已处理的 loadStrategy query，避免重复注入。
@@ -58,9 +56,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     final List<AiSession> list = await _chatRepo.listSessions();
     if (!mounted) return;
     state = state.copyWith(
-      sessions: <String, AiSession>{
-        for (final AiSession s in list) s.id: s,
-      },
+      sessions: <String, AiSession>{for (final AiSession s in list) s.id: s},
       order: <String>[for (final AiSession s in list) s.id],
       currentId: list.isNotEmpty ? list.first.id : null,
       initialized: true,
@@ -92,8 +88,9 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   Future<void> deleteSession(String id) async {
     await _chatRepo.deleteSession(id);
     if (!mounted) return;
-    final Map<String, AiSession> sessions =
-        Map<String, AiSession>.of(state.sessions)..remove(id);
+    final Map<String, AiSession> sessions = Map<String, AiSession>.of(
+      state.sessions,
+    )..remove(id);
     final List<String> order = List<String>.of(state.order)..remove(id);
     final Map<String, String> drafts = Map<String, String>.of(state.drafts)
       ..remove(id);
@@ -159,9 +156,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     state = state.copyWith(
       sessions: <String, AiSession>{
         ...state.sessions,
-        id: cur2.copyWith(
-          messages: <ChatTurn>[...base, _replyWith(reply, '')],
-        ),
+        id: cur2.copyWith(messages: <ChatTurn>[...base, _replyWith(reply, '')]),
       },
       isThinking: false,
       isStreaming: true,
@@ -303,6 +298,8 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     params: reply.params,
     deployedExchange: reply.deployedExchange,
     deployedInstanceId: reply.deployedInstanceId,
+    codegenSessionId: reply.codegenSessionId,
+    confirmedCanonicalDigest: reply.confirmedCanonicalDigest,
   );
 }
 

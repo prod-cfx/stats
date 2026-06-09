@@ -23,6 +23,14 @@ import 'widgets/long_short_search_overlay.dart';
 class LongShortBody extends ConsumerWidget {
   const LongShortBody({super.key});
 
+  static const List<String> _frontSymbols = <String>[
+    'BTCUSDT',
+    'ETHUSDT',
+    'SOLUSDT',
+    'XRPUSDT',
+    'HYPEUSDT',
+    'DOGEUSDT',
+  ];
   static const List<String> _periods = <String>['15分钟', '1小时', '4小时', '12小时'];
 
   Future<void> _pickPeriod(BuildContext context, WidgetRef ref) async {
@@ -43,16 +51,14 @@ class LongShortBody extends ConsumerWidget {
     WidgetRef ref,
     List<String> symbols,
   ) async {
-    final String? picked = await Navigator.of(
-      context,
-      rootNavigator: true,
-    ).push<String>(
-      MaterialPageRoute<String>(
-        fullscreenDialog: true,
-        builder: (BuildContext context) =>
-            LongShortSearchOverlay(symbols: symbols),
-      ),
-    );
+    final String? picked = await Navigator.of(context, rootNavigator: true)
+        .push<String>(
+          MaterialPageRoute<String>(
+            fullscreenDialog: true,
+            builder: (BuildContext context) =>
+                LongShortSearchOverlay(symbols: symbols),
+          ),
+        );
     if (picked != null) {
       ref.read(longShortControllerProvider.notifier).changeSymbol(picked);
     }
@@ -63,10 +69,7 @@ class LongShortBody extends ConsumerWidget {
     final LongShortState s = ref.watch(longShortControllerProvider);
     final List<Ticker> tickers =
         ref.watch(tickersProvider).value ?? const <Ticker>[];
-    final List<String> symbols = tickers
-        .map((Ticker ticker) => ticker.symbol)
-        .take(8)
-        .toList();
+    final List<String> symbols = _longShortSymbols(tickers);
     // coin tabs 固定在顶部（设计稿 LSCoinTabs 为 sticky 头），仅下方内容滚动。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,7 +87,11 @@ class LongShortBody extends ConsumerWidget {
     );
   }
 
-  Widget _buildScrollBody(BuildContext context, WidgetRef ref, LongShortState s) {
+  Widget _buildScrollBody(
+    BuildContext context,
+    WidgetRef ref,
+    LongShortState s,
+  ) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 100),
@@ -133,6 +140,40 @@ class LongShortBody extends ConsumerWidget {
   }
 }
 
+List<String> _longShortSymbols(List<Ticker> tickers) {
+  final Set<String> seen = <String>{};
+  final List<String> symbols = <String>[];
+
+  void add(String raw) {
+    final String base = _longShortBaseAsset(raw);
+    if (base.isEmpty || !seen.add(base)) return;
+    symbols.add('${base}USDT');
+  }
+
+  for (final String symbol in LongShortBody._frontSymbols) {
+    add(symbol);
+  }
+  for (final Ticker ticker in tickers) {
+    add(ticker.symbol);
+    if (symbols.length >= 12) break;
+  }
+
+  return symbols;
+}
+
+String _longShortBaseAsset(String symbol) {
+  final String normalized = symbol.trim().toUpperCase().replaceAll(
+    RegExp(r'[/_\-\s]'),
+    '',
+  );
+  for (final String quote in <String>['USDT', 'USDC', 'BUSD', 'USD']) {
+    if (normalized.endsWith(quote) && normalized.length > quote.length) {
+      return normalized.substring(0, normalized.length - quote.length);
+    }
+  }
+  return normalized;
+}
+
 class _CoinTabs extends StatelessWidget {
   const _CoinTabs({
     required this.symbols,
@@ -161,7 +202,8 @@ class _CoinTabs extends StatelessWidget {
                 const SizedBox(width: QzSpacing.sm),
             itemBuilder: (BuildContext context, int index) {
               final String symbol = symbols[index];
-              final bool active = symbol == selected;
+              final String coin = _longShortBaseAsset(symbol);
+              final bool active = coin == _longShortBaseAsset(selected);
               return InkWell(
                 key: Key('long-short-symbol-chip-$symbol'),
                 borderRadius: BorderRadius.circular(8),
@@ -177,7 +219,7 @@ class _CoinTabs extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    symbol.replaceAll('USDT', ''),
+                    coin,
                     style: TextStyle(
                       color: active ? c.accent : c.textMid,
                       fontSize: 13,

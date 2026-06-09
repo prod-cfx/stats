@@ -44,11 +44,30 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
     super.dispose();
   }
 
-  /// 币种代码（去 `USDT`），用于展示、热门与匹配；保留与 [widget.symbols] 同序。
-  List<String> get _coins =>
-      widget.symbols.map(_coinOf).toList(growable: false);
+  /// 币种代码，用于展示、热门与匹配；按 base asset 去重，保留首个出现顺序。
+  List<String> get _coins {
+    final Set<String> seen = <String>{};
+    final List<String> coins = <String>[];
+    for (final String symbol in widget.symbols) {
+      final String coin = _coinOf(symbol);
+      if (coin.isEmpty || !seen.add(coin)) continue;
+      coins.add(coin);
+    }
+    return coins;
+  }
 
-  String _coinOf(String symbol) => symbol.replaceAll('USDT', '');
+  String _coinOf(String symbol) {
+    final String normalized = symbol.trim().toUpperCase().replaceAll(
+      RegExp(r'[/_\-\s]'),
+      '',
+    );
+    for (final String quote in <String>['USDT', 'USDC', 'BUSD', 'USD']) {
+      if (normalized.endsWith(quote) && normalized.length > quote.length) {
+        return normalized.substring(0, normalized.length - quote.length);
+      }
+    }
+    return normalized;
+  }
 
   List<String> get _hits {
     final String q = _query.trim().toLowerCase();
@@ -80,10 +99,12 @@ class _LongShortSearchOverlayState extends State<LongShortSearchOverlay> {
   /// 回传选中币种对应的 symbol；同代码取 [widget.symbols] 首条，缺省回退 `<coin>USDT`。
   void _pick(String coin) {
     _remember(coin);
-    final String symbol = widget.symbols.firstWhere(
-      (String s) => _coinOf(s) == coin,
-      orElse: () => '${coin}USDT',
-    );
+    final String symbol = widget.symbols
+        .map((String symbol) => '${_coinOf(symbol)}USDT')
+        .firstWhere(
+          (String s) => _coinOf(s) == coin,
+          orElse: () => '${coin}USDT',
+        );
     Navigator.of(context).pop(symbol);
   }
 

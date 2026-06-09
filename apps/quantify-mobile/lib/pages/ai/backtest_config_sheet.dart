@@ -19,7 +19,9 @@ part 'backtest_config_sheet.matching.part.dart';
 ///
 /// 视觉基准：`design/project/mobile/m-screens-btconfig.jsx` + 设计稿截图。
 class BacktestConfigSheet extends ConsumerStatefulWidget {
-  const BacktestConfigSheet({super.key});
+  const BacktestConfigSheet({super.key, this.params});
+
+  final Map<String, String>? params;
 
   @override
   ConsumerState<BacktestConfigSheet> createState() =>
@@ -236,7 +238,22 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
 
     if (!mounted) return;
     _ctrl.clearError();
-    context.push('/ai/backtest-run');
+    context.push(
+      '/ai/backtest-run',
+      extra: <String, String>{
+        ...?widget.params,
+        'backtestRangePreset': st.rangeKey,
+        'backtestStart': _start.text.trim(),
+        'backtestEnd': _end.text.trim(),
+        'backtestInitialCash': _capital.text.trim(),
+        'backtestMarketType': st.futures ? 'perp' : 'spot',
+        'backtestLeverage': _leverage.text.trim(),
+        'backtestSlippageBps': _slippage.text.trim(),
+        'backtestFeeBps': _fee.text.trim(),
+        'backtestPriceSource': st.fillSource,
+        'backtestAllowPartial': st.partialData ? 'true' : 'false',
+      },
+    );
   }
 
   void _cancel() {
@@ -540,4 +557,3 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     );
   }
 }
-

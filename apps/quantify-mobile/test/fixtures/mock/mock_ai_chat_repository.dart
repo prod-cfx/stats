@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'fixtures/ai_chat.dart';
@@ -81,6 +82,17 @@ class MockAiChatRepository implements AiChatRepository {
     }
     return reply;
   }
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) async => throw UnimplementedError();
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) async* {

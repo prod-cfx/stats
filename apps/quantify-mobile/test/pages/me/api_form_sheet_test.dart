@@ -149,6 +149,12 @@ void main() {
       // 纯标签 'Secret' 不应单独出现（已被 Secret Key 取代）
       expect(find.text('主钱包地址'), findsNothing);
     });
+
+    testWidgets('已配置时显示脱敏记录', (WidgetTester tester) async {
+      await _pumpSheet(tester, 'OKX');
+
+      expect(find.text('已保存：测试子账户 · OKX-****5678'), findsOneWidget);
+    });
   });
 
   group('Hyperliquid — wallet 模式', () {

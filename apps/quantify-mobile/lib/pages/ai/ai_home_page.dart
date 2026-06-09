@@ -105,10 +105,17 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _scrollToBottom();
   }
 
-  /// 进入确认策略屏（#1832）：把参数气泡的当前会话参数经 `extra` 透传，
-  /// 供 `/ai/confirm` 渲染参数确认卡 + 脚本预览。
-  void _openConfirm(Map<String, String>? params) {
-    context.push('/ai/confirm', extra: params);
+  /// 进入确认策略屏：真实链路传 codegen session；旧 mock 参数作兜底。
+  void _openConfirm(ChatTurn turn, AiSession session) {
+    context.push(
+      '/ai/confirm',
+      extra: AiConfirmArgs(
+        codegenSessionId: turn.codegenSessionId ?? session.llmCodegenSessionId,
+        confirmedCanonicalDigest:
+            turn.confirmedCanonicalDigest ?? session.pendingCanonicalDigest,
+        params: turn.params,
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -249,7 +256,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                             // 「确认策略」CTA（#1831 接线 → #1832 落地）：
                             // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
                             onConfirm: t.kind == ChatTurnKind.params
-                                ? () => _openConfirm(t.params)
+                                ? () => _openConfirm(t, current)
                                 : null,
                             // 已部署锁定态（#1834）：会话 `deployedTo != null`
                             // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。

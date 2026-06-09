@@ -1,4 +1,5 @@
 import 'package:fake_async/fake_async.dart';
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +47,17 @@ class _FakeAiChatRepository implements AiChatRepository {
       timestamp: DateTime(2026, 1, 2),
     );
   }
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) async => throw UnimplementedError();
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) =>

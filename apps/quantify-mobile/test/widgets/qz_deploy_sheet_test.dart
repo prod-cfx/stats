@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/deploy_models.dart';
@@ -94,6 +95,17 @@ class _FakeAiChatRepo implements AiChatRepository {
   @override
   Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async =>
       throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) async => throw UnimplementedError();
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) =>

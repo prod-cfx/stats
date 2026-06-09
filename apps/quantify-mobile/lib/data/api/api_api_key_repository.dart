@@ -14,13 +14,18 @@ class ApiApiKeyRepository implements ApiKeyRepository {
 
   final ApiKeyService _service;
 
+  Object? _payload(Object? raw) {
+    final Map<String, dynamic> root = asMap(raw);
+    return root.containsKey('data') ? root['data'] : raw;
+  }
+
   ExchangeApiKey _parse(Map<String, dynamic> m, {String? maskedFallback}) {
     return ExchangeApiKey(
       id: asString(pick(m, <String>['id'])),
-      exchange: asString(pick(m, <String>['exchange'])),
-      label: asString(pick(m, <String>['label'])),
+      exchange: asString(pick(m, <String>['exchangeId', 'exchange'])),
+      label: asString(pick(m, <String>['name', 'label'])),
       maskedKey: asString(
-        pick(m, <String>['maskedKey']),
+        pick(m, <String>['maskedCredential', 'maskedKey']),
         fallback: maskedFallback ?? '',
       ),
       createdAt: asDateTime(pick(m, <String>['createdAt'])),
@@ -30,12 +35,18 @@ class ApiApiKeyRepository implements ApiKeyRepository {
   @override
   Future<List<ExchangeApiKey>> listKeys() async {
     final dynamic raw = await _service.listKeys();
-    final Object? list = raw is Map
-        ? pick(asMap(raw), <String>['items', 'data'])
-        : raw;
-    return asMapList(
-      list ?? raw,
-    ).map((Map<String, dynamic> m) => _parse(m)).toList(growable: false);
+    final Object? payload = _payload(raw);
+    final Object? list = payload is Map
+        ? pick(asMap(payload), <String>['items', 'data'])
+        : payload;
+    return asMapList(list ?? payload)
+        .where(
+          (Map<String, dynamic> m) =>
+              asBool(pick(m, <String>['isBound']), fallback: true),
+        )
+        .map((Map<String, dynamic> m) => _parse(m))
+        .where((ExchangeApiKey k) => k.id.isNotEmpty)
+        .toList(growable: false);
   }
 
   @override
@@ -64,13 +75,14 @@ class ApiApiKeyRepository implements ApiKeyRepository {
     String? apiPassphrase,
   }) async {
     final dynamic raw = await _service.addKey(<String, dynamic>{
-      'exchange': exchange,
+      'exchangeId': exchange.toLowerCase(),
       'label': label,
+      'name': label,
       'apiKey': apiKey,
       'apiSecret': apiSecret,
-      'apiPassphrase': ?apiPassphrase,
+      'passphrase': ?apiPassphrase,
     });
-    return _parse(asMap(raw), maskedFallback: maskApiKey(apiKey));
+    return _parse(asMap(_payload(raw)), maskedFallback: maskApiKey(apiKey));
   }
 
   @override

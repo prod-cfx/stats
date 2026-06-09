@@ -26,6 +26,11 @@ class ChatTurn {
   final String? deployedExchange;
   final String? deployedInstanceId;
 
+  /// LLM codegen session metadata. 参数确认 CTA 用它恢复真实后端会话并提交
+  /// `confirmGenerate=true`，避免确认页只消费本地 mock 参数。
+  final String? codegenSessionId;
+  final String? confirmedCanonicalDigest;
+
   const ChatTurn({
     required this.id,
     required this.role,
@@ -35,6 +40,8 @@ class ChatTurn {
     this.params,
     this.deployedExchange,
     this.deployedInstanceId,
+    this.codegenSessionId,
+    this.confirmedCanonicalDigest,
   });
 }
 
@@ -78,6 +85,8 @@ class AiSession {
   final DateTime updatedAt;
   final List<ChatTurn> messages;
   final String? deployedTo;
+  final String? llmCodegenSessionId;
+  final String? pendingCanonicalDigest;
 
   const AiSession({
     required this.id,
@@ -89,6 +98,8 @@ class AiSession {
     this.timeframe,
     this.cagrLabel,
     this.deployedTo,
+    this.llmCodegenSessionId,
+    this.pendingCanonicalDigest,
   });
 
   AiSession copyWith({
@@ -100,6 +111,8 @@ class AiSession {
     DateTime? updatedAt,
     List<ChatTurn>? messages,
     String? deployedTo,
+    String? llmCodegenSessionId,
+    String? pendingCanonicalDigest,
   }) {
     return AiSession(
       id: id,
@@ -111,6 +124,23 @@ class AiSession {
       updatedAt: updatedAt ?? this.updatedAt,
       messages: messages ?? this.messages,
       deployedTo: deployedTo ?? this.deployedTo,
+      llmCodegenSessionId: llmCodegenSessionId ?? this.llmCodegenSessionId,
+      pendingCanonicalDigest:
+          pendingCanonicalDigest ?? this.pendingCanonicalDigest,
     );
   }
+}
+
+/// 确认策略页入参。保留 [params] 作旧路由 / 测试兜底；真实链路通过
+/// [codegenSessionId] 从后端恢复 codegen session 并提交确认。
+class AiConfirmArgs {
+  const AiConfirmArgs({
+    this.codegenSessionId,
+    this.confirmedCanonicalDigest,
+    this.params,
+  });
+
+  final String? codegenSessionId;
+  final String? confirmedCanonicalDigest;
+  final Map<String, String>? params;
 }

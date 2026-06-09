@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/auth/session_controller.dart';
+import '../data/models/ai_chat_models.dart';
 import '../data/models/auth_models.dart';
 import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
@@ -172,6 +173,7 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState state) {
           final Object? extra = state.extra;
           return AiConfirmPage(
+            args: extra is AiConfirmArgs ? extra : null,
             params: extra is Map<String, String> ? extra : null,
           );
         },
@@ -189,13 +191,21 @@ GoRouter buildRouter({
       ),
       GoRoute(
         path: '/ai/backtest-config',
-        builder: (BuildContext context, GoRouterState state) =>
-            const BacktestConfigSheet(),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return BacktestConfigSheet(
+            params: extra is Map<String, String> ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/ai/backtest-run',
-        builder: (BuildContext context, GoRouterState state) =>
-            const AiBacktestRunPage(),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return AiBacktestRunPage(
+            params: extra is Map<String, String> ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/ai/backtest-result',
@@ -248,9 +258,7 @@ class _StrategyEntryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AuthSession? session = ref
-        .watch(sessionControllerProvider)
-        .value;
+    final AuthSession? session = ref.watch(sessionControllerProvider).value;
     return session == null
         ? const StrategyGuestPage()
         : const StrategyHomePage();

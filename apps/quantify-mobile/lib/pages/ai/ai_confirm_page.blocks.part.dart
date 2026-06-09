@@ -70,6 +70,32 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
+class _InlineError extends StatelessWidget {
+  const _InlineError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      key: const Key('ai-confirm-error'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(QzSpacing.md),
+      decoration: BoxDecoration(
+        color: c.brightness == Brightness.dark
+            ? QzStatusDark.dangerSoft
+            : QzStatus.dangerSoft,
+        borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(color: c.statusDanger, fontSize: 12, height: 1.4),
+      ),
+    );
+  }
+}
+
 /// 区块标题 + 右侧动作链接（「在对话中修改」）。
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({

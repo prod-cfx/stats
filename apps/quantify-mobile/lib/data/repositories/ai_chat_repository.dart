@@ -1,4 +1,5 @@
 import '../models/ai_chat_models.dart';
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 
 /// AI 聊天 Repository 接口。
 ///
@@ -15,6 +16,12 @@ abstract class AiChatRepository {
   Future<AiSession> createSession({String? title});
   Future<void> deleteSession(String sessionId);
   Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn);
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId);
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  });
   Stream<ChatTurn> watchSession(String sessionId);
   Future<BacktestSummary?> latestBacktest(String sessionId);
   Future<AiSession?> markDeployed(

@@ -148,7 +148,7 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
 
   void _next() {
     if (!ref.read(aiScriptPageControllerProvider).ready) return;
-    context.push('/ai/backtest-config');
+    context.push('/ai/backtest-config', extra: _params);
   }
 
   @override

@@ -9,6 +9,13 @@ class _StubBacktestService extends BacktestService {
     : super(ApiClient(baseUrl: 'http://localhost'));
 
   final Object? result;
+  Map<String, dynamic>? lastRunRequest;
+
+  @override
+  Future<dynamic> run(Map<String, dynamic> request) async {
+    lastRunRequest = request;
+    return result;
+  }
 
   @override
   Future<dynamic> getResult(String id) async => result;
@@ -16,6 +23,81 @@ class _StubBacktestService extends BacktestService {
 
 void main() {
   group('ApiBacktestRepository deep result mapping', () {
+    test('run 使用真实 backtesting job payload 并绑定 publishedSnapshotId', () async {
+      final _StubBacktestService service = _StubBacktestService(
+        result: <String, dynamic>{'id': 'job-1'},
+      );
+      final ApiBacktestRepository repo = ApiBacktestRepository(service);
+
+      await repo.run(
+        BacktestRequest(
+          strategyId: 'strategy-1',
+          publishedSnapshotId: 'snapshot-1',
+          conversationId: 'session-1',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          startTime: DateTime.utc(2026, 1, 1),
+          endTime: DateTime.utc(2026, 1, 31),
+          initialCash: 25000,
+          marketType: 'perp',
+          leverage: 5,
+          slippageBps: 4,
+          feeBps: 2,
+          priceSource: 'mid',
+          allowPartial: true,
+          rangePreset: '30D',
+          params: const <String, dynamic>{'fast_ma': '7'},
+        ),
+      );
+
+      final Map<String, dynamic> payload = service.lastRunRequest!;
+      expect(payload['symbols'], <String>['BTCUSDT']);
+      expect(payload['baseTimeframe'], '15m');
+      expect(payload['stateTimeframes'], <String>['15m']);
+      expect(payload['initialCash'], 25000);
+      expect(payload['leverage'], 5);
+      expect(payload['conversationId'], 'session-1');
+      expect(payload['execution'], <String, dynamic>{
+        'slippageBps': 4,
+        'feeBps': 2,
+        'priceSource': 'mid',
+      });
+      expect(payload['strategy'], <String, dynamic>{
+        'id': 'strategy-1',
+        'protocolVersion': 'v1',
+        'publishedSnapshotId': 'snapshot-1',
+        'params': <String, dynamic>{'fast_ma': '7', 'marketType': 'perp'},
+      });
+      expect(payload['dataRange'], <String, dynamic>{
+        'fromTs': DateTime.utc(2026, 1, 1).millisecondsSinceEpoch,
+        'toTs': DateTime.utc(2026, 1, 31).millisecondsSinceEpoch,
+      });
+      expect(payload['requestedRangeInput'], <String, dynamic>{
+        'preset': '30D',
+      });
+    });
+
+    test('run 缺少 publishedSnapshotId 时本地拦截，不请求后端', () async {
+      final _StubBacktestService service = _StubBacktestService(
+        result: <String, dynamic>{'id': 'job-1'},
+      );
+      final ApiBacktestRepository repo = ApiBacktestRepository(service);
+
+      await expectLater(
+        repo.run(
+          BacktestRequest(
+            strategyId: 'strategy-1',
+            symbol: 'BTCUSDT',
+            startTime: DateTime.utc(2026, 1, 1),
+            endTime: DateTime.utc(2026, 1, 31),
+            params: const <String, dynamic>{},
+          ),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(service.lastRunRequest, isNull);
+    });
+
     test(
       '完整响应映射 equity / drawdown / monthly / trades / risk / assessment',
       () async {
