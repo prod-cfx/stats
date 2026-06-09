@@ -191,5 +191,37 @@ void main() {
         expect(entries.last.tags, <String>['多头战神']);
       },
     );
+
+    test(
+      'unwraps backend BaseResponse envelope before mapping discover DTOs',
+      () async {
+        final List<String> calls = <String>[];
+        final repo = ApiWhaleLeaderboardRepository(
+          _discoverApi(<String, Object?>{
+            'data': <String, Object?>{
+              'recommended': <Map<String, Object?>>[
+                _discoverTrader(
+                  variant: 'recommended',
+                  address: '0xabcdefabcdefabcdef01',
+                  avatarColor: '#60a5fa',
+                  totalValueUsd: 50000000,
+                  pnlUsd: 1200000,
+                  winRatePct: 80,
+                ),
+              ],
+              'details': <Map<String, Object?>>[],
+            },
+            'message': 'Success',
+          }, calls),
+        );
+
+        final List<WhaleLeaderEntry> entries = await repo.getLeaderboard();
+
+        expect(calls, <String>['/whale-tracking/discover']);
+        expect(entries, hasLength(1));
+        expect(entries.single.id, '0xabcdefabcdefabcdef01');
+        expect(entries.single.aumDisplay, r'$50.00M');
+      },
+    );
   });
 }

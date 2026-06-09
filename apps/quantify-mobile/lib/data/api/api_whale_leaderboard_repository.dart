@@ -43,10 +43,19 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
 
   @override
   Future<List<WhaleLeaderEntry>> getLeaderboard() async {
-    final Response<WhaleDiscoverResponseDto> response = await _api.client
-        .getWhaleTrackingApi()
-        .whaleTrackingControllerGetDiscover();
-    final WhaleDiscoverResponseDto? data = response.data;
+    final Response<Object?> response = await _api.dio.get<Object?>(
+      '/whale-tracking/discover',
+    );
+    final Object? raw = response.data;
+    final Object? payload = raw is Map && raw['data'] != null
+        ? raw['data']
+        : raw;
+    final WhaleDiscoverResponseDto? data = payload is WhaleDiscoverResponseDto
+        ? payload
+        : _api.client.serializers.deserializeWith(
+            WhaleDiscoverResponseDto.serializer,
+            payload,
+          );
     if (data == null) return const <WhaleLeaderEntry>[];
 
     return <WhaleLeaderEntry>[

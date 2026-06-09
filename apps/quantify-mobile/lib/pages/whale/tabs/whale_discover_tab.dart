@@ -19,7 +19,7 @@ import 'whale_discover_tab_controller.dart';
 
 /// 巨鲸动向 — 发现 tab（issue #1789 / 三件套迁移 #2183）。对齐设计稿
 /// `WhaleDiscoverNew`：top3 轮播 hero + 排序条（胜率/总值/盈亏）+ 巨鲸列表卡
-/// （AI 标签）。mock 驱动（[whaleLeaderboardProvider]），排序态收敛进
+/// （AI 标签）。数据由 [whaleLeaderboardProvider] 通过后端发现契约提供，排序态收敛进
 /// [whaleDiscoverTabControllerProvider]，widget 退化为纯消费层。
 class WhaleDiscoverTab extends ConsumerWidget {
   const WhaleDiscoverTab({super.key});
@@ -39,7 +39,10 @@ class WhaleDiscoverTab extends ConsumerWidget {
     );
   }
 
-  Future<void> _copyAddress(BuildContext context, WhaleLeaderEntry entry) async {
+  Future<void> _copyAddress(
+    BuildContext context,
+    WhaleLeaderEntry entry,
+  ) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     await Clipboard.setData(ClipboardData(text: entry.id));
     if (!context.mounted) return;
