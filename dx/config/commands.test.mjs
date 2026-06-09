@@ -191,4 +191,25 @@ describe('dx command config', () => {
       assert.match(value, /\/api\/v1\/?$/, `.env.${env} NEXT_PUBLIC_BACKEND_API_BASE_URL must include /api/v1`)
     }
   })
+
+  it('deploys frontend targets from app roots with prebuilt Vercel output', () => {
+    const deployCommands = [
+      commands.deploy.front.staging.command,
+      commands.deploy.front.production.command,
+      commands.deploy.admin.staging.command,
+      commands.deploy.admin.production.command,
+    ]
+
+    for (const command of deployCommands) {
+      assert.match(command, /\bvercel build\b/)
+      assert.match(command, /\bvercel deploy\b.*--prebuilt/)
+      assert.match(command, /--local-config vercel\.json/)
+      assert.doesNotMatch(command, /vercel\.(front|admin)\.json/)
+    }
+
+    assert.match(commands.deploy.front.staging.command, /--cwd apps\/front/)
+    assert.match(commands.deploy.front.production.command, /--cwd apps\/front/)
+    assert.match(commands.deploy.admin.staging.command, /--cwd apps\/admin-front/)
+    assert.match(commands.deploy.admin.production.command, /--cwd apps\/admin-front/)
+  })
 })

@@ -600,24 +600,24 @@
     },
     "front": {
       "staging": {
-        "command": "vercel deploy --yes --local-config vercel.front.json",
+        "command": "vercel build --cwd apps/front --prod --local-config vercel.json && vercel deploy --cwd apps/front --prebuilt --yes --prod --local-config vercel.json",
         "app": "front",
         "description": "部署 front 到 Vercel（预发环境）"
       },
       "production": {
-        "command": "vercel deploy --yes --prod --local-config vercel.front.json",
+        "command": "vercel build --cwd apps/front --prod --local-config vercel.json && vercel deploy --cwd apps/front --prebuilt --yes --prod --local-config vercel.json",
         "app": "front",
         "description": "部署 front 到 Vercel（生产环境）"
       }
     },
     "admin": {
       "staging": {
-        "command": "vercel deploy --yes --local-config vercel.admin.json",
+        "command": "vercel build --cwd apps/admin-front --prod --local-config vercel.json && vercel deploy --cwd apps/admin-front --prebuilt --yes --prod --local-config vercel.json",
         "app": "admin-front",
         "description": "部署 admin 到 Vercel（预发环境）"
       },
       "production": {
-        "command": "vercel deploy --yes --prod --local-config vercel.admin.json",
+        "command": "vercel build --cwd apps/admin-front --prod --local-config vercel.json && vercel deploy --cwd apps/admin-front --prebuilt --yes --prod --local-config vercel.json",
         "app": "admin-front",
         "description": "部署 admin 到 Vercel（生产环境）"
       }
