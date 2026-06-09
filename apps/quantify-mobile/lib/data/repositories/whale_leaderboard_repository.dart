@@ -1,4 +1,5 @@
 import '../../domain/models/whale_leader_models.dart';
+import '../models/whale_profile_models.dart';
 
 /// 巨鲸「发现」tab 排行榜 Repository 接口（issue #1789）。
 ///
@@ -7,4 +8,7 @@ import '../../domain/models/whale_leader_models.dart';
 abstract class WhaleLeaderboardRepository {
   /// 获取巨鲸排行榜（含 top3 头像鲸与普通条目）。
   Future<List<WhaleLeaderEntry>> getLeaderboard();
+
+  /// 获取单个地址交易统计，消费 `/whale-tracking/traders/:address/performance`。
+  Future<WhaleTradeStats> getTradeStats(String address);
 }

@@ -67,6 +67,75 @@ class WhaleTradeStatsSheet extends StatefulWidget {
     );
   }
 
+  static Future<void> showFuture(
+    BuildContext context, {
+    required String address,
+    required Future<WhaleTradeStats> stats,
+    String? avatarGlyph,
+    int? avatarColorHex,
+  }) {
+    final QzColorScheme c = context.qzScheme;
+    return showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isDismissible: true,
+      isScrollControlled: true,
+      backgroundColor: c.bg,
+      barrierColor: c.scrim,
+      sheetAnimationStyle: const AnimationStyle(
+        curve: QzCurves.sheetPanel,
+        duration: QzCurves.sheetPanelDuration,
+        reverseCurve: QzCurves.sheetPanel,
+        reverseDuration: QzCurves.sheetPanelDuration,
+      ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext ctx) {
+        return FutureBuilder<WhaleTradeStats>(
+          future: stats,
+          builder:
+              (BuildContext context, AsyncSnapshot<WhaleTradeStats> snapshot) {
+                if (snapshot.hasData) {
+                  return WhaleTradeStatsSheet(
+                    address: address,
+                    stats: snapshot.requireData,
+                    avatarGlyph: avatarGlyph,
+                    avatarColorHex: avatarColorHex,
+                  );
+                }
+                final AppLocalizations l10n = AppLocalizations.of(context);
+                final QzColorScheme c = context.qzScheme;
+                return SizedBox(
+                  height: MediaQuery.sizeOf(context).height * 0.42,
+                  child: Column(
+                    children: <Widget>[
+                      _Header(
+                        title: l10n.whaleTradeStatsTitle,
+                        onClose: () => Navigator.of(context).pop(),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: snapshot.hasError
+                              ? Text(
+                                  l10n.whaleLoadError,
+                                  style: TextStyle(
+                                    color: c.textMid,
+                                    fontSize: 13,
+                                  ),
+                                )
+                              : const CircularProgressIndicator(),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+        );
+      },
+    );
+  }
+
   @override
   State<WhaleTradeStatsSheet> createState() => _WhaleTradeStatsSheetState();
 }
@@ -163,4 +232,3 @@ class _WhaleTradeStatsSheetState extends State<WhaleTradeStatsSheet> {
     );
   }
 }
-

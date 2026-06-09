@@ -232,5 +232,78 @@ void main() {
         expect(entries.single.aumDisplay, r'$50.00M');
       },
     );
+
+    test(
+      'maps trader performance DTO into trade stats asset and position rows',
+      () async {
+        final List<String> calls = <String>[];
+        final repo = ApiWhaleLeaderboardRepository(
+          _discoverApi(<String, Object?>{
+            'summary': <String, Object?>{
+              'address': '0xperf',
+              'lookbackDays': 7,
+              'trades': 5,
+              'positions': 2,
+              'totalValueUsd': 2200000,
+              'longCount': 3,
+              'shortCount': 2,
+              'winRatePct': 60,
+              'pnlUsd': 12000,
+            },
+            'byAsset': <Map<String, Object?>>[
+              <String, Object?>{
+                'symbol': 'BTC',
+                'totalValueUsd': 1500000,
+                'trades': 3,
+                'longCount': 2,
+                'shortCount': 1,
+              },
+              <String, Object?>{
+                'symbol': 'ETH',
+                'totalValueUsd': 700000,
+                'trades': 2,
+                'longCount': 1,
+                'shortCount': 1,
+              },
+            ],
+            'trades': <Map<String, Object?>>[
+              <String, Object?>{
+                'address': '0xperf',
+                'symbol': 'BTC',
+                'side': 'LONG',
+                'positionSize': 0.25,
+                'positionValueUsd': 1500000,
+                'entryPrice': 100000,
+                'liquidationPrice': 80000,
+                'positionAction': '1',
+                'createTime': DateTime.now()
+                    .toUtc()
+                    .subtract(const Duration(hours: 3))
+                    .toIso8601String(),
+              },
+            ],
+          }, calls),
+        );
+
+        final WhaleTradeStats stats = await repo.getTradeStats('0xperf');
+
+        expect(calls, <String>['/whale-tracking/traders/0xperf/performance']);
+        expect(stats.pnlDisplay, r'+$12.00K');
+        expect(stats.winRatePct, 60);
+        expect(stats.tradesTotal, 5);
+        expect(stats.wins, 3);
+        expect(stats.losses, 2);
+        expect(stats.longPct, 60);
+        expect(stats.shortPct, 40);
+        expect(stats.assetPerf, hasLength(2));
+        expect(stats.assetPerf.first.symbol, 'BTC');
+        expect(stats.assetPerf.first.tradeCount, 3);
+        expect(stats.assetPerf.first.pnlDisplay, '1.50M');
+        expect(stats.positionPerf, hasLength(1));
+        expect(stats.positionPerf.first.sym, 'BTC');
+        expect(stats.positionPerf.first.side, '做多');
+        expect(stats.positionPerf.first.sizeDisplay, '0.2500 BTC');
+      },
+    );
   });
 }

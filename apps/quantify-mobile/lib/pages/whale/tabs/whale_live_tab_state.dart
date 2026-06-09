@@ -35,7 +35,7 @@ class WhaleLiveTabState {
     this.items = const <WhaleLiveFeedItem>[],
     this.loading = true,
     this.error,
-    this.symbolFilter = '',
+    this.symbolFilter = 'BTC',
     this.tick = countdownStart,
     this.winSort = WhaleLiveWinSort.none,
   });
@@ -47,7 +47,7 @@ class WhaleLiveTabState {
   final bool loading;
   final DomainError? error;
 
-  /// 默认展示全部真实推送；具体币种筛选由用户显式选择。
+  /// 默认展示 BTC 推送；用户可切换「全部」或其他币种。
   final String symbolFilter;
   final int tick;
   final WhaleLiveWinSort winSort;

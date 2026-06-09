@@ -21,8 +21,18 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
 class _FakeLeaderboardRepo implements WhaleLeaderboardRepository {
+  final List<String> statsCalls = <String>[];
+
   @override
   Future<List<WhaleLeaderEntry>> getLeaderboard() async => mockWhaleLeaders;
+
+  @override
+  Future<WhaleTradeStats> getTradeStats(String address) async {
+    statsCalls.add(address);
+    return whaleLeaderTradeStats(
+      mockWhaleLeaders.firstWhere((WhaleLeaderEntry e) => e.id == address),
+    );
+  }
 }
 
 /// 列表卡顺序：取所有 [WhaleLeaderCard] 的地址（[WhaleLeaderEntry.id]）。
@@ -33,8 +43,9 @@ List<String> _cardOrder(WidgetTester tester) {
       .toList();
 }
 
-Future<void> _pump(WidgetTester tester) async {
+Future<_FakeLeaderboardRepo> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 3200));
+  final _FakeLeaderboardRepo repo = _FakeLeaderboardRepo();
   final GoRouter router = GoRouter(
     initialLocation: '/whale',
     routes: <RouteBase>[
@@ -53,9 +64,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        whaleLeaderboardRepositoryProvider.overrideWithValue(
-          _FakeLeaderboardRepo(),
-        ),
+        whaleLeaderboardRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(
         locale: const Locale('zh'),
@@ -68,6 +77,7 @@ Future<void> _pump(WidgetTester tester) async {
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 250));
+  return repo;
 }
 
 void main() {
@@ -232,20 +242,26 @@ void main() {
     });
 
     testWidgets('入口二：点列表卡卡片本体 → 打开交易统计弹窗', (WidgetTester tester) async {
-      await _pump(tester);
+      final _FakeLeaderboardRepo repo = await _pump(tester);
       // 点卡片本体（InkWell），避开地址 / 复制 / 趋势子控件。
       await tester.tap(find.text('账户总价值').last);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.byType(WhaleTradeStatsSheet), findsOneWidget);
+      expect(repo.statsCalls, hasLength(1));
+      expect(
+        mockWhaleLeaders.map((WhaleLeaderEntry e) => e.id),
+        contains(repo.statsCalls.single),
+      );
     });
 
     testWidgets('入口二：点趋势按钮 → 打开交易统计弹窗', (WidgetTester tester) async {
-      await _pump(tester);
+      final _FakeLeaderboardRepo repo = await _pump(tester);
       await tester.tap(find.byType(WhaleTrendButton).first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.byType(WhaleTradeStatsSheet), findsOneWidget);
+      expect(repo.statsCalls, <String>['0x8ba1...ba72']);
     });
 
     testWidgets('点复制按钮 → 写入剪贴板 + toast', (WidgetTester tester) async {

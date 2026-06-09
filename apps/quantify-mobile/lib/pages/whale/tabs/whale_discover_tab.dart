@@ -29,11 +29,13 @@ class WhaleDiscoverTab extends ConsumerWidget {
   }
 
   /// 点卡片 / 趋势按钮 → 交易统计弹窗（复用 #1859 的 [WhaleTradeStatsSheet]）。
-  void _openStats(BuildContext context, WhaleLeaderEntry entry) {
-    WhaleTradeStatsSheet.show(
+  void _openStats(BuildContext context, WidgetRef ref, WhaleLeaderEntry entry) {
+    WhaleTradeStatsSheet.showFuture(
       context,
       address: entry.id,
-      stats: whaleLeaderTradeStats(entry),
+      stats: ref
+          .read(whaleLeaderboardRepositoryProvider)
+          .getTradeStats(entry.id),
       avatarGlyph: entry.avatarText,
       avatarColorHex: entry.avatarBgHex,
     );
@@ -88,7 +90,7 @@ class WhaleDiscoverTab extends ConsumerWidget {
             WhaleTopSlideshow(
               top3: top3,
               onOpen: (WhaleLeaderEntry e) => _openProfile(context, e),
-              onStats: (WhaleLeaderEntry e) => _openStats(context, e),
+              onStats: (WhaleLeaderEntry e) => _openStats(context, ref, e),
               onCopy: (WhaleLeaderEntry e) => _copyAddress(context, e),
             ),
             Padding(
@@ -117,7 +119,7 @@ class WhaleDiscoverTab extends ConsumerWidget {
                 child: WhaleLeaderCard(
                   entry: e,
                   onOpen: () => _openProfile(context, e),
-                  onStats: () => _openStats(context, e),
+                  onStats: () => _openStats(context, ref, e),
                   onCopy: () => _copyAddress(context, e),
                 ),
               ),
