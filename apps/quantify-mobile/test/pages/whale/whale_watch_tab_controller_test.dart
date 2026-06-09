@@ -25,8 +25,26 @@ WatchRule _rule(String id, {bool muted = false}) => WatchRule(
 class _FakeRepo implements WhaleWatchRepository {
   _FakeRepo(this._rules);
   final List<WatchRule> _rules;
+  final List<String> calls = <String>[];
   @override
   Future<List<WatchRule>> listRules() async => _rules;
+  @override
+  Future<WatchRule> createRule(WatchRule rule) async {
+    calls.add('create:${rule.id}');
+    return rule;
+  }
+
+  @override
+  Future<WatchRule> updateRule(WatchRule rule) async {
+    calls.add('update:${rule.id}:${rule.muted}');
+    return rule;
+  }
+
+  @override
+  Future<void> deleteRule(WatchRule rule) async {
+    calls.add('delete:${rule.id}');
+  }
+
   @override
   Future<List<WhaleSearchResult>> search(String query) async =>
       const <WhaleSearchResult>[];
@@ -35,6 +53,12 @@ class _FakeRepo implements WhaleWatchRepository {
 class _ThrowingRepo implements WhaleWatchRepository {
   @override
   Future<List<WatchRule>> listRules() async => throw Exception('boom');
+  @override
+  Future<WatchRule> createRule(WatchRule rule) async => throw Exception('boom');
+  @override
+  Future<WatchRule> updateRule(WatchRule rule) async => throw Exception('boom');
+  @override
+  Future<void> deleteRule(WatchRule rule) async => throw Exception('boom');
   @override
   Future<List<WhaleSearchResult>> search(String query) async =>
       const <WhaleSearchResult>[];
@@ -96,28 +120,35 @@ void main() {
     });
 
     test('appendRule / replaceRule / toggleMute / removeRule', () async {
-      final ProviderContainer c = makeContainer(_FakeRepo(<WatchRule>[_rule('a')]));
+      final _FakeRepo repo = _FakeRepo(<WatchRule>[_rule('a')]);
+      final ProviderContainer c = makeContainer(repo);
       ctrl(c);
       await Future<void>.delayed(Duration.zero);
 
-      ctrl(c).appendRule(_rule('b'));
+      await ctrl(c).appendRule(_rule('b'));
       expect(read(c).rules, hasLength(2));
 
-      ctrl(c).toggleMute(_rule('a'));
+      await ctrl(c).toggleMute(_rule('a'));
       expect(
         read(c).rules!.firstWhere((WatchRule r) => r.id == 'a').muted,
         isTrue,
       );
 
-      ctrl(c).replaceRule(_rule('b', muted: true));
+      await ctrl(c).replaceRule(_rule('b', muted: true));
       expect(
         read(c).rules!.firstWhere((WatchRule r) => r.id == 'b').muted,
         isTrue,
       );
 
-      ctrl(c).removeRule(_rule('a'));
+      await ctrl(c).removeRule(_rule('a'));
       expect(read(c).rules, hasLength(1));
       expect(read(c).rules!.single.id, 'b');
+      expect(repo.calls, <String>[
+        'create:b',
+        'update:a:true',
+        'update:b:true',
+        'delete:a',
+      ]);
     });
   });
 }

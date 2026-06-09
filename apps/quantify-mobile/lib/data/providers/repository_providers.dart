@@ -184,7 +184,7 @@ final FutureProvider<List<WhaleHoldingPosition>> whaleHoldingsProvider =
 /// 巨鲸搜索与地址监控（#1754）。API 驱动；真实读写依赖 #1682/#1683。
 final Provider<WhaleWatchRepository> whaleWatchRepositoryProvider =
     Provider<WhaleWatchRepository>((Ref ref) {
-      return ApiWhaleWatchRepository(ref.watch(whaleWatchServiceProvider));
+      return ApiWhaleWatchRepository(ref.watch(generatedBackendApiProvider));
     });
 
 final Provider<StrategyRepository> strategyRepositoryProvider =

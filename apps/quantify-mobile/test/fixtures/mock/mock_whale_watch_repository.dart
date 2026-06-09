@@ -12,6 +12,15 @@ class MockWhaleWatchRepository implements WhaleWatchRepository {
       List<WatchRule>.of(mockWatchRules);
 
   @override
+  Future<WatchRule> createRule(WatchRule rule) async => rule;
+
+  @override
+  Future<WatchRule> updateRule(WatchRule rule) async => rule;
+
+  @override
+  Future<void> deleteRule(WatchRule rule) async {}
+
+  @override
   Future<List<WhaleSearchResult>> search(String query) async {
     final String q = query.trim().toLowerCase();
     if (q.isEmpty) return const <WhaleSearchResult>[];

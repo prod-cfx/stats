@@ -93,11 +93,13 @@ void main() {
     });
 
     test('watch rules 空响应返回空列表，不回退 mockWatchRules', () async {
+      final List<String> calls = <String>[];
       final repo = ApiWhaleWatchRepository(
-        WhaleWatchService(_FakeApiClient(<String, dynamic>{'data': []})),
+        _discoverApi(<Map<String, Object?>>[], calls),
       );
 
       expect(await repo.listRules(), isEmpty);
+      expect(calls, <String>['/whale-notification/rules']);
     });
 
     test('profile 空响应返回空画像，不回退 buildFallbackWhaleProfile', () async {

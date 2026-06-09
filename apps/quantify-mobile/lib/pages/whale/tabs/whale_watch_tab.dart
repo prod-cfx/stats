@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,7 +33,7 @@ class WhaleWatchTab extends ConsumerWidget {
   Future<void> _addRule(BuildContext context, WidgetRef ref) async {
     final WatchRule? rule = await WhaleWatchRuleSheet.show(context);
     if (rule == null) return;
-    ref.read(whaleWatchTabControllerProvider.notifier).appendRule(rule);
+    await ref.read(whaleWatchTabControllerProvider.notifier).appendRule(rule);
   }
 
   Future<void> _editRule(
@@ -44,7 +46,9 @@ class WhaleWatchTab extends ConsumerWidget {
       initial: rule,
     );
     if (updated == null) return;
-    ref.read(whaleWatchTabControllerProvider.notifier).replaceRule(updated);
+    await ref
+        .read(whaleWatchTabControllerProvider.notifier)
+        .replaceRule(updated);
   }
 
   Future<void> _deleteRule(
@@ -71,7 +75,7 @@ class WhaleWatchTab extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    ref.read(whaleWatchTabControllerProvider.notifier).removeRule(rule);
+    await ref.read(whaleWatchTabControllerProvider.notifier).removeRule(rule);
   }
 
   @override
@@ -104,7 +108,9 @@ class WhaleWatchTab extends ConsumerWidget {
                 rules: st.rules,
                 onAdd: () => _addRule(context, ref),
                 onEdit: (WatchRule r) => _editRule(context, ref, r),
-                onToggleMute: controller.toggleMute,
+                onToggleMute: (WatchRule r) {
+                  unawaited(controller.toggleMute(r));
+                },
                 onDelete: (WatchRule r) => _deleteRule(context, ref, r),
               ),
               _NotificationsBody(notifications: notifications),
@@ -136,27 +142,27 @@ class _SegmentedSubTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final List<({WhaleWatchSubTab tab, String label, int? count, bool dot})> segs =
-        <({WhaleWatchSubTab tab, String label, int? count, bool dot})>[
-          (
-            tab: WhaleWatchSubTab.live,
-            label: l10n.whaleWatchSubTabLive,
-            count: null,
-            dot: false,
-          ),
-          (
-            tab: WhaleWatchSubTab.addresses,
-            label: l10n.whaleWatchSubTabAddresses,
-            count: addressCount,
-            dot: false,
-          ),
-          (
-            tab: WhaleWatchSubTab.notifications,
-            label: l10n.whaleWatchSubTabNotifications,
-            count: notificationCount,
-            dot: notificationDot,
-          ),
-        ];
+    final List<({WhaleWatchSubTab tab, String label, int? count, bool dot})>
+    segs = <({WhaleWatchSubTab tab, String label, int? count, bool dot})>[
+      (
+        tab: WhaleWatchSubTab.live,
+        label: l10n.whaleWatchSubTabLive,
+        count: null,
+        dot: false,
+      ),
+      (
+        tab: WhaleWatchSubTab.addresses,
+        label: l10n.whaleWatchSubTabAddresses,
+        count: addressCount,
+        dot: false,
+      ),
+      (
+        tab: WhaleWatchSubTab.notifications,
+        label: l10n.whaleWatchSubTabNotifications,
+        count: notificationCount,
+        dot: notificationDot,
+      ),
+    ];
     return Container(
       color: c.bgElev,
       padding: const EdgeInsets.fromLTRB(
@@ -174,7 +180,13 @@ class _SegmentedSubTabs extends StatelessWidget {
         ),
         child: Row(
           children: <Widget>[
-            for (final ({WhaleWatchSubTab tab, String label, int? count, bool dot}) s
+            for (final ({
+                  WhaleWatchSubTab tab,
+                  String label,
+                  int? count,
+                  bool dot,
+                })
+                s
                 in segs)
               Expanded(
                 child: _Segment(

@@ -44,35 +44,55 @@ class WhaleWatchTabController extends Notifier<WhaleWatchTabState> {
     state = state.copyWith(subTab: tab);
   }
 
-  void appendRule(WatchRule rule) {
-    state = state.copyWith(rules: <WatchRule>[...?state.rules, rule]);
+  Future<void> appendRule(WatchRule rule) async {
+    try {
+      final WatchRule created = await ref
+          .read(whaleWatchRepositoryProvider)
+          .createRule(rule);
+      if (!mounted) return;
+      state = state.copyWith(rules: <WatchRule>[...?state.rules, created]);
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(error: ErrorRouter.normalize(error));
+    }
   }
 
-  void replaceRule(WatchRule updated) {
-    state = state.copyWith(
-      rules: <WatchRule>[
-        for (final WatchRule r in state.rules ?? <WatchRule>[])
-          if (r.id == updated.id) updated else r,
-      ],
-    );
+  Future<void> replaceRule(WatchRule updated) async {
+    try {
+      final WatchRule saved = await ref
+          .read(whaleWatchRepositoryProvider)
+          .updateRule(updated);
+      if (!mounted) return;
+      state = state.copyWith(
+        rules: <WatchRule>[
+          for (final WatchRule r in state.rules ?? <WatchRule>[])
+            if (r.id == saved.id) saved else r,
+        ],
+      );
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(error: ErrorRouter.normalize(error));
+    }
   }
 
-  void toggleMute(WatchRule rule) {
-    state = state.copyWith(
-      rules: <WatchRule>[
-        for (final WatchRule r in state.rules ?? <WatchRule>[])
-          if (r.id == rule.id) r.copyWith(muted: !r.muted) else r,
-      ],
-    );
+  Future<void> toggleMute(WatchRule rule) async {
+    await replaceRule(rule.copyWith(muted: !rule.muted));
   }
 
-  void removeRule(WatchRule rule) {
-    state = state.copyWith(
-      rules: <WatchRule>[
-        for (final WatchRule r in state.rules ?? <WatchRule>[])
-          if (r.id != rule.id) r,
-      ],
-    );
+  Future<void> removeRule(WatchRule rule) async {
+    try {
+      await ref.read(whaleWatchRepositoryProvider).deleteRule(rule);
+      if (!mounted) return;
+      state = state.copyWith(
+        rules: <WatchRule>[
+          for (final WatchRule r in state.rules ?? <WatchRule>[])
+            if (r.id != rule.id) r,
+        ],
+      );
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(error: ErrorRouter.normalize(error));
+    }
   }
 }
 
