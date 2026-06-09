@@ -204,7 +204,7 @@ export class WhaleTrackingService {
   private buildMockDiscoverWhales(): WhaleDiscoverResponseDto {
     const mockStats: AggregatedWhaleStats[] = [
       {
-        address: '0x8ba1f109551bd432803012645ac136ddd64dba72',
+        address: '0x020ca66c30bec2c4fe3861a94e4db4a498a35872',
         totalValueUsd: 128_500_000,
         trades: 42,
         positions: 9,
