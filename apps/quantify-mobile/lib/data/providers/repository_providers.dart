@@ -171,7 +171,7 @@ final FutureProvider<List<WhaleLeaderEntry>> whaleLeaderboardProvider =
 final Provider<WhaleHoldingsRepository> whaleHoldingsRepositoryProvider =
     Provider<WhaleHoldingsRepository>((Ref ref) {
       return ApiWhaleHoldingsRepository(
-        ref.watch(whaleHoldingsServiceProvider),
+        ref.watch(generatedBackendApiProvider),
       );
     });
 

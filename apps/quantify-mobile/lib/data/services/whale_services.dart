@@ -15,13 +15,6 @@ class WhaleFeedService {
   }
 }
 
-class WhaleHoldingsService {
-  const WhaleHoldingsService(this._client);
-  final ApiClient _client;
-
-  Future<dynamic> getHoldings() => _client.get('/whale-holdings');
-}
-
 class WhaleProfileService {
   const WhaleProfileService(this._client);
   final ApiClient _client;

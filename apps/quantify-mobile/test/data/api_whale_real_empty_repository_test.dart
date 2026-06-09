@@ -85,11 +85,18 @@ void main() {
     });
 
     test('holdings 空响应返回空列表，不回退 mockWhaleHoldings', () async {
+      final List<String> calls = <String>[];
       final repo = ApiWhaleHoldingsRepository(
-        WhaleHoldingsService(_FakeApiClient(<String, dynamic>{'items': []})),
+        _discoverApi(<String, Object>{
+          'total': 0,
+          'page': 1,
+          'limit': 200,
+          'items': <Map<String, Object>>[],
+        }, calls),
       );
 
       expect(await repo.getHoldings(), isEmpty);
+      expect(calls, <String>['/whale-holdings']);
     });
 
     test('watch rules 空响应返回空列表，不回退 mockWatchRules', () async {
