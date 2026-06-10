@@ -35,7 +35,9 @@ class _EquityTabBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: QzSpacing.xs, vertical: 2),
+                    horizontal: QzSpacing.xs,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: t == selected ? c.accentSoft : Colors.transparent,
                     borderRadius: BorderRadius.circular(4),
@@ -85,11 +87,13 @@ class _EquitySection extends ConsumerWidget {
 
 /// 策略参数（#1565）：类型 / 品种 / 周期 / 止损 / 仓位 / 杠杆。
 ///
-/// 因为后端尚未提供策略参数字段，从 [StrategyCard] 的 tags 与 category 派生
-/// mock 值；接入真实后端后改成读 StrategyDetail.params。
+/// 读取 strategy-plaza 模板契约的 symbol/timeframe/position/leverage/params。
+/// params 未给到的字段显示 `--`，不再派生假参数。
 class _ParamsSection extends StatelessWidget {
-  const _ParamsSection({required this.card});
-  final StrategyCard card;
+  const _ParamsSection({required this.detail});
+  final StrategyDetail detail;
+
+  StrategyCard get card => detail.card;
 
   String _categoryLabel(BuildContext ctx) {
     final AppLocalizations l10n = AppLocalizations.of(ctx);
@@ -126,9 +130,35 @@ class _ParamsSection extends StatelessWidget {
   /// 交易周期：直接取 [StrategyCard.period]（如 `30D`），缺省回退 `—`。
   String _period() => card.period.isNotEmpty ? card.period : '—';
 
-  /// 杠杆：高频策略 `5×`，其余 `1×`（对齐设计稿 m-screens-2.jsx:995）。
-  String _leverage() =>
-      card.category == StrategyCategory.highFreq ? '5×' : '1×';
+  String _marketType() => detail.marketType.isEmpty ? '—' : detail.marketType;
+
+  String _pct(double? value) =>
+      value == null ? '—' : '${value.toStringAsFixed(0)}%';
+
+  String _leverage() {
+    final double? value = detail.leverage;
+    if (value == null || value <= 0) {
+      final bool hasContractParams =
+          detail.marketType.isNotEmpty ||
+          detail.positionPct != null ||
+          detail.params.isNotEmpty;
+      if (!hasContractParams) {
+        return card.category == StrategyCategory.highFreq ? '5×' : '1×';
+      }
+      return '无杠杆';
+    }
+    return '${value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 1)}×';
+  }
+
+  String _paramValue(List<String> keys) {
+    for (final String key in keys) {
+      final double? value = detail.params[key];
+      if (value != null) {
+        return '${value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2)}%';
+      }
+    }
+    return '—';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,13 +166,24 @@ class _ParamsSection extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final List<({String label, String value})> rows =
         <({String label, String value})>[
-      (label: l10n.strategyDetailParamType, value: _categoryLabel(context)),
-      (label: l10n.strategyDetailParamSymbol, value: _symbol()),
-      (label: l10n.strategyDetailParamPeriod, value: _period()),
-      (label: l10n.strategyDetailParamStopLoss, value: '2.0%'),
-      (label: l10n.strategyDetailParamPosition, value: '100%'),
-      (label: l10n.strategyDetailParamLeverage, value: _leverage()),
-    ];
+          (label: l10n.strategyDetailParamType, value: _categoryLabel(context)),
+          (label: '市场', value: _marketType()),
+          (label: l10n.strategyDetailParamSymbol, value: _symbol()),
+          (label: l10n.strategyDetailParamPeriod, value: _period()),
+          (
+            label: l10n.strategyDetailParamStopLoss,
+            value: _paramValue(<String>[
+              'stopLossPct',
+              'stop_loss',
+              'stopLoss',
+            ]),
+          ),
+          (
+            label: l10n.strategyDetailParamPosition,
+            value: _pct(detail.positionPct),
+          ),
+          (label: l10n.strategyDetailParamLeverage, value: _leverage()),
+        ];
     return Container(
       decoration: BoxDecoration(
         color: c.bgElev,
@@ -176,7 +217,7 @@ class _ParamsSection extends StatelessWidget {
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures()
+                        FontFeature.tabularFigures(),
                       ],
                     ),
                   ),
@@ -288,8 +329,7 @@ class _DescriptionSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String desc =
-        card.description.isEmpty ? '' : '${card.description} ';
+    final String desc = card.description.isEmpty ? '' : '${card.description} ';
     return Container(
       decoration: BoxDecoration(
         color: c.bgElev,

@@ -45,6 +45,42 @@ Future<void> _open(
   await tester.pumpAndSettle();
 }
 
+Future<List<int>> _openFutureWithFallback(WidgetTester tester) async {
+  final List<int> calls = <int>[];
+  final WhaleTradeStats fullStats = mockWhaleProfiles[_knownAddress]!.stats;
+  await tester.binding.setSurfaceSize(const Size(420, 1200));
+  await tester.pumpWidget(
+    MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: buildQzThemeData(QzTheme.fallback),
+      home: Scaffold(
+        body: Builder(
+          builder: (BuildContext ctx) => Center(
+            child: TextButton(
+              onPressed: () => WhaleTradeStatsSheet.showFuture(
+                ctx,
+                address: _knownAddress,
+                stats: (int timeRangeDays) async {
+                  calls.add(timeRangeDays);
+                  return timeRangeDays == 365 ? fullStats : _emptyStats();
+                },
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+  await tester.pumpAndSettle();
+  return calls;
+}
+
 WhaleTradeStats _emptyStats() {
   return const WhaleTradeStats(
     pnlDisplay: r'$0',
@@ -147,6 +183,14 @@ void main() {
     );
 
     expect(find.text('暂无成交记录'), findsOneWidget);
+  });
+
+  testWidgets('showFuture：1周空数据自动降级到全部周期', (WidgetTester tester) async {
+    final List<int> calls = await _openFutureWithFallback(tester);
+
+    expect(calls, <int>[7, 365]);
+    expect(find.text('全部'), findsOneWidget);
+    expect(find.text('暂无成交记录'), findsNothing);
   });
 
   testWidgets('金额正负色：正盈亏 up 色 / 负盈亏 dn 色', (WidgetTester tester) async {

@@ -53,8 +53,27 @@ void main() {
       expect(s.page, 1);
       expect(s.hasMore, isTrue);
       // 默认 sort=hot 按 users 降序。
-      expect(s.items.map((StrategyMarketItem e) => e.card.id).toList(),
-          <String>['b', 'c', 'a']);
+      expect(
+        s.items.map((StrategyMarketItem e) => e.card.id).toList(),
+        <String>['b', 'c', 'a'],
+      );
+    });
+
+    test('reload：请求失败不应永久 loading，后续重试成功会清空 error', () async {
+      final _FakeRepo repo = _FakeRepo(<int, StrategyMarketPage>{
+        1: _page(<StrategyMarketItem>[item('a', users: 10)], hasMore: false),
+      }, failuresBeforeSuccess: 1);
+      final ProviderContainer c = makeContainer(repo);
+
+      await ctrl(c).reload();
+      expect(read(c).loading, isFalse);
+      expect(read(c).error, contains('backend restarting'));
+      expect(read(c).items, isEmpty);
+
+      await ctrl(c).reload();
+      expect(read(c).loading, isFalse);
+      expect(read(c).error, isNull);
+      expect(read(c).items.single.card.id, 'a');
     });
 
     test('setCategory：变更触发 reset + 首页加载（category 落到请求）', () async {
@@ -122,8 +141,7 @@ void main() {
       // 不 await 第一次，立刻发第二次——应被 loadingMore 守卫短路。
       final Future<void> first = ctrl(c).loadMore();
       await ctrl(c).loadMore();
-      expect(repo.listCalls, callsBefore + 1,
-          reason: '并发 loadMore 第二次应短路');
+      expect(repo.listCalls, callsBefore + 1, reason: '并发 loadMore 第二次应短路');
       await first;
     });
 
@@ -137,14 +155,18 @@ void main() {
       expect(read(c).toast, '已启动');
       // 等待超过 toast 时长（2400ms），文案应被清空。
       await Future<void>.delayed(
-        StrategyHomeController.kToastDuration + const Duration(milliseconds: 50),
+        StrategyHomeController.kToastDuration +
+            const Duration(milliseconds: 50),
       );
       expect(read(c).toast, isNull);
     });
   });
 }
 
-StrategyMarketPage _page(List<StrategyMarketItem> items, {required bool hasMore}) {
+StrategyMarketPage _page(
+  List<StrategyMarketItem> items, {
+  required bool hasMore,
+}) {
   return StrategyMarketPage(
     items: items,
     hasMore: hasMore,
@@ -171,10 +193,15 @@ StrategyHomeState read(ProviderContainer c) =>
 
 /// 按页码返回固定结果的假 repo，仅实现 controller 用到的 listMarket。
 class _FakeRepo implements StrategyRepository {
-  _FakeRepo(this._pages, {this.delay = Duration.zero});
+  _FakeRepo(
+    this._pages, {
+    this.delay = Duration.zero,
+    this.failuresBeforeSuccess = 0,
+  });
 
   final Map<int, StrategyMarketPage> _pages;
   final Duration delay;
+  int failuresBeforeSuccess;
 
   int listCalls = 0;
   StrategyCategory? lastCategory;
@@ -190,6 +217,10 @@ class _FakeRepo implements StrategyRepository {
     lastCategory = category;
     if (delay > Duration.zero) {
       await Future<void>.delayed(delay);
+    }
+    if (failuresBeforeSuccess > 0) {
+      failuresBeforeSuccess--;
+      throw StateError('backend restarting');
     }
     return _pages[page] ??
         const StrategyMarketPage(
@@ -217,10 +248,20 @@ class _FakeRepo implements StrategyRepository {
       throw UnimplementedError();
 
   @override
-  Future<List<StrategySignal>> listStrategySignals(String id, {int limit = 20}) =>
-      throw UnimplementedError();
+  Future<List<StrategySignal>> listStrategySignals(
+    String id, {
+    int limit = 20,
+  }) => throw UnimplementedError();
 
   @override
   Future<List<double>> getEquityCurve(String id, EquityTimeframe timeframe) =>
+      throw UnimplementedError();
+
+  @override
+  Future<StrategyRunResult> runTemplate(String id) =>
+      throw UnimplementedError();
+
+  @override
+  Future<StrategyEditSession> startEditSession(String id, {String? locale}) =>
       throw UnimplementedError();
 }

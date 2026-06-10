@@ -44,19 +44,26 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
 
   /// 重置回第 1 页并拉取首页（category/query/sort 变更或下拉刷新调用）。
   Future<void> reload() async {
-    state = state.copyWith(loading: true, page: 1);
-    final StrategyMarketPage res = await _repo.listMarket(
-      page: 1,
-      pageSize: kPageSize,
-      query: state.query.isEmpty ? null : state.query,
-      category: state.category,
-    );
-    if (!mounted) return;
-    state = state.copyWith(
-      items: _applySort(res.items, state.sort),
-      hasMore: res.hasMore,
-      loading: false,
-    );
+    state = state.copyWith(loading: true, page: 1, error: null);
+    try {
+      final StrategyMarketPage res = await _repo.listMarket(
+        page: 1,
+        pageSize: kPageSize,
+        query: state.query.isEmpty ? null : state.query,
+        category: state.category,
+      );
+      if (!mounted) return;
+      state = state.copyWith(
+        items: _applySort(res.items, state.sort),
+        hasMore: res.hasMore,
+        loading: false,
+        error: null,
+      );
+    } catch (e, st) {
+      debugPrint('[StrategyHome] reload failed: $e\n$st');
+      if (!mounted) return;
+      state = state.copyWith(loading: false, error: _errorMessage(e));
+    }
   }
 
   /// 翻下一页。短路条件：正在翻页 / 已到底（与原 `_loadMore` 一致）。
@@ -64,22 +71,34 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
     if (state.loadingMore || !state.hasMore) return;
     state = state.copyWith(loadingMore: true);
     final int next = state.page + 1;
-    final StrategyMarketPage res = await _repo.listMarket(
-      page: next,
-      pageSize: kPageSize,
-      query: state.query.isEmpty ? null : state.query,
-      category: state.category,
-    );
-    if (!mounted) return;
-    state = state.copyWith(
-      page: next,
-      items: _applySort(
-        <StrategyMarketItem>[...state.items, ...res.items],
-        state.sort,
-      ),
-      hasMore: res.hasMore,
-      loadingMore: false,
-    );
+    try {
+      final StrategyMarketPage res = await _repo.listMarket(
+        page: next,
+        pageSize: kPageSize,
+        query: state.query.isEmpty ? null : state.query,
+        category: state.category,
+      );
+      if (!mounted) return;
+      state = state.copyWith(
+        page: next,
+        items: _applySort(<StrategyMarketItem>[
+          ...state.items,
+          ...res.items,
+        ], state.sort),
+        hasMore: res.hasMore,
+        loadingMore: false,
+        error: null,
+      );
+    } catch (e, st) {
+      debugPrint('[StrategyHome] loadMore failed: $e\n$st');
+      if (!mounted) return;
+      state = state.copyWith(loadingMore: false, error: _errorMessage(e));
+    }
+  }
+
+  String _errorMessage(Object error) {
+    final String text = error.toString().trim();
+    return text.isEmpty ? '加载失败' : text;
   }
 
   Future<void> loadFeatured() async {
@@ -105,8 +124,9 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
         StrategySortKey.hot => b.stats.users.compareTo(a.stats.users),
         StrategySortKey.cagr => b.stats.cagr.compareTo(a.stats.cagr),
         StrategySortKey.sharpe => b.stats.sharpe.compareTo(a.stats.sharpe),
-        StrategySortKey.mddLow =>
-          b.stats.maxDrawdown.compareTo(a.stats.maxDrawdown),
+        StrategySortKey.mddLow => b.stats.maxDrawdown.compareTo(
+          a.stats.maxDrawdown,
+        ),
       };
     });
     return sorted;
@@ -166,7 +186,6 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
 }
 
 final strategyHomeControllerProvider =
-    NotifierProvider.autoDispose<
-      StrategyHomeController,
-      StrategyHomeState
-    >(StrategyHomeController.new);
+    NotifierProvider.autoDispose<StrategyHomeController, StrategyHomeState>(
+      StrategyHomeController.new,
+    );

@@ -15,9 +15,21 @@ class _FixtureInterceptor extends Interceptor {
     if (options.path == '/strategy-plaza/templates') {
       expect(options.queryParameters, isEmpty);
     }
+    if (options.path.endsWith('/run') ||
+        options.path.endsWith('/edit-session')) {
+      expect(options.headers['authorization'], 'Bearer test-token');
+    }
     final Object data = switch (options.path) {
       '/strategy-plaza/templates' => <String, Object>{
-        'data': <Map<String, Object>>[_template('real-grid')],
+        'data': <Map<String, Object>>[
+          _template('real-grid'),
+          _template('fallback-equity', includeSparkline: false),
+          _template(
+            'fallback-official',
+            includeSparkline: false,
+            includeEquityCurve: false,
+          ),
+        ],
       },
       '/strategy-plaza/templates/real-grid' => <String, Object>{
         'data': _template('real-grid'),
@@ -41,6 +53,29 @@ class _FixtureInterceptor extends Interceptor {
       '/strategy-plaza/templates/empty-grid/equity-curve' => <String, Object>{
         'data': <num>[],
       },
+      '/strategy-plaza/templates/real-grid/run' => <String, Object>{
+        'data': <String, Object>{
+          'id': 'strategy-real-grid',
+          'name': '真实网格策略',
+          'status': 'running',
+          'isSubscribed': true,
+          'metrics': <String, Object>{},
+          'updatedAt': '2026-06-10T00:00:00.000Z',
+          'equitySeries': <Map<String, Object>>[],
+          'snapshot': <String, Object>{},
+          'timeline': <Map<String, Object>>[],
+          'accountOverview': <String, Object>{},
+          'positionOverview': <String, Object>{},
+          'latestOrders': <Map<String, Object>>[],
+        },
+      },
+      '/strategy-plaza/templates/real-grid/edit-session' => <String, Object>{
+        'data': <String, Object>{
+          'sessionId': 'session-real-grid',
+          'templateId': 'real-grid',
+          'initialMessage': '编辑真实网格策略',
+        },
+      },
       _ => throw StateError('unexpected HTTP call: ${options.path}'),
     };
     handler.resolve(
@@ -49,7 +84,11 @@ class _FixtureInterceptor extends Interceptor {
   }
 }
 
-Map<String, Object> _template(String id) {
+Map<String, Object> _template(
+  String id, {
+  bool includeSparkline = true,
+  bool includeEquityCurve = true,
+}) {
   return <String, Object>{
     'id': id,
     'name': '真实网格策略',
@@ -77,8 +116,33 @@ Map<String, Object> _template(String id) {
       'tradeCount': 34,
       'users': 88,
     },
-    'sparkline': <num>[1, 1.03, 1.02, 1.08],
-    'equityCurve': <num>[1, 1.04, 1.11],
+    'officialBacktest': <String, Object>{
+      'generatedAt': '2026-06-10T00:00:00.000Z',
+      'backtestFrom': 1717200000000,
+      'backtestTo': 1719800000000,
+      'source': 'official_sample_backtest',
+      'dataSource': <String, Object>{'exchange': 'okx', 'marketType': 'perp'},
+      'candleCount': 120,
+      'metrics': <String, Object>{
+        'returnPct': 43.5,
+        'winRatePct': 62,
+        'maxDrawdownPct': 7.5,
+        'tradeCount': 35,
+      },
+      'equityCurve': <Map<String, Object>>[
+        <String, Object>{'ts': 1717200000000, 'equity': 1},
+        <String, Object>{'ts': 1719800000000, 'equity': 1.14},
+      ],
+      'trades': <Map<String, Object>>[],
+      'confidence': <String, Object>{
+        'level': 'high',
+        'reasons': <String>['fixture'],
+      },
+      'disclaimer': 'fixture only',
+    },
+    if (includeSparkline) 'sparkline': <num>[1, 1.03, 1.02, 1.08],
+    if (includeEquityCurve) 'equityCurve': <num>[1, 1.04, 1.11],
+    'params': <String, num>{'stopLossPct': 2.5},
     'signals': <Map<String, Object>>[],
   };
 }
@@ -86,7 +150,10 @@ Map<String, Object> _template(String id) {
 ApiStrategyRepository _buildRepo(List<String> calls) {
   final Dio dio = Dio(BaseOptions(baseUrl: 'http://stub.invalid'))
     ..interceptors.add(_FixtureInterceptor(calls));
-  return ApiStrategyRepository(GeneratedBackendApi(dio: dio));
+  return ApiStrategyRepository(
+    GeneratedBackendApi(dio: dio),
+    tokenSupplier: () => 'test-token',
+  );
 }
 
 void main() {
@@ -105,13 +172,29 @@ void main() {
       expect(hero.stats.cagr, 42.5);
       expect(hero.sparkline, <double>[1, 1.03, 1.02, 1.08]);
       expect(detail.card.id, 'real-grid');
-      expect(detail.cagr, 42.5);
-      expect(detail.winRate, 0.61);
-      expect(detail.maxDrawdown, -8.5);
+      expect(detail.cagr, 43.5);
+      expect(detail.winRate, 0.62);
+      expect(detail.maxDrawdown, -7.5);
       expect(detail.profitLossRatio, 1.9);
-      expect(detail.tradeCount, 34);
+      expect(detail.tradeCount, 35);
       expect(detail.users, 88);
-      expect(detail.equityCurve, <double>[1, 1.04, 1.11]);
+      expect(detail.equityCurve, <double>[1, 1.14]);
+      expect(detail.marketType, 'perp');
+      expect(detail.positionPct, 25);
+      expect(detail.leverage, 3);
+      expect(detail.params, <String, double>{'stopLossPct': 2.5});
+    });
+
+    test('列表卡片曲线按 sparkline、equityCurve、officialBacktest 兜底', () async {
+      final List<String> calls = <String>[];
+      final ApiStrategyRepository repo = _buildRepo(calls);
+
+      final StrategyMarketPage page = await repo.listMarket(pageSize: 10);
+
+      expect(page.items, hasLength(3));
+      expect(page.items[0].sparkline, <double>[1, 1.03, 1.02, 1.08]);
+      expect(page.items[1].sparkline, <double>[1, 1.04, 1.11]);
+      expect(page.items[2].sparkline, <double>[1, 1.14]);
     });
 
     test('signals 和 equity curve 使用真实 endpoint，空响应保持空态', () async {
@@ -146,6 +229,28 @@ void main() {
       expect(curve, <double>[1, 1.05, 1.12]);
       expect(emptySignals, isEmpty);
       expect(emptyCurve, isEmpty);
+    });
+
+    test('run 和 edit-session 使用真实策略广场动作 endpoint', () async {
+      final List<String> calls = <String>[];
+      final ApiStrategyRepository repo = _buildRepo(calls);
+
+      final StrategyRunResult run = await repo.runTemplate('real-grid');
+      final StrategyEditSession edit = await repo.startEditSession(
+        'real-grid',
+        locale: 'zh',
+      );
+
+      expect(calls, contains('/strategy-plaza/templates/real-grid/run'));
+      expect(
+        calls,
+        contains('/strategy-plaza/templates/real-grid/edit-session'),
+      );
+      expect(run.strategyId, 'strategy-real-grid');
+      expect(run.existing, isFalse);
+      expect(edit.sessionId, 'session-real-grid');
+      expect(edit.templateId, 'real-grid');
+      expect(edit.initialMessage, '编辑真实网格策略');
     });
   });
 }

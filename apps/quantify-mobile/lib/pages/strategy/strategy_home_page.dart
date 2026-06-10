@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +10,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/qz_button.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
@@ -71,8 +74,23 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
 
   /// 点击「载入对话」：toast → 700ms → `/ai?loadStrategy=$id`。toast 文案在此
   /// 解析（依赖 l10n），timer/导航请求由 controller 持有。
-  void _onLoadConversation(StrategyMarketItem item) {
+  Future<void> _onLoadConversation(StrategyMarketItem item) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    try {
+      await ref
+          .read(strategyRepositoryProvider)
+          .startEditSession(
+            item.card.id,
+            locale: Localizations.localeOf(context).languageCode,
+          );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.commonLoadError)));
+      return;
+    }
+    if (!mounted) return;
     _ctrl.fireToastAndNav(
       message: l10n.strategyHomeLoadedToast(item.card.name),
       route: '/ai?loadStrategy=${item.card.id}',
@@ -81,8 +99,18 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
 
   /// 点击「运行」（#1821）：toast「『名』已启动 · 进入实盘监控」，~700ms 后跳
   /// 实盘监控 `/me/live`。
-  void _onRun(StrategyMarketItem item) {
+  Future<void> _onRun(StrategyMarketItem item) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    try {
+      await ref.read(strategyRepositoryProvider).runTemplate(item.card.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.commonLoadError)));
+      return;
+    }
+    if (!mounted) return;
     _ctrl.fireToastAndNav(
       message: l10n.strategyHomeStartedToast(item.card.name),
       route: '/me/live',
@@ -167,8 +195,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     final StrategyHomeState s = ref.watch(strategyHomeControllerProvider);
     // 导航副作用留 widget：controller 到点写 pendingNav，这里消费并跳转。
-    ref.listen<StrategyHomeState>(strategyHomeControllerProvider,
-        (StrategyHomeState? prev, StrategyHomeState next) {
+    ref.listen<StrategyHomeState>(strategyHomeControllerProvider, (
+      StrategyHomeState? prev,
+      StrategyHomeState next,
+    ) {
       final String? route = next.pendingNav;
       if (route != null) {
         _ctrl.consumeNav();
@@ -179,6 +209,8 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     // 收藏视图下结果计数应反映过滤后的条数（含 hero 已剔除项）。
     final int resultCount = strategyResultCount(s, favorites);
     final bool showFeatured = strategyShowFeatured(s);
+    final bool showInitialError =
+        s.error != null && listItems.isEmpty && !showFeatured;
     // 把实时计数推给已打开的 sheet（#2128）；仅 sheet 打开时调度，避免 sheet 关闭
     // 时高频 rebuild（滚动分页 / 收藏切换）无意义排回调。post-frame 避免 build 内
     // 改 notifier 触发同帧重入。
@@ -218,25 +250,41 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         children: <Widget>[
           Column(
             children: <Widget>[
-          const SizedBox(height: QzSpacing.xs),
-          CategoryChipBar(
-            selected: s.category,
-            favOnly: s.favOnly,
-            onChanged: _onCategoryChanged,
-            onFavOnlyChanged: _onFavOnlyChanged,
-          ),
-          _SortRow(
-            sort: s.sort,
-            resultCount: resultCount,
-            onChanged: _onSortChanged,
-          ),
-          const SizedBox(height: QzSpacing.xs),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _ctrl.reload,
-              child: s.loading
-                  ? const Center(child: QzSpinner())
-                  : listItems.isEmpty && !showFeatured
+              const SizedBox(height: QzSpacing.xs),
+              CategoryChipBar(
+                selected: s.category,
+                favOnly: s.favOnly,
+                onChanged: _onCategoryChanged,
+                onFavOnlyChanged: _onFavOnlyChanged,
+              ),
+              _SortRow(
+                sort: s.sort,
+                resultCount: resultCount,
+                onChanged: _onSortChanged,
+              ),
+              const SizedBox(height: QzSpacing.xs),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _ctrl.reload,
+                  child: s.loading
+                      ? const Center(child: QzSpinner())
+                      : showInitialError
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: <Widget>[
+                            const SizedBox(height: 80),
+                            QzEmptyState(
+                              title: l10n.commonLoadError,
+                              subtitle: s.error,
+                              action: QzButton(
+                                label: l10n.commonRetry,
+                                variant: QzButtonVariant.ghost,
+                                onPressed: _ctrl.reload,
+                              ),
+                            ),
+                          ],
+                        )
+                      : listItems.isEmpty && !showFeatured
                       ? ListView(
                           // RefreshIndicator 要求可滚动 child
                           physics: const AlwaysScrollableScrollPhysics(),
@@ -251,58 +299,66 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                                 : QzEmptyState(title: l10n.strategyHomeEmpty),
                           ],
                         )
-                      : Builder(builder: (BuildContext _) {
-                          return ListView.builder(
-                          controller: _scrollCtrl,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          // 设计稿 m-screens-2:644 列表容器 padding '10px 16px 100px'：
-                          // 顶 10、左右 16、底 100（为底部导航/sticky 区留白）。
-                          padding: const EdgeInsets.fromLTRB(
-                              QzSpacing.lg, 10, QzSpacing.lg, 100),
-                          itemCount: listItems.length +
-                              (showFeatured ? 1 : 0) +
-                              (s.loadingMore ? 1 : 0),
-                          itemBuilder: (BuildContext ctx, int rawI) {
-                            int i = rawI;
-                            if (showFeatured) {
-                              if (i == 0) {
-                                return FeaturedHeroCard(
-                                  key: const Key('strategy-featured-hero'),
-                                  item: s.featured!,
-                                  onTap: () => context
-                                      .push('/strategy/${s.featured!.card.id}'),
+                      : Builder(
+                          builder: (BuildContext _) {
+                            return ListView.builder(
+                              controller: _scrollCtrl,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              // 设计稿 m-screens-2:644 列表容器 padding '10px 16px 100px'：
+                              // 顶 10、左右 16、底 100（为底部导航/sticky 区留白）。
+                              padding: const EdgeInsets.fromLTRB(
+                                QzSpacing.lg,
+                                10,
+                                QzSpacing.lg,
+                                100,
+                              ),
+                              itemCount:
+                                  listItems.length +
+                                  (showFeatured ? 1 : 0) +
+                                  (s.loadingMore ? 1 : 0),
+                              itemBuilder: (BuildContext ctx, int rawI) {
+                                int i = rawI;
+                                if (showFeatured) {
+                                  if (i == 0) {
+                                    return FeaturedHeroCard(
+                                      key: const Key('strategy-featured-hero'),
+                                      item: s.featured!,
+                                      onTap: () => context.push(
+                                        '/strategy/${s.featured!.card.id}',
+                                      ),
+                                    );
+                                  }
+                                  i -= 1;
+                                }
+                                if (i >= listItems.length) {
+                                  // 分页 loading：设计稿列表区无底部 spinner，故收敛为
+                                  // 不破坏布局的轻量占位——小尺寸、低高度，落在底部留白内，
+                                  // 仍保留分页业务逻辑（_loadMore）。
+                                  return const Padding(
+                                    padding: EdgeInsets.only(top: QzSpacing.sm),
+                                    child: Center(child: QzSpinner(size: 18)),
+                                  );
+                                }
+                                final StrategyMarketItem item = listItems[i];
+                                final String id = item.card.id;
+                                return StrategyCardTile(
+                                  key: Key('strategy-tile-$id'),
+                                  item: item,
+                                  starred: favorites.contains(id),
+                                  onToggleStar: () => ref
+                                      .read(strategyFavoritesProvider.notifier)
+                                      .toggle(id),
+                                  onTap: () => context.push('/strategy/$id'),
+                                  onLoadConversation: () =>
+                                      unawaited(_onLoadConversation(item)),
+                                  onRun: () => unawaited(_onRun(item)),
                                 );
-                              }
-                              i -= 1;
-                            }
-                            if (i >= listItems.length) {
-                              // 分页 loading：设计稿列表区无底部 spinner，故收敛为
-                              // 不破坏布局的轻量占位——小尺寸、低高度，落在底部留白内，
-                              // 仍保留分页业务逻辑（_loadMore）。
-                              return const Padding(
-                                padding: EdgeInsets.only(top: QzSpacing.sm),
-                                child: Center(child: QzSpinner(size: 18)),
-                              );
-                            }
-                            final StrategyMarketItem item = listItems[i];
-                            final String id = item.card.id;
-                            return StrategyCardTile(
-                              key: Key('strategy-tile-$id'),
-                              item: item,
-                              starred: favorites.contains(id),
-                              onToggleStar: () => ref
-                                  .read(strategyFavoritesProvider.notifier)
-                                  .toggle(id),
-                              onTap: () => context.push('/strategy/$id'),
-                              onLoadConversation: () =>
-                                  _onLoadConversation(item),
-                              onRun: () => _onRun(item),
+                              },
                             );
                           },
-                        );
-                        }),
-            ),
-          ),
+                        ),
+                ),
+              ),
             ],
           ),
           if (s.toast != null)
@@ -323,4 +379,3 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     );
   }
 }
-

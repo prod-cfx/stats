@@ -23,6 +23,7 @@ class StrategyHomeState {
     this.filterSheetOpen = false,
     this.items = const <StrategyMarketItem>[],
     this.featured,
+    this.error,
     this.toast,
     this.pendingNav,
   });
@@ -38,10 +39,11 @@ class StrategyHomeState {
   final bool filterSheetOpen;
   final List<StrategyMarketItem> items;
   final StrategyMarketItem? featured;
+  final String? error;
   final String? toast;
   final String? pendingNav;
 
-  /// 可空字段（`featured`/`toast`/`pendingNav`）用 [_unset] 哨兵区分「不改动」
+  /// 可空字段（`featured`/`error`/`toast`/`pendingNav`）用 [_unset] 哨兵区分「不改动」
   /// 与「显式置 null」。
   StrategyHomeState copyWith({
     StrategyCategory? category,
@@ -55,6 +57,7 @@ class StrategyHomeState {
     bool? filterSheetOpen,
     List<StrategyMarketItem>? items,
     Object? featured = _unset,
+    Object? error = _unset,
     Object? toast = _unset,
     Object? pendingNav = _unset,
   }) {
@@ -72,6 +75,7 @@ class StrategyHomeState {
       featured: identical(featured, _unset)
           ? this.featured
           : featured as StrategyMarketItem?,
+      error: identical(error, _unset) ? this.error : error as String?,
       toast: identical(toast, _unset) ? this.toast : toast as String?,
       pendingNav: identical(pendingNav, _unset)
           ? this.pendingNav

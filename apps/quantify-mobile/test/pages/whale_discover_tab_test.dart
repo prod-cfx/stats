@@ -27,8 +27,11 @@ class _FakeLeaderboardRepo implements WhaleLeaderboardRepository {
   Future<List<WhaleLeaderEntry>> getLeaderboard() async => mockWhaleLeaders;
 
   @override
-  Future<WhaleTradeStats> getTradeStats(String address) async {
-    statsCalls.add(address);
+  Future<WhaleTradeStats> getTradeStats(
+    String address, {
+    int timeRangeDays = 7,
+  }) async {
+    statsCalls.add('$address:$timeRangeDays');
     return whaleLeaderTradeStats(
       mockWhaleLeaders.firstWhere((WhaleLeaderEntry e) => e.id == address),
     );
@@ -267,8 +270,9 @@ void main() {
       expect(repo.statsCalls, hasLength(1));
       expect(
         mockWhaleLeaders.map((WhaleLeaderEntry e) => e.id),
-        contains(repo.statsCalls.single),
+        contains(repo.statsCalls.single.split(':').first),
       );
+      expect(repo.statsCalls.single.endsWith(':7'), isTrue);
     });
 
     testWidgets('入口二：点趋势按钮 → 打开交易统计弹窗', (WidgetTester tester) async {
@@ -277,7 +281,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.byType(WhaleTradeStatsSheet), findsOneWidget);
-      expect(repo.statsCalls, <String>['0x8ba1...ba72']);
+      expect(repo.statsCalls, <String>['0x8ba1...ba72:7']);
     });
 
     testWidgets('点复制按钮 → 写入剪贴板 + toast', (WidgetTester tester) async {

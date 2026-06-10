@@ -12,7 +12,10 @@ class MockWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
   Future<List<WhaleLeaderEntry>> getLeaderboard() async => mockWhaleLeaders;
 
   @override
-  Future<WhaleTradeStats> getTradeStats(String address) async {
+  Future<WhaleTradeStats> getTradeStats(
+    String address, {
+    int timeRangeDays = 7,
+  }) async {
     return whaleLeaderTradeStats(
       mockWhaleLeaders.firstWhere((WhaleLeaderEntry e) => e.id == address),
     );

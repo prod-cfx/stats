@@ -89,8 +89,9 @@ class StrategyCardTile extends StatelessWidget {
     final StrategyMarketStats stats = item.stats;
     final bool up = card.pnlPercent >= 0;
     // 行 4 作者头像仍用作者首字符（区别于行 1 的币种头像）。
-    final String authorInitial =
-        card.author.isEmpty ? '?' : card.author.characters.first;
+    final String authorInitial = card.author.isEmpty
+        ? '?'
+        : card.author.characters.first;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: QzSpacing.md),
@@ -179,9 +180,7 @@ class StrategyCardTile extends StatelessWidget {
                     icon: Icon(
                       starred ? Icons.star_rounded : Icons.star_outline_rounded,
                       size: 22,
-                      color: starred
-                          ? const Color(0xFFF59E0B)
-                          : c.textDim,
+                      color: starred ? const Color(0xFFF59E0B) : c.textDim,
                     ),
                   ),
               ],
@@ -193,8 +192,7 @@ class StrategyCardTile extends StatelessWidget {
               // 设计稿原文 `近 {period}`；period 缺省时仅显示 `近期`。
               // 暂不引入 l10n 模板字符串，period 自身已是与语言无关的标签
               // （如 `7D` / `30D`）。
-              periodLabel:
-                  card.period.isEmpty ? '近期' : '近 ${card.period}',
+              periodLabel: card.period.isEmpty ? '近期' : '近 ${card.period}',
               pnlPercent: card.pnlPercent,
               up: up,
               sparkline: item.sparkline,
@@ -253,9 +251,7 @@ class StrategyCardTile extends StatelessWidget {
                       ),
                       if (card.verified) ...<Widget>[
                         const SizedBox(width: 4),
-                        _VerifiedMark(
-                          key: Key('strategy-verified-${card.id}'),
-                        ),
+                        _VerifiedMark(key: Key('strategy-verified-${card.id}')),
                       ],
                     ],
                   ),
@@ -305,10 +301,7 @@ class _ReturnSummaryBlock extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final Color pnlColor = up ? c.marketUp : c.marketDown;
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 8,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: c.bgSoft,
         borderRadius: BorderRadius.circular(10),
@@ -362,7 +355,12 @@ class _ReturnSummaryBlock extends StatelessWidget {
           SizedBox(
             width: 120,
             height: 36,
-            child: SparklineView(data: sparkline, height: 36, strokeWidth: 1.6),
+            child: SparklineView(
+              data: sparkline,
+              height: 36,
+              strokeWidth: 1.6,
+              showFill: true,
+            ),
           ),
         ],
       ),
@@ -376,11 +374,7 @@ class _VerifiedMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Icon(
-      Icons.verified,
-      size: 12,
-      color: Color(0xFF3B82F6),
-    );
+    return const Icon(Icons.verified, size: 12, color: Color(0xFF3B82F6));
   }
 }
 
@@ -395,10 +389,7 @@ class _AuthorAvatar extends StatelessWidget {
     return Container(
       width: 18,
       height: 18,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: c.accent,
-      ),
+      decoration: BoxDecoration(shape: BoxShape.circle, color: c.accent),
       alignment: Alignment.center,
       child: Text(
         initial,

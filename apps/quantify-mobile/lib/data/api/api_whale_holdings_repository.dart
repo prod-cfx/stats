@@ -1,4 +1,5 @@
 import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_value/json_object.dart';
 
 import '../../domain/models/whale_holding_models.dart';
 import '../repositories/whale_holdings_repository.dart';
@@ -39,7 +40,8 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
       leverage: dto.leverage?.round() ?? 0,
       value: value,
       valueDisplay: _formatUsdCompact(value),
-      qtyDisplay: '${dto.positionSize.toDouble().toStringAsFixed(4)} ${dto.symbol}',
+      qtyDisplay:
+          '${dto.positionSize.toDouble().toStringAsFixed(4)} ${dto.symbol}',
       pnl: pnl,
       pnlDisplay: _formatUsdCompact(pnl, signed: true),
       pnlPctDisplay: _formatPercent(roe),
@@ -61,6 +63,7 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
           page: 1,
           limit: _limit,
           minPositionValueUsd: _minPositionValueUsd,
+          extra: _unwrapDataExtra,
         );
 
     final Iterable<dynamic> items = response.data?.items ?? const <dynamic>[];
@@ -72,7 +75,7 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
   }
 
   WhaleHoldingDto? _decodeDto(dynamic raw) {
-    final Object? value = raw.value;
+    final Object? value = raw is JsonObject ? raw.value : raw;
     if (value is WhaleHoldingDto) return value;
     if (value is! Map) return null;
     return _api.client.serializers.deserializeWith(
@@ -136,4 +139,8 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
       _ => 0xFF888888,
     };
   }
+
+  static const Map<String, dynamic> _unwrapDataExtra = <String, dynamic>{
+    'unwrapData': true,
+  };
 }

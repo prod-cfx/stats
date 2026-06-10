@@ -14,11 +14,20 @@ GeneratedBackendApi _discoverApi(Object data, List<String> calls) {
       InterceptorsWrapper(
         onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
           calls.add(options.path);
+          final Object responseData =
+              options.extra['unwrapData'] == true &&
+                  data is Map &&
+                  data.containsKey('data')
+              ? data['data'] as Object
+              : data;
+          if (options.extra['normalizeWhalePerformance'] == true) {
+            _normalizeWhalePerformance(responseData);
+          }
           handler.resolve(
             Response<Object>(
               requestOptions: options,
               statusCode: 200,
-              data: data,
+              data: responseData,
             ),
           );
         },
@@ -33,11 +42,21 @@ GeneratedBackendApi _emptyProfileApi(List<String> calls) {
       InterceptorsWrapper(
         onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
           calls.add(options.path);
+          final Object data = _emptyProfileResponse(options.path);
+          final Object responseData =
+              options.extra['unwrapData'] == true &&
+                  data is Map &&
+                  data.containsKey('data')
+              ? data['data'] as Object
+              : data;
+          if (options.extra['normalizeWhalePerformance'] == true) {
+            _normalizeWhalePerformance(responseData);
+          }
           handler.resolve(
             Response<Object>(
               requestOptions: options,
               statusCode: 200,
-              data: _emptyProfileResponse(options.path),
+              data: responseData,
             ),
           );
         },
@@ -100,6 +119,19 @@ Object _emptyProfileResponse(String path) {
     return <String, Object?>{'tag': null, 'aiTags': <Map<String, Object?>>[]};
   }
   throw StateError('Unhandled path $path');
+}
+
+void _normalizeWhalePerformance(Object data) {
+  if (data is! Map) return;
+  final Object? trades = data['trades'];
+  if (trades is! Iterable) return;
+  for (final Object? trade in trades) {
+    if (trade is Map && trade['positionAction'] is num) {
+      trade['positionAction'] = (trade['positionAction'] as num)
+          .round()
+          .toString();
+    }
+  }
 }
 
 Map<String, Object?> _discoverTrader({
@@ -344,7 +376,7 @@ void main() {
                 'positionValueUsd': 1500000,
                 'entryPrice': 100000,
                 'liquidationPrice': 80000,
-                'positionAction': '1',
+                'positionAction': 2,
                 'createTime': DateTime.now()
                     .toUtc()
                     .subtract(const Duration(hours: 3))

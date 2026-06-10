@@ -33,9 +33,9 @@ class WhaleDiscoverTab extends ConsumerWidget {
     WhaleTradeStatsSheet.showFuture(
       context,
       address: entry.id,
-      stats: ref
+      stats: (int timeRangeDays) => ref
           .read(whaleLeaderboardRepositoryProvider)
-          .getTradeStats(entry.id),
+          .getTradeStats(entry.id, timeRangeDays: timeRangeDays),
       avatarGlyph: entry.avatarText,
       avatarColorHex: entry.avatarBgHex,
     );

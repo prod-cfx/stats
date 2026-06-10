@@ -10,5 +10,8 @@ abstract class WhaleLeaderboardRepository {
   Future<List<WhaleLeaderEntry>> getLeaderboard();
 
   /// 获取单个地址交易统计，消费 `/whale-tracking/traders/:address/performance`。
-  Future<WhaleTradeStats> getTradeStats(String address);
+  Future<WhaleTradeStats> getTradeStats(
+    String address, {
+    int timeRangeDays = 7,
+  });
 }

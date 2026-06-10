@@ -30,13 +30,16 @@ abstract class StrategyRepository {
   Future<StrategyDetail> getStrategyDetail(String id);
 
   /// 近 N 条历史信号，默认 20；按时间倒序（最近在前）。
-  Future<List<StrategySignal>> listStrategySignals(
-    String id, {
-    int limit = 20,
-  });
+  Future<List<StrategySignal>> listStrategySignals(String id, {int limit = 20});
 
   /// 按时间维度获取 equity curve 采样点（#1565）。
   ///
   /// 60 点 0..1 归一化，按 [timeframe] 切换种子使曲线随窗口变化。
   Future<List<double>> getEquityCurve(String id, EquityTimeframe timeframe);
+
+  /// 运行策略广场模板。真实实现会创建或复用用户策略。
+  Future<StrategyRunResult> runTemplate(String id);
+
+  /// 基于策略广场模板创建编辑会话。
+  Future<StrategyEditSession> startEditSession(String id, {String? locale});
 }

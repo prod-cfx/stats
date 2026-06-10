@@ -16,6 +16,8 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
 
   final GeneratedBackendApi _api;
 
+  WhaleTrackingApi get _whaleApi => _api.client.getWhaleTrackingApi();
+
   @visibleForTesting
   static WhaleLeaderEntry mapDiscoverTrader(WhaleDiscoverTraderDto dto) {
     final bool recommended =
@@ -44,19 +46,9 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
 
   @override
   Future<List<WhaleLeaderEntry>> getLeaderboard() async {
-    final Response<Object?> response = await _api.dio.get<Object?>(
-      '/whale-tracking/discover',
-    );
-    final Object? raw = response.data;
-    final Object? payload = raw is Map && raw['data'] != null
-        ? raw['data']
-        : raw;
-    final WhaleDiscoverResponseDto? data = payload is WhaleDiscoverResponseDto
-        ? payload
-        : _api.client.serializers.deserializeWith(
-            WhaleDiscoverResponseDto.serializer,
-            payload,
-          );
+    final Response<WhaleDiscoverResponseDto> response = await _whaleApi
+        .whaleTrackingControllerGetDiscover(extra: _unwrapDataExtra);
+    final WhaleDiscoverResponseDto? data = response.data;
     if (data == null) return const <WhaleLeaderEntry>[];
 
     return <WhaleLeaderEntry>[
@@ -66,21 +58,19 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
   }
 
   @override
-  Future<WhaleTradeStats> getTradeStats(String address) async {
-    final Response<Object?> response = await _api.dio.get<Object?>(
-      '/whale-tracking/traders/${Uri.encodeComponent(address)}/performance',
-    );
-    final Object? raw = response.data;
-    final Object? payload = raw is Map && raw['data'] != null
-        ? raw['data']
-        : raw;
-    final WhaleAddressPerformanceResponseDto? data =
-        payload is WhaleAddressPerformanceResponseDto
-        ? payload
-        : _api.client.serializers.deserializeWith(
-            WhaleAddressPerformanceResponseDto.serializer,
-            payload,
-          );
+  Future<WhaleTradeStats> getTradeStats(
+    String address, {
+    int timeRangeDays = 7,
+  }) async {
+    final Response<WhaleAddressPerformanceResponseDto> response =
+        await _whaleApi.whaleTrackingControllerGetTraderPerformance(
+          address: address,
+          page: 1,
+          limit: 200,
+          timeRangeDays: timeRangeDays,
+          extra: _whalePerformanceExtra,
+        );
+    final WhaleAddressPerformanceResponseDto? data = response.data;
     if (data == null) return _emptyTradeStats();
     return mapPerformance(data);
   }
@@ -265,6 +255,15 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
       _ => 0xFF888888,
     };
   }
+
+  static const Map<String, dynamic> _unwrapDataExtra = <String, dynamic>{
+    'unwrapData': true,
+  };
+
+  static const Map<String, dynamic> _whalePerformanceExtra = <String, dynamic>{
+    'unwrapData': true,
+    'normalizeWhalePerformance': true,
+  };
 
   static String _timeAgo(String iso) {
     final DateTime? at = DateTime.tryParse(iso);

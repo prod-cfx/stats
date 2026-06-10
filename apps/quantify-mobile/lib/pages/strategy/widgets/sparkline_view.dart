@@ -13,11 +13,13 @@ class SparklineView extends StatelessWidget {
     required this.data,
     this.height = 24,
     this.strokeWidth = 1.5,
+    this.showFill = false,
   });
 
   final List<double> data;
   final double height;
   final double strokeWidth;
+  final bool showFill;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +32,7 @@ class SparklineView extends StatelessWidget {
           data: data,
           color: c.accent,
           strokeWidth: strokeWidth,
+          showFill: showFill,
         ),
       ),
     );
@@ -41,11 +44,13 @@ class _SparkPainter extends CustomPainter {
     required this.data,
     required this.color,
     required this.strokeWidth,
+    required this.showFill,
   });
 
   final List<double> data;
   final Color color;
   final double strokeWidth;
+  final bool showFill;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -68,6 +73,7 @@ class _SparkPainter extends CustomPainter {
     }
     final double span = (maxV - minV).abs() < 1e-9 ? 1 : (maxV - minV);
     final Path path = Path();
+    final Path fillPath = Path();
     for (int i = 0; i < data.length; i++) {
       final double x = (i / (data.length - 1)) * size.width;
       final double normalized = (data[i] - minV) / span;
@@ -75,14 +81,36 @@ class _SparkPainter extends CustomPainter {
       final double y = size.height - normalized * size.height;
       if (i == 0) {
         path.moveTo(x, y);
+        fillPath.moveTo(x, size.height);
+        fillPath.lineTo(x, y);
       } else {
         path.lineTo(x, y);
+        fillPath.lineTo(x, y);
       }
+    }
+    if (showFill) {
+      fillPath.lineTo(size.width, size.height);
+      fillPath.close();
+      canvas.drawPath(
+        fillPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[
+              color.withValues(alpha: 0.18),
+              color.withValues(alpha: 0.0),
+            ],
+          ).createShader(Offset.zero & size),
+      );
     }
     canvas.drawPath(path, paint);
   }
 
   @override
   bool shouldRepaint(covariant _SparkPainter old) =>
-      old.data != data || old.color != color || old.strokeWidth != strokeWidth;
+      old.data != data ||
+      old.color != color ||
+      old.strokeWidth != strokeWidth ||
+      old.showFill != showFill;
 }

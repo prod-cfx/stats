@@ -51,7 +51,33 @@ InterceptorsWrapper buildApiInterceptor({String Function()? tokenSupplier}) {
         ),
       );
     },
+    onResponse: (Response<dynamic> response, ResponseInterceptorHandler h) {
+      if (response.requestOptions.extra['unwrapData'] == true) {
+        final Object? body = response.data;
+        if (body is Map && body.containsKey('data')) {
+          response.data = body['data'];
+        }
+      }
+      if (response.requestOptions.extra['normalizeWhalePerformance'] == true) {
+        _normalizeWhalePerformance(response.data);
+      }
+      h.next(response);
+    },
   );
+}
+
+void _normalizeWhalePerformance(Object? data) {
+  if (data is! Map) return;
+  final Object? trades = data['trades'];
+  if (trades is! Iterable) return;
+  for (final Object? trade in trades) {
+    if (trade is Map) {
+      final Object? action = trade['positionAction'];
+      if (action is num) {
+        trade['positionAction'] = action.round().toString();
+      }
+    }
+  }
 }
 
 class ApiClient {

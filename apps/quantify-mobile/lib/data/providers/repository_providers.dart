@@ -188,7 +188,11 @@ final Provider<WhaleWatchRepository> whaleWatchRepositoryProvider =
 
 final Provider<StrategyRepository> strategyRepositoryProvider =
     Provider<StrategyRepository>((Ref ref) {
-      return ApiStrategyRepository(ref.watch(generatedBackendApiProvider));
+      return ApiStrategyRepository(
+        ref.watch(generatedBackendApiProvider),
+        tokenSupplier: () =>
+            ref.read(sessionControllerProvider).value?.token ?? '',
+      );
     });
 
 final Provider<LiveStrategyRepository> liveStrategyRepositoryProvider =

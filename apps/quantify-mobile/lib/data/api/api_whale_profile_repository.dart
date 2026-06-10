@@ -1,4 +1,5 @@
 import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_collection/built_collection.dart';
 
 import '../models/whale_profile_models.dart';
 import '../repositories/whale_profile_repository.dart';
@@ -20,26 +21,17 @@ class ApiWhaleProfileRepository implements WhaleProfileRepository {
   Future<WhaleProfile> getProfile(String address) async {
     final results = await Future.wait<Object?>(<Future<Object?>>[
       _whaleApi
-          .whaleTrackingControllerGetTraderSnapshot(address: address)
+          .whaleTrackingControllerGetTraderSnapshot(
+            address: address,
+            extra: _unwrapDataExtra,
+          )
           .then((r) => r.data),
       _whaleApi
           .whaleTrackingControllerGetTraderPositions(
             address: address,
             type: 'all',
+            extra: _unwrapDataExtra,
           )
-          .then((r) => r.data),
-      _whaleApi
-          .whaleTrackingControllerGetTraderOpenOrders(address: address)
-          .then((r) => r.data),
-      _whaleApi
-          .whaleTrackingControllerGetTraderPerformance(
-            address: address,
-            page: 1,
-            limit: 200,
-          )
-          .then((r) => r.data),
-      _whaleApi
-          .whaleTrackingControllerGetTraderDiscoverTags(address: address)
           .then((r) => r.data),
     ]);
 
@@ -48,18 +40,47 @@ class ApiWhaleProfileRepository implements WhaleProfileRepository {
       results[1],
       'positions',
     );
-    final TraderOpenOrdersResponseDto openOrders = _require(
-      results[2],
-      'open-orders',
-    );
-    final WhaleAddressPerformanceResponseDto performance = _require(
-      results[3],
-      'performance',
-    );
-    final TraderDiscoverTagsResponseDto tags = _require(
-      results[4],
-      'discover-tags',
-    );
+    final optional = await Future.wait<Object?>(<Future<Object?>>[
+      _optional(
+        _whaleApi
+            .whaleTrackingControllerGetTraderOpenOrders(
+              address: address,
+              extra: _unwrapDataExtra,
+            )
+            .then((r) => r.data),
+      ),
+      _optional(
+        _whaleApi
+            .whaleTrackingControllerGetTraderPerformance(
+              address: address,
+              page: 1,
+              limit: 200,
+              extra: _whalePerformanceExtra,
+            )
+            .then((r) => r.data),
+      ),
+      _optional(
+        _whaleApi
+            .whaleTrackingControllerGetTraderDiscoverTags(
+              address: address,
+              extra: _unwrapDataExtra,
+            )
+            .then((r) => r.data),
+      ),
+    ]);
+
+    final TraderOpenOrdersResponseDto openOrders =
+        optional[0] is TraderOpenOrdersResponseDto
+        ? optional[0]! as TraderOpenOrdersResponseDto
+        : _emptyOpenOrders();
+    final WhaleAddressPerformanceResponseDto performance =
+        optional[1] is WhaleAddressPerformanceResponseDto
+        ? optional[1]! as WhaleAddressPerformanceResponseDto
+        : _emptyPerformance(address);
+    final TraderDiscoverTagsResponseDto tags =
+        optional[2] is TraderDiscoverTagsResponseDto
+        ? optional[2]! as TraderDiscoverTagsResponseDto
+        : _emptyDiscoverTags();
 
     final List<WhaleSpotHolding> spotHoldings = positions.spot
         .map(_mapSpotHolding)
@@ -130,9 +151,51 @@ class ApiWhaleProfileRepository implements WhaleProfileRepository {
     );
   }
 
+  static Future<T?> _optional<T>(Future<T?> future) async {
+    try {
+      return await future;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static T _require<T>(Object? value, String label) {
     if (value is T) return value;
     throw StateError('Whale profile $label response is empty');
+  }
+
+  static TraderOpenOrdersResponseDto _emptyOpenOrders() {
+    return TraderOpenOrdersResponseDto(
+      (b) => b.orders.replace(BuiltList<OpenOrderDto>()),
+    );
+  }
+
+  static WhaleAddressPerformanceResponseDto _emptyPerformance(String address) {
+    return WhaleAddressPerformanceResponseDto(
+      (b) => b
+        ..summary.replace(
+          WhaleTraderSummaryPerformanceDto(
+            (s) => s
+              ..address = address
+              ..lookbackDays = 30
+              ..trades = 0
+              ..positions = 0
+              ..totalValueUsd = 0
+              ..longCount = 0
+              ..shortCount = 0
+              ..winRatePct = 0
+              ..pnlUsd = 0,
+          ),
+        )
+        ..byAsset.replace(BuiltList<WhaleAssetPerformanceDto>())
+        ..trades.replace(BuiltList<WhaleTradeHistoryItemDto>()),
+    );
+  }
+
+  static TraderDiscoverTagsResponseDto _emptyDiscoverTags() {
+    return TraderDiscoverTagsResponseDto(
+      (b) => b.aiTags.replace(BuiltList<WhaleDiscoverTraderAiTagDto>()),
+    );
   }
 
   static WhaleSpotHolding _mapSpotHolding(SpotBalanceDto dto) {
@@ -498,4 +561,13 @@ class ApiWhaleProfileRepository implements WhaleProfileRepository {
       _ => 0xFF888888,
     };
   }
+
+  static const Map<String, dynamic> _unwrapDataExtra = <String, dynamic>{
+    'unwrapData': true,
+  };
+
+  static const Map<String, dynamic> _whalePerformanceExtra = <String, dynamic>{
+    'unwrapData': true,
+    'normalizeWhalePerformance': true,
+  };
 }

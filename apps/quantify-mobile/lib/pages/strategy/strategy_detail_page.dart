@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,15 +33,18 @@ part 'strategy_detail_page.sections.part.dart';
 ///   2. widget test 可以按 id `overrideWith` 注入确定性 future
 final FutureProviderFamily<StrategyDetail, String> strategyDetailProvider =
     FutureProvider.family<StrategyDetail, String>((Ref ref, String id) {
-  return ref.watch(strategyRepositoryProvider).getStrategyDetail(id);
-});
+      return ref.watch(strategyRepositoryProvider).getStrategyDetail(id);
+    });
 
 /// equity curve 按 (id, timeframe) 缓存（#1565）。
 final FutureProviderFamily<List<double>, ({String id, EquityTimeframe tf})>
-    strategyEquityProvider = FutureProvider.family<List<double>,
-        ({String id, EquityTimeframe tf})>((Ref ref, ({String id, EquityTimeframe tf}) k) {
-  return ref.watch(strategyRepositoryProvider).getEquityCurve(k.id, k.tf);
-});
+strategyEquityProvider =
+    FutureProvider.family<List<double>, ({String id, EquityTimeframe tf})>((
+      Ref ref,
+      ({String id, EquityTimeframe tf}) k,
+    ) {
+      return ref.watch(strategyRepositoryProvider).getEquityCurve(k.id, k.tf);
+    });
 
 class StrategyDetailPage extends ConsumerStatefulWidget {
   const StrategyDetailPage({super.key, required this.id});
@@ -47,8 +52,7 @@ class StrategyDetailPage extends ConsumerStatefulWidget {
   final String id;
 
   @override
-  ConsumerState<StrategyDetailPage> createState() =>
-      _StrategyDetailPageState();
+  ConsumerState<StrategyDetailPage> createState() => _StrategyDetailPageState();
 }
 
 class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
@@ -66,8 +70,23 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
 
   /// 点击「载入对话」：toast → 700ms → `/ai?loadStrategy=$id`。
   /// toast 文案在此解析（依赖 l10n），timer/导航请求由 controller 持有。
-  void _onLoadConversation(StrategyDetail d) {
+  Future<void> _onLoadConversation(StrategyDetail d) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    try {
+      await ref
+          .read(strategyRepositoryProvider)
+          .startEditSession(
+            d.card.id,
+            locale: Localizations.localeOf(context).languageCode,
+          );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.commonLoadError)));
+      return;
+    }
+    if (!mounted) return;
     ref
         .read(strategyDetailControllerProvider.notifier)
         .fireToastAndNav(
@@ -78,8 +97,18 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
 
   /// 点击底栏「运行」（#1825，与广场卡 #1821 行为一致）：toast
   /// 「『名』已启动 · 进入实盘监控」，~700ms 后跳实盘监控 `/me/live`。
-  void _onRun(StrategyDetail d) {
+  Future<void> _onRun(StrategyDetail d) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    try {
+      await ref.read(strategyRepositoryProvider).runTemplate(d.card.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.commonLoadError)));
+      return;
+    }
+    if (!mounted) return;
     ref
         .read(strategyDetailControllerProvider.notifier)
         .fireToastAndNav(
@@ -116,15 +145,19 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final String id = widget.id;
-    final AsyncValue<StrategyDetail> detailAsync =
-        ref.watch(strategyDetailProvider(id));
+    final AsyncValue<StrategyDetail> detailAsync = ref.watch(
+      strategyDetailProvider(id),
+    );
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     final bool starred = favorites.contains(id);
-    final StrategyDetailState pageState =
-        ref.watch(strategyDetailControllerProvider);
+    final StrategyDetailState pageState = ref.watch(
+      strategyDetailControllerProvider,
+    );
     // 导航副作用留 widget：controller 到点写 pendingNav，这里消费并跳转。
-    ref.listen<StrategyDetailState>(strategyDetailControllerProvider,
-        (StrategyDetailState? prev, StrategyDetailState next) {
+    ref.listen<StrategyDetailState>(strategyDetailControllerProvider, (
+      StrategyDetailState? prev,
+      StrategyDetailState next,
+    ) {
       final String? route = next.pendingNav;
       if (route != null) {
         ref.read(strategyDetailControllerProvider.notifier).consumeNav();
@@ -158,95 +191,101 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
               body: Stack(
                 children: <Widget>[
                   detailAsync.when(
-        loading: () => const Center(child: QzSpinner()),
-        error: (Object err, _) => Center(
-          child: QzEmptyState(title: l10n.commonLoadError, subtitle: err.toString()),
-        ),
-        data: (StrategyDetail d) {
-          final EquityTimeframe tf =
-              pageState.tf ?? _defaultTimeframe(d.card.period);
-          return SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg,
-              14,
-              QzSpacing.lg,
-              100,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                // equity 卡：左上大号 +CAGR% +「{period} 累计收益」+ 时间 tab
-                // （对齐设计稿 StratDetail equity 卡，#1825）。
-                _EquityCard(
-                  cagr: d.cagr,
-                  tf: tf,
-                  onChanged: (EquityTimeframe v) => ref
-                      .read(strategyDetailControllerProvider.notifier)
-                      .setTf(v),
-                  curve: _EquitySection(id: id, tf: tf),
-                ),
-                const SizedBox(height: QzSpacing.md),
-                // 6 格指标：Sharpe / 最大回撤 / 胜率 / 盈亏比 / 交易次数 / 使用人数
-                // （对齐设计稿 StratDetail stats grid，#1825）。
-                _MetricGrid(
-                  cards: <Widget>[
-                    StrategyMetricCard(
-                      label: 'Sharpe',
-                      value: d.sharpe.toStringAsFixed(2),
+                    loading: () => const Center(child: QzSpinner()),
+                    error: (Object err, _) => Center(
+                      child: QzEmptyState(
+                        title: l10n.commonLoadError,
+                        subtitle: err.toString(),
+                      ),
                     ),
-                    StrategyMetricCard(
-                      label: l10n.strategyDetailMaxDrawdown,
-                      value: _fmtPct(d.maxDrawdown, sign: false),
-                      emphasis: QzMetricEmphasis.down,
-                    ),
-                    StrategyMetricCard(
-                      label: l10n.strategyDetailWinRate,
-                      value: '${(d.winRate * 100).toStringAsFixed(1)}%',
-                    ),
-                    StrategyMetricCard(
-                      label: l10n.strategyDetailProfitLossRatio,
-                      value: d.profitLossRatio.toStringAsFixed(2),
-                    ),
-                    StrategyMetricCard(
-                      label: l10n.strategyDetailTradeCount,
-                      value: '${d.tradeCount}',
-                    ),
-                    StrategyMetricCard(
-                      label: l10n.strategyDetailUsers,
-                      value: _fmtUsers(d.users),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: QzSpacing.md),
-                Text(
-                  l10n.strategyDetailParamsTitle,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    data: (StrategyDetail d) {
+                      final EquityTimeframe tf =
+                          pageState.tf ?? _defaultTimeframe(d.card.period);
+                      return SafeArea(
+                        top: false,
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(
+                            QzSpacing.lg,
+                            14,
+                            QzSpacing.lg,
+                            100,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              // equity 卡：左上大号 +CAGR% +「{period} 累计收益」+ 时间 tab
+                              // （对齐设计稿 StratDetail equity 卡，#1825）。
+                              _EquityCard(
+                                cagr: d.cagr,
+                                tf: tf,
+                                onChanged: (EquityTimeframe v) => ref
+                                    .read(
+                                      strategyDetailControllerProvider.notifier,
+                                    )
+                                    .setTf(v),
+                                curve: _EquitySection(id: id, tf: tf),
+                              ),
+                              const SizedBox(height: QzSpacing.md),
+                              // 6 格指标：Sharpe / 最大回撤 / 胜率 / 盈亏比 / 交易次数 / 使用人数
+                              // （对齐设计稿 StratDetail stats grid，#1825）。
+                              _MetricGrid(
+                                cards: <Widget>[
+                                  StrategyMetricCard(
+                                    label: 'Sharpe',
+                                    value: d.sharpe.toStringAsFixed(2),
+                                  ),
+                                  StrategyMetricCard(
+                                    label: l10n.strategyDetailMaxDrawdown,
+                                    value: _fmtPct(d.maxDrawdown, sign: false),
+                                    emphasis: QzMetricEmphasis.down,
+                                  ),
+                                  StrategyMetricCard(
+                                    label: l10n.strategyDetailWinRate,
+                                    value:
+                                        '${(d.winRate * 100).toStringAsFixed(1)}%',
+                                  ),
+                                  StrategyMetricCard(
+                                    label: l10n.strategyDetailProfitLossRatio,
+                                    value: d.profitLossRatio.toStringAsFixed(2),
+                                  ),
+                                  StrategyMetricCard(
+                                    label: l10n.strategyDetailTradeCount,
+                                    value: '${d.tradeCount}',
+                                  ),
+                                  StrategyMetricCard(
+                                    label: l10n.strategyDetailUsers,
+                                    value: _fmtUsers(d.users),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: QzSpacing.md),
+                              Text(
+                                l10n.strategyDetailParamsTitle,
+                                style: TextStyle(
+                                  color: c.text,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: QzSpacing.sm),
+                              _ParamsSection(detail: d),
+                              const SizedBox(height: QzSpacing.md),
+                              Text(
+                                l10n.strategyDetailDescriptionTitle,
+                                style: TextStyle(
+                                  color: c.text,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: QzSpacing.sm),
+                              _DescriptionSection(card: d.card),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(height: QzSpacing.sm),
-                _ParamsSection(card: d.card),
-                const SizedBox(height: QzSpacing.md),
-                Text(
-                  l10n.strategyDetailDescriptionTitle,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: QzSpacing.sm),
-                _DescriptionSection(card: d.card),
-              ],
-            ),
-          ),
-        );
-        },
-      ),
                   if (pageState.toast != null)
                     Positioned(
                       left: 0,
@@ -291,7 +330,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                         leading: const Icon(Icons.smart_toy_outlined),
                         onPressed: detailAsync.maybeWhen(
                           data: (StrategyDetail d) =>
-                              () => _onLoadConversation(d),
+                              () => unawaited(_onLoadConversation(d)),
                           orElse: () => null,
                         ),
                       ),
@@ -307,7 +346,8 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                           height: 48,
                           leading: const Icon(Icons.play_arrow_rounded),
                           onPressed: detailAsync.maybeWhen(
-                            data: (StrategyDetail d) => () => _onRun(d),
+                            data: (StrategyDetail d) =>
+                                () => unawaited(_onRun(d)),
                             orElse: () => null,
                           ),
                         ),
@@ -333,4 +373,3 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
     }
   }
 }
-

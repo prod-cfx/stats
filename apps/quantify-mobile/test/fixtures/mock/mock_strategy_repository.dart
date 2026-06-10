@@ -209,4 +209,21 @@ class MockStrategyRepository implements StrategyRepository {
     }
     return points;
   }
+
+  @override
+  Future<StrategyRunResult> runTemplate(String id) async {
+    return StrategyRunResult(strategyId: id);
+  }
+
+  @override
+  Future<StrategyEditSession> startEditSession(
+    String id, {
+    String? locale,
+  }) async {
+    return StrategyEditSession(
+      sessionId: 'mock-session-$id',
+      templateId: id,
+      initialMessage: 'Load $id',
+    );
+  }
 }

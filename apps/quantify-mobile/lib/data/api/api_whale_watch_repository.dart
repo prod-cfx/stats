@@ -21,7 +21,7 @@ class ApiWhaleWatchRepository implements WhaleWatchRepository {
   @override
   Future<List<WatchRule>> listRules() async {
     final response = await _notificationApi
-        .whaleNotificationRulesControllerList();
+        .whaleNotificationRulesControllerList(extra: _unwrapDataExtra);
     final List<WhaleNotificationRuleResponseDto> data =
         response.data?.toList() ?? const <WhaleNotificationRuleResponseDto>[];
     return data.map(mapRule).toList(growable: false);
@@ -31,6 +31,7 @@ class ApiWhaleWatchRepository implements WhaleWatchRepository {
   Future<WatchRule> createRule(WatchRule rule) async {
     final response = await _notificationApi
         .whaleNotificationRulesControllerCreate(
+          extra: _unwrapDataExtra,
           createWhaleNotificationRuleDto: CreateWhaleNotificationRuleDto((b) {
             b
               ..type = CreateWhaleNotificationRuleDtoTypeEnum.ADDRESS
@@ -52,6 +53,7 @@ class ApiWhaleWatchRepository implements WhaleWatchRepository {
     final response = await _notificationApi
         .whaleNotificationRulesControllerUpdate(
           id: rule.id,
+          extra: _unwrapDataExtra,
           updateWhaleNotificationRuleDto: UpdateWhaleNotificationRuleDto((b) {
             b
               ..thresholdUsd = rule.thresholdUsd
@@ -69,7 +71,10 @@ class ApiWhaleWatchRepository implements WhaleWatchRepository {
 
   @override
   Future<void> deleteRule(WatchRule rule) async {
-    await _notificationApi.whaleNotificationRulesControllerDelete(id: rule.id);
+    await _notificationApi.whaleNotificationRulesControllerDelete(
+      id: rule.id,
+      extra: _unwrapDataExtra,
+    );
   }
 
   @override
@@ -123,4 +128,8 @@ class ApiWhaleWatchRepository implements WhaleWatchRepository {
     if (text.isEmpty || text == rule.address) return null;
     return text;
   }
+
+  static const Map<String, dynamic> _unwrapDataExtra = <String, dynamic>{
+    'unwrapData': true,
+  };
 }

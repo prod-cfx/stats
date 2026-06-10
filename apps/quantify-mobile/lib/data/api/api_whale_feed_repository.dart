@@ -71,7 +71,10 @@ class ApiWhaleFeedRepository implements WhaleFeedRepository {
   Future<List<WhaleEvent>> listRecent({required int limit}) async {
     final response = await _api.client
         .getWhaleAlertsApi()
-        .whaleAlertControllerGetWhaleTrades(limit: limit);
+        .whaleAlertControllerGetWhaleTrades(
+          limit: limit,
+          extra: _unwrapDataExtra,
+        );
     final Iterable<dynamic> items = response.data?.items ?? const <dynamic>[];
     return items
         .map(_decodeTrade)
@@ -92,4 +95,8 @@ class ApiWhaleFeedRepository implements WhaleFeedRepository {
         .where((WhaleEvent? e) => e != null)
         .cast<WhaleEvent>();
   }
+
+  static const Map<String, dynamic> _unwrapDataExtra = <String, dynamic>{
+    'unwrapData': true,
+  };
 }

@@ -175,6 +175,12 @@ class StrategyDetail {
   /// 真正的 K 线接入留给后续 issue；当前页仅渲染"占位"提示。
   final List<double> equityCurve;
 
+  /// 策略运行参数。来自 strategy-plaza 模板契约，缺字段时页面显示 `--`。
+  final String marketType;
+  final double? positionPct;
+  final double? leverage;
+  final Map<String, double> params;
+
   const StrategyDetail({
     required this.card,
     required this.return7d,
@@ -188,6 +194,29 @@ class StrategyDetail {
     required this.tradeCount,
     required this.users,
     required this.equityCurve,
+    this.marketType = '',
+    this.positionPct,
+    this.leverage,
+    this.params = const <String, double>{},
+  });
+}
+
+class StrategyRunResult {
+  final String strategyId;
+  final bool existing;
+
+  const StrategyRunResult({required this.strategyId, this.existing = false});
+}
+
+class StrategyEditSession {
+  final String sessionId;
+  final String templateId;
+  final String initialMessage;
+
+  const StrategyEditSession({
+    required this.sessionId,
+    required this.templateId,
+    required this.initialMessage,
   });
 }
 

@@ -22,13 +22,15 @@ class WhaleTradeStatsSheet extends StatefulWidget {
   const WhaleTradeStatsSheet({
     super.key,
     required this.address,
-    required this.stats,
+    this.stats,
+    this.loadStats,
     this.avatarGlyph,
     this.avatarColorHex,
-  });
+  }) : assert(stats != null || loadStats != null);
 
   final String address;
-  final WhaleTradeStats stats;
+  final WhaleTradeStats? stats;
+  final Future<WhaleTradeStats> Function(int timeRangeDays)? loadStats;
   final String? avatarGlyph;
   final int? avatarColorHex;
 
@@ -70,7 +72,7 @@ class WhaleTradeStatsSheet extends StatefulWidget {
   static Future<void> showFuture(
     BuildContext context, {
     required String address,
-    required Future<WhaleTradeStats> stats,
+    required Future<WhaleTradeStats> Function(int timeRangeDays) stats,
     String? avatarGlyph,
     int? avatarColorHex,
   }) {
@@ -92,45 +94,11 @@ class WhaleTradeStatsSheet extends StatefulWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (BuildContext ctx) {
-        return FutureBuilder<WhaleTradeStats>(
-          future: stats,
-          builder:
-              (BuildContext context, AsyncSnapshot<WhaleTradeStats> snapshot) {
-                if (snapshot.hasData) {
-                  return WhaleTradeStatsSheet(
-                    address: address,
-                    stats: snapshot.requireData,
-                    avatarGlyph: avatarGlyph,
-                    avatarColorHex: avatarColorHex,
-                  );
-                }
-                final AppLocalizations l10n = AppLocalizations.of(context);
-                final QzColorScheme c = context.qzScheme;
-                return SizedBox(
-                  height: MediaQuery.sizeOf(context).height * 0.42,
-                  child: Column(
-                    children: <Widget>[
-                      _Header(
-                        title: l10n.whaleTradeStatsTitle,
-                        onClose: () => Navigator.of(context).pop(),
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: snapshot.hasError
-                              ? Text(
-                                  l10n.whaleLoadError,
-                                  style: TextStyle(
-                                    color: c.textMid,
-                                    fontSize: 13,
-                                  ),
-                                )
-                              : const CircularProgressIndicator(),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+        return WhaleTradeStatsSheet(
+          address: address,
+          loadStats: stats,
+          avatarGlyph: avatarGlyph,
+          avatarColorHex: avatarColorHex,
         );
       },
     );
@@ -147,12 +115,81 @@ enum _PerfTab { asset, position }
 class _WhaleTradeStatsSheetState extends State<WhaleTradeStatsSheet> {
   _Period _period = _Period.week;
   _PerfTab _tab = _PerfTab.asset;
+  WhaleTradeStats? _stats;
+  Object? _error;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _stats = widget.stats;
+    if (_stats == null) {
+      _load(_period, allowFallback: true);
+    }
+  }
+
+  Future<void> _load(_Period period, {required bool allowFallback}) async {
+    final Future<WhaleTradeStats> Function(int timeRangeDays)? loadStats =
+        widget.loadStats;
+    if (loadStats == null) return;
+    setState(() {
+      _period = period;
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final WhaleTradeStats stats = await loadStats(_periodDays(period));
+      if (!mounted) return;
+      if (allowFallback && period != _Period.all && _isEmptyStats(stats)) {
+        await _load(_Period.all, allowFallback: false);
+        return;
+      }
+      setState(() {
+        _stats = stats;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
+  }
+
+  void _setPeriod(_Period period) {
+    if (widget.loadStats == null) {
+      setState(() => _period = period);
+      return;
+    }
+    _load(period, allowFallback: true);
+  }
+
+  static int _periodDays(_Period period) {
+    switch (period) {
+      case _Period.day:
+        return 1;
+      case _Period.week:
+        return 7;
+      case _Period.month:
+        return 30;
+      case _Period.all:
+        return 365;
+    }
+  }
+
+  static bool _isEmptyStats(WhaleTradeStats stats) {
+    return (stats.tradesTotal ?? 0) == 0 &&
+        stats.assetPerf.isEmpty &&
+        stats.positionPerf.isEmpty;
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final WhaleTradeStats s = widget.stats;
+    final WhaleTradeStats? s = _stats;
     final Size viewport = MediaQuery.sizeOf(context);
     final double keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final double panelHeight = viewport.height * 0.88;
@@ -181,52 +218,62 @@ class _WhaleTradeStatsSheetState extends State<WhaleTradeStatsSheet> {
                 ),
                 const Spacer(),
                 const SizedBox(width: 8),
-                _PeriodSelect(
-                  value: _period,
-                  onChanged: (_Period p) => setState(() => _period = p),
-                ),
+                _PeriodSelect(value: _period, onChanged: _setPeriod),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Expanded(child: _WinRateCard(stats: s)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _TradeCountCard(stats: s)),
-                ],
+          if (s == null || _loading || _error != null)
+            Expanded(
+              child: Center(
+                child: _error != null
+                    ? Text(
+                        l10n.whaleLoadError,
+                        style: TextStyle(color: c.textMid, fontSize: 13),
+                      )
+                    : const CircularProgressIndicator(),
+              ),
+            )
+          else ...<Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Expanded(child: _WinRateCard(stats: s)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _TradeCountCard(stats: s)),
+                  ],
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg,
-              QzSpacing.lg,
-              QzSpacing.lg,
-              0,
-            ),
-            child: Text(
-              l10n.whaleTradeStatsPerfTitle,
-              style: TextStyle(
-                color: c.text,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                QzSpacing.lg,
+                QzSpacing.lg,
+                QzSpacing.lg,
+                0,
+              ),
+              child: Text(
+                l10n.whaleTradeStatsPerfTitle,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
-          _PerfTabs(
-            value: _tab,
-            onChanged: (_PerfTab t) => setState(() => _tab = t),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: math.max(20, keyboardInset)),
-              child: _PerfList(stats: s, tab: _tab),
+            _PerfTabs(
+              value: _tab,
+              onChanged: (_PerfTab t) => setState(() => _tab = t),
             ),
-          ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: math.max(20, keyboardInset)),
+                child: _PerfList(stats: s, tab: _tab),
+              ),
+            ),
+          ],
         ],
       ),
     );
