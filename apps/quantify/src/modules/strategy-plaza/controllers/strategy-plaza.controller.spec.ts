@@ -47,6 +47,25 @@ describe('StrategyPlazaController', () => {
       returnPct: 12,
       winRatePct: 55,
       maxDrawdownPct: 8,
+      tradeCount: 43,
+    },
+    officialBacktest: {
+      generatedAt: '2026-06-06T13:06:23.170Z',
+      backtestFrom: 1775008800000,
+      backtestTo: 1777167900000,
+      source: 'https://www.okx.com/api/v5/market/history-candles',
+      dataSource: {
+        exchange: 'okx',
+        marketType: 'swap',
+        endpoint: 'https://www.okx.com/api/v5/market/history-candles',
+        fixedEndTs: 1777168800000,
+        pagination: { parameter: 'after', pageLimit: 300, pageCount: 8 },
+      },
+      candleCount: 2400,
+      metrics: { returnPct: 12, winRatePct: 55, maxDrawdownPct: 8, tradeCount: 43 },
+      equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 11200 }],
+      confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
+      disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
     },
     signals: [
       { time: '2026-06-07T00:00:00.000Z', side: 'buy', price: 100, pnlPercent: 1 },
@@ -126,6 +145,19 @@ describe('StrategyPlazaController', () => {
     expect(templates.getRequired).toHaveBeenCalledWith('ma-cross')
     expect(caller.resolveCallerUserIdFromAuthorization).not.toHaveBeenCalled()
     expect(result).toEqual(expect.objectContaining({ id: 'ma-cross', timeframe: '15m' }))
+  })
+
+  it('exposes official backtest data on public template detail', async () => {
+    const { controller } = await buildController()
+
+    const result = await controller.detail('ma-cross')
+
+    expect(result.officialBacktest).toMatchObject({
+      metrics: expect.objectContaining({ tradeCount: expect.any(Number) }),
+      confidence: expect.objectContaining({ level: expect.stringMatching(/^(high|medium|low)$/) }),
+      disclaimer: expect.stringContaining('历史回测不代表未来收益'),
+    })
+    expect(result.officialBacktest.equityCurve.length).toBeGreaterThan(1)
   })
 
   it('limits public official template signals without auth', async () => {

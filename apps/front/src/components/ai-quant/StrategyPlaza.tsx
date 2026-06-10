@@ -1,7 +1,7 @@
 'use client'
 
 import type { StrategyPlazaTemplate } from '@/lib/api'
-import { Activity, Edit3, Loader2, Play } from 'lucide-react'
+import { Activity, Edit3, Info, Loader2, Play } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -28,7 +28,7 @@ const CATEGORY_LABELS = [
 const SORT_OPTIONS = [
   { key: 'hot', label: '热门' },
   { key: 'return', label: '收益' },
-  { key: 'sharpe', label: 'Sharpe' },
+  { key: 'trades', label: '交易' },
   { key: 'drawdown', label: '低回撤' },
   { key: 'new', label: '最新' },
 ] as const
@@ -65,6 +65,7 @@ interface StrategyPlazaProps {
   pendingAction?: 'run' | 'edit' | null
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
+  onOpenStrategyReport?: (templateId: string) => void
   showHotRail?: boolean
 }
 
@@ -83,8 +84,14 @@ interface StrategyCardModel {
   returnPct: number | null
   winRatePct: number | null
   maxDrawdownPct: number | null
-  sharpe: number
-  users: number
+  tradeCount: number | null
+  confidenceLevel: 'high' | 'medium' | 'low'
+  confidenceLabel: string
+  generatedAtLabel: string
+  backtestRangeLabel: string
+  dataSourceLabel: string
+  candleCount: number
+  disclaimer: string
   author: string
   authorTone: string
   tone: string
@@ -118,30 +125,6 @@ function formatMetricPct(value: number | null, options: { sign?: boolean } = {})
   return options.sign && value > 0 ? `+${formatted}` : formatted
 }
 
-function stableHash(input: string): number {
-  let hash = 0
-  for (let i = 0; i < input.length; i += 1) hash = (hash * 31 + input.charCodeAt(i)) >>> 0
-  return hash
-}
-
-function buildSeed(template: StrategyPlazaTemplate, returnPct: number | null): number[] {
-  let hash = stableHash(template.id)
-  const rnd = () => {
-    hash = (hash * 1103515245 + 12345) >>> 0
-    return (hash >>> 16) / 65535
-  }
-  const targetReturn = (returnPct ?? 8) / 100
-  const volatility = Math.max(0.6, Math.min(4.5, Math.abs(returnPct ?? 8) * 0.1 + 0.8))
-  const result: number[] = []
-  let price = 100
-  for (let i = 0; i < 28; i += 1) {
-    const target = 100 * (1 + targetReturn * (i / 27))
-    price += (target - price) * 0.45 + (rnd() - 0.5) * volatility
-    result.push(price)
-  }
-  return result
-}
-
 function inferCategory(template: StrategyPlazaTemplate, tags: string[]): string {
   if (template.category) return template.category
   const mappedCategory = TEMPLATE_CATEGORY[template.id]
@@ -170,6 +153,29 @@ function inferCategory(template: StrategyPlazaTemplate, tags: string[]): string 
   if (source.includes('orderbook') || source.includes('盘口') || source.includes('hft'))
     return '盘口'
   return '趋势'
+}
+
+function formatEvidenceDate(value: string | number): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toISOString().slice(0, 10)
+}
+
+function formatEvidenceRange(backtestFrom: number, backtestTo: number): string {
+  return `${formatEvidenceDate(backtestFrom)} - ${formatEvidenceDate(backtestTo)}`
+}
+
+function getDataSourceLabel(template: StrategyPlazaTemplate): string {
+  const source = template.officialBacktest.dataSource
+  const exchange = typeof source.exchange === 'string' ? source.exchange.toUpperCase() : template.exchange.toUpperCase()
+  const marketType = typeof source.marketType === 'string' ? source.marketType : template.marketType
+  return `${exchange} ${marketType}`
+}
+
+function getConfidenceLabel(level: StrategyCardModel['confidenceLevel']): string {
+  if (level === 'high') return '高置信'
+  if (level === 'medium') return '中置信'
+  return '低置信'
 }
 
 function resolveTemplateDisplay(template: StrategyPlazaTemplate, t: TFunction) {
@@ -205,6 +211,8 @@ function toCardModel(
   const returnPct = template.displayMetrics.returnPct
   const winRatePct = template.displayMetrics.winRatePct
   const maxDrawdownPct = template.displayMetrics.maxDrawdownPct
+  const officialBacktest = template.officialBacktest
+  const tradeCount = officialBacktest.metrics.tradeCount ?? template.displayMetrics.tradeCount ?? null
   const order = template.displayOrder ?? index + 1
   const status: StrategyCardModel['status'] =
     template.status === 'live' ? 'official' : order <= 2 ? 'hot' : order <= 4 ? 'new' : null
@@ -231,37 +239,38 @@ function toCardModel(
     returnPct,
     winRatePct,
     maxDrawdownPct,
-    sharpe: Number(
-      (1.05 + (winRatePct ?? 54) / 100 + Math.max(0, (returnPct ?? 8) / 50)).toFixed(2),
-    ),
-    users: 240 + (stableHash(template.id) % 8400),
+    tradeCount,
+    confidenceLevel: officialBacktest.confidence.level,
+    confidenceLabel: getConfidenceLabel(officialBacktest.confidence.level),
+    generatedAtLabel: formatEvidenceDate(officialBacktest.generatedAt),
+    backtestRangeLabel: formatEvidenceRange(officialBacktest.backtestFrom, officialBacktest.backtestTo),
+    dataSourceLabel: getDataSourceLabel(template),
+    candleCount: officialBacktest.candleCount,
+    disclaimer: officialBacktest.disclaimer,
     author,
     authorTone: status === 'official' ? '#7C3AED' : '#0EA5E9',
     tone: templateTone(template),
     status,
-    seed: buildSeed(template, returnPct),
+    seed: officialBacktest.equityCurve.map(point => point.equity),
     order,
   }
 }
 
-function fmtUsers(value: number): string {
-  return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${value}`
-}
-
 function Sparkline({ data, index, accent }: { data: number[]; index: string; accent?: string }) {
+  const chartData = data.length > 1 ? data : [100, 100]
   const width = 120
   const height = 40
-  const min = Math.min(...data)
-  const max = Math.max(...data)
+  const min = Math.min(...chartData)
+  const max = Math.max(...chartData)
   const span = max - min || 1
-  const points = data
+  const points = chartData
     .map((value, i) => {
-      const x = (i / (data.length - 1)) * width
+      const x = (i / (chartData.length - 1)) * width
       const y = height - 3 - ((value - min) / span) * (height - 6)
       return `${x.toFixed(1)},${y.toFixed(1)}`
     })
     .join(' ')
-  const up = data[data.length - 1] >= data[0]
+  const up = chartData[chartData.length - 1] >= chartData[0]
   const color = accent || (up ? '#16A36B' : '#DC4646')
   const gradientId = `strategy-plaza-spark-${index}`
 
@@ -408,6 +417,7 @@ export function StrategyPlaza({
   onRunStrategy,
   onEditStrategy,
   showHotRail = true,
+  onOpenStrategyReport,
 }: StrategyPlazaProps) {
   const { t } = useTranslation()
   const hasPendingAction = Boolean(pendingTemplateId && pendingAction)
@@ -427,7 +437,7 @@ export function StrategyPlaza({
     () =>
       cards
         .slice()
-        .sort((a, b) => b.users - a.users)
+        .sort((a, b) => (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity))
         .slice(0, Math.min(6, cards.length)),
     [cards],
   )
@@ -449,11 +459,11 @@ export function StrategyPlaza({
 
     return list.slice().sort((a, b) => {
       if (sort === 'return') return (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity)
-      if (sort === 'sharpe') return b.sharpe - a.sharpe
+      if (sort === 'trades') return (b.tradeCount ?? -Infinity) - (a.tradeCount ?? -Infinity)
       if (sort === 'drawdown')
         return Math.abs(a.maxDrawdownPct ?? Infinity) - Math.abs(b.maxDrawdownPct ?? Infinity)
       if (sort === 'new') return a.order - b.order
-      return b.users - a.users
+      return (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity)
     })
   }, [cards, category, favoriteOnly, favorites, query, sort])
 
@@ -554,7 +564,13 @@ export function StrategyPlaza({
               return (
                 <article
                   key={item.template.id}
+                  role={onOpenStrategyReport ? 'link' : undefined}
+                  tabIndex={onOpenStrategyReport ? 0 : undefined}
                   className="srail-card relative isolate flex w-[312px] shrink-0 snap-start flex-col overflow-hidden rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[18px] py-4 text-[color:var(--cf-text-strong)] shadow-sm transition hover:border-[color:var(--cf-text-strong)]/20 hover:shadow-lg"
+                  onClick={() => onOpenStrategyReport?.(item.template.id)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') onOpenStrategyReport?.(item.template.id)
+                  }}
                 >
                   <div className="mesh pointer-events-none absolute inset-0 bg-[linear-gradient(color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--cf-border)_55%,transparent)_1px,transparent_1px)] [mask-image:linear-gradient(120deg,#000_0%,transparent_70%)] bg-[length:22px_22px] opacity-40" />
                   <StatusBadge className="absolute top-3 right-3 z-[3]" status={item.status} />
@@ -591,10 +607,10 @@ export function StrategyPlaza({
                     <div className="mt-3 flex gap-5 border-t border-[color:var(--cf-border)] pt-3">
                       <div>
                         <div className="text-[9px] tracking-[0.4px] text-[color:var(--cf-muted)] uppercase">
-                          Sharpe
+                          交易
                         </div>
                         <div className="mt-0.5 font-mono text-[13px] font-bold">
-                          {item.sharpe.toFixed(2)}
+                          {item.tradeCount ?? '--'}
                         </div>
                       </div>
                       <div>
@@ -731,7 +747,13 @@ export function StrategyPlaza({
               <article
                 key={item.template.id}
                 data-testid="strategy-plaza-card"
+                role={onOpenStrategyReport ? 'link' : undefined}
+                tabIndex={onOpenStrategyReport ? 0 : undefined}
                 className="scard group flex min-w-0 cursor-pointer flex-col rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-[18px] py-4 transition hover:-translate-y-0.5 hover:border-[color:var(--cf-text-strong)]/20 hover:shadow-lg"
+                onClick={() => onOpenStrategyReport?.(item.template.id)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') onOpenStrategyReport?.(item.template.id)
+                }}
               >
                 <div className="scard-head mb-3.5 flex items-start gap-3">
                   <span
@@ -818,10 +840,10 @@ export function StrategyPlaza({
                 <div className="scard-stats mb-3.5 grid grid-cols-4 gap-1.5">
                   <div className="s text-center">
                     <div className="l text-[9.5px] tracking-[0.3px] text-[color:var(--cf-muted)] uppercase">
-                      Sharpe
+                      交易
                     </div>
                     <div className="v mt-1 font-mono text-[13px] font-bold text-[color:var(--cf-text-strong)]">
-                      {item.sharpe.toFixed(2)}
+                      {item.tradeCount ?? '--'}
                     </div>
                   </div>
                   <div className="s text-center">
@@ -842,13 +864,32 @@ export function StrategyPlaza({
                   </div>
                   <div className="s text-center">
                     <div className="l text-[9.5px] tracking-[0.3px] text-[color:var(--cf-muted)] uppercase">
-                      跟单
+                      置信
                     </div>
                     <div className="v mt-1 font-mono text-[13px] font-bold text-[color:var(--cf-text-strong)]">
-                      {fmtUsers(item.users)}
+                      {item.confidenceLabel}
                     </div>
                   </div>
                 </div>
+
+                <details
+                  data-testid="strategy-plaza-official-evidence"
+                  className="mb-3 rounded-[10px] border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-[11.5px] leading-5 text-[color:var(--cf-muted)]"
+                  onClick={event => event.stopPropagation()}
+                  open
+                >
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-[color:var(--cf-text-strong)]">
+                    <Info className="h-3.5 w-3.5" />
+                    官方样本回测
+                  </summary>
+                  <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
+                    <span>回测区间 {item.backtestRangeLabel}</span>
+                    <span>数据源 {item.dataSourceLabel}</span>
+                    <span>生成时间 {item.generatedAtLabel}</span>
+                    <span>K 线 {item.candleCount}</span>
+                  </div>
+                  <div className="mt-1.5">{item.disclaimer}</div>
+                </details>
 
                 <div
                   data-testid="strategy-plaza-card-footer"

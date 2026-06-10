@@ -148,6 +148,31 @@ export function renderEvidenceConstantSource(evidence: unknown): string {
   ].join('\n')
 }
 
+export function downsampleEquityCurveForEvidence(
+  points: OptimizerEquityPoint[],
+  maxPoints = 64,
+): OptimizerEquityPoint[] {
+  const validPoints = points
+    .filter(point => Number.isFinite(point.ts) && Number.isFinite(point.equity))
+    .sort((left, right) => left.ts - right.ts)
+
+  if (validPoints.length <= maxPoints) return validPoints
+  if (maxPoints <= 1) return validPoints.slice(0, 1)
+
+  const selectedIndexes = new Set<number>()
+  const lastIndex = validPoints.length - 1
+  for (let index = 0; index < maxPoints; index += 1) {
+    selectedIndexes.add(Math.round((index / (maxPoints - 1)) * lastIndex))
+  }
+  selectedIndexes.add(0)
+  selectedIndexes.add(lastIndex)
+
+  return Array.from(selectedIndexes)
+    .sort((left, right) => left - right)
+    .slice(0, maxPoints)
+    .map(index => validPoints[index]!)
+}
+
 export function runMovingAverageLongOnly(
   bars: OptimizerBar[],
   params: MovingAverageLongOnlyParams,
@@ -951,6 +976,8 @@ async function generateEvidence(): Promise<void> {
     const endpoint = spec.exchange === 'okx'
       ? 'https://www.okx.com/api/v5/market/history-candles'
       : 'https://api.binance.com/api/v3/klines'
+    const selectedRun = spec.run(bars, best.params)
+
     entries.push({
       templateId: spec.templateId,
       parameterSearchId: `official-template-search:${spec.templateId}:${spec.symbol}:${spec.interval}:${fixedEndTs}`,
@@ -978,10 +1005,11 @@ async function generateEvidence(): Promise<void> {
       fromTs: bars[0]?.ts ?? null,
       toTs: bars.at(-1)?.ts ?? null,
       params: best.params,
-      metrics: best.metrics,
+      metrics: selectedRun.metrics,
+      equityCurve: downsampleEquityCurveForEvidence(selectedRun.equityCurve, 64),
       best: {
         params: best.params,
-        metrics: best.metrics,
+        metrics: selectedRun.metrics,
       },
     })
   }

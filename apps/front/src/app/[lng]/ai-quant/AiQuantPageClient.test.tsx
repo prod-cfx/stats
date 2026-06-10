@@ -20,6 +20,7 @@ let strategyPlazaProps: {
   pendingAction?: 'run' | 'edit' | null
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
+  onOpenStrategyReport?: (templateId: string) => void
 } | null = null
 
 const plazaTemplate: StrategyPlazaTemplate = {
@@ -44,6 +45,25 @@ const plazaTemplate: StrategyPlazaTemplate = {
     returnPct: null,
     winRatePct: null,
     maxDrawdownPct: null,
+    tradeCount: 43,
+  },
+  officialBacktest: {
+    generatedAt: '2026-06-10T04:45:41.674Z',
+    backtestFrom: 1775008800000,
+    backtestTo: 1777167900000,
+    source: 'https://www.okx.com/api/v5/market/history-candles',
+    dataSource: {
+      exchange: 'okx',
+      marketType: 'swap',
+      endpoint: 'https://www.okx.com/api/v5/market/history-candles',
+      fixedEndTs: 1777168800000,
+      pagination: { parameter: 'after', pageLimit: 300, pageCount: 8 },
+    },
+    candleCount: 2400,
+    metrics: { returnPct: 1.78, winRatePct: 58.14, maxDrawdownPct: 0.78, tradeCount: 43 },
+    equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10177.53 }],
+    confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
+    disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
   },
 }
 

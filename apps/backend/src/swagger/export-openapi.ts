@@ -6,6 +6,7 @@ import { AppModule } from '../modules/app.module'
 import { buildSwaggerDocument } from './build-swagger-document'
 
 async function bootstrap() {
+  process.env.BACKEND_SWAGGER_EXPORT = 'true'
   const app = await NestFactory.create(AppModule, { logger: ['error', 'warn'] })
 
   const document = buildSwaggerDocument(app)

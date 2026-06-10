@@ -19,6 +19,7 @@ jest.mock('lucide-react', () => ({
   Activity: () => <span data-testid="activity-icon" />,
   BarChart3: () => <span data-testid="bar-chart-icon" />,
   Edit3: () => <span data-testid="edit-icon" />,
+  Info: () => <span data-testid="info-icon" />,
   Loader2: () => <span data-testid="loader-icon" />,
   Play: () => <span data-testid="play-icon" />,
   Shield: () => <span data-testid="shield-icon" />,
@@ -48,6 +49,25 @@ const template: StrategyPlazaTemplate = {
     returnPct: 1.78,
     winRatePct: 58.14,
     maxDrawdownPct: 0.78,
+    tradeCount: 43,
+  },
+  officialBacktest: {
+    generatedAt: '2026-06-10T04:45:41.674Z',
+    backtestFrom: 1775008800000,
+    backtestTo: 1777167900000,
+    source: 'https://www.okx.com/api/v5/market/history-candles',
+    dataSource: {
+      exchange: 'okx',
+      marketType: 'swap',
+      endpoint: 'https://www.okx.com/api/v5/market/history-candles',
+      fixedEndTs: 1777168800000,
+      pagination: { parameter: 'after', pageLimit: 300, pageCount: 8 },
+    },
+    candleCount: 2400,
+    metrics: { returnPct: 1.78, winRatePct: 58.14, maxDrawdownPct: 0.78, tradeCount: 43 },
+    equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10177.53 }],
+    confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
+    disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
   },
 }
 
@@ -115,8 +135,95 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.textContent).toContain('58.14%')
     expect(container.textContent).toContain('0.78%')
     expect(container.textContent).toContain('+1.78%')
+    expect(container.textContent).toContain('43')
+    expect(container.textContent).toContain('高置信')
+    expect(container.textContent).toContain('历史回测不代表未来收益')
+    expect(container.textContent).toContain('K 线 2400')
+    expect(container.textContent).toContain('OKX')
     expect(container.textContent).not.toContain('+12.5%')
     expect(container.textContent).not.toContain('68%')
+    expect(container.textContent).not.toContain('Sharpe')
+    expect(container.textContent).not.toContain('跟单')
+  })
+
+  it('uses official equity points for card sparklines', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const sparkline = container.querySelector('[data-testid="strategy-plaza-card"] polyline')
+
+    expect(sparkline?.getAttribute('points')).toBe('0.0,37.0 120.0,3.0')
+  })
+
+  it('opens official reports from card clicks while keeping run and edit separate', async () => {
+    const onOpenStrategyReport = jest.fn()
+    const onRunStrategy = jest.fn()
+    const onEditStrategy = jest.fn()
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={onRunStrategy}
+          onEditStrategy={onEditStrategy}
+          onOpenStrategyReport={onOpenStrategyReport}
+        />,
+      )
+    })
+
+    const card = container.querySelector('[data-testid="strategy-plaza-card"]')
+    const actionHost = container.querySelector(
+      '[data-testid="strategy-plaza-grid"] [data-testid="strategy-plaza-actions"]',
+    )
+    const buttons = Array.from(actionHost?.querySelectorAll('button') ?? [])
+
+    await act(async () => {
+      card?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onOpenStrategyReport).toHaveBeenCalledTimes(1)
+    expect(onOpenStrategyReport).toHaveBeenCalledWith('ma-cross')
+    expect(onRunStrategy).toHaveBeenCalledWith('ma-cross')
+    expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
+  })
+
+  it('keeps official evidence disclosure clicks from opening the report', async () => {
+    const onOpenStrategyReport = jest.fn()
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+          onOpenStrategyReport={onOpenStrategyReport}
+        />,
+      )
+    })
+
+    const summary = Array.from(container.querySelectorAll('summary')).find(element =>
+      element.textContent?.includes('官方样本回测'),
+    )
+
+    expect(summary).not.toBeUndefined()
+
+    await act(async () => {
+      summary?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onOpenStrategyReport).not.toHaveBeenCalled()
   })
 
   it('uses localized range buy/sell copy for the former grid-range card', async () => {

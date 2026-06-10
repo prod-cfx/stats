@@ -3,8 +3,8 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:backend_api_contracts/src/model/update_setting_dto_value.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:backend_api_contracts/src/model/create_setting_dto_value.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -21,7 +21,7 @@ part 'update_setting_dto.g.dart';
 @BuiltValue()
 abstract class UpdateSettingDto implements Built<UpdateSettingDto, UpdateSettingDtoBuilder> {
   @BuiltValueField(wireName: r'value')
-  UpdateSettingDtoValue get value;
+  CreateSettingDtoValue get value;
 
   /// 值类型
   @BuiltValueField(wireName: r'type')
@@ -66,7 +66,7 @@ class _$UpdateSettingDtoSerializer implements PrimitiveSerializer<UpdateSettingD
     yield r'value';
     yield serializers.serialize(
       object.value,
-      specifiedType: const FullType(UpdateSettingDtoValue),
+      specifiedType: const FullType(CreateSettingDtoValue),
     );
     if (object.type != null) {
       yield r'type';
@@ -122,8 +122,8 @@ class _$UpdateSettingDtoSerializer implements PrimitiveSerializer<UpdateSettingD
         case r'value':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(UpdateSettingDtoValue),
-          ) as UpdateSettingDtoValue;
+            specifiedType: const FullType(CreateSettingDtoValue),
+          ) as CreateSettingDtoValue;
           result.value.replace(valueDes);
           break;
         case r'type':

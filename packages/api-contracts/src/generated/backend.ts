@@ -660,6 +660,36 @@ const StrategyPlazaDisplayMetricsResponseDto = z
     users: z.number().nullish(),
   })
   .passthrough()
+const StrategyPlazaOfficialBacktestMetricsResponseDto = z
+  .object({
+    returnPct: z.number().nullable(),
+    winRatePct: z.number().nullable(),
+    maxDrawdownPct: z.number().nullable(),
+    tradeCount: z.number().nullable(),
+  })
+  .partial()
+  .passthrough()
+const StrategyPlazaOfficialBacktestEquityPointResponseDto = z
+  .object({ ts: z.number(), equity: z.number() })
+  .passthrough()
+const StrategyPlazaOfficialBacktestConfidenceResponseDto = z
+  .object({ level: z.enum(['high', 'medium', 'low']), reasons: z.array(z.string()) })
+  .passthrough()
+const StrategyPlazaOfficialBacktestResponseDto = z
+  .object({
+    generatedAt: z.string(),
+    backtestFrom: z.number(),
+    backtestTo: z.number(),
+    source: z.string(),
+    dataSource: z.object({}).partial().passthrough(),
+    eventDataSources: z.array(z.object({}).partial().passthrough()).optional(),
+    candleCount: z.number(),
+    metrics: StrategyPlazaOfficialBacktestMetricsResponseDto,
+    equityCurve: z.array(StrategyPlazaOfficialBacktestEquityPointResponseDto),
+    confidence: StrategyPlazaOfficialBacktestConfidenceResponseDto,
+    disclaimer: z.string(),
+  })
+  .passthrough()
 const StrategyPlazaSignalResponseDto = z
   .object({
     time: z.string(),
@@ -687,6 +717,7 @@ const StrategyPlazaTemplateResponseDto = z
     status: z.enum(['live', 'hidden']),
     displayOrder: z.number(),
     displayMetrics: StrategyPlazaDisplayMetricsResponseDto,
+    officialBacktest: StrategyPlazaOfficialBacktestResponseDto,
     sparkline: z.array(z.number()).optional(),
     params: z.record(z.number()).optional(),
     signals: z.array(StrategyPlazaSignalResponseDto).optional(),
@@ -1718,6 +1749,10 @@ export const schemas = {
   Function,
   LlmSubscriptionResponseDto,
   StrategyPlazaDisplayMetricsResponseDto,
+  StrategyPlazaOfficialBacktestMetricsResponseDto,
+  StrategyPlazaOfficialBacktestEquityPointResponseDto,
+  StrategyPlazaOfficialBacktestConfidenceResponseDto,
+  StrategyPlazaOfficialBacktestResponseDto,
   StrategyPlazaSignalResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaRunRequestDto,

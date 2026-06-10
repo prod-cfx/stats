@@ -1,6 +1,71 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
+export class StrategyPlazaOfficialBacktestMetricsResponseDto {
+  @ApiPropertyOptional({ nullable: true })
+  returnPct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  winRatePct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  maxDrawdownPct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  tradeCount!: number | null
+}
+
+export class StrategyPlazaOfficialBacktestConfidenceResponseDto {
+  @ApiProperty({ enum: ['high', 'medium', 'low'] })
+  level!: 'high' | 'medium' | 'low'
+
+  @ApiProperty({ type: [String] })
+  reasons!: string[]
+}
+
+export class StrategyPlazaOfficialBacktestEquityPointResponseDto {
+  @ApiProperty()
+  ts!: number
+
+  @ApiProperty()
+  equity!: number
+}
+
+export class StrategyPlazaOfficialBacktestResponseDto {
+  @ApiProperty()
+  generatedAt!: string
+
+  @ApiProperty()
+  backtestFrom!: number
+
+  @ApiProperty()
+  backtestTo!: number
+
+  @ApiProperty()
+  source!: string
+
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  dataSource!: Record<string, unknown>
+
+  @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
+  eventDataSources?: Array<Record<string, unknown>>
+
+  @ApiProperty()
+  candleCount!: number
+
+  @ApiProperty({ type: StrategyPlazaOfficialBacktestMetricsResponseDto })
+  metrics!: StrategyPlazaOfficialBacktestMetricsResponseDto
+
+  @ApiProperty({ type: [StrategyPlazaOfficialBacktestEquityPointResponseDto] })
+  equityCurve!: StrategyPlazaOfficialBacktestEquityPointResponseDto[]
+
+  @ApiProperty({ type: StrategyPlazaOfficialBacktestConfidenceResponseDto })
+  confidence!: StrategyPlazaOfficialBacktestConfidenceResponseDto
+
+  @ApiProperty()
+  disclaimer!: string
+}
+
 export class StrategyPlazaTemplateResponseDto {
   @ApiProperty()
   id!: string
@@ -91,6 +156,9 @@ export class StrategyPlazaTemplateResponseDto {
   @ApiPropertyOptional({ type: [Number] })
   equityCurve!: number[]
 
+  @ApiProperty({ type: StrategyPlazaOfficialBacktestResponseDto })
+  officialBacktest!: StrategyPlazaOfficialBacktestResponseDto
+
   constructor(template: OfficialStrategyPlazaTemplate) {
     this.id = template.id
     this.name = template.name
@@ -118,5 +186,22 @@ export class StrategyPlazaTemplateResponseDto {
     }
     this.signals = [...(template.signals ?? [])]
     this.equityCurve = [...(template.equityCurve ?? [])]
+    const officialBacktest = template.officialBacktest
+    this.officialBacktest = {
+      generatedAt: officialBacktest.generatedAt,
+      backtestFrom: officialBacktest.backtestFrom,
+      backtestTo: officialBacktest.backtestTo,
+      source: officialBacktest.source,
+      dataSource: { ...officialBacktest.dataSource },
+      ...(officialBacktest.eventDataSources ? { eventDataSources: officialBacktest.eventDataSources.map(item => ({ ...item })) } : {}),
+      candleCount: officialBacktest.candleCount,
+      metrics: { ...officialBacktest.metrics },
+      equityCurve: officialBacktest.equityCurve.map(point => ({ ...point })),
+      confidence: {
+        level: officialBacktest.confidence.level,
+        reasons: [...officialBacktest.confidence.reasons],
+      },
+      disclaimer: officialBacktest.disclaimer,
+    }
   }
 }

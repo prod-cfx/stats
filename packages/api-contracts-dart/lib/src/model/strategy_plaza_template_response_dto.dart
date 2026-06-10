@@ -6,6 +6,7 @@
 import 'package:backend_api_contracts/src/model/strategy_plaza_signal_response_dto.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_display_metrics_response_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_response_dto.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -31,6 +32,7 @@ part 'strategy_plaza_template_response_dto.g.dart';
 /// * [status] - 展示状态
 /// * [displayOrder] - 展示排序值
 /// * [displayMetrics] - 展示用回测指标
+/// * [officialBacktest] - 官方样本回测证据
 /// * [sparkline] - 列表/hero 迷你曲线
 /// * [params] - 策略参数展示值
 /// * [signals] - 策略信号列表
@@ -109,6 +111,10 @@ abstract class StrategyPlazaTemplateResponseDto implements Built<StrategyPlazaTe
   /// 展示用回测指标
   @BuiltValueField(wireName: r'displayMetrics')
   StrategyPlazaDisplayMetricsResponseDto get displayMetrics;
+
+  /// 官方样本回测证据
+  @BuiltValueField(wireName: r'officialBacktest')
+  StrategyPlazaOfficialBacktestResponseDto get officialBacktest;
 
   /// 列表/hero 迷你曲线
   @BuiltValueField(wireName: r'sparkline')
@@ -235,6 +241,11 @@ class _$StrategyPlazaTemplateResponseDtoSerializer implements PrimitiveSerialize
     yield serializers.serialize(
       object.displayMetrics,
       specifiedType: const FullType(StrategyPlazaDisplayMetricsResponseDto),
+    );
+    yield r'officialBacktest';
+    yield serializers.serialize(
+      object.officialBacktest,
+      specifiedType: const FullType(StrategyPlazaOfficialBacktestResponseDto),
     );
     if (object.sparkline != null) {
       yield r'sparkline';
@@ -406,6 +417,13 @@ class _$StrategyPlazaTemplateResponseDtoSerializer implements PrimitiveSerialize
             specifiedType: const FullType(StrategyPlazaDisplayMetricsResponseDto),
           ) as StrategyPlazaDisplayMetricsResponseDto;
           result.displayMetrics.replace(valueDes);
+          break;
+        case r'officialBacktest':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(StrategyPlazaOfficialBacktestResponseDto),
+          ) as StrategyPlazaOfficialBacktestResponseDto;
+          result.officialBacktest.replace(valueDes);
           break;
         case r'sparkline':
           final valueDes = serializers.deserialize(

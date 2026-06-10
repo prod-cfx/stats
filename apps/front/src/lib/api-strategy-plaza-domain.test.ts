@@ -81,9 +81,28 @@ const templatePayload = {
   displayOrder: 1,
   displayMetrics: {
     label: 'official_sample_backtest',
-    returnPct: null,
-    winRatePct: null,
-    maxDrawdownPct: null,
+    returnPct: 1.78,
+    winRatePct: 58.14,
+    maxDrawdownPct: 0.78,
+    tradeCount: 43,
+  },
+  officialBacktest: {
+    generatedAt: '2026-06-10T04:45:41.674Z',
+    backtestFrom: 1775008800000,
+    backtestTo: 1777167900000,
+    source: 'https://www.okx.com/api/v5/market/history-candles',
+    dataSource: {
+      exchange: 'okx',
+      marketType: 'swap',
+      endpoint: 'https://www.okx.com/api/v5/market/history-candles',
+      fixedEndTs: 1777168800000,
+      pagination: { parameter: 'after', pageLimit: 300, pageCount: 8 },
+    },
+    candleCount: 2400,
+    metrics: { returnPct: 1.78, winRatePct: 58.14, maxDrawdownPct: 0.78, tradeCount: 43 },
+    equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10177.53 }],
+    confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
+    disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
   },
 }
 
@@ -162,6 +181,12 @@ describe('strategy plaza domain API', () => {
 
     const { fetchStrategyPlazaTemplates } = await import('./api')
     await expect(fetchStrategyPlazaTemplates()).resolves.toEqual([templatePayload])
+    await expect(fetchStrategyPlazaTemplates()).resolves.toMatchObject([{ officialBacktest: {
+      metrics: { tradeCount: 43 },
+      equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10177.53 }],
+      confidence: { level: 'high' },
+      disclaimer: expect.stringContaining('历史回测不代表未来收益'),
+    } }])
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3000/api/v1/strategy-plaza/templates',
@@ -169,6 +194,27 @@ describe('strategy plaza domain API', () => {
         method: 'GET',
         headers: {},
       }),
+    )
+  })
+
+  it('fetches and unwraps a public strategy plaza template detail without login', async () => {
+    mockGetToken.mockReturnValueOnce(null)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: templatePayload, message: 'ok' }),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { fetchStrategyPlazaTemplate } = await import('./api')
+    await expect(fetchStrategyPlazaTemplate('ma-cross')).resolves.toMatchObject({
+      id: 'ma-cross',
+      officialBacktest: { metrics: { tradeCount: 43 } },
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/strategy-plaza/templates/ma-cross',
+      expect.objectContaining({ method: 'GET', headers: {} }),
     )
   })
 

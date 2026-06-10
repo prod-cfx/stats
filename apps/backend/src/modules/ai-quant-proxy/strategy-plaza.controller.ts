@@ -9,6 +9,10 @@ import { AccountAiQuantStrategyDetailResponseDto } from './dto/account-ai-quant-
 import {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaOfficialBacktestConfidenceResponseDto,
+  StrategyPlazaOfficialBacktestEquityPointResponseDto,
+  StrategyPlazaOfficialBacktestMetricsResponseDto,
+  StrategyPlazaOfficialBacktestResponseDto,
   StrategyPlazaRunExistingResponseDto,
   StrategyPlazaSignalResponseDto,
   type StrategyPlazaRunResponseDto,
@@ -20,6 +24,10 @@ import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto
 @ApiExtraModels(
   AccountAiQuantStrategyDetailResponseDto,
   StrategyPlazaDisplayMetricsResponseDto,
+  StrategyPlazaOfficialBacktestMetricsResponseDto,
+  StrategyPlazaOfficialBacktestConfidenceResponseDto,
+  StrategyPlazaOfficialBacktestEquityPointResponseDto,
+  StrategyPlazaOfficialBacktestResponseDto,
   StrategyPlazaSignalResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaEditSessionResponseDto,

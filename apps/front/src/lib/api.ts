@@ -77,6 +77,7 @@ export {
 export {
   createStrategyPlazaRunRequestId,
   type ExistingStrategyPlazaRunResult,
+  fetchStrategyPlazaTemplate,
   fetchStrategyPlazaTemplates,
   runStrategyPlazaTemplate,
   startStrategyPlazaEditSession,

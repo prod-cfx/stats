@@ -1,5 +1,10 @@
 import type { OfficialStrategyPlazaCategory } from './official-strategy-plaza-category'
-import type { OfficialStrategyPlazaTemplate, StrategyPlazaMarketType, StrategyPlazaTemplateId } from '../types/official-strategy-plaza-template'
+import type {
+  OfficialStrategyPlazaEvidenceDataSource,
+  OfficialStrategyPlazaTemplate,
+  StrategyPlazaMarketType,
+  StrategyPlazaTemplateId,
+} from '../types/official-strategy-plaza-template'
 import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from './official-strategy-plaza-backtest-evidence.constant'
 
 const DEFAULT_RULES_ADMISSION = {
@@ -8,6 +13,8 @@ const DEFAULT_RULES_ADMISSION = {
   minTradeCount: 20,
   minTotalReturnPct: 0.5,
 } as const
+
+const OFFICIAL_BACKTEST_DISCLAIMER = '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。'
 
 interface TemplateSeed {
   id: StrategyPlazaTemplateId
@@ -56,11 +63,76 @@ function metricsFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['displayM
     returnPct: metrics?.totalReturnPct ?? null,
     winRatePct: metrics ? Number((metrics.winRate * 100).toFixed(2)) : null,
     maxDrawdownPct: metrics?.maxDrawdownPct ?? null,
+    tradeCount: metrics?.tradeCount ?? null,
+  }
+}
+
+function confidenceFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['officialBacktest']['confidence'] {
+  const evidence = evidenceFor(seed.id)
+  if (!evidence) return { level: 'low', reasons: ['缺少官方样本回测证据。'] }
+
+  const metrics = evidence.metrics
+  const reasons: string[] = []
+  const isOneMinute = seed.timeframe === '1m'
+  const isLowFrequency = seed.category === 'DCA' || seed.category === '风控稳健'
+  const minTradeCount = isOneMinute ? 100 : isLowFrequency ? 8 : 30
+
+  if (metrics.tradeCount < minTradeCount) {
+    reasons.push(`样本偏少：本次官方样本回测产生 ${metrics.tradeCount} 笔交易，统计置信度较低。`)
+  }
+  if (metrics.totalReturnPct <= 0) {
+    reasons.push(`收益偏弱：本次样本窗口收益为 ${metrics.totalReturnPct}%，该模板保留用于展示策略结构。`)
+  }
+  if (metrics.maxDrawdownPct > DEFAULT_RULES_ADMISSION.maxDrawdownPctCeiling) {
+    reasons.push(`回撤偏高：最大回撤 ${metrics.maxDrawdownPct}% 超过官方阈值。`)
+  }
+  if (metrics.winRate < DEFAULT_RULES_ADMISSION.minWinRate) {
+    reasons.push(`胜率偏低：本次样本窗口胜率 ${Number((metrics.winRate * 100).toFixed(2))}%。`)
+  }
+
+  if (reasons.length === 0) return { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] }
+  if (reasons.length === 1 && metrics.totalReturnPct > 0 && metrics.maxDrawdownPct <= DEFAULT_RULES_ADMISSION.maxDrawdownPctCeiling) {
+    return { level: 'medium', reasons }
+  }
+  return { level: 'low', reasons }
+}
+
+function fallbackDataSource(seed: TemplateSeed): OfficialStrategyPlazaEvidenceDataSource {
+  return {
+    exchange: 'okx',
+    marketType: seed.marketType === 'spot' ? 'spot' : 'swap',
+    endpoint: '',
+    fixedEndTs: 0,
+    pagination: { parameter: 'after', pageLimit: 0, pageCount: 0 },
+  }
+}
+
+function officialBacktestFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['officialBacktest'] {
+  const evidence = evidenceFor(seed.id)
+  const metrics = evidenceParamsMatchSeed(seed) ? evidence?.metrics : undefined
+  return {
+    generatedAt: OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.generatedAt,
+    backtestFrom: evidence?.backtestFrom ?? 0,
+    backtestTo: evidence?.backtestTo ?? 0,
+    source: evidence?.source ?? '',
+    dataSource: evidence?.dataSource ?? fallbackDataSource(seed),
+    ...(evidence?.eventDataSources ? { eventDataSources: evidence.eventDataSources } : {}),
+    candleCount: evidence?.candleCount ?? 0,
+    metrics: {
+      returnPct: metrics?.totalReturnPct ?? null,
+      winRatePct: metrics ? Number((metrics.winRate * 100).toFixed(2)) : null,
+      maxDrawdownPct: metrics?.maxDrawdownPct ?? null,
+      tradeCount: metrics?.tradeCount ?? null,
+    },
+    equityCurve: evidence?.equityCurve ?? [],
+    confidence: confidenceFor(seed),
+    disclaimer: OFFICIAL_BACKTEST_DISCLAIMER,
   }
 }
 
 function toTemplate(seed: TemplateSeed): OfficialStrategyPlazaTemplate {
   const priceSource = seed.marketType === 'spot' ? 'last' : 'mark'
+  const officialBacktest = officialBacktestFor(seed)
   return {
     id: seed.id,
     category: seed.category,
@@ -92,6 +164,8 @@ function toTemplate(seed: TemplateSeed): OfficialStrategyPlazaTemplate {
     expectedAtomKeys: seed.expectedAtomKeys,
     admission: DEFAULT_RULES_ADMISSION,
     displayMetrics: metricsFor(seed),
+    officialBacktest,
+    equityCurve: officialBacktest.equityCurve.map(point => point.equity),
   }
 }
 

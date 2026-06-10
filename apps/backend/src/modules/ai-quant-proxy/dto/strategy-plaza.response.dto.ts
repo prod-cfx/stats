@@ -41,6 +41,71 @@ export class StrategyPlazaSignalResponseDto {
   pnlPercent!: number
 }
 
+export class StrategyPlazaOfficialBacktestMetricsResponseDto {
+  @ApiPropertyOptional({ nullable: true })
+  returnPct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  winRatePct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  maxDrawdownPct!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  tradeCount!: number | null
+}
+
+export class StrategyPlazaOfficialBacktestConfidenceResponseDto {
+  @ApiProperty({ enum: ['high', 'medium', 'low'] })
+  level!: 'high' | 'medium' | 'low'
+
+  @ApiProperty({ type: [String] })
+  reasons!: string[]
+}
+
+export class StrategyPlazaOfficialBacktestEquityPointResponseDto {
+  @ApiProperty()
+  ts!: number
+
+  @ApiProperty()
+  equity!: number
+}
+
+export class StrategyPlazaOfficialBacktestResponseDto {
+  @ApiProperty()
+  generatedAt!: string
+
+  @ApiProperty()
+  backtestFrom!: number
+
+  @ApiProperty()
+  backtestTo!: number
+
+  @ApiProperty()
+  source!: string
+
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  dataSource!: Record<string, unknown>
+
+  @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
+  eventDataSources?: Array<Record<string, unknown>>
+
+  @ApiProperty()
+  candleCount!: number
+
+  @ApiProperty({ type: StrategyPlazaOfficialBacktestMetricsResponseDto })
+  metrics!: StrategyPlazaOfficialBacktestMetricsResponseDto
+
+  @ApiProperty({ type: [StrategyPlazaOfficialBacktestEquityPointResponseDto] })
+  equityCurve!: StrategyPlazaOfficialBacktestEquityPointResponseDto[]
+
+  @ApiProperty({ type: StrategyPlazaOfficialBacktestConfidenceResponseDto })
+  confidence!: StrategyPlazaOfficialBacktestConfidenceResponseDto
+
+  @ApiProperty()
+  disclaimer!: string
+}
+
 export class StrategyPlazaTemplateResponseDto {
   @ApiProperty({ description: '策略模板 ID', example: 'tpl_01HXYZ' })
   id!: string
@@ -92,6 +157,9 @@ export class StrategyPlazaTemplateResponseDto {
 
   @ApiProperty({ description: '展示用回测指标', type: StrategyPlazaDisplayMetricsResponseDto })
   displayMetrics!: StrategyPlazaDisplayMetricsResponseDto
+
+  @ApiProperty({ description: '官方样本回测证据', type: StrategyPlazaOfficialBacktestResponseDto })
+  officialBacktest!: StrategyPlazaOfficialBacktestResponseDto
 
   @ApiPropertyOptional({ description: '列表/hero 迷你曲线', type: [Number] })
   sparkline?: number[]

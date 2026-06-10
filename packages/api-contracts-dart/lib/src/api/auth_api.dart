@@ -32,6 +32,7 @@ import 'package:backend_api_contracts/src/model/verify_email_request_dto.dart';
 import 'package:backend_api_contracts/src/model/verify_password_reset_request_dto.dart';
 
 class AuthApi {
+
   final Dio _dio;
 
   final Serializers _serializers;
@@ -39,10 +40,10 @@ class AuthApi {
   const AuthApi(this._dio, this._serializers);
 
   /// 绑定邮箱登录方式
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [bindEmailRequestDto]
+  /// * [bindEmailRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -52,8 +53,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerBindEmail({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindEmail({ 
     required BindEmailRequestDto bindEmailRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -65,8 +65,13 @@ class AuthApi {
     final _path = r'/auth/bind/email';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -75,13 +80,14 @@ class AuthApi {
 
     try {
       const _type = FullType(BindEmailRequestDto);
-      _bodyData = _serializers.serialize(
-        bindEmailRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(bindEmailRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -101,15 +107,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -133,10 +135,10 @@ class AuthApi {
   }
 
   /// 绑定 Telegram 登录方式
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [bindTelegramRequestDto]
+  /// * [bindTelegramRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -146,8 +148,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerBindTelegram({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindTelegram({ 
     required BindTelegramRequestDto bindTelegramRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -159,8 +160,13 @@ class AuthApi {
     final _path = r'/auth/bind/telegram';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -169,13 +175,14 @@ class AuthApi {
 
     try {
       const _type = FullType(BindTelegramRequestDto);
-      _bodyData = _serializers.serialize(
-        bindTelegramRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(bindTelegramRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -195,15 +202,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -227,10 +230,10 @@ class AuthApi {
   }
 
   /// 消费 Telegram 桌面端登录意图并绑定 Telegram
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [telegramDesktopExchangeRequestDto]
+  /// * [telegramDesktopExchangeRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -240,10 +243,8 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerBindTelegramByDesktopIntent({
-    required TelegramDesktopExchangeRequestDto
-    telegramDesktopExchangeRequestDto,
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindTelegramByDesktopIntent({ 
+    required TelegramDesktopExchangeRequestDto telegramDesktopExchangeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -254,8 +255,13 @@ class AuthApi {
     final _path = r'/auth/bind/telegram/desktop';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -264,13 +270,14 @@ class AuthApi {
 
     try {
       const _type = FullType(TelegramDesktopExchangeRequestDto);
-      _bodyData = _serializers.serialize(
-        telegramDesktopExchangeRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(telegramDesktopExchangeRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -290,15 +297,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -322,10 +325,10 @@ class AuthApi {
   }
 
   /// 创建 Telegram 桌面端登录意图
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [createTelegramDesktopIntentRequestDto]
+  /// * [createTelegramDesktopIntentRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -335,10 +338,8 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerCreateTelegramDesktopIntent200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerCreateTelegramDesktopIntent200Response>>
-  authControllerCreateTelegramDesktopIntent({
-    required CreateTelegramDesktopIntentRequestDto
-    createTelegramDesktopIntentRequestDto,
+  Future<Response<AuthControllerCreateTelegramDesktopIntent200Response>> authControllerCreateTelegramDesktopIntent({ 
+    required CreateTelegramDesktopIntentRequestDto createTelegramDesktopIntentRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -349,8 +350,13 @@ class AuthApi {
     final _path = r'/auth/telegram/desktop/intent';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -359,13 +365,14 @@ class AuthApi {
 
     try {
       const _type = FullType(CreateTelegramDesktopIntentRequestDto);
-      _bodyData = _serializers.serialize(
-        createTelegramDesktopIntentRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(createTelegramDesktopIntentRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -385,15 +392,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerCreateTelegramDesktopIntent200Response,
-                  ),
-                )
-                as AuthControllerCreateTelegramDesktopIntent200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerCreateTelegramDesktopIntent200Response),
+      ) as AuthControllerCreateTelegramDesktopIntent200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -417,10 +420,10 @@ class AuthApi {
   }
 
   /// 查询 Telegram 桌面端登录意图状态
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [intentId]
+  /// * [intentId] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -430,8 +433,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramDesktopIntentStatus200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerGetTelegramDesktopIntentStatus200Response>>
-  authControllerGetTelegramDesktopIntentStatus({
+  Future<Response<AuthControllerGetTelegramDesktopIntentStatus200Response>> authControllerGetTelegramDesktopIntentStatus({ 
     required String intentId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -440,20 +442,16 @@ class AuthApi {
     ProgressCallback? onSendProgress,
     ProgressCallback? onReceiveProgress,
   }) async {
-    final _path = r'/auth/telegram/desktop/intent/{intentId}'.replaceAll(
-      '{'
-      r'intentId'
-      '}',
-      encodeQueryParameter(
-        _serializers,
-        intentId,
-        const FullType(String),
-      ).toString(),
-    );
+    final _path = r'/auth/telegram/desktop/intent/{intentId}'.replaceAll('{' r'intentId' '}', encodeQueryParameter(_serializers, intentId, const FullType(String)).toString());
     final _options = Options(
       method: r'GET',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -469,15 +467,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerGetTelegramDesktopIntentStatus200Response,
-                  ),
-                )
-                as AuthControllerGetTelegramDesktopIntentStatus200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerGetTelegramDesktopIntentStatus200Response),
+      ) as AuthControllerGetTelegramDesktopIntentStatus200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -501,7 +495,7 @@ class AuthApi {
   }
 
   /// 获取 Telegram 登录配置
-  ///
+  /// 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -513,8 +507,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramLoginConfig200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerGetTelegramLoginConfig200Response>>
-  authControllerGetTelegramLoginConfig({
+  Future<Response<AuthControllerGetTelegramLoginConfig200Response>> authControllerGetTelegramLoginConfig({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -525,8 +518,13 @@ class AuthApi {
     final _path = r'/auth/telegram/login-config';
     final _options = Options(
       method: r'GET',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -542,15 +540,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerGetTelegramLoginConfig200Response,
-                  ),
-                )
-                as AuthControllerGetTelegramLoginConfig200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerGetTelegramLoginConfig200Response),
+      ) as AuthControllerGetTelegramLoginConfig200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -574,12 +568,12 @@ class AuthApi {
   }
 
   /// 获取 Telegram 网页授权地址
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [intent]
-  /// * [lng]
-  /// * [redirect]
+  /// * [intent] 
+  /// * [lng] 
+  /// * [redirect] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -589,8 +583,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramWebAuthorizeUrl200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerGetTelegramWebAuthorizeUrl200Response>>
-  authControllerGetTelegramWebAuthorizeUrl({
+  Future<Response<AuthControllerGetTelegramWebAuthorizeUrl200Response>> authControllerGetTelegramWebAuthorizeUrl({ 
     required String intent,
     required String lng,
     required String redirect,
@@ -604,23 +597,20 @@ class AuthApi {
     final _path = r'/auth/telegram/web/authorize-url';
     final _options = Options(
       method: r'GET',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
     final _queryParameters = <String, dynamic>{
-      r'intent': encodeQueryParameter(
-        _serializers,
-        intent,
-        const FullType(String),
-      ),
+      r'intent': encodeQueryParameter(_serializers, intent, const FullType(String)),
       r'lng': encodeQueryParameter(_serializers, lng, const FullType(String)),
-      r'redirect': encodeQueryParameter(
-        _serializers,
-        redirect,
-        const FullType(String),
-      ),
+      r'redirect': encodeQueryParameter(_serializers, redirect, const FullType(String)),
     };
 
     final _response = await _dio.request<Object>(
@@ -636,15 +626,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerGetTelegramWebAuthorizeUrl200Response,
-                  ),
-                )
-                as AuthControllerGetTelegramWebAuthorizeUrl200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerGetTelegramWebAuthorizeUrl200Response),
+      ) as AuthControllerGetTelegramWebAuthorizeUrl200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -668,11 +654,11 @@ class AuthApi {
   }
 
   /// Telegram Bot Webhook 回调
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [xTelegramBotApiSecretToken]
-  /// * [telegramBotWebhookRequestDto]
+  /// * [xTelegramBotApiSecretToken] 
+  /// * [telegramBotWebhookRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -682,8 +668,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerHandleTelegramBotWebhook200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerHandleTelegramBotWebhook200Response>>
-  authControllerHandleTelegramBotWebhook({
+  Future<Response<AuthControllerHandleTelegramBotWebhook200Response>> authControllerHandleTelegramBotWebhook({ 
     required String xTelegramBotApiSecretToken,
     required TelegramBotWebhookRequestDto telegramBotWebhookRequestDto,
     CancelToken? cancelToken,
@@ -700,7 +685,10 @@ class AuthApi {
         r'x-telegram-bot-api-secret-token': xTelegramBotApiSecretToken,
         ...?headers,
       },
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -709,13 +697,14 @@ class AuthApi {
 
     try {
       const _type = FullType(TelegramBotWebhookRequestDto);
-      _bodyData = _serializers.serialize(
-        telegramBotWebhookRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(telegramBotWebhookRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -735,15 +724,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerHandleTelegramBotWebhook200Response,
-                  ),
-                )
-                as AuthControllerHandleTelegramBotWebhook200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerHandleTelegramBotWebhook200Response),
+      ) as AuthControllerHandleTelegramBotWebhook200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -767,10 +752,10 @@ class AuthApi {
   }
 
   /// 用户登录
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [loginRequestDto]
+  /// * [loginRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -780,8 +765,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerLogin({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerLogin({ 
     required LoginRequestDto loginRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -793,8 +777,13 @@ class AuthApi {
     final _path = r'/auth/login';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -804,9 +793,13 @@ class AuthApi {
     try {
       const _type = FullType(LoginRequestDto);
       _bodyData = _serializers.serialize(loginRequestDto, specifiedType: _type);
-    } catch (error, stackTrace) {
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -826,15 +819,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -858,7 +847,7 @@ class AuthApi {
   }
 
   /// 游客登录换取会话
-  ///
+  /// 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -870,8 +859,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerLoginGuest({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerLoginGuest({ 
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -882,8 +870,13 @@ class AuthApi {
     final _path = r'/auth/guest';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       validateStatus: validateStatus,
     );
 
@@ -899,15 +892,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -931,10 +920,10 @@ class AuthApi {
   }
 
   /// 用户注册
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [registerRequestDto]
+  /// * [registerRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -944,8 +933,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerRegister({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerRegister({ 
     required RegisterRequestDto registerRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -957,8 +945,13 @@ class AuthApi {
     final _path = r'/auth/register';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -967,13 +960,14 @@ class AuthApi {
 
     try {
       const _type = FullType(RegisterRequestDto);
-      _bodyData = _serializers.serialize(
-        registerRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(registerRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -993,15 +987,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -1025,10 +1015,10 @@ class AuthApi {
   }
 
   /// 申请重置密码
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [passwordResetRequestDto]
+  /// * [passwordResetRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1038,7 +1028,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerRequestPasswordReset({
+  Future<Response<void>> authControllerRequestPasswordReset({ 
     required PasswordResetRequestDto passwordResetRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1050,8 +1040,13 @@ class AuthApi {
     final _path = r'/auth/password-reset';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1060,13 +1055,14 @@ class AuthApi {
 
     try {
       const _type = FullType(PasswordResetRequestDto);
-      _bodyData = _serializers.serialize(
-        passwordResetRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(passwordResetRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1086,10 +1082,10 @@ class AuthApi {
   }
 
   /// 重新发送邮箱验证码
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [resendVerificationRequestDto]
+  /// * [resendVerificationRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1099,7 +1095,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerResendVerification({
+  Future<Response<void>> authControllerResendVerification({ 
     required ResendVerificationRequestDto resendVerificationRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1111,8 +1107,13 @@ class AuthApi {
     final _path = r'/auth/resend-verification';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1121,13 +1122,14 @@ class AuthApi {
 
     try {
       const _type = FullType(ResendVerificationRequestDto);
-      _bodyData = _serializers.serialize(
-        resendVerificationRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(resendVerificationRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1147,10 +1149,10 @@ class AuthApi {
   }
 
   /// 发送邮箱登录验证码
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [sendEmailLoginCodeRequestDto]
+  /// * [sendEmailLoginCodeRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1160,7 +1162,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerSendEmailLoginCode({
+  Future<Response<void>> authControllerSendEmailLoginCode({ 
     required SendEmailLoginCodeRequestDto sendEmailLoginCodeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1172,8 +1174,13 @@ class AuthApi {
     final _path = r'/auth/email/send-code';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1182,13 +1189,14 @@ class AuthApi {
 
     try {
       const _type = FullType(SendEmailLoginCodeRequestDto);
-      _bodyData = _serializers.serialize(
-        sendEmailLoginCodeRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(sendEmailLoginCodeRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1208,10 +1216,10 @@ class AuthApi {
   }
 
   /// 发送验证码（注册/密码重置）
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [sendVerificationCodeRequestDto]
+  /// * [sendVerificationCodeRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1221,7 +1229,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerSendVerificationCode({
+  Future<Response<void>> authControllerSendVerificationCode({ 
     required SendVerificationCodeRequestDto sendVerificationCodeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1233,8 +1241,13 @@ class AuthApi {
     final _path = r'/auth/send-verification-code';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1243,13 +1256,14 @@ class AuthApi {
 
     try {
       const _type = FullType(SendVerificationCodeRequestDto);
-      _bodyData = _serializers.serialize(
-        sendVerificationCodeRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(sendVerificationCodeRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1269,10 +1283,10 @@ class AuthApi {
   }
 
   /// 消费 Telegram 桌面端登录意图并登录
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [telegramDesktopExchangeRequestDto]
+  /// * [telegramDesktopExchangeRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1282,10 +1296,8 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerTelegramDesktopExchange({
-    required TelegramDesktopExchangeRequestDto
-    telegramDesktopExchangeRequestDto,
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerTelegramDesktopExchange({ 
+    required TelegramDesktopExchangeRequestDto telegramDesktopExchangeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -1296,8 +1308,13 @@ class AuthApi {
     final _path = r'/auth/telegram/desktop/exchange';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1306,13 +1323,14 @@ class AuthApi {
 
     try {
       const _type = FullType(TelegramDesktopExchangeRequestDto);
-      _bodyData = _serializers.serialize(
-        telegramDesktopExchangeRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(telegramDesktopExchangeRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1332,15 +1350,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -1364,10 +1378,10 @@ class AuthApi {
   }
 
   /// Telegram 登录换取会话
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [telegramExchangeRequestDto]
+  /// * [telegramExchangeRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1377,8 +1391,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerTelegramExchange({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerTelegramExchange({ 
     required TelegramExchangeRequestDto telegramExchangeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1390,8 +1403,13 @@ class AuthApi {
     final _path = r'/auth/telegram/exchange';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1400,13 +1418,14 @@ class AuthApi {
 
     try {
       const _type = FullType(TelegramExchangeRequestDto);
-      _bodyData = _serializers.serialize(
-        telegramExchangeRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(telegramExchangeRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1426,15 +1445,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -1458,10 +1473,10 @@ class AuthApi {
   }
 
   /// 验证邮箱验证码
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [verifyEmailRequestDto]
+  /// * [verifyEmailRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1471,7 +1486,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerVerifyEmail({
+  Future<Response<void>> authControllerVerifyEmail({ 
     required VerifyEmailRequestDto verifyEmailRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1483,8 +1498,13 @@ class AuthApi {
     final _path = r'/auth/verify-email';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1493,13 +1513,14 @@ class AuthApi {
 
     try {
       const _type = FullType(VerifyEmailRequestDto);
-      _bodyData = _serializers.serialize(
-        verifyEmailRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(verifyEmailRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1519,10 +1540,10 @@ class AuthApi {
   }
 
   /// 验证邮箱登录验证码（自动注册或登录）
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [verifyEmailLoginCodeRequestDto]
+  /// * [verifyEmailLoginCodeRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1532,8 +1553,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>>
-  authControllerVerifyEmailLoginCode({
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerVerifyEmailLoginCode({ 
     required VerifyEmailLoginCodeRequestDto verifyEmailLoginCodeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1545,8 +1565,13 @@ class AuthApi {
     final _path = r'/auth/email/verify-code';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1555,13 +1580,14 @@ class AuthApi {
 
     try {
       const _type = FullType(VerifyEmailLoginCodeRequestDto);
-      _bodyData = _serializers.serialize(
-        verifyEmailLoginCodeRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(verifyEmailLoginCodeRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1581,15 +1607,11 @@ class AuthApi {
 
     try {
       final rawResponse = _response.data;
-      _responseData = rawResponse == null
-          ? null
-          : _serializers.deserialize(
-                  rawResponse,
-                  specifiedType: const FullType(
-                    AuthControllerTelegramDesktopExchange200Response,
-                  ),
-                )
-                as AuthControllerTelegramDesktopExchange200Response;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
     } catch (error, stackTrace) {
       throw DioException(
         requestOptions: _response.requestOptions,
@@ -1613,10 +1635,10 @@ class AuthApi {
   }
 
   /// 验证重置密码验证码并更新密码
-  ///
+  /// 
   ///
   /// Parameters:
-  /// * [verifyPasswordResetRequestDto]
+  /// * [verifyPasswordResetRequestDto] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1626,7 +1648,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerVerifyPasswordReset({
+  Future<Response<void>> authControllerVerifyPasswordReset({ 
     required VerifyPasswordResetRequestDto verifyPasswordResetRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1638,8 +1660,13 @@ class AuthApi {
     final _path = r'/auth/password-reset/verify';
     final _options = Options(
       method: r'POST',
-      headers: <String, dynamic>{...?headers},
-      extra: <String, dynamic>{'secure': <Map<String, String>>[], ...?extra},
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
       contentType: 'application/json',
       validateStatus: validateStatus,
     );
@@ -1648,13 +1675,14 @@ class AuthApi {
 
     try {
       const _type = FullType(VerifyPasswordResetRequestDto);
-      _bodyData = _serializers.serialize(
-        verifyPasswordResetRequestDto,
-        specifiedType: _type,
-      );
-    } catch (error, stackTrace) {
+      _bodyData = _serializers.serialize(verifyPasswordResetRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
       throw DioException(
-        requestOptions: _options.compose(_dio.options, _path),
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
         type: DioExceptionType.unknown,
         error: error,
         stackTrace: stackTrace,
@@ -1672,4 +1700,5 @@ class AuthApi {
 
     return _response;
   }
+
 }

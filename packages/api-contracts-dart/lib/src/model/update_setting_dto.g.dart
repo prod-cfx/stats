@@ -80,7 +80,7 @@ class _$UpdateSettingDtoTypeEnumSerializer
 
 class _$UpdateSettingDto extends UpdateSettingDto {
   @override
-  final UpdateSettingDtoValue value;
+  final CreateSettingDtoValue value;
   @override
   final UpdateSettingDtoTypeEnum? type;
   @override
@@ -148,10 +148,10 @@ class UpdateSettingDtoBuilder
     implements Builder<UpdateSettingDto, UpdateSettingDtoBuilder> {
   _$UpdateSettingDto? _$v;
 
-  UpdateSettingDtoValueBuilder? _value;
-  UpdateSettingDtoValueBuilder get value =>
-      _$this._value ??= UpdateSettingDtoValueBuilder();
-  set value(UpdateSettingDtoValueBuilder? value) => _$this._value = value;
+  CreateSettingDtoValueBuilder? _value;
+  CreateSettingDtoValueBuilder get value =>
+      _$this._value ??= CreateSettingDtoValueBuilder();
+  set value(CreateSettingDtoValueBuilder? value) => _$this._value = value;
 
   UpdateSettingDtoTypeEnum? _type;
   UpdateSettingDtoTypeEnum? get type => _$this._type;

@@ -112,6 +112,10 @@ export function resolveQuantifyBaseUrl(env: EnvService): string {
     return normalizeQuantifyBaseUrl(base)
   }
 
+  if (env.getString('BACKEND_SWAGGER_EXPORT') === 'true') {
+    return INTERNAL_QUANTIFY_API_BASE_URL
+  }
+
   throw new Error('QUANTIFY_API_BASE_URL or QUANTIFY_BASE_URL is required')
 }
 

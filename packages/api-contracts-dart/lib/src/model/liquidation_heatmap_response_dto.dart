@@ -339,13 +339,13 @@ class LiquidationHeatmapResponseDtoModelTypeEnum extends EnumClass {
 
   /// Heatmap 模型类型
   @BuiltValueEnumConst(wireName: r'MODEL1')
-  static const LiquidationHeatmapResponseDtoModelTypeEnum mODEL1 = _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL1;
+  static const LiquidationHeatmapResponseDtoModelTypeEnum MODEL1 = _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL1;
   /// Heatmap 模型类型
   @BuiltValueEnumConst(wireName: r'MODEL2')
-  static const LiquidationHeatmapResponseDtoModelTypeEnum mODEL2 = _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL2;
+  static const LiquidationHeatmapResponseDtoModelTypeEnum MODEL2 = _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL2;
   /// Heatmap 模型类型
   @BuiltValueEnumConst(wireName: r'MODEL3')
-  static const LiquidationHeatmapResponseDtoModelTypeEnum mODEL3 = _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL3;
+  static const LiquidationHeatmapResponseDtoModelTypeEnum MODEL3 = _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL3;
 
   static Serializer<LiquidationHeatmapResponseDtoModelTypeEnum> get serializer => _$liquidationHeatmapResponseDtoModelTypeEnumSerializer;
 

@@ -11671,6 +11671,122 @@
           "label"
         ]
       },
+      "StrategyPlazaOfficialBacktestMetricsResponseDto": {
+        "type": "object",
+        "properties": {
+          "returnPct": {
+            "type": "number",
+            "nullable": true
+          },
+          "winRatePct": {
+            "type": "number",
+            "nullable": true
+          },
+          "maxDrawdownPct": {
+            "type": "number",
+            "nullable": true
+          },
+          "tradeCount": {
+            "type": "number",
+            "nullable": true
+          }
+        }
+      },
+      "StrategyPlazaOfficialBacktestConfidenceResponseDto": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "level",
+          "reasons"
+        ]
+      },
+      "StrategyPlazaOfficialBacktestEquityPointResponseDto": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "number"
+          },
+          "equity": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ts",
+          "equity"
+        ]
+      },
+      "StrategyPlazaOfficialBacktestResponseDto": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string"
+          },
+          "backtestFrom": {
+            "type": "number"
+          },
+          "backtestTo": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          },
+          "dataSource": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "eventDataSources": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "candleCount": {
+            "type": "number"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestMetricsResponseDto"
+          },
+          "equityCurve": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestEquityPointResponseDto"
+            }
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestConfidenceResponseDto"
+          },
+          "disclaimer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "generatedAt",
+          "backtestFrom",
+          "backtestTo",
+          "source",
+          "dataSource",
+          "candleCount",
+          "metrics",
+          "equityCurve",
+          "confidence",
+          "disclaimer"
+        ]
+      },
       "StrategyPlazaSignalResponseDto": {
         "type": "object",
         "properties": {
@@ -11823,6 +11939,14 @@
               }
             ]
           },
+          "officialBacktest": {
+            "description": "官方样本回测证据",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestResponseDto"
+              }
+            ]
+          },
           "sparkline": {
             "description": "列表/hero 迷你曲线",
             "type": "array",
@@ -11868,7 +11992,8 @@
           "positionPct",
           "status",
           "displayOrder",
-          "displayMetrics"
+          "displayMetrics",
+          "officialBacktest"
         ]
       },
       "StrategyPlazaEditSessionResponseDto": {

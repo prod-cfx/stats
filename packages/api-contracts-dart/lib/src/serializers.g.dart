@@ -297,6 +297,14 @@ Serializers _$serializers =
           ..add(StrategyPlazaDisplayMetricsResponseDto.serializer)
           ..add(StrategyPlazaDisplayMetricsResponseDtoLabelEnum.serializer)
           ..add(StrategyPlazaEditSessionResponseDto.serializer)
+          ..add(StrategyPlazaOfficialBacktestConfidenceResponseDto.serializer)
+          ..add(
+            StrategyPlazaOfficialBacktestConfidenceResponseDtoLevelEnum
+                .serializer,
+          )
+          ..add(StrategyPlazaOfficialBacktestEquityPointResponseDto.serializer)
+          ..add(StrategyPlazaOfficialBacktestMetricsResponseDto.serializer)
+          ..add(StrategyPlazaOfficialBacktestResponseDto.serializer)
           ..add(StrategyPlazaProxyControllerDetail200Response.serializer)
           ..add(StrategyPlazaProxyControllerEditSession200Response.serializer)
           ..add(StrategyPlazaProxyControllerEquityCurve200Response.serializer)
@@ -345,7 +353,6 @@ Serializers _$serializers =
           ..add(UpdateOrderbookPairConfigDto.serializer)
           ..add(UpdateSettingDto.serializer)
           ..add(UpdateSettingDtoTypeEnum.serializer)
-          ..add(UpdateSettingDtoValue.serializer)
           ..add(UpdateTradesPairConfigDto.serializer)
           ..add(UpdateWhaleNotificationRuleDto.serializer)
           ..add(UserProfileResponseDto.serializer)
@@ -856,6 +863,10 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(BacktestingCreateJobRequestDtoStateTimeframesEnum),
             ]),
@@ -1149,6 +1160,28 @@ Serializers _$serializers =
               ]),
             ]),
             () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(JsonObject)]),
+            () => ListBuilder<JsonObject>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(
+                StrategyPlazaOfficialBacktestEquityPointResponseDto,
+              ),
+            ]),
+            () =>
+                ListBuilder<
+                  StrategyPlazaOfficialBacktestEquityPointResponseDto
+                >(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

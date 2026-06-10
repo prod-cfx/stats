@@ -35,6 +35,28 @@ export interface StrategyPlazaTemplate {
     returnPct: number | null
     winRatePct: number | null
     maxDrawdownPct: number | null
+    tradeCount?: number | null
+  }
+  officialBacktest: {
+    generatedAt: string
+    backtestFrom: number
+    backtestTo: number
+    source: string
+    dataSource: Record<string, unknown>
+    eventDataSources?: Array<Record<string, unknown>>
+    candleCount: number
+    metrics: {
+      returnPct: number | null
+      winRatePct: number | null
+      maxDrawdownPct: number | null
+      tradeCount: number | null
+    }
+    equityCurve: Array<{ ts: number; equity: number }>
+    confidence: {
+      level: 'high' | 'medium' | 'low'
+      reasons: string[]
+    }
+    disclaimer: string
   }
 }
 
@@ -117,6 +139,20 @@ export async function fetchStrategyPlazaTemplates(): Promise<StrategyPlazaTempla
       json as StrategyPlazaTemplate[] | { data?: StrategyPlazaTemplate[]; message?: string },
     )
   }, 'FETCH_STRATEGY_PLAZA_TEMPLATES')
+}
+
+export async function fetchStrategyPlazaTemplate(templateId: string): Promise<StrategyPlazaTemplate> {
+  return apiCall(async () => {
+    const slug = getStrategyPlazaTemplateSlug(templateId)
+    const response = await fetch(buildStrategyPlazaUrl(slug), {
+      method: 'GET',
+      headers: optionalAuthHeaders(),
+    })
+    const json = await parseStrategyPlazaJson(response, '获取策略广场模板详情失败')
+    return unwrapResponse<StrategyPlazaTemplate>(
+      json as StrategyPlazaTemplate | { data?: StrategyPlazaTemplate; message?: string },
+    )
+  }, 'FETCH_STRATEGY_PLAZA_TEMPLATE')
 }
 
 export async function runStrategyPlazaTemplate(

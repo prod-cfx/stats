@@ -227,6 +227,10 @@ export function AiQuantPlazaPageClient() {
     }
   }
 
+  const openStrategyReport = (templateId: string) => {
+    router.push(`/${lng}/ai-quant/plaza/${encodeURIComponent(templateId)}`)
+  }
+
   const closeExistingStrategyDialog = () => {
     setExistingStrategy(null)
   }
@@ -294,6 +298,7 @@ export function AiQuantPlazaPageClient() {
         pendingAction={pendingAction}
         onRunStrategy={runTemplate}
         onEditStrategy={editTemplate}
+        onOpenStrategyReport={openStrategyReport}
         showHotRail={isLoading || Boolean(session)}
       />
 

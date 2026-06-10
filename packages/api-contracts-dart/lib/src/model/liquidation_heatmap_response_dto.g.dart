@@ -7,24 +7,24 @@ part of 'liquidation_heatmap_response_dto.dart';
 // **************************************************************************
 
 const LiquidationHeatmapResponseDtoModelTypeEnum
-_$liquidationHeatmapResponseDtoModelTypeEnum_mODEL1 =
-    const LiquidationHeatmapResponseDtoModelTypeEnum._('mODEL1');
+_$liquidationHeatmapResponseDtoModelTypeEnum_MODEL1 =
+    const LiquidationHeatmapResponseDtoModelTypeEnum._('MODEL1');
 const LiquidationHeatmapResponseDtoModelTypeEnum
-_$liquidationHeatmapResponseDtoModelTypeEnum_mODEL2 =
-    const LiquidationHeatmapResponseDtoModelTypeEnum._('mODEL2');
+_$liquidationHeatmapResponseDtoModelTypeEnum_MODEL2 =
+    const LiquidationHeatmapResponseDtoModelTypeEnum._('MODEL2');
 const LiquidationHeatmapResponseDtoModelTypeEnum
-_$liquidationHeatmapResponseDtoModelTypeEnum_mODEL3 =
-    const LiquidationHeatmapResponseDtoModelTypeEnum._('mODEL3');
+_$liquidationHeatmapResponseDtoModelTypeEnum_MODEL3 =
+    const LiquidationHeatmapResponseDtoModelTypeEnum._('MODEL3');
 
 LiquidationHeatmapResponseDtoModelTypeEnum
 _$liquidationHeatmapResponseDtoModelTypeEnumValueOf(String name) {
   switch (name) {
-    case 'mODEL1':
-      return _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL1;
-    case 'mODEL2':
-      return _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL2;
-    case 'mODEL3':
-      return _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL3;
+    case 'MODEL1':
+      return _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL1;
+    case 'MODEL2':
+      return _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL2;
+    case 'MODEL3':
+      return _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL3;
     default:
       throw ArgumentError(name);
   }
@@ -34,9 +34,9 @@ final BuiltSet<LiquidationHeatmapResponseDtoModelTypeEnum>
 _$liquidationHeatmapResponseDtoModelTypeEnumValues =
     BuiltSet<LiquidationHeatmapResponseDtoModelTypeEnum>(
       const <LiquidationHeatmapResponseDtoModelTypeEnum>[
-        _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL1,
-        _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL2,
-        _$liquidationHeatmapResponseDtoModelTypeEnum_mODEL3,
+        _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL1,
+        _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL2,
+        _$liquidationHeatmapResponseDtoModelTypeEnum_MODEL3,
       ],
     );
 
@@ -47,14 +47,14 @@ _$liquidationHeatmapResponseDtoModelTypeEnumSerializer =
 class _$LiquidationHeatmapResponseDtoModelTypeEnumSerializer
     implements PrimitiveSerializer<LiquidationHeatmapResponseDtoModelTypeEnum> {
   static const Map<String, Object> _toWire = const <String, Object>{
-    'mODEL1': 'MODEL1',
-    'mODEL2': 'MODEL2',
-    'mODEL3': 'MODEL3',
+    'MODEL1': 'MODEL1',
+    'MODEL2': 'MODEL2',
+    'MODEL3': 'MODEL3',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
-    'MODEL1': 'mODEL1',
-    'MODEL2': 'mODEL2',
-    'MODEL3': 'mODEL3',
+    'MODEL1': 'MODEL1',
+    'MODEL2': 'MODEL2',
+    'MODEL3': 'MODEL3',
   };
 
   @override

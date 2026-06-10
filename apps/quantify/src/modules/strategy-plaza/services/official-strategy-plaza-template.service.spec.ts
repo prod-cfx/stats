@@ -59,6 +59,46 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     }
   })
 
+  it('keeps 32 live official templates across 8 categories with official backtest payloads', () => {
+    const templates = service.list()
+    const categories = new Set(templates.map(template => template.category))
+
+    expect(templates).toHaveLength(32)
+    expect(categories).toEqual(new Set(['趋势', '突破', '反转', '网格', 'DCA', '盘口', '衍生品事件', '风控稳健']))
+    expect(templates.every(template => template.officialBacktest)).toBe(true)
+    expect(templates.every(template => template.officialBacktest?.disclaimer.includes('历史回测不代表未来收益'))).toBe(true)
+  })
+
+  it('maps ma-cross official evidence into public official backtest payload', () => {
+    const template = service.getRequired('ma-cross')
+
+    expect(template.displayMetrics).toMatchObject({
+      returnPct: 1.78,
+      winRatePct: 58.14,
+      maxDrawdownPct: 0.78,
+      tradeCount: 43,
+    })
+    expect(template.officialBacktest).toMatchObject({
+      generatedAt: OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.generatedAt,
+      backtestFrom: 1775008800000,
+      backtestTo: 1777167900000,
+      source: 'https://www.okx.com/api/v5/market/history-candles',
+      candleCount: 2400,
+      metrics: {
+        returnPct: 1.78,
+        winRatePct: 58.14,
+        maxDrawdownPct: 0.78,
+        tradeCount: 43,
+      },
+      confidence: {
+        level: expect.stringMatching(/^(high|medium|low)$/),
+        reasons: expect.any(Array),
+      },
+    })
+    expect(template.officialBacktest?.equityCurve.length).toBeGreaterThan(1)
+    expect(template.equityCurve).toEqual(template.officialBacktest?.equityCurve.map(point => point.equity))
+  })
+
   it('keeps optimized templates in their original Strategy Plaza categories', () => {
     const categoryByTemplateId = new Map(service.list().map(template => [template.id, template.category]))
 

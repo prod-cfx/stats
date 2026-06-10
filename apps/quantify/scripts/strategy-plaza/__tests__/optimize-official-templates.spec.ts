@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   calculateBacktestMetrics,
+  downsampleEquityCurveForEvidence,
   renderEvidenceConstantSource,
   runMovingAverageLongOnly,
   selectBestCandidate,
@@ -35,6 +36,72 @@ const evidenceConstantPath = resolve(
 )
 
 describe('strategy plaza optimizer', () => {
+  it('downsamples equity curves while preserving first and last points', () => {
+    const points = Array.from({ length: 130 }, (_, index) => ({
+      ts: 1_700_000_000_000 + index * 60_000,
+      equity: 10_000 + index,
+    }))
+
+    const result = downsampleEquityCurveForEvidence(points, 64)
+
+    expect(result).toHaveLength(64)
+    expect(result[0]).toEqual(points[0])
+    expect(result.at(-1)).toEqual(points.at(-1))
+    expect(result.every(point => Number.isFinite(point.ts) && Number.isFinite(point.equity))).toBe(true)
+  })
+
+  it('renders official evidence constants with equity curve payloads', () => {
+    const source = renderEvidenceConstantSource({
+      status: 'VERIFIED',
+      generatedAt: '2026-06-06T13:06:23.170Z',
+      generatedBy: 'apps/quantify/scripts/strategy-plaza/optimize-official-templates.ts',
+      admission: {
+        maxDrawdownPctCeiling: 20,
+        minWinRate: 0.52,
+        minTradeCount: 20,
+        minTotalReturnPct: 0.5,
+      },
+      templates: [{
+        templateId: 'ma-cross',
+        parameterSearchId: 'search-1',
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        interval: '15m',
+        marketType: 'swap',
+        source: 'https://www.okx.com/api/v5/market/history-candles',
+        dataSource: {
+          exchange: 'okx',
+          marketType: 'swap',
+          endpoint: 'https://www.okx.com/api/v5/market/history-candles',
+          fixedEndTs: 1777168800000,
+          pagination: { parameter: 'after', pageLimit: 300, pageCount: 8 },
+        },
+        backtestFrom: 1775008800000,
+        backtestTo: 1777167900000,
+        admission: {
+          maxDrawdownPctCeiling: 20,
+          minWinRate: 0.52,
+          minTradeCount: 20,
+          minTotalReturnPct: 0.5,
+        },
+        candidateCount: 1,
+        candleCount: 2400,
+        fromTs: 1775008800000,
+        toTs: 1777167900000,
+        params: { positionPct: 35 },
+        metrics: { winRate: 0.58, maxDrawdownPct: 0.78, totalReturnPct: 1.78, tradeCount: 43 },
+        equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10178 }],
+        best: {
+          params: { positionPct: 35 },
+          metrics: { winRate: 0.58, maxDrawdownPct: 0.78, totalReturnPct: 1.78, tradeCount: 43 },
+        },
+      }],
+    })
+
+    expect(source).toContain('equityCurve')
+    expect(source).toContain('10178')
+  })
+
   it('calculates reproducible backtest metrics from closed trades and equity', () => {
     const metrics = calculateBacktestMetrics({
       initialCash: 10000,

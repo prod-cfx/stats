@@ -22,4 +22,10 @@ describe('resolveQuantifyBaseUrl', () => {
   it('throws when quantify API config is missing', () => {
     expect(() => resolveQuantifyBaseUrl(createEnv({}) as never)).toThrow('QUANTIFY_API_BASE_URL')
   })
+
+  it('uses local quantify default only during backend swagger export', () => {
+    expect(resolveQuantifyBaseUrl(createEnv({ BACKEND_SWAGGER_EXPORT: 'true' }) as never)).toBe(
+      'http://127.0.0.1:3010/api/v1',
+    )
+  })
 })

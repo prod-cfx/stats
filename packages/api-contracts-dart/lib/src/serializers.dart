@@ -188,6 +188,10 @@ import 'package:backend_api_contracts/src/model/spot_balance_dto.dart';
 import 'package:backend_api_contracts/src/model/spot_balance_item_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_display_metrics_response_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_edit_session_response_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_confidence_response_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_equity_point_response_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_metrics_response_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_response_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_detail200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_edit_session200_response.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_equity_curve200_response.dart';
@@ -221,7 +225,6 @@ import 'package:backend_api_contracts/src/model/update_beta_code_status_dto.dart
 import 'package:backend_api_contracts/src/model/update_exchange_config_dto.dart';
 import 'package:backend_api_contracts/src/model/update_orderbook_pair_config_dto.dart';
 import 'package:backend_api_contracts/src/model/update_setting_dto.dart';
-import 'package:backend_api_contracts/src/model/update_setting_dto_value.dart';
 import 'package:backend_api_contracts/src/model/update_trades_pair_config_dto.dart';
 import 'package:backend_api_contracts/src/model/update_whale_notification_rule_dto.dart';
 import 'package:backend_api_contracts/src/model/user_profile_response_dto.dart';
@@ -427,6 +430,10 @@ part 'serializers.g.dart';
   SpotBalanceItemDto,
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaOfficialBacktestConfidenceResponseDto,
+  StrategyPlazaOfficialBacktestEquityPointResponseDto,
+  StrategyPlazaOfficialBacktestMetricsResponseDto,
+  StrategyPlazaOfficialBacktestResponseDto,
   StrategyPlazaProxyControllerDetail200Response,
   StrategyPlazaProxyControllerEditSession200Response,
   StrategyPlazaProxyControllerEquityCurve200Response,
@@ -460,7 +467,6 @@ part 'serializers.g.dart';
   UpdateExchangeConfigDto,
   UpdateOrderbookPairConfigDto,
   UpdateSettingDto,
-  UpdateSettingDtoValue,
   UpdateTradesPairConfigDto,
   UpdateWhaleNotificationRuleDto,
   UserProfileResponseDto,

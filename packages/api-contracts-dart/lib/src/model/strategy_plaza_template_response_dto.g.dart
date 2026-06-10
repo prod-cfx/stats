@@ -370,6 +370,8 @@ class _$StrategyPlazaTemplateResponseDto
   @override
   final StrategyPlazaDisplayMetricsResponseDto displayMetrics;
   @override
+  final StrategyPlazaOfficialBacktestResponseDto officialBacktest;
+  @override
   final BuiltList<num>? sparkline;
   @override
   final BuiltMap<String, num>? params;
@@ -400,6 +402,7 @@ class _$StrategyPlazaTemplateResponseDto
     required this.status,
     required this.displayOrder,
     required this.displayMetrics,
+    required this.officialBacktest,
     this.sparkline,
     this.params,
     this.signals,
@@ -435,6 +438,7 @@ class _$StrategyPlazaTemplateResponseDto
         status == other.status &&
         displayOrder == other.displayOrder &&
         displayMetrics == other.displayMetrics &&
+        officialBacktest == other.officialBacktest &&
         sparkline == other.sparkline &&
         params == other.params &&
         signals == other.signals &&
@@ -461,6 +465,7 @@ class _$StrategyPlazaTemplateResponseDto
     _$hash = $jc(_$hash, status.hashCode);
     _$hash = $jc(_$hash, displayOrder.hashCode);
     _$hash = $jc(_$hash, displayMetrics.hashCode);
+    _$hash = $jc(_$hash, officialBacktest.hashCode);
     _$hash = $jc(_$hash, sparkline.hashCode);
     _$hash = $jc(_$hash, params.hashCode);
     _$hash = $jc(_$hash, signals.hashCode);
@@ -489,6 +494,7 @@ class _$StrategyPlazaTemplateResponseDto
           ..add('status', status)
           ..add('displayOrder', displayOrder)
           ..add('displayMetrics', displayMetrics)
+          ..add('officialBacktest', officialBacktest)
           ..add('sparkline', sparkline)
           ..add('params', params)
           ..add('signals', signals)
@@ -588,6 +594,14 @@ class StrategyPlazaTemplateResponseDtoBuilder
     StrategyPlazaDisplayMetricsResponseDtoBuilder? displayMetrics,
   ) => _$this._displayMetrics = displayMetrics;
 
+  StrategyPlazaOfficialBacktestResponseDtoBuilder? _officialBacktest;
+  StrategyPlazaOfficialBacktestResponseDtoBuilder get officialBacktest =>
+      _$this._officialBacktest ??=
+          StrategyPlazaOfficialBacktestResponseDtoBuilder();
+  set officialBacktest(
+    StrategyPlazaOfficialBacktestResponseDtoBuilder? officialBacktest,
+  ) => _$this._officialBacktest = officialBacktest;
+
   ListBuilder<num>? _sparkline;
   ListBuilder<num> get sparkline => _$this._sparkline ??= ListBuilder<num>();
   set sparkline(ListBuilder<num>? sparkline) => _$this._sparkline = sparkline;
@@ -633,6 +647,7 @@ class StrategyPlazaTemplateResponseDtoBuilder
       _status = $v.status;
       _displayOrder = $v.displayOrder;
       _displayMetrics = $v.displayMetrics.toBuilder();
+      _officialBacktest = $v.officialBacktest.toBuilder();
       _sparkline = $v.sparkline?.toBuilder();
       _params = $v.params?.toBuilder();
       _signals = $v.signals?.toBuilder();
@@ -734,6 +749,7 @@ class StrategyPlazaTemplateResponseDtoBuilder
               'displayOrder',
             ),
             displayMetrics: displayMetrics.build(),
+            officialBacktest: officialBacktest.build(),
             sparkline: _sparkline?.build(),
             params: _params?.build(),
             signals: _signals?.build(),
@@ -747,6 +763,8 @@ class StrategyPlazaTemplateResponseDtoBuilder
 
         _$failedField = 'displayMetrics';
         displayMetrics.build();
+        _$failedField = 'officialBacktest';
+        officialBacktest.build();
         _$failedField = 'sparkline';
         _sparkline?.build();
         _$failedField = 'params';

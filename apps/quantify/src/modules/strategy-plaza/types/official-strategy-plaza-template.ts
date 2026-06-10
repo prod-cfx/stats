@@ -59,6 +59,18 @@ export interface OfficialStrategyPlazaBacktestMetrics {
   tradeCount: number
 }
 
+export interface OfficialStrategyPlazaEvidenceEquityPoint {
+  ts: number
+  equity: number
+}
+
+export type StrategyPlazaOfficialBacktestConfidenceLevel = 'high' | 'medium' | 'low'
+
+export interface StrategyPlazaOfficialBacktestConfidence {
+  level: StrategyPlazaOfficialBacktestConfidenceLevel
+  reasons: string[]
+}
+
 export type OfficialStrategyPlazaTemplateAdmission = OfficialStrategyPlazaBacktestAdmission
 
 export interface OfficialStrategyPlazaEvidenceDataSource {
@@ -99,11 +111,31 @@ export interface OfficialStrategyPlazaEvidenceTemplate {
   toTs: number
   params: Record<string, number>
   metrics: OfficialStrategyPlazaBacktestMetrics
+  equityCurve: OfficialStrategyPlazaEvidenceEquityPoint[]
   best: {
     params: Record<string, number>
     metrics: OfficialStrategyPlazaBacktestMetrics
   }
   semanticReason?: string
+}
+
+export interface StrategyPlazaOfficialBacktest {
+  generatedAt: string
+  backtestFrom: number
+  backtestTo: number
+  source: string
+  dataSource: OfficialStrategyPlazaEvidenceDataSource
+  eventDataSources?: OfficialStrategyPlazaEvidenceEventDataSource[]
+  candleCount: number
+  metrics: {
+    returnPct: number | null
+    winRatePct: number | null
+    maxDrawdownPct: number | null
+    tradeCount: number | null
+  }
+  equityCurve: OfficialStrategyPlazaEvidenceEquityPoint[]
+  confidence: StrategyPlazaOfficialBacktestConfidence
+  disclaimer: string
 }
 
 export interface OfficialStrategyPlazaBacktestEvidence {
@@ -172,6 +204,7 @@ export interface OfficialStrategyPlazaTemplate {
     tradeCount?: number | null
     users?: number | null
   }
+  officialBacktest: StrategyPlazaOfficialBacktest
   sparkline?: number[]
   params?: Record<string, number>
   signals?: OfficialStrategyPlazaSignal[]

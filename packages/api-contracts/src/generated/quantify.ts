@@ -1343,6 +1343,36 @@ const UpdateStrategyTemplateDto = z
   })
   .partial()
   .passthrough()
+const StrategyPlazaOfficialBacktestMetricsResponseDto = z
+  .object({
+    returnPct: z.number().nullable(),
+    winRatePct: z.number().nullable(),
+    maxDrawdownPct: z.number().nullable(),
+    tradeCount: z.number().nullable(),
+  })
+  .partial()
+  .passthrough()
+const StrategyPlazaOfficialBacktestEquityPointResponseDto = z
+  .object({ ts: z.number(), equity: z.number() })
+  .passthrough()
+const StrategyPlazaOfficialBacktestConfidenceResponseDto = z
+  .object({ level: z.enum(['high', 'medium', 'low']), reasons: z.array(z.string()) })
+  .passthrough()
+const StrategyPlazaOfficialBacktestResponseDto = z
+  .object({
+    generatedAt: z.string(),
+    backtestFrom: z.number(),
+    backtestTo: z.number(),
+    source: z.string(),
+    dataSource: z.object({}).partial().passthrough(),
+    eventDataSources: z.array(z.object({}).partial().passthrough()).optional(),
+    candleCount: z.number(),
+    metrics: StrategyPlazaOfficialBacktestMetricsResponseDto,
+    equityCurve: z.array(StrategyPlazaOfficialBacktestEquityPointResponseDto),
+    confidence: StrategyPlazaOfficialBacktestConfidenceResponseDto,
+    disclaimer: z.string(),
+  })
+  .passthrough()
 const StrategyPlazaTemplateResponseDto = z
   .object({
     id: z.string(),
@@ -1391,6 +1421,7 @@ const StrategyPlazaTemplateResponseDto = z
       )
       .optional(),
     equityCurve: z.array(z.number()).optional(),
+    officialBacktest: StrategyPlazaOfficialBacktestResponseDto,
   })
   .passthrough()
 const RunStrategyPlazaTemplateDto = z
@@ -1921,6 +1952,10 @@ export const schemas = {
   StrategyTemplateResponseDto,
   CreateStrategyTemplateDto,
   UpdateStrategyTemplateDto,
+  StrategyPlazaOfficialBacktestMetricsResponseDto,
+  StrategyPlazaOfficialBacktestEquityPointResponseDto,
+  StrategyPlazaOfficialBacktestConfidenceResponseDto,
+  StrategyPlazaOfficialBacktestResponseDto,
   StrategyPlazaTemplateResponseDto,
   RunStrategyPlazaTemplateDto,
   StrategyPlazaRunExistingResponseDto,
