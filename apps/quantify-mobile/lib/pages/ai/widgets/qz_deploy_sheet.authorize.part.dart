@@ -28,7 +28,9 @@ class _ExchangePicker extends ConsumerWidget {
               final ExchangeApiKey? account = list
                   .cast<ExchangeApiKey?>()
                   .firstWhere(
-                    (ExchangeApiKey? k) => k?.exchange.toLowerCase() == e.code,
+                    (ExchangeApiKey? k) =>
+                        k?.exchange.toLowerCase() == e.code &&
+                        !(k?.isTestnet ?? false),
                     orElse: () => null,
                   );
               return _DeployTarget(
@@ -72,7 +74,6 @@ class _ExchangePicker extends ConsumerWidget {
     );
   }
 }
-
 
 class _ExchangeRow extends StatelessWidget {
   const _ExchangeRow({required this.target, required this.onTap});
@@ -163,7 +164,6 @@ class _ExchangeRow extends StatelessWidget {
     );
   }
 }
-
 
 class _AuthorizePane extends StatelessWidget {
   const _AuthorizePane({required this.apiKey, required this.onConfirm});
@@ -410,4 +410,3 @@ class _UnauthorizedPane extends StatelessWidget {
     );
   }
 }
-

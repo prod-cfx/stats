@@ -60,7 +60,7 @@ class _LanguageOptionRow extends StatelessWidget {
 
 class _Content extends ConsumerWidget {
   const _Content({required this.info, required this.apiKeys});
-  final AccountInfo info;
+  final AsyncValue<AccountInfo> info;
   final AsyncValue<List<ExchangeApiKey>> apiKeys;
 
   @override
@@ -80,13 +80,27 @@ class _Content extends ConsumerWidget {
     // 当前 mock 已绑定 Telegram（原型 m-screens-4 第 9 屏 chip + 列表
     // `@victor_qf`）；UI 直接读 fixture 模拟值，等真接口后改读 binding。
     const bool telegramBound = true;
+    final AccountInfo? accountInfo = info.maybeWhen(
+      data: (AccountInfo v) => v,
+      orElse: () => null,
+    );
+    final String accountErrorText = info.hasError
+        ? '${l10n.meHomeLoadErrorPrefix}${_safeLoadErrorMessage(info.error!)}'
+        : '';
+    final bool accountLoading =
+        accountInfo == null &&
+        info.maybeWhen(loading: () => true, orElse: () => false);
+    final String email =
+        accountInfo?.email ??
+        (accountLoading ? l10n.meAccountLoading : l10n.meAccountUnavailable);
+    final String uid = accountInfo?.uid ?? '--';
 
     return ListView(
       padding: EdgeInsets.zero,
       children: <Widget>[
         QzAccountHeader(
-          maskedEmail: maskEmail(info.email),
-          uid: info.uid,
+          maskedEmail: accountInfo == null ? email : maskEmail(email),
+          uid: uid,
           binanceConnected: binanceConnected,
           telegramBound: telegramBound,
         ),
@@ -116,9 +130,12 @@ class _Content extends ConsumerWidget {
                 children: <Widget>[
                   QzSettingsRow(
                     label: l10n.authLoginEmailLabel,
-                    value: info.email,
+                    value: accountErrorText.isEmpty ? email : accountErrorText,
+                    tone: accountErrorText.isEmpty
+                        ? QzSettingsRowTone.neutral
+                        : QzSettingsRowTone.warn,
                   ),
-                  QzSettingsRow(label: 'UID', value: info.uid, mono: true),
+                  QzSettingsRow(label: 'UID', value: uid, mono: true),
                   QzSettingsRow(
                     label: l10n.meSettingsTelegram,
                     // mock 阶段对齐设计稿 `m-screens-4.jsx:1009`：直接显示

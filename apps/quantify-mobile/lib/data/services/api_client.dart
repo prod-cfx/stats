@@ -136,7 +136,10 @@ class ApiException implements Exception {
       final Object? c = data['code'];
       if (c != null) code = c.toString();
     } else if (data is String && data.trim().isNotEmpty) {
-      message = data.trim();
+      final String text = data.trim();
+      message = _looksLikeHtml(text)
+          ? (status == null ? '请求失败，请稍后重试' : '请求失败（HTTP $status）')
+          : text;
     } else if (status != null) {
       message = '请求失败（HTTP $status）';
     }
@@ -146,4 +149,13 @@ class ApiException implements Exception {
   @override
   String toString() =>
       'ApiException(status=$statusCode, code=$code, message=$message)';
+}
+
+bool _looksLikeHtml(String text) {
+  final String lower = text.toLowerCase();
+  return lower.startsWith('<!doctype html') ||
+      lower.startsWith('<html') ||
+      lower.contains('<html') ||
+      lower.contains('<body') ||
+      lower.contains('<script');
 }

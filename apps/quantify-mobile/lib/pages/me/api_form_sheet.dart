@@ -21,7 +21,7 @@ class _ApiMeta {
   const _ApiMeta({
     required this.mode,
     this.passphrase = false,
-    this.testnet = false,
+    this.testnet = true,
   });
 
   final _ApiMode mode;
@@ -29,20 +29,20 @@ class _ApiMeta {
   /// OKX 家族（OKX/Bitget/KuCoin）需要 Passphrase。
   final bool passphrase;
 
-  /// 是否提供独立测试网（仅 Binance），决定是否渲染环境切换。
+  /// 是否展示主网 / 测试网环境卡；当前三家交易所均先开放测试网。
   final bool testnet;
 }
 
 const Map<String, _ApiMeta> _apiMetaTable = <String, _ApiMeta>{
   'binance': _ApiMeta(mode: _ApiMode.key, testnet: true),
-  'okx': _ApiMeta(mode: _ApiMode.key, passphrase: true),
+  'okx': _ApiMeta(mode: _ApiMode.key, passphrase: true, testnet: true),
   'bitget': _ApiMeta(mode: _ApiMode.key, passphrase: true),
   'kucoin': _ApiMeta(mode: _ApiMode.key, passphrase: true),
-  'hyperliquid': _ApiMeta(mode: _ApiMode.wallet),
+  'hyperliquid': _ApiMeta(mode: _ApiMode.wallet, testnet: true),
 };
 
-/// 测试网接口域名（仅 Binance 测试网展示，对齐 `m-screens-4.jsx:3008`）。
-const String _testnetEndpoint = 'https://testnet.binance.vision';
+/// 测试网接口域名预留位：后续接配置接口前先不展示真实域名。
+const String _testnetEndpoint = '';
 
 /// 测试网保存按钮琥珀渐变（对齐 `m-screens-4.jsx:3028`，QzButton 仅有紫色 accent
 /// 渐变，故 testnet 按钮在本文件内自绘）。
@@ -104,15 +104,17 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
 
   /// 按 `exchange` 纯派生，无状态流转，故留在 widget。
   late final _ApiMeta _meta = _metaFor(widget.exchange);
-  bool _didApplyExistingKey = false;
+  String? _appliedLabelFromKey;
 
   ApiFormSheetController get _controller =>
       ref.read(apiFormSheetControllerProvider.notifier);
 
-  ExchangeApiKey? _findExistingKey(List<ExchangeApiKey>? keys) {
+  ExchangeApiKey? _findExistingKey(List<ExchangeApiKey>? keys, ApiEnv env) {
     if (keys == null) return null;
+    final bool isTestnet = _isTestnetFor(env);
     for (final ExchangeApiKey key in keys) {
-      if (key.exchange.toLowerCase() == widget.exchange.toLowerCase()) {
+      if (key.exchange.toLowerCase() == widget.exchange.toLowerCase() &&
+          key.isTestnet == isTestnet) {
         return key;
       }
     }
@@ -120,10 +122,18 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   }
 
   void _applyExistingKey(ExchangeApiKey? key) {
-    if (_didApplyExistingKey || key == null) return;
-    _didApplyExistingKey = true;
-    if (_label.text.isEmpty && key.label.trim().isNotEmpty) {
-      _label.text = key.label.trim();
+    if (key == null) {
+      if (_appliedLabelFromKey != null && _label.text == _appliedLabelFromKey) {
+        _label.clear();
+      }
+      _appliedLabelFromKey = null;
+      return;
+    }
+    final String nextLabel = key.label.trim();
+    if (nextLabel.isEmpty) return;
+    if (_label.text.isEmpty || _label.text == _appliedLabelFromKey) {
+      _label.text = nextLabel;
+      _appliedLabelFromKey = nextLabel;
     }
   }
 
@@ -145,17 +155,25 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     String? v, {
     required int minLen,
     required String name,
+    bool allowEmpty = false,
   }) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    if (v == null || v.isEmpty) return '${l10n.meApiFormPleaseEnter}$name';
+    if (v == null || v.isEmpty) {
+      return allowEmpty ? null : '${l10n.meApiFormPleaseEnter}$name';
+    }
     if (v.length < minLen) {
       return '$name${l10n.meApiFormMinLenInfix}$minLen${l10n.meApiFormMinLenSuffix}';
     }
     return null;
   }
 
-  String? _validateNotEmpty(String? v, {required String name}) {
+  String? _validateNotEmpty(
+    String? v, {
+    required String name,
+    bool allowEmpty = false,
+  }) {
     if (v == null || v.isEmpty) {
+      if (allowEmpty) return null;
       return '${AppLocalizations.of(context).meApiFormPleaseEnter}$name';
     }
     return null;
@@ -172,6 +190,9 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     // wallet 模式：主钱包地址 → apiKey 槽，Agent 私钥 → apiSecret 槽。
     final bool isWallet = _meta.mode == _ApiMode.wallet;
+    final bool isTestnet = _isTestnetFor(
+      ref.read(apiFormSheetControllerProvider).env,
+    );
     final String apiKey = isWallet ? _walletAddress.text : _apiKey.text;
     final String apiSecret = isWallet ? _agentKey.text : _secret.text;
     final String? passphrase = (!isWallet && _meta.passphrase)
@@ -180,10 +201,13 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     final bool ok = await _controller.save(
       exchange: widget.exchange,
       label: _label.text.trim().isEmpty
-          ? l10n.meApiFormDefaultLabel
+          ? (isTestnet
+                ? l10n.meApiFormEnvTestnetLabel
+                : l10n.meApiFormDefaultLabel)
           : _label.text.trim(),
       apiKey: apiKey,
       apiSecret: apiSecret,
+      isTestnet: isTestnet,
       apiPassphrase: passphrase,
     );
     if (!mounted) return;
@@ -204,13 +228,14 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     final MediaQueryData mq = MediaQuery.of(context);
     final ApiFormSheetState st = ref.watch(apiFormSheetControllerProvider);
     final bool isTestnet = _isTestnetFor(st.env);
+    final bool mainnetBlocked = _meta.testnet && !isTestnet;
     final List<ExchangeApiKey>? existingKeys = ref
         .watch(apiKeysProvider)
         .maybeWhen(
           data: (List<ExchangeApiKey> keys) => keys,
           orElse: () => null,
         );
-    final ExchangeApiKey? existingKey = _findExistingKey(existingKeys);
+    final ExchangeApiKey? existingKey = _findExistingKey(existingKeys, st.env);
     _applyExistingKey(existingKey);
     final String subtitle = isTestnet
         ? l10n.meApiFormTestnetSubtitle
@@ -284,49 +309,70 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                   ],
                 ),
               ),
+              // 环境切换固定在 header 下方，避免内容滚动时 tab 跟着滑走。
+              if (_meta.testnet) ...<Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _Label(text: l10n.meApiFormEnvLabel),
+                      const SizedBox(height: 6),
+                      _EnvToggle(
+                        l10n: l10n,
+                        env: st.env,
+                        onChanged: _controller.setEnv,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               Expanded(
                 child: Form(
                   key: _formKey,
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                     children: <Widget>[
-                      // 环境切换：仅支持测试网的交易所渲染（设计稿先于密钥决策）。
-                      if (_meta.testnet) ...<Widget>[
-                        _Label(text: l10n.meApiFormEnvLabel),
-                        const SizedBox(height: 6),
-                        _EnvToggle(
-                          l10n: l10n,
-                          env: st.env,
-                          onChanged: _controller.setEnv,
+                      _MainnetGate(
+                        enabled: mainnetBlocked,
+                        message: l10n.meApiFormMainnetComingSoon,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            _WarningBanner(
+                              exchange: widget.exchange,
+                              wallet: _meta.mode == _ApiMode.wallet,
+                              testnet: isTestnet,
+                            ),
+                            const SizedBox(height: 18),
+                            ..._buildCredentialFields(
+                              c,
+                              l10n,
+                              st.showSecret,
+                              existingKey: existingKey,
+                            ),
+                            const SizedBox(height: 14),
+                            _Label(text: l10n.meApiFormLabelNote),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _label,
+                              decoration: _inputDecoration(c),
+                              validator: _validateLabel,
+                            ),
+                            if (isTestnet) ...<Widget>[
+                              const SizedBox(height: 14),
+                              _EndpointHint(l10n: l10n),
+                            ],
+                            const SizedBox(height: 18),
+                            _Label(text: l10n.meApiFormPermissionSection),
+                            const SizedBox(height: 8),
+                            _PermissionList(
+                              l10n: l10n,
+                              wallet: _meta.mode == _ApiMode.wallet,
+                              testnet: isTestnet,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 14),
-                      ],
-                      _WarningBanner(
-                        exchange: widget.exchange,
-                        wallet: _meta.mode == _ApiMode.wallet,
-                        testnet: isTestnet,
-                      ),
-                      const SizedBox(height: 18),
-                      ..._buildCredentialFields(c, l10n, st.showSecret),
-                      const SizedBox(height: 14),
-                      _Label(text: l10n.meApiFormLabelNote),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _label,
-                        decoration: _inputDecoration(c),
-                        validator: _validateLabel,
-                      ),
-                      if (isTestnet) ...<Widget>[
-                        const SizedBox(height: 14),
-                        _EndpointHint(l10n: l10n),
-                      ],
-                      const SizedBox(height: 18),
-                      _Label(text: l10n.meApiFormPermissionSection),
-                      const SizedBox(height: 8),
-                      _PermissionList(
-                        l10n: l10n,
-                        wallet: _meta.mode == _ApiMode.wallet,
-                        testnet: isTestnet,
                       ),
                     ],
                   ),
@@ -353,13 +399,17 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                           ? _TestnetSaveButton(
                               label: l10n.meApiFormSaveTestnetButton,
                               loading: st.saving,
-                              onPressed: st.saving ? null : _save,
+                              onPressed: st.saving || mainnetBlocked
+                                  ? null
+                                  : _save,
                             )
                           : QzButton(
                               label: l10n.meApiFormSaveButton,
                               variant: QzButtonVariant.accent,
                               loading: st.saving,
-                              onPressed: st.saving ? null : _save,
+                              onPressed: st.saving || mainnetBlocked
+                                  ? null
+                                  : _save,
                               expanded: true,
                             ),
                     ),
@@ -378,19 +428,27 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   List<Widget> _buildCredentialFields(
     QzColorScheme c,
     AppLocalizations l10n,
-    bool showSecret,
-  ) {
+    bool showSecret, {
+    required ExchangeApiKey? existingKey,
+  }) {
+    final bool hasExistingKey = existingKey != null;
+    final String? maskedKey = hasExistingKey ? _savedMasked(existingKey) : null;
+    final String? savedSecretHint = hasExistingKey
+        ? l10n.meApiFormSavedSecretPlaceholder
+        : null;
+
     if (_meta.mode == _ApiMode.wallet) {
       return <Widget>[
         _Label(text: l10n.meApiFormWalletAddressLabel, required: true),
         const SizedBox(height: 6),
         TextFormField(
           controller: _walletAddress,
-          decoration: _inputDecoration(c),
+          decoration: _inputDecoration(c, hintText: maskedKey),
           validator: (String? v) => _validateRequired(
             v,
             minLen: _minCredentialLen,
             name: l10n.meApiFormWalletAddressLabel,
+            allowEmpty: hasExistingKey,
           ),
         ),
         const SizedBox(height: 14),
@@ -399,11 +457,16 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
         TextFormField(
           controller: _agentKey,
           obscureText: !showSecret,
-          decoration: _secretDecoration(c, showSecret),
+          decoration: _secretDecoration(
+            c,
+            showSecret,
+            hintText: savedSecretHint,
+          ),
           validator: (String? v) => _validateRequired(
             v,
             minLen: _minCredentialLen,
             name: l10n.meApiFormAgentKeyLabel,
+            allowEmpty: hasExistingKey,
           ),
         ),
         const SizedBox(height: 6),
@@ -419,9 +482,13 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
       const SizedBox(height: 6),
       TextFormField(
         controller: _apiKey,
-        decoration: _inputDecoration(c),
-        validator: (String? v) =>
-            _validateRequired(v, minLen: _minCredentialLen, name: 'API Key'),
+        decoration: _inputDecoration(c, hintText: maskedKey),
+        validator: (String? v) => _validateRequired(
+          v,
+          minLen: _minCredentialLen,
+          name: 'API Key',
+          allowEmpty: hasExistingKey,
+        ),
       ),
       const SizedBox(height: 14),
       _Label(text: secretLabel, required: true),
@@ -429,9 +496,13 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
       TextFormField(
         controller: _secret,
         obscureText: !showSecret,
-        decoration: _secretDecoration(c, showSecret),
-        validator: (String? v) =>
-            _validateRequired(v, minLen: _minCredentialLen, name: secretLabel),
+        decoration: _secretDecoration(c, showSecret, hintText: savedSecretHint),
+        validator: (String? v) => _validateRequired(
+          v,
+          minLen: _minCredentialLen,
+          name: secretLabel,
+          allowEmpty: hasExistingKey,
+        ),
       ),
       if (_meta.passphrase) ...<Widget>[
         const SizedBox(height: 14),
@@ -440,9 +511,12 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
         TextFormField(
           controller: _passphrase,
           obscureText: !showSecret,
-          decoration: _inputDecoration(c),
-          validator: (String? v) =>
-              _validateNotEmpty(v, name: l10n.meApiFormPassphraseLabel),
+          decoration: _inputDecoration(c, hintText: savedSecretHint),
+          validator: (String? v) => _validateNotEmpty(
+            v,
+            name: l10n.meApiFormPassphraseLabel,
+            allowEmpty: hasExistingKey,
+          ),
         ),
         const SizedBox(height: 6),
         _FieldHint(text: l10n.meApiFormPassphraseHint),
@@ -450,8 +524,10 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     ];
   }
 
-  InputDecoration _inputDecoration(QzColorScheme c) {
+  InputDecoration _inputDecoration(QzColorScheme c, {String? hintText}) {
     return InputDecoration(
+      hintText: hintText,
+      hintStyle: TextStyle(color: c.textMid, fontWeight: FontWeight.w500),
       filled: true,
       fillColor: c.bgInput,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -471,8 +547,12 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   }
 
   /// 带「显示/隐藏」眼睛图标的 secret 类输入框装饰。
-  InputDecoration _secretDecoration(QzColorScheme c, bool showSecret) {
-    return _inputDecoration(c).copyWith(
+  InputDecoration _secretDecoration(
+    QzColorScheme c,
+    bool showSecret, {
+    String? hintText,
+  }) {
+    return _inputDecoration(c, hintText: hintText).copyWith(
       suffixIcon: IconButton(
         icon: Icon(
           showSecret ? Icons.visibility_off : Icons.visibility,

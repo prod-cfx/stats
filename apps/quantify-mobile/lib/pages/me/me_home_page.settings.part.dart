@@ -15,7 +15,9 @@ class _LiveStatusBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<(LiveStrategyStatus, int)> entries = liveStatusBreakdown(summary);
+    final List<(LiveStrategyStatus, int)> entries = liveStatusBreakdown(
+      summary,
+    );
 
     if (entries.isEmpty) {
       return Text(
@@ -177,6 +179,7 @@ class _ApiExchangesGroup extends ConsumerWidget {
     // 或 release 模式下未定义行为。
     if (saved == true && context.mounted) {
       ref.invalidate(apiKeysProvider);
+      QzToast.show(context, AppLocalizations.of(context).meApiFormSaveSuccess);
     }
   }
 
@@ -188,9 +191,12 @@ class _ApiExchangesGroup extends ConsumerWidget {
       data: (List<ExchangeApiKey> l) => l,
       orElse: () => const <ExchangeApiKey>[],
     );
-    ExchangeApiKey? findKey(String ex) {
+    ExchangeApiKey? findKey(String ex, {bool isTestnet = false}) {
       for (final ExchangeApiKey k in list) {
-        if (k.exchange.toLowerCase() == ex.toLowerCase()) return k;
+        if (k.exchange.toLowerCase() == ex.toLowerCase() &&
+            k.isTestnet == isTestnet) {
+          return k;
+        }
       }
       return null;
     }
@@ -206,7 +212,8 @@ class _ApiExchangesGroup extends ConsumerWidget {
           for (int i = 0; i < _meExchanges.length; i++)
             _ApiExchangeRow(
               exchange: _meExchanges[i],
-              existingKey: findKey(_meExchanges[i]),
+              mainnetKey: findKey(_meExchanges[i]),
+              testnetKey: findKey(_meExchanges[i], isTestnet: true),
               last: i == _meExchanges.length - 1,
               onTap: () => _openSheet(context, ref, _meExchanges[i]),
               l10n: l10n,
@@ -220,14 +227,16 @@ class _ApiExchangesGroup extends ConsumerWidget {
 class _ApiExchangeRow extends StatelessWidget {
   const _ApiExchangeRow({
     required this.exchange,
-    required this.existingKey,
+    required this.mainnetKey,
+    required this.testnetKey,
     required this.last,
     required this.onTap,
     required this.l10n,
   });
 
   final String exchange;
-  final ExchangeApiKey? existingKey;
+  final ExchangeApiKey? mainnetKey;
+  final ExchangeApiKey? testnetKey;
   final bool last;
   final VoidCallback onTap;
   final AppLocalizations l10n;
@@ -235,7 +244,13 @@ class _ApiExchangeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final bool configured = existingKey != null;
+    final bool configured = mainnetKey != null || testnetKey != null;
+    final String connectedLabel = l10n.meApiConnected.split(' · ').first;
+    final String notConfiguredLabel = l10n.meApiNotConfigured
+        .split(' · ')
+        .first;
+    final String statusText =
+        '${l10n.meApiFormEnvMainnetLabel}${mainnetKey != null ? connectedLabel : notConfiguredLabel} · ${l10n.meApiFormEnvTestnetLabel}${testnetKey != null ? connectedLabel : notConfiguredLabel}';
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: QzSpacing.lg,
@@ -265,11 +280,13 @@ class _ApiExchangeRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  configured ? l10n.meApiConnected : l10n.meApiNotConfigured,
+                  statusText,
                   style: TextStyle(
                     color: configured ? c.statusOk : c.statusWarn,
                     fontSize: 11,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

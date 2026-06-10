@@ -1632,6 +1632,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meHomeLoadErrorPrefix => '加载失败：';
 
   @override
+  String get meAccountLoading => '账户加载中';
+
+  @override
+  String get meAccountUnavailable => '账户信息暂不可用';
+
+  @override
   String get meStatsActiveStrategies => '活跃策略';
 
   @override
@@ -1778,6 +1784,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meApiFormSaveFailed => '保存失败，请稍后重试';
 
   @override
+  String get meApiFormSaveSuccess => '保存成功';
+
+  @override
   String get meApiFormApiKeyLabel => 'API Key';
 
   @override
@@ -1797,6 +1806,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get meApiFormSecretKeyLabel => 'Secret Key';
+
+  @override
+  String get meApiFormSavedSecretPlaceholder => '已保存，重新填写后覆盖';
 
   @override
   String get meApiFormPassphraseLabel => 'Passphrase';
@@ -1847,17 +1859,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meApiFormEnvTestnetSub => '模拟资金';
 
   @override
+  String get meApiFormMainnetComingSoon => '主网交易即将开放';
+
+  @override
   String get meApiFormTestnetSubtitle => '测试网 · 模拟资金 · 不影响真实账户';
 
   @override
-  String get meApiFormTestnetWarningBold => '请前往 testnet.binance.vision ';
+  String get meApiFormTestnetWarningBold => '请使用测试网 / 模拟盘 API 密钥。';
 
   @override
-  String get meApiFormTestnetWarningBody =>
-      '申请独立的测试网密钥（主网密钥不可用）。测试网币每 24h 自动重置，可放心调试策略。';
+  String get meApiFormTestnetWarningBody => '主网密钥不可用；服务端会按测试网环境验证和保存。';
 
   @override
   String get meApiFormEndpointLabel => '接口域名';
+
+  @override
+  String get meApiFormEndpointEmpty => '暂未配置';
 
   @override
   String get meApiFormPermWithdrawTestnetValue => '测试网无提币';

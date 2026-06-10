@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 
 import '../../data/auth/session_controller.dart';
 import '../../data/models/account_models.dart';
@@ -8,13 +9,14 @@ import '../../data/models/api_key_models.dart';
 import '../../domain/models/live_strategy_models.dart';
 import '../../domain/use_cases/live_strategy_use_cases.dart';
 import '../../data/providers.dart';
+import '../../data/services/api_client.dart';
 import '../../data/utils/mask_helpers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_grab_handle.dart';
-import '../../widgets/qz_spinner.dart';
+import '../../widgets/qz_toast.dart';
 import '../live/widgets/live_status_style.dart';
 import 'api_form_sheet.dart';
 import 'widgets/qz_account_header.dart';
@@ -42,18 +44,29 @@ class MeHomePage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: c.bg,
-      body: info.when(
-        loading: () => const Center(child: QzSpinner()),
-        error: (Object e, StackTrace st) => Center(
-          child: Text(
-            '${AppLocalizations.of(context).meHomeLoadErrorPrefix}$e',
-            style: TextStyle(color: c.statusDanger),
-          ),
-        ),
-        data: (AccountInfo data) => _Content(info: data, apiKeys: keys),
-      ),
+      body: _Content(info: info, apiKeys: keys),
     );
   }
+}
+
+String _safeLoadErrorMessage(Object error) {
+  if (error is ApiException) return error.message;
+  if (error is DioException) {
+    final Object? inner = error.error;
+    if (inner is ApiException) return inner.message;
+    return ApiException.fromDio(error).message;
+  }
+  final String text = error.toString();
+  return _looksUnsafeForUi(text) ? '请求失败，请稍后重试' : text;
+}
+
+bool _looksUnsafeForUi(String text) {
+  final String lower = text.toLowerCase();
+  return text.length > 160 ||
+      lower.contains('<!doctype html') ||
+      lower.contains('<html') ||
+      lower.contains('<body') ||
+      lower.contains('<script');
 }
 
 /// 统计卡相对于 header 的垂直叠加偏移（原型 `m-screens-4.jsx:992` `marginTop:-26`）。
@@ -154,4 +167,3 @@ Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
     ref.read(selectedLanguageProvider.notifier).set(picked);
   }
 }
-

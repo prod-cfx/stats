@@ -23,6 +23,7 @@ class _FailingApiKeyRepository implements ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
+    bool isTestnet = false,
     String? apiPassphrase,
   }) async {
     throw StateError('mock add key failed');
@@ -59,12 +60,12 @@ void main() {
       c.read(apiFormSheetControllerProvider);
 
   group('ApiFormSheetController', () {
-    test('初始态：showSecret=false，saving=false，env=mainnet', () {
+    test('初始态：showSecret=false，saving=false，env=testnet', () {
       final ProviderContainer c = makeContainer();
       final ApiFormSheetState s = read(c);
       expect(s.showSecret, isFalse);
       expect(s.saving, isFalse);
-      expect(s.env, ApiEnv.mainnet);
+      expect(s.env, ApiEnv.testnet);
     });
 
     test('toggleSecret 在 true/false 间切换', () {

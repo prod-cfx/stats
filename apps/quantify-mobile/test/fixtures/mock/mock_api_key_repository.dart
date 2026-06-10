@@ -36,6 +36,7 @@ class MockApiKeyRepository implements ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
+    bool isTestnet = false,
     String? apiPassphrase,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -49,6 +50,7 @@ class MockApiKeyRepository implements ApiKeyRepository {
       exchange: exchange,
       label: label,
       maskedKey: maskApiKey(apiKey),
+      isTestnet: isTestnet,
       createdAt: DateTime.now(),
     );
     _keys.add(entry);

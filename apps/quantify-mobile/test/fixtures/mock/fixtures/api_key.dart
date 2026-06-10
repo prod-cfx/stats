@@ -13,6 +13,15 @@ final List<ExchangeApiKey> mockApiKeys = <ExchangeApiKey>[
     exchange: 'okx',
     label: '测试子账户',
     maskedKey: 'OKX-****5678',
+    isTestnet: true,
     createdAt: DateTime.fromMillisecondsSinceEpoch(1_715_500_000_000),
+  ),
+  ExchangeApiKey(
+    id: 'key-3',
+    exchange: 'hyperliquid',
+    label: '测试钱包',
+    maskedKey: '0x12****abcd',
+    isTestnet: true,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(1_716_000_000_000),
   ),
 ];

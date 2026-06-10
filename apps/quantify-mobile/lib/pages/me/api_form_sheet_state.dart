@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// 表单环境：仅 `testnet=true` 的交易所允许在主网 / 测试网间切换。
+/// 表单环境：当前 API 表单先开放测试网，主网仅占位展示。
 ///
 /// 由 widget 的 `_ApiMeta`（按 `exchange` 纯派生）决定是否渲染切换控件，故 meta
 /// 仍留在 widget；本枚举提升为顶层 public 供 controller / state / 单测引用。
@@ -16,7 +16,7 @@ class ApiFormSheetState {
   const ApiFormSheetState({
     this.showSecret = false,
     this.saving = false,
-    this.env = ApiEnv.mainnet,
+    this.env = ApiEnv.testnet,
   });
 
   /// 是否明文显示 secret 类字段。
@@ -25,14 +25,10 @@ class ApiFormSheetState {
   /// 保存请求进行中。
   final bool saving;
 
-  /// 当前环境。不支持测试网的交易所恒为 mainnet（切换控件也不渲染）。
+  /// 当前环境。主网暂不开放保存，默认测试网。
   final ApiEnv env;
 
-  ApiFormSheetState copyWith({
-    bool? showSecret,
-    bool? saving,
-    ApiEnv? env,
-  }) {
+  ApiFormSheetState copyWith({bool? showSecret, bool? saving, ApiEnv? env}) {
     return ApiFormSheetState(
       showSecret: showSecret ?? this.showSecret,
       saving: saving ?? this.saving,

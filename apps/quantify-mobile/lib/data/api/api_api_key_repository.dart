@@ -19,7 +19,11 @@ class ApiApiKeyRepository implements ApiKeyRepository {
     return root.containsKey('data') ? root['data'] : raw;
   }
 
-  ExchangeApiKey _parse(Map<String, dynamic> m, {String? maskedFallback}) {
+  ExchangeApiKey _parse(
+    Map<String, dynamic> m, {
+    String? maskedFallback,
+    bool isTestnetFallback = false,
+  }) {
     return ExchangeApiKey(
       id: asString(pick(m, <String>['id'])),
       exchange: asString(pick(m, <String>['exchangeId', 'exchange'])),
@@ -27,6 +31,10 @@ class ApiApiKeyRepository implements ApiKeyRepository {
       maskedKey: asString(
         pick(m, <String>['maskedCredential', 'maskedKey']),
         fallback: maskedFallback ?? '',
+      ),
+      isTestnet: asBool(
+        pick(m, <String>['isTestnet']),
+        fallback: isTestnetFallback,
       ),
       createdAt: asDateTime(pick(m, <String>['createdAt'])),
     );
@@ -72,17 +80,23 @@ class ApiApiKeyRepository implements ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
+    bool isTestnet = false,
     String? apiPassphrase,
   }) async {
     final dynamic raw = await _service.addKey(<String, dynamic>{
       'exchangeId': exchange.toLowerCase(),
       'label': label,
       'name': label,
+      'isTestnet': isTestnet,
       'apiKey': apiKey,
       'apiSecret': apiSecret,
       'passphrase': ?apiPassphrase,
     });
-    return _parse(asMap(_payload(raw)), maskedFallback: maskApiKey(apiKey));
+    return _parse(
+      asMap(_payload(raw)),
+      maskedFallback: maskApiKey(apiKey),
+      isTestnetFallback: isTestnet,
+    );
   }
 
   @override

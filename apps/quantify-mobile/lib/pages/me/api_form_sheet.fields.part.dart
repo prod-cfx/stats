@@ -35,10 +35,7 @@ class _Label extends StatelessWidget {
         ),
         if (required) ...<Widget>[
           const SizedBox(width: 4),
-          Text(
-            '*',
-            style: TextStyle(color: c.statusDanger, fontSize: 13),
-          ),
+          Text('*', style: TextStyle(color: c.statusDanger, fontSize: 13)),
         ],
       ],
     );
@@ -201,15 +198,17 @@ class _WarningBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    // 测试网文案不分 bold/body，整段一句话提示去 testnet.binance.vision 申请。
+    // 测试网文案不绑定具体域名；接口域名后续由配置接口补齐。
     final String boldText = testnet
         ? l10n.meApiFormTestnetWarningBold
-        : (wallet ? l10n.meApiFormWalletWarningMust : l10n.meApiFormWarningMust);
+        : (wallet
+              ? l10n.meApiFormWalletWarningMust
+              : l10n.meApiFormWarningMust);
     final String bodyText = testnet
         ? l10n.meApiFormTestnetWarningBody
         : (wallet
-            ? l10n.meApiFormWalletWarningBody
-            : l10n.meApiFormWarningBody(exchange));
+              ? l10n.meApiFormWalletWarningBody
+              : l10n.meApiFormWarningBody(exchange));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -364,6 +363,72 @@ class _EnvToggle extends StatelessWidget {
   }
 }
 
+/// 主网 tab 内容遮罩：保留底层表单结构，后续主网开放时移除该 gate 即可。
+class _MainnetGate extends StatelessWidget {
+  const _MainnetGate({
+    required this.enabled,
+    required this.message,
+    required this.child,
+  });
+
+  final bool enabled;
+  final String message;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    final QzColorScheme c = context.qzScheme;
+    return Stack(
+      children: <Widget>[
+        IgnorePointer(child: Opacity(opacity: 0.42, child: child)),
+        Positioned.fill(
+          child: Container(
+            alignment: Alignment.topCenter,
+            padding: const EdgeInsets.fromLTRB(16, 32, 16, 0),
+            decoration: BoxDecoration(
+              color: c.bgElev.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(QzRadii.card),
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: c.statusWarn.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(QzRadii.input),
+                border: Border.all(color: c.statusWarn.withValues(alpha: 0.28)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    Icons.lock_clock_outlined,
+                    size: 16,
+                    color: c.statusWarn,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: c.statusWarn,
+                        fontSize: 12,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 测试网接口域名 mono hint（设计稿 `m-screens-4.jsx:2998-3015`）。
 class _EndpointHint extends StatelessWidget {
   const _EndpointHint({required this.l10n});
@@ -392,9 +457,11 @@ class _EndpointHint extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            _testnetEndpoint,
+            _testnetEndpoint.isEmpty
+                ? l10n.meApiFormEndpointEmpty
+                : _testnetEndpoint,
             style: TextStyle(
-              color: c.text,
+              color: _testnetEndpoint.isEmpty ? c.textMid : c.text,
               fontSize: 12,
               fontWeight: FontWeight.w500,
               fontFamily: 'monospace',
@@ -440,8 +507,7 @@ class _TestnetSaveButton extends StatelessWidget {
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
                 : Text(

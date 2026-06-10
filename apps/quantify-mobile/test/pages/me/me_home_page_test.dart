@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
@@ -34,6 +35,7 @@ Future<ProviderContainer> _pumpMe(
     stoppedCount: 1,
     winRate: 62.4,
   ),
+  Object? accountInfoError,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -48,11 +50,16 @@ Future<ProviderContainer> _pumpMe(
   );
 
   final ProviderContainer container = ProviderContainer(
+    retry: (_, _) => null,
     overrides: <Override>[
       sharedPreferencesProvider.overrideWithValue(prefs),
       tokenStorageProvider.overrideWithValue(storage),
       authRepositoryProvider.overrideWithValue(MockAuthRepository()),
       accountRepositoryProvider.overrideWithValue(MockAccountRepository()),
+      if (accountInfoError != null)
+        accountInfoProvider.overrideWith(
+          (Ref ref) async => throw accountInfoError,
+        ),
       apiKeyRepositoryProvider.overrideWithValue(MockApiKeyRepository()),
       // 大卡计数（#1792 / #1816）直接喂确定值，避免 mock repo 的 200ms 延时
       // 在 widget 树 dispose 后留下 pending timer。
@@ -108,6 +115,7 @@ Future<ProviderContainer> _pumpMe(
       ),
     ),
   );
+  await tester.pump(const Duration(milliseconds: 250));
   await tester.pumpAndSettle();
   return container;
 }
@@ -245,26 +253,75 @@ void main() {
     expect(find.text('退出登录'), findsOneWidget);
   });
 
+  testWidgets('账户接口返回 HTML 错误页时不把原文渲染到页面', (WidgetTester tester) async {
+    final RequestOptions options = RequestOptions(path: '/users/me');
+    await _pumpMe(
+      tester,
+      initialSession: kSession,
+      accountInfoError: DioException(
+        requestOptions: options,
+        response: Response<String>(
+          requestOptions: options,
+          statusCode: 403,
+          data:
+              '<!DOCTYPE html><html><body><script>alert(1)</script></body></html>',
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(find.text('账户'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('加载失败：'), findsOneWidget);
+    await tester.ensureVisible(find.text('交易所 API'));
+    await tester.pumpAndSettle();
+    expect(find.text('交易所 API'), findsOneWidget);
+    expect(find.text('Binance'), findsOneWidget);
+    expect(find.text('OKX'), findsOneWidget);
+    expect(find.text('Hyperliquid'), findsOneWidget);
+    expect(find.textContaining('DOCTYPE'), findsNothing);
+    expect(find.textContaining('<html'), findsNothing);
+    expect(find.textContaining('<script'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('「我的」首页内联展开三家交易所 API（多行 + 管理/连接）', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     // 多行槽位（每家一行 + 状态 + 按钮）
     expect(find.text('Binance'), findsOneWidget);
     expect(find.text('OKX'), findsOneWidget);
     expect(find.text('Hyperliquid'), findsOneWidget);
-    // mock_api_keys fixture 默认 Binance / OKX 已配置 → 「管理」x2 + 「连接」x1
-    expect(find.text('管理'), findsNWidgets(2));
-    expect(find.text('连接'), findsOneWidget);
+    // mock_api_keys fixture 默认 Binance 主网、OKX/Hyperliquid 测试网已配置。
+    expect(find.text('管理'), findsNWidgets(3));
+    expect(find.text('连接'), findsNothing);
+    expect(find.text('主网已连接 · 测试网未配置'), findsOneWidget);
+    expect(find.text('主网未配置 · 测试网已连接'), findsNWidgets(2));
   });
 
-  testWidgets('点击「连接」(Hyperliquid 未配置) 打开 api_form_sheet 并预填该交易所', (
+  testWidgets('点击「管理」(Hyperliquid 已配置) 打开 api_form_sheet 并预填该交易所', (
     WidgetTester tester,
   ) async {
     await _pumpMe(tester, initialSession: kSession);
-    // Hyperliquid 默认未配置 → 行尾按钮为「连接」
-    await tester.tap(find.text('连接'));
+    await tester.tap(find.text('管理').last);
     await tester.pumpAndSettle();
     // sheet 标题里包含「Hyperliquid API」（QzExchangeLogo 旁标题文案）
     expect(find.text('Hyperliquid API'), findsOneWidget);
+  });
+
+  testWidgets('API 密钥保存成功后关闭抽屉并显示成功 toast', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    await tester.tap(find.text('管理').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存测试网密钥'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('保存成功'), findsOneWidget);
+    expect(find.text('Hyperliquid API'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('统计卡主字段为活跃策略 / 累计收益 / 胜率', (WidgetTester tester) async {

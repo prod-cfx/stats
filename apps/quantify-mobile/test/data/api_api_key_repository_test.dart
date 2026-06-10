@@ -36,6 +36,7 @@ void main() {
                 'isBound': true,
                 'name': 'Main Binance',
                 'maskedCredential': 'BINN****1234',
+                'isTestnet': true,
                 'createdAt': '2026-06-09T00:00:00.000Z',
               },
               <String, Object?>{
@@ -58,6 +59,7 @@ void main() {
         expect(keys.single.exchange, 'binance');
         expect(keys.single.label, 'Main Binance');
         expect(keys.single.maskedKey, 'BINN****1234');
+        expect(keys.single.isTestnet, isTrue);
       },
     );
 
@@ -83,6 +85,7 @@ void main() {
           label: 'OKX Main',
           apiKey: 'OKXABCDEFGHIJKLMNOP5678',
           apiSecret: 'secret',
+          isTestnet: true,
           apiPassphrase: 'pass',
         );
 
@@ -90,6 +93,7 @@ void main() {
           'exchangeId': 'okx',
           'label': 'OKX Main',
           'name': 'OKX Main',
+          'isTestnet': true,
           'apiKey': 'OKXABCDEFGHIJKLMNOP5678',
           'apiSecret': 'secret',
           'passphrase': 'pass',
@@ -98,6 +102,7 @@ void main() {
         expect(key.exchange, 'okx');
         expect(key.label, 'OKX Main');
         expect(key.maskedKey, 'OKXA****5678');
+        expect(key.isTestnet, isTrue);
       },
     );
   });

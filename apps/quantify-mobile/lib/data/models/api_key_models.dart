@@ -4,6 +4,7 @@ class ExchangeApiKey {
   final String exchange;
   final String label;
   final String maskedKey;
+  final bool isTestnet;
   final DateTime createdAt;
 
   const ExchangeApiKey({
@@ -11,6 +12,7 @@ class ExchangeApiKey {
     required this.exchange,
     required this.label,
     required this.maskedKey,
+    this.isTestnet = false,
     required this.createdAt,
   });
 }

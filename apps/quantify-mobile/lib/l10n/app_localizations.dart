@@ -3192,6 +3192,18 @@ abstract class AppLocalizations {
   /// **'加载失败：'**
   String get meHomeLoadErrorPrefix;
 
+  /// No description provided for @meAccountLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户加载中'**
+  String get meAccountLoading;
+
+  /// No description provided for @meAccountUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户信息暂不可用'**
+  String get meAccountUnavailable;
+
   /// No description provided for @meStatsActiveStrategies.
   ///
   /// In zh, this message translates to:
@@ -3480,6 +3492,12 @@ abstract class AppLocalizations {
   /// **'保存失败，请稍后重试'**
   String get meApiFormSaveFailed;
 
+  /// No description provided for @meApiFormSaveSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存成功'**
+  String get meApiFormSaveSuccess;
+
   /// No description provided for @meApiFormApiKeyLabel.
   ///
   /// In zh, this message translates to:
@@ -3521,6 +3539,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'Secret Key'**
   String get meApiFormSecretKeyLabel;
+
+  /// No description provided for @meApiFormSavedSecretPlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存，重新填写后覆盖'**
+  String get meApiFormSavedSecretPlaceholder;
 
   /// No description provided for @meApiFormPassphraseLabel.
   ///
@@ -3612,6 +3636,12 @@ abstract class AppLocalizations {
   /// **'模拟资金'**
   String get meApiFormEnvTestnetSub;
 
+  /// No description provided for @meApiFormMainnetComingSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'主网交易即将开放'**
+  String get meApiFormMainnetComingSoon;
+
   /// No description provided for @meApiFormTestnetSubtitle.
   ///
   /// In zh, this message translates to:
@@ -3621,13 +3651,13 @@ abstract class AppLocalizations {
   /// No description provided for @meApiFormTestnetWarningBold.
   ///
   /// In zh, this message translates to:
-  /// **'请前往 testnet.binance.vision '**
+  /// **'请使用测试网 / 模拟盘 API 密钥。'**
   String get meApiFormTestnetWarningBold;
 
   /// No description provided for @meApiFormTestnetWarningBody.
   ///
   /// In zh, this message translates to:
-  /// **'申请独立的测试网密钥（主网密钥不可用）。测试网币每 24h 自动重置，可放心调试策略。'**
+  /// **'主网密钥不可用；服务端会按测试网环境验证和保存。'**
   String get meApiFormTestnetWarningBody;
 
   /// No description provided for @meApiFormEndpointLabel.
@@ -3635,6 +3665,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'接口域名'**
   String get meApiFormEndpointLabel;
+
+  /// No description provided for @meApiFormEndpointEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂未配置'**
+  String get meApiFormEndpointEmpty;
 
   /// No description provided for @meApiFormPermWithdrawTestnetValue.
   ///

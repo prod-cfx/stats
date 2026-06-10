@@ -204,7 +204,10 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   _DeployTarget _targetFromKeys(List<ExchangeApiKey> keys) {
     final _ExchangeCatalogEntry catalog = _kExchangeCatalog[0];
     final List<ExchangeApiKey> accounts = keys
-        .where((ExchangeApiKey k) => k.exchange.toLowerCase() == catalog.code)
+        .where(
+          (ExchangeApiKey k) =>
+              k.exchange.toLowerCase() == catalog.code && !k.isTestnet,
+        )
         .toList(growable: false);
     final ExchangeApiKey? selected = accounts.isEmpty
         ? null

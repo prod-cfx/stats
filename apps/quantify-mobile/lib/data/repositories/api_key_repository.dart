@@ -25,6 +25,7 @@ abstract class ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
+    bool isTestnet = false,
     String? apiPassphrase,
   });
 

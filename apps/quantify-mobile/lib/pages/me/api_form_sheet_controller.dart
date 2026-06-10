@@ -38,15 +38,19 @@ class ApiFormSheetController extends Notifier<ApiFormSheetState> {
     required String label,
     required String apiKey,
     required String apiSecret,
+    bool isTestnet = false,
     String? apiPassphrase,
   }) async {
     state = state.copyWith(saving: true);
     try {
-      await ref.read(apiKeyRepositoryProvider).addKey(
+      await ref
+          .read(apiKeyRepositoryProvider)
+          .addKey(
             exchange: exchange,
             label: label,
             apiKey: apiKey,
             apiSecret: apiSecret,
+            isTestnet: isTestnet,
             apiPassphrase: apiPassphrase,
           );
       if (!mounted) return false;

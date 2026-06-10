@@ -1681,6 +1681,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meHomeLoadErrorPrefix => 'Load failed: ';
 
   @override
+  String get meAccountLoading => 'Loading account';
+
+  @override
+  String get meAccountUnavailable => 'Account unavailable';
+
+  @override
   String get meStatsActiveStrategies => 'Active Strategies';
 
   @override
@@ -1827,6 +1833,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meApiFormSaveFailed => 'Save failed, please try again later';
 
   @override
+  String get meApiFormSaveSuccess => 'Saved successfully';
+
+  @override
   String get meApiFormApiKeyLabel => 'API Key';
 
   @override
@@ -1846,6 +1855,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get meApiFormSecretKeyLabel => 'Secret Key';
+
+  @override
+  String get meApiFormSavedSecretPlaceholder => 'Saved, re-enter to replace';
 
   @override
   String get meApiFormPassphraseLabel => 'Passphrase';
@@ -1896,18 +1908,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meApiFormEnvTestnetSub => 'Simulated Funds';
 
   @override
+  String get meApiFormMainnetComingSoon => 'Mainnet trading is coming soon';
+
+  @override
   String get meApiFormTestnetSubtitle =>
       'Testnet · Simulated funds · No impact on real accounts';
 
   @override
-  String get meApiFormTestnetWarningBold => 'Visit testnet.binance.vision ';
+  String get meApiFormTestnetWarningBold =>
+      'Use a testnet / paper trading API key. ';
 
   @override
   String get meApiFormTestnetWarningBody =>
-      'to apply for dedicated testnet keys (mainnet keys won\'t work). Testnet coins reset every 24h, so debug strategies freely.';
+      'Mainnet keys are not accepted; the server validates and stores credentials for the testnet environment.';
 
   @override
   String get meApiFormEndpointLabel => 'Endpoint';
+
+  @override
+  String get meApiFormEndpointEmpty => 'Not configured yet';
 
   @override
   String get meApiFormPermWithdrawTestnetValue => 'No withdrawal on testnet';
