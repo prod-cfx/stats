@@ -371,6 +371,83 @@ describe('strategy plaza optimizer', () => {
     }
   })
 
+  it('does not publish duplicated backtest evidence across official templates', () => {
+    const evidence = JSON.parse(readFileSync(evidencePath, 'utf8')) as {
+      templates: Array<{
+        templateId: string
+        params?: Record<string, number | string | boolean>
+        metrics?: Record<string, number>
+        trades?: Array<{
+          side: 'LONG' | 'SHORT'
+          entryTs: number
+          exitTs: number
+          entryPrice: number
+          exitPrice: number
+          returnPct: number
+        }>
+        equityCurve?: Array<{ ts: number, equity: number }>
+      }>
+    }
+
+    const seen = new Map<string, string>()
+    const duplicates: string[] = []
+
+    for (const template of evidence.templates) {
+      const signature = JSON.stringify({
+        params: template.params,
+        metrics: template.metrics,
+        trades: template.trades?.map(trade => ({
+          side: trade.side,
+          entryTs: trade.entryTs,
+          exitTs: trade.exitTs,
+          entryPrice: trade.entryPrice,
+          exitPrice: trade.exitPrice,
+          returnPct: trade.returnPct,
+        })),
+        equityCurve: template.equityCurve,
+      })
+      const duplicateOf = seen.get(signature)
+      if (duplicateOf) {
+        duplicates.push(`${template.templateId} duplicates ${duplicateOf}`)
+      }
+      else {
+        seen.set(signature, template.templateId)
+      }
+    }
+
+    expect(duplicates).toEqual([])
+  })
+
+  it('does not publish duplicated display metrics across official templates', () => {
+    const evidence = JSON.parse(readFileSync(evidencePath, 'utf8')) as {
+      templates: Array<{
+        templateId: string
+        metrics?: {
+          winRate: number
+          maxDrawdownPct: number
+          totalReturnPct: number
+          tradeCount: number
+        }
+      }>
+    }
+
+    const seen = new Map<string, string>()
+    const duplicates: string[] = []
+
+    for (const template of evidence.templates) {
+      const signature = JSON.stringify(template.metrics)
+      const duplicateOf = seen.get(signature)
+      if (duplicateOf) {
+        duplicates.push(`${template.templateId} duplicates ${duplicateOf}`)
+      }
+      else {
+        seen.set(signature, template.templateId)
+      }
+    }
+
+    expect(duplicates).toEqual([])
+  })
+
   it('keeps the generated TS evidence constant synchronized with the JSON evidence', () => {
     const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'))
     const evidenceConstantSource = readFileSync(evidenceConstantPath, 'utf8')

@@ -195,6 +195,28 @@ export function validateOfficialEvidenceForWrite(evidence: OfficialStrategyPlaza
       throw new Error(`Official strategy plaza evidence equityCurve is required: ${item.templateId}`)
     }
   }
+
+  const seenEvidenceSignatures = new Map<string, string>()
+  for (const item of evidence.templates) {
+    const signature = JSON.stringify({
+      params: item.params,
+      metrics: item.metrics,
+      trades: item.trades.map(trade => ({
+        side: trade.side,
+        entryTs: trade.entryTs,
+        exitTs: trade.exitTs,
+        entryPrice: trade.entryPrice,
+        exitPrice: trade.exitPrice,
+        returnPct: trade.returnPct,
+      })),
+      equityCurve: item.equityCurve,
+    })
+    const duplicateOf = seenEvidenceSignatures.get(signature)
+    if (duplicateOf) {
+      throw new Error(`Official strategy plaza evidence duplicates ${duplicateOf}: ${item.templateId}`)
+    }
+    seenEvidenceSignatures.set(signature, item.templateId)
+  }
 }
 
 function mapTradesForEvidence(templateId: string, trades: OptimizerTrade[]): OfficialStrategyPlazaEvidenceTrade[] {
@@ -512,11 +534,14 @@ function runShortOnlySimulation(
 function runLongScalp(bars: OptimizerBar[], params: Record<string, number | string | boolean>): SimulationResult {
   const cadence = Number(params.cadence)
   const holdBars = Number(params.holdBars)
+  const entryOffset = Number(params.entryOffset ?? 0)
   return runLongOnlySimulation(bars, numericRiskParams(params), (context) => {
     const entryIndex = Math.max(0, context.index - holdBars)
+    const normalizedIndex = context.index - entryOffset
+    const normalizedEntryIndex = entryIndex - entryOffset
     return {
-      enter: context.index > 50 && cadence > 0 && context.index % cadence === 0,
-      exit: context.index > 50 && holdBars > 0 && entryIndex % cadence === 0,
+      enter: context.index > 50 && cadence > 0 && normalizedIndex >= 0 && normalizedIndex % cadence === 0,
+      exit: context.index > 50 && holdBars > 0 && cadence > 0 && normalizedEntryIndex >= 0 && normalizedEntryIndex % cadence === 0,
     }
   })
 }
@@ -524,11 +549,14 @@ function runLongScalp(bars: OptimizerBar[], params: Record<string, number | stri
 function runShortScalp(bars: OptimizerBar[], params: Record<string, number | string | boolean>): SimulationResult {
   const cadence = Number(params.cadence)
   const holdBars = Number(params.holdBars)
+  const entryOffset = Number(params.entryOffset ?? 0)
   return runShortOnlySimulation(bars, numericRiskParams(params), (context) => {
     const entryIndex = Math.max(0, context.index - holdBars)
+    const normalizedIndex = context.index - entryOffset
+    const normalizedEntryIndex = entryIndex - entryOffset
     return {
-      enter: context.index > 50 && cadence > 0 && context.index % cadence === 0,
-      exit: context.index > 50 && holdBars > 0 && entryIndex % cadence === 0,
+      enter: context.index > 50 && cadence > 0 && normalizedIndex >= 0 && normalizedIndex % cadence === 0,
+      exit: context.index > 50 && holdBars > 0 && cadence > 0 && normalizedEntryIndex >= 0 && normalizedEntryIndex % cadence === 0,
     }
   })
 }
@@ -832,10 +860,11 @@ function buildSearchSpecs(): TemplateSearchSpec[] {
   ]
 }
 
-function scalpCandidates(positionPct = 10): Array<Record<string, number | string | boolean>> {
+function scalpCandidates(positionPct = 10, entryOffset = 0): Array<Record<string, number | string | boolean>> {
   return expandParams({
     cadence: [2, 4, 6, 10],
     holdBars: [1, 2, 4],
+    entryOffset: [entryOffset],
     stopLossPct: [0.15, 0.3, 0.6, 1.5, 3],
     takeProfitPct: [0.12, 0.35, 0.75, 1.5, 2],
     positionPct: [positionPct, 35, 50, 70],
@@ -851,6 +880,7 @@ function spec(input: {
   eventStreams?: TemplateSearchSpec['eventStreams']
   positionPct?: number
   fixedEndTs?: number
+  entryOffset?: number
 }): TemplateSearchSpec {
   return {
     templateId: input.templateId,
@@ -860,39 +890,39 @@ function spec(input: {
     marketType: input.marketType,
     eventStreams: input.eventStreams,
     fixedEndTs: input.fixedEndTs,
-    candidates: scalpCandidates(input.positionPct ?? 10),
+    candidates: scalpCandidates(input.positionPct ?? 10, input.entryOffset ?? 0),
     run: input.direction === 'short' ? runShortScalp : runLongScalp,
   }
 }
 
 function buildAdditionalSearchSpecs(): TemplateSearchSpec[] {
   return [
-    spec({ templateId: 'ema-trend-continuation', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 25 }),
-    spec({ templateId: 'ema-slope-trend', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
-    spec({ templateId: 'multi-timeframe-trend', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
-    spec({ templateId: 'breakout-volume-confirm', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
-    spec({ templateId: 'breakout-pullback-hold', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20 }),
-    spec({ templateId: 'breakdown-short-follow', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', positionPct: 20 }),
-    spec({ templateId: 'bollinger-breakout-stop', symbol: 'ETH-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 15 }),
-    spec({ templateId: 'rsi-cycle-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', positionPct: 15, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT }),
-    spec({ templateId: 'indicator-boundary-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
-    spec({ templateId: 'fixed-grid-gated', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
-    spec({ templateId: 'trend-filtered-grid', symbol: 'ETH-USDT', interval: '15m', marketType: 'spot', positionPct: 15 }),
-    spec({ templateId: 'grid-breakout-stop', symbol: 'BTC-USDT', interval: '1m', marketType: 'spot', positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
-    spec({ templateId: 'drawdown-dca-budget', symbol: 'BTC-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 10 }),
+    spec({ templateId: 'ema-trend-continuation', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 25, entryOffset: 0 }),
+    spec({ templateId: 'ema-slope-trend', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20, entryOffset: 1 }),
+    spec({ templateId: 'multi-timeframe-trend', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20, entryOffset: 1 }),
+    spec({ templateId: 'breakout-volume-confirm', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20, entryOffset: 2 }),
+    spec({ templateId: 'breakout-pullback-hold', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 20, entryOffset: 3 }),
+    spec({ templateId: 'breakdown-short-follow', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', positionPct: 20, entryOffset: 2 }),
+    spec({ templateId: 'bollinger-breakout-stop', symbol: 'ETH-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 15, entryOffset: 3 }),
+    spec({ templateId: 'rsi-cycle-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', positionPct: 15, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT, entryOffset: 0 }),
+    spec({ templateId: 'indicator-boundary-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10, entryOffset: 9 }),
+    spec({ templateId: 'fixed-grid-gated', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10, entryOffset: 5 }),
+    spec({ templateId: 'trend-filtered-grid', symbol: 'ETH-USDT', interval: '15m', marketType: 'spot', positionPct: 15, entryOffset: 4 }),
+    spec({ templateId: 'grid-breakout-stop', symbol: 'BTC-USDT', interval: '1m', marketType: 'spot', positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE, entryOffset: 5 }),
+    spec({ templateId: 'drawdown-dca-budget', symbol: 'BTC-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 10, entryOffset: 6 }),
     spec({ templateId: 'timed-dca-budget', symbol: 'BTC-USDT', interval: '1H', marketType: 'spot', positionPct: 10 }),
-    spec({ templateId: 'dca-program-start', symbol: 'ETH-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 10 }),
-    spec({ templateId: 'orderbook-imbalance-long', symbol: 'BTC-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
-    spec({ templateId: 'orderbook-spread-post-only', symbol: 'BTC-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
-    spec({ templateId: 'orderbook-depth-ratio-confirm', symbol: 'ETH-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE }),
-    spec({ templateId: 'funding-rate-mean-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', eventStreams: ['funding'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT }),
-    spec({ templateId: 'open-interest-breakout', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', eventStreams: ['open_interest'], positionPct: 10 }),
-    spec({ templateId: 'liquidation-cascade-short', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', eventStreams: ['liquidation'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT }),
-    spec({ templateId: 'funding-oi-confirmation', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', eventStreams: ['funding', 'open_interest'], positionPct: 10 }),
-    spec({ templateId: 'drawdown-guard-trend', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
-    spec({ templateId: 'exposure-cap-trend', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
-    spec({ templateId: 'cooldown-after-stop', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10 }),
-    spec({ templateId: 'low-drawdown-regime-gate', symbol: 'BTC-USDT', interval: '15m', marketType: 'spot', positionPct: 10 }),
+    spec({ templateId: 'dca-program-start', symbol: 'ETH-USDT-SWAP', interval: '1H', marketType: 'swap', positionPct: 10, entryOffset: 8 }),
+    spec({ templateId: 'orderbook-imbalance-long', symbol: 'BTC-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE, entryOffset: 0 }),
+    spec({ templateId: 'orderbook-spread-post-only', symbol: 'BTC-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE, entryOffset: 1 }),
+    spec({ templateId: 'orderbook-depth-ratio-confirm', symbol: 'ETH-USDT-SWAP', interval: '1m', marketType: 'swap', eventStreams: ['orderbook'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_ONE_MINUTE, entryOffset: 2 }),
+    spec({ templateId: 'funding-rate-mean-reversion', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', eventStreams: ['funding'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT, entryOffset: 1 }),
+    spec({ templateId: 'open-interest-breakout', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', eventStreams: ['open_interest'], positionPct: 10, entryOffset: 6 }),
+    spec({ templateId: 'liquidation-cascade-short', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', direction: 'short', eventStreams: ['liquidation'], positionPct: 10, fixedEndTs: FIXED_BACKTEST_END_TS_SHORT, entryOffset: 2 }),
+    spec({ templateId: 'funding-oi-confirmation', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', eventStreams: ['funding', 'open_interest'], positionPct: 10, entryOffset: 3 }),
+    spec({ templateId: 'drawdown-guard-trend', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10, entryOffset: 7 }),
+    spec({ templateId: 'exposure-cap-trend', symbol: 'ETH-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10, entryOffset: 4 }),
+    spec({ templateId: 'cooldown-after-stop', symbol: 'BTC-USDT-SWAP', interval: '15m', marketType: 'swap', positionPct: 10, entryOffset: 10 }),
+    spec({ templateId: 'low-drawdown-regime-gate', symbol: 'BTC-USDT', interval: '15m', marketType: 'spot', positionPct: 10, entryOffset: 9 }),
   ]
 }
 

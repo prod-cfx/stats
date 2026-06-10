@@ -58,10 +58,36 @@ function template(id: string) {
 function sourceContentFromLastCall(repo: ReturnType<typeof buildService>['repo']) {
   const call = repo.resolveOfficialSnapshotForUser.mock.calls.at(-1)?.[0]
   if (!call?.sourceContent) throw new Error('sourceContent missing')
-  return call.sourceContent as { scriptSnapshot: string, astSnapshot: { exprPool?: Array<{ payload?: { kind?: string } }> } }
+  return call.sourceContent as {
+    scriptSnapshot: string
+    astSnapshot: { exprPool?: Array<{ payload?: { kind?: string } }> }
+    executionEnvelope?: { runtime?: string, source?: string }
+  }
 }
 
 describe('StrategyPlazaCompiledSnapshotService', () => {
+  it('marks compiled plaza snapshots as official signal-generator templates for deployment', async () => {
+    const { repo, service } = buildService()
+
+    await service.resolveCompiledSnapshotForUser({ userId: 'user-1', template: template('ema-trend-continuation') })
+
+    expect(sourceContentFromLastCall(repo).executionEnvelope).toMatchObject({
+      runtime: 'signal-generator',
+      source: 'strategy-plaza-official-template',
+    })
+  })
+
+  it('builds ma-cross compiled plaza snapshots without throwing', async () => {
+    const { repo, service } = buildService()
+
+    await expect(service.resolveCompiledSnapshotForUser({
+      userId: 'user-1',
+      template: template('ma-cross'),
+    })).resolves.toEqual({ id: 'snapshot-1' })
+
+    expect(sourceContentFromLastCall(repo).scriptSnapshot).toContain('protocolVersion')
+  })
+
   it('builds orderbook plaza runs from compiled rules artifacts with external event predicates', async () => {
     const { repo, service } = buildService()
 
