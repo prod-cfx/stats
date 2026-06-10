@@ -219,6 +219,7 @@ export 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest
 export 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_equity_point_response_dto.dart';
 export 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_metrics_response_dto.dart';
 export 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_response_dto.dart';
+export 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_trade_response_dto.dart';
 export 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_detail200_response.dart';
 export 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_edit_session200_response.dart';
 export 'package:backend_api_contracts/src/model/strategy_plaza_proxy_controller_equity_curve200_response.dart';

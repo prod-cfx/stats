@@ -69,6 +69,34 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(templates.every(template => template.officialBacktest?.disclaimer.includes('历史回测不代表未来收益'))).toBe(true)
   })
 
+  it('serves 32 live official templates with complete sample backtest metrics and trades', () => {
+    const templates = service.list()
+
+    expect(templates).toHaveLength(32)
+    expect(new Set(templates.map(template => template.category)).size).toBe(8)
+
+    for (const template of templates) {
+      expect(template.officialBacktest.metrics.returnPct).not.toBeNull()
+      expect(template.officialBacktest.metrics.winRatePct).not.toBeNull()
+      expect(template.officialBacktest.metrics.maxDrawdownPct).not.toBeNull()
+      expect(template.officialBacktest.metrics.tradeCount).not.toBeNull()
+      expect(template.officialBacktest.metrics.tradeCount).toBeGreaterThan(0)
+      expect(template.officialBacktest.equityCurve.length).toBeGreaterThan(0)
+      expect(template.officialBacktest.trades.length).toBe(template.officialBacktest.metrics.tradeCount)
+    }
+  })
+
+  it('does not mark low-sample official backtests as high confidence', () => {
+    const lowSampleTemplates = service
+      .list()
+      .filter(template => (template.officialBacktest.metrics.tradeCount ?? 0) < 20)
+
+    for (const template of lowSampleTemplates) {
+      expect(template.officialBacktest.confidence.level).not.toBe('high')
+      expect(template.officialBacktest.confidence.reasons.join(' ')).toMatch(/样本|交易|sample|trade/i)
+    }
+  })
+
   it('maps ma-cross official evidence into public official backtest payload', () => {
     const template = service.getRequired('ma-cross')
 
@@ -133,33 +161,24 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(missingEvidenceTemplateIds).toEqual([])
   })
 
-  it('shows display metrics only when evidence parameters align with edit seed run config', () => {
+  it('uses official evidence metrics for every live template even when sample parameters are optimized', () => {
     const drift = service.list().flatMap((template) => {
-      if (template.displayMetrics.returnPct == null && template.displayMetrics.winRatePct == null && template.displayMetrics.maxDrawdownPct == null) {
-        return []
-      }
       const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === template.id)
-      if (!evidence) return [`${template.id}: displayMetrics present without evidence`]
+      if (!evidence) return [`${template.id}: missing evidence`]
 
-      const issues: string[] = []
-      const params = evidence.params as Record<string, unknown>
-      if (typeof params.positionPct === 'number' && params.positionPct !== template.runConfig.positionPct) {
-        issues.push(`positionPct evidence=${params.positionPct} runConfig=${template.runConfig.positionPct}`)
-      }
-      if (typeof params.stopLossPct === 'number' && !template.editSeed.initialMessage.includes(`亏损 ${params.stopLossPct}%`)) {
-        issues.push(`stopLossPct evidence=${params.stopLossPct} missing from initialMessage`)
-      }
-      if (typeof params.takeProfitPct === 'number' && !template.editSeed.initialMessage.includes(`盈利 ${params.takeProfitPct}%`) && !template.editSeed.initialMessage.includes(`止盈 ${params.takeProfitPct}%`)) {
-        issues.push(`takeProfitPct evidence=${params.takeProfitPct} missing from initialMessage`)
-      }
-      if (typeof params.holdBars === 'number' && !template.editSeed.initialMessage.includes(`持仓 ${params.holdBars} 根 K 线`)) {
-        issues.push(`holdBars evidence=${params.holdBars} missing from initialMessage`)
-      }
-      if (typeof params.cadence === 'number' && !template.editSeed.initialMessage.includes(`每 ${params.cadence} 根 K 线最多开仓一次`)) {
-        issues.push(`cadence evidence=${params.cadence} missing from initialMessage`)
+      const expectedMetrics = {
+        returnPct: evidence.metrics.totalReturnPct,
+        winRatePct: Number((evidence.metrics.winRate * 100).toFixed(2)),
+        maxDrawdownPct: evidence.metrics.maxDrawdownPct,
+        tradeCount: evidence.metrics.tradeCount,
       }
 
-      return issues.map(issue => `${evidence.templateId}: ${issue}`)
+      return template.displayMetrics.returnPct === expectedMetrics.returnPct
+        && template.displayMetrics.winRatePct === expectedMetrics.winRatePct
+        && template.displayMetrics.maxDrawdownPct === expectedMetrics.maxDrawdownPct
+        && template.displayMetrics.tradeCount === expectedMetrics.tradeCount
+        ? []
+        : [`${template.id}: displayMetrics do not match official evidence`]
     })
 
     expect(drift).toEqual([])

@@ -10,6 +10,7 @@ import {
   renderEvidenceConstantSource,
   runMovingAverageLongOnly,
   selectBestCandidate,
+  validateOfficialEvidenceForWrite,
 } from '../optimize-official-templates'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../../../src/modules/strategy-plaza/constants/official-strategy-plaza-templates'
 
@@ -90,6 +91,17 @@ describe('strategy plaza optimizer', () => {
         toTs: 1777167900000,
         params: { positionPct: 35 },
         metrics: { winRate: 0.58, maxDrawdownPct: 0.78, totalReturnPct: 1.78, tradeCount: 43 },
+        trades: [{
+          id: 'ma-cross-1',
+          side: 'LONG',
+          entryTs: 1775008800000,
+          entryPrice: 100,
+          exitTs: 1775009700000,
+          exitPrice: 101,
+          returnPct: 1,
+          reasonOpen: 'fast_ma_cross_up',
+          reasonClose: 'fast_ma_cross_down',
+        }],
         equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10178 }],
         best: {
           params: { positionPct: 35 },
@@ -112,8 +124,8 @@ describe('strategy plaza optimizer', () => {
         { ts: 4, equity: 11200 },
       ],
       trades: [
-        { entryTs: 1, exitTs: 2, entryPrice: 100, exitPrice: 105, pnlPct: 5 },
-        { entryTs: 3, exitTs: 4, entryPrice: 100, exitPrice: 98, pnlPct: -2 },
+        { side: 'LONG', entryTs: 1, exitTs: 2, entryPrice: 100, exitPrice: 105, pnlPct: 5 },
+        { side: 'LONG', entryTs: 3, exitTs: 4, entryPrice: 100, exitPrice: 98, pnlPct: -2 },
       ],
     })
 
@@ -121,6 +133,72 @@ describe('strategy plaza optimizer', () => {
     expect(metrics.maxDrawdownPct).toBeCloseTo(6.67, 2)
     expect(metrics.totalReturnPct).toBe(12)
     expect(metrics.tradeCount).toBe(2)
+  })
+
+  it('rejects official evidence with empty trades or invalid metrics before writing output', () => {
+    const evidence = {
+      status: 'VERIFIED' as const,
+      generatedAt: '2026-06-10T00:00:00.000Z',
+      generatedBy: 'test',
+      admission: {
+        maxDrawdownPctCeiling: 20,
+        minWinRate: 0.52,
+        minTradeCount: 20,
+        minTotalReturnPct: 0.5,
+      },
+      templates: OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map((template, index) => ({
+        templateId: template.id,
+        parameterSearchId: `official-template-search:${template.id}`,
+        exchange: 'okx' as const,
+        symbol: template.runConfig.symbol,
+        interval: template.runConfig.timeframe,
+        marketType: template.runConfig.marketType === 'spot' ? 'spot' as const : 'swap' as const,
+        source: 'https://www.okx.com/api/v5/market/history-candles',
+        dataSource: {
+          exchange: 'okx' as const,
+          marketType: template.runConfig.marketType === 'spot' ? 'spot' as const : 'swap' as const,
+          endpoint: 'https://www.okx.com/api/v5/market/history-candles',
+          fixedEndTs: 1777168800000,
+          pagination: { parameter: 'after', pageLimit: 300, pageCount: 8 },
+        },
+        backtestFrom: 1775008800000,
+        backtestTo: 1777167900000,
+        admission: {
+          maxDrawdownPctCeiling: 20,
+          minWinRate: 0.52,
+          minTradeCount: 20,
+          minTotalReturnPct: 0.5,
+        },
+        candidateCount: 20,
+        candleCount: 2400,
+        fromTs: 1775008800000,
+        toTs: 1777167900000,
+        params: { positionPct: template.runConfig.positionPct },
+        metrics: index === 0
+          ? { winRate: 0, maxDrawdownPct: 0, totalReturnPct: 0, tradeCount: 0 }
+          : { winRate: 0.6, maxDrawdownPct: 1, totalReturnPct: 1, tradeCount: 1 },
+        trades: index === 0
+          ? []
+          : [{
+              id: `${template.id}-1`,
+              side: 'LONG' as const,
+              entryTs: 1775008800000,
+              entryPrice: 100,
+              exitTs: 1775009700000,
+              exitPrice: 101,
+              returnPct: 1,
+            }],
+        equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10100 }],
+        best: {
+          params: { positionPct: template.runConfig.positionPct },
+          metrics: index === 0
+            ? { winRate: 0, maxDrawdownPct: 0, totalReturnPct: 0, tradeCount: 0 }
+            : { winRate: 0.6, maxDrawdownPct: 1, totalReturnPct: 1, tradeCount: 1 },
+        },
+      })),
+    }
+
+    expect(() => validateOfficialEvidenceForWrite(evidence)).toThrow(/tradeCount|trades/i)
   })
 
   it('runs a deterministic MA long-only candidate', () => {
@@ -210,6 +288,15 @@ describe('strategy plaza optimizer', () => {
             tradeCount: number
           }
         }
+        trades?: Array<{
+          id: string
+          side: 'LONG' | 'SHORT'
+          entryTs: number
+          entryPrice: number
+          exitTs: number
+          exitPrice: number
+          returnPct: number
+        }>
       }>
     }
 
@@ -237,6 +324,7 @@ describe('strategy plaza optimizer', () => {
       expect(template.metrics?.winRate).toBeGreaterThanOrEqual(evidence.admission.minWinRate)
       expect(template.metrics?.tradeCount).toBeGreaterThanOrEqual(evidence.admission.minTradeCount)
       expect(template.metrics?.totalReturnPct).toBeGreaterThanOrEqual(evidence.admission.minTotalReturnPct)
+      expect(template.trades).toHaveLength(template.metrics?.tradeCount ?? 0)
     }
 
     for (const template of evidence.templates) {

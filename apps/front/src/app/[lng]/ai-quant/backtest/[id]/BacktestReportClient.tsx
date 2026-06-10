@@ -175,7 +175,7 @@ function formatSignedPnl(value: number): string {
 }
 
 // --- 4. AI Analysis Panel ---
-function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] }) {
+export function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] }) {
   const [expanded, setExpanded] = useState(true)
 
   return (
@@ -212,7 +212,7 @@ function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] })
   )
 }
 
-function DecisionSummarySection({
+export function DecisionSummarySection({
   confidence,
   strategyFit,
   marketCapabilityNotes,
@@ -248,7 +248,7 @@ function DecisionSummarySection({
 }
 
 // --- 5. Risk Analysis ---
-function RiskCard({ title, data }: { title: string; data: { label: string; value: string }[] }) {
+export function RiskCard({ title, data }: { title: string; data: { label: string; value: string }[] }) {
   return (
     <div className="flex h-full flex-col rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm">
       <h3 className="mb-4 !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
@@ -265,7 +265,7 @@ function RiskCard({ title, data }: { title: string; data: { label: string; value
 }
 
 // --- 6. Trade Details Section ---
-function TradeDetailsSection({
+export function TradeDetailsSection({
   lng,
   trades,
   marketType,

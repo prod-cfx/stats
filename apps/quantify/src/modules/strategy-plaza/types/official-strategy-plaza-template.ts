@@ -64,6 +64,20 @@ export interface OfficialStrategyPlazaEvidenceEquityPoint {
   equity: number
 }
 
+export interface OfficialStrategyPlazaEvidenceTrade {
+  id: string
+  side: 'LONG' | 'SHORT'
+  entryTs: number
+  entryPrice: number
+  exitTs: number
+  exitPrice: number
+  returnPct: number
+  reasonOpen?: string
+  reasonClose?: string
+  reasonOpenDisplay?: string
+  reasonCloseDisplay?: string
+}
+
 export type StrategyPlazaOfficialBacktestConfidenceLevel = 'high' | 'medium' | 'low'
 
 export interface StrategyPlazaOfficialBacktestConfidence {
@@ -111,6 +125,7 @@ export interface OfficialStrategyPlazaEvidenceTemplate {
   toTs: number
   params: Record<string, number>
   metrics: OfficialStrategyPlazaBacktestMetrics
+  trades: OfficialStrategyPlazaEvidenceTrade[]
   equityCurve: OfficialStrategyPlazaEvidenceEquityPoint[]
   best: {
     params: Record<string, number>
@@ -134,6 +149,7 @@ export interface StrategyPlazaOfficialBacktest {
     tradeCount: number | null
   }
   equityCurve: OfficialStrategyPlazaEvidenceEquityPoint[]
+  trades: OfficialStrategyPlazaEvidenceTrade[]
   confidence: StrategyPlazaOfficialBacktestConfidence
   disclaimer: string
 }

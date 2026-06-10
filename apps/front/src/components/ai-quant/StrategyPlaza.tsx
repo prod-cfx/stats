@@ -1,7 +1,7 @@
 'use client'
 
 import type { StrategyPlazaTemplate } from '@/lib/api'
-import { Activity, Edit3, Info, Loader2, Play } from 'lucide-react'
+import { Activity, Edit3, Loader2, Play } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -871,25 +871,6 @@ export function StrategyPlaza({
                     </div>
                   </div>
                 </div>
-
-                <details
-                  data-testid="strategy-plaza-official-evidence"
-                  className="mb-3 rounded-[10px] border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-[11.5px] leading-5 text-[color:var(--cf-muted)]"
-                  onClick={event => event.stopPropagation()}
-                  open
-                >
-                  <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-[color:var(--cf-text-strong)]">
-                    <Info className="h-3.5 w-3.5" />
-                    官方样本回测
-                  </summary>
-                  <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
-                    <span>回测区间 {item.backtestRangeLabel}</span>
-                    <span>数据源 {item.dataSourceLabel}</span>
-                    <span>生成时间 {item.generatedAtLabel}</span>
-                    <span>K 线 {item.candleCount}</span>
-                  </div>
-                  <div className="mt-1.5">{item.disclaimer}</div>
-                </details>
 
                 <div
                   data-testid="strategy-plaza-card-footer"

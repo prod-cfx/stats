@@ -41,23 +41,8 @@ function evidenceFor(templateId: OfficialStrategyPlazaTemplate['id']) {
   return OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === templateId)
 }
 
-function messageHasPercent(message: string, value: number, labels: readonly string[]): boolean {
-  return labels.some(label => message.includes(`${label} ${value}%`) || message.includes(`${label}${value}%`))
-}
-
-function evidenceParamsMatchSeed(seed: TemplateSeed): boolean {
-  const params = evidenceFor(seed.id)?.params as Record<string, unknown> | undefined
-  if (!params) return false
-  if (typeof params.positionPct === 'number' && params.positionPct !== seed.positionPct) return false
-  if (typeof params.stopLossPct === 'number' && !messageHasPercent(seed.initialMessage, params.stopLossPct, ['亏损', '亏损达到'])) return false
-  if (typeof params.takeProfitPct === 'number' && !messageHasPercent(seed.initialMessage, params.takeProfitPct, ['盈利', '止盈'])) return false
-  if (typeof params.holdBars === 'number' && !seed.initialMessage.includes(`持仓 ${params.holdBars} 根 K 线`)) return false
-  if (typeof params.cadence === 'number' && !seed.initialMessage.includes(`每 ${params.cadence} 根 K 线最多开仓一次`)) return false
-  return true
-}
-
 function metricsFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['displayMetrics'] {
-  const metrics = evidenceParamsMatchSeed(seed) ? evidenceFor(seed.id)?.metrics : undefined
+  const metrics = evidenceFor(seed.id)?.metrics
   return {
     label: 'official_sample_backtest',
     returnPct: metrics?.totalReturnPct ?? null,
@@ -73,9 +58,7 @@ function confidenceFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['offic
 
   const metrics = evidence.metrics
   const reasons: string[] = []
-  const isOneMinute = seed.timeframe === '1m'
-  const isLowFrequency = seed.category === 'DCA' || seed.category === '风控稳健'
-  const minTradeCount = isOneMinute ? 100 : isLowFrequency ? 8 : 30
+  const minTradeCount = DEFAULT_RULES_ADMISSION.minTradeCount
 
   if (metrics.tradeCount < minTradeCount) {
     reasons.push(`样本偏少：本次官方样本回测产生 ${metrics.tradeCount} 笔交易，统计置信度较低。`)
@@ -109,7 +92,7 @@ function fallbackDataSource(seed: TemplateSeed): OfficialStrategyPlazaEvidenceDa
 
 function officialBacktestFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate['officialBacktest'] {
   const evidence = evidenceFor(seed.id)
-  const metrics = evidenceParamsMatchSeed(seed) ? evidence?.metrics : undefined
+  const metrics = evidence?.metrics
   return {
     generatedAt: OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.generatedAt,
     backtestFrom: evidence?.backtestFrom ?? 0,
@@ -125,6 +108,7 @@ function officialBacktestFor(seed: TemplateSeed): OfficialStrategyPlazaTemplate[
       tradeCount: metrics?.tradeCount ?? null,
     },
     equityCurve: evidence?.equityCurve ?? [],
+    trades: evidence?.trades ?? [],
     confidence: confidenceFor(seed),
     disclaimer: OFFICIAL_BACKTEST_DISCLAIMER,
   }

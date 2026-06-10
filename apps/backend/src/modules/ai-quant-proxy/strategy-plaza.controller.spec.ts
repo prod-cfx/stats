@@ -1,6 +1,6 @@
 import { DECORATORS } from '@nestjs/swagger/dist/constants'
 import { StrategyPlazaProxyController } from './strategy-plaza.controller'
-import { StrategyPlazaTemplateResponseDto } from './dto/strategy-plaza.response.dto'
+import { StrategyPlazaOfficialBacktestResponseDto, StrategyPlazaTemplateResponseDto } from './dto/strategy-plaza.response.dto'
 
 describe('strategyPlazaProxyController', () => {
   const templatePayload = {
@@ -20,6 +20,17 @@ describe('strategyPlazaProxyController', () => {
       candleCount: 2400,
       metrics: { returnPct: 1.78, winRatePct: 58.14, maxDrawdownPct: 0.78, tradeCount: 43 },
       equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10177.53 }],
+      trades: [{
+        id: 'ma-cross-1',
+        side: 'LONG',
+        entryTs: 1775008800000,
+        entryPrice: 100,
+        exitTs: 1775095200000,
+        exitPrice: 101.78,
+        returnPct: 1.78,
+        reasonOpen: 'fast_ma_cross_up',
+        reasonClose: 'fast_ma_cross_down',
+      }],
       confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
       disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
     },
@@ -60,6 +71,12 @@ describe('strategyPlazaProxyController', () => {
     const properties = Reflect.getMetadata(DECORATORS.API_MODEL_PROPERTIES_ARRAY, StrategyPlazaTemplateResponseDto.prototype)
 
     expect(properties).toContain(':officialBacktest')
+  })
+
+  it('declares official backtest trades in the backend proxy dto contract', () => {
+    const properties = Reflect.getMetadata(DECORATORS.API_MODEL_PROPERTIES_ARRAY, StrategyPlazaOfficialBacktestResponseDto.prototype)
+
+    expect(properties).toContain(':trades')
   })
 
   it('runs templates with backend-controlled user/auth and only runRequestId body', async () => {

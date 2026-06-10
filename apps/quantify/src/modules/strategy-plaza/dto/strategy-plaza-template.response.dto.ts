@@ -31,6 +31,41 @@ export class StrategyPlazaOfficialBacktestEquityPointResponseDto {
   equity!: number
 }
 
+export class StrategyPlazaOfficialBacktestTradeResponseDto {
+  @ApiProperty()
+  id!: string
+
+  @ApiProperty({ enum: ['LONG', 'SHORT'] })
+  side!: 'LONG' | 'SHORT'
+
+  @ApiProperty()
+  entryTs!: number
+
+  @ApiProperty()
+  entryPrice!: number
+
+  @ApiProperty()
+  exitTs!: number
+
+  @ApiProperty()
+  exitPrice!: number
+
+  @ApiProperty()
+  returnPct!: number
+
+  @ApiPropertyOptional()
+  reasonOpen?: string
+
+  @ApiPropertyOptional()
+  reasonClose?: string
+
+  @ApiPropertyOptional()
+  reasonOpenDisplay?: string
+
+  @ApiPropertyOptional()
+  reasonCloseDisplay?: string
+}
+
 export class StrategyPlazaOfficialBacktestResponseDto {
   @ApiProperty()
   generatedAt!: string
@@ -58,6 +93,9 @@ export class StrategyPlazaOfficialBacktestResponseDto {
 
   @ApiProperty({ type: [StrategyPlazaOfficialBacktestEquityPointResponseDto] })
   equityCurve!: StrategyPlazaOfficialBacktestEquityPointResponseDto[]
+
+  @ApiProperty({ type: [StrategyPlazaOfficialBacktestTradeResponseDto] })
+  trades!: StrategyPlazaOfficialBacktestTradeResponseDto[]
 
   @ApiProperty({ type: StrategyPlazaOfficialBacktestConfidenceResponseDto })
   confidence!: StrategyPlazaOfficialBacktestConfidenceResponseDto
@@ -197,6 +235,7 @@ export class StrategyPlazaTemplateResponseDto {
       candleCount: officialBacktest.candleCount,
       metrics: { ...officialBacktest.metrics },
       equityCurve: officialBacktest.equityCurve.map(point => ({ ...point })),
+      trades: officialBacktest.trades.map(trade => ({ ...trade })),
       confidence: {
         level: officialBacktest.confidence.level,
         reasons: [...officialBacktest.confidence.reasons],

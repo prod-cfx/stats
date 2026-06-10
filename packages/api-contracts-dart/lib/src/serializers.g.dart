@@ -305,6 +305,10 @@ Serializers _$serializers =
           ..add(StrategyPlazaOfficialBacktestEquityPointResponseDto.serializer)
           ..add(StrategyPlazaOfficialBacktestMetricsResponseDto.serializer)
           ..add(StrategyPlazaOfficialBacktestResponseDto.serializer)
+          ..add(StrategyPlazaOfficialBacktestTradeResponseDto.serializer)
+          ..add(
+            StrategyPlazaOfficialBacktestTradeResponseDtoSideEnum.serializer,
+          )
           ..add(StrategyPlazaProxyControllerDetail200Response.serializer)
           ..add(StrategyPlazaProxyControllerEditSession200Response.serializer)
           ..add(StrategyPlazaProxyControllerEquityCurve200Response.serializer)
@@ -1182,6 +1186,12 @@ Serializers _$serializers =
                 ListBuilder<
                   StrategyPlazaOfficialBacktestEquityPointResponseDto
                 >(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(StrategyPlazaOfficialBacktestTradeResponseDto),
+            ]),
+            () => ListBuilder<StrategyPlazaOfficialBacktestTradeResponseDto>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

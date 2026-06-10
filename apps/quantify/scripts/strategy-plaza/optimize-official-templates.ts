@@ -1,5 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../../src/modules/strategy-plaza/constants/official-strategy-plaza-templates'
+import type {
+  OfficialStrategyPlazaBacktestEvidence,
+  OfficialStrategyPlazaEvidenceTrade,
+} from '../../src/modules/strategy-plaza/types/official-strategy-plaza-template'
 
 export interface OptimizerBar {
   ts: number
@@ -11,6 +16,7 @@ export interface OptimizerBar {
 }
 
 export interface OptimizerTrade {
+  side: 'LONG' | 'SHORT'
   entryTs: number
   exitTs: number
   entryPrice: number
@@ -146,6 +152,61 @@ export function renderEvidenceConstantSource(evidence: unknown): string {
     `export const OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE: OfficialStrategyPlazaBacktestEvidence = ${JSON.stringify(evidence, null, 2)}`,
     '',
   ].join('\n')
+}
+
+export function validateOfficialEvidenceForWrite(evidence: OfficialStrategyPlazaBacktestEvidence): void {
+  if (evidence.status !== 'VERIFIED') {
+    throw new Error('Official strategy plaza evidence must be VERIFIED before writing output')
+  }
+
+  const liveTemplateIds = new Set(OFFICIAL_STRATEGY_PLAZA_TEMPLATES
+    .filter(template => template.status === 'live')
+    .map(template => template.id))
+
+  if (evidence.templates.length !== liveTemplateIds.size) {
+    throw new Error(`Official strategy plaza evidence must contain ${liveTemplateIds.size} templates`)
+  }
+
+  const evidenceTemplateIds = new Set(evidence.templates.map(template => template.templateId))
+  for (const templateId of liveTemplateIds) {
+    if (!evidenceTemplateIds.has(templateId)) {
+      throw new Error(`Missing official strategy plaza evidence template: ${templateId}`)
+    }
+  }
+
+  for (const item of evidence.templates) {
+    if (!liveTemplateIds.has(item.templateId as never)) {
+      throw new Error(`Unknown official strategy plaza evidence template: ${item.templateId}`)
+    }
+    if (
+      !Number.isFinite(item.metrics.totalReturnPct)
+      || !Number.isFinite(item.metrics.winRate)
+      || !Number.isFinite(item.metrics.maxDrawdownPct)
+    ) {
+      throw new Error(`Official strategy plaza evidence has invalid metrics: ${item.templateId}`)
+    }
+    if (!Number.isInteger(item.metrics.tradeCount) || item.metrics.tradeCount <= 0) {
+      throw new Error(`Official strategy plaza evidence tradeCount must be > 0: ${item.templateId}`)
+    }
+    if (!Array.isArray(item.trades) || item.trades.length !== item.metrics.tradeCount) {
+      throw new Error(`Official strategy plaza evidence trades length must match tradeCount: ${item.templateId}`)
+    }
+    if (!Array.isArray(item.equityCurve) || item.equityCurve.length === 0) {
+      throw new Error(`Official strategy plaza evidence equityCurve is required: ${item.templateId}`)
+    }
+  }
+}
+
+function mapTradesForEvidence(templateId: string, trades: OptimizerTrade[]): OfficialStrategyPlazaEvidenceTrade[] {
+  return trades.map((trade, index) => ({
+    id: `${templateId}-${index + 1}`,
+    side: trade.side,
+    entryTs: trade.entryTs,
+    entryPrice: roundPrice(trade.entryPrice),
+    exitTs: trade.exitTs,
+    exitPrice: roundPrice(trade.exitPrice),
+    returnPct: Number(trade.pnlPct.toFixed(4)),
+  }))
 }
 
 export function downsampleEquityCurveForEvidence(
@@ -317,6 +378,7 @@ function runLongOnlySimulation(
       if (exitPrice != null) {
         cash += positionUnits * exitPrice
         trades.push({
+          side: 'LONG',
           entryTs,
           exitTs: bar.ts,
           entryPrice: roundPrice(entryPrice),
@@ -347,6 +409,7 @@ function runLongOnlySimulation(
   if (finalBar != null && positionUnits > 0) {
     cash += positionUnits * finalBar.close
     trades.push({
+      side: 'LONG',
       entryTs,
       exitTs: finalBar.ts,
       entryPrice: roundPrice(entryPrice),
@@ -405,6 +468,7 @@ function runShortOnlySimulation(
         const pnl = shortNotional * ((entryPrice - exitPrice) / entryPrice)
         cash += pnl
         trades.push({
+          side: 'SHORT',
           entryTs,
           exitTs: bar.ts,
           entryPrice: roundPrice(entryPrice),
@@ -432,6 +496,7 @@ function runShortOnlySimulation(
     const pnl = shortNotional * ((entryPrice - finalBar.close) / entryPrice)
     cash += pnl
     trades.push({
+      side: 'SHORT',
       entryTs,
       exitTs: finalBar.ts,
       entryPrice: roundPrice(entryPrice),
@@ -1006,6 +1071,7 @@ async function generateEvidence(): Promise<void> {
       toTs: bars.at(-1)?.ts ?? null,
       params: best.params,
       metrics: selectedRun.metrics,
+      trades: mapTradesForEvidence(spec.templateId, selectedRun.trades),
       equityCurve: downsampleEquityCurveForEvidence(selectedRun.equityCurve, 64),
       best: {
         params: best.params,
@@ -1033,6 +1099,7 @@ async function generateEvidence(): Promise<void> {
 
   const outputPath = resolveWorkspacePath(EVIDENCE_PATH)
   const constantOutputPath = resolveWorkspacePath(EVIDENCE_CONSTANT_PATH)
+  if (evidence.status === 'VERIFIED') validateOfficialEvidenceForWrite(evidence)
   await mkdir(dirname(outputPath), { recursive: true })
   await mkdir(dirname(constantOutputPath), { recursive: true })
   await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8')

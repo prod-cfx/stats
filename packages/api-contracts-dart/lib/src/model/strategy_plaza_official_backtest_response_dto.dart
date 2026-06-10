@@ -6,6 +6,7 @@
 import 'package:built_collection/built_collection.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_confidence_response_dto.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_equity_point_response_dto.dart';
+import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_trade_response_dto.dart';
 import 'package:built_value/json_object.dart';
 import 'package:backend_api_contracts/src/model/strategy_plaza_official_backtest_metrics_response_dto.dart';
 import 'package:built_value/built_value.dart';
@@ -25,6 +26,7 @@ part 'strategy_plaza_official_backtest_response_dto.g.dart';
 /// * [candleCount] 
 /// * [metrics] 
 /// * [equityCurve] 
+/// * [trades] 
 /// * [confidence] 
 /// * [disclaimer] 
 @BuiltValue()
@@ -55,6 +57,9 @@ abstract class StrategyPlazaOfficialBacktestResponseDto implements Built<Strateg
 
   @BuiltValueField(wireName: r'equityCurve')
   BuiltList<StrategyPlazaOfficialBacktestEquityPointResponseDto> get equityCurve;
+
+  @BuiltValueField(wireName: r'trades')
+  BuiltList<StrategyPlazaOfficialBacktestTradeResponseDto> get trades;
 
   @BuiltValueField(wireName: r'confidence')
   StrategyPlazaOfficialBacktestConfidenceResponseDto get confidence;
@@ -131,6 +136,11 @@ class _$StrategyPlazaOfficialBacktestResponseDtoSerializer implements PrimitiveS
     yield serializers.serialize(
       object.equityCurve,
       specifiedType: const FullType(BuiltList, [FullType(StrategyPlazaOfficialBacktestEquityPointResponseDto)]),
+    );
+    yield r'trades';
+    yield serializers.serialize(
+      object.trades,
+      specifiedType: const FullType(BuiltList, [FullType(StrategyPlazaOfficialBacktestTradeResponseDto)]),
     );
     yield r'confidence';
     yield serializers.serialize(
@@ -227,6 +237,13 @@ class _$StrategyPlazaOfficialBacktestResponseDtoSerializer implements PrimitiveS
             specifiedType: const FullType(BuiltList, [FullType(StrategyPlazaOfficialBacktestEquityPointResponseDto)]),
           ) as BuiltList<StrategyPlazaOfficialBacktestEquityPointResponseDto>;
           result.equityCurve.replace(valueDes);
+          break;
+        case r'trades':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(StrategyPlazaOfficialBacktestTradeResponseDto)]),
+          ) as BuiltList<StrategyPlazaOfficialBacktestTradeResponseDto>;
+          result.trades.replace(valueDes);
           break;
         case r'confidence':
           final valueDes = serializers.deserialize(

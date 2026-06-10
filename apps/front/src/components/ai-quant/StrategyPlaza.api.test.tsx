@@ -66,6 +66,15 @@ const template: StrategyPlazaTemplate = {
     candleCount: 2400,
     metrics: { returnPct: 1.78, winRatePct: 58.14, maxDrawdownPct: 0.78, tradeCount: 43 },
     equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 10177.53 }],
+    trades: [{
+      id: 'ma-cross-1',
+      side: 'LONG',
+      entryTs: 1775008800000,
+      entryPrice: 100,
+      exitTs: 1775095200000,
+      exitPrice: 101.78,
+      returnPct: 1.78,
+    }],
     confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
     disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
   },
@@ -137,9 +146,9 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.textContent).toContain('+1.78%')
     expect(container.textContent).toContain('43')
     expect(container.textContent).toContain('高置信')
-    expect(container.textContent).toContain('历史回测不代表未来收益')
-    expect(container.textContent).toContain('K 线 2400')
-    expect(container.textContent).toContain('OKX')
+    expect(container.querySelector('[data-testid="strategy-plaza-official-evidence"]')).toBeNull()
+    expect(container.textContent).not.toContain('历史回测不代表未来收益')
+    expect(container.textContent).not.toContain('K 线 2400')
     expect(container.textContent).not.toContain('+12.5%')
     expect(container.textContent).not.toContain('68%')
     expect(container.textContent).not.toContain('Sharpe')
@@ -198,7 +207,7 @@ describe('StrategyPlaza API rendering', () => {
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
   })
 
-  it('keeps official evidence disclosure clicks from opening the report', async () => {
+  it('does not render official evidence disclosure on cards', async () => {
     const onOpenStrategyReport = jest.fn()
 
     await act(async () => {
@@ -213,17 +222,74 @@ describe('StrategyPlaza API rendering', () => {
       )
     })
 
-    const summary = Array.from(container.querySelectorAll('summary')).find(element =>
-      element.textContent?.includes('官方样本回测'),
-    )
+    expect(container.querySelector('[data-testid="strategy-plaza-official-evidence"]')).toBeNull()
+    expect(container.textContent).not.toContain('官方样本回测')
+    expect(onOpenStrategyReport).not.toHaveBeenCalled()
+  })
 
-    expect(summary).not.toBeUndefined()
-
-    await act(async () => {
-      summary?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  it('renders all 32 paginated official templates without placeholder metrics', async () => {
+    const templates = Array.from({ length: 32 }, (_, index): StrategyPlazaTemplate => {
+      const id = `sample-${index + 1}`
+      return {
+        ...template,
+        id,
+        name: `Sample ${index + 1}`,
+        displayOrder: index + 1,
+        displayMetrics: {
+          ...template.displayMetrics,
+          returnPct: index + 1,
+          winRatePct: 50 + index / 10,
+          maxDrawdownPct: 1 + index / 100,
+          tradeCount: 20 + index,
+        },
+        officialBacktest: {
+          ...template.officialBacktest,
+          metrics: {
+            returnPct: index + 1,
+            winRatePct: 50 + index / 10,
+            maxDrawdownPct: 1 + index / 100,
+            tradeCount: 20 + index,
+          },
+          trades: Array.from({ length: 20 + index }, (_, tradeIndex) => ({
+            id: `${id}-${tradeIndex + 1}`,
+            side: 'LONG' as const,
+            entryTs: 1775008800000 + tradeIndex * 60000,
+            entryPrice: 100,
+            exitTs: 1775008860000 + tradeIndex * 60000,
+            exitPrice: 101,
+            returnPct: 1,
+          })),
+        },
+      }
     })
 
-    expect(onOpenStrategyReport).not.toHaveBeenCalled()
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={templates}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    for (const page of [1, 2, 3, 4]) {
+      const pageButton = Array.from(container.querySelectorAll('button')).find(button =>
+        button.textContent === String(page),
+      )
+
+      await act(async () => {
+        pageButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      const cards = Array.from(container.querySelectorAll('[data-testid="strategy-plaza-card"]'))
+      expect(cards.length).toBe(page === 4 ? 5 : 9)
+      for (const card of cards) {
+        expect(card.textContent).not.toContain('--')
+        expect(card.textContent).not.toContain('交易0')
+      }
+    }
   })
 
   it('uses localized range buy/sell copy for the former grid-range card', async () => {

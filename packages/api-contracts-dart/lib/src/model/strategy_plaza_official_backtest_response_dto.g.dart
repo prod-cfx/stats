@@ -28,6 +28,8 @@ class _$StrategyPlazaOfficialBacktestResponseDto
   final BuiltList<StrategyPlazaOfficialBacktestEquityPointResponseDto>
   equityCurve;
   @override
+  final BuiltList<StrategyPlazaOfficialBacktestTradeResponseDto> trades;
+  @override
   final StrategyPlazaOfficialBacktestConfidenceResponseDto confidence;
   @override
   final String disclaimer;
@@ -47,6 +49,7 @@ class _$StrategyPlazaOfficialBacktestResponseDto
     required this.candleCount,
     required this.metrics,
     required this.equityCurve,
+    required this.trades,
     required this.confidence,
     required this.disclaimer,
   }) : super._();
@@ -72,6 +75,7 @@ class _$StrategyPlazaOfficialBacktestResponseDto
         candleCount == other.candleCount &&
         metrics == other.metrics &&
         equityCurve == other.equityCurve &&
+        trades == other.trades &&
         confidence == other.confidence &&
         disclaimer == other.disclaimer;
   }
@@ -88,6 +92,7 @@ class _$StrategyPlazaOfficialBacktestResponseDto
     _$hash = $jc(_$hash, candleCount.hashCode);
     _$hash = $jc(_$hash, metrics.hashCode);
     _$hash = $jc(_$hash, equityCurve.hashCode);
+    _$hash = $jc(_$hash, trades.hashCode);
     _$hash = $jc(_$hash, confidence.hashCode);
     _$hash = $jc(_$hash, disclaimer.hashCode);
     _$hash = $jf(_$hash);
@@ -108,6 +113,7 @@ class _$StrategyPlazaOfficialBacktestResponseDto
           ..add('candleCount', candleCount)
           ..add('metrics', metrics)
           ..add('equityCurve', equityCurve)
+          ..add('trades', trades)
           ..add('confidence', confidence)
           ..add('disclaimer', disclaimer))
         .toString();
@@ -172,6 +178,14 @@ class StrategyPlazaOfficialBacktestResponseDtoBuilder
     equityCurve,
   ) => _$this._equityCurve = equityCurve;
 
+  ListBuilder<StrategyPlazaOfficialBacktestTradeResponseDto>? _trades;
+  ListBuilder<StrategyPlazaOfficialBacktestTradeResponseDto> get trades =>
+      _$this._trades ??=
+          ListBuilder<StrategyPlazaOfficialBacktestTradeResponseDto>();
+  set trades(
+    ListBuilder<StrategyPlazaOfficialBacktestTradeResponseDto>? trades,
+  ) => _$this._trades = trades;
+
   StrategyPlazaOfficialBacktestConfidenceResponseDtoBuilder? _confidence;
   StrategyPlazaOfficialBacktestConfidenceResponseDtoBuilder get confidence =>
       _$this._confidence ??=
@@ -200,6 +214,7 @@ class StrategyPlazaOfficialBacktestResponseDtoBuilder
       _candleCount = $v.candleCount;
       _metrics = $v.metrics.toBuilder();
       _equityCurve = $v.equityCurve.toBuilder();
+      _trades = $v.trades.toBuilder();
       _confidence = $v.confidence.toBuilder();
       _disclaimer = $v.disclaimer;
       _$v = null;
@@ -257,6 +272,7 @@ class StrategyPlazaOfficialBacktestResponseDtoBuilder
             ),
             metrics: metrics.build(),
             equityCurve: equityCurve.build(),
+            trades: trades.build(),
             confidence: confidence.build(),
             disclaimer: BuiltValueNullFieldError.checkNotNull(
               disclaimer,
@@ -276,6 +292,8 @@ class StrategyPlazaOfficialBacktestResponseDtoBuilder
         metrics.build();
         _$failedField = 'equityCurve';
         equityCurve.build();
+        _$failedField = 'trades';
+        trades.build();
         _$failedField = 'confidence';
         confidence.build();
       } catch (e) {

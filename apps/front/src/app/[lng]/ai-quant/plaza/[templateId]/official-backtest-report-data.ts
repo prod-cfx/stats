@@ -1,5 +1,6 @@
 import type { StrategyPlazaTemplate } from '@/lib/api'
-import type { EquityPoint } from '../../backtest/[id]/backtest-report-data'
+import type { BacktestReportData, EquityPoint } from '../../backtest/[id]/backtest-report-data'
+import { createBacktestReportDataFromLive } from '../../backtest/[id]/backtest-report-data'
 
 export interface OfficialBacktestReportData {
   title: string
@@ -15,6 +16,7 @@ export interface OfficialBacktestReportData {
   }
   confidence: StrategyPlazaTemplate['officialBacktest']['confidence']
   equitySeries: EquityPoint[]
+  detailedReport: BacktestReportData | null
   evidenceRows: Array<{ label: string, value: string }>
   disclaimer: string
 }
@@ -59,6 +61,41 @@ export function createOfficialBacktestReportData(
 ): OfficialBacktestReportData {
   const official = template.officialBacktest
   const isEn = lng === 'en'
+  const returnPct = official.metrics.returnPct
+  const winRatePct = official.metrics.winRatePct
+  const maxDrawdownPct = official.metrics.maxDrawdownPct
+  const tradeCount = official.metrics.tradeCount
+  const hasCompleteMetrics = returnPct != null
+    && winRatePct != null
+    && maxDrawdownPct != null
+    && tradeCount != null
+  const detailedReport = hasCompleteMetrics
+    ? createBacktestReportDataFromLive(template.id, {
+        totalReturnPct: returnPct,
+        winRatePct,
+        maxDrawdownPct,
+        tradeCount,
+      }, {
+        equityCurve: official.equityCurve,
+        trades: official.trades,
+        openPositions: [],
+      }, {
+        lng,
+        context: {
+          exchange: template.exchange,
+          marketType: template.marketType,
+          symbol: template.symbol,
+          timeframe: template.timeframe,
+          requestedRange: `${formatDate(official.backtestFrom)} - ${formatDate(official.backtestTo)}`,
+          appliedRange: `${formatDate(official.backtestFrom)} - ${formatDate(official.backtestTo)}`,
+          dataCoverage: { barCount: official.candleCount },
+          execution: {
+            leverage: template.leverage ?? undefined,
+            priceSource: formatDataSource(template),
+          },
+        },
+      })
+    : null
   return {
     title: template.name,
     description: template.description,
@@ -68,6 +105,7 @@ export function createOfficialBacktestReportData(
     metrics: official.metrics,
     confidence: official.confidence,
     equitySeries: buildEquitySeries(template, lng),
+    detailedReport,
     evidenceRows: [
       { label: isEn ? 'Backtest range' : '回测区间', value: `${formatDate(official.backtestFrom)} - ${formatDate(official.backtestTo)}` },
       { label: isEn ? 'Data source' : '数据源', value: formatDataSource(template) },

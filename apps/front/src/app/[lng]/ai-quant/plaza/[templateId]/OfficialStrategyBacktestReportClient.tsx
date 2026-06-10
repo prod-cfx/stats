@@ -5,7 +5,14 @@ import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchStrategyPlazaTemplate } from '@/lib/api'
+import {
+  AiAnalysisPanel,
+  DecisionSummarySection,
+  RiskCard,
+  TradeDetailsSection,
+} from '../../backtest/[id]/BacktestReportClient'
 import { BacktestEquityChart } from '../../backtest/[id]/BacktestEquityChart'
+import { normalizeBacktestMarketType } from '../../backtest/[id]/backtest-result-presentation'
 import { createOfficialBacktestReportData } from './official-backtest-report-data'
 
 interface OfficialStrategyBacktestReportClientProps {
@@ -123,6 +130,64 @@ export function OfficialStrategyBacktestReportClient({
       </section>
 
       <BacktestEquityChart lng={lng} data={report.equitySeries} />
+
+      {report.detailedReport && (
+        <>
+          <DecisionSummarySection
+            confidence={report.detailedReport.confidence}
+            strategyFit={report.detailedReport.strategyFit}
+            marketCapabilityNotes={report.detailedReport.marketCapabilityNotes}
+          />
+
+          <AiAnalysisPanel lng={lng} insights={report.detailedReport.insights} />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <RiskCard
+              title={lng === 'en' ? 'Max Drawdown Analysis' : '最大回撤分析'}
+              data={report.detailedReport.maxDrawdownAnalysis.map(item => ({
+                label:
+                  lng === 'en'
+                    ? item.label
+                    : item.label === 'Max Drawdown'
+                      ? '最大回撤幅度'
+                      : item.label === 'Drawdown Period'
+                        ? '回撤发生时间'
+                        : '回撤恢复天数',
+                value:
+                  lng === 'en'
+                    ? item.value
+                    : item.label === 'Recovery Days'
+                      ? item.value === 'Not recovered'
+                        ? '未恢复'
+                        : item.value.replace(' Days', ' 天')
+                      : item.label === 'Drawdown Period' && item.value === '- ~ -'
+                        ? '--'
+                        : item.value,
+              }))}
+            />
+            <RiskCard
+              title={lng === 'en' ? 'Volatility & Sharpe' : '波动率与夏普'}
+              data={report.detailedReport.volatilitySharpe.map(item => ({
+                label:
+                  lng === 'en'
+                    ? item.label
+                    : item.label === 'Annualized Volatility'
+                      ? '年化波动率'
+                      : item.label === 'Sharpe Ratio'
+                        ? '夏普比率 (Sharpe)'
+                        : '索提诺比率 (Sortino)',
+                value: item.value,
+              }))}
+            />
+          </div>
+
+          <TradeDetailsSection
+            lng={lng}
+            trades={report.detailedReport.trades}
+            marketType={normalizeBacktestMarketType(report.marketType)}
+          />
+        </>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">

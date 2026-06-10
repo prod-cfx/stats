@@ -11730,6 +11730,57 @@
           "equity"
         ]
       },
+      "StrategyPlazaOfficialBacktestTradeResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "LONG",
+              "SHORT"
+            ]
+          },
+          "entryTs": {
+            "type": "number"
+          },
+          "entryPrice": {
+            "type": "number"
+          },
+          "exitTs": {
+            "type": "number"
+          },
+          "exitPrice": {
+            "type": "number"
+          },
+          "returnPct": {
+            "type": "number"
+          },
+          "reasonOpen": {
+            "type": "string"
+          },
+          "reasonClose": {
+            "type": "string"
+          },
+          "reasonOpenDisplay": {
+            "type": "string"
+          },
+          "reasonCloseDisplay": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "side",
+          "entryTs",
+          "entryPrice",
+          "exitTs",
+          "exitPrice",
+          "returnPct"
+        ]
+      },
       "StrategyPlazaOfficialBacktestResponseDto": {
         "type": "object",
         "properties": {
@@ -11767,6 +11818,12 @@
               "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestEquityPointResponseDto"
             }
           },
+          "trades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestTradeResponseDto"
+            }
+          },
           "confidence": {
             "$ref": "#/components/schemas/StrategyPlazaOfficialBacktestConfidenceResponseDto"
           },
@@ -11783,6 +11840,7 @@
           "candleCount",
           "metrics",
           "equityCurve",
+          "trades",
           "confidence",
           "disclaimer"
         ]

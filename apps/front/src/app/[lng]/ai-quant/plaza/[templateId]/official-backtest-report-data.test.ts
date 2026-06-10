@@ -44,6 +44,17 @@ const template: StrategyPlazaTemplate = {
       { ts: Date.parse('2026-03-13T04:00:00.000Z'), equity: 10100 },
       { ts: Date.parse('2026-03-14T04:00:00.000Z'), equity: 10050 },
     ],
+    trades: [{
+      id: 'ma-cross-1',
+      side: 'LONG',
+      entryTs: Date.parse('2026-03-12T08:00:00.000Z'),
+      entryPrice: 100.5,
+      exitTs: Date.parse('2026-03-13T12:00:00.000Z'),
+      exitPrice: 103.2,
+      returnPct: 2.69,
+      reasonOpen: 'fast_ma_cross_up',
+      reasonClose: 'fast_ma_cross_down',
+    }],
     confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
     disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
   },
@@ -66,5 +77,17 @@ describe('official backtest report data', () => {
       { label: 'K 线数量', value: '2400' },
     ]))
     expect(data.disclaimer).toContain('历史回测不代表未来收益')
+    expect(data.detailedReport?.trades).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'ma-cross-1',
+        direction: 'long',
+        entryTime: '2026-03-12 08:00',
+        exitTime: '2026-03-13 12:00',
+        profitPct: 2.69,
+      }),
+    ]))
+    expect(data.detailedReport?.insights.length).toBeGreaterThan(0)
+    expect(data.detailedReport?.maxDrawdownAnalysis.length).toBeGreaterThan(0)
+    expect(data.detailedReport?.volatilitySharpe.length).toBeGreaterThan(0)
   })
 })

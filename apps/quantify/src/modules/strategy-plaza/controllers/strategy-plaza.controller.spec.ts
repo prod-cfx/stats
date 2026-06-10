@@ -64,6 +64,17 @@ describe('StrategyPlazaController', () => {
       candleCount: 2400,
       metrics: { returnPct: 12, winRatePct: 55, maxDrawdownPct: 8, tradeCount: 43 },
       equityCurve: [{ ts: 1775008800000, equity: 10000 }, { ts: 1777167900000, equity: 11200 }],
+      trades: [{
+        id: 'ma-cross-1',
+        side: 'LONG',
+        entryTs: 1775008800000,
+        entryPrice: 100,
+        exitTs: 1775095200000,
+        exitPrice: 112,
+        returnPct: 12,
+        reasonOpen: 'fast_ma_cross_up',
+        reasonClose: 'fast_ma_cross_down',
+      }],
       confidence: { level: 'high', reasons: ['样本回测满足官方基础准入条件。'] },
       disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数，不等同于实盘表现。',
     },
@@ -158,6 +169,7 @@ describe('StrategyPlazaController', () => {
       disclaimer: expect.stringContaining('历史回测不代表未来收益'),
     })
     expect(result.officialBacktest.equityCurve.length).toBeGreaterThan(1)
+    expect(result.officialBacktest.trades).toEqual(template.officialBacktest.trades)
   })
 
   it('limits public official template signals without auth', async () => {

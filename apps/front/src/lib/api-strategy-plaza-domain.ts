@@ -52,6 +52,19 @@ export interface StrategyPlazaTemplate {
       tradeCount: number | null
     }
     equityCurve: Array<{ ts: number; equity: number }>
+    trades: Array<{
+      id: string
+      side: 'LONG' | 'SHORT'
+      entryTs: number
+      entryPrice: number
+      exitTs: number
+      exitPrice: number
+      returnPct: number
+      reasonOpen?: string
+      reasonClose?: string
+      reasonOpenDisplay?: string
+      reasonCloseDisplay?: string
+    }>
     confidence: {
       level: 'high' | 'medium' | 'low'
       reasons: string[]

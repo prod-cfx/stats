@@ -672,6 +672,21 @@ const StrategyPlazaOfficialBacktestMetricsResponseDto = z
 const StrategyPlazaOfficialBacktestEquityPointResponseDto = z
   .object({ ts: z.number(), equity: z.number() })
   .passthrough()
+const StrategyPlazaOfficialBacktestTradeResponseDto = z
+  .object({
+    id: z.string(),
+    side: z.enum(['LONG', 'SHORT']),
+    entryTs: z.number(),
+    entryPrice: z.number(),
+    exitTs: z.number(),
+    exitPrice: z.number(),
+    returnPct: z.number(),
+    reasonOpen: z.string().optional(),
+    reasonClose: z.string().optional(),
+    reasonOpenDisplay: z.string().optional(),
+    reasonCloseDisplay: z.string().optional(),
+  })
+  .passthrough()
 const StrategyPlazaOfficialBacktestConfidenceResponseDto = z
   .object({ level: z.enum(['high', 'medium', 'low']), reasons: z.array(z.string()) })
   .passthrough()
@@ -686,6 +701,7 @@ const StrategyPlazaOfficialBacktestResponseDto = z
     candleCount: z.number(),
     metrics: StrategyPlazaOfficialBacktestMetricsResponseDto,
     equityCurve: z.array(StrategyPlazaOfficialBacktestEquityPointResponseDto),
+    trades: z.array(StrategyPlazaOfficialBacktestTradeResponseDto),
     confidence: StrategyPlazaOfficialBacktestConfidenceResponseDto,
     disclaimer: z.string(),
   })
@@ -1751,6 +1767,7 @@ export const schemas = {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaOfficialBacktestMetricsResponseDto,
   StrategyPlazaOfficialBacktestEquityPointResponseDto,
+  StrategyPlazaOfficialBacktestTradeResponseDto,
   StrategyPlazaOfficialBacktestConfidenceResponseDto,
   StrategyPlazaOfficialBacktestResponseDto,
   StrategyPlazaSignalResponseDto,
