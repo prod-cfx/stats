@@ -5308,13 +5308,16 @@ export class CanonicalSpecV2IrCompilerService {
     if (side) params.side = side
     const direction = this.readStringParam(atom.params?.direction)
     if (direction) params.direction = direction
-    const value = this.readOptionalNumber(atom.value)
+    const rawValue = this.readOptionalNumber(atom.value)
       ?? this.readOptionalNumber(atom.params?.value)
-      ?? this.readOptionalNumber(atom.params?.valuePct)
+    const percentValue = this.readOptionalNumber(atom.params?.valuePct)
       ?? this.readOptionalNumber(atom.params?.thresholdPct)
+    const value = rawValue
+      ?? (schemaRef === 'funding' && percentValue !== null ? Number((percentValue / 100).toFixed(10)) : percentValue)
       ?? this.readOptionalNumber(atom.params?.changePct)
       ?? this.readOptionalNumber(atom.params?.ratio)
       ?? this.readOptionalNumber(atom.params?.notionalUsd)
+      ?? (schemaRef === 'funding' ? 0 : null)
     if (value !== null) params.value = value
     const window = this.readStringParam(atom.params?.window)
     if (window) params.window = window

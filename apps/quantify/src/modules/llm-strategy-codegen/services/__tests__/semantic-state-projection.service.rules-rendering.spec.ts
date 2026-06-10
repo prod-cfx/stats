@@ -233,6 +233,11 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
         contains: ['价格突破过去 20 根 K 线滚动高点', '成交量 > 1.5 × 20 根均量', '出场：价格低于 EMA20 → 平多'],
         excludes: ['突破过去 20 根 K 线最高价', 'EMA20 低于 EMA20'],
       },
+      {
+        prompt: '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建趋势过滤网格策略。规则：价格在震荡区间内且 1h 价格高于 MA50 时才买入；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；价格回到区间上沿卖出；风控：单次仓位 70%，亏损 1.5% 止损，止盈 0.12%。',
+        contains: ['震荡区间形态', '1h 价格在 MA50 上方', '交易冷却：6 根 K 线', '时间止损：持仓超过 4 根 K 线平仓'],
+        excludes: ['只在价格高于 EMA', '只在价格低于 EMA', '网格区间再平衡', '围绕最近 20 根 K 线中点'],
+      },
     ]
 
     for (const item of cases) {

@@ -105,4 +105,27 @@ describe('Strategy Plaza rules-mainflow codegen regressions', () => {
     ]))
     expect(entryAnd?.args.filter(arg => /breakout|rolling_extrema/.test(arg))).toHaveLength(1)
   })
+
+  it('compiles funding-rate percent thresholds into runtime ratio values', () => {
+    const compiled = buildCompiledIrFromPrompt('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。')
+    const fundingPredicate = compiled.ir.signalCatalog.predicates.find(predicate => predicate.kind === 'fundingRateCondition')
+
+    expect(fundingPredicate?.params).toEqual(expect.objectContaining({ value: 0.0001 }))
+  })
+
+  it('keeps trend-filtered grid as normal entry/exit rules without implicit grid program', () => {
+    const state = buildSemanticStateFromPrompt('基于 OKX 模拟盘 ETH-USDT 现货 15m，创建趋势过滤网格策略。规则：价格在震荡区间内且 1h 价格高于 MA50 时才买入；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；价格回到区间上沿卖出；风控：单次仓位 70%，亏损 1.5% 止损，止盈 0.12%。')
+    const keys = semanticAtomKeys(state)
+
+    expect([...keys]).toEqual(expect.arrayContaining([
+      'pattern.range',
+      'indicator.above',
+      'action.open_long',
+      'action.close_long',
+      'risk.cooldown',
+      'risk.time_stop_bars',
+    ]))
+    expect(keys.has('program.dynamic_grid')).toBe(false)
+    expect(keys.has('grid.range_rebalance')).toBe(false)
+  })
 })

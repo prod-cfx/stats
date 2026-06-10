@@ -2098,7 +2098,9 @@ export class GenericSeedDispatcher {
 
   private hasProgramStrategySignal(userMessage: string): boolean {
     // Only gates phase fallback for texts with program-shaped workflows; atom roles still come from registry.
-    return /网格|webhook|自适应|grid/iu.test(userMessage) || this.resolveGenericExecutionProgramKeyFromMessage(userMessage) !== null
+    return this.hasExplicitGridExecutionIntent(userMessage)
+      || /webhook|自适应/iu.test(userMessage)
+      || this.resolveGenericExecutionProgramKeyFromMessage(userMessage) !== null
   }
 
   private resolveGenericExecutionProgramKeyFromMessage(userMessage: string): string | null {
@@ -2154,7 +2156,7 @@ export class GenericSeedDispatcher {
   ): PatchAtomNode[] {
     const out: PatchAtomNode[] = []
     const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
-      if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !this.hasExplicitGridExecutionIntent(userMessage)) return
       if (item.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key && !this.hasExplicitAtrTakeProfitParams(item, userMessage)) return
       const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
       const fixedGateEffect = contract?.surface?.phaseResolver === 'fixed-gate' && contract.roles.includes('effect')
@@ -2497,7 +2499,7 @@ export class GenericSeedDispatcher {
   private collectTypedRuleGlobalEffects(flatPatch: InternalSeedDraft, userMessage: string): AtomExpr[] {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
-      if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !this.hasExplicitGridExecutionIntent(userMessage)) return
       if (item.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key && !this.hasExplicitAtrTakeProfitParams(item, userMessage)) return
       if (
         this.hasLegScopeIntent(userMessage)
@@ -2828,7 +2830,7 @@ export class GenericSeedDispatcher {
     }
     if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'programs')) {
       const atoms = flatPatch.atoms ?? []
-      const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) && /网格|grid/iu.test(userMessage)
+      const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) && this.hasExplicitGridExecutionIntent(userMessage)
       const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
       const genericExecutionProgramKey = this.resolveGenericExecutionProgramKeyFromMessage(userMessage)
       const explicitProgramEvidence = this.findEvidenceText(
@@ -2916,6 +2918,11 @@ export class GenericSeedDispatcher {
 
   private hasFixedGridGatedProgramIntent(userMessage: string): boolean {
     return /固定网格|门控网格|区间挂|区间内采用|双向网格|突破停止|上下边界|步长|每格\s*\d+(?:\.\d+)?\s*(?:USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
+  }
+
+  private hasExplicitGridExecutionIntent(userMessage: string): boolean {
+    return this.hasFixedGridGatedProgramIntent(userMessage)
+      || /(?:价格区间\s*\d+(?:\.\d+)?\s*[-~到至]\s*\d+(?:\.\d+)?|网格[^，。；;]{0,20}(?:挂单|下单|档位|层级|买卖|轮动|再平衡|自动)|(?:共|总计)?\s*\d+\s*[格档]|网格步长|每格|grid\s*(?:range|levels?|step|spacing|orders?|rebalance))/iu.test(userMessage)
   }
 
   private readFixedGridProgramParamsFromMessage(userMessage: string): Record<string, unknown> {
@@ -3143,7 +3150,7 @@ export class GenericSeedDispatcher {
   }
 
   private extractFundingRateParams(userMessage: string): Record<string, unknown> {
-    const percentMatches = [...userMessage.matchAll(/(?:资金费率|funding\s*rate|funding)[^，。；;]*?(大于等于|至少|不低于|>=|大于|高于|超过|>|小于|低于|<)[^\d，。；;]{0,8}(\d+(?:\.\d+)?)\s*%/giu)]
+    const percentMatches = [...userMessage.matchAll(/(?:资金费率|funding\s*rate|funding)[^，。；;且]*?(大于等于|至少|不低于|>=|大于|高于|超过|>|小于|低于|<)[^\d，。；;且]{0,8}(\d+(?:\.\d+)?)\s*%/giu)]
     const percentMatch = percentMatches.at(-1)
     if (percentMatch?.[2]) {
       const percent = Number(percentMatch[2])
@@ -3231,7 +3238,8 @@ export class GenericSeedDispatcher {
   }
 
   private hasRegimeGateIntent(userMessage: string): boolean {
-    if (/regime|gate|趋势过滤|趋势向上/iu.test(userMessage)) return true
+    if (/regime|gate|趋势向上/iu.test(userMessage)) return true
+    if (/趋势过滤/iu.test(userMessage) && !/价格[^，。；;]*(?:高于|低于|站上|跌破)[^，。；;]*(?:MA|EMA|SMA)\s*\d+/iu.test(userMessage)) return true
     if (/(?:orderbook|订单簿|盘口|深度|价差|资金费率|funding\s*rate|未平仓量|持仓量|open\s*interest|\bOI\b|清算|liquidation)[^，。；;]*(?:才允许|只允许)[^，。；;]*(?:开仓|入场|进场|开多|开空|做多|做空|open|enter)/iu.test(userMessage)) return false
     if (!/才允许|只允许/iu.test(userMessage)) return false
     return !this.hasMultiTimeframeGateIntent(userMessage)
