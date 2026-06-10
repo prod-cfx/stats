@@ -284,8 +284,19 @@ function evaluateFundingRateCondition(
     const payload = readPayloadRecord(event.payload)
     if (!payload) return false
     const rate = readFirstNumber(payload, ['fundingRate', 'funding_rate', 'rate', 'value'])
-    return rate !== null && compareByOperator(rate, threshold, operator)
+    return rate !== null && compareFundingRate(rate, threshold, operator)
   })
+}
+
+function compareFundingRate(left: number, right: number, operator: string): boolean {
+  const epsilon = 1e-12
+  if (operator.toUpperCase() === 'GT' || operator === '>') {
+    return left > right || Math.abs(left - right) <= epsilon
+  }
+  if (operator.toUpperCase() === 'LT' || operator === '<') {
+    return left < right || Math.abs(left - right) <= epsilon
+  }
+  return compareByOperator(left, right, operator)
 }
 
 function evaluateLiquidationCondition(

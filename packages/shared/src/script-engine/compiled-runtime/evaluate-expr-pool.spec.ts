@@ -187,6 +187,32 @@ describe('evaluateExprPool', () => {
     expect(values.funding_positive).toBe(true)
   })
 
+  it('treats funding rates at the configured threshold as matching exchange precision', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'funding.rate': [
+            { id: 'funding-1', ts: 9_000, payload: { fundingRate: 0.0001 } },
+          ],
+        },
+      },
+      [{
+        id: 'funding_at_threshold',
+        nodeType: 'predicate',
+        sourceRef: 'fundingRate.condition',
+        payload: {
+          kind: 'fundingRateCondition',
+          params: { sourceFeedId: 'funding.rate', operator: 'GT', value: 0.0001 },
+        },
+        deps: [],
+      }],
+      ['funding_at_threshold'],
+    )
+
+    expect(values.funding_at_threshold).toBe(true)
+  })
+
   it('evaluates liquidationCondition predicates from event inbox side and notional', () => {
     const values = evaluateExprPool(
       {
