@@ -278,7 +278,7 @@ describe('stage1 typed rules corpus fixture', () => {
       const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 1m，创建盘口深度比确认策略。规则：价格高于 EMA50 且买盘深度是卖盘 1.5 倍以上时开多；价格跌破 EMA50 平多；风控：仓位 10%，亏损 1.2% 止损。')
 
       expect(findConditionLeaf(patch, 'orderbook.depth_ratio')).toEqual(expect.objectContaining({
-        params: expect.objectContaining({ side: 'bid_over_ask', operator: 'gt', ratio: 1.5 }),
+        params: expect.objectContaining({ side: 'bid_over_ask', operator: 'gte', ratio: 1.5 }),
       }))
     })
 

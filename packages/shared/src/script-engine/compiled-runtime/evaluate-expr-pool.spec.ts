@@ -266,6 +266,32 @@ describe('evaluateExprPool', () => {
     expect(values.orderbook_bid_dominant).toBe(true)
   })
 
+  it('evaluates inclusive orderbook depth ratio thresholds at the boundary', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-1', ts: 9_000, payload: { bidDepth: 1_500, askDepth: 1_000 } },
+          ],
+        },
+      },
+      [{
+        id: 'orderbook_bid_depth_ratio_gte',
+        nodeType: 'predicate',
+        sourceRef: 'orderbook.imbalance',
+        payload: {
+          kind: 'orderbookImbalance',
+          params: { sourceFeedId: 'orderbook.imbalance', side: 'bid_over_ask', operator: 'GTE', ratio: 1.5 },
+        },
+        deps: [],
+      }],
+      ['orderbook_bid_depth_ratio_gte'],
+    )
+
+    expect(values.orderbook_bid_depth_ratio_gte).toBe(true)
+  })
+
   it('evaluates orderbookImbalance from the latest visible snapshot instead of any historical match', () => {
     const values = evaluateExprPool(
       {

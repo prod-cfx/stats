@@ -3043,13 +3043,24 @@ export class GenericSeedDispatcher {
   }
 
   private extractOrderbookDepthRatioParams(userMessage: string): Record<string, unknown> {
+    const operatorText = userMessage.match(/(?:深度比|买一卖一深度|买盘深度|卖盘深度|depth\s*ratio|depth)[^，。；;]{0,48}?(大于等于|至少|不低于|不少于|>=|以上|及以上|小于等于|不高于|至多|<=|以下|及以下|小于|低于|below|less|lt|大于|高于|超过|>|above|gt)/iu)?.[1]
+      ?? userMessage.match(/(大于等于|至少|不低于|不少于|>=|以上|及以上|小于等于|不高于|至多|<=|以下|及以下|小于|低于|below|less|lt|大于|高于|超过|>|above|gt)[^，。；;]{0,32}?(?:深度比|买一卖一深度|买盘深度|卖盘深度|depth\s*ratio|depth)/iu)?.[1]
+      ?? userMessage.match(/(?:买盘|买方|bid)[^，。；;]{0,20}(?:卖盘|卖方|ask)[^，。；;]{0,32}?(大于等于|至少|不低于|不少于|>=|以上|及以上|小于等于|不高于|至多|<=|以下|及以下|小于|低于|below|less|lt|大于|高于|超过|>|above|gt)/iu)?.[1]
+      ?? ''
     const ratio = this.parsePositiveNumber(
       userMessage.match(/(?:买盘|买方|bid)[^，。；;]{0,20}(?:卖盘|卖方|ask)[^\d，。；;]{0,20}(\d+(?:\.\d+)?)\s*(?:倍|x|X)/iu)?.[1]
       ?? userMessage.match(/(?:深度比|买一卖一深度|depth\s*ratio|depth)[^\d，。；;]{0,24}(\d+(?:\.\d+)?)\s*(?:倍|x|X)?/iu)?.[1],
     )
+    const operator = /小于等于|不高于|至多|<=|以下|及以下/iu.test(operatorText)
+      ? 'lte'
+      : /小于|低于|below|less|lt|</iu.test(operatorText)
+        ? 'lt'
+        : /大于等于|至少|不低于|不少于|>=|以上|及以上/iu.test(operatorText)
+          ? 'gte'
+          : 'gt'
     return {
       side: /卖盘|卖方|ask|sell/iu.test(userMessage) && !/买盘|买方|bid|buy/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask',
-      operator: /小于|低于|below|less|lt/iu.test(userMessage) ? 'lt' : 'gt',
+      operator,
       ratio: ratio ?? 2,
     }
   }
