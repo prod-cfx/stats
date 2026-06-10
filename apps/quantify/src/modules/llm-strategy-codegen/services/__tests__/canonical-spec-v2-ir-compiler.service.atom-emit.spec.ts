@@ -68,6 +68,22 @@ describe('Issue #1395 — atom-contract-registry supportStatus 升级', () => {
 describe('Issue #1395 — condition.sequence IR emit', () => {
   const compiler = new CanonicalSpecV2IrCompilerService()
 
+  it('price.rolling_extrema_breakout compares high/low probes against the rolling channel', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'price.rolling_extrema_breakout',
+        params: { lookbackBars: 20, extrema: 'high' },
+      }),
+    ])
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const predicate = result.ir.signalCatalog.predicates.find(item => item.id.includes('price_rolling_extrema_breakout'))
+    const probeSeries = result.ir.signalCatalog.series.find(item => item.id === predicate?.args[0])
+
+    expect(predicate?.kind).toBe('compare')
+    expect(probeSeries).toEqual(expect.objectContaining({ kind: 'PRICE', field: 'high' }))
+  })
+
   it('consecutive_body × count=3 × up → sequence with 3 GT[close,open] steps', () => {
     const spec = buildSpec([
       baseEntryExitRule({

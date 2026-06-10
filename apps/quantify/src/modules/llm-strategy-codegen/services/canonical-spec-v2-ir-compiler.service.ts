@@ -2050,9 +2050,9 @@ export class CanonicalSpecV2IrCompilerService {
         const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
           ? atom.params.timeframe.trim()
           : context.timeframe
-        const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
         const period = this.readNumber([atom.params?.lookbackBars, atom.params?.period], 20)
         const extrema = typeof atom.params?.extrema === 'string' ? atom.params.extrema : 'high'
+        const probeRef = this.ensurePriceSeries(context, extrema === 'low' ? 'low' : 'high', timeframe)
         const channelRef = extrema === 'low'
           ? this.ensureChannelSeries(context, 'LOWEST_LOW', period, timeframe)
           : this.ensureChannelSeries(context, 'HIGHEST_HIGH', period, timeframe)
@@ -2061,7 +2061,7 @@ export class CanonicalSpecV2IrCompilerService {
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
           'compare',
-          [closeRef, channelRef],
+          [probeRef, channelRef],
           { op: this.resolveComparisonKind(atom.op ?? (extrema === 'low' ? 'LT' : 'GT')) },
         )
       }
