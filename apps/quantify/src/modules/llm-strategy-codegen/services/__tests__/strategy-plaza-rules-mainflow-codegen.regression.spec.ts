@@ -86,4 +86,23 @@ describe('Strategy Plaza rules-mainflow codegen regressions', () => {
     expect(stopLosses).toHaveLength(1)
     expect(stopLosses[0]?.params).toEqual(expect.objectContaining({ valuePct: 2 }))
   })
+
+  it('compiles open-interest breakout into executable price breakout and price-below-EMA exit predicates', () => {
+    const compiled = buildCompiledIrFromPrompt('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建持仓量突破确认策略。规则：未平仓量 1 小时增加超过 5% 且价格突破过去 20 根 K 线高点时开多；跌破 EMA20 时平多；风控：仓位 10%，亏损 2% 止损。')
+    const predicates = compiled.ir.signalCatalog.predicates
+    const entryAnd = predicates.find(predicate => predicate.id === 'semantic_entry_dispatcher_typed_rule_1_and')
+
+    expect(predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'semantic_exit_dispatcher_typed_rule_2_indicator_below_15m',
+        kind: 'LTE',
+        args: ['close_15m', 'ema_20_15m'],
+      }),
+      expect.objectContaining({
+        kind: 'openInterestCondition',
+        params: expect.objectContaining({ window: '1h', value: 5 }),
+      }),
+    ]))
+    expect(entryAnd?.args.filter(arg => /breakout|rolling_extrema/.test(arg))).toHaveLength(1)
+  })
 })

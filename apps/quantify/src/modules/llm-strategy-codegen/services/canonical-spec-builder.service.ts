@@ -5030,9 +5030,12 @@ export class CanonicalSpecBuilderService {
       return this.buildConditionFromSemanticRuleAtom(expr, phase, sideScope, defaultTimeframe)
     }
     if (expr.kind === 'and' || expr.kind === 'or') {
-      const children = expr.children
+      const rawChildren = expr.children
         .map(child => this.buildConditionFromSemanticRuleExpr(child, phase, sideScope, defaultTimeframe))
         .filter((condition): condition is CanonicalConditionNode => condition !== null)
+      const children = expr.kind === 'and'
+        ? this.dedupeCanonicalBreakoutAliasConditions(rawChildren)
+        : rawChildren
       if (children.length === 0) return null
       if (children.length === 1) return children[0]
       return { kind: expr.kind === 'and' ? 'AND' : 'OR', children }
@@ -5049,6 +5052,42 @@ export class CanonicalSpecBuilderService {
       if (children.length === 1) return children[0]
       return { kind: 'AND', predicateForm: 'generic', children }
     }
+    return null
+  }
+
+  private dedupeCanonicalBreakoutAliasConditions(children: readonly CanonicalConditionNode[]): CanonicalConditionNode[] {
+    const rollingAliases = new Set<string>()
+    for (const child of children) {
+      if (child.kind !== 'atom' || child.key !== ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key) continue
+      const alias = this.canonicalBreakoutAliasFromRollingExtrema(child.params ?? {})
+      if (alias) rollingAliases.add(alias)
+    }
+    if (rollingAliases.size === 0) return [...children]
+
+    return children.filter((child) => {
+      if (child.kind !== 'atom') return true
+      if (child.key !== 'breakout.channel_high_break' && child.key !== 'breakout.channel_low_break') return true
+      const alias = this.canonicalBreakoutAliasFromChannel(child.key, child.params ?? {})
+      return !alias || !rollingAliases.has(alias)
+    })
+  }
+
+  private canonicalBreakoutAliasFromRollingExtrema(params: Record<string, unknown>): string | null {
+    const lookback = this.readNumberParam(params.lookbackBars)
+    const event = this.readStringParam(params.event)
+    const extrema = this.readStringParam(params.extrema)
+    if (lookback === null || !event || !extrema) return null
+    if (event === 'breakout_up' && extrema === 'high') return `up:${lookback}`
+    if (event === 'breakout_down' && extrema === 'low') return `down:${lookback}`
+    return null
+  }
+
+  private canonicalBreakoutAliasFromChannel(key: string, params: Record<string, unknown>): string | null {
+    const period = this.readNumberParam(params.period)
+    const reference = this.readStringParam(params.reference)
+    if (period === null || !reference) return null
+    if (key === 'breakout.channel_high_break' && reference === 'channel_high') return `up:${period}`
+    if (key === 'breakout.channel_low_break' && reference === 'channel_low') return `down:${period}`
     return null
   }
 
@@ -7893,6 +7932,7 @@ export class CanonicalSpecBuilderService {
           : (typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
             ? trigger.params.fastPeriod
             : parsedIndicator.period ?? undefined)
+        const effectiveReferencePeriod = typeof ownPeriod === 'number' && referencePeriod === ownPeriod ? null : referencePeriod
         return {
           kind: 'atom',
           key: 'indicator.above',
@@ -7902,7 +7942,7 @@ export class CanonicalSpecBuilderService {
             ...(parsedIndicator.indicator ? { indicator: parsedIndicator.indicator } : {}),
             ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
             ...(typeof ownPeriod === 'number' ? { period: ownPeriod } : {}),
-            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+            ...(effectiveReferencePeriod !== null ? { 'reference.period': effectiveReferencePeriod } : {}),
             ...(timeframe ? { timeframe } : {}),
           },
         }
@@ -7916,6 +7956,7 @@ export class CanonicalSpecBuilderService {
           : (typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
             ? trigger.params.fastPeriod
             : parsedIndicator.period ?? undefined)
+        const effectiveReferencePeriod = typeof ownPeriod === 'number' && referencePeriod === ownPeriod ? null : referencePeriod
         return {
           kind: 'atom',
           key: 'indicator.below',
@@ -7925,7 +7966,7 @@ export class CanonicalSpecBuilderService {
             ...(parsedIndicator.indicator ? { indicator: parsedIndicator.indicator } : {}),
             ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
             ...(typeof ownPeriod === 'number' ? { period: ownPeriod } : {}),
-            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+            ...(effectiveReferencePeriod !== null ? { 'reference.period': effectiveReferencePeriod } : {}),
             ...(timeframe ? { timeframe } : {}),
           },
         }
