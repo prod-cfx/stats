@@ -2314,7 +2314,7 @@ export class SemanticStateProjectionService {
     const indicator = this.formatIndicatorName(trigger)
     const reference = `${indicator}${period}`
     const ownPeriod = this.readFiniteNumber(trigger.params.period)
-    if (ownPeriod !== null && periodValue !== null) {
+    if (ownPeriod !== null && periodValue !== null && ownPeriod !== periodValue) {
       const left = `${indicator}${this.formatNumber(ownPeriod)}`
       return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
         ? `${left} 在 ${reference} 上方`
@@ -3848,7 +3848,7 @@ export class SemanticStateProjectionService {
       case 'and': {
         const grouped = this.tryRenderMultiTimeframeIndicatorCompareAnd(expr)
         if (grouped) return grouped
-        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderUserFacingRuleCondition(child)).filter(s => s.length > 0))
+        const parts = this.dedupeBreakoutAliasParts(expr.children)
         return parts.join(' 同时 ')
       }
       case 'or': {
@@ -3971,6 +3971,13 @@ export class SemanticStateProjectionService {
       return `单笔仓位 ${this.formatNumber(value)} ${asset}`
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.time_stop_bars exists in legacy registry, not in ATOM_CONTRACT_REGISTRY typed keys yet.
+    if (atomKey === 'risk.time_stop_bars') {
+      const maxBars = this.readFiniteNumber(params.maxBars) ?? this.readFiniteNumber(params.bars)
+      if (maxBars === null) return '时间止损（K 线数）'
+      return `时间止损：持仓超过 ${this.formatNumber(maxBars)} 根 K 线平仓`
+    }
+
     if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
       const period = this.readIndicatorReferencePeriod(params) ?? this.readFiniteNumber(params.period)
       if (period === null) return null
@@ -3980,7 +3987,7 @@ export class SemanticStateProjectionService {
       const prefix = timeframe ? `${timeframe} ` : ''
       const reference = `${indicator}${this.formatNumber(period)}`
       const ownPeriod = this.readIndicatorReferencePeriod(params) === null ? null : this.readFiniteNumber(params.period)
-      if (ownPeriod !== null) {
+      if (ownPeriod !== null && ownPeriod !== period) {
         const left = `${indicator}${this.formatNumber(ownPeriod)}`
         return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
           ? `${prefix}${left} 在 ${reference} 上方`
@@ -4017,7 +4024,130 @@ export class SemanticStateProjectionService {
       }
     }
 
+    if (atomKey === ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key) {
+      return this.formatRollingExtremaBreakoutCondition(params)
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['openInterest.condition'].key) {
+      return this.formatOpenInterestCondition(params)
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
+      return this.formatFundingRateCondition(params)
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['liquidation.condition'].key) {
+      return this.formatLiquidationCondition(params)
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['orderbook.imbalance'].key) {
+      return this.formatOrderbookImbalanceCondition(params)
+    }
+
     return null
+  }
+
+  private dedupeBreakoutAliasParts(children: readonly AtomExpr[]): string[] {
+    const rollingAliases = new Set<string>()
+    for (const child of children) {
+      if (child.kind !== 'atom' || child.key !== ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key) continue
+      const alias = this.breakoutAliasKeyFromRollingExtrema(child.params)
+      if (alias) rollingAliases.add(alias)
+    }
+
+    const parts: string[] = []
+    for (const child of children) {
+      if (child.kind === 'atom'
+        && (child.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || child.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key)
+      ) {
+        const alias = this.breakoutAliasKeyFromChannel(child.key, child.params)
+        if (alias && rollingAliases.has(alias)) continue
+      }
+      const rendered = this.renderUserFacingRuleCondition(child)
+      if (rendered.length > 0) parts.push(rendered)
+    }
+    return this.dedupeKeepOrder(parts)
+  }
+
+  private breakoutAliasKeyFromRollingExtrema(params: Record<string, unknown>): string | null {
+    const lookback = this.readFiniteNumber(params.lookbackBars)
+    const event = this.readString(params.event)
+    const extrema = this.readString(params.extrema)
+    if (lookback === null || !event || !extrema) return null
+    if (event === 'breakout_up' && extrema === 'high') return `up:${this.formatNumber(lookback)}`
+    if (event === 'breakout_down' && extrema === 'low') return `down:${this.formatNumber(lookback)}`
+    return null
+  }
+
+  private breakoutAliasKeyFromChannel(atomKey: string, params: Record<string, unknown>): string | null {
+    const period = this.readFiniteNumber(params.period)
+    const reference = this.readString(params.reference)
+    if (period === null || !reference) return null
+    if (atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key && reference === 'channel_high') return `up:${this.formatNumber(period)}`
+    if (atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key && reference === 'channel_low') return `down:${this.formatNumber(period)}`
+    return null
+  }
+
+  private formatRollingExtremaBreakoutCondition(params: Record<string, unknown>): string | null {
+    const lookback = this.readFiniteNumber(params.lookbackBars)
+    const event = this.readString(params.event)
+    const extrema = this.readString(params.extrema)
+    if (lookback === null || !event || !extrema) return null
+    const direction = event === 'breakout_down' ? '跌破' : '突破'
+    const target = extrema === 'low' ? '低点' : '高点'
+    const bufferPct = this.readFiniteNumber(params.bufferPct)
+    const bufferText = bufferPct === null ? '' : `，突破缓冲 ${this.formatNumber(bufferPct)}%`
+    return `价格${direction}过去 ${this.formatNumber(lookback)} 根 K 线滚动${target}${bufferText}`
+  }
+
+  private formatOpenInterestCondition(params: Record<string, unknown>): string | null {
+    const changePct = this.readFiniteNumber(params.changePct) ?? this.readFiniteNumber(params.value)
+    const window = this.readString(params.window)
+    const operator = this.formatComparisonOperator(params.operator)
+    const direction = this.readString(params.direction) === 'down' ? '减少' : '增加'
+    if (changePct === null) return null
+    const windowText = window ? ` ${window}` : ''
+    return `未平仓量${windowText}${direction}${operator} ${this.formatNumber(changePct)}%`
+  }
+
+  private formatFundingRateCondition(params: Record<string, unknown>): string | null {
+    const valuePct = this.readFiniteNumber(params.valuePct)
+    const value = this.readFiniteNumber(params.value)
+    const operator = this.formatComparisonOperator(params.operator)
+    if (valuePct !== null) return `资金费率${operator} ${this.formatNumber(valuePct)}%`
+    if (value !== null) return `资金费率${operator} ${this.formatNumber(value)}`
+    return null
+  }
+
+  private formatLiquidationCondition(params: Record<string, unknown>): string | null {
+    const notionalUsd = this.readFiniteNumber(params.notionalUsd)
+    const sideRaw = this.readString(params.side)
+    const side = sideRaw === 'short' ? '空头' : sideRaw === 'long' ? '多头' : '多空'
+    const operator = this.formatComparisonOperator(params.operator)
+    if (notionalUsd === null) return null
+    return `${side}清算${operator} ${this.formatUsdAmount(notionalUsd)}`
+  }
+
+  private formatOrderbookImbalanceCondition(params: Record<string, unknown>): string | null {
+    const percent = this.readFiniteNumber(params.percent)
+    const ratio = this.readFiniteNumber(params.ratio)
+    const operator = this.formatComparisonOperator(params.operator)
+    if (percent !== null) return `OKX orderbook imbalance${operator} ${this.formatNumber(percent)}%`
+    if (ratio !== null) return `盘口买盘/卖盘失衡比${operator} ${this.formatNumber(ratio)}`
+    return null
+  }
+
+  private formatComparisonOperator(raw: unknown): string {
+    const op = typeof raw === 'string' ? raw.toUpperCase() : ''
+    if (op === 'GTE' || op === '>=') return '大于或等于'
+    if (op === 'LTE' || op === '<=') return '小于或等于'
+    if (op === 'LT' || op === '<') return '小于'
+    return '大于'
+  }
+
+  private formatUsdAmount(value: number): string {
+    if (value >= 10_000 && value % 10_000 === 0) return `${this.formatNumber(value / 10_000)} 万 USDT`
+    return `${this.formatNumber(value)} USDT`
   }
 
   private tryRenderPullbackReclaimSequence(expr: Extract<AtomExpr, { kind: 'sequence' }>): string | null {

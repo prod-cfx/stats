@@ -2623,7 +2623,7 @@ export class PlannerDispatcherMergeService {
 
   private extractExplicitPercentRiskEffects(userMessage: string): AtomExprAtom[] {
     const out: AtomExprAtom[] = []
-    const stopLoss = /(?:(?:止损|stop\s*loss)\D{0,12}(\d+(?:\.\d+)?)\s*%|(?:亏损|亏|loss)\D{0,12}(\d+(?:\.\d+)?)\s*%\D{0,12}(?:止损|平仓|退出|stop\s*loss))/iu.exec(userMessage)
+    const stopLoss = /(?:(?:亏损|亏|loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止损|平仓|退出|stop\s*loss)|(?:止损|stop\s*loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%)/iu.exec(userMessage)
     const takeProfit = /(?:止盈|take\s*profit)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
       // 兼容「盈利/获利/收益 达到 X% 时卖出平仓」这类出场式止盈表述（区间低买高卖模板）。
       // 要求百分比后近距离出现平仓动词，排除「盈利 X% 后加仓」的 pyramiding 语义。
