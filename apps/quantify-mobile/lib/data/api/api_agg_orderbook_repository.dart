@@ -20,8 +20,6 @@ import '../services/generated_backend_api.dart';
 class ApiAggOrderbookRepository implements AggOrderbookRepository {
   ApiAggOrderbookRepository(this._api);
 
-  static const String _defaultBase = 'BTC';
-  static const String _defaultType = 'perp';
   static const List<int> _defaultPrecisions = <int>[1, 10, 100];
   static const List<String> _defaultMetricCoins = <String>[
     'BTC',
@@ -90,32 +88,45 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
   final GeneratedBackendApi _api;
 
   @override
-  Future<AggMarketData> getMarketData() async {
+  Future<AggMarketData> getMarketData({
+    AggMarketRequest request = const AggMarketRequest.defaultMarket(),
+  }) async {
+    final String base = request.normalizedBase;
+    final String type = request.normalizedType;
+    final List<String> metricCoins = _metricCoinsFor(base);
     final (
       AggregatedOrderbookResponseDto? orderbook,
       Map<String, OiSnapshot> oiData,
       Map<String, VolSnapshot> volData,
     ) = await (
-      _fetchOrderbook(),
-      _fetchOiSnapshots(_defaultMetricCoins),
-      _fetchVolumeSnapshots(_defaultMetricCoins),
+      _fetchOrderbook(base: base, type: type),
+      _fetchOiSnapshots(metricCoins),
+      _fetchVolumeSnapshots(metricCoins),
     ).wait;
 
     if (orderbook == null) {
       throw const ApiException(message: 'empty aggregated orderbook response');
     }
-    return buildMarketData(orderbook, oiData: oiData, volData: volData);
+    return buildMarketData(
+      orderbook,
+      oiData: oiData,
+      volData: volData,
+      metricCoins: metricCoins,
+    );
   }
 
-  Future<AggregatedOrderbookResponseDto?> _fetchOrderbook() async {
+  Future<AggregatedOrderbookResponseDto?> _fetchOrderbook({
+    required String base,
+    required String type,
+  }) async {
     final Response<
       AggregatedOrderbookControllerGetAggregatedOrderbook200Response
     >
     response = await _api.client
         .getOrderbookApi()
         .aggregatedOrderbookControllerGetAggregatedOrderbook(
-          base_: _defaultBase,
-          type: _defaultType,
+          base_: base,
+          type: type,
         );
     return response.data?.data;
   }
@@ -148,12 +159,17 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
     final List<(String, VolSnapshot)?> entries = await Future.wait(
       symbols.map((String symbol) async {
         try {
-          final Response<Object> response = await _api.dio.get<Object>(
-            '/markets/volume/snapshot/$symbol',
-          );
+          final Response<AggregatedVolumeSnapshotResponseDto> response =
+              await _api.client
+                  .getMarketsApi()
+                  .marketsControllerGetAggregatedVolumeSnapshot(symbol: symbol);
+          final AggregatedVolumeSnapshotResponseDto? data = response.data;
+          if (data == null) return null;
+          return (symbol, mapVolSnapshot(data));
+        } on DioException catch (error) {
           final AggregatedVolumeSnapshotResponseDto? data =
               decodeVolumeSnapshot(
-                response.data,
+                error.response?.data,
                 serializers: _api.client.serializers,
               );
           if (data == null) return null;
@@ -192,13 +208,14 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
     AggregatedOrderbookResponseDto data, {
     Map<String, OiSnapshot> oiData = const <String, OiSnapshot>{},
     Map<String, VolSnapshot> volData = const <String, VolSnapshot>{},
+    List<String> metricCoins = _defaultMetricCoins,
   }) {
     final List<AggExchange> exchanges = buildExchanges(data.venues);
     final Map<String, AggExchange> exchangeMap = <String, AggExchange>{
       for (final AggExchange e in exchanges) e.key: e,
     };
-    final List<String> oiCoins = _coinsWithData(oiData);
-    final List<String> volCoins = _coinsWithData(volData);
+    final List<String> oiCoins = _coinsWithData(oiData, metricCoins);
+    final List<String> volCoins = _coinsWithData(volData, metricCoins);
     final List<String> oiExchanges = _uniqueSorted(
       oiData.values.expand(
         (OiSnapshot s) => s.rows.map((OiRow r) => r.exchange),
@@ -324,7 +341,11 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
   @visibleForTesting
   static Object? unwrapEnvelopeData(Object? raw) {
     if (raw is JsonObject) return raw.value;
-    if (raw is Map) return raw['data'] ?? raw;
+    if (raw is Map) {
+      if (raw.containsKey('data')) return raw['data'];
+      if (raw.containsKey('symbol')) return raw;
+      return null;
+    }
     return raw;
   }
 
@@ -337,10 +358,21 @@ class ApiAggOrderbookRepository implements AggOrderbookRepository {
     };
   }
 
-  static List<String> _coinsWithData(Map<String, Object> data) {
-    return _defaultMetricCoins
+  static List<String> _coinsWithData(
+    Map<String, Object> data,
+    List<String> metricCoins,
+  ) {
+    return metricCoins
         .where((String coin) => data.containsKey(coin))
         .toList(growable: false);
+  }
+
+  static List<String> _metricCoinsFor(String base) {
+    final List<String> coins = <String>[base];
+    for (final String coin in _defaultMetricCoins) {
+      if (coin != base) coins.add(coin);
+    }
+    return coins;
   }
 
   static List<String> _uniqueSorted(Iterable<String> values) {

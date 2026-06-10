@@ -1,9 +1,12 @@
 import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:built_value/json_object.dart';
 import 'package:built_value/serializer.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/api/api_agg_orderbook_repository.dart';
 import 'package:quantify_mobile/data/models/agg_market_data.dart';
+import 'package:quantify_mobile/data/repositories/agg_orderbook_repository.dart';
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 
 VenueDetailDto _venue(String id, num size) {
   return VenueDetailDto(
@@ -40,6 +43,34 @@ AggregatedOrderbookResponseDto _dto() {
     b.mergedQuotes.replace(<String>[]);
   });
 }
+
+Map<String, Object?> _dtoJson(String base, String type) => <String, Object?>{
+  'marketKey': '$base-$type',
+  'base': base,
+  'type': type,
+  'midPrice': 100,
+  'updatedAt': 0,
+  'asks': <Object?>[
+    <String, Object?>{
+      'price': 101,
+      'sizeTotal': 2,
+      'details': <Object?>[
+        <String, Object?>{'venueId': 'binance', 'size': 2},
+      ],
+    },
+  ],
+  'bids': <Object?>[
+    <String, Object?>{
+      'price': 99,
+      'sizeTotal': 3,
+      'details': <Object?>[
+        <String, Object?>{'venueId': 'okx', 'size': 3},
+      ],
+    },
+  ],
+  'venues': <Object?>['binance', 'okx'],
+  'mergedQuotes': <Object?>[],
+};
 
 OiAggregateSnapshotDto _oiDto() {
   return OiAggregateSnapshotDto((b) {
@@ -104,6 +135,25 @@ AggregatedVolumeSnapshotResponseDto _volDto() {
 }
 
 void main() {
+  group('AggMarketRequest', () {
+    test('normalizes base and type', () {
+      const AggMarketRequest request = AggMarketRequest(
+        base: ' btc ',
+        type: 'PERP',
+      );
+
+      expect(request.normalizedBase, 'BTC');
+      expect(request.normalizedType, 'perp');
+    });
+
+    test('defaults to BTC perp', () {
+      const AggMarketRequest request = AggMarketRequest.defaultMarket();
+
+      expect(request.normalizedBase, 'BTC');
+      expect(request.normalizedType, 'perp');
+    });
+  });
+
   group('ApiAggOrderbookRepository.buildMarketData', () {
     test('maps asks/bids levels with venue source', () {
       final AggMarketData d = ApiAggOrderbookRepository.buildMarketData(_dto());
@@ -157,6 +207,22 @@ void main() {
       expect(d.volColor['okx'], isNotNull);
       expect(d.coinColor['BTC'], isNotNull);
       expect(d.precisions, <int>[1, 10, 100]);
+    });
+
+    test('orders metric coins by request candidate order', () {
+      final OiSnapshot oi = ApiAggOrderbookRepository.mapOiSnapshot(_oiDto());
+      final VolSnapshot vol = ApiAggOrderbookRepository.mapVolSnapshot(
+        _volDto(),
+      );
+      final AggMarketData d = ApiAggOrderbookRepository.buildMarketData(
+        _dto(),
+        oiData: <String, OiSnapshot>{'BTC': oi, 'ETH': oi},
+        volData: <String, VolSnapshot>{'BTC': vol, 'ETH': vol},
+        metricCoins: <String>['ETH', 'BTC'],
+      );
+
+      expect(d.oiCoins, <String>['ETH', 'BTC']);
+      expect(d.volCoins, <String>['ETH', 'BTC']);
     });
 
     test(
@@ -227,5 +293,219 @@ void main() {
       );
       expect(l.exchange, 'AGG');
     });
+  });
+
+  group('ApiAggOrderbookRepository.getMarketData', () {
+    test('passes base and type into generated orderbook API', () async {
+      final List<Uri> calls = <Uri>[];
+      final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              calls.add(options.uri);
+              if (options.path == '/orderbook/aggregated') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: <String, Object?>{
+                      'data': _dtoJson('ETH', 'spot'),
+                      'message': 'Success',
+                    },
+                  ),
+                );
+                return;
+              }
+              if (options.path.startsWith('/open-interest/aggregate/')) {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 404,
+                    data: <String, Object?>{'code': 'OPEN_INTEREST_NOT_FOUND'},
+                  ),
+                );
+                return;
+              }
+              if (options.path.startsWith('/markets/volume/snapshot/')) {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: <String, Object?>{
+                      'symbol': 'ETH',
+                      'total': 0,
+                      'rows': <Object?>[],
+                    },
+                  ),
+                );
+                return;
+              }
+              h.next(options);
+            },
+          ),
+        );
+      final ApiAggOrderbookRepository repo = ApiAggOrderbookRepository(
+        GeneratedBackendApi(dio: dio),
+      );
+
+      final AggMarketData data = await repo.getMarketData(
+        request: const AggMarketRequest(base: 'ETH', type: 'spot'),
+      );
+
+      final Uri orderbookCall = calls.singleWhere(
+        (Uri uri) => uri.path == '/orderbook/aggregated',
+      );
+      expect(orderbookCall.queryParameters['base'], 'ETH');
+      expect(orderbookCall.queryParameters['type'], 'spot');
+      expect(data.asks, isNotEmpty);
+    });
+
+    test('uses generated MarketsApi volume snapshot path', () async {
+      final List<String> paths = <String>[];
+      final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              paths.add(options.path);
+              if (options.path == '/orderbook/aggregated') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: <String, Object?>{
+                      'data': _dtoJson('BTC', 'perp'),
+                      'message': 'Success',
+                    },
+                  ),
+                );
+                return;
+              }
+              if (options.path.startsWith('/open-interest/aggregate/')) {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 404,
+                    data: <String, Object?>{'code': 'OPEN_INTEREST_NOT_FOUND'},
+                  ),
+                );
+                return;
+              }
+              if (options.path == '/markets/volume/snapshot/BTC') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: <String, Object?>{
+                      'symbol': 'BTC',
+                      'total': 1000,
+                      'rows': <Object?>[],
+                    },
+                  ),
+                );
+                return;
+              }
+              if (options.path.startsWith('/markets/volume/snapshot/')) {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 404,
+                    data: <String, Object?>{'code': 'VOLUME_NOT_FOUND'},
+                  ),
+                );
+                return;
+              }
+              h.next(options);
+            },
+          ),
+        );
+      final ApiAggOrderbookRepository repo = ApiAggOrderbookRepository(
+        GeneratedBackendApi(dio: dio),
+      );
+
+      await repo.getMarketData(request: const AggMarketRequest.defaultMarket());
+
+      expect(paths, contains('/markets/volume/snapshot/BTC'));
+    });
+
+    test(
+      'unwraps runtime envelope from generated MarketsApi volume response',
+      () async {
+        final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+                if (options.path == '/orderbook/aggregated') {
+                  h.resolve(
+                    Response<Object?>(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: <String, Object?>{
+                        'data': _dtoJson('BTC', 'perp'),
+                        'message': 'Success',
+                      },
+                    ),
+                  );
+                  return;
+                }
+                if (options.path.startsWith('/open-interest/aggregate/')) {
+                  h.resolve(
+                    Response<Object?>(
+                      requestOptions: options,
+                      statusCode: 404,
+                      data: <String, Object?>{
+                        'code': 'OPEN_INTEREST_NOT_FOUND',
+                      },
+                    ),
+                  );
+                  return;
+                }
+                if (options.path == '/markets/volume/snapshot/BTC') {
+                  h.resolve(
+                    Response<Object?>(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: <String, Object?>{
+                        'data': <String, Object?>{
+                          'symbol': 'BTC',
+                          'total': 1000,
+                          'rows': <Object?>[
+                            <String, Object?>{
+                              'exchange': 'Binance',
+                              'value': 600,
+                            },
+                          ],
+                        },
+                        'message': 'Success',
+                      },
+                    ),
+                  );
+                  return;
+                }
+                if (options.path.startsWith('/markets/volume/snapshot/')) {
+                  h.resolve(
+                    Response<Object?>(
+                      requestOptions: options,
+                      statusCode: 404,
+                      data: <String, Object?>{'code': 'VOLUME_NOT_FOUND'},
+                    ),
+                  );
+                  return;
+                }
+                h.next(options);
+              },
+            ),
+          );
+        final ApiAggOrderbookRepository repo = ApiAggOrderbookRepository(
+          GeneratedBackendApi(dio: dio),
+        );
+
+        final AggMarketData data = await repo.getMarketData(
+          request: const AggMarketRequest.defaultMarket(),
+        );
+
+        expect(data.volData['BTC']!.total, 1000);
+        expect(data.volData['BTC']!.rows.single.exchange, 'Binance');
+      },
+    );
   });
 }

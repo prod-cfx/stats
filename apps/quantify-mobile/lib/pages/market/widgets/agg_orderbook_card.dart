@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/agg_market_data.dart';
 import '../../../data/providers.dart';
+import '../../../data/repositories/agg_orderbook_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -34,9 +35,8 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
   AggOrderbookController get _controller =>
       ref.read(aggOrderbookControllerProvider.notifier);
 
-  Future<void> _openPrecisionSheet() async {
+  Future<void> _openPrecisionSheet(List<int> precisions) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<int> precisions = _controller.precisions;
     final int current = ref.read(aggOrderbookControllerProvider).precision;
     setState(() => _precisionOpen = true);
     final int? picked = await showModalBottomSheet<int>(
@@ -86,15 +86,15 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
     if (picked != null && mounted) _controller.setPrecision(picked);
   }
 
-  Future<void> _openSourceSheet() async {
-    final Set<String> initial = _controller.currentSelection.toSet();
+  Future<void> _openSourceSheet(AggMarketData data) async {
+    final Set<String> initial = _controller.currentSelectionOf(data).toSet();
     await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
       builder: (BuildContext ctx) => _SourceSheet(
         initial: initial,
-        exchanges: _controller.exchanges,
+        exchanges: data.exchanges,
         // mounted 守卫：sheet 经 rootNavigator 独立挂载，card 卸载后
         // autoDispose 会销毁 controller，裸回调会在已 dispose Notifier 上崩溃。
         onSelectionChanged: (Set<String> selected) {
@@ -111,8 +111,12 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
     // 原始聚合数据经单一共享 aggOrderbookProvider 注入（issue #2216）；加载/
     // 错误态回退空 bundle。过滤/聚合/累计派生上移 AggOrderbookController
     // （#2218 C4），View 仅 watch 输入态 + 调 controller 取派生 asks/bids。
+    final AggMarketRequest request = AggMarketRequest(
+      base: _coin,
+      type: _futures ? 'perp' : 'spot',
+    );
     final AggMarketData data =
-        ref.watch(aggOrderbookProvider).value ?? kEmptyAggData;
+        ref.watch(aggOrderbookByMarketProvider(request)).value ?? kEmptyAggData;
     final AggOrderbookState s = ref.watch(aggOrderbookControllerProvider);
     final AggOrderbookController ctrl = _controller;
     final List<AggBookLevel> asks = ctrl.asksOf(data);
@@ -182,8 +186,8 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
                   precision: s.precision,
                   precisionExpanded: _precisionOpen,
                   onView: ctrl.setView,
-                  onPrecision: _openPrecisionSheet,
-                  onSource: _openSourceSheet,
+                  onPrecision: () => _openPrecisionSheet(data.precisions),
+                  onSource: () => _openSourceSheet(data),
                 ),
                 _ColumnHeader(coin: _coin),
                 if (s.view != AggView.bids)
@@ -281,4 +285,3 @@ class _AggOrderbookCardState extends ConsumerState<AggOrderbookCard> {
     );
   }
 }
-

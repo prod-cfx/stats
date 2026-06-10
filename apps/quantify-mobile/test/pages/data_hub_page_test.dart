@@ -51,7 +51,9 @@ const AggMarketData _realEmptyAggData = AggMarketData(
 
 class _RealEmptyAggRepository implements AggOrderbookRepository {
   @override
-  Future<AggMarketData> getMarketData() async => _realEmptyAggData;
+  Future<AggMarketData> getMarketData({
+    AggMarketRequest request = const AggMarketRequest.defaultMarket(),
+  }) async => _realEmptyAggData;
 }
 
 /// issue #1851「数据」hub 导航架构的 widget 测试。

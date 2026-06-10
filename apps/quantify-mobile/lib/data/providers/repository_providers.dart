@@ -112,11 +112,28 @@ final Provider<AggOrderbookRepository> aggOrderbookRepositoryProvider =
       return ApiAggOrderbookRepository(ref.watch(generatedBackendApiProvider));
     });
 
-/// 聚合市场数据 bundle（#2216）。4 个 `agg_*` widget 统一 watch 此单一共享
-/// Provider 取原始 levels 与各表真实快照；派生留 widget（C4 #2218 收口上移）。
+/// 聚合市场数据 bundle（按币种/市场类型请求）。聚合挂单的币种与合约/现货
+/// segment 会驱动此 family；持仓量/成交量 tab 以选中币种请求 perp 快照。
+final FutureProviderFamily<AggMarketData, AggMarketRequest>
+aggOrderbookByMarketProvider =
+    FutureProvider.family<AggMarketData, AggMarketRequest>((
+      Ref ref,
+      AggMarketRequest request,
+    ) async {
+      return ref
+          .watch(aggOrderbookRepositoryProvider)
+          .getMarketData(request: request);
+    });
+
+/// 聚合市场数据 bundle（#2216）。保留默认 BTC/perp 兼容旧调用点；新 UI 应优先
+/// watch [aggOrderbookByMarketProvider]。
 final FutureProvider<AggMarketData> aggOrderbookProvider =
     FutureProvider<AggMarketData>((Ref ref) async {
-      return ref.watch(aggOrderbookRepositoryProvider).getMarketData();
+      return ref.watch(
+        aggOrderbookByMarketProvider(
+          const AggMarketRequest.defaultMarket(),
+        ).future,
+      );
     });
 
 final Provider<KlineRepository> klineRepositoryProvider =

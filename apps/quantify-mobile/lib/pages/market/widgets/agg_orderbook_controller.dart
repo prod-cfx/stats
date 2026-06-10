@@ -90,10 +90,15 @@ class AggOrderbookController extends Notifier<AggOrderbookState> {
   /// 解析来源选中集合：已有用户选择则用之；否则用全集（首帧初始化）。
   /// 数据为空（加载中）时返回空集，待真实数据到达再全选。
   Set<String> _resolveSelection(AggMarketData data) {
+    final Set<String> all = data.exchanges
+        .map((AggExchange e) => e.key)
+        .toSet();
     final Set<String>? selected = state.selectedEx;
-    if (selected != null) return selected;
-    if (data.exchanges.isEmpty) return const <String>{};
-    return data.exchanges.map((AggExchange e) => e.key).toSet();
+    if (all.isEmpty) return const <String>{};
+    if (selected == null) return all;
+    if (selected.isEmpty) return const <String>{};
+    final Set<String> clamped = selected.intersection(all);
+    return clamped.isEmpty ? all : clamped;
   }
 
   /// 单侧派生：按选中来源过滤 → 按精度聚合 → 填充累计量。纯派生，不改 state。
@@ -131,6 +136,9 @@ class AggOrderbookController extends Notifier<AggOrderbookState> {
   /// 解析后的当前选中集合（一次性 read，供来源抽屉初始选中回退）。
   Set<String> get currentSelection =>
       _resolveSelection(ref.read(aggOrderbookProvider).value ?? kEmptyAggData);
+
+  /// 指定数据下解析后的当前选中集合。
+  Set<String> currentSelectionOf(AggMarketData data) => _resolveSelection(data);
 
   void setExchanges(Set<String> selected) {
     // 防御性拷贝：避免外部持有同一可变 Set 实例后静默 mutate state。

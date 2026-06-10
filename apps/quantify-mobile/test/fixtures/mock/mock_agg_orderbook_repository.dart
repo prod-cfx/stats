@@ -6,7 +6,9 @@ class MockAggOrderbookRepository implements AggOrderbookRepository {
   const MockAggOrderbookRepository();
 
   @override
-  Future<AggMarketData> getMarketData() async {
+  Future<AggMarketData> getMarketData({
+    AggMarketRequest request = const AggMarketRequest.defaultMarket(),
+  }) async {
     return AggMarketData(
       exchanges: kAggExchanges,
       exchangeMap: kAggExchangeMap,

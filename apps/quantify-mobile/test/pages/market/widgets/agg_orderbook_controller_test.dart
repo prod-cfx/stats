@@ -53,7 +53,9 @@ class _FakeRepo implements AggOrderbookRepository {
   const _FakeRepo(this.data);
   final AggMarketData data;
   @override
-  Future<AggMarketData> getMarketData() async => data;
+  Future<AggMarketData> getMarketData({
+    AggMarketRequest request = const AggMarketRequest.defaultMarket(),
+  }) async => data;
 }
 
 void main() {
@@ -112,6 +114,45 @@ void main() {
       expect(ctrl(c).asksOf(dataOf(c)), isEmpty);
       expect(ctrl(c).bidsOf(dataOf(c)), isEmpty);
     });
+
+    test('切换市场后旧选择全部失效时回退到新市场全集', () async {
+      final ProviderContainer c = await makeContainer();
+      ctrl(c).setExchanges(<String>{'binance'});
+
+      const AggExchange bybit = AggExchange(
+        key: 'bybit',
+        name: 'Bybit',
+        letter: 'B',
+        color: Color(0xFF222222),
+        fg: Color(0xFFFFFFFF),
+      );
+      const AggMarketData next = AggMarketData(
+        exchanges: <AggExchange>[bybit],
+        exchangeMap: <String, AggExchange>{'bybit': bybit},
+        precisions: <int>[1],
+        asks: <AggBookLevel>[
+          AggBookLevel(price: 103, qty: 4, exchange: 'bybit'),
+        ],
+        bids: <AggBookLevel>[
+          AggBookLevel(price: 97, qty: 5, exchange: 'bybit'),
+        ],
+        oiCoins: <String>[],
+        oiExchangeMap: <String, AggExchange>{},
+        oiData: <String, OiSnapshot>{},
+        volCoins: <String>[],
+        volExchangeName: <String, String>{},
+        volColor: <String, Color>{},
+        volData: <String, VolSnapshot>{},
+        coinColor: <String, Color>{},
+      );
+
+      expect(ctrl(c).asksOf(next).map((AggBookLevel l) => l.exchange), <String>[
+        'bybit',
+      ]);
+      expect(ctrl(c).bidsOf(next).map((AggBookLevel l) => l.exchange), <String>[
+        'bybit',
+      ]);
+    });
   });
 
   group('precision 变化触发聚合', () {
@@ -164,12 +205,15 @@ void main() {
       expect(ctrl(c).bidsOf(dataOf(c)), isEmpty);
     });
 
-    test('null-data 回退：precisions/exchanges/currentSelection getter 返回空', () async {
-      final ProviderContainer c = await makeContainer(empty);
-      expect(ctrl(c).precisions, isEmpty);
-      expect(ctrl(c).exchanges, isEmpty);
-      expect(ctrl(c).currentSelection, isEmpty);
-    });
+    test(
+      'null-data 回退：precisions/exchanges/currentSelection getter 返回空',
+      () async {
+        final ProviderContainer c = await makeContainer(empty);
+        expect(ctrl(c).precisions, isEmpty);
+        expect(ctrl(c).exchanges, isEmpty);
+        expect(ctrl(c).currentSelection, isEmpty);
+      },
+    );
   });
 
   group('值相等：setExchanges/setView 同值不产生新引用', () {

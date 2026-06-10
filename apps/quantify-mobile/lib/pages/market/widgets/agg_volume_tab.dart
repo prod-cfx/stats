@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/agg_market_data.dart';
 import '../../../data/providers.dart';
+import '../../../data/repositories/agg_orderbook_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -27,12 +28,19 @@ class _AggVolumeTabState extends ConsumerState<AggVolumeTab> {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    // 成交量数据经 aggOrderbookProvider 注入（issue #2216）。
-    final AggMarketData? agg = ref.watch(aggOrderbookProvider).value;
+    // 成交量数据按选中币种经真实聚合市场 provider 注入。
+    final AggMarketData? agg = ref
+        .watch(
+          aggOrderbookByMarketProvider(
+            AggMarketRequest(base: _coin, type: 'perp'),
+          ),
+        )
+        .value;
     final List<String> volCoins = agg?.volCoins ?? const <String>[];
     final Map<String, String> volExchangeName =
         agg?.volExchangeName ?? const <String, String>{};
-    final Map<String, Color> volColor = agg?.volColor ?? const <String, Color>{};
+    final Map<String, Color> volColor =
+        agg?.volColor ?? const <String, Color>{};
     final VolSnapshot? data = agg?.volData[_coin];
 
     return ListView(
