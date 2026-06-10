@@ -22,6 +22,8 @@ class PredMarket {
     required this.yesPercent,
     required this.volume,
     required this.live,
+    this.volumeTotal = 0,
+    this.openInterest = 0,
     this.rules = const <String>[],
     this.resolution,
     this.winStart,
@@ -39,6 +41,12 @@ class PredMarket {
 
   /// 交易量（美元）。0 视为无量。
   final double volume;
+
+  /// 总交易量（美元）。后端缺失时为 0。
+  final double volumeTotal;
+
+  /// 未平仓量（美元）。后端缺失时为 0。
+  final double openInterest;
 
   /// 是否实时开放（LIVE 脉冲点 + 详情 OPEN/CLOSED）。
   final bool live;
@@ -117,6 +125,10 @@ String? fmtPredVol(double volume) {
     return '\$${k}K Vol.';
   }
   return '\$${_trimInt(volume)} Vol.';
+}
+
+String fmtPredMoney(double value) {
+  return fmtPredVol(value)?.replaceAll(' Vol.', '') ?? '\$0';
 }
 
 String _trimInt(double v) =>

@@ -146,6 +146,9 @@ void main() {
     expect(find.text('规则'), findsOneWidget);
     expect(find.text('Resolution source'), findsOneWidget);
     expect(find.text('Event window'), findsOneWidget);
+    expect(find.text('24h Vol'), findsOneWidget);
+    expect(find.text('Total Vol'), findsOneWidget);
+    expect(find.text('Open Interest'), findsOneWidget);
     expect(find.textContaining('创建时间'), findsOneWidget);
   });
 

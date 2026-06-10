@@ -12,6 +12,8 @@ PredictionMarketCardDto _dto({
   String? probability,
   List<PredictionMarketOutcomeDto>? options,
   String? volume24h,
+  String? volumeTotal,
+  String? openInterest,
   PredictionMarketRulesDto? rules,
 }) {
   return PredictionMarketCardDto((b) {
@@ -20,7 +22,9 @@ PredictionMarketCardDto _dto({
       ..title = title
       ..status = status
       ..probability = probability
-      ..volume24h = volume24h;
+      ..volume24h = volume24h
+      ..volumeTotal = volumeTotal
+      ..openInterest = openInterest;
     if (options != null) b.options.replace(options);
     if (rules != null) b.rules.replace(rules);
   });
@@ -109,11 +113,21 @@ void main() {
       expect(m.rules, <String>['Event window: 2026-01-01T00:00:00.000Z']);
       expect(m.createdAt, '2026-06-08T16:47:47.433Z');
     });
+
+    test('maps total volume and open interest into detail metrics', () {
+      final PredMarket m = ApiPredMarketRepository.mapPredMarket(
+        _dto(volume24h: '12.5', volumeTotal: '3456.7', openInterest: '89.1'),
+        0,
+      );
+      expect(m.volume, 12.5);
+      expect(m.volumeTotal, 3456.7);
+      expect(m.openInterest, 89.1);
+    });
   });
 
   group('ApiPredMarketRepository.listPredMarkets', () {
     test(
-      'decodes backend envelope and sends front-aligned query params',
+      'uses generated contract call and sends front-aligned query params',
       () async {
         late RequestOptions captured;
         final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
@@ -125,33 +139,32 @@ void main() {
                   Response<Object?>(
                     requestOptions: options,
                     statusCode: 200,
-                    data: <String, Object?>{
-                      'data': <Object?>[
-                        <String, Object?>{
-                          'id': '1162208',
-                          'title': 'Revolut会在2026年推出美元稳定币吗？',
-                          'options': <Object?>[
-                            <String, Object?>{
-                              'label': '否',
-                              'probability': '0.63',
-                            },
-                            <String, Object?>{
-                              'label': '是',
-                              'probability': '0.37',
-                            },
-                          ],
-                          'status': 'OPEN',
-                          'volume24h': '21',
-                          'rules': <String, Object?>{
-                            'paragraphs': <String>[
-                              'Event window: 2026-01-11T18:31:21.067Z ~ 2027-01-01T05:00:00.000Z',
-                            ],
-                            'createdAt': '2026-06-08T16:47:47.433Z',
+                    data: <Object?>[
+                      <String, Object?>{
+                        'id': '1162208',
+                        'title': 'Revolut会在2026年推出美元稳定币吗？',
+                        'options': <Object?>[
+                          <String, Object?>{
+                            'label': '否',
+                            'probability': '0.63',
                           },
+                          <String, Object?>{
+                            'label': '是',
+                            'probability': '0.37',
+                          },
+                        ],
+                        'status': 'OPEN',
+                        'volume24h': '21',
+                        'volumeTotal': '1200',
+                        'openInterest': '98.5',
+                        'rules': <String, Object?>{
+                          'paragraphs': <String>[
+                            'Event window: 2026-01-11T18:31:21.067Z ~ 2027-01-01T05:00:00.000Z',
+                          ],
+                          'createdAt': '2026-06-08T16:47:47.433Z',
                         },
-                      ],
-                      'message': 'Success',
-                    },
+                      },
+                    ],
                   ),
                 );
               },
@@ -166,6 +179,7 @@ void main() {
         );
 
         expect(captured.path, '/polymarket/markets');
+        expect(captured.extra['unwrapData'], isTrue);
         expect(captured.queryParameters['page'], 1);
         expect(captured.queryParameters['limit'], 48);
         expect(captured.queryParameters['onlyActive'], isTrue);
@@ -174,6 +188,8 @@ void main() {
         expect(markets.single.question, 'Revolut会在2026年推出美元稳定币吗？');
         expect(markets.single.yesPercent, 37);
         expect(markets.single.volume, 21);
+        expect(markets.single.volumeTotal, 1200);
+        expect(markets.single.openInterest, 98.5);
         expect(markets.single.live, isTrue);
         expect(markets.single.rules, hasLength(1));
         expect(markets.single.createdAt, '2026-06-08T16:47:47.433Z');

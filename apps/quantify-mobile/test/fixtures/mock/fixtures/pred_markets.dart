@@ -24,6 +24,8 @@ const List<PredMarket> kPredMarkets = <PredMarket>[
     question: 'CZ 会在2026年3月31日至4月7日期间发布0-19条帖子吗？',
     yesPercent: 67,
     volume: 393,
+    volumeTotal: 1519,
+    openInterest: 393,
     live: true,
   ),
   PredMarket(

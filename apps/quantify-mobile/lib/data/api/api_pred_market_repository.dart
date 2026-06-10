@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:backend_api_contracts/backend_api_contracts.dart';
-import 'package:built_collection/built_collection.dart';
-import 'package:built_value/serializer.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/pred_market_models.dart';
@@ -11,8 +9,7 @@ import '../services/generated_backend_api.dart';
 
 /// [PredMarketRepository] 真实现（issue #2270）。
 ///
-/// 经 generated SDK 共享的 [Dio] 调真实 backend `/polymarket/markets`，再用
-/// contract serializers 把响应 `data` 解成 [PredictionMarketCardDto]。
+/// 经 generated SDK 调真实 backend `/polymarket/markets`。
 /// icon/color 契约不提供，沿用 mock 的 `kPredIconPalette` 按 index 派生。
 class ApiPredMarketRepository implements PredMarketRepository {
   ApiPredMarketRepository(this._api);
@@ -25,18 +22,18 @@ class ApiPredMarketRepository implements PredMarketRepository {
     bool onlyActive = true,
     String? locale,
   }) async {
-    final response = await _api.dio.get<Object>(
-      '/polymarket/markets',
-      queryParameters: <String, Object?>{
-        'page': 1,
-        'limit': limit,
-        'onlyActive': onlyActive,
-        if (locale != null && locale.isNotEmpty) 'locale': locale,
-      },
-    );
-    final List<PredictionMarketCardDto> data = _decodeMarkets(
-      response.data,
-    ).toList(growable: false);
+    final response = await _api.client
+        .getPolymarketApi()
+        .polymarketControllerListMarkets(
+          page: 1,
+          limit: limit,
+          onlyActive: onlyActive,
+          locale: locale,
+          extra: const <String, Object?>{'unwrapData': true},
+        );
+    final List<PredictionMarketCardDto> data =
+        response.data?.toList(growable: false) ??
+        const <PredictionMarketCardDto>[];
     final List<PredMarket> result = <PredMarket>[];
     for (int i = 0; i < data.length; i++) {
       result.add(mapPredMarket(data[i], i));
@@ -56,22 +53,12 @@ class ApiPredMarketRepository implements PredMarketRepository {
       question: dto.title,
       yesPercent: _yesPercent(dto),
       volume: double.tryParse(dto.volume24h ?? '') ?? 0,
+      volumeTotal: double.tryParse(dto.volumeTotal ?? '') ?? 0,
+      openInterest: double.tryParse(dto.openInterest ?? '') ?? 0,
       live: _isLiveStatus(dto.status),
       rules: dto.rules?.paragraphs.toList(growable: false) ?? const <String>[],
       created: dto.rules?.createdAt,
     );
-  }
-
-  static BuiltList<PredictionMarketCardDto> _decodeMarkets(Object? raw) {
-    final Object? payload = raw is Map ? raw['data'] : raw;
-    if (payload == null) return BuiltList<PredictionMarketCardDto>();
-    return standardSerializers.deserialize(
-          payload,
-          specifiedType: const FullType(BuiltList, <FullType>[
-            FullType(PredictionMarketCardDto),
-          ]),
-        )!
-        as BuiltList<PredictionMarketCardDto>;
   }
 
   static bool _isLiveStatus(String? raw) {

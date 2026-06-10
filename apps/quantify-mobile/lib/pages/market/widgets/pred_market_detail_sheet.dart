@@ -33,8 +33,7 @@ class PredMarketDetailSheet extends StatelessWidget {
     final String status = market.live
         ? l10n.predMarketStatusOpen
         : l10n.predMarketStatusClosed;
-    final String volText =
-        fmtPredVol(market.volume)?.replaceAll(' Vol.', '') ?? '\$0';
+    final String volText = fmtPredMoney(market.volume);
     return Container(
       key: const Key('pred-detail-sheet'),
       constraints: BoxConstraints(
@@ -58,6 +57,8 @@ class PredMarketDetailSheet extends StatelessWidget {
                 children: <Widget>[
                   _heading(c, l10n, status, volText),
                   _divider(c, top: 4, bottom: 14),
+                  _metrics(c),
+                  _divider(c, top: 14, bottom: 14),
                   Text(
                     l10n.predMarketRules,
                     style: TextStyle(
@@ -221,6 +222,55 @@ class PredMarketDetailSheet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _metrics(QzColorScheme c) {
+    return Row(
+      children: <Widget>[
+        Expanded(child: _metric(c, '24h Vol', fmtPredMoney(market.volume))),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(c, 'Total Vol', fmtPredMoney(market.volumeTotal)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(c, 'Open Interest', fmtPredMoney(market.openInterest)),
+        ),
+      ],
+    );
+  }
+
+  Widget _metric(QzColorScheme c, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: c.textDim, fontSize: 10),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: c.text,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
