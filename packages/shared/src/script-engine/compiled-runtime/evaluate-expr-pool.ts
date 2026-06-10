@@ -359,16 +359,55 @@ function evaluateOpenInterestCondition(
     .sort((left, right) => Number(left.ts ?? 0) - Number(right.ts ?? 0))
     .map(event => {
       const payload = readPayloadRecord(event.payload)
-      return payload ? readFirstNumber(payload, ['openInterest', 'open_interest', 'oi', 'value']) : null
+      const value = payload ? readFirstNumber(payload, ['openInterest', 'open_interest', 'oi', 'value']) : null
+      const ts = typeof event.ts === 'number' && Number.isFinite(event.ts) ? event.ts : null
+      return value !== null && value > 0 && ts !== null ? { ts, value } : null
     })
-    .filter((value): value is number => value !== null && value > 0)
+    .filter((value): value is { ts: number; value: number } => value !== null)
   if (values.length < 2) return false
 
-  const previous = values[values.length - 2]
   const current = values[values.length - 1]
-  const changePct = ((current - previous) / previous) * 100
+  const windowMs = readDurationParamMs(node.payload.params, 'window')
+    ?? readNumberParam(node.payload.params, 'windowMs')
+  const previous = windowMs && windowMs > 0
+    ? findWindowBaseline(values, current.ts - windowMs)
+    : values[values.length - 2]
+  if (!previous) return false
+
+  const changePct = ((current.value - previous.value) / previous.value) * 100
   const comparable = direction === 'down' ? -changePct : changePct
   return Number.isFinite(comparable) && compareByOperator(comparable, threshold, operator)
+}
+
+function findWindowBaseline(
+  values: readonly { ts: number; value: number }[],
+  targetTs: number,
+): { ts: number; value: number } | null {
+  for (let index = values.length - 2; index >= 0; index -= 1) {
+    const candidate = values[index]
+    if (candidate && candidate.ts <= targetTs) return candidate
+  }
+  return null
+}
+
+function readDurationParamMs(
+  params: Record<string, number | string | boolean> | undefined,
+  key: string,
+): number | null {
+  const raw = params?.[key]
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : null
+  if (typeof raw !== 'string') return null
+  const normalized = raw.trim().toLowerCase()
+  const match = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)$/.exec(normalized)
+  if (!match) return null
+  const value = Number(match[1])
+  if (!Number.isFinite(value) || value <= 0) return null
+  const unit = match[2]
+  if (unit === 'ms') return value
+  if (unit === 's') return value * 1_000
+  if (unit === 'm') return value * 60_000
+  if (unit === 'h') return value * 60 * 60_000
+  return value * 24 * 60 * 60_000
 }
 
 function evaluateIndicatorSlope(

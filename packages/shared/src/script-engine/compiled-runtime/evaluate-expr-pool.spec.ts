@@ -313,6 +313,34 @@ describe('evaluateExprPool', () => {
     expect(values.oi_up_5pct).toBe(true)
   })
 
+  it('evaluates openInterestCondition percent changes over the configured time window', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 3_600_000,
+        eventInbox: {
+          open_interest: [
+            { id: 'oi-0', ts: 0, payload: { openInterest: 100 } },
+            { id: 'oi-1', ts: 2_700_000, payload: { openInterest: 105 } },
+            { id: 'oi-2', ts: 3_600_000, payload: { openInterest: 106 } },
+          ],
+        },
+      },
+      [{
+        id: 'oi_up_1h_5pct',
+        nodeType: 'predicate',
+        sourceRef: 'openInterest.condition',
+        payload: {
+          kind: 'openInterestCondition',
+          params: { sourceFeedId: 'open_interest', direction: 'up', operator: 'GT', value: 5, window: '1h' },
+        },
+        deps: [],
+      }],
+      ['oi_up_1h_5pct'],
+    )
+
+    expect(values.oi_up_1h_5pct).toBe(true)
+  })
+
   it('evaluates funding plus open interest confirmation predicates together', () => {
     const values = evaluateExprPool(
       {
