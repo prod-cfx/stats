@@ -21,6 +21,7 @@ import { StrategyConsistencyService } from '@/modules/llm-strategy-codegen/servi
 import { StrategySummaryBuilderService } from '@/modules/llm-strategy-codegen/services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '@/modules/llm-strategy-codegen/services/strategy-summary-observation.service'
 import { StrategyPlazaOfficialSnapshotRepository } from '../repositories/strategy-plaza-official-snapshot.repository'
+import { buildOfficialStrategySnapshotContent } from '../utils/official-strategy-plaza-snapshot-builder'
 import {
   buildOfficialTemplateBacktestConfigDefaults,
   buildOfficialTemplateDataRequirements,
@@ -105,10 +106,13 @@ export class StrategyPlazaCompiledSnapshotService {
     const patch = this.seedDispatcher.dispatch(message) as CodegenSemanticPatch
     const semanticState = this.seedStateBuilder.build(patch, message)
     if (!semanticState) {
-      throw new Error(`strategy_plaza.compiled_snapshot.semantic_state_missing: ${template.id}`)
+      return this.buildFallbackOfficialSourceSnapshotContent(template)
     }
 
-    const artifacts = await this.generationStage.generate({ semanticState })
+    const artifacts = await this.generationStage.generate({ semanticState }).catch(() => null)
+    if (!artifacts) {
+      return this.buildFallbackOfficialSourceSnapshotContent(template)
+    }
     const scriptSnapshot = artifacts.compiledScript
     const scriptHash = sha256Text(scriptSnapshot)
     const runtimeContent = {
@@ -148,12 +152,51 @@ export class StrategyPlazaCompiledSnapshotService {
       deploymentExecutionConstraints: runtimeContent.deploymentExecutionConstraints as Prisma.InputJsonValue,
       dataRequirements: artifacts.ast.dataRequirements as unknown as Prisma.InputJsonValue,
       lockedParams: runtimeContent.lockedParams as Prisma.InputJsonValue,
-      executionEnvelope: artifacts.executionEnvelope as unknown as Prisma.InputJsonValue,
+      executionEnvelope: {
+        ...artifacts.executionEnvelope,
+        runtime: 'signal-generator',
+        source: 'strategy-plaza-official-template',
+      } as unknown as Prisma.InputJsonValue,
       executionPolicy: artifacts.compiled.ir.executionPolicy as unknown as Prisma.InputJsonValue,
       userIntentSummary: artifacts.userIntentSummary as unknown as Prisma.InputJsonValue,
       strategySummary: artifacts.strategySummary as unknown as Prisma.InputJsonValue,
       scriptSummary: artifacts.scriptSummary as unknown as Prisma.InputJsonValue,
       snapshotVersion: 3,
+    }
+  }
+
+  private buildFallbackOfficialSourceSnapshotContent(
+    template: OfficialStrategyPlazaTemplate,
+  ): StrategyPlazaSourceSnapshotContent {
+    const content = buildOfficialStrategySnapshotContent(template)
+    return {
+      snapshotHash: content.snapshotHash,
+      scriptHash: content.scriptHash,
+      specHash: content.specHash,
+      irHash: content.irHash,
+      astDigest: content.astDigest,
+      structuralDigest: content.structuralDigest,
+      scriptSnapshot: content.scriptSnapshot,
+      specSnapshot: content.specSnapshot as Prisma.InputJsonValue,
+      semanticGraph: content.semanticGraph as Prisma.InputJsonValue,
+      compiledIr: content.compiledIr as Prisma.InputJsonValue,
+      irSnapshot: content.irSnapshot as Prisma.InputJsonValue,
+      astSnapshot: content.astSnapshot as Prisma.InputJsonValue,
+      compiledManifest: content.compiledManifest as Prisma.InputJsonValue,
+      consistencyReport: content.consistencyReport as Prisma.InputJsonValue,
+      paramsSnapshot: content.paramsSnapshot as Prisma.InputJsonValue,
+      strategyConfig: content.strategyConfig as Prisma.InputJsonValue,
+      backtestConfigDefaults: content.backtestConfigDefaults as Prisma.InputJsonValue,
+      deploymentExecutionDefaults: content.deploymentExecutionDefaults as Prisma.InputJsonValue,
+      deploymentExecutionConstraints: content.deploymentExecutionConstraints as Prisma.InputJsonValue,
+      dataRequirements: content.dataRequirements as Prisma.InputJsonValue,
+      lockedParams: content.lockedParams as Prisma.InputJsonValue,
+      executionEnvelope: content.executionEnvelope as Prisma.InputJsonValue,
+      executionPolicy: content.executionPolicy as Prisma.InputJsonValue,
+      userIntentSummary: content.userIntentSummary as Prisma.InputJsonValue,
+      strategySummary: content.strategySummary as Prisma.InputJsonValue,
+      scriptSummary: content.scriptSummary as Prisma.InputJsonValue,
+      snapshotVersion: content.snapshotVersion,
     }
   }
 }
