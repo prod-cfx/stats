@@ -7,6 +7,9 @@ import '../models/coin_stock_models.dart';
 import '../repositories/coin_stock_repository.dart';
 import '../services/generated_backend_api.dart';
 
+typedef CoinStockQuoteLoader =
+    Future<List<CryptoStockQuoteResponseDto>> Function(String source);
+
 /// [CoinStockRepository] 真实现（issue #2270，依赖 #2268 契约透明化）。
 ///
 /// 经 generated [CryptoStockQuotesApi] 调真实 backend `/crypto-stock-quotes/latest`。
@@ -16,9 +19,15 @@ import '../services/generated_backend_api.dart';
 /// 契约 DTO 的 price/marketCap/mNav/holdings* 等数值字段均为 `String?`，mobile
 /// [CoinStock] 对应字段全为 `String`，映射统一 null→空串 fallback。
 class ApiCoinStockRepository implements CoinStockRepository {
-  ApiCoinStockRepository(this._api);
+  ApiCoinStockRepository(this._api) : _loadQuotesOverride = null;
 
-  final GeneratedBackendApi _api;
+  @visibleForTesting
+  ApiCoinStockRepository.test({required CoinStockQuoteLoader loadQuotes})
+    : _api = null,
+      _loadQuotesOverride = loadQuotes;
+
+  final GeneratedBackendApi? _api;
+  final CoinStockQuoteLoader? _loadQuotesOverride;
 
   @override
   Future<List<CoinStock>> listCoinStocks() async {
@@ -47,7 +56,13 @@ class ApiCoinStockRepository implements CoinStockRepository {
 
   Future<_QuoteLoadResult> _loadQuotes(String source) async {
     try {
-      final response = await _api.client
+      final CoinStockQuoteLoader? override = _loadQuotesOverride;
+      if (override != null) {
+        return _QuoteLoadResult(quotes: await override(source));
+      }
+
+      final GeneratedBackendApi api = _api!;
+      final response = await api.client
           .getCryptoStockQuotesApi()
           .cryptoStockQuotesControllerGetLatest(source_: source);
       return _QuoteLoadResult(
