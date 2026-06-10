@@ -859,7 +859,7 @@ function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
   if (periodMatches.length !== 1) return null
   const hasSingleIndicatorCross = hasPriceSubject
     ? /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
-    : /(?:突破|跌破|break(?:s|out)?|breakdown)/iu.test(clause)
+    : /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?|break(?:s|out)?|breakdown)/iu.test(clause)
   if (!hasPriceSubject && !hasSingleIndicatorCross) return null
   const period = Number(periodMatches[0]?.[1])
   return Number.isFinite(period) && period > 0 ? period : null
@@ -2155,6 +2155,7 @@ export class GenericSeedDispatcher {
     const out: PatchAtomNode[] = []
     const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
       if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      if (item.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key && !this.hasExplicitAtrTakeProfitParams(item, userMessage)) return
       const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
       const fixedGateEffect = contract?.surface?.phaseResolver === 'fixed-gate' && contract.roles.includes('effect')
       if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !fixedGateEffect) return
@@ -2297,24 +2298,52 @@ export class GenericSeedDispatcher {
         evidence: { text: this.findEvidenceText(userMessage, '(?:价差|spread)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
-    if (/(?:深度比|买一卖一深度|depth\s*ratio)/iu.test(userMessage) && !out.some(item => item.key === 'orderbook.depth_ratio')) {
+    if (/(?:深度比|买一卖一深度|买盘深度|卖盘深度|depth\s*ratio)/iu.test(userMessage) && !out.some(item => item.key === 'orderbook.depth_ratio')) {
       out.push({
         key: 'orderbook.depth_ratio',
         phase: 'entry',
         sideScope: this.hasLegScopeIntent(userMessage) ? 'both' : (/开空|做空|short/iu.test(userMessage) ? 'short' : 'long'),
-        params: { side: /卖一|ask/iu.test(userMessage) && !/买一|bid/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask', operator: 'gt', ratio: this.extractFirstNumber(userMessage, '(?:深度比|深度|depth)[^，。；;]{0,12}(\d+(?:\.\d+)?)') ?? 2 },
-        evidence: { text: this.findEvidenceText(userMessage, '(?:深度比|买一卖一深度|depth\s*ratio)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
+        params: this.extractOrderbookDepthRatioParams(userMessage),
+        evidence: { text: this.findEvidenceText(userMessage, '(?:深度比|买一卖一深度|买盘深度|卖盘深度|depth\s*ratio)[^，。；;]*') ?? userMessage.trim(), source: 'user_explicit' },
       })
     }
     for (const item of out) {
       if (item.key === 'orderbook.imbalance') {
         item.params = { ...item.params, ...this.extractOrderbookImbalanceParams(userMessage) }
       }
+      if (item.key === 'orderbook.depth_ratio') {
+        item.params = { ...item.params, ...this.extractOrderbookDepthRatioParams(userMessage) }
+      }
       if (item.key === ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key) {
-        item.params = { ...this.extractFundingRateParams(userMessage), ...item.params }
+        item.params = { ...item.params, ...this.extractFundingRateParams(userMessage) }
       }
       if (item.key === ATOM_CONTRACT_REGISTRY['liquidation.condition'].key) {
         item.params = { ...this.extractLiquidationParams(userMessage), ...item.params }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['openInterest.condition'].key) {
+        item.params = { ...item.params, ...this.extractOpenInterestParams(userMessage) }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['indicator.slope'].key) {
+        item.params = { ...item.params, ...this.extractIndicatorSlopeParams(userMessage, readPatchEvidenceText(item) ?? undefined) }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || item.key === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key) {
+        item.params = { ...item.params, ...this.extractMacdTupleParams(userMessage, item.params), ...this.extractIndicatorTimeframeParams(userMessage, readPatchEvidenceText(item) ?? undefined, item.params) }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key || item.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
+        item.params = { ...item.params, ...this.extractIndicatorTimeframeParams(userMessage, readPatchEvidenceText(item) ?? undefined, item.params) }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['price.previous_extrema_retest'].key) {
+        item.params = { ...item.params, ...this.extractPreviousExtremaRetestParams(userMessage, readPatchEvidenceText(item) ?? undefined) }
+      }
+      if (item.key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key && relativeVolumeThreshold) {
+        item.params = {
+          ...item.params,
+          mode: 'relative_to_sma',
+          refWindow: relativeVolumeThreshold.refWindow,
+          multiplier: relativeVolumeThreshold.multiplier,
+          metric: 'base_volume',
+          operator: 'GT',
+        }
       }
     }
     if (this.hasOpenInterestIntent(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['openInterest.condition'].key)) {
@@ -2335,7 +2364,26 @@ export class GenericSeedDispatcher {
         evidence: { text: userMessage.trim(), source: 'user_explicit' },
       })
     }
-    return mergeCompatiblePatchAtomNodes(out)
+    return mergeCompatiblePatchAtomNodes(out.filter(item => !this.isFalseCandlePatternFromIndicatorSlope(item, userMessage)))
+  }
+
+  private isFalseCandlePatternFromIndicatorSlope(item: PatchAtomNode, userMessage: string): boolean {
+    if (item.key !== 'price.candle_pattern') return false
+    const evidenceText = readPatchEvidenceText(item) ?? ''
+    const text = evidenceText || userMessage
+    return /斜率|倾斜|slope/iu.test(text)
+      && /连续\s*\d+\s*根/iu.test(text)
+      && !/(?:阳线|阴线|实体|K\s*线\s*(?:形态|实体)|candle|body)/iu.test(text)
+  }
+
+  private hasExplicitAtrTakeProfitParams(item: { params?: Record<string, unknown>, evidence?: unknown }, userMessage: string): boolean {
+    const params = item.params ?? {}
+    if (typeof params.multiple === 'number' && Number.isFinite(params.multiple) && params.multiple > 0) return true
+    if (typeof params.multiplier === 'number' && Number.isFinite(params.multiplier) && params.multiplier > 0) return true
+    const evidenceText = readPatchEvidenceText(item) ?? ''
+    const text = evidenceText || userMessage
+    return /(?:ATR|atr)[^，。；;]{0,24}(?:止盈|take\s*profit)|(?:止盈|take\s*profit)[^，。；;]{0,24}(?:ATR|atr)/iu.test(text)
+      && /\d+(?:\.\d+)?\s*(?:倍|x|X)\s*(?:ATR|atr)/u.test(text)
   }
 
   private shouldTreatPredicateEvidenceAsExit(evidenceText: string | undefined): boolean {
@@ -2353,6 +2401,8 @@ export class GenericSeedDispatcher {
       const priceLevel = Number(rawLevel)
       if (!Number.isFinite(priceLevel) || priceLevel <= 0) return
       const evidence = match?.[0]?.trim() || userMessage.trim()
+      const suffix = userMessage.slice((match.index ?? 0) + match[0].length, (match.index ?? 0) + match[0].length + 8)
+      if (/^\s*(?:根|条|个|K\s*线?|bar|bars)/iu.test(suffix)) return
       out.push({
         key,
         phase: this.hasCloseActionIntent(evidence) ? 'exit' : 'entry',
@@ -2374,6 +2424,7 @@ export class GenericSeedDispatcher {
       const lookbackBars = Number(rawLookback)
       if (!Number.isInteger(lookbackBars) || lookbackBars <= 0) return
       const evidence = match[0]?.trim() || userMessage.trim()
+      const bufferPct = this.extractBreakoutBufferPct(evidence) ?? this.extractBreakoutBufferPct(userMessage)
       const phase = this.hasCloseActionIntent(evidence) ? 'exit' : 'entry'
       const sideScope = phase === 'exit'
         ? (event === 'breakout_down' ? 'long' : 'short')
@@ -2383,7 +2434,7 @@ export class GenericSeedDispatcher {
         key,
         phase,
         sideScope,
-        params: { extrema, lookbackBars, event },
+        params: { extrema, lookbackBars, event, ...(bufferPct !== null ? { bufferPct } : {}) },
         evidence: { text: evidence, source: 'user_explicit' },
       })
     }
@@ -2402,6 +2453,13 @@ export class GenericSeedDispatcher {
     for (const pattern of lowPatterns) {
       for (const match of userMessage.matchAll(pattern)) push(match, 'low', 'breakout_down')
     }
+  }
+
+  private extractBreakoutBufferPct(text: string): number | null {
+    const match = text.match(/突破缓冲\s*(\d+(?:\.\d+)?)\s*%/iu)
+    if (!match?.[1]) return null
+    const value = Number(match[1])
+    return Number.isFinite(value) && value >= 0 ? value : null
   }
 
   private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: InternalSeedDraft): void {
@@ -2440,6 +2498,7 @@ export class GenericSeedDispatcher {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
       if (item.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && !/网格|grid/iu.test(userMessage)) return
+      if (item.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key && !this.hasExplicitAtrTakeProfitParams(item, userMessage)) return
       if (
         this.hasLegScopeIntent(userMessage)
         && this.hasOpenActionIntent(userMessage)
@@ -2971,8 +3030,95 @@ export class GenericSeedDispatcher {
     return {
       side: /卖盘|卖方|ask|sell/iu.test(userMessage) && !/买盘|买方|bid|buy|多/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask',
       operator: /小于|低于|below|less|lt/iu.test(userMessage) ? 'lt' : 'gt',
+      ...(percent !== null ? { percent } : {}),
       ...(ratio !== null ? { ratio } : {}),
     }
+  }
+
+  private extractOrderbookDepthRatioParams(userMessage: string): Record<string, unknown> {
+    const ratio = this.parsePositiveNumber(
+      userMessage.match(/(?:买盘|买方|bid)[^，。；;]{0,20}(?:卖盘|卖方|ask)[^\d，。；;]{0,20}(\d+(?:\.\d+)?)\s*(?:倍|x|X)/iu)?.[1]
+      ?? userMessage.match(/(?:深度比|买一卖一深度|depth\s*ratio|depth)[^\d，。；;]{0,24}(\d+(?:\.\d+)?)\s*(?:倍|x|X)?/iu)?.[1],
+    )
+    return {
+      side: /卖盘|卖方|ask|sell/iu.test(userMessage) && !/买盘|买方|bid|buy/iu.test(userMessage) ? 'ask_over_bid' : 'bid_over_ask',
+      operator: /小于|低于|below|less|lt/iu.test(userMessage) ? 'lt' : 'gt',
+      ratio: ratio ?? 2,
+    }
+  }
+
+  private extractIndicatorSlopeParams(userMessage: string, evidenceText?: string): Record<string, unknown> {
+    const text = evidenceText && evidenceText.trim().length > 0 ? evidenceText : userMessage
+    if (!/斜率|倾斜|slope/iu.test(text)) return {}
+    const indicatorMatch = text.match(/\b(EMA|MA|SMA)\s*(\d{1,4})\b/iu) ?? userMessage.match(/\b(EMA|MA|SMA)\s*(\d{1,4})\b/iu)
+    const consecutiveMatch = text.match(/连续\s*(\d{1,4})\s*根/iu) ?? userMessage.match(/连续\s*(\d{1,4})\s*根/iu)
+    const direction = /向下|下降|下行|down|negative/iu.test(text) ? 'down' : /向上|上涨|上行|up|positive/iu.test(text) ? 'up' : undefined
+    const indicator = indicatorMatch?.[1]?.toLowerCase()
+    const period = indicatorMatch?.[2] ? Number(indicatorMatch[2]) : null
+    const consecutiveBars = consecutiveMatch?.[1] ? Number(consecutiveMatch[1]) : null
+    return {
+      ...(indicator ? { indicator } : {}),
+      ...(period !== null && Number.isInteger(period) ? { period } : {}),
+      ...(direction ? { direction } : {}),
+      ...(consecutiveBars !== null && Number.isInteger(consecutiveBars) ? { consecutiveBars } : {}),
+    }
+  }
+
+  private extractMacdTupleParams(userMessage: string, params: Record<string, unknown>): Record<string, unknown> {
+    if (params.indicator !== 'macd') return {}
+    const match = userMessage.match(/MACD\s*(\d{1,3})\s*[\/／]\s*(\d{1,3})\s*[\/／]\s*(\d{1,3})/iu)
+    if (!match?.[1] || !match[2] || !match[3]) return {}
+    const fastPeriod = Number(match[1])
+    const slowPeriod = Number(match[2])
+    const signalPeriod = Number(match[3])
+    if (!Number.isInteger(fastPeriod) || !Number.isInteger(slowPeriod) || !Number.isInteger(signalPeriod)) return {}
+    return { fastPeriod, slowPeriod, signalPeriod }
+  }
+
+  private extractIndicatorTimeframeParams(userMessage: string, evidenceText: string | undefined, params: Record<string, unknown>): Record<string, unknown> {
+    const text = evidenceText && evidenceText.trim().length > 0 ? evidenceText : userMessage
+    const targetPeriod = typeof params.period === 'number'
+      ? params.period
+      : typeof params.fastPeriod === 'number'
+        ? params.fastPeriod
+        : null
+    const referencePeriod = typeof params['reference.period'] === 'number' ? params['reference.period'] : null
+    const periodAlias = typeof params.period === 'number' ? {} : referencePeriod !== null ? { period: referencePeriod } : {}
+    const localTimeframe = this.extractLeadingTimeframe(text)
+    if (localTimeframe) return { ...periodAlias, timeframe: localTimeframe }
+    if (targetPeriod !== null) {
+      const indicator = typeof params.indicator === 'string' ? params.indicator : '(?:EMA|MA|SMA)'
+      const escapedIndicator = indicator.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+      const re = new RegExp(`((?:\\d+\\s*(?:m|min|分钟|h|小时|d|天)))[^，。；;]{0,32}${escapedIndicator}\\s*${targetPeriod}`, 'iu')
+      const match = userMessage.match(re)
+      const normalized = match?.[1] ? this.normalizeTimeframeToken(match[1]) : null
+      if (normalized) return { ...periodAlias, timeframe: normalized }
+    }
+    return periodAlias
+  }
+
+  private extractLeadingTimeframe(text: string): string | null {
+    const match = text.match(/(?:^|[，。；;：:\s])((?:\d+)\s*(?:m|min|分钟|h|小时|d|天))(?=[^，。；;]{0,32}(?:EMA|MA|SMA|价格|price))/iu)
+    return match?.[1] ? this.normalizeTimeframeToken(match[1]) : null
+  }
+
+  private normalizeTimeframeToken(raw: string): string | null {
+    const match = raw.match(/(\d+)\s*(m|min|分钟|h|小时|d|天)/iu)
+    if (!match?.[1] || !match[2]) return null
+    const value = Number(match[1])
+    if (!Number.isInteger(value) || value <= 0) return null
+    const unit = match[2].toLowerCase()
+    if (unit === 'm' || unit === 'min' || unit === '分钟') return `${value}m`
+    if (unit === 'h' || unit === '小时') return `${value}h`
+    if (unit === 'd' || unit === '天') return `${value}d`
+    return null
+  }
+
+  private extractPreviousExtremaRetestParams(userMessage: string, evidenceText?: string): Record<string, unknown> {
+    const text = evidenceText && evidenceText.trim().length > 0 ? evidenceText : userMessage
+    if (/不破|站稳|hold/iu.test(text) || /不破|站稳|hold/iu.test(userMessage)) return { retestKind: 'not_break' }
+    if (/跌穿|跌破|break\s*(?:below|through)/iu.test(text)) return { retestKind: 'break_through' }
+    return {}
   }
 
   private convertOrderbookImbalancePercentToRatio(percent: number): number | null {
@@ -2997,6 +3143,17 @@ export class GenericSeedDispatcher {
   }
 
   private extractFundingRateParams(userMessage: string): Record<string, unknown> {
+    const percentMatches = [...userMessage.matchAll(/(?:资金费率|funding\s*rate|funding)[^，。；;]*?(大于等于|至少|不低于|>=|大于|高于|超过|>|小于|低于|<)[^\d，。；;]{0,8}(\d+(?:\.\d+)?)\s*%/giu)]
+    const percentMatch = percentMatches.at(-1)
+    if (percentMatch?.[2]) {
+      const percent = Number(percentMatch[2])
+      if (!Number.isFinite(percent)) return {}
+      const operatorText = percentMatch[1] ?? ''
+      return {
+        operator: /小于|低于|</iu.test(operatorText) ? 'LT' : /大于等于|至少|不低于|>=/iu.test(operatorText) ? 'GTE' : 'GT',
+        valuePct: percent,
+      }
+    }
     if (/为正|正|positive|>\s*0|大于\s*0/iu.test(userMessage)) return { operator: 'GT', value: 0 }
     if (/为负|负|negative|<\s*0|小于\s*0/iu.test(userMessage)) return { operator: 'LT', value: 0 }
     return {}
@@ -3031,10 +3188,15 @@ export class GenericSeedDispatcher {
 
   private extractOpenInterestParams(userMessage: string): Record<string, unknown> {
     const value = this.extractFirstNumber(userMessage, '(?:未平仓量|持仓量|open\\s*interest|\\bOI\\b)[^，。；;]{0,24}?(?:增加|上涨|上升|增长|提高|超过|大于|>|>=)[^\\d，。；;]{0,12}?(\\d+(?:\\.\\d+)?)\\s*%')
+    const windowMatch = userMessage.match(/(?:未平仓量|持仓量|open\s*interest|\bOI\b)[^，。；;]{0,18}(\d+)\s*(小时|h|分钟|min|m|天|d)/iu)
+    const window = windowMatch?.[1] && windowMatch[2]
+      ? this.normalizeTimeframeToken(`${windowMatch[1]}${windowMatch[2]}`)
+      : null
     return {
       direction: /(?:减少|下降|降低|下滑|decreas|down|fall)/iu.test(userMessage) ? 'down' : 'up',
       operator: /(?:至少|不低于|大于等于|>=|不少于)/iu.test(userMessage) ? 'GTE' : 'GT',
-      ...(value !== null ? { value } : {}),
+      ...(value !== null ? { value, changePct: value } : {}),
+      ...(window ? { window } : {}),
     }
   }
 

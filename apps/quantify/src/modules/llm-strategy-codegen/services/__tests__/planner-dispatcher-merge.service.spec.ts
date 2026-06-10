@@ -2069,6 +2069,57 @@ describe('PlannerDispatcherMergeService — preserves explicit dispatcher semant
     ].map(leaf => leaf.key))),
   ].sort()
 
+  const findConditionLeaf = (patch: CodegenSemanticPatch | null | undefined, key: string) =>
+    (patch?.rules ?? []).flatMap(rule => collectAtomLeaves(rule.condition)).find(leaf => leaf.key === key)
+
+  const plannerEntry = (condition: CodegenSemanticPatch['rules'] extends Array<infer Rule> ? Rule extends { condition: infer Condition } ? Condition : never : never, sideScope: 'long' | 'short' = 'long') => ({
+    rules: [{
+      id: 'planner-entry',
+      phase: 'entry',
+      sideScope,
+      condition,
+      effects: { actions: [{ kind: 'atom', key: sideScope === 'short' ? 'action.open_short' : 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+    }],
+  }) as unknown as CodegenSemanticPatch
+
+  it('overrides noisy planner params with explicit dispatcher params for plaza predicates', () => {
+    const cases = [{
+      text: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。',
+      planner: plannerEntry({ kind: 'atom', key: 'fundingRate.condition', params: { operator: 'GT', value: 0 } }, 'short'),
+      key: 'fundingRate.condition',
+      params: { operator: 'GT', valuePct: 0.01 },
+    }, {
+      text: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建持仓量突破确认策略。规则：未平仓量 1 小时增加超过 5% 且价格突破过去 20 根 K 线高点时开多；跌破 EMA20 时平多；风控：仓位 10%，亏损 2% 止损。',
+      planner: plannerEntry({ kind: 'atom', key: 'openInterest.condition', params: { direction: 'up', operator: 'GT', value: 5 } }, 'long'),
+      key: 'openInterest.condition',
+      params: { direction: 'up', changePct: 5, window: '1h' },
+    }, {
+      text: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 趋势策略。规则：MACD DIF 上穿 DEA 时金叉做多、死叉平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，亏损 2% 止损，盈利 0.5% 止盈。',
+      planner: plannerEntry({ kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } }, 'long'),
+      key: 'indicator.cross_over',
+      params: { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
+    }, {
+      text: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 1m，创建盘口深度比确认策略。规则：价格高于 EMA50 且买盘深度是卖盘 1.5 倍以上时开多；价格跌破 EMA50 平多；风控：仓位 10%，亏损 1.2% 止损。',
+      planner: plannerEntry({ kind: 'atom', key: 'orderbook.depth_ratio', params: { side: 'bid_over_ask', operator: 'gt', ratio: 2 } }, 'long'),
+      key: 'orderbook.depth_ratio',
+      params: { side: 'bid_over_ask', operator: 'gt', ratio: 1.5 },
+    }, {
+      text: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建放量突破策略。规则：价格突破过去 20 根 K 线高点并且成交量超过 20 根均量 1.5 倍时开多；跌破 EMA20 平多；风控：仓位 20%，单笔最多亏 2%。',
+      planner: plannerEntry({ kind: 'atom', key: 'volume.threshold', params: { metric: 'base_volume', operator: 'GT', value: 20, refWindow: 1, multiplier: 1.5 } }, 'long'),
+      key: 'volume.threshold',
+      params: { mode: 'relative_to_sma', refWindow: 20, multiplier: 1.5 },
+    }]
+
+    for (const item of cases) {
+      const dispatcher = new GenericSeedDispatcher().dispatch(item.text) as CodegenSemanticPatch
+      const merged = svc.mergeDeterministicExecutionSlots(item.planner, dispatcher, item.text)
+
+      expect(findConditionLeaf(merged, item.key)).toEqual(expect.objectContaining({
+        params: expect.objectContaining(item.params),
+      }))
+    }
+  })
+
   it('adds explicit condition leaves from matching dispatcher entry rule', () => {
     const planner: CodegenSemanticPatch = {
       rules: [{
