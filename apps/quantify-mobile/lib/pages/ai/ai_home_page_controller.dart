@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error/error_router.dart';
 import '../../core/providers/notifier_lifecycle.dart';
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/strategy_models.dart';
@@ -53,13 +54,28 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   }
 
   Future<void> loadSessions() async {
-    final List<AiSession> list = await _chatRepo.listSessions();
+    state = state.copyWith(loadError: null, initialized: false);
+    List<AiSession> list;
+    try {
+      list = await _chatRepo.listSessions();
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(
+        sessions: const <String, AiSession>{},
+        order: const <String>[],
+        currentId: null,
+        initialized: true,
+        loadError: ErrorRouter.normalize(error).message,
+      );
+      return;
+    }
     if (!mounted) return;
     state = state.copyWith(
       sessions: <String, AiSession>{for (final AiSession s in list) s.id: s},
       order: <String>[for (final AiSession s in list) s.id],
       currentId: list.isNotEmpty ? list.first.id : null,
       initialized: true,
+      loadError: null,
     );
   }
 

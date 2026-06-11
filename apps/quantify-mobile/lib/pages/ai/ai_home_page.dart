@@ -277,6 +277,13 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
             Expanded(
               child: !st.initialized
                   ? const Center(child: CircularProgressIndicator())
+                  : current == null && st.loadError != null
+                  ? _LoadError(
+                      scheme: c,
+                      error: st.loadError!,
+                      onRetry: _loadSessions,
+                      onCreate: _createSession,
+                    )
                   : current == null
                   ? _Empty(scheme: c, onCreate: _createSession)
                   : ListView.separated(
@@ -387,6 +394,70 @@ class _Empty extends StatelessWidget {
               onPressed: onCreate,
               icon: const Icon(Icons.add, size: 16),
               label: Text(l10n.aiSessionNewButton),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadError extends StatelessWidget {
+  const _LoadError({
+    required this.scheme,
+    required this.error,
+    required this.onRetry,
+    required this.onCreate,
+  });
+
+  final QzColorScheme scheme;
+  final String error;
+  final VoidCallback onRetry;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(QzSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              l10n.commonLoadError,
+              key: const Key('ai-load-error-title'),
+              style: TextStyle(
+                color: scheme.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.sm),
+            Text(
+              error,
+              key: const Key('ai-load-error-detail'),
+              style: TextStyle(color: scheme.textDim, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                OutlinedButton(
+                  key: const Key('ai-load-retry'),
+                  onPressed: onRetry,
+                  child: Text(l10n.commonRetry),
+                ),
+                const SizedBox(width: QzSpacing.sm),
+                ElevatedButton.icon(
+                  key: const Key('ai-load-create'),
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text(l10n.aiSessionNewButton),
+                ),
+              ],
             ),
           ],
         ),

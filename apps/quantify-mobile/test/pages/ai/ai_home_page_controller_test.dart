@@ -16,12 +16,19 @@ class _FakeAiChatRepository implements AiChatRepository {
 
   final List<AiSession> _seed;
   int _seq = 0;
+  int listSessionsCalls = 0;
+  Object? listSessionsError;
 
   /// sendMessageTo 返回的固定回复内容（逐字流式铺设的源串）。
   String replyContent = 'hi';
 
   @override
-  Future<List<AiSession>> listSessions() async => _seed;
+  Future<List<AiSession>> listSessions() async {
+    listSessionsCalls++;
+    final Object? error = listSessionsError;
+    if (error != null) throw error;
+    return _seed;
+  }
 
   @override
   Future<AiSession> createSession({String? title}) async {
@@ -126,6 +133,21 @@ void main() {
       expect(s.initialized, isTrue);
       expect(s.order, <String>['a', 'b']);
       expect(s.currentId, 'a');
+    });
+
+    test('loadSessions 失败时结束初始化并记录错误', () async {
+      final _FakeAiChatRepository repo = _FakeAiChatRepository(const [])
+        ..listSessionsError = StateError('network down');
+      final ProviderContainer c = makeContainer(repo);
+      pin(c);
+
+      await ctrl(c).loadSessions();
+
+      final AiHomePageState s = read(c);
+      expect(s.initialized, isTrue);
+      expect(s.currentId, isNull);
+      expect(s.sessions, isEmpty);
+      expect(s.loadError, contains('network down'));
     });
 
     test('send 全流转：thinking → streaming → done（逐字铺设完成）', () {

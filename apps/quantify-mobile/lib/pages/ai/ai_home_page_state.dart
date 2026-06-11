@@ -18,6 +18,7 @@ class AiHomePageState {
     this.isThinking = false,
     this.isStreaming = false,
     this.initialized = false,
+    this.loadError,
     this.lastLoadedStrategyId,
   });
 
@@ -37,6 +38,9 @@ class AiHomePageState {
 
   /// listSessions 是否已完成首帧加载。
   final bool initialized;
+
+  /// 首帧会话加载错误。非空时页面展示可重试错误态，避免无限 loading。
+  final String? loadError;
 
   /// 已处理过的 `?loadStrategy=<id>`，避免重复注入。
   final String? lastLoadedStrategyId;
@@ -59,6 +63,7 @@ class AiHomePageState {
     bool? isThinking,
     bool? isStreaming,
     bool? initialized,
+    Object? loadError = _unset,
     Object? lastLoadedStrategyId = _unset,
   }) {
     return AiHomePageState(
@@ -71,6 +76,9 @@ class AiHomePageState {
       isThinking: isThinking ?? this.isThinking,
       isStreaming: isStreaming ?? this.isStreaming,
       initialized: initialized ?? this.initialized,
+      loadError: identical(loadError, _unset)
+          ? this.loadError
+          : loadError as String?,
       lastLoadedStrategyId: identical(lastLoadedStrategyId, _unset)
           ? this.lastLoadedStrategyId
           : lastLoadedStrategyId as String?,

@@ -131,6 +131,60 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
   }) async => null;
 }
 
+class _LoadErrorAiChatRepository implements AiChatRepository {
+  int listSessionsCalls = 0;
+  bool failListSessions = true;
+
+  @override
+  Future<List<AiSession>> listSessions() async {
+    listSessionsCalls++;
+    if (failListSessions) throw StateError('sessions unavailable');
+    return const <AiSession>[];
+  }
+
+  @override
+  Future<AiSession> createSession({String? title}) async => AiSession(
+    id: 'new-session',
+    title: title ?? '新方案',
+    category: '未分类',
+    updatedAt: DateTime(2026, 6, 11),
+    messages: const <ChatTurn>[],
+  );
+
+  @override
+  Future<void> deleteSession(String sessionId) async {}
+
+  @override
+  Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async => turn;
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) async => throw UnimplementedError();
+
+  @override
+  Stream<ChatTurn> watchSession(String sessionId) =>
+      const Stream<ChatTurn>.empty();
+
+  @override
+  Future<BacktestSummary?> latestBacktest(String sessionId) async => null;
+
+  @override
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? exchangeAccountId,
+    String? exchangeAccountName,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async => null;
+}
+
 void main() {
   testWidgets('AI 对话页：输入消息发送 → user 气泡显示 → 流式 assistant 回复', (
     WidgetTester tester,
@@ -246,6 +300,28 @@ void main() {
 
     expect(find.text('confirm-route'), findsOneWidget);
     expect(repo.sendMessageCalls, 0);
+  });
+
+  testWidgets('会话列表加载失败：不再无限 loading，展示错误并可重试', (WidgetTester tester) async {
+    final _LoadErrorAiChatRepository repo = _LoadErrorAiChatRepository();
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byKey(const Key('ai-load-error-title')), findsOneWidget);
+    expect(find.text('加载失败'), findsOneWidget);
+    expect(find.textContaining('sessions unavailable'), findsOneWidget);
+
+    repo.failListSessions = false;
+    await tester.tap(find.byKey(const Key('ai-load-retry')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
+
+    expect(repo.listSessionsCalls, 2);
+    expect(find.byKey(const Key('ai-load-error-title')), findsNothing);
+    expect(find.text('暂无会话，点击「新建方案」开始一个策略对话。'), findsOneWidget);
   });
 
   testWidgets('已部署会话：首屏渲染实盘终态卡和查看实盘 CTA', (WidgetTester tester) async {
