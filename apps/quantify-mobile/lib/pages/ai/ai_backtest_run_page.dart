@@ -8,6 +8,7 @@ import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import 'ai_error_text.dart';
 import 'widgets/qz_backtest_progress_card.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
@@ -162,7 +163,9 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
                       if (_error == null)
                         QzBacktestProgressCard(progress: _progress)
                       else
-                        Text('${l10n.commonLoadError}: $_error'),
+                        Text(
+                          '${l10n.commonLoadError}: ${formatAiErrorText(_error!)}',
+                        ),
                     ],
                   ),
                   Positioned(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -16,7 +17,10 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// - 「本次回测设定」summary 卡 5 行回显 (#1893)
 /// - 整屏向导页视觉：顶部 QzTopBar + 统一 5 步 StepBar
 /// - footer 贴底（不在滚动内）：滚动后「开始回测」依然可见
-Future<void> _pump(WidgetTester tester) async {
+Future<GoRouter> _pump(
+  WidgetTester tester, {
+  AiPublishedStrategyContext? strategyContext,
+}) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   final GoRouter router = GoRouter(
     initialLocation: '/host',
@@ -29,9 +33,15 @@ Future<void> _pump(WidgetTester tester) async {
           GoRoute(
             path: 'sheet',
             builder: (BuildContext context, GoRouterState state) =>
-                const BacktestConfigSheet(),
+                BacktestConfigSheet(strategyContext: strategyContext),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/ai/backtest-run',
+        builder: (BuildContext context, GoRouterState state) => Text(
+          state.extra is AiBacktestRunArgs ? 'backtest-run-args' : 'no-args',
+        ),
       ),
     ],
   );
@@ -51,7 +61,21 @@ Future<void> _pump(WidgetTester tester) async {
   );
   router.push('/host/sheet');
   await tester.pumpAndSettle();
+  return router;
 }
+
+const AiPublishedStrategyContext _publishedContext = AiPublishedStrategyContext(
+  codegenSessionId: 'session-1',
+  status: 'PUBLISHED',
+  publishedSnapshotId: 'snapshot-1',
+  params: <String, String>{'symbol': 'BTC/USDT'},
+  snapshotParamValues: <String, Object?>{},
+  strategyConfig: <String, Object?>{},
+  backtestConfigDefaults: <String, Object?>{},
+  deploymentExecutionDefaults: <String, Object?>{},
+  deploymentExecutionConstraints: <String, Object?>{},
+  compatibilityMetadata: <String, Object?>{},
+);
 
 void main() {
   testWidgets('默认手续费 = 2', (WidgetTester tester) async {
@@ -237,6 +261,27 @@ void main() {
     expect(find.text('开始回测'), findsOneWidget);
     expect(find.text('收起'), findsNothing);
     expect(find.text('确认并开始回测'), findsNothing);
+  });
+
+  testWidgets('缺少发布快照时不进入回测进行页', (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('缺少已发布策略快照，请返回确认策略后重试。'), findsOneWidget);
+    expect(find.text('backtest-run-args'), findsNothing);
+  });
+
+  testWidgets('存在发布快照时提交 AiBacktestRunArgs 进入回测进行页', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, strategyContext: _publishedContext);
+
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('backtest-run-args'), findsOneWidget);
   });
 
   testWidgets('整屏页不再渲染旧 sheet 圆角主体', (WidgetTester tester) async {

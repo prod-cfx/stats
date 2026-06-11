@@ -121,6 +121,7 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
       _params['codegen_status'] ??
       _params['status'];
   String? get _codegenError => _params['codegenError'] ?? _params['error'];
+  bool get _canBacktest => widget.strategyContext?.hasPublishedSnapshot == true;
 
   @override
   void initState() {
@@ -153,11 +154,10 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
   }
 
   void _next() {
-    if (!ref.read(aiScriptPageControllerProvider).ready) return;
-    context.push(
-      '/ai/backtest-config',
-      extra: widget.strategyContext ?? _params,
-    );
+    if (!ref.read(aiScriptPageControllerProvider).ready || !_canBacktest) {
+      return;
+    }
+    context.push('/ai/backtest-config', extra: widget.strategyContext);
   }
 
   @override
@@ -239,7 +239,7 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
               ),
             ),
             _BottomBar(
-              ready: ready,
+              ready: ready && _canBacktest,
               prevLabel: l10n.aiScriptPrev,
               nextLabel: l10n.aiScriptNext,
               onPrev: () => context.pop(),

@@ -155,37 +155,45 @@ class ApiException implements Exception {
     final int? status = resp?.statusCode;
     String message = e.message ?? 'network error';
     String? code;
+    bool hasResponseMessage = false;
     final Object? data = resp?.data;
     if (data is Map) {
       final Object? nested = data['error'];
       if (nested is Map) {
         final Object? nestedMessage = nested['message'];
-        if (nestedMessage is String && nestedMessage.isNotEmpty) {
-          message = nestedMessage;
+        if (nestedMessage is String && nestedMessage.trim().isNotEmpty) {
+          message = nestedMessage.trim();
+          hasResponseMessage = true;
         }
         final Object? nestedCode = nested['code'];
         if (nestedCode != null) code = nestedCode.toString();
       } else if (nested is String &&
-          nested.isNotEmpty &&
+          nested.trim().isNotEmpty &&
           message == (e.message ?? 'network error')) {
-        message = nested;
+        message = nested.trim();
+        hasResponseMessage = true;
       }
 
       final Object? m = data['message'];
       if (m is String &&
-          m.isNotEmpty &&
+          m.trim().isNotEmpty &&
           message == (e.message ?? 'network error')) {
-        message = m;
+        message = m.trim();
+        hasResponseMessage = true;
       }
       final Object? c = data['code'];
       if (c != null && code == null) code = c.toString();
     } else if (data is String && data.trim().isNotEmpty) {
       final String text = data.trim();
       message = _looksLikeHtml(text)
-          ? (status == null ? '请求失败，请稍后重试' : '请求失败（HTTP $status）')
+          ? (status == null ? '请求失败，请稍后重试' : _httpFallbackMessage(status))
           : text;
+      hasResponseMessage = !_looksLikeHtml(text);
     } else if (status != null) {
-      message = '请求失败（HTTP $status）';
+      message = _httpFallbackMessage(status);
+    }
+    if (!hasResponseMessage && status != null) {
+      message = _httpFallbackMessage(status);
     }
     return ApiException(message: message, statusCode: status, code: code);
   }
@@ -193,6 +201,13 @@ class ApiException implements Exception {
   @override
   String toString() =>
       'ApiException(status=$statusCode, code=$code, message=$message)';
+}
+
+String _httpFallbackMessage(int status) {
+  if (status == 409) {
+    return '回测请求冲突，可能已有相同回测任务正在处理。请稍后重试。';
+  }
+  return '请求失败（HTTP $status）';
 }
 
 bool _looksLikeHtml(String text) {

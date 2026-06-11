@@ -255,6 +255,11 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     final BacktestConfigSheetState st = ref.read(
       backtestConfigSheetControllerProvider,
     );
+    final AiPublishedStrategyContext? strategyContext = widget.strategyContext;
+    if (strategyContext?.hasPublishedSnapshot != true) {
+      _ctrl.setError('缺少已发布策略快照，请返回确认策略后重试。');
+      return;
+    }
     if (st.rangeKey == 'custom') {
       final DateTime? s = DateTime.tryParse(_start.text.trim());
       final DateTime? e = DateTime.tryParse(_end.text.trim());
@@ -292,35 +297,21 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     _ctrl.clearError();
     context.push(
       '/ai/backtest-run',
-      extra: widget.strategyContext == null
-          ? <String, String>{
-              ...?widget.params,
-              'backtestRangePreset': st.rangeKey,
-              'backtestStart': _start.text.trim(),
-              'backtestEnd': _end.text.trim(),
-              'backtestInitialCash': _capital.text.trim(),
-              'backtestMarketType': st.futures ? 'perp' : 'spot',
-              'backtestLeverage': _leverage.text.trim(),
-              'backtestSlippageBps': _slippage.text.trim(),
-              'backtestFeeBps': _fee.text.trim(),
-              'backtestPriceSource': st.fillSource,
-              'backtestAllowPartial': st.partialData ? 'true' : 'false',
-            }
-          : AiBacktestRunArgs(
-              strategyContext: widget.strategyContext!,
-              config: <String, String>{
-                'backtestRangePreset': st.rangeKey,
-                'backtestStart': _start.text.trim(),
-                'backtestEnd': _end.text.trim(),
-                'backtestInitialCash': _capital.text.trim(),
-                'backtestMarketType': st.futures ? 'perp' : 'spot',
-                'backtestLeverage': _leverage.text.trim(),
-                'backtestSlippageBps': _slippage.text.trim(),
-                'backtestFeeBps': _fee.text.trim(),
-                'backtestPriceSource': st.fillSource,
-                'backtestAllowPartial': st.partialData ? 'true' : 'false',
-              },
-            ),
+      extra: AiBacktestRunArgs(
+        strategyContext: strategyContext!,
+        config: <String, String>{
+          'backtestRangePreset': st.rangeKey,
+          'backtestStart': _start.text.trim(),
+          'backtestEnd': _end.text.trim(),
+          'backtestInitialCash': _capital.text.trim(),
+          'backtestMarketType': st.futures ? 'perp' : 'spot',
+          'backtestLeverage': _leverage.text.trim(),
+          'backtestSlippageBps': _slippage.text.trim(),
+          'backtestFeeBps': _fee.text.trim(),
+          'backtestPriceSource': st.fillSource,
+          'backtestAllowPartial': st.partialData ? 'true' : 'false',
+        },
+      ),
     );
   }
 

@@ -8,6 +8,7 @@ import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import 'ai_error_text.dart';
 import 'widgets/qz_backtest_result_card.dart';
 import '../../widgets/qz_button.dart';
 import '../../widgets/qz_step_bar.dart';
@@ -63,7 +64,7 @@ class AiBacktestResultPage extends ConsumerWidget {
                           loading: () =>
                               const Center(child: CircularProgressIndicator()),
                           error: (Object error, StackTrace _) =>
-                              Center(child: Text(error.toString())),
+                              Center(child: Text(formatAiErrorText(error))),
                           data: (BacktestResult result) => Stack(
                             children: <Widget>[
                               ListView(

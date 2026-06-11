@@ -128,7 +128,9 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
   Future<void> _next(BuildContext context) async {
     final String? sessionId = _sessionId;
     if (sessionId == null) {
-      _openScript(_params, status: 'PUBLISHED');
+      setState(() {
+        _error = '缺少策略生成会话，请返回 AI 对话重新确认策略。';
+      });
       return;
     }
     if (_confirming) return;
@@ -229,28 +231,6 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
   bool _isTerminalFailure(CodegenSessionResponseDtoStatusEnum status) {
     return status == CodegenSessionResponseDtoStatusEnum.CONSISTENCY_FAILED ||
         status == CodegenSessionResponseDtoStatusEnum.REJECTED;
-  }
-
-  void _openScript(
-    Map<String, String> params, {
-    required String status,
-    String? sessionId,
-    String? publishedSnapshotId,
-    String? strategyInstanceId,
-  }) {
-    context.push(
-      '/ai/script',
-      extra: <String, String>{
-        ...params,
-        'codegenStatus': status,
-        if (sessionId?.trim().isNotEmpty == true)
-          'codegenSessionId': sessionId!.trim(),
-        if (publishedSnapshotId?.trim().isNotEmpty == true)
-          'publishedSnapshotId': publishedSnapshotId!.trim(),
-        if (strategyInstanceId?.trim().isNotEmpty == true)
-          'strategyInstanceId': strategyInstanceId!.trim(),
-      },
-    );
   }
 
   void _openScriptContext(AiPublishedStrategyContext strategyContext) {

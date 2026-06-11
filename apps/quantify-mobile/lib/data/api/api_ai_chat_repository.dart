@@ -39,7 +39,12 @@ ChatTurn _parseTurn(Map<String, dynamic> m) {
     deployedExchange: asStringOrNull(pick(m, <String>['deployedExchange'])),
     deployedInstanceId: asStringOrNull(pick(m, <String>['deployedInstanceId'])),
     codegenSessionId: asStringOrNull(
-      pick(m, <String>['codegenSessionId', 'llmCodegenSessionId', 'sessionId']),
+      pick(m, <String>[
+        'codegenSessionId',
+        'llmCodegenSessionId',
+        'activeCodegenSessionId',
+        'sessionId',
+      ]),
     ),
     confirmedCanonicalDigest: asStringOrNull(
       pick(m, <String>['confirmedCanonicalDigest', 'canonicalDigest']),
@@ -61,7 +66,12 @@ AiSession _parseSession(Map<String, dynamic> m) {
     cagrLabel: asStringOrNull(pick(m, <String>['cagrLabel'])),
     deployedTo: asStringOrNull(pick(m, <String>['deployedTo'])),
     llmCodegenSessionId: asStringOrNull(
-      pick(m, <String>['llmCodegenSessionId', 'sessionId']),
+      pick(m, <String>[
+        'llmCodegenSessionId',
+        'activeCodegenSessionId',
+        'codegenSessionId',
+        'sessionId',
+      ]),
     ),
     pendingCanonicalDigest: asStringOrNull(
       pick(m, <String>['pendingCanonicalDigest', 'canonicalDigest']),
@@ -99,6 +109,171 @@ BuiltMap<String, JsonObject?>? _builtJsonObjectMap(
       (String key, Object? value) =>
           MapEntry<String, JsonObject?>(key, JsonObject(value)),
     ),
+  );
+}
+
+Map<String, dynamic> _unwrapObjectEnvelope(Object? raw) {
+  final Map<String, dynamic> map = asMap(raw);
+  final Object? data = map['data'];
+  if (data is Map) return asMap(data);
+  return map;
+}
+
+BuiltMap<String, JsonObject?>? _jsonObjectMapFromRaw(Object? raw) {
+  final Map<String, dynamic> map = asMap(raw);
+  if (map.isEmpty) return null;
+  final Map<String, JsonObject?> sanitized = <String, JsonObject?>{};
+  for (final MapEntry<String, dynamic> entry in map.entries) {
+    final Object? value = _jsonObjectValueOrNull(entry.value);
+    if (value != null) sanitized[entry.key] = JsonObject(value);
+  }
+  if (sanitized.isEmpty) return null;
+  return BuiltMap<String, JsonObject?>(sanitized);
+}
+
+Object? _jsonObjectValueOrNull(Object? raw) {
+  if (raw == null) return null;
+  if (raw is String || raw is num || raw is bool) return raw;
+  if (raw is List) {
+    return raw
+        .map(_jsonObjectValueOrNull)
+        .where((Object? value) => value != null)
+        .toList(growable: false);
+  }
+  if (raw is Map) {
+    final Map<String, Object?> map = <String, Object?>{};
+    for (final MapEntry<Object?, Object?> entry in raw.entries) {
+      final Object? value = _jsonObjectValueOrNull(entry.value);
+      if (value != null) map['${entry.key}'] = value;
+    }
+    return map;
+  }
+  return raw.toString();
+}
+
+String? _optionalStringFromRaw(Object? raw) {
+  if (raw == null) return null;
+  final String value = asString(raw).trim();
+  return value.isEmpty || value.toLowerCase() == 'null' ? null : value;
+}
+
+void _setOptionalString(void Function(String value) set, Object? raw) {
+  final String? value = _optionalStringFromRaw(raw);
+  if (value != null) set(value);
+}
+
+void _replaceOptionalMap(
+  void Function(BuiltMap<String, JsonObject?> value) replace,
+  BuiltMap<String, JsonObject?>? value,
+) {
+  if (value != null) replace(value);
+}
+
+BuiltMap<String, JsonObject?> _emptyJsonObjectMap() =>
+    BuiltMap<String, JsonObject?>(const <String, JsonObject?>{});
+
+void _populateCodegenSessionBuilder(
+  CodegenSessionResponseDtoBuilder b,
+  Map<String, dynamic> map,
+) {
+  b
+    ..id = asString(pick(map, <String>['id'])).trim()
+    ..status = _codegenStatusFromRaw(map['status'])
+    ..clarificationGate.replace(
+      _jsonObjectMapFromRaw(map['clarificationGate']) ?? _emptyJsonObjectMap(),
+    );
+  _setOptionalString((String v) => b.conversationId = v, map['conversationId']);
+  _setOptionalString(
+    (String v) => b.conversationTitle = v,
+    map['conversationTitle'],
+  );
+  _setOptionalString((String v) => b.scriptCode = v, map['scriptCode']);
+  _setOptionalString(
+    (String v) => b.publishedSnapshotId = v,
+    map['publishedSnapshotId'],
+  );
+  _setOptionalString(
+    (String v) => b.canonicalDigest = v,
+    map['canonicalDigest'],
+  );
+  _setOptionalString(
+    (String v) => b.strategyInstanceId = v,
+    map['strategyInstanceId'],
+  );
+  _setOptionalString((String v) => b.rejectReason = v, map['rejectReason']);
+  _setOptionalString(
+    (String v) => b.assistantPrompt = v,
+    map['assistantPrompt'],
+  );
+  _replaceOptionalMap(
+    b.publishedSnapshotParamValues.replace,
+    _jsonObjectMapFromRaw(map['publishedSnapshotParamValues']),
+  );
+  _replaceOptionalMap(
+    b.publishedSnapshotStrategyConfig.replace,
+    _jsonObjectMapFromRaw(map['publishedSnapshotStrategyConfig']),
+  );
+  _replaceOptionalMap(
+    b.publishedSnapshotBacktestConfigDefaults.replace,
+    _jsonObjectMapFromRaw(map['publishedSnapshotBacktestConfigDefaults']),
+  );
+  _replaceOptionalMap(
+    b.publishedSnapshotDeploymentExecutionDefaults.replace,
+    _jsonObjectMapFromRaw(map['publishedSnapshotDeploymentExecutionDefaults']),
+  );
+  _replaceOptionalMap(
+    b.publishedSnapshotDeploymentExecutionConstraints.replace,
+    _jsonObjectMapFromRaw(
+      map['publishedSnapshotDeploymentExecutionConstraints'],
+    ),
+  );
+  _replaceOptionalMap(
+    b.publishedSnapshotCompatibilityMetadata.replace,
+    _jsonObjectMapFromRaw(map['publishedSnapshotCompatibilityMetadata']),
+  );
+  _replaceOptionalMap(
+    b.specDesc.replace,
+    _jsonObjectMapFromRaw(map['specDesc']),
+  );
+  _replaceOptionalMap(
+    b.semanticGraph.replace,
+    _jsonObjectMapFromRaw(map['semanticGraph']),
+  );
+  _replaceOptionalMap(
+    b.validationReport.replace,
+    _jsonObjectMapFromRaw(map['validationReport']),
+  );
+  _replaceOptionalMap(
+    b.clarificationState.replace,
+    _jsonObjectMapFromRaw(map['clarificationState']),
+  );
+  _replaceOptionalMap(
+    b.publicationGate.replace,
+    _jsonObjectMapFromRaw(map['publicationGate']),
+  );
+}
+
+CodegenSessionResponseDtoStatusEnum _codegenStatusFromRaw(Object? raw) {
+  final String status = asString(raw).trim().toUpperCase();
+  if (status.isEmpty) {
+    throw const ApiException(message: '策略生成会话状态缺失，请返回 AI 对话重新确认。');
+  }
+  try {
+    return CodegenSessionResponseDtoStatusEnum.valueOf(status);
+  } catch (_) {
+    throw ApiException(message: '策略生成会话状态异常：$status');
+  }
+}
+
+CodegenSessionResponseDto _codegenSessionFromRaw(Object? raw) {
+  final Map<String, dynamic> map = _unwrapObjectEnvelope(raw);
+  final String id = asString(pick(map, <String>['id'])).trim();
+  if (id.isEmpty) {
+    throw const ApiException(message: '策略生成会话暂不可用，请返回 AI 对话重新发送策略。');
+  }
+  return CodegenSessionResponseDto(
+    (CodegenSessionResponseDtoBuilder b) =>
+        _populateCodegenSessionBuilder(b, map),
   );
 }
 
@@ -254,19 +429,7 @@ class ApiAiChatRepository implements AiChatRepository {
 
   @override
   Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async {
-    final LlmStrategyCodegenApi? api = _codegenApi;
-    if (api == null) {
-      throw const ApiException(message: 'generated backend API unavailable');
-    }
-    final response = await api.llmStrategyCodegenControllerGetSession(
-      authorization: _authorization(),
-      id: sessionId,
-    );
-    final CodegenSessionResponseDto? data = response.data;
-    if (data == null) {
-      throw const ApiException(message: 'empty codegen session');
-    }
-    return data;
+    return _codegenSessionFromRaw(await _service.getCodegenSession(sessionId));
   }
 
   @override
@@ -275,29 +438,15 @@ class ApiAiChatRepository implements AiChatRepository {
     required String message,
     String? confirmedCanonicalDigest,
   }) async {
-    final LlmStrategyCodegenApi? api = _codegenApi;
-    if (api == null) {
-      throw const ApiException(message: 'generated backend API unavailable');
-    }
-    final response = await api.llmStrategyCodegenControllerContinueSession(
-      authorization: _authorization(),
-      id: sessionId,
-      llmCodegenContinueRequestDto: LlmCodegenContinueRequestDto((b) {
-        b
-          ..message = message
-          ..locale = LlmCodegenContinueRequestDtoLocaleEnum.zh
-          ..confirmGenerate = true;
-        if (confirmedCanonicalDigest != null &&
-            confirmedCanonicalDigest.trim().isNotEmpty) {
-          b.confirmedCanonicalDigest = confirmedCanonicalDigest.trim();
-        }
+    return _codegenSessionFromRaw(
+      await _service.sendMessage(sessionId, <String, dynamic>{
+        'message': message,
+        'locale': 'zh',
+        'confirmGenerate': true,
+        if (confirmedCanonicalDigest?.trim().isNotEmpty == true)
+          'confirmedCanonicalDigest': confirmedCanonicalDigest!.trim(),
       }),
     );
-    final CodegenSessionResponseDto? data = response.data;
-    if (data == null) {
-      throw const ApiException(message: 'empty codegen session');
-    }
-    return data;
   }
 
   @override

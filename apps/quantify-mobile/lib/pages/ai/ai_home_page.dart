@@ -122,9 +122,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     context.push(
       '/ai/confirm',
       extra: AiConfirmArgs(
-        codegenSessionId: turn.codegenSessionId ?? session.llmCodegenSessionId,
-        confirmedCanonicalDigest:
-            turn.confirmedCanonicalDigest ?? session.pendingCanonicalDigest,
+        codegenSessionId: _codegenSessionIdFor(turn, session),
+        confirmedCanonicalDigest: _canonicalDigestFor(turn, session),
         params: turn.params,
       ),
     );
@@ -166,10 +165,37 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   }
 
   bool _hasCodegenMetadata(ChatTurn turn, AiSession session) {
-    return turn.codegenSessionId?.trim().isNotEmpty == true ||
-        turn.confirmedCanonicalDigest?.trim().isNotEmpty == true ||
-        session.llmCodegenSessionId?.trim().isNotEmpty == true ||
-        session.pendingCanonicalDigest?.trim().isNotEmpty == true;
+    return _codegenSessionIdFor(turn, session) != null ||
+        _canonicalDigestFor(turn, session) != null;
+  }
+
+  String? _codegenSessionIdFor(ChatTurn turn, AiSession session) {
+    return _firstNonBlank(<String?>[
+      turn.codegenSessionId,
+      session.llmCodegenSessionId,
+      turn.params?['codegenSessionId'],
+      turn.params?['llmCodegenSessionId'],
+      turn.params?['activeCodegenSessionId'],
+      turn.params?['sessionId'],
+    ]);
+  }
+
+  String? _canonicalDigestFor(ChatTurn turn, AiSession session) {
+    return _firstNonBlank(<String?>[
+      turn.confirmedCanonicalDigest,
+      session.pendingCanonicalDigest,
+      turn.params?['confirmedCanonicalDigest'],
+      turn.params?['canonicalDigest'],
+      turn.params?['pendingCanonicalDigest'],
+    ]);
+  }
+
+  String? _firstNonBlank(Iterable<String?> values) {
+    for (final String? value in values) {
+      final String trimmed = value?.trim() ?? '';
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
   }
 
   void _scrollToBottom() {
@@ -320,8 +346,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 : null,
                             // 「确认策略」CTA（#1831 接线 → #1832 落地）：
                             // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
-                            onConfirm:
-                                t.kind == ChatTurnKind.params || canConfirm
+                            onConfirm: canConfirm
                                 ? () => _openConfirm(t, current)
                                 : null,
                             // 已部署锁定态（#1834）：会话 `deployedTo != null`

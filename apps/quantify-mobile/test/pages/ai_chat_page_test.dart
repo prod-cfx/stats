@@ -31,8 +31,13 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
       ),
       GoRoute(
         path: '/ai/confirm',
-        builder: (BuildContext context, GoRouterState state) =>
-            const Scaffold(body: Center(child: Text('confirm-route'))),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          final String suffix = extra is AiConfirmArgs
+              ? ':${extra.codegenSessionId ?? ''}:${extra.confirmedCanonicalDigest ?? ''}'
+              : '';
+          return Scaffold(body: Center(child: Text('confirm-route$suffix')));
+        },
       ),
     ],
   );
@@ -58,30 +63,33 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
 }
 
 class _ConfirmIntentAiChatRepository implements AiChatRepository {
-  _ConfirmIntentAiChatRepository();
+  _ConfirmIntentAiChatRepository({AiSession? session})
+    : session =
+          session ??
+          AiSession(
+            id: 'confirm-session',
+            title: '基于 OKX 模拟盘 BTC-U',
+            category: '未分类',
+            pair: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            updatedAt: DateTime(2026, 6, 10, 22, 42),
+            llmCodegenSessionId: 'codegen-1',
+            pendingCanonicalDigest: 'sha256:canonical-1',
+            messages: <ChatTurn>[
+              ChatTurn(
+                id: 'assistant-confirm-gate',
+                role: 'assistant',
+                content: '我整理出的策略逻辑如下。请确认是否按这个逻辑生成脚本。',
+                timestamp: DateTime(2026, 6, 10, 22, 42),
+                codegenSessionId: 'codegen-1',
+                confirmedCanonicalDigest: 'sha256:canonical-1',
+              ),
+            ],
+          );
 
   int sendMessageCalls = 0;
 
-  final AiSession session = AiSession(
-    id: 'confirm-session',
-    title: '基于 OKX 模拟盘 BTC-U',
-    category: '未分类',
-    pair: 'BTC-USDT-SWAP',
-    timeframe: '15m',
-    updatedAt: DateTime(2026, 6, 10, 22, 42),
-    llmCodegenSessionId: 'codegen-1',
-    pendingCanonicalDigest: 'sha256:canonical-1',
-    messages: <ChatTurn>[
-      ChatTurn(
-        id: 'assistant-confirm-gate',
-        role: 'assistant',
-        content: '我整理出的策略逻辑如下。请确认是否按这个逻辑生成脚本。',
-        timestamp: DateTime(2026, 6, 10, 22, 42),
-        codegenSessionId: 'codegen-1',
-        confirmedCanonicalDigest: 'sha256:canonical-1',
-      ),
-    ],
-  );
+  final AiSession session;
 
   @override
   Future<List<AiSession>> listSessions() async => <AiSession>[session];
@@ -261,12 +269,12 @@ void main() {
     }
   });
 
-  testWidgets('待部署 params 气泡：mock s5 session 渲染参数和确认策略 CTA', (
+  testWidgets('待部署 params 气泡：无 codegen metadata 时仅渲染参数', (
     WidgetTester tester,
   ) async {
     await _pump(tester);
 
-    // 默认进入 s5 → 含 params 气泡（fast_ma=5 / slow_ma=20）+ 确认策略 CTA。
+    // 默认进入 s5 → 含 params 气泡（fast_ma=5 / slow_ma=20）。
     // params 行通过 RichText 内嵌 TextSpan 渲染，无法用 find.text 命中；
     // 以 Key 为准 + 校验 RichText 子节点的纯文本拼接含 fast_ma 即可。
     final Finder paramsBubble = find.byKey(const Key('ai-bubble-params'));
@@ -279,8 +287,8 @@ void main() {
         .join('|');
     expect(joined, contains('fast_ma'));
     expect(joined, contains('slow_ma'));
-    expect(find.text('需要我开始回测吗?'), findsOneWidget);
-    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsOneWidget);
+    expect(find.text('需要我开始回测吗?'), findsNothing);
+    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
   });
 
   testWidgets('确认门普通文本：显示确认 CTA，回复「是」进入确认页不再普通发送', (WidgetTester tester) async {
@@ -298,12 +306,87 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-send-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('confirm-route'), findsOneWidget);
+    expect(
+      find.text('confirm-route:codegen-1:sha256:canonical-1'),
+      findsOneWidget,
+    );
     expect(repo.sendMessageCalls, 0);
+  });
+
+  testWidgets('无 codegen metadata 的参数气泡不显示确认 CTA', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'params-without-codegen',
+        title: '历史参数',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 10, 22, 42),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'assistant-params',
+            role: 'assistant',
+            content: '策略参数如下。',
+            timestamp: DateTime(2026, 6, 10, 22, 42),
+            kind: ChatTurnKind.params,
+            params: const <String, String>{
+              'category': 'trend',
+              'symbol': 'BTC/USDT',
+            },
+          ),
+        ],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(find.byKey(const Key('ai-bubble-params')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
+  });
+
+  testWidgets('参数气泡内 codegen metadata 可恢复并进入确认页', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'params-with-codegen',
+        title: '真实参数',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 10, 22, 42),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'assistant-params',
+            role: 'assistant',
+            content: '策略参数如下。',
+            timestamp: DateTime(2026, 6, 10, 22, 42),
+            kind: ChatTurnKind.params,
+            params: const <String, String>{
+              'category': 'trend',
+              'symbol': 'BTC/USDT',
+              'activeCodegenSessionId': 'codegen-from-params',
+              'canonicalDigest': 'sha256:params-digest',
+            },
+          ),
+        ],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('confirm-route:codegen-from-params:sha256:params-digest'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('会话列表加载失败：不再无限 loading，展示错误并可重试', (WidgetTester tester) async {
     final _LoadErrorAiChatRepository repo = _LoadErrorAiChatRepository();
+
     await _pump(
       tester,
       overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],

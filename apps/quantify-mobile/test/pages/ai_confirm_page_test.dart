@@ -203,6 +203,15 @@ void main() {
     );
   });
 
+  testWidgets('缺少 codegenSessionId 时不伪装发布态进入脚本页', (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('ai-confirm-next-cta')));
+    await tester.pump();
+
+    expect(find.text('缺少策略生成会话，请返回 AI 对话重新确认策略。'), findsOneWidget);
+  });
+
   testWidgets('确认页通过真实 codegen session 提交确认并透传发布参数', (
     WidgetTester tester,
   ) async {

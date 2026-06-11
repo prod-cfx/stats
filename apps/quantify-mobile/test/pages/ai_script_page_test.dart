@@ -32,6 +32,20 @@ Future<void> _pump(
 }
 
 void main() {
+  const AiPublishedStrategyContext publishedContext =
+      AiPublishedStrategyContext(
+        codegenSessionId: 'session-1',
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-1',
+        params: <String, String>{'symbol': 'BTC/USDT'},
+        snapshotParamValues: <String, Object?>{},
+        strategyConfig: <String, Object?>{},
+        backtestConfigDefaults: <String, Object?>{},
+        deploymentExecutionDefaults: <String, Object?>{},
+        deploymentExecutionConstraints: <String, Object?>{},
+        compatibilityMetadata: <String, Object?>{},
+      );
+
   testWidgets('生成中态：显示 spinner + 文案，CTA 禁用（验收 2、5）', (
     WidgetTester tester,
   ) async {
@@ -49,7 +63,7 @@ void main() {
   testWidgets('就绪态：READY badge + 行号 + 成功提示，CTA 可点（验收 3、5）', (
     WidgetTester tester,
   ) async {
-    await _pump(tester, params: <String, String>{'codegenStatus': 'PUBLISHED'});
+    await _pump(tester, strategyContext: publishedContext);
     await tester.pump();
 
     expect(find.byKey(const Key('ai-script-ready-badge')), findsOneWidget);
@@ -61,6 +75,16 @@ void main() {
       find.byKey(const Key('ai-script-next-cta')),
     );
     expect(next.onPressed, isNotNull, reason: '就绪态「下一步」可点');
+  });
+
+  testWidgets('仅有 PUBLISHED 字符串但缺少发布快照时 CTA 禁用', (WidgetTester tester) async {
+    await _pump(tester, params: <String, String>{'codegenStatus': 'PUBLISHED'});
+    await tester.pump();
+
+    final FilledButton next = tester.widget<FilledButton>(
+      find.byKey(const Key('ai-script-next-cta')),
+    );
+    expect(next.onPressed, isNull);
   });
 
   testWidgets('就绪态优先展示后端 scriptCode，不再使用本地 mock 模板', (

@@ -48,8 +48,11 @@ class _StubListAiChatService extends AiChatService {
   final List<Map<String, dynamic>> rows;
   final List<Map<String, dynamic>> codegenSessions;
   final Object? codegenError;
+  final List<Object?> sendResponses = <Object?>[];
+  final List<Map<String, dynamic>> sendBodies = <Map<String, dynamic>>[];
   int listCallCount = 0;
   int codegenCallCount = 0;
+  int sendCallCount = 0;
 
   @override
   Future<dynamic> listSessions() async {
@@ -68,9 +71,160 @@ class _StubListAiChatService extends AiChatService {
     codegenCallCount++;
     return r;
   }
+
+  @override
+  Future<dynamic> sendMessage(
+    String sessionId,
+    Map<String, dynamic> turn,
+  ) async {
+    sendCallCount++;
+    sendBodies.add(turn);
+    if (sendResponses.isEmpty) return <String, dynamic>{};
+    return sendResponses.removeAt(0);
+  }
 }
 
 void main() {
+  group('ApiAiChatRepository.listSessions 会话 metadata', () {
+    test('读取 activeCodegenSessionId 作为确认策略 codegen session', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'conversation-1',
+            'conversationTitle': 'BTC 策略',
+            'category': 'AI 量化',
+            'updatedAt': '2026-06-10T22:42:00.000Z',
+            'activeCodegenSessionId': 'codegen-active-1',
+            'canonicalDigest': 'sha256:active-1',
+            'conversationMessages': <Map<String, dynamic>>[
+              <String, dynamic>{'role': 'assistant', 'content': '确认策略'},
+            ],
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final List<AiSession> sessions = await repo.listSessions();
+
+      expect(sessions.single.llmCodegenSessionId, 'codegen-active-1');
+      expect(sessions.single.pendingCanonicalDigest, 'sha256:active-1');
+    });
+  });
+
+  group('ApiAiChatRepository codegen raw response', () {
+    test('getCodegenSession 支持 data 信封并保留快照参数', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: const <Map<String, dynamic>>[],
+        codegenSessions: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'data': <String, dynamic>{
+              'id': 'session-1',
+              'status': 'CONFIRM_GATE',
+              'canonicalDigest': 'sha256:canonical-1',
+              'specDesc': <String, dynamic>{'symbol': 'BTC/USDT'},
+            },
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final session = await repo.getCodegenSession('session-1');
+
+      expect(session.id, 'session-1');
+      expect(session.status.name, 'CONFIRM_GATE');
+      expect(session.canonicalDigest, 'sha256:canonical-1');
+      expect(session.specDesc?['symbol']?.value, 'BTC/USDT');
+    });
+
+    test('getCodegenSession 忽略 JSON object 内 null 字段', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: const <Map<String, dynamic>>[],
+        codegenSessions: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'session-nullable',
+            'status': 'CONFIRM_GATE',
+            'publicationGate': null,
+            'specDesc': <String, dynamic>{
+              'symbol': 'BTC/USDT',
+              'optional': null,
+              'rules': <Object?>[
+                <String, Object?>{'key': 'ma.cross', 'value': null},
+                null,
+              ],
+            },
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final session = await repo.getCodegenSession('session-nullable');
+
+      expect(session.id, 'session-nullable');
+      expect(session.specDesc?['symbol']?.value, 'BTC/USDT');
+      expect(session.specDesc?.containsKey('optional'), isFalse);
+      final Object? rules = session.specDesc?['rules']?.value;
+      expect(rules, isA<List<Object?>>());
+      expect(rules as List<Object?>, hasLength(1));
+      expect(
+        (rules.single as Map<String, Object?>).containsKey('value'),
+        isFalse,
+      );
+    });
+
+    test('getCodegenSession 缺少 id 时抛中文业务错误', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: const <Map<String, dynamic>>[],
+        codegenSessions: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'data': <String, dynamic>{'status': 'DRAFTING'},
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      expect(
+        () => repo.getCodegenSession('session-1'),
+        throwsA(
+          isA<ApiException>().having(
+            (ApiException e) => e.message,
+            'message',
+            '策略生成会话暂不可用，请返回 AI 对话重新发送策略。',
+          ),
+        ),
+      );
+    });
+
+    test('confirmStrategy 走 raw body 并支持 data 信封', () async {
+      final _StubListAiChatService svc =
+          _StubListAiChatService(rows: const <Map<String, dynamic>>[])
+            ..sendResponses.add(<String, dynamic>{
+              'data': <String, dynamic>{
+                'id': 'session-1',
+                'status': 'PUBLISHED',
+                'publishedSnapshotId': 'snapshot-1',
+              },
+            });
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final session = await repo.confirmStrategy(
+        'session-1',
+        message: '确认策略',
+        confirmedCanonicalDigest: ' sha256:canonical-1 ',
+      );
+
+      expect(session.id, 'session-1');
+      expect(session.status.name, 'PUBLISHED');
+      expect(session.publishedSnapshotId, 'snapshot-1');
+      expect(svc.sendBodies.single['message'], '确认策略');
+      expect(svc.sendBodies.single['locale'], 'zh');
+      expect(svc.sendBodies.single['confirmGenerate'], isTrue);
+      expect(
+        svc.sendBodies.single['confirmedCanonicalDigest'],
+        'sha256:canonical-1',
+      );
+    });
+  });
+
   group('ApiAiChatRepository.watchSession 轮询真实 codegen session', () {
     test('轮询 codegen session，产出新增 assistant 消息后结束', () async {
       final _StubListAiChatService svc = _StubListAiChatService(
