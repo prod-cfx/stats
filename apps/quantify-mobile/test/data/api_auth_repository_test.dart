@@ -3,12 +3,13 @@ import 'package:quantify_mobile/data/api/api_auth_repository.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/services/api_client.dart';
 import 'package:quantify_mobile/data/services/auth_service.dart';
+import 'package:quantify_mobile/data/services/generated_backend_api.dart';
 
 /// 用预置响应替身校验 [ApiAuthRepository] 对真实 backend 信封
 /// `{data: {accessToken, user:{...}}}` 的解析；不发真实 HTTP。
 class _StubAuthService extends AuthService {
   _StubAuthService(this.response)
-    : super(ApiClient(baseUrl: 'http://localhost'));
+    : super(GeneratedBackendApi(dio: buildApiDio(baseUrl: 'http://localhost')));
 
   final Object? response;
 

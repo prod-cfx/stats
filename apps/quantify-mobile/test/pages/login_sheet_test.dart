@@ -34,6 +34,26 @@ class _FailingCodeAuthRepository extends MockAuthRepository {
   }
 }
 
+class _RecordingRegisterAuthRepository extends MockAuthRepository {
+  int registerCalls = 0;
+
+  @override
+  Future<AuthSession> register({
+    required String email,
+    required String password,
+    String? nickname,
+    String? betaCode,
+  }) async {
+    registerCalls += 1;
+    return super.register(
+      email: email,
+      password: password,
+      nickname: nickname,
+      betaCode: betaCode,
+    );
+  }
+}
+
 Future<({ProviderContainer container, InMemoryTokenStorage storage})>
 _pumpSheetHarness(WidgetTester tester, {AuthRepository? authRepository}) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -208,9 +228,11 @@ void main() {
     expect(find.byKey(const Key('register-submit')), findsOneWidget);
   });
 
-  testWidgets('LoginSheet 注册成功关闭面板并跳转 /ai', (WidgetTester tester) async {
+  testWidgets('LoginSheet 注册态被 coming soon 遮罩拦截', (WidgetTester tester) async {
+    final _RecordingRegisterAuthRepository repo =
+        _RecordingRegisterAuthRepository();
     final (:ProviderContainer container, :InMemoryTokenStorage storage) =
-        await _pumpSheetHarness(tester);
+        await _pumpSheetHarness(tester, authRepository: repo);
 
     await tester.tap(find.byKey(const Key('auth-mode-register')));
     await tester.pumpAndSettle();
@@ -223,16 +245,17 @@ void main() {
       find.byKey(const Key('register-password-field')),
       'pw12345678',
     );
-    await tester.tap(find.byKey(const Key('register-submit')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('login-sheet')), findsNothing);
-    expect(find.text('AI_HOME_PLACEHOLDER'), findsOneWidget);
-    expect(storage.snapshot.containsKey(kSessionStorageKey), isTrue);
-    expect(
-      container.read(sessionControllerProvider).value?.email,
-      'new@quantify.dev',
+    await tester.tap(
+      find.byKey(const Key('login-sheet-register-coming-soon-overlay')),
     );
+    await tester.pump();
+
+    expect(find.byKey(const Key('login-sheet')), findsOneWidget);
+    expect(find.text('coming soon'), findsOneWidget);
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+    expect(storage.snapshot.containsKey(kSessionStorageKey), isFalse);
+    expect(container.read(sessionControllerProvider).value, isNull);
+    expect(repo.registerCalls, 0);
   });
 
   testWidgets('LoginSheet close button dismisses without navigation', (

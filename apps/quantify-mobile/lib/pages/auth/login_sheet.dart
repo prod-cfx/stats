@@ -150,6 +150,12 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
     );
   }
 
+  void _showRegisterComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('coming soon')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -254,95 +260,128 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                       colors: c,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
-                    child: Form(
-                      key: _formKey,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      child: Column(
+                  Stack(
+                    children: <Widget>[
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
-                          LoginTextField(
-                            fieldKey: const Key('login-email-field'),
-                            shellKey: const Key('login-email-field-shell'),
-                            labelKey: const Key('login-email-label'),
-                            controller: _email,
-                            enabled: !busy,
-                            label: l10n.authLoginEmailLabel,
-                            hintText: 'you@example.com',
-                            keyboardType: TextInputType.emailAddress,
-                            validator: _validateEmail,
-                            colors: c,
-                          ),
-                          const SizedBox(height: 10),
-                          if (isRegister) ...<Widget>[
-                            LoginTextField(
-                              fieldKey: const Key('register-password-field'),
-                              shellKey:
-                                  const Key('register-password-field-shell'),
-                              labelKey: const Key('register-password-label'),
-                              controller: _password,
-                              enabled: !busy,
-                              label: l10n.authRegisterPasswordLabel,
-                              hintText: l10n.authRegisterPasswordHint,
-                              obscureText: true,
-                              validator: _validatePassword,
-                              colors: c,
-                            ),
-                            const SizedBox(height: 10),
-                            LoginTextField(
-                              fieldKey: const Key('register-beta-code-field'),
-                              shellKey:
-                                  const Key('register-beta-code-field-shell'),
-                              labelKey: const Key('register-beta-code-label'),
-                              controller: _betaCode,
-                              enabled: !busy,
-                              label: l10n.authRegisterBetaCodeLabel,
-                              hintText: l10n.authRegisterBetaCodeHint,
-                              validator: (_) => null,
-                              colors: c,
-                            ),
-                          ] else
-                            LoginTextField(
-                              fieldKey: const Key('login-code-field'),
-                              shellKey: const Key('login-code-field-shell'),
-                              labelKey: const Key('login-code-label'),
-                              controller: _code,
-                              enabled: !busy,
-                              label: l10n.authLoginCodeLabel,
-                              hintText: l10n.authLoginCodeHint,
-                              keyboardType: TextInputType.number,
-                              validator: _validateCode,
-                              colors: c,
-                              suffix: SendCodeButton(
-                                key: const Key('login-send-code'),
-                                label: sendCodeLabel,
-                                loading: st.codeLoading,
-                                enabled: !busy && st.codeCountdown == 0,
-                                onPressed: _sendLoginCode,
-                                colors: c,
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                            child: Form(
+                              key: _formKey,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  LoginTextField(
+                                    fieldKey: const Key('login-email-field'),
+                                    shellKey:
+                                        const Key('login-email-field-shell'),
+                                    labelKey: const Key('login-email-label'),
+                                    controller: _email,
+                                    enabled: !busy,
+                                    label: l10n.authLoginEmailLabel,
+                                    hintText: 'you@example.com',
+                                    keyboardType: TextInputType.emailAddress,
+                                    validator: _validateEmail,
+                                    colors: c,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  if (isRegister) ...<Widget>[
+                                    LoginTextField(
+                                      fieldKey:
+                                          const Key('register-password-field'),
+                                      shellKey: const Key(
+                                        'register-password-field-shell',
+                                      ),
+                                      labelKey:
+                                          const Key('register-password-label'),
+                                      controller: _password,
+                                      enabled: !busy,
+                                      label: l10n.authRegisterPasswordLabel,
+                                      hintText: l10n.authRegisterPasswordHint,
+                                      obscureText: true,
+                                      validator: _validatePassword,
+                                      colors: c,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    LoginTextField(
+                                      fieldKey:
+                                          const Key('register-beta-code-field'),
+                                      shellKey: const Key(
+                                        'register-beta-code-field-shell',
+                                      ),
+                                      labelKey:
+                                          const Key('register-beta-code-label'),
+                                      controller: _betaCode,
+                                      enabled: !busy,
+                                      label: l10n.authRegisterBetaCodeLabel,
+                                      hintText: l10n.authRegisterBetaCodeHint,
+                                      validator: (_) => null,
+                                      colors: c,
+                                    ),
+                                  ] else
+                                    LoginTextField(
+                                      fieldKey: const Key('login-code-field'),
+                                      shellKey:
+                                          const Key('login-code-field-shell'),
+                                      labelKey: const Key('login-code-label'),
+                                      controller: _code,
+                                      enabled: !busy,
+                                      label: l10n.authLoginCodeLabel,
+                                      hintText: l10n.authLoginCodeHint,
+                                      keyboardType: TextInputType.number,
+                                      validator: _validateCode,
+                                      colors: c,
+                                      suffix: SendCodeButton(
+                                        key: const Key('login-send-code'),
+                                        label: sendCodeLabel,
+                                        loading: st.codeLoading,
+                                        enabled: !busy && st.codeCountdown == 0,
+                                        onPressed: _sendLoginCode,
+                                        colors: c,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+                            child: GradientPrimaryButton(
+                              key: isRegister
+                                  ? const Key('register-submit')
+                                  : const Key('login-submit'),
+                              label: isRegister
+                                  ? l10n.authRegisterButton
+                                  : l10n.authLoginButton,
+                              loading: isRegister
+                                  ? st.registerLoading
+                                  : st.emailLoading,
+                              onPressed: busy
+                                  ? null
+                                  : (isRegister
+                                      ? _submitRegister
+                                      : _submitEmail),
+                              colors: c,
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
-                    child: GradientPrimaryButton(
-                      key: isRegister
-                          ? const Key('register-submit')
-                          : const Key('login-submit'),
-                      label: isRegister
-                          ? l10n.authRegisterButton
-                          : l10n.authLoginButton,
-                      loading:
-                          isRegister ? st.registerLoading : st.emailLoading,
-                      onPressed: busy
-                          ? null
-                          : (isRegister ? _submitRegister : _submitEmail),
-                      colors: c,
-                    ),
+                      if (isRegister)
+                        Positioned.fill(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              key: const Key(
+                                'login-sheet-register-coming-soon-overlay',
+                              ),
+                              onTap: _showRegisterComingSoon,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),

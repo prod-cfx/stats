@@ -157,10 +157,28 @@ class ApiException implements Exception {
     String? code;
     final Object? data = resp?.data;
     if (data is Map) {
-      final Object? m = data['message'] ?? data['error'];
-      if (m is String && m.isNotEmpty) message = m;
+      final Object? nested = data['error'];
+      if (nested is Map) {
+        final Object? nestedMessage = nested['message'];
+        if (nestedMessage is String && nestedMessage.isNotEmpty) {
+          message = nestedMessage;
+        }
+        final Object? nestedCode = nested['code'];
+        if (nestedCode != null) code = nestedCode.toString();
+      } else if (nested is String &&
+          nested.isNotEmpty &&
+          message == (e.message ?? 'network error')) {
+        message = nested;
+      }
+
+      final Object? m = data['message'];
+      if (m is String &&
+          m.isNotEmpty &&
+          message == (e.message ?? 'network error')) {
+        message = m;
+      }
       final Object? c = data['code'];
-      if (c != null) code = c.toString();
+      if (c != null && code == null) code = c.toString();
     } else if (data is String && data.trim().isNotEmpty) {
       final String text = data.trim();
       message = _looksLikeHtml(text)

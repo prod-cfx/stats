@@ -37,7 +37,7 @@ final Provider<GeneratedBackendApi> generatedBackendApiProvider =
 
 // ── 各域 Service（stateless，注入共享 ApiClient）─────────────────────────
 final Provider<AuthService> authServiceProvider = Provider<AuthService>(
-  (Ref ref) => AuthService(ref.watch(apiClientProvider)),
+  (Ref ref) => AuthService(ref.watch(generatedBackendApiProvider)),
 );
 final Provider<TickerService> tickerServiceProvider = Provider<TickerService>(
   (Ref ref) => TickerService(ref.watch(apiClientProvider)),

@@ -1,20 +1,30 @@
-import 'api_client.dart';
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 
-/// 鉴权后端资源（issue #2189 / #2260）。stateless：只持有 [ApiClient]。
+import 'generated_backend_api.dart';
+
+/// 鉴权后端资源（issue #2425）。stateless：只持有 generated backend SDK。
 ///
-/// 路径对齐 backend OpenAPI 真实契约（`packages/api-contracts-dart` `AuthApi`）：
-/// login/register/email-code/me。响应为 `{data, message}` 信封，反序列化在
-/// [ApiAuthRepository] 完成。登出无后端端点（JWT 无状态），纯本地清盘。
+/// 路径与请求体统一来自 `packages/api-contracts-dart`，避免 mobile 手写 auth
+/// endpoint 与真实 OpenAPI 契约漂移。响应映射由 [ApiAuthRepository] 完成。
 class AuthService {
-  const AuthService(this._client);
+  AuthService(this._backend);
 
-  final ApiClient _client;
+  final GeneratedBackendApi _backend;
 
-  Future<dynamic> login({required String email, required String password}) {
-    return _client.post(
-      '/auth/login',
-      body: <String, dynamic>{'email': email, 'password': password},
+  AuthApi get _auth => _backend.client.getAuthApi();
+
+  Future<dynamic> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _auth.authControllerLogin(
+      loginRequestDto: LoginRequestDto(
+        (b) => b
+          ..email = email
+          ..password = password,
+      ),
     );
+    return response.data;
   }
 
   Future<dynamic> register({
@@ -22,41 +32,86 @@ class AuthService {
     required String password,
     String? nickname,
     String? betaCode,
-  }) {
-    final Map<String, dynamic> body = <String, dynamic>{
-      'email': email,
-      'password': password,
-    };
-    if (nickname != null && nickname.isNotEmpty) body['nickname'] = nickname;
-    if (betaCode != null && betaCode.isNotEmpty) body['betaCode'] = betaCode;
-    return _client.post('/auth/register', body: body);
+  }) async {
+    final response = await _auth.authControllerRegister(
+      registerRequestDto: RegisterRequestDto((b) {
+        b
+          ..email = email
+          ..password = password;
+        if (nickname != null && nickname.isNotEmpty) b.nickname = nickname;
+        if (betaCode != null && betaCode.isNotEmpty) b.betaCode = betaCode;
+      }),
+    );
+    return response.data;
   }
 
-  Future<dynamic> sendLoginCode({required String email}) {
-    return _client.post(
-      '/auth/email/send-code',
-      body: <String, dynamic>{'email': email},
+  Future<void> sendLoginCode({required String email}) async {
+    await _auth.authControllerSendEmailLoginCode(
+      sendEmailLoginCodeRequestDto: SendEmailLoginCodeRequestDto(
+        (b) => b.email = email,
+      ),
     );
   }
 
-  Future<dynamic> loginWithCode({required String email, required String code}) {
-    return _client.post(
-      '/auth/email/verify-code',
-      body: <String, dynamic>{'email': email, 'code': code},
+  Future<dynamic> loginWithCode({
+    required String email,
+    required String code,
+  }) async {
+    final response = await _auth.authControllerVerifyEmailLoginCode(
+      verifyEmailLoginCodeRequestDto: VerifyEmailLoginCodeRequestDto(
+        (b) => b
+          ..email = email
+          ..code = code,
+      ),
     );
+    return response.data;
   }
 
   Future<dynamic> loginTelegram({
     Map<String, dynamic> payload = const <String, dynamic>{},
-  }) {
-    return _client.post('/auth/telegram/exchange', body: payload);
+  }) async {
+    final response = await _auth.authControllerTelegramExchange(
+      telegramExchangeRequestDto: TelegramExchangeRequestDto((b) {
+        b
+          ..telegramId = _payloadString(payload, 'telegramId')
+          ..authDate = _payloadString(payload, 'authDate')
+          ..hash = _payloadString(payload, 'hash')
+          ..source_ = _telegramSource(_payloadString(payload, 'source'));
+        final String firstName = _payloadString(payload, 'firstName');
+        final String lastName = _payloadString(payload, 'lastName');
+        final String username = _payloadString(payload, 'username');
+        final String photoUrl = _payloadString(payload, 'photoUrl');
+        final String betaCode = _payloadString(payload, 'betaCode');
+        if (firstName.isNotEmpty) b.firstName = firstName;
+        if (lastName.isNotEmpty) b.lastName = lastName;
+        if (username.isNotEmpty) b.username = username;
+        if (photoUrl.isNotEmpty) b.photoUrl = photoUrl;
+        if (betaCode.isNotEmpty) b.betaCode = betaCode;
+      }),
+    );
+    return response.data;
   }
 
-  Future<dynamic> loginGuest() {
-    return _client.post('/auth/guest');
+  Future<dynamic> loginGuest() async {
+    final response = await _auth.authControllerLoginGuest();
+    return response.data;
   }
 
-  Future<dynamic> me() {
-    return _client.get('/users/me');
+  Future<dynamic> me() async {
+    final response = await _backend.client.getUsersApi().userControllerMe();
+    return response.data;
   }
+}
+
+String _payloadString(Map<String, dynamic> payload, String key) {
+  final Object? value = payload[key];
+  return value == null ? '' : value.toString();
+}
+
+TelegramExchangeRequestDtoSource_Enum _telegramSource(String value) {
+  return switch (value) {
+    'web' => TelegramExchangeRequestDtoSource_Enum.web,
+    'desktop' => TelegramExchangeRequestDtoSource_Enum.desktop,
+    _ => TelegramExchangeRequestDtoSource_Enum.webapp,
+  };
 }

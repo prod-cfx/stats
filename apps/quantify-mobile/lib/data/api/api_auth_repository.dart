@@ -1,3 +1,5 @@
+import 'package:backend_api_contracts/backend_api_contracts.dart' as contracts;
+
 import '../models/auth_models.dart';
 import '../repositories/auth_repository.dart';
 import '../services/api_client.dart';
@@ -19,6 +21,10 @@ class ApiAuthRepository implements AuthRepository {
   /// 真实 backend 契约为信封 `{data: AuthResponseDto{accessToken, user}, message}`，
   /// 故先剥一层 `data`；为兼容扁平结构（旧 mock / 单测桩）保留顶层回退。
   AuthSession _parse(Object? raw, {required String fallbackEmail}) {
+    if (raw is contracts.AuthResponseDto ||
+        raw is contracts.AuthControllerTelegramDesktopExchange200Response) {
+      return _parseGenerated(raw as Object, fallbackEmail: fallbackEmail);
+    }
     final Map<String, dynamic> root = asMap(raw);
     // 信封：仅当 data 是对象且承载鉴权字段时下钻，避免把扁平响应的
     // `data == user` 语义误判。
@@ -44,6 +50,32 @@ class ApiAuthRepository implements AuthRepository {
     // token 缺失（如 4xx 信封 {message} 无 accessToken）不能静默建空会话——
     // 否则 UI 显示已登录但后续请求全匿名。抛 ApiException 让控制器走
     // session.hasError 落错误前缀。
+    if (session.token.isEmpty) {
+      throw const ApiException(message: 'auth response missing access token');
+    }
+    return session;
+  }
+
+  AuthSession _parseGenerated(Object raw, {required String fallbackEmail}) {
+    if (raw is contracts.AuthResponseDto) {
+      return _parseAuthResponseDto(raw, fallbackEmail: fallbackEmail);
+    }
+    if (raw is contracts.AuthControllerTelegramDesktopExchange200Response) {
+      return _parseAuthResponseDto(raw.data, fallbackEmail: fallbackEmail);
+    }
+    throw StateError('unsupported generated auth response: ${raw.runtimeType}');
+  }
+
+  AuthSession _parseAuthResponseDto(
+    contracts.AuthResponseDto dto, {
+    required String fallbackEmail,
+  }) {
+    final AuthSession session = AuthSession(
+      userId: dto.user.id,
+      token: dto.accessToken,
+      email: dto.user.email.isNotEmpty ? dto.user.email : fallbackEmail,
+      isGuest: dto.user.isGuest,
+    );
     if (session.token.isEmpty) {
       throw const ApiException(message: 'auth response missing access token');
     }
