@@ -115,10 +115,28 @@ function selectVisibleRuntimeEvents(feedId: string, events: RuntimeEvent[], prim
     return [sorted[endExclusive - 1]!]
   }
   if (schema === 'open_interest') {
-    return sorted.slice(Math.max(0, endExclusive - 2), endExclusive)
+    return selectOpenInterestRuntimeEvents(sorted, endExclusive, primaryCloseTs)
   }
 
   return sorted.slice(0, endExclusive)
+}
+
+function selectOpenInterestRuntimeEvents(
+  sorted: RuntimeEvent[],
+  endExclusive: number,
+  primaryCloseTs: number,
+): RuntimeEvent[] {
+  const oneHourAgo = primaryCloseTs - 60 * 60_000
+  if (oneHourAgo < 0) return sorted.slice(Math.max(0, endExclusive - 2), endExclusive)
+
+  let startIndex = Math.max(0, endExclusive - 2)
+  for (let index = endExclusive - 1; index >= 0; index -= 1) {
+    if (sorted[index]!.ts <= oneHourAgo) {
+      startIndex = index
+      break
+    }
+  }
+  return sorted.slice(startIndex, endExclusive)
 }
 
 function getSortedRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {

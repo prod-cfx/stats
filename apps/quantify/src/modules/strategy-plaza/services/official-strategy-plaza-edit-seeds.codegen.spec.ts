@@ -34,6 +34,10 @@ function createPublicationStage(): CodegenPublicationGenerationStage {
 }
 
 describe('official Strategy Plaza edit seeds codegen', () => {
+  it('keeps the official Strategy Plaza template set at 32 strategies', () => {
+    expect(OFFICIAL_STRATEGY_PLAZA_TEMPLATES).toHaveLength(32)
+  })
+
   it.each(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.slice(0, 5).map(template => [template.id, template] as const))('%s generates compiled script from edit seed', async (_id, template) => {
     const message = template.editSeed.initialMessage
     const patch = new GenericSeedDispatcher().dispatch(message) as CodegenSemanticPatch

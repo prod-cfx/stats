@@ -147,6 +147,38 @@ describe('buildRuntimeMarketContext', () => {
     })
   })
 
+  it('keeps enough open-interest history for one-hour window comparisons', () => {
+    const context = buildRuntimeMarketContext({
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      primaryCloseTs: 3_600_000,
+      params: { marketType: 'perp' },
+      barsByTimeframe: {
+        '15m': [
+          { symbol: 'BTCUSDT', timeframe: '15m', openTime: 2_700_000, closeTime: 3_600_000, open: 100, high: 111, low: 99, close: 110, volume: 1 },
+        ],
+      },
+      eventStreams: {
+        open_interest: [
+          { id: 'one-hour-ago', ts: 0, payload: { openInterest: 100 } },
+          { id: 'mid-1', ts: 900_000, payload: { openInterest: 101 } },
+          { id: 'mid-2', ts: 1_800_000, payload: { openInterest: 102 } },
+          { id: 'previous', ts: 2_700_000, payload: { openInterest: 105 } },
+          { id: 'current', ts: 3_600_000, payload: { openInterest: 106 } },
+          { id: 'future', ts: 4_500_000, payload: { openInterest: 107 } },
+        ],
+      },
+    })
+
+    expect(context.eventInbox?.open_interest.map(event => event.id)).toEqual([
+      'one-hour-ago',
+      'mid-1',
+      'mid-2',
+      'previous',
+      'current',
+    ])
+  })
+
   it('marks funding and liquidation event feeds as live data source feeds', () => {
     const context = buildRuntimeMarketContext({
       symbol: 'BTCUSDT',

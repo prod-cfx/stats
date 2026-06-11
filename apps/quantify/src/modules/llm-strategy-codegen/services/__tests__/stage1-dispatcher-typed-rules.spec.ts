@@ -20,6 +20,14 @@ function allEffectLeaves(patch: ReturnType<GenericSeedDispatcher['dispatch']>) {
   return (patch.rules ?? []).flatMap(rule => ruleEffectLeaves(rule).map(leaf => ({ ...leaf, rulePhase: rule.phase })))
 }
 
+function allConditionLeaves(patch: ReturnType<GenericSeedDispatcher['dispatch']>) {
+  return (patch.rules ?? []).flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => ({ ...leaf, rulePhase: rule.phase })))
+}
+
+function findConditionLeaf(patch: ReturnType<GenericSeedDispatcher['dispatch']>, key: string) {
+  return allConditionLeaves(patch).find(leaf => leaf.key === key)
+}
+
 describe('stage1 typed rules corpus fixture', () => {
   it('contains exactly 31 required current-capability cases', () => {
     expect(STAGE1_TYPED_RULES_CORPUS).toHaveLength(31)
@@ -190,6 +198,121 @@ describe('stage1 typed rules corpus fixture', () => {
         multiplier: 1.5,
       }),
     }))
+  })
+
+  describe('official Strategy Plaza semantic parameter regressions', () => {
+    it('keeps open-interest window and percent change in breakout confirmation entry', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建持仓量突破确认策略。规则：未平仓量 1 小时增加超过 5% 且价格突破过去 20 根 K 线高点时开多；跌破 EMA20 时平多；风控：仓位 10%，亏损 2% 止损。')
+      const oi = findConditionLeaf(patch, 'openInterest.condition')
+
+      expect(oi).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ direction: 'up', changePct: 5, window: '1h' }),
+      }))
+      expect(findConditionLeaf(patch, 'price.rolling_extrema_breakout')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ lookbackBars: 20, extrema: 'high', event: 'breakout_up' }),
+      }))
+    })
+
+    it('keeps EMA20 identity for slope trend and does not infer bearish candle pattern', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 EMA 斜率趋势策略。规则：EMA20 斜率连续 3 根向上且成交量确认放大后开多；价格跌破 EMA20 平多；风控：仓位 20%，2 倍杠杆，亏损 2% 止损。')
+      const keys = allConditionLeaves(patch).map(leaf => leaf.key)
+
+      expect(findConditionLeaf(patch, 'indicator.slope')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ema', period: 20, direction: 'up', consecutiveBars: 3 }),
+      }))
+      expect(keys).not.toContain('price.candle_pattern')
+    })
+
+    it('keeps multi-timeframe gate timeframe on 1h MA50 filter', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建多周期趋势策略。规则：15m EMA20 上穿 EMA50 开多，但 1h 价格必须在 MA50 上方才允许入场；15m 跌破 EMA20 平多；风控：仓位 20%，亏损 2% 止损。')
+      const maGate = allConditionLeaves(patch).find(leaf => leaf.key === 'indicator.above' && leaf.params?.indicator === 'ma')
+
+      expect(findConditionLeaf(patch, 'indicator.cross_over')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ema', fastPeriod: 20, slowPeriod: 50, timeframe: '15m' }),
+      }))
+      expect(maGate).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ma', period: 50, timeframe: '1h' }),
+      }))
+    })
+
+    it('keeps funding-rate threshold percentage', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。')
+
+      expect(findConditionLeaf(patch, 'fundingRate.condition')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ operator: 'GT', valuePct: 0.01 }),
+      }))
+    })
+
+    it('keeps orderbook imbalance percent, cooldown, and time-stop bars', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 1m，创建盘口买盘失衡确认策略。规则：价格突破最近 6 根 K 线高点且必须 OKX orderbook imbalance 大于 52% 才允许开多；每 10 根 K 线最多开仓一次；持仓 4 根 K 线后平多；跌破 EMA20 时平多；风控：仓位 70%，2 倍杠杆，亏损 0.6% 止损，止盈 0.12%。')
+      const effects = allEffectLeaves(patch)
+
+      expect(findConditionLeaf(patch, 'orderbook.imbalance')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ side: 'bid_over_ask', operator: 'gt', percent: 52 }),
+      }))
+      expect(effects).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'risk.cooldown', params: expect.objectContaining({ durationBars: 10 }) }),
+        expect.objectContaining({ key: 'risk.time_stop_bars', params: expect.objectContaining({ maxBars: 4, effect: 'close_position' }) }),
+      ]))
+    })
+
+    it('keeps liquidation side and notional threshold', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建清算瀑布开空策略。规则：多头清算超过 100 万 USDT 后开空；价格重新站上 EMA20 平空；风控：仓位 10%，亏损 2% 止损。')
+
+      expect(findConditionLeaf(patch, 'liquidation.condition')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ side: 'long', operator: 'GT', notionalUsd: 1_000_000 }),
+      }))
+    })
+
+    it('keeps explicit MACD tuple on both golden and death crosses', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 趋势策略。规则：MACD DIF 上穿 DEA 时金叉做多、死叉平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，亏损 2% 止损，盈利 0.5% 止盈。')
+      const macdLeaves = allConditionLeaves(patch).filter(leaf => leaf.params?.indicator === 'macd')
+
+      expect(macdLeaves).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'indicator.cross_over', params: expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }) }),
+        expect.objectContaining({ key: 'indicator.cross_under', params: expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }) }),
+      ]))
+    })
+
+    it('keeps natural-language orderbook depth ratio value', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 1m，创建盘口深度比确认策略。规则：价格高于 EMA50 且买盘深度是卖盘 1.5 倍以上时开多；价格跌破 EMA50 平多；风控：仓位 10%，亏损 1.2% 止损。')
+
+      expect(findConditionLeaf(patch, 'orderbook.depth_ratio')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ side: 'bid_over_ask', operator: 'gte', ratio: 1.5 }),
+      }))
+    })
+
+    it('keeps breakout pullback-hold semantics and 2 percent risk', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破回踩策略。规则：价格突破 20 根高点后不立刻买，等回踩不破突破位再开多；跌破突破位下方止损；风控：仓位 20%，亏损 2% 止损。')
+      const effects = allEffectLeaves(patch)
+
+      expect(allConditionLeaves(patch)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'price.previous_extrema_retest', params: expect.objectContaining({ retestKind: 'not_break' }) }),
+        expect.objectContaining({ key: 'pattern.pullback' }),
+      ]))
+      expect(effects).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 2 }) }),
+      ]))
+      expect(effects.filter(effect => effect.key === 'risk.stop_loss_pct')).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ params: expect.objectContaining({ valuePct: 20 }) }),
+      ]))
+    })
+
+    it('keeps breakout buffer percent', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，亏损 3% 止损，盈利 0.6% 止盈。')
+
+      expect(findConditionLeaf(patch, 'price.rolling_extrema_breakout')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ lookbackBars: 24, extrema: 'high', event: 'breakout_up', bufferPct: 0.25 }),
+      }))
+    })
+
+    it('keeps volume relative-average lookback and multiplier', () => {
+      const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建放量突破策略。规则：价格突破过去 20 根 K 线高点并且成交量超过 20 根均量 1.5 倍时开多；跌破 EMA20 平多；风控：仓位 20%，单笔最多亏 2%。')
+
+      expect(findConditionLeaf(patch, 'volume.threshold')).toEqual(expect.objectContaining({
+        params: expect.objectContaining({ mode: 'relative_to_sma', refWindow: 20, multiplier: 1.5 }),
+      }))
+    })
   })
 
   it('keeps explicit fixed-ratio sizing for on-start spot strategy 6', () => {

@@ -5,11 +5,9 @@ import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strateg
 import { buildOfficialTemplateBacktestConfigDefaults } from '../utils/official-strategy-plaza-snapshot-content'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
-const verifiedBacktestDraftConfig = {
+const thirtyDayBacktestDraftConfig = {
   range: {
-    preset: 'CUSTOM' as const,
-    startAt: '2026-03-08T00:00:00.000Z',
-    endAt: '2026-03-10T00:00:00.000Z',
+    preset: '30D' as const,
   },
   execution: {
     initialCash: 10000,
@@ -84,7 +82,7 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-1',
       'user-1',
       expect.objectContaining({
-        range: expect.objectContaining({ preset: 'CUSTOM' }),
+        range: expect.objectContaining({ preset: '30D' }),
         execution: expect.objectContaining({ leverage: 2, allowPartial: false }),
       }),
     )
@@ -191,7 +189,7 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(result.initialMessage).toBe('Create a MA crossover strategy')
   })
 
-  it('persists the official verified backtest window for plaza edit conversations', async () => {
+  it('persists a 30D backtest range for plaza edit conversations', async () => {
     const template = {
       id: 'orderbook-imbalance-long',
       editSeed: {
@@ -216,7 +214,6 @@ describe('StrategyPlazaEditSessionService', () => {
     const service = new StrategyPlazaEditSessionService(
       templates as never,
       codegenConversationService as never,
-      { build: jest.fn().mockReturnValue(verifiedBacktestDraftConfig) } as never,
     )
 
     await service.startEditSession({ userId: 'user-1', templateId: 'orderbook-imbalance-long' })
@@ -224,7 +221,7 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
       'conversation-book',
       'user-1',
-      verifiedBacktestDraftConfig,
+      thirtyDayBacktestDraftConfig,
     )
   })
 
@@ -240,7 +237,7 @@ describe('StrategyPlazaEditSessionService', () => {
     }))
   })
 
-  it('persists the verified external-event backtest window when using the default draft builder', async () => {
+  it('persists a 30D backtest range when using the default draft builder', async () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const templates = { getRequired: jest.fn().mockReturnValue(orderbookTemplate) }
     const codegenConversationService = {
@@ -258,7 +255,49 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-book',
       'user-1',
       expect.objectContaining({
-        range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
+        range: expect.objectContaining({ preset: '30D' }),
+      }),
+    )
+  })
+
+  it('does not require official backtest evidence to create an edit conversation', async () => {
+    const template = {
+      id: 'template-without-evidence',
+      editSeed: {
+        initialMessage: 'Build DCA strategy',
+        guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '1h' },
+      },
+      runConfig: {
+        exchange: 'okx',
+        marketType: 'perp',
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '1h',
+        positionPct: 70,
+        leverage: 2,
+        deploymentExecutionConfig: { priceSource: 'close', orderType: 'market', timeInForce: 'ioc' },
+      },
+    }
+    const templates = { getRequired: jest.fn().mockReturnValue(template) }
+    const codegenConversationService = {
+      startSession: jest.fn().mockResolvedValue({ id: 'session-dca', conversationId: 'conversation-dca' }),
+      updateConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
+    }
+    const service = new StrategyPlazaEditSessionService(
+      templates as never,
+      codegenConversationService as never,
+    )
+
+    await expect(service.startEditSession({ userId: 'user-1', templateId: 'template-without-evidence' })).resolves.toEqual({
+      sessionId: 'session-dca',
+      templateId: 'template-without-evidence',
+      initialMessage: 'Build DCA strategy',
+    })
+    expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
+      'conversation-dca',
+      'user-1',
+      expect.objectContaining({
+        range: { preset: '30D' },
+        execution: expect.objectContaining({ leverage: 2 }),
       }),
     )
   })

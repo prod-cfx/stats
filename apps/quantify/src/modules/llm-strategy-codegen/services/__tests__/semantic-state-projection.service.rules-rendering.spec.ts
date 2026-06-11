@@ -8,6 +8,8 @@
 
 import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 function baseState(overrides: Partial<SemanticState>): SemanticState {
@@ -30,6 +32,14 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
 
 describe('semanticStateProjectionService — rules-first summary 渲染（#1395）', () => {
   const service = new SemanticStateProjectionService()
+  const dispatcher = new GenericSeedDispatcher()
+  const seedBuilder = new SemanticSeedStateBuilderService()
+
+  function summarizePrompt(prompt: string): string {
+    const patch = dispatcher.dispatch(prompt)
+    const state = seedBuilder.build(patch, prompt)
+    return service.buildConversationView(state).summary
+  }
 
   it('detects recommendation intent from namespaced action atom keys', () => {
     const signals = (service as unknown as {
@@ -179,6 +189,62 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).toContain('EMA20')
     expect(view.summary).toContain('15m')
     expect(view.summary).not.toContain('指标高于阈值')
+  })
+
+  it('renders Strategy Plaza staging regressions through rules main flow', () => {
+    const cases = [
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建持仓量突破确认策略。规则：未平仓量 1 小时增加超过 5% 且价格突破过去 20 根 K 线高点时开多；跌破 EMA20 时平多；风控：仓位 10%，亏损 2% 止损。',
+        contains: ['未平仓量 1h增加大于 5%', '价格突破过去 20 根 K 线滚动高点', '出场：价格低于 EMA20 → 平多'],
+        excludes: ['持仓量条件', '突破过去 20 根 K 线最高价', 'EMA20 低于 EMA20'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 EMA 斜率趋势策略。规则：EMA20 斜率连续 3 根向上且成交量确认放大后开多；价格跌破 EMA20 平多；风控：仓位 20%，2 倍杠杆，亏损 2% 止损。',
+        contains: ['EMA20 斜率向上', '成交量确认：>1.5 × 20 根均量', '出场：价格低于 EMA20 → 平多'],
+        excludes: ['EMA20 低于 EMA20'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。',
+        contains: ['资金费率大于 0.01%', 'RSI14 高于或等于 70'],
+        excludes: ['资金费率条件'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 1m，创建盘口买盘失衡确认策略。规则：价格突破最近 6 根 K 线高点且必须 OKX orderbook imbalance 大于 52% 才允许开多；每 10 根 K 线最多开仓一次；持仓 4 根 K 线后平多；跌破 EMA20 时平多；风控：仓位 70%，2 倍杠杆，亏损 0.6% 止损，止盈 0.12%。',
+        contains: ['OKX orderbook imbalance大于 52%', '价格突破过去 6 根 K 线滚动高点', '时间止损：持仓超过 4 根 K 线平仓', '出场：价格低于 EMA20 → 平多'],
+        excludes: ['盘口失衡', '突破过去 6 根 K 线最高价', '时间止损（K 线数）', 'EMA20 低于 EMA20'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建清算瀑布开空策略。规则：多头清算超过 100 万 USDT 后开空；价格重新站上 EMA20 平空；风控：仓位 10%，亏损 2% 止损。',
+        contains: ['多头清算大于 100 万 USDT', '出场：价格在 EMA20 上方 → 平空'],
+        excludes: ['清算条件', 'EMA20 在 EMA20 上方'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破回踩策略。规则：价格突破 20 根高点后不立刻买，等回踩不破突破位再开多；跌破突破位下方止损；风控：仓位 20%，亏损 2% 止损。',
+        contains: ['回踩不破突破位', '止损：价格相对入场均价下跌2% 强制平仓', '单笔仓位 20%'],
+        excludes: ['下跌20%'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，亏损 3% 止损，盈利 0.6% 止盈。',
+        contains: ['价格突破过去 24 根 K 线滚动高点，突破缓冲 0.25%', '出场：价格跌破过去 12 根 K 线滚动低点'],
+        excludes: ['突破过去 24 根 K 线最高价'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建放量突破策略。规则：价格突破过去 20 根 K 线高点并且成交量超过 20 根均量 1.5 倍时开多；跌破 EMA20 平多；风控：仓位 20%，单笔最多亏 2%。',
+        contains: ['价格突破过去 20 根 K 线滚动高点', '成交量 > 1.5 × 20 根均量', '出场：价格低于 EMA20 → 平多'],
+        excludes: ['突破过去 20 根 K 线最高价', 'EMA20 低于 EMA20'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建趋势过滤网格策略。规则：价格在震荡区间内且 1h 价格高于 MA50 时才买入；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；价格回到区间上沿卖出；风控：单次仓位 70%，亏损 1.5% 止损，止盈 0.12%。',
+        contains: ['震荡区间形态', '1h 价格在 MA50 上方', '交易冷却：6 根 K 线', '时间止损：持仓超过 4 根 K 线平仓'],
+        excludes: ['只在价格高于 EMA', '只在价格低于 EMA', '网格区间再平衡', '围绕最近 20 根 K 线中点'],
+      },
+    ]
+
+    for (const item of cases) {
+      const summary = summarizePrompt(item.prompt)
+      for (const expected of item.contains) expect(summary).toContain(expected)
+      for (const forbidden of item.excludes) expect(summary).not.toContain(forbidden)
+    }
   })
 
   it('renders moving-average relative compare from left period and nested reference period', () => {

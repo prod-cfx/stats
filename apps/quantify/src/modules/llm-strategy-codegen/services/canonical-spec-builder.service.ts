@@ -3666,6 +3666,19 @@ export class CanonicalSpecBuilderService {
     return this.readNumberParam(reference?.period)
   }
 
+  private parseIndicatorNameAndPeriod(value: unknown): { indicator: string | null, period: number | null } {
+    if (typeof value !== 'string') return { indicator: null, period: null }
+    const trimmed = value.trim()
+    if (trimmed.length === 0) return { indicator: null, period: null }
+    const match = trimmed.match(/^(EMA|MA|SMA|RSI)\s*(\d{1,4})$/iu)
+    if (!match?.[1]) return { indicator: trimmed.toLowerCase(), period: null }
+    const period = match[2] ? Number(match[2]) : null
+    return {
+      indicator: match[1].toLowerCase(),
+      period: period !== null && Number.isFinite(period) ? period : null,
+    }
+  }
+
   private readPriceCrossReferencePeriod(trigger: unknown): number | null {
     const evidenceRecord = trigger && typeof trigger === 'object' && !Array.isArray(trigger)
       ? (trigger as { evidence?: unknown }).evidence
@@ -4888,12 +4901,16 @@ export class CanonicalSpecBuilderService {
     sourcePath?: string,
   ): CanonicalRuleV2['actions'] {
     switch (leaf.key) {
+      case 'open_long':
       case ATOM_CONTRACT_REGISTRY['action.open_long'].key:
         return phase === 'entry' ? [this.buildOpenAction('OPEN_LONG', sizing, leaf.key)] : []
+      case 'open_short':
       case ATOM_CONTRACT_REGISTRY['action.open_short'].key:
         return phase === 'entry' ? [this.buildOpenAction('OPEN_SHORT', sizing, leaf.key)] : []
+      case 'close_long':
       case ATOM_CONTRACT_REGISTRY['action.close_long'].key:
         return phase === 'exit' ? [{ type: 'CLOSE_LONG', atomKey: leaf.key }] : []
+      case 'close_short':
       case ATOM_CONTRACT_REGISTRY['action.close_short'].key:
         return phase === 'exit' ? [{ type: 'CLOSE_SHORT', atomKey: leaf.key }] : []
       case 'action.reduce_position': {
@@ -4972,6 +4989,10 @@ export class CanonicalSpecBuilderService {
       || key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
       || key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
       || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+      || key === 'open_long'
+      || key === 'open_short'
+      || key === 'close_long'
+      || key === 'close_short'
       || key === ATOM_CONTRACT_REGISTRY['action.add_position'].key
       || key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key
       || key === 'action.limit_order'
@@ -5009,9 +5030,12 @@ export class CanonicalSpecBuilderService {
       return this.buildConditionFromSemanticRuleAtom(expr, phase, sideScope, defaultTimeframe)
     }
     if (expr.kind === 'and' || expr.kind === 'or') {
-      const children = expr.children
+      const rawChildren = expr.children
         .map(child => this.buildConditionFromSemanticRuleExpr(child, phase, sideScope, defaultTimeframe))
         .filter((condition): condition is CanonicalConditionNode => condition !== null)
+      const children = expr.kind === 'and'
+        ? this.dedupeCanonicalBreakoutAliasConditions(rawChildren)
+        : rawChildren
       if (children.length === 0) return null
       if (children.length === 1) return children[0]
       return { kind: expr.kind === 'and' ? 'AND' : 'OR', children }
@@ -5028,6 +5052,42 @@ export class CanonicalSpecBuilderService {
       if (children.length === 1) return children[0]
       return { kind: 'AND', predicateForm: 'generic', children }
     }
+    return null
+  }
+
+  private dedupeCanonicalBreakoutAliasConditions(children: readonly CanonicalConditionNode[]): CanonicalConditionNode[] {
+    const rollingAliases = new Set<string>()
+    for (const child of children) {
+      if (child.kind !== 'atom' || child.key !== ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key) continue
+      const alias = this.canonicalBreakoutAliasFromRollingExtrema(child.params ?? {})
+      if (alias) rollingAliases.add(alias)
+    }
+    if (rollingAliases.size === 0) return [...children]
+
+    return children.filter((child) => {
+      if (child.kind !== 'atom') return true
+      if (child.key !== 'breakout.channel_high_break' && child.key !== 'breakout.channel_low_break') return true
+      const alias = this.canonicalBreakoutAliasFromChannel(child.key, child.params ?? {})
+      return !alias || !rollingAliases.has(alias)
+    })
+  }
+
+  private canonicalBreakoutAliasFromRollingExtrema(params: Record<string, unknown>): string | null {
+    const lookback = this.readNumberParam(params.lookbackBars)
+    const event = this.readStringParam(params.event)
+    const extrema = this.readStringParam(params.extrema)
+    if (lookback === null || !event || !extrema) return null
+    if (event === 'breakout_up' && extrema === 'high') return `up:${lookback}`
+    if (event === 'breakout_down' && extrema === 'low') return `down:${lookback}`
+    return null
+  }
+
+  private canonicalBreakoutAliasFromChannel(key: string, params: Record<string, unknown>): string | null {
+    const period = this.readNumberParam(params.period)
+    const reference = this.readStringParam(params.reference)
+    if (period === null || !reference) return null
+    if (key === 'breakout.channel_high_break' && reference === 'channel_high') return `up:${period}`
+    if (key === 'breakout.channel_low_break' && reference === 'channel_low') return `down:${period}`
     return null
   }
 
@@ -7866,21 +7926,23 @@ export class CanonicalSpecBuilderService {
       case ATOM_CONTRACT_REGISTRY['indicator.above'].key: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
         const referencePeriod = this.readSemanticReferencePeriod(trigger.params)
+        const parsedIndicator = this.parseIndicatorNameAndPeriod(trigger.params.indicator)
         const ownPeriod = typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
           ? trigger.params.period
           : (typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
             ? trigger.params.fastPeriod
-            : undefined)
+            : parsedIndicator.period ?? undefined)
+        const effectiveReferencePeriod = typeof ownPeriod === 'number' && referencePeriod === ownPeriod ? null : referencePeriod
         return {
           kind: 'atom',
           key: 'indicator.above',
           semanticScope: 'market',
           op: 'GTE',
           params: {
-            ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
+            ...(parsedIndicator.indicator ? { indicator: parsedIndicator.indicator } : {}),
             ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
             ...(typeof ownPeriod === 'number' ? { period: ownPeriod } : {}),
-            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+            ...(effectiveReferencePeriod !== null ? { 'reference.period': effectiveReferencePeriod } : {}),
             ...(timeframe ? { timeframe } : {}),
           },
         }
@@ -7888,21 +7950,44 @@ export class CanonicalSpecBuilderService {
       case ATOM_CONTRACT_REGISTRY['indicator.below'].key: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
         const referencePeriod = this.readSemanticReferencePeriod(trigger.params)
+        const parsedIndicator = this.parseIndicatorNameAndPeriod(trigger.params.indicator)
         const ownPeriod = typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
           ? trigger.params.period
           : (typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
             ? trigger.params.fastPeriod
-            : undefined)
+            : parsedIndicator.period ?? undefined)
+        const effectiveReferencePeriod = typeof ownPeriod === 'number' && referencePeriod === ownPeriod ? null : referencePeriod
         return {
           kind: 'atom',
           key: 'indicator.below',
           semanticScope: 'market',
           op: 'LTE',
           params: {
-            ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
+            ...(parsedIndicator.indicator ? { indicator: parsedIndicator.indicator } : {}),
             ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
             ...(typeof ownPeriod === 'number' ? { period: ownPeriod } : {}),
-            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+            ...(effectiveReferencePeriod !== null ? { 'reference.period': effectiveReferencePeriod } : {}),
+            ...(timeframe ? { timeframe } : {}),
+          },
+        }
+      }
+      case ATOM_CONTRACT_REGISTRY['indicator.slope'].key: {
+        const timeframe = this.readTriggerParamTimeframe(trigger.params) ?? defaultTimeframe
+        const indicator = this.readStringParam(trigger.params.indicator) ?? 'ema'
+        const period = this.readNumberParam(trigger.params.period) ?? DEFAULT_INDICATOR_PARAMS.ema.period
+        const direction = this.readStringParam(trigger.params.direction) === 'down' ? 'down' : 'up'
+        const consecutiveBars = this.readNumberParam(trigger.params.consecutiveBars) ?? 1
+        return {
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['indicator.slope'].key,
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: direction === 'down' ? 'LT' : 'GT',
+          params: {
+            indicator,
+            period,
+            direction,
+            consecutiveBars,
             ...(timeframe ? { timeframe } : {}),
           },
         }
@@ -7958,6 +8043,22 @@ export class CanonicalSpecBuilderService {
             metric,
             ...(unit ? { unit } : {}),
             ...(period !== null ? { period } : {}),
+          },
+        }
+      }
+      case ATOM_CONTRACT_REGISTRY['volume.confirmation'].key: {
+        const timeframe = this.readTriggerParamTimeframe(trigger.params) ?? defaultTimeframe
+        return {
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['volume.confirmation'].key,
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: this.readGateThresholdOperator(trigger.params.operator),
+          params: {
+            mode: this.readStringParam(trigger.params.mode) ?? 'confirm_breakout',
+            multiplier: this.readNumberParam(trigger.params.multiplier) ?? 1.5,
+            refWindow: this.readNumberParam(trigger.params.refWindow) ?? 20,
+            ...(timeframe ? { timeframe } : {}),
           },
         }
       }

@@ -18,6 +18,7 @@ jest.mock('react-i18next', () => ({
       'aiQuant.messages.backtestDrawdownFail': '回撤超标，暂不允许部署',
       'aiQuant.messages.backtestOpenTrades': `回测存在 ${String(options?.count ?? 0)} 个未平仓持仓`,
       'aiQuant.messages.backtestNoTrades': '本次回测未产生有效成交，暂不允许部署。请调整策略条件后重试。',
+      'aiQuant.messages.backtestEventStreamUnavailable': '本次回测缺少外部事件数据，暂不允许部署。请更换时间范围或稍后重试。',
       'aiQuant.messages.backtestConfigChanged': '这是历史回测结果，当前参数已变化，不能直接用于部署，需要重新回测。',
       'aiQuant.fullScreen': '全屏查看',
       'aiQuant.maxDrawdown': '最大回撤',
@@ -153,6 +154,33 @@ describe('BacktestSummaryCard', () => {
 
     expect(container.textContent).toContain('回撤超标，暂不允许部署')
     expect(container.textContent).not.toContain('未形成已完成交易')
+  })
+
+  it('shows event-stream diagnostic copy when external feed data is unavailable', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-event-stream-missing',
+            symbol: 'ETHUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 0,
+            totalReturnPct: 0,
+            winRatePct: 0,
+            tradeCount: 0,
+            diagnosticReason: 'BACKTEST_EVENT_STREAM_UNAVAILABLE',
+          }}
+          marketType="perp"
+          canDeploy={false}
+          onOpenFullScreen={() => undefined}
+          onDeploy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('本次回测缺少外部事件数据')
+    expect(container.textContent).not.toContain('请调整策略条件后重试')
   })
 
   it('shows running deployment state with a locked primary action and view entry', async () => {

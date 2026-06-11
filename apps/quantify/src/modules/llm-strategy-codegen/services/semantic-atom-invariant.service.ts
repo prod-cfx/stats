@@ -983,6 +983,9 @@ export class SemanticAtomInvariantService {
       actual: input.ir.portfolio.sizing,
     }
     const astCandidates = this.readAstOpenActionPositionSizings(input.ast, input.semanticState)
+    if (astCandidates.length === 0 && !this.hasAstOpenSizingCarrier(input.ast)) {
+      return []
+    }
     const ast = {
       passed: astCandidates.length > 0
         && astCandidates.every(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
@@ -1019,6 +1022,15 @@ export class SemanticAtomInvariantService {
       || leaf.key === 'program.fixed_grid_gated',
     )
     return hasLifecycleSizingCarrier && !hasOpenAction
+  }
+
+  private hasAstOpenSizingCarrier(ast: StrategyAstV1): boolean {
+    return ast.decisionPrograms.some(program => program.actions.some(action =>
+      action.kind === 'OPEN_LONG'
+      || action.kind === 'OPEN_SHORT'
+      || action.kind === 'ADD_LONG'
+      || action.kind === 'ADD_SHORT',
+    )) || ast.orderPrograms.length > 0 || (ast.orchestrationPrograms ?? []).length > 0
   }
 
   private toCanonicalPositionSizingSnapshot(sizing: SemanticPositionSizingContract): PositionSizingSnapshot {

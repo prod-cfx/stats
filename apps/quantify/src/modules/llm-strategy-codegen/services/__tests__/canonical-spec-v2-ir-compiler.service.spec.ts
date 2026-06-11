@@ -210,6 +210,59 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles EMA slope with volume confirmation into executable predicates', () => {
+    const canonicalSpec: CanonicalStrategySpecV2 = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'fixed_ratio', value: 0.2 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: { requiredTimeframes: ['15m'] },
+      rules: [{
+        id: 'entry-ema-slope-volume',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 100,
+        condition: {
+          kind: 'AND',
+          children: [
+            { kind: 'atom', key: 'indicator.slope', params: { indicator: 'ema', period: 20, direction: 'up', consecutiveBars: 3 } },
+            { kind: 'atom', key: 'volume.confirmation', params: { mode: 'confirm_breakout', refWindow: 20, multiplier: 1.5 } },
+          ],
+        },
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'fixed_ratio', value: 0.2 } }],
+      }],
+    }
+
+    const result = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 20,
+      },
+    })
+
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GT', args: expect.arrayContaining(['ema_20_15m', 'ema_20_15m_3']) }),
+      expect.objectContaining({ kind: 'compare', params: expect.objectContaining({ op: 'GT' }) }),
+      expect.objectContaining({ kind: 'AND' }),
+    ]))
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'ema_20_15m_3', kind: 'EMA', offsetBars: 3 }),
+      expect.objectContaining({ kind: 'SMA_VOLUME', params: expect.objectContaining({ period: 20, multiplier: 1.5 }) }),
+    ]))
+  })
+
   it('preserves rules-only EMA stack reference periods through canonical and IR compile', () => {
     const semanticState: SemanticState = {
       version: 1,

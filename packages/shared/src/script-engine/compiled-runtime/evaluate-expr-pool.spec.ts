@@ -187,6 +187,32 @@ describe('evaluateExprPool', () => {
     expect(values.funding_positive).toBe(true)
   })
 
+  it('treats funding rates at the configured threshold as matching exchange precision', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'funding.rate': [
+            { id: 'funding-1', ts: 9_000, payload: { fundingRate: 0.0001 } },
+          ],
+        },
+      },
+      [{
+        id: 'funding_at_threshold',
+        nodeType: 'predicate',
+        sourceRef: 'fundingRate.condition',
+        payload: {
+          kind: 'fundingRateCondition',
+          params: { sourceFeedId: 'funding.rate', operator: 'GT', value: 0.0001 },
+        },
+        deps: [],
+      }],
+      ['funding_at_threshold'],
+    )
+
+    expect(values.funding_at_threshold).toBe(true)
+  })
+
   it('evaluates liquidationCondition predicates from event inbox side and notional', () => {
     const values = evaluateExprPool(
       {
@@ -238,6 +264,32 @@ describe('evaluateExprPool', () => {
     )
 
     expect(values.orderbook_bid_dominant).toBe(true)
+  })
+
+  it('evaluates inclusive orderbook depth ratio thresholds at the boundary', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'orderbook.imbalance': [
+            { id: 'book-1', ts: 9_000, payload: { bidDepth: 1_500, askDepth: 1_000 } },
+          ],
+        },
+      },
+      [{
+        id: 'orderbook_bid_depth_ratio_gte',
+        nodeType: 'predicate',
+        sourceRef: 'orderbook.imbalance',
+        payload: {
+          kind: 'orderbookImbalance',
+          params: { sourceFeedId: 'orderbook.imbalance', side: 'bid_over_ask', operator: 'GTE', ratio: 1.5 },
+        },
+        deps: [],
+      }],
+      ['orderbook_bid_depth_ratio_gte'],
+    )
+
+    expect(values.orderbook_bid_depth_ratio_gte).toBe(true)
   })
 
   it('evaluates orderbookImbalance from the latest visible snapshot instead of any historical match', () => {
@@ -311,6 +363,34 @@ describe('evaluateExprPool', () => {
     )
 
     expect(values.oi_up_5pct).toBe(true)
+  })
+
+  it('evaluates openInterestCondition percent changes over the configured time window', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 3_600_000,
+        eventInbox: {
+          open_interest: [
+            { id: 'oi-0', ts: 0, payload: { openInterest: 100 } },
+            { id: 'oi-1', ts: 2_700_000, payload: { openInterest: 105 } },
+            { id: 'oi-2', ts: 3_600_000, payload: { openInterest: 106 } },
+          ],
+        },
+      },
+      [{
+        id: 'oi_up_1h_5pct',
+        nodeType: 'predicate',
+        sourceRef: 'openInterest.condition',
+        payload: {
+          kind: 'openInterestCondition',
+          params: { sourceFeedId: 'open_interest', direction: 'up', operator: 'GT', value: 5, window: '1h' },
+        },
+        deps: [],
+      }],
+      ['oi_up_1h_5pct'],
+    )
+
+    expect(values.oi_up_1h_5pct).toBe(true)
   })
 
   it('evaluates funding plus open interest confirmation predicates together', () => {

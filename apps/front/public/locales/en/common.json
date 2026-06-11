@@ -745,6 +745,7 @@
       "backtestSuccess": "Backtest max drawdown {{drawdown}}% (Passed), ready to deploy.",
       "backtestFail": "Backtest max drawdown {{drawdown}}% (Failed). Suggest optimizing parameters via chat before backtesting again.",
       "backtestNoTrades": "Backtest produced no valid trades, so deployment remains disabled. Please adjust the strategy conditions and retry.",
+      "backtestEventStreamUnavailable": "Backtest is missing external event data, so deployment remains disabled. Change the time range or retry later.",
       "backtestOpenTrades": "Backtest opened positions but did not close them within the selected range ({{count}} still open), so deployment remains disabled.",
       "optimizeHint": "Suggest reducing single position size or adjusting buy/sell thresholds before re-backtesting.",
       "deploySuccess": "Deployed successfully: {{exchange}} / {{account}}. Check status in User Center.",

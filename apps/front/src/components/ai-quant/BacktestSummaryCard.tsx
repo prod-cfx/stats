@@ -144,6 +144,8 @@ export function BacktestSummaryCard({
       ]
   const deployBlockMessage = result.maxDrawdownPct > 20
     ? t('aiQuant.messages.backtestDrawdownFail')
+    : result.tradeCount === 0 && !hasOpenTrades && result.diagnosticReason === 'BACKTEST_EVENT_STREAM_UNAVAILABLE'
+      ? t('aiQuant.messages.backtestEventStreamUnavailable')
     : result.tradeCount === 0 && !hasOpenTrades
       ? normalizedMarketType === 'spot'
         ? isEn

@@ -142,6 +142,95 @@ describe('BacktestJobExecutorService', () => {
     }))
   })
 
+  it('runs preset backtests on the fully covered suggested range when market data lags current time', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn(),
+    }
+    const input = createInput()
+    input.requestedRangeInput = { preset: '30D' }
+    input.dataRange = {
+      fromTs: Date.parse('2026-05-11T16:00:00.000Z'),
+      toTs: Date.parse('2026-06-10T16:00:00.000Z'),
+    }
+    const appliedRange = {
+      fromTs: Date.parse('2026-05-01T16:00:00.000Z'),
+      toTs: Date.parse('2026-05-28T16:45:00.000Z'),
+    }
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({
+      kind: 'partial',
+      availableRange: {
+        fromTs: Date.parse('2026-05-01T16:00:00.000Z'),
+        toTs: Date.parse('2026-05-28T16:45:00.000Z'),
+      },
+      appliedRange,
+    })
+    const runner = { run: jest.fn().mockResolvedValue({ summary: { totalTrades: 1 }, equityCurve: [], trades: [], markers: [], bySymbol: [] }) }
+    const executor = new BacktestJobExecutorService(
+      runner as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+    )
+
+    await executor.execute('job-1', input, {
+      ...createInputSummary(),
+      dataRange: input.dataRange,
+      requestedRange: input.dataRange,
+    })
+
+    expect(repository.markFailed).not.toHaveBeenCalled()
+    expect(marketData.loadBars).toHaveBeenCalledWith(expect.objectContaining({ dataRange: appliedRange }))
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({ dataRange: appliedRange }))
+    expect(repository.markSucceeded).toHaveBeenCalledWith('job-1', expect.objectContaining({
+      inputSummary: expect.objectContaining({
+        requestedRange: input.dataRange,
+        appliedRange,
+        isPartial: false,
+      }),
+    }))
+  })
+
+  it('keeps custom backtests strict when requested range is only partially covered', async () => {
+    const repository = {
+      markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),
+      markSucceeded: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const input = createInput()
+    input.requestedRangeInput = {
+      preset: 'CUSTOM',
+      startAt: '2026-05-11T16:00:00.000Z',
+      endAt: '2026-06-10T16:00:00.000Z',
+    }
+    input.dataRange = {
+      fromTs: Date.parse('2026-05-11T16:00:00.000Z'),
+      toTs: Date.parse('2026-06-10T16:00:00.000Z'),
+    }
+    const marketData = createMarketDataMock()
+    marketData.resolveCoverage.mockResolvedValue({
+      kind: 'partial',
+      availableRange: { fromTs: 1_000, toTs: 2_000 },
+      appliedRange: { fromTs: 1_000, toTs: 2_000 },
+    })
+    const executor = new BacktestJobExecutorService(
+      { run: jest.fn() } as never,
+      marketData as never,
+      { updateLastBacktestRef: jest.fn() } as never,
+      repository as never,
+    )
+
+    await executor.execute('job-1', input, createInputSummary())
+
+    expect(repository.markSucceeded).not.toHaveBeenCalled()
+    expect(repository.markFailed).toHaveBeenCalledWith('job-1', expect.objectContaining({
+      code: 'backtest.data_range_out_of_coverage',
+      args: expect.objectContaining({ suggestedRange: { fromTs: 1_000, toTs: 2_000 } }),
+    }))
+  })
+
   it('adds diagnostic reason to zero-trade results', async () => {
     const repository = {
       markRunning: jest.fn().mockResolvedValue({ id: 'job-1', ownerUserId: 'user-1', conversationId: null, status: 'running' }),

@@ -146,7 +146,12 @@ export class BacktestJobExecutorService {
         args: { symbols: input.symbols, fromTs: input.dataRange.fromTs, toTs: input.dataRange.toTs },
       })
     }
-    if (coverage.kind === 'partial' && input.allowPartial !== true) {
+    const canShiftPresetRange = coverage.kind === 'partial'
+      && input.allowPartial !== true
+      && input.requestedRangeInput
+      && input.requestedRangeInput.preset !== 'CUSTOM'
+
+    if (coverage.kind === 'partial' && input.allowPartial !== true && !canShiftPresetRange) {
       throw new DomainException('backtest.data_range_out_of_coverage', {
         code: ErrorCode.BACKTEST_JOB_CONFLICT,
         status: HttpStatus.CONFLICT,
@@ -161,7 +166,7 @@ export class BacktestJobExecutorService {
     const resolvedSummary: BacktestJobInputSummary = {
       ...initialSummary,
       appliedRange: coverage.appliedRange,
-      isPartial: coverage.kind === 'partial',
+      isPartial: coverage.kind === 'partial' && !canShiftPresetRange,
     }
 
     const eventStreams = await this.resolveBacktestEventStreams({ ...input, dataRange: coverage.appliedRange })

@@ -1890,6 +1890,27 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'indicator.slope': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const indicator = typeof atom.params?.indicator === 'string'
+          ? atom.params.indicator.trim().toLowerCase()
+          : 'ema'
+        const period = this.readNumber([atom.params?.period], context.movingAverage.fast)
+        const consecutiveBars = Math.max(1, this.readNumber([atom.params?.consecutiveBars], 1))
+        const kind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ma' || indicator === 'sma' ? 'SMA' : 'EMA'
+        const currentRef = this.ensureIndicatorSeries(context, kind, period, timeframe)
+        const previousRef = this.ensureIndicatorSeries(context, kind, period, timeframe, consecutiveBars)
+        const direction = typeof atom.params?.direction === 'string' ? atom.params.direction : 'up'
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${kind.toLowerCase()}_${period}_${consecutiveBars}_${timeframe}`,
+          direction === 'down' ? 'LT' : 'GT',
+          [currentRef, previousRef],
+        )
+      }
+
       case 'price.detect.indicator_boundary': {
         const indicator = this.readNestedParam(atom.params, 'indicator', 'name') ?? atom.params?.indicator
         const boundaryRole = this.readStringParam(atom.params?.boundaryRole)
@@ -2008,13 +2029,30 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'volume.confirmation': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const volumeRef = this.ensureVolumeSeries(context, timeframe)
+        const multiplier = this.readNumber([atom.params?.multiplier], 1.5)
+        const refWindow = this.readNumber([atom.params?.refWindow], 20)
+        const averageRef = this.ensureSmaVolumeSeries(context, refWindow, multiplier, timeframe)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          'compare',
+          [volumeRef, averageRef],
+          { op: this.resolveComparisonKind(atom.op ?? 'GT') },
+        )
+      }
+
       case 'price.rolling_extrema_breakout': {
         const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
           ? atom.params.timeframe.trim()
           : context.timeframe
-        const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
         const period = this.readNumber([atom.params?.lookbackBars, atom.params?.period], 20)
         const extrema = typeof atom.params?.extrema === 'string' ? atom.params.extrema : 'high'
+        const probeRef = this.ensurePriceSeries(context, extrema === 'low' ? 'low' : 'high', timeframe)
         const channelRef = extrema === 'low'
           ? this.ensureChannelSeries(context, 'LOWEST_LOW', period, timeframe)
           : this.ensureChannelSeries(context, 'HIGHEST_HIGH', period, timeframe)
@@ -2023,7 +2061,7 @@ export class CanonicalSpecV2IrCompilerService {
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
           'compare',
-          [closeRef, channelRef],
+          [probeRef, channelRef],
           { op: this.resolveComparisonKind(atom.op ?? (extrema === 'low' ? 'LT' : 'GT')) },
         )
       }
@@ -2925,9 +2963,10 @@ export class CanonicalSpecV2IrCompilerService {
     kind: Extract<SeriesDef['kind'], 'SMA' | 'EMA' | 'RSI'>,
     period: number,
     timeframe = context.timeframe,
+    offsetBars = 0,
   ): string {
     const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
-    const id = `${kind.toLowerCase()}_${period}_${timeframe}`
+    const id = `${kind.toLowerCase()}_${period}_${timeframe}${offsetBars > 0 ? `_${offsetBars}` : ''}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
@@ -2935,6 +2974,7 @@ export class CanonicalSpecV2IrCompilerService {
         timeframe,
         inputs: [closeRef],
         params: { period },
+        ...(offsetBars > 0 ? { offsetBars } : {}),
       })
     }
     return id
@@ -5268,13 +5308,16 @@ export class CanonicalSpecV2IrCompilerService {
     if (side) params.side = side
     const direction = this.readStringParam(atom.params?.direction)
     if (direction) params.direction = direction
-    const value = this.readOptionalNumber(atom.value)
+    const rawValue = this.readOptionalNumber(atom.value)
       ?? this.readOptionalNumber(atom.params?.value)
-      ?? this.readOptionalNumber(atom.params?.valuePct)
+    const percentValue = this.readOptionalNumber(atom.params?.valuePct)
       ?? this.readOptionalNumber(atom.params?.thresholdPct)
+    const value = rawValue
+      ?? (schemaRef === 'funding' && percentValue !== null ? Number((percentValue / 100).toFixed(10)) : percentValue)
       ?? this.readOptionalNumber(atom.params?.changePct)
       ?? this.readOptionalNumber(atom.params?.ratio)
       ?? this.readOptionalNumber(atom.params?.notionalUsd)
+      ?? (schemaRef === 'funding' ? 0 : null)
     if (value !== null) params.value = value
     const window = this.readStringParam(atom.params?.window)
     if (window) params.window = window

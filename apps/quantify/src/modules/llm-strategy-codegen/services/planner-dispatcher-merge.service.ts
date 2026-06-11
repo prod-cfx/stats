@@ -2623,7 +2623,7 @@ export class PlannerDispatcherMergeService {
 
   private extractExplicitPercentRiskEffects(userMessage: string): AtomExprAtom[] {
     const out: AtomExprAtom[] = []
-    const stopLoss = /(?:(?:止损|stop\s*loss)\D{0,12}(\d+(?:\.\d+)?)\s*%|(?:亏损|亏|loss)\D{0,12}(\d+(?:\.\d+)?)\s*%\D{0,12}(?:止损|平仓|退出|stop\s*loss))/iu.exec(userMessage)
+    const stopLoss = /(?:(?:亏损|亏|loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止损|平仓|退出|stop\s*loss)|(?:止损|stop\s*loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%)/iu.exec(userMessage)
     const takeProfit = /(?:止盈|take\s*profit)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
       // 兼容「盈利/获利/收益 达到 X% 时卖出平仓」这类出场式止盈表述（区间低买高卖模板）。
       // 要求百分比后近距离出现平仓动词，排除「盈利 X% 后加仓」的 pyramiding 语义。
@@ -3438,7 +3438,7 @@ export class PlannerDispatcherMergeService {
     const plannerLeaves = collectAtomLeaves(plannerRule.condition)
     const dispatcherLeaves = collectAtomLeaves(dispatcherRule.condition)
     if (plannerLeaves.length === 0 || dispatcherLeaves.length === 0) return false
-    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf)))
+    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf) || plannerLeaf.key === dispatcherLeaf.key))
   }
 
   private lifecycleActionsCompatible(plannerRule: SemanticRule, dispatcherRule: SemanticRule): boolean {
@@ -3458,7 +3458,7 @@ export class PlannerDispatcherMergeService {
     for (const key of dispatcherActions) if (plannerActions.has(key)) return false
     const plannerLeaves = collectAtomLeaves(plannerRule.condition)
     const dispatcherLeaves = collectAtomLeaves(dispatcherRule.condition)
-    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf)))
+    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf) || plannerLeaf.key === dispatcherLeaf.key))
   }
 
   private collectLifecycleActionEffects(rule: SemanticRule): AtomExprAtom[] {
@@ -3522,14 +3522,40 @@ export class PlannerDispatcherMergeService {
   private mergeMissingConditionLeaves(existing: AtomExpr, additions: readonly AtomExprAtom[]): AtomExpr {
     const conditionAdditions = additions.filter(leaf => this.atomHasRole(leaf.key, 'predicate'))
     if (conditionAdditions.length === 0) return existing
-    const existingLeaves = collectAtomLeaves(existing)
+    const enriched = this.mergeExplicitConditionLeafParams(existing, conditionAdditions)
+    const existingLeaves = collectAtomLeaves(enriched)
     const missing = conditionAdditions.filter(addition =>
       !existingLeaves.some(existingLeaf => this.conditionLeafRepresents(existingLeaf, addition))
+      && !existingLeaves.some(existingLeaf => existingLeaf.key === addition.key)
       && !existingLeaves.some(existingLeaf => this.sameMovingAverageCrossConditionKey(existingLeaf, addition)),
     )
-    if (missing.length === 0) return existing
-    if (existing.kind === 'and') return { ...existing, children: [...existing.children, ...missing] }
-    return { kind: 'and', children: [existing, ...missing] }
+    if (missing.length === 0) return enriched
+    if (enriched.kind === 'and') return { ...enriched, children: [...enriched.children, ...missing] }
+    return { kind: 'and', children: [enriched, ...missing] }
+  }
+
+  private mergeExplicitConditionLeafParams(existing: AtomExpr, additions: readonly AtomExprAtom[]): AtomExpr {
+    if (existing.kind === 'atom') {
+      const candidate = additions.find(addition => addition.key === existing.key)
+      if (!candidate) return existing
+      return {
+        ...existing,
+        params: { ...(existing.params ?? {}), ...(candidate.params ?? {}) },
+      }
+    }
+    if (existing.kind === 'and' || existing.kind === 'or') {
+      return {
+        ...existing,
+        children: existing.children.map(child => this.mergeExplicitConditionLeafParams(child, additions)),
+      }
+    }
+    if (existing.kind === 'not') {
+      return { ...existing, child: this.mergeExplicitConditionLeafParams(existing.child, additions) }
+    }
+    if (existing.kind === 'sequence') {
+      return { ...existing, steps: existing.steps.map(step => this.mergeExplicitConditionLeafParams(step, additions)) }
+    }
+    return existing
   }
 
   private appendDedupedTypedRuleEffects(existing: RuleEffects, additions: readonly AtomExpr[]): RuleEffectsByRole {
