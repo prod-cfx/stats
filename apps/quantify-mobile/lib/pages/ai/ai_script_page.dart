@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/ai_strategy_context.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -88,10 +89,11 @@ export default class TrendMA extends Strategy {
 ///     展开折叠（长脚本「查看全部 N 行 / 收起」）+ 成功提示条。
 ///   - 底部「下一步：回测设置」仅就绪态可点 → push `/ai/backtest-config`。
 class AiScriptPage extends ConsumerStatefulWidget {
-  const AiScriptPage({super.key, this.params});
+  const AiScriptPage({super.key, this.params, this.strategyContext});
 
   /// 当前会话参数键值对，经 router `extra` 透传。`null` 时回退 [kStratFallbackParams]。
   final Map<String, String>? params;
+  final AiPublishedStrategyContext? strategyContext;
 
   @override
   ConsumerState<AiScriptPage> createState() => _AiScriptPageState();
@@ -104,11 +106,15 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
       ref.read(aiScriptPageControllerProvider.notifier);
 
   Map<String, String> get _params =>
-      (widget.params != null && widget.params!.isNotEmpty)
-      ? widget.params!
-      : kStratFallbackParams;
+      widget.strategyContext?.toRouteParams() ??
+      ((widget.params != null && widget.params!.isNotEmpty)
+          ? widget.params!
+          : kStratFallbackParams);
 
-  String get _script => buildStratScript(_params);
+  String get _script =>
+      widget.strategyContext?.scriptCode?.trim().isNotEmpty == true
+      ? widget.strategyContext!.scriptCode!.trim()
+      : buildStratScript(_params);
   String get _fileName => stratFileName(_params);
   String? get _codegenStatus =>
       _params['codegenStatus'] ??
@@ -148,7 +154,10 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
 
   void _next() {
     if (!ref.read(aiScriptPageControllerProvider).ready) return;
-    context.push('/ai/backtest-config', extra: _params);
+    context.push(
+      '/ai/backtest-config',
+      extra: widget.strategyContext ?? _params,
+    );
   }
 
   @override

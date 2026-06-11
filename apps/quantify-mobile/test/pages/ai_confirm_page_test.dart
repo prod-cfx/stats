@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
+import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
@@ -126,6 +127,7 @@ class _FakeAiChatRepository implements AiChatRepository {
     String sessionId,
     String publishedSnapshotId, {
     String? exchangeAccountId,
+    String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async => null;
 }
@@ -220,16 +222,15 @@ void main() {
         GoRoute(
           path: '/ai/script',
           builder: (_, GoRouterState state) {
-            final Map<String, String> extra = state.extra is Map<String, String>
-                ? state.extra! as Map<String, String>
-                : const <String, String>{};
+            final AiPublishedStrategyContext extra =
+                state.extra! as AiPublishedStrategyContext;
             return Text(
-              '${extra['codegenStatus']} '
-              '${extra['fast_ma']} '
-              '${extra['publishedSnapshotId']} '
-              '${extra['codegenSessionId']} '
-              '${extra['strategyInstanceId']} '
-              '${extra['snapshot-1'] ?? '-'}',
+              '${extra.status} '
+              '${extra.params['fast_ma']} '
+              '${extra.publishedSnapshotId} '
+              '${extra.codegenSessionId} '
+              '${extra.strategyInstanceId} '
+              '${extra.hasPublishedSnapshot}',
             );
           },
         ),
@@ -264,7 +265,7 @@ void main() {
     expect(repo.confirmCalls.single.message, '确认策略');
     expect(repo.confirmCalls.single.digest, 'sha256:canonical-1');
     expect(
-      find.text('PUBLISHED 7 snapshot-1 session-1 strategy-1 -'),
+      find.text('PUBLISHED 7 snapshot-1 session-1 strategy-1 true'),
       findsOneWidget,
     );
   });
@@ -303,13 +304,12 @@ void main() {
         GoRoute(
           path: '/ai/script',
           builder: (_, GoRouterState state) {
-            final Map<String, String> extra = state.extra is Map<String, String>
-                ? state.extra! as Map<String, String>
-                : const <String, String>{};
+            final AiPublishedStrategyContext extra =
+                state.extra! as AiPublishedStrategyContext;
             return Text(
-              '${extra['codegenStatus']} '
-              '${extra['publishedSnapshotId']} '
-              '${extra['codegenSessionId']}',
+              '${extra.status} '
+              '${extra.publishedSnapshotId} '
+              '${extra.codegenSessionId}',
             );
           },
         ),

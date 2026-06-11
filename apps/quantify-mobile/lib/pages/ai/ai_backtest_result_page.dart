@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/ai_strategy_context.dart';
 import '../../data/models/backtest_models.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
@@ -15,14 +16,16 @@ import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「回测结果」整屏页 — 仍属于向导第 4 步。
 class AiBacktestResultPage extends ConsumerWidget {
-  const AiBacktestResultPage({super.key, this.jobId});
+  const AiBacktestResultPage({super.key, this.jobId, this.args});
 
   final String? jobId;
+  final AiBacktestResultArgs? args;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final c = context.qzScheme;
+    final String? effectiveJobId = args?.jobId ?? jobId;
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
@@ -52,10 +55,10 @@ class AiBacktestResultPage extends ConsumerWidget {
               done: const <int>[0, 1, 2],
             ),
             Expanded(
-              child: jobId == null || jobId!.isEmpty
+              child: effectiveJobId == null || effectiveJobId.isEmpty
                   ? Center(child: Text(l10n.commonLoadError))
                   : ref
-                        .watch(backtestResultProvider(jobId!))
+                        .watch(backtestResultProvider(effectiveJobId))
                         .when(
                           loading: () =>
                               const Center(child: CircularProgressIndicator()),
@@ -109,8 +112,22 @@ class AiBacktestResultPage extends ConsumerWidget {
                                         child: QzButton(
                                           label: '一键部署到交易所',
                                           variant: QzButtonVariant.accent,
-                                          onPressed: () =>
-                                              context.push('/ai/deploy'),
+                                          onPressed: () {
+                                            final AiPublishedStrategyContext?
+                                            strategyContext =
+                                                args?.strategyContext;
+                                            if (strategyContext == null) {
+                                              context.push('/ai/deploy');
+                                              return;
+                                            }
+                                            context.push(
+                                              '/ai/deploy',
+                                              extra: strategyContext
+                                                  .toDeploymentContext(
+                                                    backtestResult: result,
+                                                  ),
+                                            );
+                                          },
                                           expanded: true,
                                         ),
                                       ),

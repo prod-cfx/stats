@@ -69,6 +69,7 @@ class _FakeAiChatRepo implements AiChatRepository {
       String sessionId,
       String publishedSnapshotId,
       String? exchangeAccountId,
+      String? exchangeAccountName,
       Map<String, Object?>? deploymentExecutionConfig,
     })
   >
@@ -78,6 +79,7 @@ class _FakeAiChatRepo implements AiChatRepository {
           String sessionId,
           String publishedSnapshotId,
           String? exchangeAccountId,
+          String? exchangeAccountName,
           Map<String, Object?>? deploymentExecutionConfig,
         })
       >[];
@@ -120,12 +122,14 @@ class _FakeAiChatRepo implements AiChatRepository {
     String sessionId,
     String publishedSnapshotId, {
     String? exchangeAccountId,
+    String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async {
     deployCalls.add((
       sessionId: sessionId,
       publishedSnapshotId: publishedSnapshotId,
       exchangeAccountId: exchangeAccountId,
+      exchangeAccountName: exchangeAccountName,
       deploymentExecutionConfig: deploymentExecutionConfig,
     ));
     if (error != null) throw error!;
@@ -144,6 +148,9 @@ const DeploymentContext _context = DeploymentContext(
   notifyClose: true,
   notifyStopLoss: true,
   symbol: 'ETH/USDT · 1h',
+  exchange: 'binance',
+  marketType: 'perp',
+  leverage: 5,
 );
 
 AiSession _deployedSession() => AiSession(
@@ -287,6 +294,7 @@ void main() {
       expect(aiRepo.deployCalls.single.sessionId, 'sess-real-2327');
       expect(aiRepo.deployCalls.single.publishedSnapshotId, 'snap-real-2327');
       expect(aiRepo.deployCalls.single.exchangeAccountId, 'k2');
+      expect(aiRepo.deployCalls.single.exchangeAccountName, '子账户');
       expect(
         aiRepo.deployCalls.single.deploymentExecutionConfig,
         containsPair('amount', 5000),
@@ -391,6 +399,7 @@ void main() {
     expect(aiRepo.deployCalls.single.sessionId, 'sess-real-2327');
     expect(aiRepo.deployCalls.single.publishedSnapshotId, 'snap-real-2327');
     expect(aiRepo.deployCalls.single.exchangeAccountId, 'k1');
+    expect(aiRepo.deployCalls.single.exchangeAccountName, '主账户');
     expect(find.textContaining('publish failed'), findsOneWidget);
     expect(find.byKey(const Key('deploy-done-detail')), findsNothing);
     expect(find.text('部署成功'), findsNothing);

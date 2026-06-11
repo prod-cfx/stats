@@ -28,6 +28,7 @@ abstract class AiChatRepository {
     String sessionId,
     String publishedSnapshotId, {
     String? exchangeAccountId,
+    String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   });
 }

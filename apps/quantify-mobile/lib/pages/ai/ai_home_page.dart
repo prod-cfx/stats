@@ -98,6 +98,18 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     if (text.isEmpty || ref.read(aiHomePageControllerProvider).isSending) {
       return;
     }
+    final AiHomePageState st = ref.read(aiHomePageControllerProvider);
+    final AiSession? current = st.currentId == null
+        ? null
+        : st.sessions[st.currentId!];
+    final ChatTurn? confirmable = current == null
+        ? null
+        : _latestConfirmableTurn(current);
+    if (confirmable != null && _isConfirmIntent(text)) {
+      _input.clear();
+      _openConfirm(confirmable, current!);
+      return;
+    }
     _input.clear();
     _scrollToBottom();
     await _ctrl.send(text);
@@ -116,6 +128,48 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         params: turn.params,
       ),
     );
+  }
+
+  bool _isConfirmIntent(String text) {
+    final String normalized = text.trim().toLowerCase();
+    if (normalized.isEmpty || normalized.length > 12) return false;
+    const Set<String> exact = <String>{
+      '是',
+      '确认',
+      '可以',
+      '好的',
+      '好',
+      '开始',
+      '生成',
+      '生成脚本',
+      '确认策略',
+      '按这个生成',
+      'yes',
+      'ok',
+      'go',
+    };
+    if (exact.contains(normalized)) return true;
+    return normalized.contains('确认') && normalized.contains('生成');
+  }
+
+  ChatTurn? _latestConfirmableTurn(AiSession session) {
+    if (session.deployedTo != null) return null;
+    final List<ChatTurn> messages = session.messages;
+    for (int i = messages.length - 1; i >= 0; i--) {
+      final ChatTurn turn = messages[i];
+      if (turn.role != 'assistant') continue;
+      if (turn.kind == ChatTurnKind.deployed) return null;
+      if (_hasCodegenMetadata(turn, session)) return turn;
+      return null;
+    }
+    return null;
+  }
+
+  bool _hasCodegenMetadata(ChatTurn turn, AiSession session) {
+    return turn.codegenSessionId?.trim().isNotEmpty == true ||
+        turn.confirmedCanonicalDigest?.trim().isNotEmpty == true ||
+        session.llmCodegenSessionId?.trim().isNotEmpty == true ||
+        session.pendingCanonicalDigest?.trim().isNotEmpty == true;
   }
 
   void _scrollToBottom() {
@@ -241,6 +295,10 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                           };
                           final bool isDeployed =
                               t.kind == ChatTurnKind.deployed;
+                          final bool canConfirm =
+                              t.role == 'assistant' &&
+                              !isDeployed &&
+                              _hasCodegenMetadata(t, current);
                           final String? liveId =
                               t.deployedInstanceId ??
                               (isDeployed ? current.deployedTo : null);
@@ -255,7 +313,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 : null,
                             // 「确认策略」CTA（#1831 接线 → #1832 落地）：
                             // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
-                            onConfirm: t.kind == ChatTurnKind.params
+                            onConfirm:
+                                t.kind == ChatTurnKind.params || canConfirm
                                 ? () => _openConfirm(t, current)
                                 : null,
                             // 已部署锁定态（#1834）：会话 `deployedTo != null`

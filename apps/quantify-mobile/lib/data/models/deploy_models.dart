@@ -15,6 +15,9 @@ class DeploymentContext {
     this.exchangeAccountId,
     this.symbol,
     this.strategyName,
+    this.exchange,
+    this.marketType,
+    this.leverage,
     this.backtestReturn,
     this.backtestSharpe,
     this.backtestMaxDrawdown,
@@ -31,6 +34,9 @@ class DeploymentContext {
   final bool notifyStopLoss;
   final String? symbol;
   final String? strategyName;
+  final String? exchange;
+  final String? marketType;
+  final int? leverage;
   final double? backtestReturn;
   final double? backtestSharpe;
   final double? backtestMaxDrawdown;
@@ -46,6 +52,9 @@ class DeploymentContext {
     };
     if (exchangeAccountId != null) {
       config['exchangeAccountId'] = exchangeAccountId;
+    }
+    if (leverage != null && marketType != 'spot') {
+      config['leverage'] = leverage;
     }
     return config;
   }

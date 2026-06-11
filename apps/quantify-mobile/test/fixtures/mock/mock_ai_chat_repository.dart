@@ -117,6 +117,7 @@ class MockAiChatRepository implements AiChatRepository {
     String sessionId,
     String publishedSnapshotId, {
     String? exchangeAccountId,
+    String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 50));

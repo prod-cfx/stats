@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 import '../helpers/test_overrides.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:quantify_mobile/data/models/ai_chat_models.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -15,7 +19,7 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// Pump AI page with a minimal router. Sized 400×1200 so 3 mock sessions +
 /// input bar fit; await an extra 100ms tick so `_loadSessions` (50ms repo
 /// delay) resolves before assertions.
-Future<void> _pump(WidgetTester tester) async {
+Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
   await tester.binding.setSurfaceSize(const Size(400, 1200));
   final GoRouter router = GoRouter(
     initialLocation: '/ai',
@@ -25,12 +29,17 @@ Future<void> _pump(WidgetTester tester) async {
         builder: (BuildContext context, GoRouterState state) =>
             const AiHomePage(),
       ),
+      GoRoute(
+        path: '/ai/confirm',
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Center(child: Text('confirm-route'))),
+      ),
     ],
   );
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[...testRepositoryOverrides],
+      overrides: overrides ?? <Override>[...testRepositoryOverrides],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -46,6 +55,80 @@ Future<void> _pump(WidgetTester tester) async {
   // 让 postFrame loadSessions（50ms 延迟）解析
   await tester.pump(const Duration(milliseconds: 100));
   await tester.pump();
+}
+
+class _ConfirmIntentAiChatRepository implements AiChatRepository {
+  _ConfirmIntentAiChatRepository();
+
+  int sendMessageCalls = 0;
+
+  final AiSession session = AiSession(
+    id: 'confirm-session',
+    title: '基于 OKX 模拟盘 BTC-U',
+    category: '未分类',
+    pair: 'BTC-USDT-SWAP',
+    timeframe: '15m',
+    updatedAt: DateTime(2026, 6, 10, 22, 42),
+    llmCodegenSessionId: 'codegen-1',
+    pendingCanonicalDigest: 'sha256:canonical-1',
+    messages: <ChatTurn>[
+      ChatTurn(
+        id: 'assistant-confirm-gate',
+        role: 'assistant',
+        content: '我整理出的策略逻辑如下。请确认是否按这个逻辑生成脚本。',
+        timestamp: DateTime(2026, 6, 10, 22, 42),
+        codegenSessionId: 'codegen-1',
+        confirmedCanonicalDigest: 'sha256:canonical-1',
+      ),
+    ],
+  );
+
+  @override
+  Future<List<AiSession>> listSessions() async => <AiSession>[session];
+
+  @override
+  Future<AiSession> createSession({String? title}) async => session;
+
+  @override
+  Future<void> deleteSession(String sessionId) async {}
+
+  @override
+  Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async {
+    sendMessageCalls++;
+    return ChatTurn(
+      id: 'unexpected-reply',
+      role: 'assistant',
+      content: 'should not send',
+      timestamp: DateTime(2026, 6, 10, 22, 43),
+    );
+  }
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) async => throw UnimplementedError();
+
+  @override
+  Stream<ChatTurn> watchSession(String sessionId) =>
+      const Stream<ChatTurn>.empty();
+
+  @override
+  Future<BacktestSummary?> latestBacktest(String sessionId) async => null;
+
+  @override
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? exchangeAccountId,
+    String? exchangeAccountName,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async => null;
 }
 
 void main() {
@@ -144,6 +227,25 @@ void main() {
     expect(joined, contains('slow_ma'));
     expect(find.text('需要我开始回测吗?'), findsOneWidget);
     expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsOneWidget);
+  });
+
+  testWidgets('确认门普通文本：显示确认 CTA，回复「是」进入确认页不再普通发送', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo =
+        _ConfirmIntentAiChatRepository();
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(find.textContaining('请确认是否按这个逻辑生成脚本'), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('ai-chat-input')), '是');
+    await tester.tap(find.byKey(const Key('ai-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('confirm-route'), findsOneWidget);
+    expect(repo.sendMessageCalls, 0);
   });
 
   testWidgets('已部署会话：首屏渲染实盘终态卡和查看实盘 CTA', (WidgetTester tester) async {

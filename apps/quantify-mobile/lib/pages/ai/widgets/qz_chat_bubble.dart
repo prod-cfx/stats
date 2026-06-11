@@ -50,9 +50,9 @@ class QzChatBubble extends StatelessWidget {
   /// 与 [codeBlock] 互斥：如二者同时存在，[params] 优先。
   final Map<String, String>? params;
 
-  /// 参数气泡「确认策略」CTA 回调（#1831）。仅 [params] 非空时渲染按钮；
-  /// 为 null 时不显示 CTA（保持与历史调用方兼容）。confirm 屏（#1832）
-  /// 就绪前由 `ai_home_page.dart` 注入占位/回测配置入口。
+  /// 「确认策略」CTA 回调（#1831）。参数卡会带提示文案 + 按钮；普通
+  /// assistant 文本如果携带 codegen 元数据，也可只渲染按钮，作为后端
+  /// CONFIRM_GATE 文本的兜底入口。
   final VoidCallback? onConfirm;
 
   /// 会话已部署锁定态（#1834）。由会话 `deployedTo != null` 推导，
@@ -312,6 +312,18 @@ class QzChatBubble extends StatelessWidget {
                         fontFamilyFallback: QzFont.monoFallback,
                       ),
                     ),
+                  ),
+                ],
+                if ((params == null || params!.isEmpty) &&
+                    onConfirm != null &&
+                    !locked) ...<Widget>[
+                  const SizedBox(height: QzSpacing.sm),
+                  QzButton(
+                    key: const Key('ai-bubble-confirm-cta'),
+                    label: AppLocalizations.of(context).aiConfirmStrategy,
+                    variant: QzButtonVariant.accent,
+                    expanded: true,
+                    onPressed: onConfirm,
                   ),
                 ],
                 if (time != null) ...<Widget>[

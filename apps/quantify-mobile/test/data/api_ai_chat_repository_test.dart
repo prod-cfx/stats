@@ -364,11 +364,18 @@ void main() {
         );
         final ApiAiChatRepository repo = ApiAiChatRepository(svc);
 
-        await repo.markDeployed('sess-A', 'inst-B');
+        await repo.markDeployed(
+          'sess-A',
+          'inst-B',
+          exchangeAccountId: 'acct-1',
+          exchangeAccountName: 'OKX 主账户',
+        );
 
         final Map<String, dynamic> body = svc.deployBodies.single;
         expect(body['deployRequestId'], isNotNull);
         expect(body['publishedSnapshotId'], 'inst-B');
+        expect(body['exchangeAccountId'], 'acct-1');
+        expect(body['exchangeAccountName'], 'OKX 主账户');
         expect(body.containsKey('name'), isTrue);
       },
     );

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
+import '../../data/models/ai_strategy_context.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
@@ -160,15 +161,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
 
       if (!mounted) return;
       setState(() => _session = result);
-      _openScript(
-        _paramsFromSession(result).isNotEmpty
-            ? _paramsFromSession(result)
-            : _params,
-        status: result.status.name,
-        sessionId: result.id,
-        publishedSnapshotId: publishedSnapshotId,
-        strategyInstanceId: result.strategyInstanceId,
-      );
+      _openScriptContext(AiPublishedStrategyContext.fromCodegen(result));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -258,6 +251,10 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
           'strategyInstanceId': strategyInstanceId!.trim(),
       },
     );
+  }
+
+  void _openScriptContext(AiPublishedStrategyContext strategyContext) {
+    context.push('/ai/script', extra: strategyContext);
   }
 
   // #1892 已落地 `/ai/script` 屏。「确认策略」来自会话参数气泡，说明 codegen

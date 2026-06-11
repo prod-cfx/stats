@@ -1,6 +1,7 @@
 export 'account_models.dart';
 export 'agg_market_data.dart';
 export 'ai_chat_models.dart';
+export 'ai_strategy_context.dart';
 export 'api_key_models.dart';
 export 'auth_models.dart';
 export 'backtest_models.dart';

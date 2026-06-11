@@ -71,6 +71,7 @@ class _FakeAiChatRepository implements AiChatRepository {
     String sessionId,
     String publishedSnapshotId, {
     String? exchangeAccountId,
+    String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async => null;
 }

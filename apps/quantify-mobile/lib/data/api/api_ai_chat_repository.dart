@@ -90,6 +90,33 @@ Map<String, String> _stringParamsFromBuilt(
   )..removeWhere((String _, String value) => value.isEmpty);
 }
 
+BuiltMap<String, JsonObject?>? _builtJsonObjectMap(
+  Map<String, Object?>? source,
+) {
+  if (source == null || source.isEmpty) return null;
+  return BuiltMap<String, JsonObject?>(
+    source.map(
+      (String key, Object? value) =>
+          MapEntry<String, JsonObject?>(key, JsonObject(value)),
+    ),
+  );
+}
+
+AiSession _sessionFromStrategyDetail(
+  AccountAiQuantStrategyDetailResponseDto dto,
+) {
+  return AiSession(
+    id: dto.id,
+    title: dto.name,
+    category: 'AI 量化',
+    updatedAt: asDateTime(dto.updatedAt),
+    messages: const <ChatTurn>[],
+    pair: dto.symbol,
+    timeframe: dto.timeframe,
+    deployedTo: dto.id,
+  );
+}
+
 ChatTurn _turnFromCodegen(CodegenSessionResponseDto response) {
   final Map<String, String> params = _stringParamsFromBuilt(
     response.publishedSnapshotParamValues ?? response.specDesc,
@@ -152,6 +179,9 @@ class ApiAiChatRepository implements AiChatRepository {
 
   LlmStrategyCodegenApi? get _codegenApi =>
       _generatedApi?.client.getLlmStrategyCodegenApi();
+
+  AccountAiQuantApi? get _accountAiQuantApi =>
+      _generatedApi?.client.getAccountAiQuantApi();
 
   String _authorization() {
     final String token = _tokenSupplier?.call() ?? '';
@@ -337,9 +367,47 @@ class ApiAiChatRepository implements AiChatRepository {
     String sessionId,
     String publishedSnapshotId, {
     String? exchangeAccountId,
+    String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async {
     final String deployRequestId = '$sessionId-$publishedSnapshotId';
+    final AccountAiQuantApi? api = _accountAiQuantApi;
+    if (api != null) {
+      final response = await api.accountAiQuantStrategiesControllerDeploy(
+        authorization: _authorization(),
+        accountAiQuantDeployRequestDto: AccountAiQuantDeployRequestDto((b) {
+          b
+            ..name = publishedSnapshotId
+            ..deployRequestId = deployRequestId
+            ..publishedSnapshotId = publishedSnapshotId;
+          if (exchangeAccountId?.trim().isNotEmpty == true) {
+            b.exchangeAccountId = exchangeAccountId!.trim();
+          }
+          if (exchangeAccountName?.trim().isNotEmpty == true) {
+            b.exchangeAccountName = exchangeAccountName!.trim();
+          }
+          final BuiltMap<String, JsonObject?>? config = _builtJsonObjectMap(
+            deploymentExecutionConfig,
+          );
+          if (config != null) b.deploymentExecutionConfig.replace(config);
+        }),
+      );
+      final AccountAiQuantStrategyDetailResponseDto? data = response.data?.data;
+      if (data != null) return _sessionFromStrategyDetail(data);
+
+      for (int i = 0; i < _deployPollLimit; i++) {
+        final deployResult = await api
+            .accountAiQuantStrategiesControllerDeployResult(
+              authorization: _authorization(),
+              deployRequestId: deployRequestId,
+            );
+        final AccountAiQuantStrategyDetailResponseDto? result =
+            deployResult.data?.data;
+        if (result != null) return _sessionFromStrategyDetail(result);
+      }
+      return null;
+    }
+
     final Map<String, dynamic> body = <String, dynamic>{
       'name': publishedSnapshotId,
       'deployRequestId': deployRequestId,
@@ -347,6 +415,9 @@ class ApiAiChatRepository implements AiChatRepository {
     };
     if (exchangeAccountId != null) {
       body['exchangeAccountId'] = exchangeAccountId;
+    }
+    if (exchangeAccountName != null) {
+      body['exchangeAccountName'] = exchangeAccountName;
     }
     if (deploymentExecutionConfig != null) {
       body['deploymentExecutionConfig'] = deploymentExecutionConfig;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/ai_strategy_context.dart';
 import '../../data/models/backtest_models.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
@@ -14,9 +15,10 @@ import '../../widgets/qz_top_cancel_button.dart';
 
 /// AI 量化「回测进行中」整屏页 — 向导第 4 步。
 class AiBacktestRunPage extends ConsumerStatefulWidget {
-  const AiBacktestRunPage({super.key, this.params});
+  const AiBacktestRunPage({super.key, this.params, this.args});
 
   final Map<String, String>? params;
+  final AiBacktestRunArgs? args;
 
   @override
   ConsumerState<AiBacktestRunPage> createState() => _AiBacktestRunPageState();
@@ -26,7 +28,11 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
   double _progress = 0.38;
   Object? _error;
 
-  Map<String, String> get _params => widget.params ?? const <String, String>{};
+  Map<String, String> get _params =>
+      widget.args?.params ?? widget.params ?? const <String, String>{};
+
+  AiPublishedStrategyContext? get _strategyContext =>
+      widget.args?.strategyContext;
 
   String get _symbol => _normalizeBacktestSymbol(
     _params['symbol'] ?? _params['symbols'] ?? 'BTCUSDT',
@@ -48,6 +54,10 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
       final String snapshotId = _params['publishedSnapshotId']?.trim() ?? '';
       if (snapshotId.isEmpty) {
         throw const FormatException('缺少已发布策略快照，无法发起回测。请返回确认策略后重试。');
+      }
+      final AiPublishedStrategyContext? strategyContext = _strategyContext;
+      if (strategyContext?.requiresRepublishForBacktest == true) {
+        throw const FormatException('当前已发布快照缺少回测绑定真相，请重新确认策略后再回测。');
       }
       final BacktestResult result = await ref
           .read(backtestRepositoryProvider)
@@ -86,9 +96,20 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
           );
       if (!mounted) return;
       setState(() => _progress = 1);
-      context.pushReplacement(
-        '/ai/backtest-result?jobId=${Uri.encodeComponent(result.id)}',
-      );
+      final String location =
+          '/ai/backtest-result?jobId=${Uri.encodeComponent(result.id)}';
+      if (strategyContext == null) {
+        context.pushReplacement(location);
+      } else {
+        context.pushReplacement(
+          location,
+          extra: AiBacktestResultArgs(
+            jobId: result.id,
+            strategyContext: strategyContext,
+            result: result,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e);

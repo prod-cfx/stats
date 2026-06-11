@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/ai_strategy_context.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -19,9 +20,10 @@ part 'backtest_config_sheet.matching.part.dart';
 ///
 /// 视觉基准：`design/project/mobile/m-screens-btconfig.jsx` + 设计稿截图。
 class BacktestConfigSheet extends ConsumerStatefulWidget {
-  const BacktestConfigSheet({super.key, this.params});
+  const BacktestConfigSheet({super.key, this.params, this.strategyContext});
 
   final Map<String, String>? params;
+  final AiPublishedStrategyContext? strategyContext;
 
   @override
   ConsumerState<BacktestConfigSheet> createState() =>
@@ -98,6 +100,56 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     _fee.addListener(_onInputChanged);
     _start.addListener(_onInputChanged);
     _end.addListener(_onInputChanged);
+    Future<void>.microtask(_applyStrategyDefaults);
+  }
+
+  void _applyStrategyDefaults() {
+    final AiPublishedStrategyContext? ctx = widget.strategyContext;
+    if (ctx == null || !mounted) return;
+    final Map<String, Object?> defaults = ctx.backtestConfigDefaults;
+    _setTextIfPresent(_capital, defaults, <String>['initialCash', 'capital']);
+    _setTextIfPresent(_leverage, defaults, <String>['leverage']);
+    _setTextIfPresent(_slippage, defaults, <String>['slippageBps']);
+    _setTextIfPresent(_fee, defaults, <String>['feeBps']);
+    _setTextIfPresent(_start, defaults, <String>['startAt', 'backtestStart']);
+    _setTextIfPresent(_end, defaults, <String>['endAt', 'backtestEnd']);
+    final String? range = _stringFrom(defaults, <String>['rangePreset']);
+    if (range != null) {
+      _ctrl.setRange(
+        range.toUpperCase() == 'CUSTOM' ? 'custom' : range.toUpperCase(),
+      );
+    }
+    final String? priceSource = _stringFrom(defaults, <String>['priceSource']);
+    if (priceSource != null) _ctrl.setFillSource(priceSource.toLowerCase());
+    final String? allowPartial = _stringFrom(defaults, <String>[
+      'allowPartial',
+    ]);
+    if (allowPartial != null) {
+      _ctrl.setPartialData(allowPartial.toLowerCase() != 'false');
+    }
+    _ctrl.setFutures(ctx.marketType != 'spot');
+  }
+
+  void _setTextIfPresent(
+    TextEditingController controller,
+    Map<String, Object?> source,
+    List<String> keys,
+  ) {
+    final String? value = _stringFrom(source, keys);
+    if (value == null) return;
+    controller.text = value;
+  }
+
+  String? _stringFrom(Map<String, Object?> source, List<String> keys) {
+    for (final String key in keys) {
+      for (final MapEntry<String, Object?> entry in source.entries) {
+        if (entry.key.toLowerCase() == key.toLowerCase()) {
+          final String value = entry.value?.toString().trim() ?? '';
+          return value.isEmpty ? null : value;
+        }
+      }
+    }
+    return null;
   }
 
   void _onInputChanged() {
@@ -240,19 +292,35 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     _ctrl.clearError();
     context.push(
       '/ai/backtest-run',
-      extra: <String, String>{
-        ...?widget.params,
-        'backtestRangePreset': st.rangeKey,
-        'backtestStart': _start.text.trim(),
-        'backtestEnd': _end.text.trim(),
-        'backtestInitialCash': _capital.text.trim(),
-        'backtestMarketType': st.futures ? 'perp' : 'spot',
-        'backtestLeverage': _leverage.text.trim(),
-        'backtestSlippageBps': _slippage.text.trim(),
-        'backtestFeeBps': _fee.text.trim(),
-        'backtestPriceSource': st.fillSource,
-        'backtestAllowPartial': st.partialData ? 'true' : 'false',
-      },
+      extra: widget.strategyContext == null
+          ? <String, String>{
+              ...?widget.params,
+              'backtestRangePreset': st.rangeKey,
+              'backtestStart': _start.text.trim(),
+              'backtestEnd': _end.text.trim(),
+              'backtestInitialCash': _capital.text.trim(),
+              'backtestMarketType': st.futures ? 'perp' : 'spot',
+              'backtestLeverage': _leverage.text.trim(),
+              'backtestSlippageBps': _slippage.text.trim(),
+              'backtestFeeBps': _fee.text.trim(),
+              'backtestPriceSource': st.fillSource,
+              'backtestAllowPartial': st.partialData ? 'true' : 'false',
+            }
+          : AiBacktestRunArgs(
+              strategyContext: widget.strategyContext!,
+              config: <String, String>{
+                'backtestRangePreset': st.rangeKey,
+                'backtestStart': _start.text.trim(),
+                'backtestEnd': _end.text.trim(),
+                'backtestInitialCash': _capital.text.trim(),
+                'backtestMarketType': st.futures ? 'perp' : 'spot',
+                'backtestLeverage': _leverage.text.trim(),
+                'backtestSlippageBps': _slippage.text.trim(),
+                'backtestFeeBps': _fee.text.trim(),
+                'backtestPriceSource': st.fillSource,
+                'backtestAllowPartial': st.partialData ? 'true' : 'false',
+              },
+            ),
     );
   }
 

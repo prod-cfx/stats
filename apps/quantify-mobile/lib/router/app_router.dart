@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../data/auth/session_controller.dart';
 import '../data/models/ai_chat_models.dart';
+import '../data/models/ai_strategy_context.dart';
 import '../data/models/auth_models.dart';
+import '../data/models/deploy_models.dart';
 import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
 import '../pages/ai/ai_confirm_page.dart';
@@ -185,6 +187,7 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState state) {
           final Object? extra = state.extra;
           return AiScriptPage(
+            strategyContext: extra is AiPublishedStrategyContext ? extra : null,
             params: extra is Map<String, String> ? extra : null,
           );
         },
@@ -194,6 +197,7 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState state) {
           final Object? extra = state.extra;
           return BacktestConfigSheet(
+            strategyContext: extra is AiPublishedStrategyContext ? extra : null,
             params: extra is Map<String, String> ? extra : null,
           );
         },
@@ -203,19 +207,29 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState state) {
           final Object? extra = state.extra;
           return AiBacktestRunPage(
+            args: extra is AiBacktestRunArgs ? extra : null,
             params: extra is Map<String, String> ? extra : null,
           );
         },
       ),
       GoRoute(
         path: '/ai/backtest-result',
-        builder: (BuildContext context, GoRouterState state) =>
-            AiBacktestResultPage(jobId: state.uri.queryParameters['jobId']),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return AiBacktestResultPage(
+            jobId: state.uri.queryParameters['jobId'],
+            args: extra is AiBacktestResultArgs ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/ai/deploy',
-        builder: (BuildContext context, GoRouterState state) =>
-            const AiDeployPage(),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return AiDeployPage(
+            deploymentContext: extra is DeploymentContext ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/me/theme',

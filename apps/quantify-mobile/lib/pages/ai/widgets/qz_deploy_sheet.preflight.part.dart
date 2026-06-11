@@ -131,6 +131,19 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final List<PreflightCheck> checks = _checks(l10n);
+    final DeploymentContext dc = widget.deploymentContext;
+    final String strategyName = dc.strategyName?.trim().isNotEmpty == true
+        ? dc.strategyName!.trim()
+        : l10n.deployPreflightStrategyName;
+    final String strategyMeta = dc.symbol?.trim().isNotEmpty == true
+        ? dc.symbol!.trim()
+        : l10n.deployPreflightStrategyMeta;
+    final String marketLabel = dc.marketType == 'spot'
+        ? l10n.backtestMarketSpot
+        : l10n.deployConfirmMarketPerp;
+    final String leverageLabel = dc.leverage == null
+        ? '-'
+        : '${dc.leverage}x · 全仓';
     final bool scanning = _scanned < checks.length || _result == null;
     final int pass = checks.where((PreflightCheck c) => c.ok).length;
     final int fail = checks.length - pass;
@@ -151,7 +164,7 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              l10n.deployPreflightStrategyName,
+              strategyName,
               style: TextStyle(
                 color: c.text,
                 fontSize: 15,
@@ -160,7 +173,7 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
             ),
             const SizedBox(height: 3),
             Text(
-              l10n.deployPreflightStrategyMeta,
+              strategyMeta,
               style: TextStyle(color: c.textDim, fontSize: 11.5),
             ),
             const SizedBox(height: QzSpacing.lg),
@@ -169,18 +182,18 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
               children: <Widget>[
                 _SummaryCell(
                   label: l10n.deployConfirmSummaryReturn,
-                  value: '+38.2%',
+                  value: _formatPct(dc.backtestReturn, positivePrefix: true),
                   valueColor: c.marketUp,
                   scheme: c,
                 ),
                 _SummaryCell(
                   label: l10n.deployConfirmSummarySharpe,
-                  value: '1.86',
+                  value: dc.backtestSharpe?.toStringAsFixed(2) ?? '-',
                   scheme: c,
                 ),
                 _SummaryCell(
                   label: l10n.deployConfirmSummaryMaxDrawdown,
-                  value: '-12.4%',
+                  value: _formatPct(dc.backtestMaxDrawdown),
                   valueColor: c.marketDown,
                   scheme: c,
                 ),
@@ -197,7 +210,7 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
             ),
             _DetailRow(
               label: l10n.deployConfirmFieldMarketType,
-              value: l10n.deployConfirmMarketPerp,
+              value: marketLabel,
               scheme: c,
             ),
             _AccountSelectRow(
@@ -210,7 +223,7 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
             ),
             _DetailRow(
               label: l10n.deployConfirmFieldLeverage,
-              value: '5x · 全仓',
+              value: leverageLabel,
               scheme: c,
             ),
             const SizedBox(height: 14),
@@ -353,4 +366,10 @@ class _PreflightActions extends StatelessWidget {
       ],
     );
   }
+}
+
+String _formatPct(double? value, {bool positivePrefix = false}) {
+  if (value == null || !value.isFinite) return '-';
+  final String prefix = positivePrefix && value > 0 ? '+' : '';
+  return '$prefix${value.toStringAsFixed(1)}%';
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/ai/ai_script_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -8,7 +9,11 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
 /// #1892 验收：「策略脚本」独立步骤屏，覆盖 生成中 → 就绪 两态。
-Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  Map<String, String>? params,
+  AiPublishedStrategyContext? strategyContext,
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   await tester.pumpWidget(
     ProviderScope(
@@ -19,7 +24,7 @@ Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
         theme: buildQzThemeData(
           const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
         ),
-        home: AiScriptPage(params: params),
+        home: AiScriptPage(params: params, strategyContext: strategyContext),
       ),
     ),
   );
@@ -56,6 +61,40 @@ void main() {
       find.byKey(const Key('ai-script-next-cta')),
     );
     expect(next.onPressed, isNotNull, reason: '就绪态「下一步」可点');
+  });
+
+  testWidgets('就绪态优先展示后端 scriptCode，不再使用本地 mock 模板', (
+    WidgetTester tester,
+  ) async {
+    const String script = 'export default class RealStrategy {}';
+    await _pump(
+      tester,
+      strategyContext: const AiPublishedStrategyContext(
+        codegenSessionId: 'session-1',
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-1',
+        scriptCode: script,
+        params: <String, String>{'symbol': 'ETH/USDT'},
+        snapshotParamValues: <String, Object?>{},
+        strategyConfig: <String, Object?>{},
+        backtestConfigDefaults: <String, Object?>{},
+        deploymentExecutionDefaults: <String, Object?>{},
+        deploymentExecutionConstraints: <String, Object?>{},
+        compatibilityMetadata: <String, Object?>{},
+      ),
+    );
+    await tester.pump();
+
+    final Iterable<RichText> codeTexts = tester.widgetList<RichText>(
+      find.byType(RichText),
+    );
+    expect(
+      codeTexts.any(
+        (RichText widget) => widget.text.toPlainText().contains('RealStrategy'),
+      ),
+      isTrue,
+    );
+    expect(find.textContaining('Quantify Strategy · 双均线趋势'), findsNothing);
   });
 
   testWidgets('长脚本：展开折叠切换文案「查看全部 N 行 / 收起」（验收 4）', (WidgetTester tester) async {

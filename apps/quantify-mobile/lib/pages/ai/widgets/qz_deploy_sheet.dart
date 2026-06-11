@@ -156,6 +156,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
             deploymentContext.sessionId,
             deploymentContext.publishedSnapshotId,
             exchangeAccountId: target!.apiKey!.id,
+            exchangeAccountName: target.apiKey!.label,
             deploymentExecutionConfig: deploymentContext.toExecutionConfig(
               exchangeAccountId: target.apiKey!.id,
             ),
@@ -175,7 +176,9 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           strategyId: session.id,
           symbol: deploymentContext.symbol ?? session.pair,
           amount: deploymentContext.amount,
-          leverage: '5x · 全仓',
+          leverage: deploymentContext.leverage == null
+              ? null
+              : '${deploymentContext.leverage}x · 全仓',
           startedAt: now,
         );
         _step = DeployStep.success;
@@ -186,15 +189,28 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     }
   }
 
-  /// 兼容旧入口（空列表场景），等价于打开 Binance API 表单。
+  /// 兼容旧入口（空列表场景），打开当前策略交易所 API 表单。
   Future<void> _goConfigureApi() async {
     final BuildContext ctx = context;
     Navigator.of(ctx).pop();
     if (!ctx.mounted) return;
-    final bool? saved = await showApiFormSheet(ctx, exchange: 'Binance');
+    final String exchange = _exchangeNameForConfigure(
+      widget.deploymentContext?.exchange,
+    );
+    final bool? saved = await showApiFormSheet(ctx, exchange: exchange);
     if (saved == true && ctx.mounted) {
       ref.invalidate(apiKeysProvider);
     }
+  }
+
+  String _exchangeNameForConfigure(String? exchange) {
+    final String code = (exchange ?? 'binance').toLowerCase();
+    return _kExchangeCatalog
+        .firstWhere(
+          (_ExchangeCatalogEntry entry) => entry.code == code,
+          orElse: () => _kExchangeCatalog[0],
+        )
+        .name;
   }
 
   void _finish() {
@@ -202,7 +218,12 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   }
 
   _DeployTarget _targetFromKeys(List<ExchangeApiKey> keys) {
-    final _ExchangeCatalogEntry catalog = _kExchangeCatalog[0];
+    final String wanted = (widget.deploymentContext?.exchange ?? 'binance')
+        .toLowerCase();
+    final _ExchangeCatalogEntry catalog = _kExchangeCatalog.firstWhere(
+      (_ExchangeCatalogEntry entry) => entry.code == wanted,
+      orElse: () => _kExchangeCatalog[0],
+    );
     final List<ExchangeApiKey> accounts = keys
         .where(
           (ExchangeApiKey k) =>
