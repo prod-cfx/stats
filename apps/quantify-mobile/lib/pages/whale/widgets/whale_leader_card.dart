@@ -86,7 +86,11 @@ class WhaleLeaderCard extends StatelessWidget {
     return Row(
       children: <Widget>[
         Flexible(
-          child: WhaleAddressLink(address: entry.id, onOpen: onOpen),
+          child: WhaleAddressLink(
+            address: entry.id,
+            displayAddress: entry.displayAddress,
+            onOpen: onOpen,
+          ),
         ),
         const SizedBox(width: QzSpacing.xs),
         WhaleCopyButton(onCopy: onCopy),

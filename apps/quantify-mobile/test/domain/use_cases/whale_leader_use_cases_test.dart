@@ -13,6 +13,7 @@ WhaleLeaderEntry _entry({
 }) {
   return WhaleLeaderEntry(
     id: id,
+    displayAddress: id,
     aumDisplay: '\$$aum',
     aumValue: aum,
     pnlDisplay: pnl >= 0 ? '+\$$pnl万' : '-\$${pnl.abs()}万',
@@ -48,7 +49,9 @@ void main() {
       final out = sortWhaleLeaders(
         list,
         const WhaleLeaderSort(
-            key: WhaleLeaderSortKey.winRate, dir: WhaleLeaderSortDir.desc),
+          key: WhaleLeaderSortKey.winRate,
+          dir: WhaleLeaderSortDir.desc,
+        ),
       );
       expect(out.map((e) => e.winRate).toList(), <double>[90, 50, 10]);
     });
@@ -58,7 +61,9 @@ void main() {
       final out = sortWhaleLeaders(
         list,
         const WhaleLeaderSort(
-            key: WhaleLeaderSortKey.aum, dir: WhaleLeaderSortDir.asc),
+          key: WhaleLeaderSortKey.aum,
+          dir: WhaleLeaderSortDir.asc,
+        ),
       );
       expect(out.map((e) => e.aumValue).toList(), <double>[10, 30]);
     });
@@ -68,7 +73,9 @@ void main() {
       final out = sortWhaleLeaders(
         list,
         const WhaleLeaderSort(
-            key: WhaleLeaderSortKey.pnl, dir: WhaleLeaderSortDir.desc),
+          key: WhaleLeaderSortKey.pnl,
+          dir: WhaleLeaderSortDir.desc,
+        ),
       );
       expect(out.map((e) => e.pnlValue).toList(), <double>[8, -5]);
     });
@@ -78,7 +85,9 @@ void main() {
       sortWhaleLeaders(
         list,
         const WhaleLeaderSort(
-            key: WhaleLeaderSortKey.aum, dir: WhaleLeaderSortDir.desc),
+          key: WhaleLeaderSortKey.aum,
+          dir: WhaleLeaderSortDir.desc,
+        ),
       );
       expect(list.map((e) => e.aumValue).toList(), <double>[1, 3]);
     });
@@ -95,10 +104,10 @@ void main() {
         _entry(id: 'b'),
         _entry(id: 'c', avatarText: 'C'),
       ];
-      expect(
-        topWhaleLeaders(list).map((e) => e.id).toList(),
-        <String>['a', 'c'],
-      );
+      expect(topWhaleLeaders(list).map((e) => e.id).toList(), <String>[
+        'a',
+        'c',
+      ]);
     });
 
     test('无 avatarText 全过滤为空', () {

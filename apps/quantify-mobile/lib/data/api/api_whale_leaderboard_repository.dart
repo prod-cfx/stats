@@ -24,6 +24,7 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
         dto.variant == WhaleDiscoverTraderDtoVariantEnum.recommended;
     return WhaleLeaderEntry(
       id: dto.address,
+      displayAddress: _abbreviateAddress(dto.address),
       aumDisplay: _formatUsdCompact(dto.totalValueUsd),
       aumValue: dto.totalValueUsd.toDouble(),
       pnlDisplay: _formatUsdCompact(dto.pnlUsd, signed: true),
@@ -178,6 +179,12 @@ class ApiWhaleLeaderboardRepository implements WhaleLeaderboardRepository {
         : address;
     if (trimmed.isEmpty) return 'WH';
     return trimmed.substring(0, trimmed.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  static String _abbreviateAddress(String address) {
+    final String trimmed = address.trim();
+    if (trimmed.length <= 13) return trimmed;
+    return '${trimmed.substring(0, 6)}...${trimmed.substring(trimmed.length - 4)}';
   }
 
   static int? _parseColorHex(String value) {

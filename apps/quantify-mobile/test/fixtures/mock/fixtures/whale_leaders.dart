@@ -8,6 +8,7 @@ import 'package:quantify_mobile/domain/models/whale_leader_models.dart';
 const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   WhaleLeaderEntry(
     id: '0x8ba1...ba72',
+    displayAddress: '0x8ba1...ba72',
     avatarText: '8B',
     avatarBgHex: 0xFFA78BFA,
     avatarTextHex: 0xFFFFFFFF,
@@ -24,6 +25,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0x742d...f44e',
+    displayAddress: '0x742d...f44e',
     avatarText: '74',
     avatarBgHex: 0xFF5EEAD4,
     avatarTextHex: 0xFF0F172A,
@@ -40,6 +42,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0x66f8...2054',
+    displayAddress: '0x66f8...2054',
     avatarText: '66',
     avatarBgHex: 0xFFC7D2FE,
     avatarTextHex: 0xFF3730A3,
@@ -56,6 +59,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0x2810...cb16',
+    displayAddress: '0x2810...cb16',
     aumDisplay: '\$3240万',
     aumValue: 32400000,
     pnlDisplay: '+\$259.2万',
@@ -68,6 +72,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0xd551...92ff',
+    displayAddress: '0xd551...92ff',
     aumDisplay: '\$425万',
     aumValue: 4250000,
     pnlDisplay: '+\$34万',
@@ -80,6 +85,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0xfe9e...51c8',
+    displayAddress: '0xfe9e...51c8',
     aumDisplay: '\$1580万',
     aumValue: 15800000,
     pnlDisplay: '+\$126.4万',
@@ -92,6 +98,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0x53d2...8a3d',
+    displayAddress: '0x53d2...8a3d',
     aumDisplay: '\$2105万',
     aumValue: 21050000,
     pnlDisplay: '+\$168.4万',
@@ -104,6 +111,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0x1151...e30f',
+    displayAddress: '0x1151...e30f',
     aumDisplay: '\$675万',
     aumValue: 6750000,
     pnlDisplay: '+\$54万',
@@ -116,6 +124,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0xbe0e...33e8',
+    displayAddress: '0xbe0e...33e8',
     aumDisplay: '\$1125万',
     aumValue: 11250000,
     pnlDisplay: '+\$90万',
@@ -128,6 +137,7 @@ const List<WhaleLeaderEntry> mockWhaleLeaders = <WhaleLeaderEntry>[
   ),
   WhaleLeaderEntry(
     id: '0x267b...fdc0',
+    displayAddress: '0x267b...fdc0',
     aumDisplay: '\$890万',
     aumValue: 8900000,
     pnlDisplay: '-\$71.2万',

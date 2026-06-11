@@ -282,6 +282,7 @@ void main() {
         expect(calls, <String>['/whale-tracking/discover']);
         expect(entries, hasLength(2));
         expect(entries.first.id, '0xabcdefabcdefabcdef01');
+        expect(entries.first.displayAddress, '0xabcd...ef01');
         expect(entries.first.avatarText, 'AB');
         expect(entries.first.avatarBgHex, 0xFF60A5FA);
         expect(entries.first.tier, r'$50M HYPERUNIT WHALE');
@@ -294,6 +295,7 @@ void main() {
         expect(entries.first.tags, <String>['金库管家']);
 
         expect(entries.last.id, '0x11112222333344445555');
+        expect(entries.last.displayAddress, '0x1111...5555');
         expect(entries.last.avatarText, isNull);
         expect(entries.last.aumValue, 9876543);
         expect(entries.last.pnlDisplay, r'+$123.40K');
@@ -330,6 +332,7 @@ void main() {
         expect(calls, <String>['/whale-tracking/discover']);
         expect(entries, hasLength(1));
         expect(entries.single.id, '0xabcdefabcdefabcdef01');
+        expect(entries.single.displayAddress, '0xabcd...ef01');
         expect(entries.single.aumDisplay, r'$50.00M');
       },
     );

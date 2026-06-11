@@ -16,17 +16,20 @@ class WhaleAddressLink extends StatelessWidget {
   const WhaleAddressLink({
     required this.address,
     required this.onOpen,
+    this.displayAddress,
     this.fontSize = 14,
     super.key,
   });
 
   final String address;
+  final String? displayAddress;
   final VoidCallback onOpen;
   final double fontSize;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    final String label = displayAddress ?? address;
     return InkWell(
       onTap: onOpen,
       borderRadius: BorderRadius.circular(4),
@@ -39,7 +42,7 @@ class WhaleAddressLink extends StatelessWidget {
             children: <Widget>[
               Flexible(
                 child: Text(
-                  address,
+                  label,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: c.accent,

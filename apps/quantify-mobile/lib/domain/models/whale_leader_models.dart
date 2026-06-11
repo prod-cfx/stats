@@ -12,6 +12,7 @@ library;
 class WhaleLeaderEntry {
   const WhaleLeaderEntry({
     required this.id,
+    required this.displayAddress,
     required this.aumDisplay,
     required this.aumValue,
     required this.pnlDisplay,
@@ -27,7 +28,8 @@ class WhaleLeaderEntry {
     this.tier,
   });
 
-  final String id; // 缩写地址，如 '0x8ba1...ba72'
+  final String id; // 完整链上地址，用于复制、详情页和 API 调用。
+  final String displayAddress; // 卡片展示地址，如 '0x8ba1...ba72'。
   final String? avatarText; // 头像徽章文字（仅 top3），null 表示非 top3
   final int? avatarBgHex; // 头像背景色（仅 top3）
   final int? avatarTextHex; // 头像文字色（仅 top3）

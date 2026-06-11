@@ -231,6 +231,7 @@ class WhaleTopCard extends StatelessWidget {
                   Flexible(
                     child: WhaleAddressLink(
                       address: entry.id,
+                      displayAddress: entry.displayAddress,
                       onOpen: onOpen,
                       fontSize: 13,
                     ),
