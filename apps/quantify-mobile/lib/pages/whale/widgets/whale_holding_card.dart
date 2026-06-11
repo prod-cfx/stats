@@ -45,6 +45,7 @@ class WhaleHoldingCard extends StatelessWidget {
               Flexible(
                 child: WhaleAddressLink(
                   address: entry.address,
+                  displayAddress: entry.displayAddress,
                   onOpen: onOpen,
                   fontSize: 13,
                 ),
@@ -84,8 +85,7 @@ class WhaleHoldingCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: sideColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(QzRadii.pill),
-                  border:
-                      Border.all(color: sideColor.withValues(alpha: 0.2)),
+                  border: Border.all(color: sideColor.withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   entry.isLong
@@ -272,8 +272,9 @@ class _Headline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final CrossAxisAlignment cross =
-        alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final CrossAxisAlignment cross = alignEnd
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start;
     final TextAlign align = alignEnd ? TextAlign.right : TextAlign.left;
     return Column(
       crossAxisAlignment: cross,

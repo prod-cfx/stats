@@ -25,7 +25,8 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
 
   WhaleHoldingPosition _map(WhaleHoldingDto dto) {
     final double value = dto.positionValueUsd.toDouble();
-    final double margin = value / (dto.leverage?.toDouble() ?? 10);
+    final double leverage = dto.leverage?.toDouble() ?? 10;
+    final double margin = value / (leverage > 0 ? leverage : 10);
     final double pnl = dto.pnl?.toDouble() ?? 0;
     final double roe = dto.roe?.toDouble() ?? 0;
     final double? liq = dto.liquidationPrice?.toDouble();
@@ -33,6 +34,7 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
 
     return WhaleHoldingPosition(
       address: dto.userAddress,
+      displayAddress: _shortenAddress(dto.userAddress),
       symbol: dto.symbol,
       symbolColorHex: _symbolColor(dto.symbol),
       mode: 'Cross',
@@ -100,6 +102,12 @@ class ApiWhaleHoldingsRepository implements WhaleHoldingsRepository {
   static String _formatPercent(double value) {
     final String sign = value >= 0 ? '+' : '-';
     return '$sign${(value.abs() * 100).toStringAsFixed(2)}%';
+  }
+
+  static String _shortenAddress(String address) {
+    final String value = address.trim();
+    if (!value.startsWith('0x') || value.length < 11) return address;
+    return '${value.substring(0, 6)}…${value.substring(value.length - 4)}';
   }
 
   static String _formatUsdCompact(double value, {bool signed = false}) {

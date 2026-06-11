@@ -15,6 +15,7 @@ enum WhaleHoldingSide { long, short }
 class WhaleHoldingPosition {
   const WhaleHoldingPosition({
     required this.address,
+    required this.displayAddress,
     required this.symbol,
     required this.symbolColorHex,
     required this.mode,
@@ -35,7 +36,8 @@ class WhaleHoldingPosition {
     required this.timeDisplay,
   });
 
-  final String address; // 缩写地址，如 '0xa5b0…1d41'
+  final String address; // 完整地址，用于复制 / 路由 / 统计。
+  final String displayAddress; // 缩写地址，如 '0xa5b0…1d41'
   final String symbol; // BTC / ETH / HYPE ...
   final int symbolColorHex; // 币种圆点色
   final String mode; // 全仓 / 逐仓

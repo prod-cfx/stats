@@ -20,6 +20,16 @@ class _FakeHoldingsRepo implements WhaleHoldingsRepository {
   Future<List<WhaleHoldingPosition>> getHoldings() async => mockWhaleHoldings;
 }
 
+class _SingleHoldingRepo implements WhaleHoldingsRepository {
+  const _SingleHoldingRepo(this.row);
+
+  final WhaleHoldingPosition row;
+
+  @override
+  Future<List<WhaleHoldingPosition>> getHoldings() async =>
+      <WhaleHoldingPosition>[row];
+}
+
 /// 当前渲染的持仓卡地址顺序。
 List<String> _cardAddresses(WidgetTester tester) {
   return tester
@@ -367,6 +377,74 @@ void main() {
         isNotEmpty,
       );
       expect(find.text('地址已复制'), findsOneWidget);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    testWidgets('真实地址行展示缩写地址但复制完整地址', (WidgetTester tester) async {
+      const String full = '0xabcdefabcdefabcdef01';
+      const String short = '0xabcd…ef01';
+      final List<MethodCall> calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') calls.add(call);
+          return null;
+        },
+      );
+
+      await tester.binding.setSurfaceSize(const Size(420, 1200));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            whaleHoldingsRepositoryProvider.overrideWithValue(
+              _SingleHoldingRepo(
+                const WhaleHoldingPosition(
+                  address: full,
+                  displayAddress: short,
+                  symbol: 'BTC',
+                  symbolColorHex: 0xFFF7931A,
+                  mode: 'Cross',
+                  side: WhaleHoldingSide.long,
+                  leverage: 10,
+                  value: 1000000,
+                  valueDisplay: r'$1.00M',
+                  qtyDisplay: '10.0000 BTC',
+                  pnl: 1000,
+                  pnlDisplay: r'+$1.00K',
+                  pnlPctDisplay: '+1.00%',
+                  margin: 100000,
+                  marginDisplay: r'$100.00K',
+                  openDisplay: r'$100,000.00',
+                  liqDisplay: r'$90,000.00',
+                  liqBreached: false,
+                  hoursAgo: 1,
+                  timeDisplay: '1 小时前',
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: buildQzThemeData(QzTheme.fallback),
+            home: const Scaffold(body: WhaleHoldingsTab()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text(short), findsOneWidget);
+      expect(find.text(full), findsNothing);
+
+      await tester.tap(find.byType(WhaleCopyButton).first);
+      await tester.pump();
+      expect((calls.first.arguments as Map<dynamic, dynamic>)['text'], full);
+
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
         null,

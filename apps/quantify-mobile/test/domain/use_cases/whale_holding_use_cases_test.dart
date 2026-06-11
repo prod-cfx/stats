@@ -12,6 +12,7 @@ WhaleHoldingPosition _pos({
 }) {
   return WhaleHoldingPosition(
     address: '0xabc',
+    displayAddress: '0xabc',
     symbol: symbol,
     symbolColorHex: 0xFF000000,
     mode: '全仓',

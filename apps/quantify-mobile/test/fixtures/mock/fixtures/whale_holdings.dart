@@ -10,6 +10,7 @@ const int _hype = 0xFF22D3EE;
 const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   WhaleHoldingPosition(
     address: '0xa5b0…1d41',
+    displayAddress: '0xa5b0…1d41',
     symbol: 'ETH',
     symbolColorHex: _eth,
     mode: '全仓',
@@ -31,6 +32,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x6c85…84f6',
+    displayAddress: '0x6c85…84f6',
     symbol: 'ETH',
     symbolColorHex: _eth,
     mode: '全仓',
@@ -52,6 +54,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x94d3…3814',
+    displayAddress: '0x94d3…3814',
     symbol: 'BTC',
     symbolColorHex: _btc,
     mode: '全仓',
@@ -73,6 +76,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x0ddf…a902',
+    displayAddress: '0x0ddf…a902',
     symbol: 'BTC',
     symbolColorHex: _btc,
     mode: '全仓',
@@ -94,6 +98,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x082e…ca88',
+    displayAddress: '0x082e…ca88',
     symbol: 'HYPE',
     symbolColorHex: _hype,
     mode: '全仓',
@@ -115,6 +120,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0xa183…0482',
+    displayAddress: '0xa183…0482',
     symbol: 'BTC',
     symbolColorHex: _btc,
     mode: '全仓',
@@ -136,6 +142,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x7fda…17d1',
+    displayAddress: '0x7fda…17d1',
     symbol: 'ETH',
     symbolColorHex: _eth,
     mode: '全仓',
@@ -157,6 +164,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0xeadc…9d55',
+    displayAddress: '0xeadc…9d55',
     symbol: 'BTC',
     symbolColorHex: _btc,
     mode: '全仓',
@@ -178,6 +186,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x218a…7da2',
+    displayAddress: '0x218a…7da2',
     symbol: 'ETH',
     symbolColorHex: _eth,
     mode: '全仓',
@@ -199,6 +208,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0x4a20…3c26',
+    displayAddress: '0x4a20…3c26',
     symbol: 'ETH',
     symbolColorHex: _eth,
     mode: '全仓',
@@ -220,6 +230,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0xfd42…3d97',
+    displayAddress: '0xfd42…3d97',
     symbol: 'BTC',
     symbolColorHex: _btc,
     mode: '全仓',
@@ -241,6 +252,7 @@ const List<WhaleHoldingPosition> mockWhaleHoldings = <WhaleHoldingPosition>[
   ),
   WhaleHoldingPosition(
     address: '0xd475…1a91',
+    displayAddress: '0xd475…1a91',
     symbol: 'ETH',
     symbolColorHex: _eth,
     mode: '全仓',
