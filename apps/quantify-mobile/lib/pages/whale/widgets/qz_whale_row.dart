@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/whale_models.dart';
+import '../../../data/utils/mask_helpers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
@@ -157,7 +158,8 @@ class QzWhaleRow extends StatelessWidget {
     String relTime,
     AppLocalizations l10n,
   ) {
-    final String addressText = event.address ?? event.fromLabel;
+    final String rawAddressText = event.address ?? event.fromLabel;
+    final String addressText = formatMobileAddress(rawAddressText);
     return Row(
       children: <Widget>[
         Expanded(

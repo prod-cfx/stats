@@ -46,4 +46,19 @@ void main() {
       expect(maskEmail(''), '');
     });
   });
+
+  group('formatMobileAddress', () {
+    test('formats normal 0x address as 0x + first4 + ellipsis + last4', () {
+      expect(
+        formatMobileAddress('0x95ab1234567890abcdefc60a'),
+        '0x95ab…c60a',
+      );
+    });
+
+    test('keeps short and non-0x values unchanged', () {
+      expect(formatMobileAddress('0x1234'), '0x1234');
+      expect(formatMobileAddress('hyperliquid-user'), 'hyperliquid-user');
+      expect(formatMobileAddress(''), '');
+    });
+  });
 }

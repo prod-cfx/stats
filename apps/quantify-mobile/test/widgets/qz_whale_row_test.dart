@@ -123,6 +123,7 @@ void main() {
   // ── issue #1985：逐笔持仓推送卡 ────────────────────────────────────────
   WhaleEvent holding({
     String id = 'w-h',
+    String address = '0xe2…55d6',
     String side = 'long',
     int? leverage,
     double winRate = 73,
@@ -135,7 +136,7 @@ void main() {
       fromLabel: 'A',
       toLabel: 'B',
       timestamp: DateTime(2024, 5, 18),
-      address: '0xe2…55d6',
+      address: address,
       traderTag: '趋势跟踪',
       isFresh: true,
       mode: '全仓',
@@ -164,6 +165,22 @@ void main() {
     expect(find.text('33.5140 BTC'), findsOneWidget); // 数量
     expect(find.text('75,763'), findsOneWidget); // 开盘价
     expect(find.text('73%'), findsOneWidget); // 胜率
+  });
+
+  testWidgets('renders mobile abbreviated address but keeps full event address', (
+    WidgetTester tester,
+  ) async {
+    const String full = '0x95ab1234567890abcdefc60a';
+    final WhaleEvent event = holding(address: full);
+
+    await _pump(
+      tester,
+      QzWhaleRow(event: event, now: DateTime(2024, 5, 18)),
+    );
+
+    expect(find.text('0x95ab…c60a'), findsOneWidget);
+    expect(find.text(full), findsNothing);
+    expect(event.address, full);
   });
 
   testWidgets('点击地址触发详情回调，点击右上角图标触发统计回调', (WidgetTester tester) async {

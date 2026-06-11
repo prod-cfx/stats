@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../data/models/whale_extra_models.dart';
 import '../../../data/models/whale_watch_models.dart';
+import '../../../data/auth/session_controller.dart';
 import '../../../data/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
@@ -13,6 +14,7 @@ import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 import '../widgets/whale_watch_addr_card.dart';
 import '../widgets/whale_watch_rule_sheet.dart';
+import '../../auth/login_sheet.dart';
 import 'whale_live_tab.dart';
 import 'whale_watch_tab_controller.dart';
 import 'whale_watch_tab_state.dart';
@@ -31,6 +33,11 @@ class WhaleWatchTab extends ConsumerWidget {
   const WhaleWatchTab({super.key});
 
   Future<void> _addRule(BuildContext context, WidgetRef ref) async {
+    final bool loggedIn = ref.read(sessionControllerProvider).value != null;
+    if (!loggedIn) {
+      await showLoginSheet(context);
+      return;
+    }
     final WatchRule? rule = await WhaleWatchRuleSheet.show(context);
     if (rule == null) return;
     await ref.read(whaleWatchTabControllerProvider.notifier).appendRule(rule);

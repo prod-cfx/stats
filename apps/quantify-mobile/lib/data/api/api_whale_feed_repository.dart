@@ -18,20 +18,20 @@ class ApiWhaleFeedRepository implements WhaleFeedRepository {
   final GeneratedBackendApi _api;
 
   WhaleEvent _mapTrade(WhaleTradeDto trade) {
-    final String sideLabel = trade.side == WhaleTradeDtoSideEnum.short
-        ? 'Short'
-        : 'Long';
-    final String sideName = sideLabel.toLowerCase();
+    final bool isShort = trade.side == WhaleTradeDtoSideEnum.short;
+    final String sideLabel = isShort ? 'Short' : 'Long';
+    final String sideName = isShort ? 'short' : 'long';
     final double tradeSize = trade.tradeSize.toDouble().abs();
     final String symbol = trade.symbol.toUpperCase();
     final DateTime timestamp =
-        DateTime.tryParse(trade.tradeTime) ?? DateTime.now().toUtc();
+        DateTime.tryParse(trade.tradeTime)?.toUtc() ?? DateTime.now().toUtc();
+    final double tradeValueUsd = trade.tradeValueUsd.toDouble();
 
     return WhaleEvent(
-      id: '${trade.userAddress}-$symbol-${trade.tradeTime}-${trade.tradeValueUsd}-${trade.price}',
+      id: '${trade.userAddress}-$symbol-${trade.tradeTime}-$tradeValueUsd-${trade.price}',
       symbol: symbol,
-      amountUsd: trade.tradeValueUsd.toDouble(),
-      direction: sideName == 'short' ? 'out' : 'in',
+      amountUsd: tradeValueUsd,
+      direction: isShort ? 'out' : 'in',
       fromLabel: 'Hyperliquid',
       toLabel: '$symbol $sideLabel',
       timestamp: timestamp,
@@ -39,9 +39,9 @@ class ApiWhaleFeedRepository implements WhaleFeedRepository {
       address: trade.userAddress,
       traderTag: '成交',
       isFresh: true,
-      mode: '全仓',
+      mode: null,
       side: sideName,
-      positionValue: trade.tradeValueUsd.toDouble(),
+      positionValue: tradeValueUsd,
       quantity: '${tradeSize.toStringAsFixed(4)} $symbol',
       openPrice: trade.price.toDouble(),
     );
@@ -73,6 +73,7 @@ class ApiWhaleFeedRepository implements WhaleFeedRepository {
         .getWhaleAlertsApi()
         .whaleAlertControllerGetWhaleTrades(
           limit: limit,
+          minTradeValueUsd: 10000,
           extra: _unwrapDataExtra,
         );
     final Iterable<dynamic> items = response.data?.items ?? const <dynamic>[];

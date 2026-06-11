@@ -10,6 +10,7 @@ import 'package:quantify_mobile/data/models/whale_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
+import 'package:quantify_mobile/pages/auth/login_sheet.dart';
 import 'package:quantify_mobile/pages/whale/tabs/whale_watch_tab.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -129,5 +130,16 @@ void main() {
     await tester.tap(find.text('监控地址'));
     await tester.pumpAndSettle();
     expect(find.text('暂无监控地址'), findsNothing);
+  });
+
+  testWidgets('未登录点击创建监控打开 LoginSheet', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.text('监控地址'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('whaleWatchAddressCreateMonitorButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginSheet), findsOneWidget);
   });
 }

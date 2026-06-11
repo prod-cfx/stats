@@ -65,7 +65,7 @@ void main() {
         _FakeFeedRepo(<WhaleEvent>[], StreamController<WhaleEvent>()),
       );
       expect(read(c).loading, isTrue);
-      expect(read(c).symbolFilter, '');
+      expect(read(c).symbolFilter, 'BTC');
     });
 
     test('loading→data：历史加载完成、去重保留首次出现', () async {
@@ -104,6 +104,23 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(read(c).items.first.event.id, 'b');
       expect(read(c).items, hasLength(2));
+    });
+
+    test('watchFeed error keeps loaded history', () async {
+      final StreamController<WhaleEvent> sc = StreamController<WhaleEvent>();
+      final ProviderContainer c = makeContainer(
+        _FakeFeedRepo(<WhaleEvent>[_ev('btc-1')], sc),
+      );
+      ctrl(c);
+      await Future<void>.delayed(Duration.zero);
+      expect(read(c).items, hasLength(1));
+
+      sc.addError(Exception('poll failed'));
+      await Future<void>.delayed(Duration.zero);
+
+      final WhaleLiveTabState state = read(c);
+      expect(state.items, hasLength(1));
+      expect(state.error, isNull);
     });
   });
 

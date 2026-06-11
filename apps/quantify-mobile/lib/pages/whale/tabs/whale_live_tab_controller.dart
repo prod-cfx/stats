@@ -59,7 +59,13 @@ class WhaleLiveTabController extends Notifier<WhaleLiveTabState> {
           if (seen.add(e.id)) WhaleLiveFeedItem(e, highlight: false),
       ];
       state = state.copyWith(items: deduped, loading: false, error: null);
-      _sub = repo.watchFeed().listen(_onPush);
+      _sub = repo.watchFeed().listen(
+        _onPush,
+        onError: (_) {
+          if (!mounted) return;
+          state = state.copyWith(loading: false, error: null);
+        },
+      );
     } catch (error) {
       if (!mounted) return;
       state = state.copyWith(

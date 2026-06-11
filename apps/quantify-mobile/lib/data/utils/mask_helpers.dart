@@ -37,3 +37,12 @@ String maskEmail(String email) {
   if (local.length <= 2) return '***$domain';
   return '${local.substring(0, 2)}***$domain';
 }
+
+/// Formats wallet addresses for compact mobile card display.
+///
+/// Normal EVM-style addresses longer than 12 characters render as
+/// `0x95ab…c60a`. Short or non-0x values are returned unchanged.
+String formatMobileAddress(String raw) {
+  if (!raw.startsWith('0x') || raw.length <= 12) return raw;
+  return '${raw.substring(0, 6)}…${raw.substring(raw.length - 4)}';
+}
