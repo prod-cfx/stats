@@ -24,7 +24,18 @@ class _FakeTickerRepository implements TickerRepository {
   Future<List<Ticker>> listTickers() => _completer.future;
 
   @override
-  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async => null;
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) => const Stream<Ticker>.empty();
 }
 
 void main() {
@@ -34,8 +45,9 @@ void main() {
     completer = Completer<List<Ticker>>();
     final ProviderContainer c = ProviderContainer(
       overrides: <Override>[
-        tickerRepositoryProvider
-            .overrideWithValue(_FakeTickerRepository(completer)),
+        tickerRepositoryProvider.overrideWithValue(
+          _FakeTickerRepository(completer),
+        ),
       ],
     );
     // 保持 autoDispose provider 存活（无监听者会被销毁，吞掉异步回调）。
@@ -132,10 +144,7 @@ void main() {
         <String>['BTCUSDT', 'SOLUSDT'],
       );
       k.selectTab(MarketTab.perp);
-      expect(
-        k.visibleTickers(const <String>{}).single.symbol,
-        'ETHUSDT',
-      );
+      expect(k.visibleTickers(const <String>{}).single.symbol, 'ETHUSDT');
     });
 
     test('watchlist 仅命中收藏集合', () async {

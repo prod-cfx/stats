@@ -22,6 +22,6 @@ When the latest assistant response is asking for strategy confirmation and carri
 
 ## Testing
 
-- Add widget coverage for short confirm input opening `/ai/confirm` instead of appending a normal message.
+- Add controller/widget coverage for short confirm input opening `/ai/confirm` instead of appending a normal message.
 - Add bubble/page coverage that a non-params assistant turn with codegen metadata shows the confirm CTA.
 - Keep existing AI confirm/script/deploy tests passing.

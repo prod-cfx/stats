@@ -66,7 +66,18 @@ class _NoTimerTickerRepository implements TickerRepository {
   Future<List<Ticker>> listTickers() async => const <Ticker>[_btc];
 
   @override
-  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async => _btc;
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) => const Stream<Ticker>.empty();
 }
 
 /// 同上：`watchCandles` 返回空流，消除 K 线 periodic 计时器。

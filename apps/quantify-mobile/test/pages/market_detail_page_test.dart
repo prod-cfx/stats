@@ -31,7 +31,9 @@ import '../helpers/test_overrides.dart';
 
 class _FakeTickerRepository implements TickerRepository {
   @override
-  Future<List<Ticker>> listTickers() async => mockTickers
+  Future<List<Ticker>> listTickers() async => _tickers();
+
+  Future<List<Ticker>> _tickers() async => mockTickers
       .map(
         (Ticker ticker) => Ticker(
           symbol: ticker.symbol,
@@ -52,7 +54,26 @@ class _FakeTickerRepository implements TickerRepository {
       .toList(growable: false);
 
   @override
-  Stream<Ticker> watchTicker(String symbol) => const Stream<Ticker>.empty();
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async {
+    final List<Ticker> tickers = await _tickers();
+    for (final Ticker ticker in tickers) {
+      if (ticker.symbol == symbol || ticker.symbol.startsWith(symbol)) {
+        return ticker;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) => const Stream<Ticker>.empty();
 }
 
 class _FakeOrderbookRepository implements OrderbookRepository {

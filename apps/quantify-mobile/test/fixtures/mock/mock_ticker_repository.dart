@@ -13,7 +13,26 @@ class MockTickerRepository implements TickerRepository {
   }
 
   @override
-  Stream<Ticker> watchTicker(String symbol) {
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async {
+    final List<Ticker> tickers = await listTickers();
+    for (final Ticker ticker in tickers) {
+      if (ticker.symbol == symbol || ticker.symbol.startsWith(symbol)) {
+        return ticker;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) {
     final Ticker base = mockTickers.firstWhere(
       (Ticker t) => t.symbol == symbol,
       orElse: () => mockTickers.first,

@@ -43,8 +43,20 @@ class _StubTickerRepository implements TickerRepository {
 
   @override
   Future<List<Ticker>> listTickers() async => <Ticker>[btc, ...mockTickers];
+
   @override
-  Stream<Ticker> watchTicker(String symbol) => Stream<Ticker>.value(btc);
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async => btc;
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) => Stream<Ticker>.value(btc);
 }
 
 Future<void> _pumpStats(WidgetTester tester, Ticker ticker) async {

@@ -39,7 +39,41 @@ class _FakeTickerRepository implements TickerRepository {
   Future<List<Ticker>> listTickers() => tickersFuture;
 
   @override
-  Stream<Ticker> watchTicker(String symbol) => stream;
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async {
+    final List<Ticker> tickers = await tickersFuture;
+    for (final Ticker ticker in tickers) {
+      if (_sameMarketSymbol(ticker.symbol, symbol)) return ticker;
+    }
+    return null;
+  }
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) => stream;
+
+  bool _sameMarketSymbol(String left, String right) {
+    return _canonicalSymbol(left) == _canonicalSymbol(right);
+  }
+
+  String _canonicalSymbol(String value) {
+    final String normalized = value.trim().toUpperCase().replaceAll(
+      RegExp(r'[/_\-\s]'),
+      '',
+    );
+    for (final String quote in <String>['USDT', 'USDC', 'USD']) {
+      if (normalized.endsWith(quote) && normalized.length > quote.length) {
+        return normalized.substring(0, normalized.length - quote.length);
+      }
+    }
+    return normalized;
+  }
 }
 
 class _FakeTradesRepository implements TradesRepository {
@@ -160,7 +194,7 @@ void main() {
       expect(s.priceSnapshot, isNull);
     });
 
-    test('loading→error：listTickers 抛错经 ErrorRouter.normalize', () async {
+    test('loading→error：getTicker 抛错经 ErrorRouter.normalize', () async {
       final Completer<List<Ticker>> completer = Completer<List<Ticker>>();
       final ProviderContainer c = makeContainer(completer.future);
       ctrl(c);

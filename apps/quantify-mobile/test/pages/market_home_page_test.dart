@@ -44,7 +44,18 @@ class _FakeTickerRepository implements TickerRepository {
   }
 
   @override
-  Stream<Ticker> watchTicker(String symbol) {
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async => null;
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) {
     final StreamController<Ticker> controller = controllers.putIfAbsent(
       symbol,
       () => StreamController<Ticker>.broadcast(),

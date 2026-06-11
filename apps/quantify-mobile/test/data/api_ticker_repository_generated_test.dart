@@ -433,4 +433,114 @@ void main() {
 
     expect(ticker.price, 62888.3);
   });
+
+  test(
+    'ApiTickerRepository.getTicker fetches one market with exchange',
+    () async {
+      final List<({String symbol, String? exchange})> requests =
+          <({String symbol, String? exchange})>[];
+      final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              if (options.path == '/kline') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const <String, Object?>{'data': <Object?>[]},
+                  ),
+                );
+                return;
+              }
+
+              expect(options.path, '/markets/ticker');
+              requests.add((
+                symbol: options.queryParameters['symbol'] as String,
+                exchange: options.queryParameters['exchange'] as String?,
+              ));
+              h.resolve(
+                Response<Object?>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: <String, Object?>{
+                    'data': _tickerJson(
+                      symbol: 'BTC',
+                      exchange: 'Binance',
+                      openInterestUsd: '987654321.00',
+                    ),
+                    'message': 'Success',
+                  },
+                ),
+              );
+            },
+          ),
+        );
+
+      final Ticker? ticker = await ApiTickerRepository(
+        GeneratedBackendApi(dio: dio),
+      ).getTicker(symbol: 'BTC', kind: MarketKind.perp, exchange: 'Binance');
+
+      expect(requests, <({String symbol, String? exchange})>[
+        (symbol: 'BTC', exchange: 'Binance'),
+      ]);
+      expect(ticker?.kind, MarketKind.perp);
+      expect(ticker?.openInterest, 987654321.00);
+    },
+  );
+
+  test(
+    'ApiTickerRepository.watchTicker preserves requested kind and exchange',
+    () async {
+      final List<({String symbol, String? exchange})> requests =
+          <({String symbol, String? exchange})>[];
+      final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              if (options.path == '/kline') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const <String, Object?>{'data': <Object?>[]},
+                  ),
+                );
+                return;
+              }
+
+              expect(options.path, '/markets/ticker');
+              requests.add((
+                symbol: options.queryParameters['symbol'] as String,
+                exchange: options.queryParameters['exchange'] as String?,
+              ));
+              h.resolve(
+                Response<Object?>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: <String, Object?>{
+                    'data': _tickerJson(
+                      symbol: 'ETH',
+                      exchange: 'OKX',
+                      priceChangePercent24h: '-1.5',
+                    ),
+                    'message': 'Success',
+                  },
+                ),
+              );
+            },
+          ),
+        );
+
+      final Ticker ticker = await ApiTickerRepository(
+        GeneratedBackendApi(dio: dio),
+      ).watchTicker('ETH', kind: MarketKind.spot, exchange: 'OKX').first;
+
+      expect(requests, <({String symbol, String? exchange})>[
+        (symbol: 'ETH', exchange: 'OKX'),
+      ]);
+      expect(ticker.kind, MarketKind.spot);
+      expect(ticker.changePercent, -1.5);
+    },
+  );
 }

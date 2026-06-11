@@ -49,14 +49,7 @@ class MarketDetailController extends Notifier<MarketDetailState> {
   Future<void> _load() async {
     final tickerRepo = ref.read(tickerRepositoryProvider);
     try {
-      final List<Ticker> tickers = await tickerRepo.listTickers();
-      Ticker? snapshot;
-      for (final Ticker ticker in tickers) {
-        if (_sameMarketSymbol(ticker.symbol, symbol)) {
-          snapshot = ticker;
-          break;
-        }
-      }
+      Ticker? snapshot = await tickerRepo.getTicker(symbol: symbol);
       if (snapshot == null) {
         if (!mounted) return;
         state = state.copyWith(priceSnapshot: null, loading: false);
@@ -90,15 +83,6 @@ class MarketDetailController extends Notifier<MarketDetailState> {
         loading: false,
       );
     }
-  }
-
-  bool _sameMarketSymbol(String left, String right) {
-    return _canonicalSymbol(left) == _canonicalSymbol(right);
-  }
-
-  String _canonicalSymbol(String value) {
-    final (String base, _) = splitSymbolAssets(value);
-    return (base.isEmpty ? value : base).toUpperCase();
   }
 
   /// 拉取指定周期历史 K 线并重新订阅推流。竞态保护见类注释。

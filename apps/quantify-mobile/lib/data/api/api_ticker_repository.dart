@@ -87,8 +87,17 @@ class ApiTickerRepository implements TickerRepository {
       queryParameters: query,
     );
     final Map<String, dynamic>? data = _unwrapTickerData(response.data);
+    return _tickerFromMap(data, requestedSymbol: symbol, kind: kind);
+  }
+
+  Future<Ticker?> _tickerFromMap(
+    Map<String, dynamic>? data, {
+    required String requestedSymbol,
+    required MarketKind kind,
+  }) async {
     if (data == null) return null;
-    final String responseSymbol = (data['symbol'] as String?) ?? symbol;
+    final String responseSymbol =
+        (data['symbol'] as String?) ?? requestedSymbol;
     final double? latestClose = await _fetchLatestKlineClose(responseSymbol);
     return Ticker.fromBackendFields(
       symbol: responseSymbol,
@@ -319,37 +328,32 @@ class ApiTickerRepository implements TickerRepository {
   }
 
   @override
-  Stream<Ticker> watchTicker(String symbol) async* {
+  Future<Ticker?> getTicker({
+    required String symbol,
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) {
+    return _fetchTicker(symbol: symbol, kind: kind, exchange: exchange);
+  }
+
+  @override
+  Stream<Ticker> watchTicker(
+    String symbol, {
+    MarketKind kind = MarketKind.perp,
+    String? exchange,
+  }) async* {
     Future<Ticker> fetchOne() async {
+      final Map<String, dynamic> query = <String, dynamic>{'symbol': symbol};
+      if (exchange != null) query['exchange'] = exchange;
       final Response<dynamic> response = await _api.dio.get<dynamic>(
         '/markets/ticker',
-        queryParameters: <String, dynamic>{'symbol': symbol},
+        queryParameters: query,
       );
       final Map<String, dynamic>? data = _unwrapTickerData(response.data);
       if (data == null) {
         throw const ApiException(message: 'empty ticker response');
       }
-      final MarketKind kind =
-          data['openInterestUsd'] != null ||
-              data['fundingRate'] != null ||
-              data['indexPrice'] != null
-          ? MarketKind.perp
-          : MarketKind.spot;
-      final String responseSymbol = (data['symbol'] as String?) ?? symbol;
-      final double? latestClose = await _fetchLatestKlineClose(responseSymbol);
-      return Ticker.fromBackendFields(
-        symbol: responseSymbol,
-        currentPrice:
-            latestClose?.toString() ?? data['currentPrice']?.toString() ?? '0',
-        priceChangePercent24h: data['priceChangePercent24h']?.toString(),
-        volumeUsd: data['volumeUsd']?.toString() ?? '0',
-        kind: kind,
-        high24h: data['high24h']?.toString(),
-        low24h: data['low24h']?.toString(),
-        openInterestUsd: data['openInterestUsd']?.toString(),
-        indexPrice: data['indexPrice']?.toString(),
-        fundingRate: data['fundingRate']?.toString(),
-      );
+      return (await _tickerFromMap(data, requestedSymbol: symbol, kind: kind))!;
     }
 
     Future<Ticker?> fetchOneSafely() async {
