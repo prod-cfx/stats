@@ -56,6 +56,7 @@ void main() {
     expect(requests, hasLength(1));
     expect(requests.single.path, '/whale-alerts/trades');
     expect(requests.single.queryParameters['limit'], 7);
+    expect(requests.single.queryParameters['page'], 1);
     expect(requests.single.queryParameters['min_trade_value_usd'], 10000);
 
     expect(events, hasLength(2));
@@ -69,15 +70,14 @@ void main() {
     expect(event.toLabel, 'BTC Long');
     expect(event.traderTag, '成交');
     expect(event.mode, isNull);
+    expect(event.leverage, isNull);
     expect(event.side, 'long');
     expect(event.positionValue, 1250000);
     expect(event.quantity, '12.3456 BTC');
     expect(event.openPrice, 68000);
+    expect(event.isFresh, isTrue);
     expect(event.winRate, inInclusiveRange(45, 85));
-    expect(
-      event.timestamp.toUtc(),
-      DateTime.parse('2026-06-11T08:30:00.000Z'),
-    );
+    expect(event.timestamp.toUtc(), DateTime.parse('2026-06-11T08:30:00.000Z'));
 
     final WhaleEvent shortEvent = events.last;
     expect(shortEvent.direction, 'out');

@@ -48,6 +48,8 @@ class QzWhaleRow extends StatelessWidget {
 
   static const String _dash = '--';
 
+  static String formatDisplayAddress(String raw) => formatMobileAddress(raw);
+
   /// 暴露给测试的纯函数：金额格式化为 `$1.25M` / `$12.5M` / `$320K`。
   static String formatAmountUsd(double amountUsd) {
     if (amountUsd >= 1_000_000) {

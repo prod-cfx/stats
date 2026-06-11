@@ -378,10 +378,57 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'WhaleLiveTab shows abbreviated address but keeps full model address',
+    (WidgetTester tester) async {
+      final WhaleEvent event = WhaleEvent(
+        id: 'live-btc-short',
+        symbol: 'BTC',
+        amountUsd: 16250.125,
+        direction: 'out',
+        fromLabel: 'Hyperliquid',
+        toLabel: 'BTC Short',
+        timestamp: DateTime.utc(2026, 6, 9, 1, 2, 3),
+        winRate: 72,
+        address: '0xabcdefabcdefabcdef01',
+        traderTag: '成交',
+        isFresh: true,
+        mode: '全仓',
+        side: 'short',
+        positionValue: 16250.125,
+        quantity: '0.2500 BTC',
+        openPrice: 65000.5,
+      );
+      final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository(
+        history: <WhaleEvent>[event],
+      );
+      await _pump(tester, repo);
+      addTearDown(() async => repo.dispose());
+
+      expect(find.text('0xabcd…ef01'), findsOneWidget);
+      expect(find.text('0xabcdefabcdefabcdef01'), findsNothing);
+      expect(repo._history.single.address, '0xabcdefabcdefabcdef01');
+    },
+  );
+
   test('QzWhaleRow.formatAmountUsd 覆盖三档边界', () {
     expect(QzWhaleRow.formatAmountUsd(500), '\$500');
     expect(QzWhaleRow.formatAmountUsd(12_500), '\$13K');
     expect(QzWhaleRow.formatAmountUsd(12_500_000), '\$12.50M');
+  });
+
+  group('QzWhaleRow.formatDisplayAddress', () {
+    test('shortens standard 0x whale address for mobile cards', () {
+      expect(
+        QzWhaleRow.formatDisplayAddress('0xabcdefabcdefabcdef01'),
+        '0xabcd…ef01',
+      );
+    });
+
+    test('keeps non-standard and short labels unchanged', () {
+      expect(QzWhaleRow.formatDisplayAddress('Hyperliquid'), 'Hyperliquid');
+      expect(QzWhaleRow.formatDisplayAddress('0xabc'), '0xabc');
+    });
   });
 
   test('QzWhaleRow.formatRelativeTime 边界', () {
