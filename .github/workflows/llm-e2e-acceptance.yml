@@ -49,7 +49,7 @@ on:
     - cron: '0 18 * * *'
 
 env:
-  NODE_VERSION: '22.14.0'
+  NODE_VERSION: '22.22.0'
   DX_PACKAGE: '@ranger1/dx'
   DX_VERSION: '0.1.104'
 

@@ -6,7 +6,7 @@ name: CI
 # - CI/CD 与本地开发统一使用 dx 命令系统
 # - 前端（front / admin）在 GitHub Actions 中构建并部署到 Vercel
 # - 后端（backend / quantify）通过 dx backend-artifact-deploy 制品部署到 AWS 服务器
-# - Node 版本需与仓库要求一致（.nvmrc 指定 22.14.0）
+# - Node 版本需与仓库要求一致（Node 22.22.0）
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ on:
           - admin
 
 env:
-  NODE_VERSION: '22.14.0'
+  NODE_VERSION: '22.22.0'
   DX_VERSION: '0.1.97'
   VERCEL_VERSION: '50.4.5'
   DEPLOY_ENVIRONMENT: ${{ secrets.DEPLOY_ENVIRONMENT }}

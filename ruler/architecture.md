@@ -22,7 +22,7 @@ dx/
 
 ## 技术栈（以当前仓库 `package.json` / 各 app `package.json` 为准）
 
-- 运行时基线：Node.js `>=20.19.0`，pnpm `10.28.2`
+- 运行时基线：Node.js `>=22.22.0`，pnpm `10.28.2`
 - Monorepo / 构建编排：Nx `19.8.14`
 - 语言与工程化：TypeScript `5.9.2`、ESLint `9.32.x`、Prettier `3.6.2`
 - 后端主服务：NestJS `11.1.x`、Prisma `7.8.0`、PostgreSQL、Redis、Swagger/OpenAPI、Socket.IO
