@@ -311,9 +311,13 @@ AiSession _sessionFromStrategyDetail(
 }
 
 ChatTurn _turnFromCodegen(CodegenSessionResponseDto response) {
-  final Map<String, String> params = _stringParamsFromBuilt(
-    response.publishedSnapshotParamValues ?? response.specDesc,
-  );
+  final bool isConfirmGate =
+      response.status == CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE;
+  final Map<String, String> params = isConfirmGate
+      ? const <String, String>{}
+      : _stringParamsFromBuilt(
+          response.publishedSnapshotParamValues ?? response.specDesc,
+        );
   final bool hasParams = params.isNotEmpty;
   final String content = response.assistantPrompt?.trim().isNotEmpty == true
       ? response.assistantPrompt!.trim()
@@ -403,7 +407,8 @@ class ApiAiChatRepository implements AiChatRepository {
   Future<AiSession> createSession({String? title}) async {
     final LlmStrategyCodegenApi? api = _codegenApi;
     if (api != null) {
-      final String id = 'local-codegen-${DateTime.now().microsecondsSinceEpoch}';
+      final String id =
+          'local-codegen-${DateTime.now().microsecondsSinceEpoch}';
       return AiSession(
         id: id,
         title: title?.trim().isNotEmpty == true ? title!.trim() : '新对话',

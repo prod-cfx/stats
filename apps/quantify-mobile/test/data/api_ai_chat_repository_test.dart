@@ -261,6 +261,54 @@ void main() {
       expect(svc.sendBodies.single.containsKey('content'), isFalse);
     });
 
+    test('CONFIRM_GATE 不把 raw specDesc 渲染为聊天参数块', () async {
+      final _StubListAiChatService svc =
+          _StubListAiChatService(rows: const <Map<String, dynamic>>[])
+            ..sendResponses.add(<String, dynamic>{
+              'data': <String, dynamic>{
+                'id': 'session-1',
+                'status': 'CONFIRM_GATE',
+                'canonicalDigest': 'sha256:canonical-1',
+                'assistantPrompt': '请确认是否按这个逻辑生成脚本。',
+                'publishedSnapshotParamValues': <String, dynamic>{
+                  'viewType': 'semantic_snapshot',
+                  'canonicalDigest': 'sha256:canonical-1',
+                  'version': 1,
+                  'confirmation': 'pending',
+                  'ruleSummary': '均线策略',
+                },
+                'specDesc': <String, dynamic>{
+                  'viewType': 'semantic_snapshot',
+                  'canonicalDigest': 'sha256:canonical-1',
+                  'version': 1,
+                  'confirmation': <String, dynamic>{
+                    'digest': 'sha256:canonical-1',
+                  },
+                  'ruleSummary': <String, dynamic>{'title': '均线策略'},
+                },
+              },
+            });
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final ChatTurn turn = await repo.sendMessageTo(
+        'session-1',
+        ChatTurn(
+          id: 'u-1',
+          role: 'user',
+          content: '生成均线策略',
+          timestamp: DateTime(2026),
+        ),
+      );
+
+      expect(turn.kind, ChatTurnKind.text);
+      expect(turn.params, isNull);
+      expect(turn.content, '请确认是否按这个逻辑生成脚本。');
+      expect(turn.content, isNot(contains('策略脚本已生成')));
+      expect(turn.codegenSessionId, 'session-1');
+      expect(turn.confirmedCanonicalDigest, 'sha256:canonical-1');
+      expect(svc.sendBodies.single['confirmGenerate'], isFalse);
+    });
+
     test('confirmStrategy 走 raw body 并支持 data 信封', () async {
       final _StubListAiChatService svc =
           _StubListAiChatService(rows: const <Map<String, dynamic>>[])
