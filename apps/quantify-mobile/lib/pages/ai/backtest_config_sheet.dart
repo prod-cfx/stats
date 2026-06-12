@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_strategy_context.dart';
+import '../../data/models/backtest_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -247,6 +249,28 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
         _fillSourceLabel(l10n, fillSource),
       );
 
+  String _supportExchange(AiPublishedStrategyContext ctx) =>
+      (ctx.exchange ?? widget.params?['exchange'] ?? 'binance')
+          .trim()
+          .toLowerCase();
+
+  String _supportSymbol(AiPublishedStrategyContext ctx) {
+    final String raw =
+        (ctx.symbol ??
+                widget.params?['symbol'] ??
+                widget.params?['displaySymbol'] ??
+                'BTCUSDT')
+            .trim();
+    return raw.replaceAll('/', '').replaceAll('-', '').toUpperCase();
+  }
+
+  String _supportBaseTimeframe(AiPublishedStrategyContext ctx) =>
+      (ctx.baseTimeframe ??
+              widget.params?['baseTimeframe'] ??
+              widget.params?['period'] ??
+              '15m')
+          .trim();
+
   /// 校验取值依赖留在 widget 的输入框控制器，故解析在此完成；结果（错误/通过）
   /// 经 controller 推进流程态。
   Future<void> _submit() async {
@@ -254,6 +278,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     final BacktestConfigSheetState st = ref.read(
       backtestConfigSheetControllerProvider,
     );
+    if (st.checkingSupport) return;
     final AiPublishedStrategyContext? strategyContext = widget.strategyContext;
     if (strategyContext?.hasPublishedSnapshot != true) {
       _ctrl.setError('缺少已发布策略快照，请返回确认策略后重试。');
@@ -292,18 +317,49 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       return;
     }
 
+    final AiPublishedStrategyContext ctx = strategyContext!;
+    final String exchange = _supportExchange(ctx);
+    final String symbol = _supportSymbol(ctx);
+    final String baseTimeframe = _supportBaseTimeframe(ctx);
+    final String marketType = st.futures ? 'perp' : 'spot';
+    _ctrl.setCheckingSupport(true);
+    try {
+      final BacktestSymbolSupportResult support = await ref
+          .read(backtestRepositoryProvider)
+          .checkSymbolSupport(
+            BacktestSymbolSupportRequest(
+              exchange: exchange,
+              marketType: marketType,
+              symbol: symbol,
+              baseTimeframe: baseTimeframe,
+            ),
+          );
+      if (!mounted) return;
+      if (!support.supported) {
+        _ctrl.setError(support.reason ?? '当前交易对或周期暂不支持回测');
+        return;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _ctrl.setError('回测能力检查失败，请稍后重试');
+      return;
+    }
+
     if (!mounted) return;
-    _ctrl.clearError();
+    _ctrl.setCheckingSupport(false);
     context.push(
       '/ai/backtest-run',
       extra: AiBacktestRunArgs(
-        strategyContext: strategyContext!,
+        strategyContext: ctx,
         config: <String, String>{
+          'exchange': exchange,
+          'symbol': symbol,
+          'baseTimeframe': baseTimeframe,
           'backtestRangePreset': st.rangeKey,
           'backtestStart': _start.text.trim(),
           'backtestEnd': _end.text.trim(),
           'backtestInitialCash': _capital.text.trim(),
-          'backtestMarketType': st.futures ? 'perp' : 'spot',
+          'backtestMarketType': marketType,
           'backtestLeverage': _leverage.text.trim(),
           'backtestSlippageBps': _slippage.text.trim(),
           'backtestFeeBps': _fee.text.trim(),
@@ -587,8 +643,10 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                             child: _ActionButton(
                               key: const Key('backtest-submit'),
                               scheme: c,
-                              label: l10n.backtestStartButton,
-                              onPressed: _submit,
+                              label: st.checkingSupport
+                                  ? '检查交易对...'
+                                  : l10n.backtestStartButton,
+                              onPressed: st.checkingSupport ? null : _submit,
                               accent: true,
                             ),
                           ),

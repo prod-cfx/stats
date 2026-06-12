@@ -14,6 +14,7 @@ class BacktestConfigSheetState {
     this.fillSource = 'close',
     this.partialData = true,
     this.futures = true,
+    this.checkingSupport = false,
     this.error,
   });
 
@@ -23,6 +24,9 @@ class BacktestConfigSheetState {
 
   /// 交易市场：现货无杠杆；合约启用杠杆选择。默认合约对齐设计稿。
   final bool futures;
+
+  /// 提交前交易对支持检查中，防止重复提交。
+  final bool checkingSupport;
 
   /// 校验失败文案；null = 无错误。
   final String? error;
@@ -35,6 +39,7 @@ class BacktestConfigSheetState {
     String? fillSource,
     bool? partialData,
     bool? futures,
+    bool? checkingSupport,
     Object? error = _unset,
   }) {
     return BacktestConfigSheetState(
@@ -42,6 +47,7 @@ class BacktestConfigSheetState {
       fillSource: fillSource ?? this.fillSource,
       partialData: partialData ?? this.partialData,
       futures: futures ?? this.futures,
+      checkingSupport: checkingSupport ?? this.checkingSupport,
       error: identical(error, _unset) ? this.error : error as String?,
     );
   }

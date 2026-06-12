@@ -44,6 +44,27 @@ class BacktestRequest {
   });
 }
 
+class BacktestSymbolSupportRequest {
+  final String exchange;
+  final String marketType;
+  final String symbol;
+  final String baseTimeframe;
+
+  const BacktestSymbolSupportRequest({
+    required this.exchange,
+    required this.marketType,
+    required this.symbol,
+    required this.baseTimeframe,
+  });
+}
+
+class BacktestSymbolSupportResult {
+  final bool supported;
+  final String? reason;
+
+  const BacktestSymbolSupportResult({required this.supported, this.reason});
+}
+
 /// 单笔回测交易记录（交易记录 Tab）。
 class BacktestTrade {
   final DateTime time;

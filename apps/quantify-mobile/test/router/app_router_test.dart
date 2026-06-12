@@ -128,6 +128,11 @@ class _NoTimerOrderbookRepository implements OrderbookRepository {
 
 class _NoTimerBacktestRepository implements BacktestRepository {
   @override
+  Future<BacktestSymbolSupportResult> checkSymbolSupport(
+    BacktestSymbolSupportRequest request,
+  ) async => const BacktestSymbolSupportResult(supported: true);
+
+  @override
   Future<BacktestResult> run(BacktestRequest request) async =>
       mockBacktestResult;
 

@@ -1,8 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
+import 'package:quantify_mobile/data/models/backtest_models.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/repositories/backtest_repository.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -20,6 +26,7 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 Future<GoRouter> _pump(
   WidgetTester tester, {
   AiPublishedStrategyContext? strategyContext,
+  BacktestRepository? backtestRepository,
 }) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   final GoRouter router = GoRouter(
@@ -53,6 +60,10 @@ Future<GoRouter> _pump(
 
   await tester.pumpWidget(
     ProviderScope(
+      overrides: <Override>[
+        if (backtestRepository != null)
+          backtestRepositoryProvider.overrideWithValue(backtestRepository),
+      ],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -68,6 +79,61 @@ Future<GoRouter> _pump(
   await tester.pumpAndSettle();
   return router;
 }
+
+class _FakeBacktestRepository implements BacktestRepository {
+  _FakeBacktestRepository({
+    this.result = const BacktestSymbolSupportResult(supported: true),
+    this.error,
+    this.hold,
+  });
+
+  final BacktestSymbolSupportResult result;
+  final Object? error;
+  final Completer<BacktestSymbolSupportResult>? hold;
+  final List<BacktestSymbolSupportRequest> checks =
+      <BacktestSymbolSupportRequest>[];
+  int runs = 0;
+
+  @override
+  Future<BacktestSymbolSupportResult> checkSymbolSupport(
+    BacktestSymbolSupportRequest request,
+  ) async {
+    checks.add(request);
+    if (error != null) throw error!;
+    if (hold != null) return hold!.future;
+    return result;
+  }
+
+  @override
+  Future<BacktestResult> run(BacktestRequest request) async {
+    runs += 1;
+    return _emptyBacktestResult;
+  }
+
+  @override
+  Future<BacktestResult> getResult(String id) async => _emptyBacktestResult;
+}
+
+final BacktestResult _emptyBacktestResult = BacktestResult(
+  id: 'fake-job',
+  totalReturnPercent: 0,
+  cagrPercent: 0,
+  maxDrawdownPercent: 0,
+  sharpe: 0,
+  calmar: 0,
+  winRatePercent: 0,
+  profitLossRatio: 0,
+  avgHoldDuration: '-',
+  totalTrades: 0,
+  rangeStart: DateTime.utc(2026, 1, 1),
+  rangeEnd: DateTime.utc(2026, 1, 2),
+  equityCurve: const <double>[],
+  drawdownMarkers: const <int>[],
+  monthlyRows: const <BacktestMonthlyRow>[],
+  trades: const <BacktestTrade>[],
+  riskRows: const <BacktestRiskRow>[],
+  aiAssessment: '',
+);
 
 const AiPublishedStrategyContext _publishedContext = AiPublishedStrategyContext(
   codegenSessionId: 'session-1',
@@ -316,14 +382,110 @@ void main() {
     expect(find.text('backtest-run-args'), findsNothing);
   });
 
-  testWidgets('存在发布快照时提交 AiBacktestRunArgs 进入回测进行页', (
-    WidgetTester tester,
-  ) async {
-    await _pump(tester, strategyContext: _publishedContext);
+  testWidgets('本地校验失败时不发起 symbol support check', (WidgetTester tester) async {
+    final _FakeBacktestRepository repo = _FakeBacktestRepository();
+    await _pump(
+      tester,
+      strategyContext: _publishedContext,
+      backtestRepository: repo,
+    );
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('backtest-capital')),
+        matching: find.byType(TextField),
+      ),
+      '0',
+    );
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.checks, isEmpty);
+    expect(find.text('请输入正数初始资金'), findsOneWidget);
+  });
+
+  testWidgets('symbol support 支持时先检查再跳转运行页', (WidgetTester tester) async {
+    final _FakeBacktestRepository repo = _FakeBacktestRepository();
+    await _pump(
+      tester,
+      strategyContext: _publishedContext,
+      backtestRepository: repo,
+    );
 
     await tester.tap(find.byKey(const Key('backtest-submit')));
     await tester.pumpAndSettle();
 
+    expect(repo.checks, hasLength(1));
+    expect(repo.checks.single.exchange, 'binance');
+    expect(repo.checks.single.marketType, 'perp');
+    expect(repo.checks.single.symbol, 'BTCUSDT');
+    expect(repo.checks.single.baseTimeframe, '15m');
+    expect(find.text('backtest-run-args'), findsOneWidget);
+  });
+
+  testWidgets('symbol support 不支持时停留配置页并展示原因', (WidgetTester tester) async {
+    final _FakeBacktestRepository repo = _FakeBacktestRepository(
+      result: const BacktestSymbolSupportResult(
+        supported: false,
+        reason: 'BTCUSDT 15m 暂不支持回测',
+      ),
+    );
+    await _pump(
+      tester,
+      strategyContext: _publishedContext,
+      backtestRepository: repo,
+    );
+
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.checks, hasLength(1));
+    expect(find.text('BTCUSDT 15m 暂不支持回测'), findsOneWidget);
+    expect(find.text('backtest-run-args'), findsNothing);
+    expect(find.byKey(const Key('backtest-submit')), findsOneWidget);
+  });
+
+  testWidgets('symbol support 检查失败时不跳转并展示可理解错误', (WidgetTester tester) async {
+    final _FakeBacktestRepository repo = _FakeBacktestRepository(
+      error: StateError('network down'),
+    );
+    await _pump(
+      tester,
+      strategyContext: _publishedContext,
+      backtestRepository: repo,
+    );
+
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.checks, hasLength(1));
+    expect(find.text('回测能力检查失败，请稍后重试'), findsOneWidget);
+    expect(find.text('backtest-run-args'), findsNothing);
+    expect(find.byKey(const Key('backtest-submit')), findsOneWidget);
+  });
+
+  testWidgets('symbol support loading 期间按钮 disabled 避免重复提交', (
+    WidgetTester tester,
+  ) async {
+    final Completer<BacktestSymbolSupportResult> hold =
+        Completer<BacktestSymbolSupportResult>();
+    final _FakeBacktestRepository repo = _FakeBacktestRepository(hold: hold);
+    await _pump(
+      tester,
+      strategyContext: _publishedContext,
+      backtestRepository: repo,
+    );
+
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pump();
+
+    expect(repo.checks, hasLength(1));
+    expect(find.text('检查交易对...'), findsOneWidget);
+
+    hold.complete(const BacktestSymbolSupportResult(supported: true));
+    await tester.pumpAndSettle();
     expect(find.text('backtest-run-args'), findsOneWidget);
   });
 

@@ -9,6 +9,7 @@ class _BacktestApiHarness {
 
   final Object? result;
   Map<String, dynamic>? lastRunRequest;
+  Map<String, dynamic>? lastSupportRequest;
   final List<String> calls = <String>[];
 
   GeneratedBackendApi build() {
@@ -20,6 +21,19 @@ class _BacktestApiHarness {
             if (options.path == '/backtesting/jobs' &&
                 options.method == 'POST') {
               lastRunRequest = _serializedListToMap(options.data);
+              h.resolve(
+                Response<Object?>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: result,
+                ),
+              );
+              return;
+            }
+
+            if (options.path == '/backtesting/symbols/check' &&
+                options.method == 'POST') {
+              lastSupportRequest = _serializedListToMap(options.data);
               h.resolve(
                 Response<Object?>(
                   requestOptions: options,
@@ -215,6 +229,59 @@ void main() {
       expect(payload['requestedRangeInput'], <String, dynamic>{
         'preset': '30D',
       });
+    });
+
+    test('checkSymbolSupport 调用真实 generated symbols check contract', () async {
+      final _BacktestApiHarness harness = _BacktestApiHarness(
+        result: const <String, Object?>{'status': 'supported'},
+      );
+      final ApiBacktestRepository repo = ApiBacktestRepository(
+        harness.build(),
+        tokenSupplier: () => 'token',
+      );
+
+      final BacktestSymbolSupportResult result = await repo.checkSymbolSupport(
+        const BacktestSymbolSupportRequest(
+          exchange: 'binance',
+          marketType: 'perp',
+          symbol: 'btcusdt',
+          baseTimeframe: '15m',
+        ),
+      );
+
+      expect(result.supported, isTrue);
+      expect(harness.calls, <String>['/backtesting/symbols/check']);
+      expect(harness.lastSupportRequest, <String, dynamic>{
+        'exchange': 'binance',
+        'marketType': 'perp',
+        'symbol': 'BTCUSDT',
+        'baseTimeframe': '15m',
+      });
+    });
+
+    test('checkSymbolSupport 映射 not_supported reasonCode', () async {
+      final ApiBacktestRepository repo = ApiBacktestRepository(
+        _BacktestApiHarness(
+          result: const <String, Object?>{
+            'status': 'not_supported',
+            'reasonCode': 'symbol_not_supported',
+            'args': <String, Object?>{'symbol': 'BTCUSDT'},
+          },
+        ).build(),
+        tokenSupplier: () => 'token',
+      );
+
+      final BacktestSymbolSupportResult result = await repo.checkSymbolSupport(
+        const BacktestSymbolSupportRequest(
+          exchange: 'okx',
+          marketType: 'spot',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '1h',
+        ),
+      );
+
+      expect(result.supported, isFalse);
+      expect(result.reason, 'symbol_not_supported');
     });
 
     test('run 缺少 publishedSnapshotId 时本地拦截，不请求后端', () async {

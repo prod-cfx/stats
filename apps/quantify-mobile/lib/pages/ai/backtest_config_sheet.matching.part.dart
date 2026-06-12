@@ -362,12 +362,13 @@ class _ActionButton extends StatelessWidget {
   });
   final QzColorScheme scheme;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool accent;
 
   @override
   Widget build(BuildContext context) {
     final Color fg = accent ? scheme.accentOn : scheme.text;
+    final bool enabled = onPressed != null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -377,18 +378,20 @@ class _ActionButton extends StatelessWidget {
           height: 50,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: accent ? null : scheme.bgElev,
-            gradient: accent ? scheme.accentGrad : null,
+            color: accent && enabled ? null : scheme.bgElev,
+            gradient: accent && enabled ? scheme.accentGrad : null,
             border: accent ? null : Border.all(color: scheme.border),
             borderRadius: BorderRadius.circular(14),
-            boxShadow: accent ? <BoxShadow>[scheme.accentShadow] : null,
+            boxShadow: accent && enabled
+                ? <BoxShadow>[scheme.accentShadow]
+                : null,
           ),
           child: Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: fg,
+              color: enabled ? fg : scheme.textDim,
               fontSize: 14,
               fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
             ),

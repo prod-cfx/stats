@@ -23,6 +23,48 @@ class ApiBacktestRepository implements BacktestRepository {
 
   BacktestingApi get _backtestingApi => _api.client.getBacktestingApi();
 
+  @override
+  Future<BacktestSymbolSupportResult> checkSymbolSupport(
+    BacktestSymbolSupportRequest request,
+  ) async {
+    final response = await _backtestingApi
+        .backtestingProxyControllerCheckSymbolSupport(
+          authorization: _authorization(),
+          backtestingSymbolSupportRequestDto:
+              BacktestingSymbolSupportRequestDto(
+                (b) => b
+                  ..exchange = _symbolSupportExchange(request.exchange)
+                  ..marketType = _symbolSupportMarketType(request.marketType)
+                  ..symbol = request.symbol.trim().toUpperCase()
+                  ..baseTimeframe = _symbolSupportBaseTimeframe(
+                    request.baseTimeframe,
+                  ),
+              ),
+        );
+    final BacktestingSymbolSupportResponseDto? data = response.data;
+    if (data == null) {
+      return const BacktestSymbolSupportResult(
+        supported: false,
+        reason: '当前交易对或周期暂不支持回测',
+      );
+    }
+    switch (data.status) {
+      case BacktestingSymbolSupportResponseDtoStatusEnum.supported:
+      case BacktestingSymbolSupportResponseDtoStatusEnum.refreshedThenSupported:
+        return const BacktestSymbolSupportResult(supported: true);
+      case BacktestingSymbolSupportResponseDtoStatusEnum.notSupported:
+        return BacktestSymbolSupportResult(
+          supported: false,
+          reason: data.reasonCode ?? '当前交易对或周期暂不支持回测',
+        );
+      default:
+        return const BacktestSymbolSupportResult(
+          supported: false,
+          reason: '当前交易对或周期暂不支持回测',
+        );
+    }
+  }
+
   BacktestResult _merge(dynamic raw, {String? fallbackId}) {
     final Map<String, dynamic> envelope = asMap(raw);
     final Map<String, dynamic> m = asMap(envelope['data']);
@@ -256,6 +298,68 @@ class ApiBacktestRepository implements BacktestRepository {
         return 'perp';
       default:
         throw FormatException('unsupported backtest marketType: $raw');
+    }
+  }
+
+  BacktestingSymbolSupportRequestDtoExchangeEnum _symbolSupportExchange(
+    String raw,
+  ) {
+    switch (raw.trim().toLowerCase()) {
+      case 'binance':
+        return BacktestingSymbolSupportRequestDtoExchangeEnum.binance;
+      case 'okx':
+        return BacktestingSymbolSupportRequestDtoExchangeEnum.okx;
+      case 'hyperliquid':
+        return BacktestingSymbolSupportRequestDtoExchangeEnum.hyperliquid;
+      default:
+        throw FormatException('unsupported backtest exchange: $raw');
+    }
+  }
+
+  BacktestingSymbolSupportRequestDtoMarketTypeEnum _symbolSupportMarketType(
+    String raw,
+  ) {
+    switch (raw.trim().toLowerCase()) {
+      case 'spot':
+        return BacktestingSymbolSupportRequestDtoMarketTypeEnum.spot;
+      case 'perp':
+      case 'futures':
+      case 'future':
+        return BacktestingSymbolSupportRequestDtoMarketTypeEnum.perp;
+      default:
+        throw FormatException('unsupported backtest marketType: $raw');
+    }
+  }
+
+  BacktestingSymbolSupportRequestDtoBaseTimeframeEnum
+  _symbolSupportBaseTimeframe(String raw) {
+    switch (raw.trim()) {
+      case '1m':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n1m;
+      case '3m':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n3m;
+      case '5m':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n5m;
+      case '15m':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n15m;
+      case '30m':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n30m;
+      case '1h':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n1h;
+      case '4h':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n4h;
+      case '6h':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n6h;
+      case '8h':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n8h;
+      case '12h':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n12h;
+      case '1d':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n1d;
+      case '1w':
+        return BacktestingSymbolSupportRequestDtoBaseTimeframeEnum.n1w;
+      default:
+        throw FormatException('unsupported backtest baseTimeframe: $raw');
     }
   }
 

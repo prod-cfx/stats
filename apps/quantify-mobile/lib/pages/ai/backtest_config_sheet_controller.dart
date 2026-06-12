@@ -9,8 +9,7 @@ import 'backtest_config_sheet_state.dart';
 /// 的 6 个 `TextEditingController`，故 `_submit` 的解析逻辑仍在 widget 完成，本
 /// 控制器只承载结果（[setError]/[clearError]）与开关字段。挂 [NotifierLifecycle]
 /// 对齐范式（当前无异步回调，登记仅为统一约定）。
-class BacktestConfigSheetController
-    extends Notifier<BacktestConfigSheetState> {
+class BacktestConfigSheetController extends Notifier<BacktestConfigSheetState> {
   final NotifierLifecycle _life = NotifierLifecycle();
 
   bool get mounted => _life.mounted;
@@ -39,7 +38,11 @@ class BacktestConfigSheetController
   }
 
   void setError(String message) {
-    state = state.copyWith(error: message);
+    state = state.copyWith(error: message, checkingSupport: false);
+  }
+
+  void setCheckingSupport(bool checking) {
+    state = state.copyWith(checkingSupport: checking, error: null);
   }
 
   /// 清错误；仅在当前有错误时推进，避免无意义重建。
