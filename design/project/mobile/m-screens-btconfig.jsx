@@ -1,6 +1,6 @@
 /* ========================================================================
    SCREEN — 回测设置 (BacktestConfig)
-   独立步骤:确认策略 → 回测设置 → 回测中
+   独立步骤:回测设置 → 回测
    ======================================================================== */
 
 function ScreenBacktestConfig() {
@@ -22,11 +22,11 @@ function ScreenBacktestConfig() {
         title="回测设置"
         sub="设置如何回测这条策略"
         onBack
-        backTo="confirm"
+        backTo="ai"
       />
 
-      {/* 5-step indicator — same shape used on every step page */}
-      <BtcStepBar active={2} done={[0,1]}/>
+      {/* backtest-only step indicator */}
+      <BtcStepBar active={0} done={[]}/>
 
       <div style={{flex:1, overflowY:'auto', padding:'12px 16px 100px'}}>
         {/* recap strip — reminds user which strategy they're configuring */}
@@ -261,12 +261,12 @@ function ScreenBacktestConfig() {
         background:`linear-gradient(180deg, transparent, ${M.bg} 30%)`,
         display:'flex', gap:10,
       }}>
-        <button data-back="confirm" style={{
+        <button data-back="ai" style={{
           flex:1, height:50, borderRadius:14,
           border:`1px solid ${M.border}`, background:M.elev,
           color:M.text, fontSize:14, fontWeight:500, cursor:'pointer',
           whiteSpace:'nowrap',
-        }}>上一步</button>
+        }}>返回对话</button>
         <button data-go-btrun style={{
           flex:2, height:50, borderRadius:14, border:0,
           background:M.violetGrad, color:'#fff',
@@ -292,17 +292,12 @@ function rangeToText(r) {
   }[r] || '';
 }
 
-/* ===== 5-step indicator bar — used on confirm / btconfig / btrun / btres / dp =====
-   Tab-bar–style with mono numbers, full Chinese labels and an accent underline
-   for the active step. Done steps swap their number for a check and are tappable
-   (via data-back) so the user can jump back to any completed step. */
+/* ===== backtest-only indicator bar — 回测设置 / 回测 =====
+   Done steps swap their number for a check and are tappable (via data-back). */
 function BtcStepBar({ active, done = [] }) {
   const steps = [
-    { label: '确认策略', back: 'confirm'  },
-    { label: '策略脚本', back: 'script'   },
     { label: '回测设置', back: 'btconfig' },
     { label: '回测',     back: 'btres'    },
-    { label: '部署',     back: 'deploy'   },
   ];
   return (
     <div style={{
@@ -310,7 +305,7 @@ function BtcStepBar({ active, done = [] }) {
       padding: '0 8px',
       borderBottom: `1px solid ${M.borderSoft}`,
       display: 'grid',
-      gridTemplateColumns: 'repeat(5, 1fr)',
+      gridTemplateColumns: 'repeat(2, 1fr)',
     }}>
       {steps.map((s, i) => (
         <BtcStep key={s.label} n={i+1} label={s.label}

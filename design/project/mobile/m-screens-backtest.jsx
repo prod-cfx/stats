@@ -20,9 +20,7 @@ function BtSectTitle({ children, right }) {
 }
 
 /* === REUSED PRIMITIVES ===================================================
-   We import the unified 5-step BtcStepBar from m-screens-btconfig.jsx (loaded
-   first, exposed on window). Backtest run + result pages adopt the same step
-   bar as confirm / script / btconfig so the whole flow stays aligned. */
+   Backtest run page uses the two-step 回测设置 / 回测 bar. */
 const BtcStepBar = window.BtcStepBar;
 
 function BtTopBar({ title, sub, right }) {
@@ -31,7 +29,7 @@ function BtTopBar({ title, sub, right }) {
       title={title}
       sub={sub}
       onBack
-      backTo="confirm"
+      backTo="ai"
       right={right}
     />
   );
@@ -67,7 +65,7 @@ function ScreenBacktestRun() {
     <div style={{height:'100%', display:'flex', flexDirection:'column', background:M.bg}}>
       <MStatus/>
       <BtTopBar title="回测进行中" sub="BTC 趋势 · 双均线 · 15m"/>
-      <BtcStepBar active={3} done={[0,1,2]}/>
+      <BtcStepBar active={1} done={[0]}/>
 
       <div style={{flex:1, overflowY:'auto', padding:'12px 16px 100px'}}>
         {/* progress hero */}
@@ -153,7 +151,7 @@ function ScreenBacktestRun() {
         padding:'12px 16px 36px',
         background:`linear-gradient(180deg, transparent, ${M.bg} 30%)`,
       }}>
-        <button data-back="confirm" style={{
+        <button data-back="ai" style={{
           width:'100%', height:50, borderRadius:14,
           border:`1px solid ${M.border}`, background:M.elev,
           color:M.text, fontSize:14, fontWeight:500, cursor:'pointer',
@@ -289,8 +287,6 @@ function ScreenBacktestResult() {
           </button>
         }
       />
-      {/* still on step 4 — viewing 回测 result; advances to step 5 only when user taps 部署 */}
-      <BtcStepBar active={3} done={[0,1,2]}/>
 
       <div style={{flex:1, overflowY:'auto', padding:'12px 16px 100px'}}>
         {/* hero result */}
@@ -394,11 +390,11 @@ function ScreenBacktestResult() {
         background:`linear-gradient(180deg, transparent, ${M.bg} 30%)`,
         display:'flex', gap:10,
       }}>
-        <button data-back="btconfig" style={{
+        <button data-back="ai" style={{
           flex:1, height:50, borderRadius:14,
           border:`1px solid ${M.border}`, background:M.elev,
           color:M.text, fontSize:14, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap',
-        }}>上一步</button>
+        }}>返回对话</button>
         <button data-go-deploy style={{
           flex:2, height:50, borderRadius:14, border:0,
           background:M.violetGrad, color:'#fff',

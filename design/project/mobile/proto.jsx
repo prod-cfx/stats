@@ -277,10 +277,14 @@ function App() {
     if (e.target.closest('[data-action="guest-cta"]')) { setSheet('login'); return; }
     // 登录 button inside login sheet → close sheet, jump to AI tab
     if (sheet === 'login' && (txt === '登录' || txt.includes('Telegram'))) { setSheet(null); setScreen('ai'); return; }
-    // confirm strategy → script generation (next step)
-    if (screen === 'confirm' && e.target.closest('[data-go-script]')) { setScreen('script'); return; }
+    // /ai/confirm bottom CTA: only here do we confirm generation, then return to chat.
+    if (screen === 'confirm' && e.target.closest('[data-confirm-generate]')) {
+      window.__qfConfirmGenerate = true;
+      setScreen('ai');
+      return;
+    }
     // script generated → backtest config
-    if (screen === 'script' && e.target.closest('[data-go-btconfig]')) { setScreen('btconfig'); return; }
+    if ((screen === 'script' || screen === 'ai') && e.target.closest('[data-go-btconfig]')) { setScreen('btconfig'); return; }
     // backtest config → start running
     if (screen === 'btconfig' && e.target.closest('[data-go-btrun]')) { setScreen('btrun'); return; }
     // 一键部署到交易所 from backtest result

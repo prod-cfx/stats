@@ -21,13 +21,6 @@ const DP_EXCHANGES = [
     authorized:false, liq:null,         perms:'未授权',           tag:'链上' },
 ];
 
-/* The unified 5-step BtcStepBar is defined in m-screens-btconfig.jsx (loaded
-   first, exposed on window). Deploy uses it at active=4 done=[0,1,2,3] so the
-   global progress stays visible across the whole 5-step flow. The internal
-   deploy sub-stage (confirm / deploying / success) is conveyed by page content
-   — no separate sub-stepper needed. */
-const BtcStepBar = window.BtcStepBar;
-
 function ScreenDeploy({ initialStage = 'confirm' } = {}) {
   const [stage, setStage]   = React.useState(
     /* migrate the old 'select'/'allocate' canvas keys to the new 'confirm' */
@@ -47,7 +40,7 @@ function ScreenDeploy({ initialStage = 'confirm' } = {}) {
         title="部署策略"
         sub="BTC 趋势 · 双均线 · 15m"
         onBack={stage === 'confirm'}
-        backTo="btres"
+        backTo="ai"
         right={stage !== 'deploying' && stage !== 'success' && (
           <button data-back="ai" style={{
             height:30, padding:'0 12px', borderRadius:8,
@@ -56,10 +49,6 @@ function ScreenDeploy({ initialStage = 'confirm' } = {}) {
           }}>取消</button>
         )}
       />
-
-      {/* unified 5-step indicator — same shape used on confirm / script /
-          btconfig / btrun / btres. Deploy is always step 5 (active=4). */}
-      <BtcStepBar active={4} done={[0,1,2,3]}/>
 
       {stage === 'confirm'   && <DpConfirm ex={ex}
         amount={amount} perTrade={perTrade} maxDailyLoss={maxDailyLoss}
@@ -420,11 +409,11 @@ function DpConfirm({ ex, amount, perTrade, maxDailyLoss, onDeploy }) {
             fontFamily:'inherit', whiteSpace:'nowrap',
           }}>{demoFail ? '演示态:失败 ↺' : '演示态:通过 ↺'}</button>
 
-        <button data-back="btres" style={{
+        <button data-back="ai" style={{
           flex:1, height:50, borderRadius:14,
           border:`1px solid ${M.border}`, background:M.elev,
           color:M.text, fontSize:14, fontWeight:500, cursor:'pointer',
-        }}>返回</button>
+        }}>返回对话</button>
         <button
           onClick={demoFail ? undefined : onDeploy}
           disabled={demoFail}
@@ -449,7 +438,7 @@ function DpConfirm({ ex, amount, perTrade, maxDailyLoss, onDeploy }) {
           ) : (
             <React.Fragment>
               <Ico d={ICONS.shield} w={15} sw={1.8} stroke="#fff"/>
-              确认无误,立即部署
+              确认部署
             </React.Fragment>
           )}
         </button>
@@ -809,7 +798,7 @@ function DpSelect({ ex, onPick, onNext }) {
       </div>
 
       <DpBottomBar>
-        <button data-back="btres" style={dpSecondaryBtn}>返回</button>
+        <button data-back="ai" style={dpSecondaryBtn}>返回对话</button>
         <button onClick={onNext} style={dpPrimaryBtn}>
           继续
           <Ico d={ICONS.caretR} w={13} sw={2.4}/>
@@ -984,7 +973,7 @@ function DpAllocate({ ex, amount, setAmount, perTrade, setPerTrade,
       </div>
 
       <DpBottomBar>
-        <button onClick={onBack} style={dpSecondaryBtn}>上一步</button>
+        <button onClick={onBack} style={dpSecondaryBtn}>返回对话</button>
         <button onClick={onDeploy} style={dpPrimaryBtn}>
           <Ico d={ICONS.play} w={13} fill="#fff" sw={0}/>
           确认部署

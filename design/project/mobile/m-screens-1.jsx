@@ -253,22 +253,19 @@ if (!window.__qfChatSessions) {
         ],
       },
       {
-        id: 's5', title: 'AVAX 突破 · 待部署', pair:'AVAX/USDT', timeframe:'1H',
+        id: 's5', title: 'AVAX 突破 · 待确认', pair:'AVAX/USDT', timeframe:'1H',
         category:'突破', updatedAt:'12 分钟前',
-        backtest: { cagr:'+22.4%', sharpe:'1.51', mdd:'-9.8%' },
-        wipStep: 'deploy',  // workflow position: confirm | btconfig | btres | deploy
+        backtest: null,
+        status: 'CONFIRM_GATE',
         messages: [
           QF_GREETING,
           { who:'user', kind:'text', text:'AVAX 1 小时,突破前 20 根 K 线高点开多,跌破 ATR 止损。' },
           { who:'bot',  kind:'text', text:<>已识别为 <strong>突破跟踪</strong>。建议加上「成交量过滤」减少假突破。</> },
           { who:'bot',  kind:'params' },
-          { who:'user', kind:'text', text:'开始回测' },
-          { who:'bot',  kind:'result' },
-          { who:'bot',  kind:'wip' },
         ],
       },
     ],
-    currentId: 's1',
+    currentId: 's5',
   };
 }
 
@@ -295,6 +292,38 @@ function ScreenAIChat() {
       ? { ...s, messages: typeof updater === 'function' ? updater(s.messages) : updater, updatedAt: '刚刚' }
       : s));
   };
+
+  React.useEffect(() => {
+    if (!window.__qfConfirmGenerate) return;
+    window.__qfConfirmGenerate = false;
+    setSessions(prev => prev.map(s => {
+      if (s.id !== currentId) return s;
+      const already = s.messages.some(m => m.kind === 'script' || m.kind === 'script_generating');
+      if (already) return s;
+      return {
+        ...s,
+        status: 'SCRIPT_GENERATING',
+        wipStep: 'btconfig',
+        updatedAt: '刚刚',
+        messages: [...s.messages, { who:'bot', kind:'script_generating' }],
+      };
+    }));
+    const t = setTimeout(() => {
+      setSessions(prev => prev.map(s => {
+        if (s.id !== currentId) return s;
+        return {
+          ...s,
+          status: 'SCRIPT_READY',
+          wipStep: 'btconfig',
+          updatedAt: '刚刚',
+          messages: s.messages.map(m => m.kind === 'script_generating'
+            ? { who:'bot', kind:'script' }
+            : m),
+        };
+      }));
+    }, 1100);
+    return () => clearTimeout(t);
+  }, [currentId]);
 
   React.useEffect(() => {
     const el = scrollRef.current;
@@ -355,7 +384,24 @@ function ScreenAIChat() {
     });
   };
 
-  const quick = ['再跑一次回测', '把止损改成 1.5%', '换成 ETH 看看', '部署到 Binance'];
+  const quick = ['逻辑图', '回测结果', '部署'];
+  const openQuick = (q, e) => {
+    e.stopPropagation();
+    if (q === '逻辑图') {
+      window.__nav?.go('confirm');
+      return;
+    }
+    if (q === '回测结果') {
+      window.__nav?.go('btres');
+      return;
+    }
+    if (q === '部署') {
+      window.__nav?.go('deploy');
+      return;
+    }
+    setDraft(q);
+    inputRef.current?.focus();
+  };
   const stop = (e) => e.stopPropagation();
 
   return (
@@ -380,7 +426,15 @@ function ScreenAIChat() {
           </button>
         }
         right={
-          <div style={{display:'flex', gap:6}}>
+          <div style={{display:'flex', gap:8, alignItems:'center'}}>
+            <button onClick={(e)=>{stop(e); window.__nav?.go('btconfig');}} style={{
+              height:32, minWidth:58, padding:'0 14px', borderRadius:12,
+              background:M.violetSoft, color:M.violet, border:0, cursor:'pointer',
+              fontSize:13, fontWeight:700, letterSpacing:-0.1,
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}>
+              回测
+            </button>
             <button onClick={(e)=>{stop(e); newSession();}} style={{
               width:32, height:32, borderRadius:999, background:M.soft, color:M.text,
               border:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
@@ -402,10 +456,14 @@ function ScreenAIChat() {
           }
           if (m.kind === 'params') {
             const locked = !!current.deployedTo;
+            const canViewLogic = current.status === 'CONFIRM_GATE' || !!current.wipStep || !!current.backtest;
             return (
               <Bubble key={i}>
                 {locked && <LockedBanner/>}
-                已为你识别为 <Chip tone="violet" style={{margin:'0 2px'}}>趋势跟踪</Chip> 类策略。建议参数:
+                <div style={{marginBottom:10, lineHeight:1.65}}>
+                  我整理出的策略逻辑如下：<br/>
+                  已为你识别为 <Chip tone="violet" style={{margin:'0 2px'}}>趋势跟踪</Chip> 类策略。请确认是否按这个逻辑生成脚本。
+                </div>
                 <div style={{
                   marginTop:10, padding:'10px 12px', borderRadius:10, background:M.soft,
                   fontFamily:M.mono, fontSize:12, lineHeight:1.7, color:M.text,
@@ -415,20 +473,19 @@ function ScreenAIChat() {
                   <div><span style={{color:M.dim}}>stop_loss</span> = 2.0%</div>
                   <div><span style={{color:M.dim}}>position</span> = 100%</div>
                 </div>
-                {!locked && (
+                {!locked && canViewLogic && (
                   <>
-                    <div style={{marginTop:10, marginBottom:10}}>需要我开始回测吗?</div>
                     <button
-                      data-go-confirm
+                      data-go-logic
                       onClick={(e)=>{stop(e); window.__nav?.go('confirm');}}
                       style={{
+                        marginTop:10,
                         width:'100%', height:36, borderRadius:10, border:0,
                         background:M.violetGrad, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
                         boxShadow:'0 4px 14px rgba(124,92,255,0.28)',
                         display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                       }}>
-                      确认策略
-                      <Ico d={ICONS.caretR} w={13} sw={2}/>
+                      查看逻辑图
                     </button>
                   </>
                 )}
@@ -476,6 +533,75 @@ function ScreenAIChat() {
                     display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                   }}>
                   查看实盘策略
+                  <Ico d={ICONS.caretR} w={13} sw={2}/>
+                </button>
+              </Bubble>
+            );
+          }
+          if (m.kind === 'script_generating') {
+            return (
+              <Bubble key={i}>
+                <div style={{display:'flex', gap:10, alignItems:'center', marginBottom:10}}>
+                  <div style={{
+                    width:36, height:36, borderRadius:18,
+                    border:`3px solid ${M.violetSoft}`, borderTopColor:M.violet,
+                    animation:'qfScriptSpin 0.9s linear infinite', flexShrink:0,
+                  }}/>
+                  <div>
+                    <div style={{fontSize:14, fontWeight:700, color:M.text}}>正在生成策略脚本</div>
+                    <div style={{fontSize:11, color:M.dim, fontFamily:M.mono, marginTop:3}}>
+                      确认参数 · 生成代码 · 注入风控
+                    </div>
+                  </div>
+                </div>
+                <style>{`@keyframes qfScriptSpin { to { transform: rotate(360deg); } }`}</style>
+              </Bubble>
+            );
+          }
+          if (m.kind === 'script') {
+            return (
+              <Bubble key={i}>
+                <div style={{
+                  padding:'12px 14px', borderRadius:10, background:'rgba(22,163,107,0.08)',
+                  border:'1px solid rgba(22,163,107,0.20)', marginBottom:12,
+                  display:'flex', gap:10, alignItems:'flex-start',
+                }}>
+                  <div style={{
+                    width:30, height:30, borderRadius:8, background:M.ok, color:'#fff',
+                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                  }}>
+                    <Ico d={ICONS.check} w={16} sw={2.4}/>
+                  </div>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontSize:13, fontWeight:700, color:M.ok, marginBottom:2}}>
+                      策略脚本已生成
+                    </div>
+                    <div style={{fontSize:11, color:M.text, opacity:0.72, lineHeight:1.55}}>
+                      已按确认策略生成 Pine Script,并注入止损、仓位和执行保护。
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  borderRadius:10, background:'#0F0B22', color:'#D8D3F7',
+                  padding:'10px 12px', fontFamily:M.mono, fontSize:10.5,
+                  lineHeight:1.7, overflow:'hidden', marginBottom:12,
+                }}>
+                  <div style={{color:'#A78BFA'}}>strategy("AVAX Breakout", overlay=true)</div>
+                  <div>entry = close &gt; ta.highest(high, 20)[1]</div>
+                  <div>stop = close - ta.atr(14) * 1.8</div>
+                  <div>if entry</div>
+                  <div>&nbsp;&nbsp;strategy.entry("LONG", strategy.long)</div>
+                </div>
+                <button
+                  data-go-btconfig
+                  onClick={(e)=>{stop(e); window.__nav?.go('btconfig');}}
+                  style={{
+                    width:'100%', height:38, borderRadius:10, border:0,
+                    background:M.violetGrad, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
+                    boxShadow:'0 4px 14px rgba(124,92,255,0.28)',
+                    display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                  }}>
+                  开始回测
                   <Ico d={ICONS.caretR} w={13} sw={2}/>
                 </button>
               </Bubble>
@@ -569,14 +695,14 @@ function ScreenAIChat() {
       <div style={{padding:'8px 16px 88px', background:M.bg, borderTop:`1px solid ${M.borderSoft}`}}>
         {/* quick replies */}
         <div style={{
-          display:'flex', gap:6, overflowX:'auto', padding:'6px 0 8px', margin:'0 -16px 0',
+          display:'flex', gap:10, overflowX:'auto', padding:'4px 0 14px', margin:'0 -16px 0',
           paddingLeft:16, paddingRight:16,
         }}>
           {quick.map(q => (
             <button key={q}
-              onClick={(e)=>{ e.stopPropagation(); setDraft(q); inputRef.current?.focus(); }}
+              onClick={(e)=>openQuick(q, e)}
               style={{
-                flexShrink:0, height:28, padding:'0 12px', borderRadius:999,
+                flexShrink:0, height:32, padding:'0 12px', borderRadius:16,
                 background:M.violetSoft, color:M.violet, border:0,
                 fontSize:12, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap',
               }}>{q}</button>

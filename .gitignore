@@ -72,6 +72,8 @@ apps/quantify/generated/
 
 /release/
 .omx/
+.od-skills/
+design/project/.od-skills/
 .claude/worktrees/
 .worktrees/
 .claude/scheduled_tasks.lock

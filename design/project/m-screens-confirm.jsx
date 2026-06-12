@@ -838,7 +838,7 @@ function ScreenStratScript() {
             cursor: confirmed ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
           }}>
-          下一步:回测设置
+          开始回测
           <Ico d={ICONS.caretR} w={13} sw={2.4} />
         </button>
       </div>

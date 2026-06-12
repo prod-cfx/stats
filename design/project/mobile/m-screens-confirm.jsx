@@ -243,9 +243,6 @@ function ScreenStratConfirm() {
         }
       />
 
-      {/* steps indicator (5 steps) */}
-      <BtcStepBar active={0} done={[]}/>
-
       <div style={{flex:1, overflowY:'auto', padding:'12px 16px 100px'}}>
         {/* hero — strategy identity */}
         <Card p="16px" style={{marginBottom:14}}>
@@ -346,7 +343,7 @@ function ScreenStratConfirm() {
           color:M.text, fontSize:14, fontWeight:500, cursor:'pointer',
         }}>返回对话</button>
         <button
-          data-go-script="true"
+          data-confirm-generate="true"
           style={{
             flex:2, height:50, borderRadius:14, border:0,
             background: M.violetGrad,
@@ -356,8 +353,7 @@ function ScreenStratConfirm() {
             cursor: 'pointer',
             display:'flex', alignItems:'center', justifyContent:'center', gap:6,
           }}>
-          下一步:策略脚本
-          <Ico d={ICONS.caretR} w={13} sw={2.4}/>
+          确认策略
         </button>
       </div>
     </div>
@@ -729,17 +725,15 @@ function ScreenStratScript() {
       <MTopBar
         title="策略脚本"
         sub="生成可执行脚本,推送回测引擎"
-        onBack backTo="confirm"
+        onBack backTo="ai"
         right={
-          <button data-back="confirm" style={{
+          <button data-back="ai" style={{
             height:30, padding:'0 12px', borderRadius:8,
             border:`1px solid ${M.border}`, background:M.elev,
             color:M.mid, fontSize:12, fontWeight:500, cursor:'pointer',
           }}>取消</button>
         }
       />
-      <BtcStepBar active={1} done={[0]}/>
-
       <div style={{flex:1, overflowY:'auto', padding:'12px 16px 100px'}}>
         {/* recap of which strategy this is for */}
         <Card p="14px 16px" style={{marginBottom:14}}>
@@ -821,7 +815,7 @@ function ScreenStratScript() {
         background: `linear-gradient(180deg, transparent, ${M.bg} 30%)`,
         display:'flex', gap:10,
       }}>
-        <button data-back="confirm" style={{
+        <button data-back="ai" style={{
           flex:1, height:50, borderRadius:14,
           border:`1px solid ${M.border}`, background:M.elev,
           color:M.text, fontSize:14, fontWeight:500, cursor:'pointer',
@@ -838,7 +832,7 @@ function ScreenStratScript() {
             cursor: confirmed ? 'pointer' : 'not-allowed',
             display:'flex', alignItems:'center', justifyContent:'center', gap:6,
           }}>
-          下一步:回测设置
+          开始回测
           <Ico d={ICONS.caretR} w={13} sw={2.4}/>
         </button>
       </div>
