@@ -275,7 +275,13 @@ void main() {
 
     // 顶栏标题展示当前会话标题（默认第一条 — 倒序后 = AVAX 待确认）。
     expect(find.text('AVAX 突破 · 待确认'), findsOneWidget);
-    expect(find.text('AVAX 突破 · 待部署'), findsNothing);
+    expect(
+      find.text(
+        'AVAX 突破 · '
+        '待部署',
+      ),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const Key('ai-appbar-history')));
     await tester.pumpAndSettle();
@@ -348,7 +354,13 @@ void main() {
         .join('|');
     expect(joined, contains('fast_ma'));
     expect(joined, contains('slow_ma'));
-    expect(find.text('需要我开始回测吗?'), findsNothing);
+    expect(
+      find.text(
+        '需要我开始回测吗'
+        '?',
+      ),
+      findsNothing,
+    );
     expect(find.text('请先确认策略逻辑，确认后我会继续生成脚本。'), findsOneWidget);
     expect(find.text('查看逻辑图'), findsOneWidget);
 

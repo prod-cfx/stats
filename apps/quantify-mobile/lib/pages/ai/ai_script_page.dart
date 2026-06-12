@@ -9,7 +9,6 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
-import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 import 'ai_script_page_controller.dart';
@@ -183,20 +182,6 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
         top: false,
         child: Column(
           children: <Widget>[
-            QzStepBar(
-              steps: <String>[
-                l10n.aiStepConfirm,
-                l10n.aiStepScript,
-                l10n.aiStepBacktestConfig,
-                l10n.aiStepBacktest,
-                l10n.aiStepDeploy,
-              ],
-              active: 1,
-              done: const <int>[0],
-              onStepTap: (int i) {
-                if (i == 0) context.pop();
-              },
-            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -242,7 +227,7 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
               ready: ready && _canBacktest,
               prevLabel: l10n.aiScriptPrev,
               nextLabel: l10n.aiScriptNext,
-              onPrev: () => context.pop(),
+              onPrev: () => context.go('/ai'),
               onNext: _next,
             ),
           ],

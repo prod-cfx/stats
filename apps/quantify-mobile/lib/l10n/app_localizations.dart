@@ -3921,7 +3921,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiConfirmNextScript.
   ///
   /// In zh, this message translates to:
-  /// **'下一步：策略脚本'**
+  /// **'确认策略'**
   String get aiConfirmNextScript;
 
   /// No description provided for @aiStartBacktestPrompt.
@@ -7125,7 +7125,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiScriptPrev.
   ///
   /// In zh, this message translates to:
-  /// **'上一步'**
+  /// **'返回对话'**
   String get aiScriptPrev;
 
   /// No description provided for @aiScriptNext.

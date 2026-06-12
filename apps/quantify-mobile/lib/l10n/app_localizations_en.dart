@@ -2056,7 +2056,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConfirmBackToChat => 'Back to chat';
 
   @override
-  String get aiConfirmNextScript => 'Next: Strategy Script';
+  String get aiConfirmNextScript => 'Confirm strategy';
 
   @override
   String get aiStartBacktestPrompt =>
@@ -3748,7 +3748,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Script generated and risk control injected. You can continue to backtest setup.';
 
   @override
-  String get aiScriptPrev => 'Back';
+  String get aiScriptPrev => 'Back to chat';
 
   @override
   String get aiScriptNext => 'Next: Backtest Setup';

@@ -2001,7 +2001,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConfirmBackToChat => '返回对话';
 
   @override
-  String get aiConfirmNextScript => '下一步：策略脚本';
+  String get aiConfirmNextScript => '确认策略';
 
   @override
   String get aiStartBacktestPrompt => '请先确认策略逻辑，确认后我会继续生成脚本。';
@@ -3672,7 +3672,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiScriptSuccessHint => '脚本已生成、风控已注入，可继续下一步配置回测。';
 
   @override
-  String get aiScriptPrev => '上一步';
+  String get aiScriptPrev => '返回对话';
 
   @override
   String get aiScriptNext => '下一步：回测设置';

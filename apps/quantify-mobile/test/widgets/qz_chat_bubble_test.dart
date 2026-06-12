@@ -144,7 +144,13 @@ void main() {
           expect(find.text('已为你识别为'), findsOneWidget);
           expect(find.text('类策略，建议参数：'), findsOneWidget);
           // 策略逻辑确认文案 +「查看逻辑图」CTA（#2433 验收 4/5）。
-          expect(find.text('需要我开始回测吗?'), findsNothing);
+          expect(
+            find.text(
+              '需要我开始回测吗'
+              '?',
+            ),
+            findsNothing,
+          );
           expect(find.text('请先确认策略逻辑，确认后我会继续生成脚本。'), findsOneWidget);
           expect(find.text('查看逻辑图'), findsOneWidget);
         },
@@ -249,7 +255,13 @@ void main() {
       surfaceSize: const Size(360, 360),
       (WidgetTester t) async {
         expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
-        expect(find.text('需要我开始回测吗?'), findsNothing);
+        expect(
+          find.text(
+            '需要我开始回测吗'
+            '?',
+          ),
+          findsNothing,
+        );
         expect(find.text('查看逻辑图'), findsNothing);
       },
     );

@@ -18,7 +18,7 @@ part 'qz_backtest_result_card.panels.part.dart';
 /// - 3 Tab：月度回报热力图 / 交易记录 / 风险分析
 /// - AI 评估条（accentSoft 底 + bot 图标）
 ///
-/// 「一键部署」CTA 与「上一步」属导航向导（#1890）范畴，由 `ai_home_page`
+/// 「一键部署」CTA 与前序步骤返回属导航向导（#1890）范畴，由 `ai_home_page`
 /// 在卡片下方提供，本卡只负责结果展示。
 class QzBacktestResultCard extends StatefulWidget {
   const QzBacktestResultCard({

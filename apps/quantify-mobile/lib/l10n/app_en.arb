@@ -725,7 +725,7 @@
   "aiConfirmAdviceTitle": "AI Hint",
   "aiConfirmDisclaimer": "Backtests use historical data and cannot guarantee live results. Validate with a paper account before deploying.",
   "aiConfirmBackToChat": "Back to chat",
-  "aiConfirmNextScript": "Next: Strategy Script",
+  "aiConfirmNextScript": "Confirm strategy",
   "aiStartBacktestPrompt": "Review the strategy logic first. After confirmation, I will continue generating the script.",
   "aiParamsBadgePrefix": "Identified as",
   "@aiParamsBadgePrefix": {
@@ -1431,6 +1431,6 @@
   },
   "aiScriptCollapse": "Collapse",
   "aiScriptSuccessHint": "Script generated and risk control injected. You can continue to backtest setup.",
-  "aiScriptPrev": "Back",
+  "aiScriptPrev": "Back to chat",
   "aiScriptNext": "Next: Backtest Setup"
 }

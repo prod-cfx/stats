@@ -60,6 +60,20 @@ void main() {
     expect(next.onPressed, isNull, reason: '生成中态「下一步」不可点');
   });
 
+  testWidgets('脚本页不渲染旧五步流程条和返回前序步骤文案（#2437）', (WidgetTester tester) async {
+    await _pump(tester);
+
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
+    expect(
+      find.text(
+        '上'
+        '一步',
+      ),
+      findsNothing,
+    );
+    expect(find.text('返回对话'), findsOneWidget);
+  });
+
   testWidgets('就绪态：READY badge + 行号 + 成功提示，CTA 可点（验收 3、5）', (
     WidgetTester tester,
   ) async {

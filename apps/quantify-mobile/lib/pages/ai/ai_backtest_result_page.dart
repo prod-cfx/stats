@@ -11,7 +11,6 @@ import '../../theme/tokens.dart';
 import 'ai_error_text.dart';
 import 'widgets/qz_backtest_result_card.dart';
 import '../../widgets/qz_button.dart';
-import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 
@@ -47,14 +46,6 @@ class AiBacktestResultPage extends ConsumerWidget {
         top: false,
         child: Column(
           children: <Widget>[
-            QzStepBar(
-              steps: <String>[
-                l10n.aiStepBacktestConfig,
-                l10n.aiStepBacktest,
-              ],
-              active: 1,
-              done: const <int>[0],
-            ),
             Expanded(
               child: providedResult != null
                   ? _BacktestResultBody(

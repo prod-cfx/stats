@@ -283,7 +283,7 @@ class QzChatBubble extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // 「需要我开始回测吗?」+「确认策略」CTA（设计稿 m-screens-1.jsx:417-433）。
+                  // 旧确认回测提问 +「确认策略」CTA（设计稿 m-screens-1.jsx:417-433）。
                   // 仅 onConfirm 注入时渲染按钮，confirm 屏（#1832）未就绪前指向占位入口。
                   // locked（#1834）时隐藏 CTA——已部署方案参数不可再改。
                   if (onConfirm != null && !locked) ...<Widget>[

@@ -10,7 +10,6 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import 'ai_error_text.dart';
 import 'widgets/qz_backtest_progress_card.dart';
-import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 
@@ -138,14 +137,6 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
         top: false,
         child: Column(
           children: <Widget>[
-            QzStepBar(
-              steps: <String>[
-                l10n.aiStepBacktestConfig,
-                l10n.aiStepBacktest,
-              ],
-              active: 1,
-              done: const <int>[0],
-            ),
             Expanded(
               child: Stack(
                 children: <Widget>[

@@ -15,7 +15,7 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 /// - 顶部 recap / 历史区间 / 初始资金 / 交易市场按设计稿顺序渲染
 /// - 交易市场 现货/合约 segmented + 杠杆数字输入，20x+ 高杠杆告警 (#1893)
 /// - 「本次回测设定」summary 卡 5 行回显 (#1893)
-/// - 整屏向导页视觉：顶部 QzTopBar + 统一 5 步 StepBar
+/// - 整屏配置页视觉：顶部 QzTopBar；不保留旧五步 StepBar
 /// - footer 贴底（不在滚动内）：滚动后「开始回测」依然可见
 Future<GoRouter> _pump(
   WidgetTester tester, {
@@ -250,30 +250,15 @@ void main() {
     }
   });
 
-  testWidgets('整屏向导页顶部：回测设置 + 回测两步条', (WidgetTester tester) async {
+  testWidgets('整屏配置页顶部不渲染旧流程条（#2437）', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.text('回测设置'), findsWidgets);
     expect(find.text('设置如何回测这条策略'), findsOneWidget);
-    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
-    for (final String step in <String>['回测设置', '回测']) {
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('qz-step-bar')),
-          matching: find.text(step),
-        ),
-        findsOneWidget,
-      );
-    }
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     for (final String oldStep in <String>['确认策略', '策略脚本', '部署']) {
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('qz-step-bar')),
-          matching: find.text(oldStep),
-        ),
-        findsNothing,
-      );
+      expect(find.text(oldStep), findsNothing);
     }
-    expect(find.text('01'), findsOneWidget);
+    expect(find.text('01'), findsNothing);
     expect(find.byKey(const Key('backtest-sheet-scrim')), findsNothing);
     expect(find.text('回测参数'), findsNothing);
   });
@@ -300,7 +285,13 @@ void main() {
     await _pump(tester);
     expect(find.text('返回对话'), findsOneWidget);
     expect(find.text('开始回测'), findsOneWidget);
-    expect(find.text('上一步'), findsNothing);
+    expect(
+      find.text(
+        '上'
+        '一步',
+      ),
+      findsNothing,
+    );
     expect(find.text('收起'), findsNothing);
     expect(find.text('确认并开始回测'), findsNothing);
   });

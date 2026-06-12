@@ -36,6 +36,8 @@ import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
 import 'package:quantify_mobile/pages/auth/login_sheet.dart';
 import 'package:quantify_mobile/pages/market/data_hub_page.dart';
+import 'package:quantify_mobile/pages/market/market_home_controller.dart';
+import 'package:quantify_mobile/pages/market/market_home_state.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/data_hub_header.dart';
 import 'package:quantify_mobile/pages/live/live_strategies_page.dart';
@@ -133,6 +135,15 @@ class _NoTimerBacktestRepository implements BacktestRepository {
   Future<BacktestResult> getResult(String id) async => mockBacktestResult;
 }
 
+/// MarketHomeController 自身在 `build()` 内启 10s periodic refresh。路由测试只
+/// 验证 tab/route 落点，数据用 `_NoTimerTickerRepository` 固定返回；覆盖 controller
+/// 避免未由 `UncontrolledProviderScope` 接管的 ProviderContainer 在测试结束时残留计时器。
+class _NoTimerMarketHomeController extends MarketHomeController {
+  @override
+  MarketHomeState build() =>
+      const MarketHomeState(tickers: <Ticker>[_NoTimerTickerRepository._btc]);
+}
+
 const DeploymentContext _deployContext = DeploymentContext(
   sessionId: 'sess-router-2436',
   publishedSnapshotId: 'snap-router-2436',
@@ -180,6 +191,9 @@ Future<BuildContext> _pumpApp(
       ),
       backtestRepositoryProvider.overrideWithValue(
         _NoTimerBacktestRepository(),
+      ),
+      marketHomeControllerProvider.overrideWith(
+        _NoTimerMarketHomeController.new,
       ),
       // `/me` 落地 MeHomePage 会 watch account/apiKeys/liveStrategySummary，
       // 其 mock repo 各启 200ms `Future.delayed` 计时器；widget dispose 时
@@ -399,7 +413,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(BacktestConfigSheet), findsOneWidget);
-    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(find.text('回测设置'), findsWidgets);
   });
 
@@ -412,27 +426,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.byType(AiBacktestRunPage), findsOneWidget);
-    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(find.text('回测进行中'), findsWidgets);
-    for (final String step in <String>['回测设置', '回测']) {
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('qz-step-bar')),
-          matching: find.text(step),
-        ),
-        findsOneWidget,
-      );
-    }
-    for (final String oldStep in <String>['确认策略', '策略脚本', '部署']) {
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('qz-step-bar')),
-          matching: find.text(oldStep),
-        ),
-        findsNothing,
-      );
-    }
-    expect(find.text('02'), findsOneWidget);
+    expect(find.text('确认策略'), findsNothing);
+    expect(find.text('策略脚本'), findsNothing);
+    expect(find.text('02'), findsNothing);
   });
 
   testWidgets('/ai/backtest-result resolves to AiBacktestResultPage', (
@@ -443,27 +441,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AiBacktestResultPage), findsOneWidget);
-    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(find.text('回测结果'), findsOneWidget);
-    for (final String step in <String>['回测设置', '回测']) {
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('qz-step-bar')),
-          matching: find.text(step),
-        ),
-        findsOneWidget,
-      );
-    }
     for (final String oldStep in <String>['确认策略', '策略脚本', '部署']) {
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('qz-step-bar')),
-          matching: find.text(oldStep),
-        ),
-        findsNothing,
-      );
+      expect(find.text(oldStep), findsNothing);
     }
-    expect(find.text('02'), findsOneWidget);
+    expect(find.text('02'), findsNothing);
     expect(find.text('返回对话'), findsOneWidget);
 
     await tester.tap(find.text('返回对话'));
@@ -520,7 +503,7 @@ void main() {
     expect(find.byType(AiConfirmPage), findsOneWidget);
     // #1891 内容对齐：Hero / 策略逻辑 RuleBlock / EXECUTE / 免责声明 / 双按钮
     // 均渲染（脚本预览块已下沉到 `/ai/script`，本屏不再有 copy-script）。
-    expect(find.text('确认策略'), findsWidgets);
+    expect(find.text('查看逻辑图'), findsWidgets);
     expect(find.byKey(const Key('ai-confirm-hero')), findsOneWidget);
     expect(find.byKey(const Key('ai-confirm-rule-0')), findsOneWidget);
     // 底部双按钮在 sticky bar（始终在屏）。

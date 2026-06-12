@@ -16,7 +16,6 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_card.dart';
-import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 import 'ai_confirm_chat_handoff.dart';
@@ -32,10 +31,6 @@ part 'ai_confirm_page.bottombar.part.dart';
 ///   - EXECUTE 块：交易所/标的/周期/仓位/市场 mono chips + 风控告警条
 ///   - AI 提示框（紫底 + bot icon）+ 免责声明条（shield）
 ///   - 底部双按钮「返回对话」/「确认策略」，顶栏右侧「取消」
-///
-/// 流程条（#2130）：顶栏下方展示设计稿统一 [QzStepBar]，对齐
-/// `m-screens-confirm.jsx` 的 `<BtcStepBar active={0} done={[]}/>`——确认页为
-/// 第 1 步 active、done 为空。确认成功后回到 `/ai`，脚本生成态由对话气泡承载。
 ///
 /// 入参：当前会话参数经 `extra` 透传（`Map<String, String>`）。缺省时回退
 /// [_fallbackParams]，保证深链 / widget test 直接打开不崩。
@@ -386,16 +381,6 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
         top: false,
         child: Column(
           children: <Widget>[
-            QzStepBar(
-              steps: <String>[
-                l10n.aiStepConfirm,
-                l10n.aiStepScript,
-                l10n.aiStepBacktestConfig,
-                l10n.aiStepBacktest,
-                l10n.aiStepDeploy,
-              ],
-              active: 0,
-            ),
             // 滚动区 + sticky 渐变操作区叠放（对齐设计稿 `position:absolute`）。
             Expanded(
               child: Stack(
@@ -450,7 +435,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
                       backLabel: l10n.aiConfirmBackToChat,
                       nextLabel: _confirming
                           ? '确认中...'
-                          : l10n.aiConfirmNextScript,
+                          : l10n.aiConfirmStrategy,
                       onBack: () => _backToChat(context),
                       onNext: () => _next(context),
                     ),

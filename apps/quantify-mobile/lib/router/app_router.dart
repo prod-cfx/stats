@@ -180,7 +180,7 @@ GoRouter buildRouter({
           );
         },
       ),
-      // 策略脚本屏（#1892）：确认页「下一步：策略脚本」进入，向导第 2 步；
+      // 策略脚本深链兼容（#1892）：确认主流程已回到对话生成脚本卡。
       // 当前会话参数经 `extra`（Map<String, String>）透传，深链直达回退 mock。
       GoRoute(
         path: '/ai/script',

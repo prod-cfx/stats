@@ -8,7 +8,6 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 import 'backtest_config_sheet_controller.dart';
@@ -346,13 +345,6 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
         top: false,
         child: Column(
           children: <Widget>[
-            QzStepBar(
-              steps: <String>[
-                l10n.aiStepBacktestConfig,
-                l10n.aiStepBacktest,
-              ],
-              active: 0,
-            ),
             Expanded(
               child: Stack(
                 children: <Widget>[

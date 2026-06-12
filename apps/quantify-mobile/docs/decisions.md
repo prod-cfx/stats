@@ -82,13 +82,13 @@
 
 ## 2026-06-01 · AI 量化形态裁决 + 5 步 StepBar 向导骨架：方案 B 维持对话中心、向导标 future（Issue #1890，AI 量化对齐批次前置基座）
 
-**背景**：#1890 为本批「AI 量化」对齐工作的**基座 Issue**，要求先裁决形态：设计稿 `design/project/mobile`（`proto.jsx` 串联）把「AI 量化」定义为 **6 屏线性向导**，每屏顶部共享一条 5 步进度指示器 `BtcStepBar`（`m-screens-btconfig.jsx:285`，标签 `:287-289` `确认策略 / 策略脚本 / 回测设置 / 回测 / 部署`，已完成步可点击回跳），屏间「上一步 / 下一步」线性导航；现实现走**对话中心**形态——确认+脚本合并为单页 `/ai/confirm`（无 StepBar）、回测设置是弹层 `backtest_config_sheet.dart`、回测中/结果退化为对话内嵌卡（`qz_backtest_progress_card.dart` / `qz_backtest_result_card.dart`）、部署是弹层 `qz_deploy_sheet.dart`。`qz_backtest_progress_card.dart` 头部注释引用本文件 #1749，说明现 route/sheet 边界是**有意决策**。
+**背景**：#1890 为本批「AI 量化」对齐工作的**基座 Issue**，要求先裁决形态：设计稿 `design/project/mobile`（`proto.jsx` 串联）把「AI 量化」定义为 **6 屏线性向导**，每屏顶部共享一条 5 步进度指示器 `BtcStepBar`（`m-screens-btconfig.jsx:285`，标签 `:287-289` `确认策略 / 策略脚本 / 回测设置 / 回测 / 部署`，已完成步可点击回跳），屏间前后步骤线性导航；现实现走**对话中心**形态——确认+脚本合并为单页 `/ai/confirm`（无 StepBar）、回测设置是弹层 `backtest_config_sheet.dart`、回测中/结果退化为对话内嵌卡（`qz_backtest_progress_card.dart` / `qz_backtest_result_card.dart`）、部署是弹层 `qz_deploy_sheet.dart`。`qz_backtest_progress_card.dart` 头部注释引用本文件 #1749，说明现 route/sheet 边界是**有意决策**。
 
 **候选**：
 
 | 方案 | 描述 | 取舍 |
 |------|------|------|
-| A. 对齐设计稿（向导形态） | 新增 `BtcStepBar` 组件 + 整屏路由 `/ai/confirm`→`/ai/script`→`/ai/backtest-config`→`/ai/backtest-run`→`/ai/backtest-result`→`/ai/deploy`，全程共享 StepBar + 上一步/下一步线性导航，推翻 #1749 §3 route↔sheet 边界与 #1751 简化边界 | 5 步向导骨架 + 6 屏 route + StepBar 回跳态全部依赖真实策略代码生成 / 回测引擎产出（#1679/#1682）才有产品价值；未就绪前落 mock 向导骨架，真实接入时大概率重写（步骤序、回跳语义、上下文持有者归属均由真实数据形态决定）；直接推翻 #1749/#1751/#1770/#1771 已反复确立的「对话是唯一会话上下文持有者、回测/部署走 sheet+聊天卡、不新增多步骤 route」边界，破坏现役可走通链路（Never break userspace） |
+| A. 对齐设计稿（向导形态） | 新增 `BtcStepBar` 组件 + 整屏路由 `/ai/confirm`→`/ai/script`→`/ai/backtest-config`→`/ai/backtest-run`→`/ai/backtest-result`→`/ai/deploy`，全程共享 StepBar + 前后步骤线性导航，推翻 #1749 §3 route↔sheet 边界与 #1751 简化边界 | 5 步向导骨架 + 6 屏 route + StepBar 回跳态全部依赖真实策略代码生成 / 回测引擎产出（#1679/#1682）才有产品价值；未就绪前落 mock 向导骨架，真实接入时大概率重写（步骤序、回跳语义、上下文持有者归属均由真实数据形态决定）；直接推翻 #1749/#1751/#1770/#1771 已反复确立的「对话是唯一会话上下文持有者、回测/部署走 sheet+聊天卡、不新增多步骤 route」边界，破坏现役可走通链路（Never break userspace） |
 | B. 维持对话中心、向导标 future（采纳） | 钉死「AI 量化以 app 现有对话中心形态为最终基线」：对话 → `/ai/confirm` → `/ai/backtest-config`（route 承载回测配置弹层）→ 聊天内回测卡 → `QzDeploySheet`；不引入 `BtcStepBar`、不新增 6 屏向导 route、不做屏间线性导航。设计稿 6 屏向导 + 5 步 StepBar 统一标 future。本结论作为后续「AI 量化」单屏对齐 Issue 的前置依据被显式引用 | 对齐 #1749 §3（route↔sheet 硬边界）、#1751（AI 对话直接接回测、不新增独立 route）、#1770（5 步 StepBar + 确认/脚本步骤页同题已采纳暂缓）、#1771（回测中/结果独立页标 future）已建立的统一基线；真实数据通道 #1679/#1682 未就绪，KISS/YAGNI；现役对话链路零破坏 |
 
 **判定**：**采纳方案 B——AI 量化维持对话中心形态为最终基线，6 屏线性向导 + 5 步 `BtcStepBar` 统一标 future，不引入向导骨架与线性导航**。本节作为本批「AI 量化」对齐工作的形态前置结论，supersede #1890「方案 A（对齐设计稿）」分支，并更新 #1749 关于 AI 量化形态的边界为最终结论。
@@ -100,7 +100,7 @@
 | [1] decisions.md 中 AI 量化形态（#1749）决策更新为最终结论 + 理由 | 已满足。结论＝方案 B 维持对话中心，6 屏向导 + StepBar 标 future，记入本节并写明理由；#1749 关于 AI 量化形态的边界由本节钉死为最终结论 | 本节 + #1749 §3 |
 | [2] 若采用向导形态：存在 `BtcStepBar` 组件 5 步、当前步高亮、已完成步可点回跳 | 不适用。采纳方案 B，不落地 StepBar；设计稿 `BtcStepBar`（`m-screens-btconfig.jsx:285`）标 future | 本节判定 |
 | [3] 若采用向导形态：各屏顶部渲染同一 StepBar | 不适用。同上，不落地 | 本节判定 |
-| [4] 屏间「上一步/下一步」线性导航与设计稿一致 | 不适用。维持对话 → route → 聊天卡 → sheet 的现役链路，不引入线性向导导航 | #1749 §3、#1751 |
+| [4] 屏间前后步骤线性导航与设计稿一致 | 不适用。维持对话 → route → 聊天卡 → sheet 的现役链路，不引入线性向导导航 | #1749 §3、#1751 |
 | [5] 本 Issue 最终形态结论作为后续对齐 Issue 前置依据被显式引用 | 已满足。本节钉死方案 B，README「设计真源」段补 #1890 引用；后续「AI 量化」单屏对齐 Issue 一律以本节为形态前置，不重复论证 | 本节 + README |
 
 **理由**：

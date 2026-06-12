@@ -728,7 +728,7 @@
   "aiConfirmAdviceTitle": "AI 提示",
   "aiConfirmDisclaimer": "回测基于历史数据，无法保证实盘表现。部署前请使用模拟账户验证。",
   "aiConfirmBackToChat": "返回对话",
-  "aiConfirmNextScript": "下一步：策略脚本",
+  "aiConfirmNextScript": "确认策略",
   "aiStartBacktestPrompt": "请先确认策略逻辑，确认后我会继续生成脚本。",
   "aiParamsBadgePrefix": "已为你识别为",
   "@aiParamsBadgePrefix": {
@@ -1449,6 +1449,6 @@
   },
   "aiScriptCollapse": "收起",
   "aiScriptSuccessHint": "脚本已生成、风控已注入，可继续下一步配置回测。",
-  "aiScriptPrev": "上一步",
+  "aiScriptPrev": "返回对话",
   "aiScriptNext": "下一步：回测设置"
 }

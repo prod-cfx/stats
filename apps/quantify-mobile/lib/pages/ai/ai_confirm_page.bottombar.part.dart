@@ -32,7 +32,7 @@ class _DisclaimerBar extends StatelessWidget {
 
 /// 底部 sticky 行动条：从透明到背景色的渐变覆盖层（对齐设计稿
 /// `linear-gradient(180deg, transparent, bg 30%)` + `padding:12px 16px 36px`），
-/// 次按钮「返回对话」(elev + border) + 主按钮「下一步：策略脚本」(紫色渐变 + 投影 + 箭头)。
+/// 次按钮「返回对话」(elev + border) + 主按钮「确认策略」(紫色渐变 + 投影 + 箭头)。
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.backLabel,

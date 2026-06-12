@@ -334,7 +334,7 @@ class _Dot extends StatelessWidget {
   );
 }
 
-/// 底部行动条：上一步 + 下一步（仅就绪态可点）。
+/// 底部行动条：返回对话 + 下一步（仅就绪态可点）。
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.ready,

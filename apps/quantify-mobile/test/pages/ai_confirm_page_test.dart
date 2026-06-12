@@ -17,7 +17,6 @@ import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
-import 'package:quantify_mobile/widgets/qz_step_bar.dart';
 
 Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
@@ -206,36 +205,28 @@ void main() {
     expect(find.text('BTC 趋势 · 双均线'), findsNothing);
   });
 
-  testWidgets('确认页顶栏下方展示 5 步流程条（#2130）', (WidgetTester tester) async {
+  testWidgets('确认页不渲染旧五步流程条（#2437）', (WidgetTester tester) async {
     await _pump(tester);
 
-    final Finder stepBar = find.byKey(const Key('qz-step-bar'));
-    expect(stepBar, findsOneWidget);
-
-    // 5 步标签按设计稿顺序展示（标签在流程条作用域内唯一）。
-    for (final String label in <String>['策略脚本', '回测设置', '回测', '部署']) {
-      expect(
-        find.descendant(of: stepBar, matching: find.text(label)),
-        findsOneWidget,
-      );
-    }
-    // 「确认策略」同时出现在顶栏标题与流程条，限定流程条内仍唯一。
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(
-      find.descendant(of: stepBar, matching: find.text('确认策略')),
-      findsOneWidget,
+      find.text(
+        '下一步：'
+        '策略脚本',
+      ),
+      findsNothing,
     );
   });
 
-  testWidgets('确认页流程条 active=0 done 为空（#2130）', (WidgetTester tester) async {
+  testWidgets('确认页主 CTA 保持确认策略，不回流脚本步骤文案（#2437）', (WidgetTester tester) async {
     await _pump(tester);
-    final QzStepBar bar = tester.widget<QzStepBar>(find.byType(QzStepBar));
-    expect(bar.active, 0);
-    expect(bar.done, isEmpty);
-    // done 为空 → 无对勾图标。
+
+    expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
+    expect(find.text('查看逻辑图'), findsWidgets);
     expect(
-      find.descendant(
-        of: find.byType(QzStepBar),
-        matching: find.byIcon(Icons.check_rounded),
+      find.text(
+        '下一步：'
+        '策略脚本',
       ),
       findsNothing,
     );
