@@ -455,6 +455,19 @@ void main() {
     expect(find.byType(AiHomePage), findsOneWidget);
   });
 
+  testWidgets('/ai/backtest-result without job shows empty state', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push('/ai/backtest-result');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiBacktestResultPage), findsOneWidget);
+    expect(find.byKey(const Key('ai-backtest-result-empty')), findsOneWidget);
+    expect(find.text('暂无回测结果，请先完成一次回测。'), findsOneWidget);
+    expect(find.text('加载失败'), findsNothing);
+  });
+
   testWidgets('/ai/deploy resolves to AiDeployPage', (
     WidgetTester tester,
   ) async {
@@ -465,6 +478,8 @@ void main() {
     expect(find.byType(AiDeployPage), findsOneWidget);
     expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(find.text('部署策略'), findsWidgets);
+    expect(find.byKey(const Key('ai-deploy-empty')), findsOneWidget);
+    expect(find.text('暂无可部署策略，请先生成策略并完成回测。'), findsOneWidget);
     expect(find.byKey(const Key('deploy-step-indicator')), findsNothing);
     for (final String oldStep in <String>['确认策略', '策略脚本', '回测设置', '回测', '部署']) {
       expect(find.text(oldStep), findsNothing);
@@ -501,32 +516,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AiConfirmPage), findsOneWidget);
-    // #1891 内容对齐：Hero / 策略逻辑 RuleBlock / EXECUTE / 免责声明 / 双按钮
-    // 均渲染（脚本预览块已下沉到 `/ai/script`，本屏不再有 copy-script）。
     expect(find.text('逻辑图'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, '确认策略'), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-hero')), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-rule-0')), findsOneWidget);
-    // 底部双按钮在 sticky bar（始终在屏）。
-    expect(find.byKey(const Key('ai-confirm-back-cta')), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
-    // 脚本预览块已移除（#1891 方案）。
-    expect(find.byKey(const Key('ai-confirm-copy-script')), findsNothing);
-    // EXECUTE / AI 提示 / 免责声明在长列表下方，滚动后再断言渲染。
-    final Finder list = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('ai-confirm-execute')),
-      300,
-      scrollable: list,
-    );
-    expect(find.byKey(const Key('ai-confirm-execute')), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('ai-confirm-disclaimer')),
-      300,
-      scrollable: list,
-    );
-    expect(find.byKey(const Key('ai-confirm-advice')), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-disclaimer')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-empty')), findsOneWidget);
+    expect(find.text('暂无策略逻辑图，请先在 AI 对话中生成策略。'), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-hero')), findsNothing);
+    expect(find.byKey(const Key('ai-confirm-rule-0')), findsNothing);
+    expect(find.byKey(const Key('ai-confirm-next-cta')), findsNothing);
   });
 
   testWidgets('/ai/confirm 接收 extra 参数并渲染到策略逻辑区', (WidgetTester tester) async {

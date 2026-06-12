@@ -123,6 +123,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiQuickReply3 => '部署';
 
   @override
+  String get aiConfirmEmptyTitle => '暂无策略逻辑图，请先在 AI 对话中生成策略。';
+
+  @override
+  String get aiScriptEmptyTitle => '暂无策略逻辑图，请先在 AI 对话中生成策略。';
+
+  @override
   String get backtestSheetTitle => '回测参数';
 
   @override
@@ -289,6 +295,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backtestResultTitle => '回测结果';
+
+  @override
+  String get backtestResultEmptyTitle => '暂无回测结果，请先完成一次回测。';
 
   @override
   String get backtestResultTotalReturn => '总收益';
@@ -459,6 +468,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deployButton => '一键部署';
+
+  @override
+  String get deployEmptyTitle => '暂无可部署策略，请先生成策略并完成回测。';
 
   @override
   String get deploySheetTitleExchange => '选择交易所';

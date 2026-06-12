@@ -18,7 +18,20 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
-Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
+const Map<String, String> _defaultConfirmParams = <String, String>{
+  'category': '趋势跟踪',
+  'symbol': 'BTC/USDT',
+  'period': '15m',
+  'fast_ma': '5',
+  'slow_ma': '20',
+  'stop_loss': '2.0%',
+  'leverage': '5x',
+};
+
+Future<void> _pump(
+  WidgetTester tester, {
+  Map<String, String>? params = _defaultConfirmParams,
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   await tester.pumpWidget(
     MaterialApp(
@@ -170,6 +183,14 @@ class _FakeAiChatRepository implements AiChatRepository {
 }
 
 void main() {
+  testWidgets('无策略数据直达逻辑图页时显示空态', (WidgetTester tester) async {
+    await _pump(tester, params: null);
+
+    expect(find.byKey(const Key('ai-confirm-empty')), findsOneWidget);
+    expect(find.text('暂无策略逻辑图，请先在 AI 对话中生成策略。'), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-next-cta')), findsNothing);
+  });
+
   testWidgets('确认策略 fallback market chip 默认合约 5x（#2066）', (
     WidgetTester tester,
   ) async {

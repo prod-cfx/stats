@@ -49,7 +49,7 @@ void main() {
   testWidgets('生成中态：显示 spinner + 文案，CTA 禁用（验收 2、5）', (
     WidgetTester tester,
   ) async {
-    await _pump(tester);
+    await _pump(tester, params: <String, String>{'symbol': 'BTC/USDT'});
     expect(find.byKey(const Key('ai-script-generating')), findsOneWidget);
     expect(find.text('正在生成策略脚本'), findsOneWidget);
     expect(find.text('编译参数 · 校验语法 · 注入风控'), findsOneWidget);
@@ -60,8 +60,17 @@ void main() {
     expect(next.onPressed, isNull, reason: '生成中态「下一步」不可点');
   });
 
-  testWidgets('脚本页不渲染旧五步流程条和返回前序步骤文案（#2437）', (WidgetTester tester) async {
+  testWidgets('无策略数据直达脚本页时显示空态', (WidgetTester tester) async {
     await _pump(tester);
+
+    expect(find.byKey(const Key('ai-script-empty')), findsOneWidget);
+    expect(find.text('暂无策略逻辑图，请先在 AI 对话中生成策略。'), findsOneWidget);
+    expect(find.byKey(const Key('ai-script-generating')), findsNothing);
+    expect(find.byKey(const Key('ai-script-next-cta')), findsNothing);
+  });
+
+  testWidgets('脚本页不渲染旧五步流程条和返回前序步骤文案（#2437）', (WidgetTester tester) async {
+    await _pump(tester, params: <String, String>{'symbol': 'BTC/USDT'});
 
     expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(

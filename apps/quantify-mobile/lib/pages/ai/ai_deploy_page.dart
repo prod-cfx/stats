@@ -5,6 +5,7 @@ import '../../data/models/deploy_models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import 'widgets/qz_deploy_sheet.dart';
+import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 
@@ -21,6 +22,8 @@ class AiDeployPage extends StatelessWidget {
     final String subtitle = deploymentContext?.symbol?.trim().isNotEmpty == true
         ? deploymentContext!.symbol!.trim()
         : 'AI 策略';
+    final bool canDeploy =
+        deploymentContext?.publishedSnapshotId.trim().isNotEmpty == true;
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
@@ -36,10 +39,16 @@ class AiDeployPage extends StatelessWidget {
       ),
       body: SafeArea(
         top: false,
-        child: QzDeploySheet(
-          showHeader: false,
-          deploymentContext: deploymentContext,
-        ),
+        child: canDeploy
+            ? QzDeploySheet(
+                showHeader: false,
+                deploymentContext: deploymentContext,
+              )
+            : QzEmptyState(
+                key: const Key('ai-deploy-empty'),
+                icon: Icons.rocket_launch_outlined,
+                title: l10n.deployEmptyTitle,
+              ),
       ),
     );
   }

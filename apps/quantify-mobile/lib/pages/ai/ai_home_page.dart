@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
+import '../../data/models/ai_strategy_context.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -121,8 +122,22 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
 
   void _openQuickNav(String label) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final AiHomePageState st = ref.read(aiHomePageControllerProvider);
+    final AiSession? current = st.currentId == null
+        ? null
+        : st.sessions[st.currentId!];
     if (label == l10n.aiQuickReply1) {
-      context.push('/ai/confirm');
+      final ChatTurn? confirmable = current == null
+          ? null
+          : _latestConfirmableTurn(current);
+      final Object? extra = confirmable == null
+          ? _latestParams(current)
+          : AiConfirmArgs(
+              codegenSessionId: _codegenSessionIdFor(confirmable),
+              confirmedCanonicalDigest: _canonicalDigestFor(confirmable),
+              params: confirmable.params,
+            );
+      context.push('/ai/confirm', extra: extra);
       return;
     }
     if (label == l10n.aiQuickReply2) {
@@ -130,8 +145,36 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       return;
     }
     if (label == l10n.aiQuickReply3) {
-      context.push('/ai/deploy');
+      final AiPublishedStrategyContext? strategyContext = current == null
+          ? null
+          : _latestPublishedStrategyContext(current);
+      context.push('/ai/deploy', extra: strategyContext?.toDeploymentContext());
     }
+  }
+
+  Map<String, String>? _latestParams(AiSession? session) {
+    if (session == null) return null;
+    for (final ChatTurn turn in session.messages.reversed) {
+      final Map<String, String>? params = turn.params;
+      if (turn.kind == ChatTurnKind.params &&
+          params != null &&
+          params.isNotEmpty) {
+        return params;
+      }
+    }
+    return null;
+  }
+
+  AiPublishedStrategyContext? _latestPublishedStrategyContext(
+    AiSession session,
+  ) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      final AiPublishedStrategyContext? strategyContext = turn.strategyContext;
+      if (strategyContext?.hasPublishedSnapshot == true) {
+        return strategyContext;
+      }
+    }
+    return null;
   }
 
   Future<void> _confirmInChat(ChatTurn turn, AiSession session) async {

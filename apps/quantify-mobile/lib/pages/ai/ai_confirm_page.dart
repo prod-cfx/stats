@@ -16,6 +16,7 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_card.dart';
+import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 import 'ai_confirm_chat_handoff.dart';
@@ -83,6 +84,12 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
       widget.args?.codegenSessionId?.trim().isNotEmpty == true
       ? widget.args!.codegenSessionId!.trim()
       : null;
+
+  bool get _hasInputData =>
+      _session != null ||
+      _sessionId != null ||
+      widget.args?.params?.isNotEmpty == true ||
+      widget.params?.isNotEmpty == true;
 
   @override
   void initState() {
@@ -379,72 +386,83 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: <Widget>[
-            // 滚动区 + sticky 渐变操作区叠放（对齐设计稿 `position:absolute`）。
-            Expanded(
-              child: Stack(
+        child: _hasInputData
+            ? Column(
                 children: <Widget>[
-                  // 内容滚动区：顶 12 / 左右 16 / 底 100（给 sticky bar 留空间，
-                  // 滚动到底免责声明不被遮挡），对齐设计稿 `padding:12px 16px 100px`。
-                  ListView(
-                    padding: const EdgeInsets.fromLTRB(
-                      QzSpacing.lg,
-                      QzSpacing.md,
-                      QzSpacing.lg,
-                      100,
-                    ),
-                    children: <Widget>[
-                      _HeroCard(
-                        view: view,
-                        subtitle: l10n.aiConfirmHeroSubtitle,
-                      ),
-                      ...statusWidgets,
-                      const SizedBox(height: QzSpacing.lg),
-                      _SectionTitle(
-                        title: l10n.aiConfirmLogicTitle,
-                        actionLabel: l10n.aiConfirmEditInChat,
-                        onAction: () => context.pop(),
-                      ),
-                      const SizedBox(height: QzSpacing.sm),
-                      for (int i = 0; i < view.rules.length; i++) ...<Widget>[
-                        if (i > 0) _RuleSeparator(label: l10n.aiConfirmRuleSep),
-                        _RuleBlock(
-                          index: i,
-                          rule: view.rules[i],
-                          ifLabel: l10n.aiConfirmRuleIf,
-                          thenLabel: l10n.aiConfirmRuleThen,
+                  // 滚动区 + sticky 渐变操作区叠放（对齐设计稿 `position:absolute`）。
+                  Expanded(
+                    child: Stack(
+                      children: <Widget>[
+                        // 内容滚动区：顶 12 / 左右 16 / 底 100（给 sticky bar 留空间，
+                        // 滚动到底免责声明不被遮挡），对齐设计稿 `padding:12px 16px 100px`。
+                        ListView(
+                          padding: const EdgeInsets.fromLTRB(
+                            QzSpacing.lg,
+                            QzSpacing.md,
+                            QzSpacing.lg,
+                            100,
+                          ),
+                          children: <Widget>[
+                            _HeroCard(
+                              view: view,
+                              subtitle: l10n.aiConfirmHeroSubtitle,
+                            ),
+                            ...statusWidgets,
+                            const SizedBox(height: QzSpacing.lg),
+                            _SectionTitle(
+                              title: l10n.aiConfirmLogicTitle,
+                              actionLabel: l10n.aiConfirmEditInChat,
+                              onAction: () => context.pop(),
+                            ),
+                            const SizedBox(height: QzSpacing.sm),
+                            for (
+                              int i = 0;
+                              i < view.rules.length;
+                              i++
+                            ) ...<Widget>[
+                              if (i > 0)
+                                _RuleSeparator(label: l10n.aiConfirmRuleSep),
+                              _RuleBlock(
+                                index: i,
+                                rule: view.rules[i],
+                                ifLabel: l10n.aiConfirmRuleIf,
+                                thenLabel: l10n.aiConfirmRuleThen,
+                              ),
+                            ],
+                            const SizedBox(height: QzSpacing.lg),
+                            _ExecuteBlock(view: view),
+                            const SizedBox(height: QzSpacing.lg),
+                            _AiAdviceBox(
+                              title: l10n.aiConfirmAdviceTitle,
+                              text: view.advice,
+                            ),
+                            const SizedBox(height: QzSpacing.md),
+                            _DisclaimerBar(text: l10n.aiConfirmDisclaimer),
+                          ],
+                        ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _BottomBar(
+                            backLabel: l10n.aiConfirmBackToChat,
+                            nextLabel: _confirming
+                                ? '确认中...'
+                                : l10n.aiConfirmNextScript,
+                            onBack: () => _backToChat(context),
+                            onNext: () => _next(context),
+                          ),
                         ),
                       ],
-                      const SizedBox(height: QzSpacing.lg),
-                      _ExecuteBlock(view: view),
-                      const SizedBox(height: QzSpacing.lg),
-                      _AiAdviceBox(
-                        title: l10n.aiConfirmAdviceTitle,
-                        text: view.advice,
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      _DisclaimerBar(text: l10n.aiConfirmDisclaimer),
-                    ],
-                  ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _BottomBar(
-                      backLabel: l10n.aiConfirmBackToChat,
-                      nextLabel: _confirming
-                          ? '确认中...'
-                          : l10n.aiConfirmNextScript,
-                      onBack: () => _backToChat(context),
-                      onNext: () => _next(context),
                     ),
                   ),
                 ],
+              )
+            : QzEmptyState(
+                key: const Key('ai-confirm-empty'),
+                icon: Icons.account_tree_outlined,
+                title: l10n.aiConfirmEmptyTitle,
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

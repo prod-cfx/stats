@@ -326,6 +326,18 @@ abstract class AppLocalizations {
   /// **'部署'**
   String get aiQuickReply3;
 
+  /// No description provided for @aiConfirmEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无策略逻辑图，请先在 AI 对话中生成策略。'**
+  String get aiConfirmEmptyTitle;
+
+  /// No description provided for @aiScriptEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无策略逻辑图，请先在 AI 对话中生成策略。'**
+  String get aiScriptEmptyTitle;
+
   /// No description provided for @backtestSheetTitle.
   ///
   /// In zh, this message translates to:
@@ -635,6 +647,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'回测结果'**
   String get backtestResultTitle;
+
+  /// No description provided for @backtestResultEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无回测结果，请先完成一次回测。'**
+  String get backtestResultEmptyTitle;
 
   /// No description provided for @backtestResultTotalReturn.
   ///
@@ -959,6 +977,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'一键部署'**
   String get deployButton;
+
+  /// No description provided for @deployEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无可部署策略，请先生成策略并完成回测。'**
+  String get deployEmptyTitle;
 
   /// No description provided for @deploySheetTitleExchange.
   ///

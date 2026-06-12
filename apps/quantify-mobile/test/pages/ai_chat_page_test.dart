@@ -311,7 +311,7 @@ void main() {
     for (final (Key key, String label, String routeText) in cases) {
       await tester.tap(find.byKey(key));
       await tester.pumpAndSettle();
-      expect(find.text(routeText), findsOneWidget);
+      expect(find.textContaining(routeText), findsOneWidget);
       expect(find.text(label), findsNothing);
       GoRouter.of(tester.element(find.text(routeText))).pop();
       await tester.pumpAndSettle();

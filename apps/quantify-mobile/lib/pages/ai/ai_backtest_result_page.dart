@@ -11,6 +11,7 @@ import '../../theme/tokens.dart';
 import 'ai_error_text.dart';
 import 'widgets/qz_backtest_result_card.dart';
 import '../../widgets/qz_button.dart';
+import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 
@@ -53,7 +54,11 @@ class AiBacktestResultPage extends ConsumerWidget {
                       strategyContext: args?.strategyContext,
                     )
                   : effectiveJobId == null || effectiveJobId.isEmpty
-                  ? Center(child: Text(l10n.commonLoadError))
+                  ? QzEmptyState(
+                      key: const Key('ai-backtest-result-empty'),
+                      icon: Icons.query_stats_outlined,
+                      title: l10n.backtestResultEmptyTitle,
+                    )
                   : ref
                         .watch(backtestResultProvider(effectiveJobId))
                         .when(

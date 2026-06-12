@@ -127,6 +127,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiQuickReply3 => 'Deploy';
 
   @override
+  String get aiConfirmEmptyTitle =>
+      'No strategy logic yet. Generate a strategy in AI chat first.';
+
+  @override
+  String get aiScriptEmptyTitle =>
+      'No strategy logic yet. Generate a strategy in AI chat first.';
+
+  @override
   String get backtestSheetTitle => 'Backtest Settings';
 
   @override
@@ -303,6 +311,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestResultTitle => 'Backtest Result';
 
   @override
+  String get backtestResultEmptyTitle =>
+      'No backtest result yet. Run a backtest first.';
+
+  @override
   String get backtestResultTotalReturn => 'Total Return';
 
   @override
@@ -474,6 +486,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deployButton => 'One-click Deploy';
+
+  @override
+  String get deployEmptyTitle =>
+      'No deployable strategy yet. Generate a strategy and finish a backtest first.';
 
   @override
   String get deploySheetTitleExchange => 'Select Exchange';

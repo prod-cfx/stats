@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
+import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 import 'ai_script_page_controller.dart';
@@ -16,7 +17,7 @@ import 'ai_script_page_state.dart';
 part 'ai_script_page.cards.part.dart';
 part 'ai_script_page.viewer.part.dart';
 
-/// 默认参数（直接深链 `/ai/script` 无 extra 时回退），对齐设计稿 BTC 双均线。
+/// 默认参数（兼容旧测试/旧入口透传空字段时的脚本预览），对齐设计稿 BTC 双均线。
 const Map<String, String> kStratFallbackParams = <String, String>{
   'category': '趋势跟踪',
   'symbol': 'BTC/USDT',
@@ -104,6 +105,9 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
   AiScriptPageController get _ctrl =>
       ref.read(aiScriptPageControllerProvider.notifier);
 
+  bool get _hasInputData =>
+      widget.strategyContext != null || widget.params?.isNotEmpty == true;
+
   Map<String, String> get _params =>
       widget.strategyContext?.toRouteParams() ??
       ((widget.params != null && widget.params!.isNotEmpty)
@@ -180,58 +184,65 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  QzSpacing.lg,
-                  QzSpacing.md,
-                  QzSpacing.lg,
-                  QzSpacing.lg,
-                ),
+        child: _hasInputData
+            ? Column(
                 children: <Widget>[
-                  _RecapCard(params: _params, fileName: _fileName),
-                  const SizedBox(height: QzSpacing.lg),
-                  _StatusRow(
-                    ready: ready,
-                    copied: st.copied,
-                    onCopy: _copyScript,
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(
+                        QzSpacing.lg,
+                        QzSpacing.md,
+                        QzSpacing.lg,
+                        QzSpacing.lg,
+                      ),
+                      children: <Widget>[
+                        _RecapCard(params: _params, fileName: _fileName),
+                        const SizedBox(height: QzSpacing.lg),
+                        _StatusRow(
+                          ready: ready,
+                          copied: st.copied,
+                          onCopy: _copyScript,
+                        ),
+                        const SizedBox(height: QzSpacing.sm),
+                        if (ready) ...<Widget>[
+                          _ScriptViewer(
+                            script: _script,
+                            fileName: _fileName,
+                            copied: st.copied,
+                            expanded: st.expanded,
+                            collapsedLines: _collapsedLines,
+                            onToggleExpand: _ctrl.toggleExpand,
+                            onCopy: _copyScript,
+                          ),
+                          const SizedBox(height: QzSpacing.md),
+                          _SuccessHint(text: l10n.aiScriptSuccessHint),
+                        ] else if (st.failed)
+                          _ScriptErrorCard(
+                            text:
+                                '${l10n.commonLoadError}: ${st.errorMessage ?? ''}',
+                          )
+                        else
+                          _GeneratingCard(
+                            title: l10n.aiScriptGeneratingTitle,
+                            steps: l10n.aiScriptGeneratingSteps,
+                          ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: QzSpacing.sm),
-                  if (ready) ...<Widget>[
-                    _ScriptViewer(
-                      script: _script,
-                      fileName: _fileName,
-                      copied: st.copied,
-                      expanded: st.expanded,
-                      collapsedLines: _collapsedLines,
-                      onToggleExpand: _ctrl.toggleExpand,
-                      onCopy: _copyScript,
-                    ),
-                    const SizedBox(height: QzSpacing.md),
-                    _SuccessHint(text: l10n.aiScriptSuccessHint),
-                  ] else if (st.failed)
-                    _ScriptErrorCard(
-                      text: '${l10n.commonLoadError}: ${st.errorMessage ?? ''}',
-                    )
-                  else
-                    _GeneratingCard(
-                      title: l10n.aiScriptGeneratingTitle,
-                      steps: l10n.aiScriptGeneratingSteps,
-                    ),
+                  _BottomBar(
+                    ready: ready && _canBacktest,
+                    prevLabel: l10n.aiScriptPrev,
+                    nextLabel: l10n.aiScriptNext,
+                    onPrev: () => context.go('/ai'),
+                    onNext: _next,
+                  ),
                 ],
+              )
+            : QzEmptyState(
+                key: const Key('ai-script-empty'),
+                icon: Icons.account_tree_outlined,
+                title: l10n.aiScriptEmptyTitle,
               ),
-            ),
-            _BottomBar(
-              ready: ready && _canBacktest,
-              prevLabel: l10n.aiScriptPrev,
-              nextLabel: l10n.aiScriptNext,
-              onPrev: () => context.go('/ai'),
-              onNext: _next,
-            ),
-          ],
-        ),
       ),
     );
   }
