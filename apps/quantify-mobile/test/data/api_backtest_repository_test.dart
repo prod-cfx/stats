@@ -46,7 +46,10 @@ void main() {
           priceSource: 'mid',
           allowPartial: true,
           rangePreset: '30D',
-          params: const <String, dynamic>{'fast_ma': '7'},
+          params: const <String, dynamic>{
+            'fast_ma': '7',
+            'codegenSessionId': 'codegen-1',
+          },
         ),
       );
 
@@ -57,6 +60,7 @@ void main() {
       expect(payload['initialCash'], 25000);
       expect(payload['leverage'], 5);
       expect(payload['conversationId'], 'session-1');
+      expect(payload['sessionId'], 'codegen-1');
       expect(payload['execution'], <String, dynamic>{
         'slippageBps': 4,
         'feeBps': 2,
@@ -210,6 +214,46 @@ void main() {
       expect(result.trades, isEmpty);
       expect(result.monthlyRows, hasLength(1));
       expect(result.riskRows, hasLength(1));
+    });
+
+    test('真实 backtesting result summary 字段映射到 mobile 核心指标', () async {
+      final ApiBacktestRepository repo = ApiBacktestRepository(
+        _StubBacktestService(
+          result: <String, dynamic>{
+            'data': <String, dynamic>{
+              'summary': <String, dynamic>{
+                'netProfitPct': -0.1125,
+                'maxDrawdownPct': 0.1229,
+                'winRate': 0,
+                'profitFactor': 0,
+                'totalTrades': 9,
+              },
+              'equityCurve': <Map<String, dynamic>>[
+                <String, dynamic>{'ts': 1778572800000, 'equity': 10000},
+                <String, dynamic>{'ts': 1778573700000, 'equity': 9999.97},
+              ],
+              'inputSummary': <String, dynamic>{
+                'appliedRange': <String, dynamic>{
+                  'fromTs': 1778572800000,
+                  'toTs': 1781164800000,
+                },
+              },
+            },
+          },
+        ),
+      );
+
+      final BacktestResult result = await repo.getResult('btjob-real');
+
+      expect(result.id, 'btjob-real');
+      expect(result.totalReturnPercent, -0.1125);
+      expect(result.maxDrawdownPercent, 0.1229);
+      expect(result.winRatePercent, 0);
+      expect(result.profitLossRatio, 0);
+      expect(result.totalTrades, 9);
+      expect(result.equityCurve, <double>[10000, 9999.97]);
+      expect(result.rangeStart.millisecondsSinceEpoch, 1778572800000);
+      expect(result.rangeEnd.millisecondsSinceEpoch, 1781164800000);
     });
   });
 }

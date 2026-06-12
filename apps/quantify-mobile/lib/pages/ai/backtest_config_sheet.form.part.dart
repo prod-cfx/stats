@@ -2,8 +2,9 @@ part of 'backtest_config_sheet.dart';
 // ignore_for_file: unused_element
 
 class _RecapStrip extends StatelessWidget {
-  const _RecapStrip({required this.scheme});
+  const _RecapStrip({required this.scheme, required this.strategyName});
   final QzColorScheme scheme;
+  final String strategyName;
 
   @override
   Widget build(BuildContext context) {
@@ -22,8 +23,8 @@ class _RecapStrip extends StatelessWidget {
               TextSpan(
                 text: '正在为「',
                 children: <InlineSpan>[
-                  const TextSpan(
-                    text: 'BTC 趋势 · 双均线',
+                  TextSpan(
+                    text: strategyName,
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const TextSpan(text: '」配置回测参数'),

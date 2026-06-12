@@ -83,18 +83,18 @@ class AiPublishedStrategyContext {
   String? get exchange => _normalizeExchange(
     _findString(
       <String>['exchange', 'exchangeId', 'venue'],
-      [snapshotParamValues, strategyConfig, deploymentExecutionDefaults],
+      [strategyConfig, snapshotParamValues, deploymentExecutionDefaults],
     ),
   );
 
   String? get symbol => _findString(
     <String>['symbol', 'baseSymbol', 'instrument'],
-    [snapshotParamValues, strategyConfig, backtestConfigDefaults],
+    [strategyConfig, snapshotParamValues, backtestConfigDefaults],
   );
 
   String? get baseTimeframe => _findString(
     <String>['baseTimeframe', 'timeframe', 'period'],
-    [snapshotParamValues, strategyConfig, backtestConfigDefaults],
+    [strategyConfig, snapshotParamValues, backtestConfigDefaults],
   );
 
   String? get marketType {
@@ -117,8 +117,41 @@ class AiPublishedStrategyContext {
 
   int? get leverage => _findInt(
     <String>['leverage'],
-    [deploymentExecutionDefaults, backtestConfigDefaults, snapshotParamValues],
+    [
+      deploymentExecutionDefaults,
+      backtestConfigDefaults,
+      strategyConfig,
+      snapshotParamValues,
+    ],
   );
+
+  String get displayTitle {
+    final String? explicit = _findString(
+      <String>['name', 'title', 'strategyName', 'displayName'],
+      [strategyConfig, snapshotParamValues],
+    );
+    if (explicit != null) return explicit;
+    final String? symbol = displaySymbol;
+    return symbol == null ? 'AI 策略' : '$symbol AI 策略';
+  }
+
+  String? get displaySymbol {
+    final String? raw = symbol;
+    if (raw == null) return null;
+    return raw.trim().toUpperCase().replaceAll('/', '');
+  }
+
+  String get displayMeta {
+    return <String?>[displaySymbol, baseTimeframe]
+        .where((String? value) => value?.trim().isNotEmpty == true)
+        .cast<String>()
+        .join(' · ');
+  }
+
+  String get displayHeaderSubtitle {
+    final String meta = displayMeta;
+    return meta.isEmpty ? 'AI 策略' : meta;
+  }
 
   Map<String, String> toRouteParams() {
     final Map<String, String> routeParams = <String, String>{
@@ -142,8 +175,13 @@ class AiPublishedStrategyContext {
     if (exchange != null) routeParams['exchange'] = exchange;
     final String? symbol = this.symbol;
     if (symbol != null) routeParams['symbol'] = symbol;
+    final String? displaySymbol = this.displaySymbol;
+    if (displaySymbol != null) routeParams['displaySymbol'] = displaySymbol;
     final String? baseTimeframe = this.baseTimeframe;
     if (baseTimeframe != null) routeParams['baseTimeframe'] = baseTimeframe;
+    if (baseTimeframe != null) routeParams['period'] = baseTimeframe;
+    routeParams['strategyName'] = displayTitle;
+    routeParams['category'] = displayTitle;
     final String? marketType = this.marketType;
     if (marketType != null) routeParams['marketType'] = marketType;
     final int? leverage = this.leverage;
@@ -189,10 +227,12 @@ class AiPublishedStrategyContext {
         true,
       ),
       symbol: _displaySymbol(),
-      strategyName: _findString(
-        <String>['name', 'title', 'strategyName'],
-        [snapshotParamValues, strategyConfig],
-      ),
+      strategyName:
+          _findString(
+            <String>['name', 'title', 'strategyName'],
+            [snapshotParamValues, strategyConfig],
+          ) ??
+          displayTitle,
       exchange: exchange,
       marketType: marketType,
       leverage: leverage,
@@ -203,7 +243,7 @@ class AiPublishedStrategyContext {
   }
 
   String? _displaySymbol() {
-    final String? s = symbol;
+    final String? s = displaySymbol;
     final String? tf = baseTimeframe;
     if (s == null) return null;
     if (tf == null) return s;

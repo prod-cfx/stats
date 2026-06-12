@@ -11,35 +11,46 @@ class ApiBacktestRepository implements BacktestRepository {
   ApiBacktestRepository(this._service);
 
   final BacktestService _service;
+  static const int _jobPollLimit = 120;
+  static const Duration _jobPollInterval = Duration(milliseconds: 1500);
 
-  BacktestResult _merge(dynamic raw) {
+  BacktestResult _merge(dynamic raw, {String? fallbackId}) {
     final Map<String, dynamic> envelope = asMap(raw);
     final Map<String, dynamic> m = asMap(envelope['data']);
     if (m.isEmpty) m.addAll(envelope);
+    final Map<String, dynamic> summary = asMap(m['summary']);
+    final Map<String, dynamic> inputSummary = asMap(m['inputSummary']);
     final BacktestResult base = _emptyBacktestResult();
     if (m.isEmpty) return base;
     return BacktestResult(
-      id: asString(pick(m, <String>['id']), fallback: base.id),
+      id: asString(pick(m, <String>['id']), fallback: fallbackId ?? base.id),
       totalReturnPercent: asDouble(
-        pick(m, <String>['totalReturnPercent']),
+        pick(m, <String>['totalReturnPercent']) ??
+            pick(summary, <String>['netProfitPct', 'totalReturnPct']),
         fallback: base.totalReturnPercent,
       ),
       cagrPercent: asDouble(
-        pick(m, <String>['cagrPercent']),
+        pick(m, <String>['cagrPercent']) ?? pick(summary, <String>['cagrPct']),
         fallback: base.cagrPercent,
       ),
       maxDrawdownPercent: asDouble(
-        pick(m, <String>['maxDrawdownPercent']),
+        pick(m, <String>['maxDrawdownPercent']) ??
+            pick(summary, <String>['maxDrawdownPct']),
         fallback: base.maxDrawdownPercent,
       ),
-      sharpe: asDouble(pick(m, <String>['sharpe']), fallback: base.sharpe),
+      sharpe: asDouble(
+        pick(m, <String>['sharpe']) ?? pick(summary, <String>['sharpe']),
+        fallback: base.sharpe,
+      ),
       calmar: asDouble(pick(m, <String>['calmar']), fallback: base.calmar),
       winRatePercent: asDouble(
-        pick(m, <String>['winRatePercent']),
+        pick(m, <String>['winRatePercent']) ??
+            pick(summary, <String>['winRate']),
         fallback: base.winRatePercent,
       ),
       profitLossRatio: asDouble(
-        pick(m, <String>['profitLossRatio']),
+        pick(m, <String>['profitLossRatio']) ??
+            pick(summary, <String>['profitFactor']),
         fallback: base.profitLossRatio,
       ),
       avgHoldDuration: asString(
@@ -47,15 +58,20 @@ class ApiBacktestRepository implements BacktestRepository {
         fallback: base.avgHoldDuration,
       ),
       totalTrades: asInt(
-        pick(m, <String>['totalTrades']),
+        pick(m, <String>['totalTrades']) ??
+            pick(summary, <String>['totalTrades', 'tradeCount']),
         fallback: base.totalTrades,
       ),
       rangeStart: asDateTime(
-        pick(m, <String>['rangeStart']),
+        pick(m, <String>['rangeStart']) ??
+            pick(asMap(inputSummary['appliedRange']), <String>['fromTs']) ??
+            pick(asMap(inputSummary['dataRange']), <String>['fromTs']),
         fallback: base.rangeStart,
       ),
       rangeEnd: asDateTime(
-        pick(m, <String>['rangeEnd']),
+        pick(m, <String>['rangeEnd']) ??
+            pick(asMap(inputSummary['appliedRange']), <String>['toTs']) ??
+            pick(asMap(inputSummary['dataRange']), <String>['toTs']),
         fallback: base.rangeEnd,
       ),
       equityCurve: _parseEquityCurve(m),
@@ -77,10 +93,10 @@ class ApiBacktestRepository implements BacktestRepository {
       throw const FormatException('missing publishedSnapshotId for backtest');
     }
     final String marketType = request.marketType == 'spot' ? 'spot' : 'perp';
-    final Map<String, dynamic> strategyParams = <String, dynamic>{
-      ...request.params,
-      'marketType': marketType,
-    };
+    final Map<String, dynamic> strategyParams = _strategyParams(
+      request.params,
+      marketType,
+    );
     final dynamic raw = await _service.run(<String, dynamic>{
       'symbols': <String>[request.symbol],
       'baseTimeframe': request.baseTimeframe,
@@ -90,6 +106,8 @@ class ApiBacktestRepository implements BacktestRepository {
       if (request.allowPartial) 'allowPartial': true,
       if (request.conversationId?.trim().isNotEmpty == true)
         'conversationId': request.conversationId!.trim(),
+      if (asString(request.params['codegenSessionId']).trim().isNotEmpty)
+        'sessionId': asString(request.params['codegenSessionId']).trim(),
       'execution': <String, dynamic>{
         'slippageBps': request.slippageBps,
         'feeBps': request.feeBps,
@@ -117,12 +135,73 @@ class ApiBacktestRepository implements BacktestRepository {
           'endAt': request.endTime.toIso8601String(),
       },
     });
-    return _merge(raw);
+    final Map<String, dynamic> created = asMap(asMap(raw)['data']);
+    if (created.isEmpty) created.addAll(asMap(raw));
+    final String jobId = asString(pick(created, <String>['id'])).trim();
+    final String status = asString(pick(created, <String>['status'])).trim();
+    if (jobId.isEmpty || status.isEmpty || _isSucceeded(status)) {
+      return _merge(raw, fallbackId: jobId.isEmpty ? null : jobId);
+    }
+
+    await _waitForJob(jobId, status);
+    return getResult(jobId);
+  }
+
+  Map<String, dynamic> _strategyParams(
+    Map<String, dynamic> source,
+    String marketType,
+  ) {
+    final Map<String, dynamic> params = <String, dynamic>{...source};
+    params.removeWhere((String key, dynamic _) {
+      final String k = key.toLowerCase();
+      return k == 'codegensessionid' ||
+          k == 'conversationid' ||
+          k == 'publishedsnapshotid' ||
+          k == 'strategyinstanceid' ||
+          k == 'scriptcode' ||
+          k.startsWith('backtest');
+    });
+    params['marketType'] = marketType;
+    return params;
   }
 
   @override
   Future<BacktestResult> getResult(String id) async {
-    return _merge(await _service.getResult(id));
+    return _merge(await _service.getResult(id), fallbackId: id);
+  }
+
+  Future<void> _waitForJob(String jobId, String initialStatus) async {
+    String status = initialStatus;
+    for (int i = 0; i <= _jobPollLimit; i++) {
+      if (_isSucceeded(status)) return;
+      if (_isFailed(status)) {
+        throw FormatException('backtest job failed: $status');
+      }
+      if (i == _jobPollLimit) break;
+      await Future<void>.delayed(_jobPollInterval);
+      final Map<String, dynamic> envelope = asMap(await _service.getJob(jobId));
+      final Map<String, dynamic> data = asMap(envelope['data']);
+      status = asString(
+        pick(data.isEmpty ? envelope : data, <String>['status']),
+        fallback: status,
+      );
+    }
+    throw FormatException('backtest job timeout: $jobId');
+  }
+
+  bool _isSucceeded(String status) => status.toLowerCase() == 'succeeded';
+
+  bool _isFailed(String status) {
+    switch (status.toLowerCase()) {
+      case 'failed':
+      case 'canceled':
+      case 'cancelled':
+      case 'timeout':
+      case 'timed_out':
+        return true;
+      default:
+        return false;
+    }
   }
 
   List<double> _parseEquityCurve(Map<String, dynamic> m) {

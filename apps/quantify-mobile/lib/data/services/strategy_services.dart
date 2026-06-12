@@ -85,6 +85,8 @@ class BacktestService {
   Future<dynamic> run(Map<String, dynamic> request) =>
       _client.post('/backtesting/jobs', body: request);
 
+  Future<dynamic> getJob(String id) => _client.get('/backtesting/jobs/$id');
+
   Future<dynamic> getResult(String id) =>
       _client.get('/backtesting/jobs/$id/result');
 }

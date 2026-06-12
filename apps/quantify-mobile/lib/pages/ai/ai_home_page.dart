@@ -105,9 +105,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     final ChatTurn? confirmable = current == null
         ? null
         : _latestConfirmableTurn(current);
-    if (confirmable != null && _isConfirmIntent(text)) {
+    if (_isConfirmIntent(text) && confirmable != null && current != null) {
       _input.clear();
-      _openConfirm(confirmable, current!);
+      await _confirmInChat(confirmable, current);
       return;
     }
     _input.clear();
@@ -117,16 +117,18 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _scrollToBottom();
   }
 
-  /// 进入确认策略屏：真实链路传 codegen session；旧 mock 参数作兜底。
-  void _openConfirm(ChatTurn turn, AiSession session) {
-    context.push(
-      '/ai/confirm',
-      extra: AiConfirmArgs(
-        codegenSessionId: _codegenSessionIdFor(turn, session),
-        confirmedCanonicalDigest: _canonicalDigestFor(turn, session),
-        params: turn.params,
-      ),
+  Future<void> _confirmInChat(ChatTurn turn, AiSession session) async {
+    final String? codegenSessionId = _codegenSessionIdFor(turn);
+    final String? digest = _canonicalDigestFor(turn);
+    if (codegenSessionId == null || digest == null) return;
+    _scrollToBottom();
+    await _ctrl.confirmStrategyInChat(
+      session.id,
+      codegenSessionId: codegenSessionId,
+      confirmedCanonicalDigest: digest,
     );
+    if (!mounted) return;
+    _scrollToBottom();
   }
 
   bool _isConfirmIntent(String text) {
@@ -154,25 +156,22 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   ChatTurn? _latestConfirmableTurn(AiSession session) {
     if (session.deployedTo != null) return null;
     final List<ChatTurn> messages = session.messages;
-    for (int i = messages.length - 1; i >= 0; i--) {
-      final ChatTurn turn = messages[i];
-      if (turn.role != 'assistant') continue;
-      if (turn.kind == ChatTurnKind.deployed) return null;
-      if (_hasCodegenMetadata(turn, session)) return turn;
+    if (messages.isEmpty) return null;
+    final ChatTurn turn = messages.last;
+    if (turn.role != 'assistant' || turn.kind == ChatTurnKind.deployed) {
       return null;
     }
-    return null;
+    return _hasCodegenMetadata(turn) ? turn : null;
   }
 
-  bool _hasCodegenMetadata(ChatTurn turn, AiSession session) {
-    return _codegenSessionIdFor(turn, session) != null ||
-        _canonicalDigestFor(turn, session) != null;
+  bool _hasCodegenMetadata(ChatTurn turn) {
+    return _codegenSessionIdFor(turn) != null &&
+        _canonicalDigestFor(turn) != null;
   }
 
-  String? _codegenSessionIdFor(ChatTurn turn, AiSession session) {
+  String? _codegenSessionIdFor(ChatTurn turn) {
     return _firstNonBlank(<String?>[
       turn.codegenSessionId,
-      session.llmCodegenSessionId,
       turn.params?['codegenSessionId'],
       turn.params?['llmCodegenSessionId'],
       turn.params?['activeCodegenSessionId'],
@@ -180,10 +179,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     ]);
   }
 
-  String? _canonicalDigestFor(ChatTurn turn, AiSession session) {
+  String? _canonicalDigestFor(ChatTurn turn) {
     return _firstNonBlank(<String?>[
       turn.confirmedCanonicalDigest,
-      session.pendingCanonicalDigest,
       turn.params?['confirmedCanonicalDigest'],
       turn.params?['canonicalDigest'],
       turn.params?['pendingCanonicalDigest'],
@@ -238,6 +236,20 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AiHomePageState>(aiHomePageControllerProvider, (
+      AiHomePageState? previous,
+      AiHomePageState next,
+    ) {
+      if (!mounted) return;
+      final int previousCount = _messageCount(previous);
+      final int nextCount = _messageCount(next);
+      final bool streamingChanged =
+          previous?.isStreaming == true && !next.isStreaming;
+      if (next.isStreaming || streamingChanged || previousCount != nextCount) {
+        _scrollToBottom();
+      }
+    });
+
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AiHomePageState st = ref.watch(aiHomePageControllerProvider);
@@ -269,7 +281,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       l10n.aiQuickReply1,
       l10n.aiQuickReply2,
       l10n.aiQuickReply3,
-      l10n.aiQuickReply4,
     ];
 
     final List<ChatTurn> messages = current?.messages ?? <ChatTurn>[];
@@ -331,7 +342,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                           final bool canConfirm =
                               t.role == 'assistant' &&
                               !isDeployed &&
-                              _hasCodegenMetadata(t, current);
+                              identical(t, _latestConfirmableTurn(current));
                           final String? liveId =
                               t.deployedInstanceId ??
                               (isDeployed ? current.deployedTo : null);
@@ -344,10 +355,10 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                             params: t.kind == ChatTurnKind.params
                                 ? t.params
                                 : null,
-                            // 「确认策略」CTA（#1831 接线 → #1832 落地）：
-                            // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
+                            // 「确认策略」CTA：只确认当前 CONFIRM_GATE；确认后
+                            // 才生成脚本，并把 PUBLISHED 脚本回复回聊天。
                             onConfirm: canConfirm
-                                ? () => _openConfirm(t, current)
+                                ? () => _confirmInChat(t, current)
                                 : null,
                             // 已部署锁定态（#1834）：会话 `deployedTo != null`
                             // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。
@@ -383,6 +394,11 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         ),
       ),
     );
+  }
+
+  int _messageCount(AiHomePageState? state) {
+    if (state?.currentId == null) return 0;
+    return state!.sessions[state.currentId!]?.messages.length ?? 0;
   }
 
   String _formatSubtitle(AiSession s) {

@@ -11,6 +11,7 @@ import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
+import 'package:quantify_mobile/data/services/api_client.dart';
 import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -36,6 +37,7 @@ Future<void> _pump(WidgetTester tester, {Map<String, String>? params}) async {
 CodegenSessionResponseDto _codegenSession({
   required CodegenSessionResponseDtoStatusEnum status,
   String? canonicalDigest,
+  Map<String, Object?>? specDesc,
 }) {
   return CodegenSessionResponseDto(
     (b) => b
@@ -43,6 +45,14 @@ CodegenSessionResponseDto _codegenSession({
       ..status = status
       ..canonicalDigest = canonicalDigest
       ..clarificationGate.replace(BuiltMap<String, JsonObject?>())
+      ..specDesc.replace(
+        BuiltMap<String, JsonObject?>(
+          (specDesc ?? const <String, Object?>{}).map(
+            (String key, Object? value) =>
+                MapEntry<String, JsonObject?>(key, JsonObject(value)),
+          ),
+        ),
+      )
       ..publishedSnapshotParamValues.replace(
         BuiltMap<String, JsonObject?>(<String, JsonObject?>{
           'category': JsonObject('均线突破'),
@@ -60,18 +70,21 @@ class _FakeAiChatRepository implements AiChatRepository {
   _FakeAiChatRepository({
     List<CodegenSessionResponseDto>? confirmResponses,
     List<CodegenSessionResponseDto>? getResponses,
+    List<Object>? confirmErrors,
   }) : _confirmResponses = List<CodegenSessionResponseDto>.of(
          confirmResponses ?? const <CodegenSessionResponseDto>[],
        ),
        _getResponses = List<CodegenSessionResponseDto>.of(
          getResponses ?? const <CodegenSessionResponseDto>[],
-       );
+       ),
+       _confirmErrors = List<Object>.of(confirmErrors ?? const <Object>[]);
 
   final List<({String sessionId, String message, String? digest})>
   confirmCalls = <({String sessionId, String message, String? digest})>[];
   final List<String> getCalls = <String>[];
   final List<CodegenSessionResponseDto> _confirmResponses;
   final List<CodegenSessionResponseDto> _getResponses;
+  final List<Object> _confirmErrors;
 
   @override
   Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async {
@@ -94,6 +107,7 @@ class _FakeAiChatRepository implements AiChatRepository {
       message: message,
       digest: confirmedCanonicalDigest,
     ));
+    if (_confirmErrors.isNotEmpty) throw _confirmErrors.removeAt(0);
     if (_confirmResponses.isNotEmpty) return _confirmResponses.removeAt(0);
     return _codegenSession(
       status: CodegenSessionResponseDtoStatusEnum.PUBLISHED,
@@ -279,9 +293,93 @@ void main() {
     );
   });
 
+  testWidgets('确认页优先渲染真实 displayLogicGraph 和 executionContext', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository(
+      getResponses: <CodegenSessionResponseDto>[
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
+          canonicalDigest: 'sha256:canonical-graph',
+          specDesc: <String, Object?>{
+            'executionContext': <String, Object?>{
+              'exchange': 'okx',
+              'symbol': 'BTCUSDT',
+              'timeframe': '15m',
+              'marketType': 'perp',
+            },
+            'displayLogicGraph': <String, Object?>{
+              'blocks': <Object?>[
+                <String, Object?>{
+                  'items': <Object?>[
+                    <String, Object?>{
+                      'kind': 'condition',
+                      'text':
+                          '15m 价格在 EMA20 上方 同时 15m 价格在 EMA60 上方 同时 15m 价格在 EMA144 上方 时做多开仓',
+                    },
+                    <String, Object?>{'kind': 'action', 'text': '开多'},
+                    <String, Object?>{
+                      'kind': 'action',
+                      'text': '止损：价格相对入场均价下跌5% 强制平仓',
+                    },
+                    <String, Object?>{'kind': 'action', 'text': '单笔仓位 10 USDT'},
+                  ],
+                },
+                <String, Object?>{
+                  'items': <Object?>[
+                    <String, Object?>{
+                      'kind': 'condition',
+                      'text': '15m 价格低于 EMA20 时平多',
+                    },
+                    <String, Object?>{'kind': 'action', 'text': '平多'},
+                  ],
+                },
+              ],
+            },
+          },
+        ),
+      ],
+    );
+
+    await tester.binding.setSurfaceSize(const Size(420, 1800));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          home: const AiConfirmPage(
+            args: AiConfirmArgs(codegenSessionId: 'session-1'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('BTCUSDT AI 策略'), findsOneWidget);
+    expect(find.textContaining('EMA144'), findsOneWidget);
+    expect(find.textContaining('15m 价格低于 EMA20'), findsOneWidget);
+    expect(find.textContaining('单笔仓位 10 USDT'), findsWidgets);
+    final String richText = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .map((RichText widget) => widget.text.toPlainText())
+        .join('|');
+    expect(richText, contains('OKX'));
+    expect(richText, contains('永续合约'));
+    expect(find.text('BTC 趋势 · 双均线'), findsNothing);
+  });
+
   testWidgets('确认后等待后端发布快照，再进入策略脚本页', (WidgetTester tester) async {
     final _FakeAiChatRepository repo = _FakeAiChatRepository(
       getResponses: <CodegenSessionResponseDto>[
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
         _codegenSession(
           status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
           canonicalDigest: 'sha256:canonical-1',
@@ -353,7 +451,186 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.confirmCalls, hasLength(1));
-    expect(repo.getCalls, <String>['session-1', 'session-1']);
+    expect(repo.getCalls, <String>['session-1', 'session-1', 'session-1']);
     expect(find.text('PUBLISHED snapshot-1 session-1'), findsOneWidget);
+  });
+
+  testWidgets('已发布 session 直接复用快照进入脚本页，不重复确认', (WidgetTester tester) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository(
+      getResponses: <CodegenSessionResponseDto>[
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.PUBLISHED,
+          canonicalDigest: 'sha256:canonical-1',
+        ).rebuild((b) => b..scriptCode = 'return { ok: true }'),
+      ],
+    );
+    late final GoRouter router;
+    router = GoRouter(
+      routes: <RouteBase>[
+        GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(
+          path: '/ai/confirm',
+          builder: (_, GoRouterState state) => AiConfirmPage(
+            args: state.extra is AiConfirmArgs
+                ? state.extra! as AiConfirmArgs
+                : null,
+          ),
+        ),
+        GoRoute(
+          path: '/ai/script',
+          builder: (_, GoRouterState state) {
+            final AiPublishedStrategyContext extra =
+                state.extra! as AiPublishedStrategyContext;
+            return Text('${extra.publishedSnapshotId} ${extra.scriptCode}');
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          routerConfig: router,
+        ),
+      ),
+    );
+    router.push(
+      '/ai/confirm',
+      extra: const AiConfirmArgs(codegenSessionId: 'session-1'),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('ai-confirm-next-cta')));
+    await tester.pumpAndSettle();
+
+    expect(repo.confirmCalls, isEmpty);
+    expect(find.text('snapshot-1 return { ok: true }'), findsOneWidget);
+  });
+
+  testWidgets('确认 409 后拉取已发布 session 恢复脚本上下文', (WidgetTester tester) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository(
+      getResponses: <CodegenSessionResponseDto>[
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.PUBLISHED,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
+      ],
+      confirmErrors: <Object>[
+        const ApiException(
+          message: 'conflict',
+          statusCode: 409,
+          code: 'CONFLICT',
+        ),
+      ],
+    );
+    late final GoRouter router;
+    router = GoRouter(
+      routes: <RouteBase>[
+        GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(
+          path: '/ai/confirm',
+          builder: (_, GoRouterState state) => AiConfirmPage(
+            args: state.extra is AiConfirmArgs
+                ? state.extra! as AiConfirmArgs
+                : null,
+          ),
+        ),
+        GoRoute(
+          path: '/ai/script',
+          builder: (_, GoRouterState state) {
+            final AiPublishedStrategyContext extra =
+                state.extra! as AiPublishedStrategyContext;
+            return Text('${extra.status} ${extra.publishedSnapshotId}');
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          routerConfig: router,
+        ),
+      ),
+    );
+    router.push(
+      '/ai/confirm',
+      extra: const AiConfirmArgs(codegenSessionId: 'session-1'),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('ai-confirm-next-cta')));
+    await tester.pumpAndSettle();
+
+    expect(repo.confirmCalls, hasLength(1));
+    expect(find.text('PUBLISHED snapshot-1'), findsOneWidget);
+  });
+
+  testWidgets('digest 不一致时阻止复用旧发布快照', (WidgetTester tester) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository(
+      getResponses: <CodegenSessionResponseDto>[
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE,
+          canonicalDigest: 'sha256:old',
+        ),
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.PUBLISHED,
+          canonicalDigest: 'sha256:old',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          home: const AiConfirmPage(
+            args: AiConfirmArgs(
+              codegenSessionId: 'session-1',
+              confirmedCanonicalDigest: 'sha256:new',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('ai-confirm-next-cta')));
+    await tester.pumpAndSettle();
+
+    expect(repo.confirmCalls, isEmpty);
+    expect(find.textContaining('当前确认内容与后端会话不一致'), findsOneWidget);
   });
 }

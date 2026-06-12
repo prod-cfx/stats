@@ -19,11 +19,14 @@ class AiDeployPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final c = context.qzScheme;
+    final String subtitle = deploymentContext?.symbol?.trim().isNotEmpty == true
+        ? deploymentContext!.symbol!.trim()
+        : 'AI 策略';
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
         title: '部署策略',
-        subtitle: 'BTC 趋势 · 双均线 · 15m',
+        subtitle: subtitle,
         onBack: () => context.pop(),
         actions: <Widget>[
           QzTopCancelButton(

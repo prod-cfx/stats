@@ -77,6 +77,24 @@ const AiPublishedStrategyContext _publishedContext = AiPublishedStrategyContext(
   compatibilityMetadata: <String, Object?>{},
 );
 
+const AiPublishedStrategyContext _ethPublishedContext =
+    AiPublishedStrategyContext(
+      codegenSessionId: 'session-eth',
+      status: 'PUBLISHED',
+      publishedSnapshotId: 'snapshot-eth',
+      params: <String, String>{'symbol': 'BTC/USDT'},
+      snapshotParamValues: <String, Object?>{'symbol': 'ETHUSDT'},
+      strategyConfig: <String, Object?>{
+        'symbol': 'ETHUSDT',
+        'baseTimeframe': '15m',
+        'name': 'ETHUSDT AI 策略',
+      },
+      backtestConfigDefaults: <String, Object?>{'leverage': 3},
+      deploymentExecutionDefaults: <String, Object?>{},
+      deploymentExecutionConstraints: <String, Object?>{},
+      compatibilityMetadata: <String, Object?>{},
+    );
+
 void main() {
   testWidgets('默认手续费 = 2', (WidgetTester tester) async {
     await _pump(tester);
@@ -113,7 +131,7 @@ void main() {
   testWidgets('设计稿结构：recap + 历史区间 + 初始资金', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.textContaining('配置回测参数'), findsOneWidget);
-    expect(find.textContaining('BTC 趋势 · 双均线'), findsOneWidget);
+    expect(find.textContaining('AI 策略'), findsOneWidget);
     expect(find.byKey(const Key('backtest-range-7D')), findsOneWidget);
     expect(find.byKey(const Key('backtest-range-30D')), findsOneWidget);
     expect(find.byKey(const Key('backtest-range-90D')), findsOneWidget);
@@ -124,6 +142,15 @@ void main() {
     expect(find.byKey(const Key('backtest-capital')), findsOneWidget);
     expect(find.byKey(const Key('backtest-capital-1k')), findsOneWidget);
     expect(find.byKey(const Key('backtest-capital-100k')), findsOneWidget);
+  });
+
+  testWidgets('发布上下文存在时 recap 使用真实策略名，不显示 BTC fallback', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, strategyContext: _ethPublishedContext);
+
+    expect(find.textContaining('ETHUSDT AI 策略'), findsOneWidget);
+    expect(find.textContaining('BTC 趋势 · 双均线'), findsNothing);
   });
 
   testWidgets('区间回显：默认 30D 显示设计稿固定数据范围', (WidgetTester tester) async {

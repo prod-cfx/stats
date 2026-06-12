@@ -27,11 +27,14 @@ class AiBacktestResultPage extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final c = context.qzScheme;
     final String? effectiveJobId = args?.jobId ?? jobId;
+    final BacktestResult? providedResult = args?.result;
+    final String subtitle =
+        args?.strategyContext.displayHeaderSubtitle ?? 'AI 策略';
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
         title: l10n.backtestResultTitle,
-        subtitle: 'BTC 趋势 · 双均线 · 15m',
+        subtitle: subtitle,
         onBack: () => context.pop(),
         actions: <Widget>[
           QzTopCancelButton(
@@ -56,7 +59,12 @@ class AiBacktestResultPage extends ConsumerWidget {
               done: const <int>[0, 1, 2],
             ),
             Expanded(
-              child: effectiveJobId == null || effectiveJobId.isEmpty
+              child: providedResult != null
+                  ? _BacktestResultBody(
+                      result: providedResult,
+                      strategyContext: args?.strategyContext,
+                    )
+                  : effectiveJobId == null || effectiveJobId.isEmpty
                   ? Center(child: Text(l10n.commonLoadError))
                   : ref
                         .watch(backtestResultProvider(effectiveJobId))
@@ -65,84 +73,92 @@ class AiBacktestResultPage extends ConsumerWidget {
                               const Center(child: CircularProgressIndicator()),
                           error: (Object error, StackTrace _) =>
                               Center(child: Text(formatAiErrorText(error))),
-                          data: (BacktestResult result) => Stack(
-                            children: <Widget>[
-                              ListView(
-                                padding: const EdgeInsets.fromLTRB(
-                                  QzSpacing.lg,
-                                  QzSpacing.md,
-                                  QzSpacing.lg,
-                                  100,
-                                ),
-                                children: <Widget>[
-                                  QzBacktestResultCard(result: result),
-                                ],
-                              ),
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    QzSpacing.lg,
-                                    QzSpacing.md,
-                                    QzSpacing.lg,
-                                    QzSpacing.lg,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: <Color>[
-                                        c.bg.withValues(alpha: 0),
-                                        c.bg,
-                                      ],
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: <Widget>[
-                                      Expanded(
-                                        child: _SolidSecondaryButton(
-                                          label: l10n.backtestCollapseButton,
-                                          onPressed: () => context.pop(),
-                                        ),
-                                      ),
-                                      const SizedBox(width: QzSpacing.md),
-                                      Expanded(
-                                        flex: 2,
-                                        child: QzButton(
-                                          label: '一键部署到交易所',
-                                          variant: QzButtonVariant.accent,
-                                          onPressed: () {
-                                            final AiPublishedStrategyContext?
-                                            strategyContext =
-                                                args?.strategyContext;
-                                            if (strategyContext == null) {
-                                              context.push('/ai/deploy');
-                                              return;
-                                            }
-                                            context.push(
-                                              '/ai/deploy',
-                                              extra: strategyContext
-                                                  .toDeploymentContext(
-                                                    backtestResult: result,
-                                                  ),
-                                            );
-                                          },
-                                          expanded: true,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
+                          data: (BacktestResult result) => _BacktestResultBody(
+                            result: result,
+                            strategyContext: args?.strategyContext,
                           ),
                         ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BacktestResultBody extends StatelessWidget {
+  const _BacktestResultBody({required this.result, this.strategyContext});
+
+  final BacktestResult result;
+  final AiPublishedStrategyContext? strategyContext;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Stack(
+      children: <Widget>[
+        ListView(
+          padding: const EdgeInsets.fromLTRB(
+            QzSpacing.lg,
+            QzSpacing.md,
+            QzSpacing.lg,
+            100,
+          ),
+          children: <Widget>[QzBacktestResultCard(result: result)],
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(
+              QzSpacing.lg,
+              QzSpacing.md,
+              QzSpacing.lg,
+              QzSpacing.lg,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[c.bg.withValues(alpha: 0), c.bg],
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: _SolidSecondaryButton(
+                    label: l10n.backtestCollapseButton,
+                    onPressed: () => context.pop(),
+                  ),
+                ),
+                const SizedBox(width: QzSpacing.md),
+                Expanded(
+                  flex: 2,
+                  child: QzButton(
+                    label: '一键部署到交易所',
+                    variant: QzButtonVariant.accent,
+                    onPressed: () {
+                      if (strategyContext == null) {
+                        context.push('/ai/deploy');
+                        return;
+                      }
+                      context.push(
+                        '/ai/deploy',
+                        extra: strategyContext!.toDeploymentContext(
+                          backtestResult: result,
+                        ),
+                      );
+                    },
+                    expanded: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

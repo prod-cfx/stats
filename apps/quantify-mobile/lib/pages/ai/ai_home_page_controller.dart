@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/error/error_router.dart';
@@ -9,6 +10,7 @@ import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
 import '../../data/repositories/strategy_repository.dart';
+import '../../data/services/api_client.dart';
 import 'ai_home_page_state.dart';
 
 /// AI 多会话对话页控制器（issue #2186 三件套迁移）。
@@ -23,6 +25,8 @@ import 'ai_home_page_state.dart';
 class AiHomePageController extends Notifier<AiHomePageState> {
   /// Streaming cadence: 1 char / 250 ms（保留 #1508 节奏）。
   static const Duration streamTick = Duration(milliseconds: 250);
+  static const int _publishPollLimit = 80;
+  static const Duration _publishPollInterval = Duration(milliseconds: 1500);
 
   final NotifierLifecycle _life = NotifierLifecycle();
   Timer? _streamTimer;
@@ -94,10 +98,16 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   Future<void> createSession(String untitledTitle) async {
     final AiSession fresh = await _chatRepo.createSession(title: untitledTitle);
     if (!mounted) return;
+    _streamTimer?.cancel();
+    final Map<String, String> drafts = Map<String, String>.of(state.drafts)
+      ..remove(fresh.id);
     state = state.copyWith(
       sessions: <String, AiSession>{...state.sessions, fresh.id: fresh},
       order: <String>[fresh.id, ...state.order],
       currentId: fresh.id,
+      drafts: drafts,
+      isThinking: false,
+      isStreaming: false,
     );
   }
 
@@ -138,6 +148,10 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     );
     final AiSession? cur = state.sessions[id];
     if (cur == null) return;
+    final String targetSessionId = _firstNonBlank(<String?>[
+      cur.llmCodegenSessionId,
+      id,
+    ])!;
     state = state.copyWith(
       sessions: <String, AiSession>{
         ...state.sessions,
@@ -152,10 +166,31 @@ class AiHomePageController extends Notifier<AiHomePageState> {
 
     ChatTurn reply;
     try {
-      reply = await _chatRepo.sendMessageTo(id, userTurn);
-    } catch (_) {
+      reply = await _chatRepo.sendMessageTo(targetSessionId, userTurn);
+    } catch (error) {
       if (!mounted) return;
-      state = state.copyWith(isThinking: false);
+      final AiSession? failed = state.sessions[id];
+      if (failed == null) {
+        state = state.copyWith(isThinking: false);
+        return;
+      }
+      final String message = ErrorRouter.normalize(error).message;
+      final ChatTurn errorTurn = ChatTurn(
+        id: 'assistant-error-${DateTime.now().microsecondsSinceEpoch}',
+        role: 'assistant',
+        content: '发送失败：$message',
+        timestamp: DateTime.now(),
+      );
+      state = state.copyWith(
+        sessions: <String, AiSession>{
+          ...state.sessions,
+          id: failed.copyWith(
+            messages: <ChatTurn>[...failed.messages, errorTurn],
+            updatedAt: DateTime.now(),
+          ),
+        },
+        isThinking: false,
+      );
       return;
     }
     if (!mounted) return;
@@ -172,7 +207,17 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     state = state.copyWith(
       sessions: <String, AiSession>{
         ...state.sessions,
-        id: cur2.copyWith(messages: <ChatTurn>[...base, _replyWith(reply, '')]),
+        id: cur2.copyWith(
+          messages: <ChatTurn>[...base, _replyWith(reply, '')],
+          llmCodegenSessionId: _firstNonBlank(<String?>[
+            reply.codegenSessionId,
+            cur2.llmCodegenSessionId,
+          ]),
+          pendingCanonicalDigest: _firstNonBlank(<String?>[
+            reply.confirmedCanonicalDigest,
+            cur2.pendingCanonicalDigest,
+          ]),
+        ),
       },
       isThinking: false,
       isStreaming: true,
@@ -203,7 +248,17 @@ class AiHomePageController extends Notifier<AiHomePageState> {
         state = state.copyWith(
           sessions: <String, AiSession>{
             ...state.sessions,
-            id: s.copyWith(messages: msgs),
+            id: s.copyWith(
+              messages: msgs,
+              llmCodegenSessionId: _firstNonBlank(<String?>[
+                reply.codegenSessionId,
+                s.llmCodegenSessionId,
+              ]),
+              pendingCanonicalDigest: _firstNonBlank(<String?>[
+                reply.confirmedCanonicalDigest,
+                s.pendingCanonicalDigest,
+              ]),
+            ),
           },
           isStreaming: false,
         );
@@ -217,6 +272,167 @@ class AiHomePageController extends Notifier<AiHomePageState> {
         },
       );
     });
+  }
+
+  Future<void> confirmStrategyInChat(
+    String sessionId, {
+    required String codegenSessionId,
+    required String confirmedCanonicalDigest,
+  }) async {
+    if (state.isSending) return;
+    final AiSession? cur = state.sessions[sessionId];
+    if (cur == null) return;
+    final DateTime now = DateTime.now();
+    final ChatTurn userTurn = ChatTurn(
+      id: 'confirm-user-${now.microsecondsSinceEpoch}',
+      role: 'user',
+      content: '确认策略',
+      timestamp: now,
+    );
+    final ChatTurn pendingTurn = ChatTurn(
+      id: 'confirm-pending-${now.microsecondsSinceEpoch + 1}',
+      role: 'assistant',
+      content: '已确认策略，正在生成策略脚本...',
+      timestamp: now.add(const Duration(milliseconds: 1)),
+      codegenSessionId: codegenSessionId,
+      confirmedCanonicalDigest: confirmedCanonicalDigest,
+    );
+
+    state = state.copyWith(
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        sessionId: cur.copyWith(
+          messages: <ChatTurn>[...cur.messages, userTurn, pendingTurn],
+          updatedAt: now,
+          llmCodegenSessionId: codegenSessionId,
+          pendingCanonicalDigest: confirmedCanonicalDigest,
+        ),
+      },
+      isThinking: true,
+    );
+
+    try {
+      CodegenSessionResponseDto result;
+      try {
+        result = await _chatRepo.confirmStrategy(
+          codegenSessionId,
+          message: '确认策略',
+          confirmedCanonicalDigest: confirmedCanonicalDigest,
+        );
+      } catch (error) {
+        if (!_isConflictError(error)) rethrow;
+        result = await _chatRepo.getCodegenSession(codegenSessionId);
+      }
+      result = await _waitForPublished(codegenSessionId, result);
+      if (!mounted) return;
+      _replaceAssistantTurn(
+        sessionId,
+        pendingTurn.id,
+        _publishedScriptTurn(result),
+        sessionPatch: (AiSession s) => s.copyWith(
+          llmCodegenSessionId: result.id,
+          pendingCanonicalDigest: result.canonicalDigest,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _replaceAssistantTurn(
+        sessionId,
+        pendingTurn.id,
+        ChatTurn(
+          id: 'confirm-error-${DateTime.now().microsecondsSinceEpoch}',
+          role: 'assistant',
+          content: '脚本生成失败：${ErrorRouter.normalize(error).message}',
+          timestamp: DateTime.now(),
+        ),
+      );
+    } finally {
+      if (mounted) state = state.copyWith(isThinking: false);
+    }
+  }
+
+  Future<CodegenSessionResponseDto> _waitForPublished(
+    String sessionId,
+    CodegenSessionResponseDto initial,
+  ) async {
+    CodegenSessionResponseDto current = initial;
+    for (int i = 0; i <= _publishPollLimit; i++) {
+      if (current.status == CodegenSessionResponseDtoStatusEnum.PUBLISHED) {
+        return current;
+      }
+      if (_isTerminalFailure(current.status)) {
+        final String reason = current.rejectReason?.trim().isNotEmpty == true
+            ? current.rejectReason!.trim()
+            : '后端未返回失败原因';
+        throw StateError(reason);
+      }
+      if (i == _publishPollLimit) break;
+      await Future<void>.delayed(_publishPollInterval);
+      try {
+        current = await _chatRepo.getCodegenSession(sessionId);
+      } catch (error) {
+        if (!_isConflictError(error)) rethrow;
+      }
+    }
+    throw TimeoutException('策略脚本生成超时，请稍后重试。');
+  }
+
+  bool _isTerminalFailure(CodegenSessionResponseDtoStatusEnum status) {
+    return status == CodegenSessionResponseDtoStatusEnum.CONSISTENCY_FAILED ||
+        status == CodegenSessionResponseDtoStatusEnum.REJECTED;
+  }
+
+  bool _isConflictError(Object error) {
+    if (error is ApiException) return error.statusCode == 409;
+    if (error is DioException) {
+      final Object? inner = error.error;
+      if (inner is ApiException && inner.statusCode == 409) return true;
+      return error.response?.statusCode == 409;
+    }
+    final String text = error.toString();
+    return text.contains('status=409') ||
+        text.contains('HTTP 409') ||
+        text.contains('CONFLICT');
+  }
+
+  ChatTurn _publishedScriptTurn(CodegenSessionResponseDto result) {
+    final String script = result.scriptCode?.trim() ?? '';
+    final String content = script.isEmpty
+        ? '策略脚本已生成，可以开始回测。'
+        : '策略脚本已生成，可以开始回测。\n\n```javascript\n$script\n```';
+    return ChatTurn(
+      id: 'published-script-${result.id}-${DateTime.now().microsecondsSinceEpoch}',
+      role: 'assistant',
+      content: content,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  void _replaceAssistantTurn(
+    String sessionId,
+    String turnId,
+    ChatTurn replacement, {
+    AiSession Function(AiSession session)? sessionPatch,
+  }) {
+    final AiSession? session = state.sessions[sessionId];
+    if (session == null) return;
+    final List<ChatTurn> messages = List<ChatTurn>.of(session.messages);
+    final int index = messages.indexWhere((ChatTurn turn) => turn.id == turnId);
+    if (index >= 0) {
+      messages[index] = replacement;
+    } else {
+      messages.add(replacement);
+    }
+    final AiSession patched = sessionPatch?.call(session) ?? session;
+    state = state.copyWith(
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        sessionId: patched.copyWith(
+          messages: messages,
+          updatedAt: DateTime.now(),
+        ),
+      },
+    );
   }
 
   /// 处理 `?loadStrategy=<id>`：拉策略详情 → 选/建会话 → 注入预设两条消息。
@@ -317,6 +533,14 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     codegenSessionId: reply.codegenSessionId,
     confirmedCanonicalDigest: reply.confirmedCanonicalDigest,
   );
+
+  String? _firstNonBlank(Iterable<String?> values) {
+    for (final String? value in values) {
+      final String trimmed = value?.trim() ?? '';
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
+  }
 }
 
 final aiHomePageControllerProvider =

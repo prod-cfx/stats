@@ -121,6 +121,34 @@ void main() {
     expect(find.textContaining('Quantify Strategy · 双均线趋势'), findsNothing);
   });
 
+  testWidgets('发布上下文存在时 recap 使用真实标题和杠杆', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      strategyContext: const AiPublishedStrategyContext(
+        codegenSessionId: 'session-eth',
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-eth',
+        params: <String, String>{'symbol': 'BTC/USDT'},
+        snapshotParamValues: <String, Object?>{'symbol': 'ETHUSDT'},
+        strategyConfig: <String, Object?>{
+          'symbol': 'ETHUSDT',
+          'baseTimeframe': '15m',
+          'name': 'ETHUSDT AI 策略',
+        },
+        backtestConfigDefaults: <String, Object?>{},
+        deploymentExecutionDefaults: <String, Object?>{'leverage': 3},
+        deploymentExecutionConstraints: <String, Object?>{},
+        compatibilityMetadata: <String, Object?>{},
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('ETHUSDT AI 策略'), findsOneWidget);
+    expect(find.textContaining('ETHUSDT'), findsWidgets);
+    expect(find.textContaining('3x'), findsOneWidget);
+    expect(find.textContaining('BTC/USDT'), findsNothing);
+  });
+
   testWidgets('长脚本：展开折叠切换文案「查看全部 N 行 / 收起」（验收 4）', (WidgetTester tester) async {
     await _pump(tester, params: <String, String>{'codegenStatus': 'PUBLISHED'});
     await tester.pump();

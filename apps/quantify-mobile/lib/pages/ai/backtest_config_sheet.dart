@@ -326,6 +326,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
     final BacktestConfigSheetState st = ref.watch(
       backtestConfigSheetControllerProvider,
     );
+    final String strategyName = widget.strategyContext?.displayTitle ?? 'AI 策略';
     final double bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
       backgroundColor: c.bg,
@@ -370,7 +371,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        _RecapStrip(scheme: c),
+                        _RecapStrip(scheme: c, strategyName: strategyName),
                         const SizedBox(height: 14),
                         _SectionTitle(
                           scheme: c,

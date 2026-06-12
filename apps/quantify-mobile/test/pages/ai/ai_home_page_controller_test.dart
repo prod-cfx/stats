@@ -255,5 +255,32 @@ void main() {
       expect(s.sessions.containsKey('a'), isFalse);
       expect(s.currentId, 'b');
     });
+
+    test('createSession 切到新会话并清理新会话草稿和发送态', () {
+      fakeAsync((FakeAsync async) {
+        final ProviderContainer c = makeContainer(
+          _FakeAiChatRepository(<AiSession>[_session('a')])
+            ..replyContent = 'streaming',
+        );
+        pin(c);
+        ctrl(c).loadSessions();
+        async.flushMicrotasks();
+        ctrl(c).persistDraft('old draft');
+        ctrl(c).send('hello');
+        async.flushMicrotasks();
+        expect(read(c).isStreaming, isTrue);
+
+        ctrl(c).createSession('新方案');
+        async.flushMicrotasks();
+
+        final AiHomePageState s = read(c);
+        expect(s.currentId, 'new-1');
+        expect(s.order.first, 'new-1');
+        expect(s.drafts['new-1'], isNull);
+        expect(s.drafts['a'], '');
+        expect(s.isThinking, isFalse);
+        expect(s.isStreaming, isFalse);
+      });
+    });
   });
 }

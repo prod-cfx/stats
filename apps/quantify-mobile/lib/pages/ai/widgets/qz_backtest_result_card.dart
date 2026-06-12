@@ -44,6 +44,9 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
   String _rangeLabel() {
     final DateTime s = widget.result.rangeStart;
     final DateTime e = widget.result.rangeEnd;
+    if (s.millisecondsSinceEpoch <= 0 || e.millisecondsSinceEpoch <= 0) {
+      return '--';
+    }
     String ym(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
     return '${ym(s)} → ${ym(e)}';
   }
@@ -185,4 +188,3 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
     );
   }
 }
-

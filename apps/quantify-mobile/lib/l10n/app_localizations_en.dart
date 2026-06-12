@@ -112,16 +112,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiSessionDeleteConfirm => 'Delete';
 
   @override
-  String get aiQuickReply1 => 'Run backtest again';
+  String get aiQuickReply1 => 'Logic graph';
 
   @override
-  String get aiQuickReply2 => 'Set stop loss to 1.5%';
+  String get aiQuickReply2 => 'Backtest result';
 
   @override
-  String get aiQuickReply3 => 'Try ETH instead';
-
-  @override
-  String get aiQuickReply4 => 'Deploy to Binance';
+  String get aiQuickReply3 => 'Deploy';
 
   @override
   String get backtestSheetTitle => 'Backtest Settings';

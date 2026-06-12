@@ -91,6 +91,24 @@ Map<String, dynamic> _builtJsonMap(BuiltMap<String, JsonObject?>? source) {
   );
 }
 
+String? _canonicalDigestFromSpec(BuiltMap<String, JsonObject?>? specDesc) {
+  final Map<String, dynamic> spec = _builtJsonMap(specDesc);
+  final String direct = asString(spec['canonicalDigest']).trim();
+  if (direct.isNotEmpty) return direct;
+  final String nested = asString(
+    pick(asMap(spec['confirmation']), <String>['digest']),
+  ).trim();
+  return nested.isEmpty ? null : nested;
+}
+
+String? _pendingCanonicalDigest(CodegenSessionResponseDto response) {
+  final Map<String, dynamic> gate = _builtJsonMap(response.clarificationGate);
+  if (gate['blocked'] == true) return null;
+  final String direct = response.canonicalDigest?.trim() ?? '';
+  if (direct.isNotEmpty) return direct;
+  return _canonicalDigestFromSpec(response.specDesc);
+}
+
 Map<String, String> _stringParamsFromBuilt(
   BuiltMap<String, JsonObject?>? source,
 ) {
@@ -315,7 +333,7 @@ ChatTurn _turnFromCodegen(CodegenSessionResponseDto response) {
     kind: hasParams ? ChatTurnKind.params : ChatTurnKind.text,
     params: hasParams ? params : null,
     codegenSessionId: response.id,
-    confirmedCanonicalDigest: response.canonicalDigest,
+    confirmedCanonicalDigest: _pendingCanonicalDigest(response),
   );
 }
 
@@ -328,7 +346,7 @@ AiSession _sessionFromCodegen(CodegenSessionResponseDto response) {
     updatedAt: DateTime.now(),
     messages: <ChatTurn>[turn],
     llmCodegenSessionId: response.id,
-    pendingCanonicalDigest: response.canonicalDigest,
+    pendingCanonicalDigest: _pendingCanonicalDigest(response),
     deployedTo: response.strategyInstanceId,
   );
 }
@@ -351,12 +369,13 @@ class ApiAiChatRepository implements AiChatRepository {
   final GeneratedBackendApi? _generatedApi;
   final String Function()? _tokenSupplier;
   final Duration _sessionPollInterval;
-
-  LlmStrategyCodegenApi? get _codegenApi =>
-      _generatedApi?.client.getLlmStrategyCodegenApi();
+  final Map<String, String> _localCodegenSessionIds = <String, String>{};
 
   AccountAiQuantApi? get _accountAiQuantApi =>
       _generatedApi?.client.getAccountAiQuantApi();
+
+  LlmStrategyCodegenApi? get _codegenApi =>
+      _generatedApi?.client.getLlmStrategyCodegenApi();
 
   String _authorization() {
     final String token = _tokenSupplier?.call() ?? '';
@@ -384,52 +403,103 @@ class ApiAiChatRepository implements AiChatRepository {
   Future<AiSession> createSession({String? title}) async {
     final LlmStrategyCodegenApi? api = _codegenApi;
     if (api != null) {
-      final response = await api.llmStrategyCodegenControllerStartSession(
-        authorization: _authorization(),
-        llmCodegenStartRequestDto: LlmCodegenStartRequestDto(
-          (b) => b..locale = LlmCodegenStartRequestDtoLocaleEnum.zh,
-        ),
+      final String id = 'local-codegen-${DateTime.now().microsecondsSinceEpoch}';
+      return AiSession(
+        id: id,
+        title: title?.trim().isNotEmpty == true ? title!.trim() : '新对话',
+        category: 'AI 量化',
+        updatedAt: DateTime.now(),
+        messages: const <ChatTurn>[],
       );
-      final CodegenSessionResponseDto? data = response.data;
-      if (data != null) return _sessionFromCodegen(data);
     }
-    return _parseSession(asMap(await _service.createSession(title: title)));
+    return _sessionFromCodegen(
+      _codegenSessionFromRaw(await _service.createSession(title: title)),
+    );
   }
 
   @override
-  Future<void> deleteSession(String sessionId) =>
-      _service.deleteSession(sessionId);
+  Future<void> deleteSession(String sessionId) async {
+    if (sessionId.startsWith('local-codegen-')) {
+      _localCodegenSessionIds.remove(sessionId);
+      return;
+    }
+    await _service.deleteSession(sessionId);
+  }
 
   @override
   Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async {
     final LlmStrategyCodegenApi? api = _codegenApi;
     if (api != null) {
+      final bool isLocalSession = sessionId.startsWith('local-codegen-');
+      final String? mappedSessionId = _localCodegenSessionIds[sessionId];
+      if (isLocalSession && mappedSessionId == null) {
+        final response = await api.llmStrategyCodegenControllerStartSession(
+          authorization: _authorization(),
+          extra: const <String, dynamic>{'unwrapData': true},
+          llmCodegenStartRequestDto: LlmCodegenStartRequestDto(
+            (b) => b
+              ..initialMessage = turn.content
+              ..locale = LlmCodegenStartRequestDtoLocaleEnum.zh,
+          ),
+        );
+        final CodegenSessionResponseDto? data = response.data;
+        if (data == null) {
+          throw const ApiException(message: '策略生成回复为空，请稍后重试。');
+        }
+        _localCodegenSessionIds[sessionId] = data.id;
+        return _turnFromCodegen(data);
+      }
+      final String remoteSessionId = mappedSessionId ?? sessionId;
+      final BuiltMap<String, String>? clarificationAnswers =
+          await _clarificationAnswersFor(remoteSessionId, turn.content);
       final response = await api.llmStrategyCodegenControllerContinueSession(
         authorization: _authorization(),
-        id: sessionId,
-        llmCodegenContinueRequestDto: LlmCodegenContinueRequestDto(
-          (b) => b
+        id: remoteSessionId,
+        extra: const <String, dynamic>{'unwrapData': true},
+        llmCodegenContinueRequestDto: LlmCodegenContinueRequestDto((b) {
+          b
             ..message = turn.content
             ..locale = LlmCodegenContinueRequestDtoLocaleEnum.zh
-            ..confirmGenerate = false,
-        ),
+            ..confirmGenerate = false;
+          if (clarificationAnswers != null) {
+            b.clarificationAnswers.replace(clarificationAnswers);
+          }
+        }),
       );
       final CodegenSessionResponseDto? data = response.data;
-      if (data != null) return _turnFromCodegen(data);
+      if (data == null) {
+        throw const ApiException(message: '策略生成回复为空，请稍后重试。');
+      }
+      return _turnFromCodegen(data);
     }
-    final dynamic raw = await _service.sendMessage(sessionId, <String, dynamic>{
-      'id': turn.id,
-      'role': turn.role,
-      'content': turn.content,
-      'kind': turn.kind.name,
-      if (turn.params != null) 'params': turn.params,
-    });
-    return _parseTurn(asMap(raw));
+    return _turnFromCodegen(
+      _codegenSessionFromRaw(
+        await _service.sendMessage(sessionId, <String, dynamic>{
+          'message': turn.content,
+          'locale': 'zh',
+          'confirmGenerate': false,
+        }),
+      ),
+    );
   }
 
   @override
   Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async {
-    return _codegenSessionFromRaw(await _service.getCodegenSession(sessionId));
+    final String id = _localCodegenSessionIds[sessionId] ?? sessionId;
+    final LlmStrategyCodegenApi? api = _codegenApi;
+    if (api != null) {
+      final response = await api.llmStrategyCodegenControllerGetSession(
+        authorization: _authorization(),
+        id: id,
+        extra: const <String, dynamic>{'unwrapData': true},
+      );
+      final CodegenSessionResponseDto? data = response.data;
+      if (data == null) {
+        throw const ApiException(message: '策略生成会话暂不可用，请稍后重试。');
+      }
+      return data;
+    }
+    return _codegenSessionFromRaw(await _service.getCodegenSession(id));
   }
 
   @override
@@ -438,8 +508,31 @@ class ApiAiChatRepository implements AiChatRepository {
     required String message,
     String? confirmedCanonicalDigest,
   }) async {
+    final String id = _localCodegenSessionIds[sessionId] ?? sessionId;
+    final LlmStrategyCodegenApi? api = _codegenApi;
+    if (api != null) {
+      final response = await api.llmStrategyCodegenControllerContinueSession(
+        authorization: _authorization(),
+        id: id,
+        extra: const <String, dynamic>{'unwrapData': true},
+        llmCodegenContinueRequestDto: LlmCodegenContinueRequestDto((b) {
+          b
+            ..message = message
+            ..locale = LlmCodegenContinueRequestDtoLocaleEnum.zh
+            ..confirmGenerate = true;
+          if (confirmedCanonicalDigest?.trim().isNotEmpty == true) {
+            b.confirmedCanonicalDigest = confirmedCanonicalDigest!.trim();
+          }
+        }),
+      );
+      final CodegenSessionResponseDto? data = response.data;
+      if (data == null) {
+        throw const ApiException(message: '策略确认回复为空，请稍后重试。');
+      }
+      return data;
+    }
     return _codegenSessionFromRaw(
-      await _service.sendMessage(sessionId, <String, dynamic>{
+      await _service.sendMessage(id, <String, dynamic>{
         'message': message,
         'locale': 'zh',
         'confirmGenerate': true,
@@ -447,6 +540,37 @@ class ApiAiChatRepository implements AiChatRepository {
           'confirmedCanonicalDigest': confirmedCanonicalDigest!.trim(),
       }),
     );
+  }
+
+  Future<BuiltMap<String, String>?> _clarificationAnswersFor(
+    String sessionId,
+    String answer,
+  ) async {
+    final String value = answer.trim();
+    if (value.isEmpty) return null;
+    CodegenSessionResponseDto current;
+    try {
+      current = await getCodegenSession(sessionId);
+    } catch (_) {
+      return null;
+    }
+    final Map<String, dynamic> gate = _builtJsonMap(current.clarificationGate);
+    if (gate['blocked'] != true) return null;
+    final String? key = _firstClarificationKey(gate);
+    if (key == null) return null;
+    return BuiltMap<String, String>(<String, String>{key: value});
+  }
+
+  String? _firstClarificationKey(Map<String, dynamic> gate) {
+    for (final String listKey in <String>['items', 'pendingItems']) {
+      final Object? items = gate[listKey];
+      if (items is! Iterable) continue;
+      for (final Object? item in items) {
+        final String key = asString(pick(asMap(item), <String>['key'])).trim();
+        if (key.isNotEmpty) return key;
+      }
+    }
+    return null;
   }
 
   @override

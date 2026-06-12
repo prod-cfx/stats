@@ -299,26 +299,20 @@ abstract class AppLocalizations {
   /// No description provided for @aiQuickReply1.
   ///
   /// In zh, this message translates to:
-  /// **'再跑一次回测'**
+  /// **'逻辑图'**
   String get aiQuickReply1;
 
   /// No description provided for @aiQuickReply2.
   ///
   /// In zh, this message translates to:
-  /// **'把止损改成 1.5%'**
+  /// **'回测结果'**
   String get aiQuickReply2;
 
   /// No description provided for @aiQuickReply3.
   ///
   /// In zh, this message translates to:
-  /// **'换成 ETH 看看'**
+  /// **'部署'**
   String get aiQuickReply3;
-
-  /// No description provided for @aiQuickReply4.
-  ///
-  /// In zh, this message translates to:
-  /// **'部署到 Binance'**
-  String get aiQuickReply4;
 
   /// No description provided for @backtestSheetTitle.
   ///

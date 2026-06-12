@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/data/models/backtest_models.dart';
 import '../fixtures/mock/fixtures/backtest.dart';
 import 'package:quantify_mobile/pages/ai/widgets/qz_backtest_result_card.dart';
 
@@ -69,5 +70,38 @@ void main() {
           w.text.toPlainText().contains('优于阈值'),
     );
     expect(bar, findsOneWidget);
+  });
+
+  testWidgets('missing timestamps render neutral range instead of epoch', (
+    WidgetTester tester,
+  ) async {
+    final BacktestResult result = BacktestResult(
+      id: 'bt-epoch',
+      totalReturnPercent: 0,
+      cagrPercent: 0,
+      maxDrawdownPercent: 0,
+      sharpe: 0,
+      calmar: 0,
+      winRatePercent: 0,
+      profitLossRatio: 0,
+      avgHoldDuration: '--',
+      totalTrades: 0,
+      rangeStart: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      rangeEnd: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      equityCurve: const <double>[0, 0],
+      drawdownMarkers: const <int>[],
+      monthlyRows: const <BacktestMonthlyRow>[],
+      trades: const <BacktestTrade>[],
+      riskRows: const <BacktestRiskRow>[],
+      aiAssessment: '',
+    );
+    await pumpQz(
+      tester,
+      SingleChildScrollView(child: QzBacktestResultCard(result: result)),
+      surfaceSize: const Size(360, 900),
+    );
+
+    expect(find.text('--'), findsWidgets);
+    expect(find.textContaining('1970-01'), findsNothing);
   });
 }

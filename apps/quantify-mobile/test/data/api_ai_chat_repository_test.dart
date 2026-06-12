@@ -41,16 +41,20 @@ class _StubAiChatService extends AiChatService {
 class _StubListAiChatService extends AiChatService {
   _StubListAiChatService({
     required this.rows,
+    this.createResponse,
     this.codegenSessions = const [],
     this.codegenError,
   }) : super(ApiClient(baseUrl: 'http://localhost'));
 
   final List<Map<String, dynamic>> rows;
+  final Object? createResponse;
   final List<Map<String, dynamic>> codegenSessions;
   final Object? codegenError;
   final List<Object?> sendResponses = <Object?>[];
+  final List<Map<String, dynamic>> createBodies = <Map<String, dynamic>>[];
   final List<Map<String, dynamic>> sendBodies = <Map<String, dynamic>>[];
   int listCallCount = 0;
+  int createCallCount = 0;
   int codegenCallCount = 0;
   int sendCallCount = 0;
 
@@ -58,6 +62,16 @@ class _StubListAiChatService extends AiChatService {
   Future<dynamic> listSessions() async {
     listCallCount++;
     return rows;
+  }
+
+  @override
+  Future<dynamic> createSession({String? title}) async {
+    createCallCount++;
+    createBodies.add(<String, dynamic>{'title': title});
+    return createResponse ??
+        <String, dynamic>{
+          'data': <String, dynamic>{'id': 'created-1', 'status': 'DRAFTING'},
+        };
   }
 
   @override
@@ -112,6 +126,29 @@ void main() {
   });
 
   group('ApiAiChatRepository codegen raw response', () {
+    test('createSession 支持后端 data 信封并生成新 codegen 会话', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: const <Map<String, dynamic>>[],
+        createResponse: <String, dynamic>{
+          'data': <String, dynamic>{
+            'id': 'session-new',
+            'status': 'DRAFTING',
+            'assistantPrompt': '请补充策略规则。',
+          },
+          'message': 'Success',
+        },
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final AiSession session = await repo.createSession(title: '新策略');
+
+      expect(svc.createCallCount, 1);
+      expect(session.id, 'session-new');
+      expect(session.llmCodegenSessionId, 'session-new');
+      expect(session.messages.single.codegenSessionId, 'session-new');
+      expect(session.messages.single.content, '请补充策略规则。');
+    });
+
     test('getCodegenSession 支持 data 信封并保留快照参数', () async {
       final _StubListAiChatService svc = _StubListAiChatService(
         rows: const <Map<String, dynamic>>[],
@@ -192,6 +229,36 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('sendMessageTo 走真实 codegen body 并支持 data 信封', () async {
+      final _StubListAiChatService svc =
+          _StubListAiChatService(rows: const <Map<String, dynamic>>[])
+            ..sendResponses.add(<String, dynamic>{
+              'data': <String, dynamic>{
+                'id': 'session-1',
+                'status': 'CONFIRM_GATE',
+                'assistantPrompt': '请确认策略。',
+              },
+            });
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final ChatTurn turn = await repo.sendMessageTo(
+        'session-1',
+        ChatTurn(
+          id: 'u-1',
+          role: 'user',
+          content: 'EMA 策略',
+          timestamp: DateTime(2026),
+        ),
+      );
+
+      expect(turn.codegenSessionId, 'session-1');
+      expect(turn.content, '请确认策略。');
+      expect(svc.sendBodies.single['message'], 'EMA 策略');
+      expect(svc.sendBodies.single['locale'], 'zh');
+      expect(svc.sendBodies.single['confirmGenerate'], isFalse);
+      expect(svc.sendBodies.single.containsKey('content'), isFalse);
     });
 
     test('confirmStrategy 走 raw body 并支持 data 信封', () async {

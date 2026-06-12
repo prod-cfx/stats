@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/ai_strategy_context.dart';
 import '../../data/providers.dart';
+import '../../data/services/api_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -140,15 +141,31 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
       _error = null;
     });
     try {
-      CodegenSessionResponseDto result = await ref
-          .read(aiChatRepositoryProvider)
-          .confirmStrategy(
-            sessionId,
-            message: '确认策略',
-            confirmedCanonicalDigest:
-                widget.args?.confirmedCanonicalDigest ??
-                _session?.canonicalDigest,
-          );
+      final CodegenSessionResponseDto? preflight = await _loadPreflight(
+        sessionId,
+      );
+      if (preflight != null) {
+        if (!mounted) return;
+        setState(() => _session = preflight);
+        final bool opened = await _openIfReusable(sessionId, preflight);
+        if (opened) return;
+      }
+
+      CodegenSessionResponseDto result;
+      try {
+        result = await ref
+            .read(aiChatRepositoryProvider)
+            .confirmStrategy(
+              sessionId,
+              message: '确认策略',
+              confirmedCanonicalDigest:
+                  widget.args?.confirmedCanonicalDigest ??
+                  _session?.canonicalDigest,
+            );
+      } catch (error) {
+        if (!_isConflictError(error)) rethrow;
+        result = await _recoverAfterConflict(sessionId);
+      }
 
       // 对齐 front：确认后后端可能先停在 CONFIRM_GATE，再进入生成/校验队列；
       // 移动端必须等到发布快照可用，后续回测才有 publishedSnapshotId 契约真相。
@@ -181,15 +198,104 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
       if (current.status != CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE) {
         break;
       }
-      current = await ref
-          .read(aiChatRepositoryProvider)
-          .confirmStrategy(
-            sessionId,
-            message: '确认策略',
-            confirmedCanonicalDigest: current.canonicalDigest,
-          );
+      try {
+        current = await ref
+            .read(aiChatRepositoryProvider)
+            .confirmStrategy(
+              sessionId,
+              message: '确认策略',
+              confirmedCanonicalDigest: current.canonicalDigest,
+            );
+      } catch (error) {
+        if (!_isConflictError(error)) rethrow;
+        current = await _recoverAfterConflict(sessionId);
+      }
     }
     return current;
+  }
+
+  Future<CodegenSessionResponseDto?> _loadPreflight(String sessionId) async {
+    try {
+      return await ref
+          .read(aiChatRepositoryProvider)
+          .getCodegenSession(sessionId);
+    } catch (_) {
+      // front 对短暂查询失败也会保留本地草稿继续确认；mobile 同步该容错。
+      return null;
+    }
+  }
+
+  Future<bool> _openIfReusable(
+    String sessionId,
+    CodegenSessionResponseDto snapshot,
+  ) async {
+    _ensureDigestCompatible(snapshot);
+    if (_hasPublishedSnapshot(snapshot)) {
+      _openScriptContext(AiPublishedStrategyContext.fromCodegen(snapshot));
+      return true;
+    }
+    if (_isProcessingStatus(snapshot.status)) {
+      final CodegenSessionResponseDto published =
+          await _waitForPublishedSnapshot(sessionId, snapshot);
+      if (!mounted) return true;
+      setState(() => _session = published);
+      _openScriptContext(AiPublishedStrategyContext.fromCodegen(published));
+      return true;
+    }
+    if (_isTerminalFailure(snapshot.status)) {
+      final String reason = snapshot.rejectReason?.trim().isNotEmpty == true
+          ? snapshot.rejectReason!.trim()
+          : '后端未发布策略快照';
+      throw FormatException('策略发布失败：$reason');
+    }
+    return false;
+  }
+
+  Future<CodegenSessionResponseDto> _recoverAfterConflict(
+    String sessionId,
+  ) async {
+    final CodegenSessionResponseDto snapshot = await ref
+        .read(aiChatRepositoryProvider)
+        .getCodegenSession(sessionId);
+    _ensureDigestCompatible(snapshot);
+    if (_hasPublishedSnapshot(snapshot)) return snapshot;
+    if (!_isTerminalFailure(snapshot.status)) {
+      return _waitForPublishedSnapshot(sessionId, snapshot);
+    }
+    throw const ApiException(
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: '回测请求冲突，可能已有相同回测任务正在处理。请稍后重试。',
+    );
+  }
+
+  bool _hasPublishedSnapshot(CodegenSessionResponseDto session) {
+    return session.status == CodegenSessionResponseDtoStatusEnum.PUBLISHED &&
+        session.publishedSnapshotId?.trim().isNotEmpty == true;
+  }
+
+  void _ensureDigestCompatible(CodegenSessionResponseDto snapshot) {
+    final String local =
+        widget.args?.confirmedCanonicalDigest?.trim() ??
+        _session?.canonicalDigest?.trim() ??
+        '';
+    final String remote = snapshot.canonicalDigest?.trim() ?? '';
+    if (local.isNotEmpty && remote.isNotEmpty && local != remote) {
+      throw const FormatException('当前确认内容与后端会话不一致，请返回 AI 对话重新确认最新策略。');
+    }
+  }
+
+  bool _isConflictError(Object error) {
+    if (error is ApiException) return error.statusCode == 409;
+    if (error is DioException) {
+      final Object? inner = error.error;
+      if (inner is ApiException && inner.statusCode == 409) return true;
+      return error.response?.statusCode == 409;
+    }
+    final String text = error.toString();
+    return text.contains('status=409') ||
+        text.contains('HTTP 409') ||
+        text.contains('CONFLICT');
   }
 
   Future<CodegenSessionResponseDto> _waitForPublishedSnapshot(
@@ -208,7 +314,8 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
         throw FormatException('策略发布失败：$reason');
       }
       if (!_isProcessingStatus(current.status) &&
-          current.status != CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE) {
+          current.status != CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE &&
+          current.status != CodegenSessionResponseDtoStatusEnum.DRAFTING) {
         throw FormatException('策略发布状态异常：${current.status.name}');
       }
       if (i == _publishPollLimit) break;
@@ -239,13 +346,16 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
 
   // #1892 已落地 `/ai/script` 屏。「确认策略」来自会话参数气泡，说明 codegen
   // 已产出可预览参数；向脚本页透传完成态，避免脚本页本地 Timer 伪造 ready。
+
   void _backToChat(BuildContext context) => context.pop();
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final StrategyConfirmView view = confirmStrategyView(_params, l10n);
+    final StrategyConfirmView view =
+        confirmStrategyViewFromSession(_session) ??
+        confirmStrategyView(_params, l10n);
     final List<Widget> statusWidgets = <Widget>[
       if (_loading)
         Padding(
@@ -385,6 +495,58 @@ enum _ConfirmScenario { btcTrend, ethGrid }
 
 dynamic _jsonObjectValue(JsonObject? object) => object?.value;
 
+Map<String, Object?> _objectMapFromBuilt(
+  BuiltMap<String, JsonObject?>? source,
+) {
+  if (source == null) return const <String, Object?>{};
+  return Map<String, Object?>.unmodifiable(
+    Map<String, Object?>.fromEntries(
+      source.entries.map(
+        (MapEntry<String, JsonObject?> entry) => MapEntry<String, Object?>(
+          entry.key,
+          _normalizeConfirmJson(entry.value?.value),
+        ),
+      ),
+    ),
+  );
+}
+
+Object? _normalizeConfirmJson(Object? value) {
+  if (value is BuiltMap) {
+    return Map<String, Object?>.unmodifiable(
+      Map<String, Object?>.fromEntries(
+        value.entries.map(
+          (MapEntry<dynamic, dynamic> entry) => MapEntry<String, Object?>(
+            entry.key.toString(),
+            _normalizeConfirmJson(
+              entry.value is JsonObject
+                  ? (entry.value as JsonObject).value
+                  : entry.value,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  if (value is BuiltList) {
+    return List<Object?>.unmodifiable(value.map(_normalizeConfirmJson));
+  }
+  if (value is Map) {
+    return Map<String, Object?>.unmodifiable(
+      value.map(
+        (dynamic key, dynamic entry) => MapEntry<String, Object?>(
+          key.toString(),
+          _normalizeConfirmJson(entry),
+        ),
+      ),
+    );
+  }
+  if (value is Iterable && value is! String) {
+    return List<Object?>.unmodifiable(value.map(_normalizeConfirmJson));
+  }
+  return value;
+}
+
 Map<String, String> _stringParamsFromBuilt(
   BuiltMap<String, JsonObject?>? source,
 ) {
@@ -396,6 +558,183 @@ Map<String, String> _stringParamsFromBuilt(
     if (text.isNotEmpty) result[entry.key] = text;
   }
   return result;
+}
+
+StrategyConfirmView? confirmStrategyViewFromSession(
+  CodegenSessionResponseDto? session,
+) {
+  if (session == null) return null;
+  final Map<String, Object?> spec = _objectMapFromBuilt(session.specDesc);
+  if (spec.isEmpty) return null;
+  final Map<String, Object?> execution = _mapAt(spec, <String>[
+    'executionContext',
+  ]);
+  final Map<String, Object?> graph = _mapAt(spec, <String>[
+    'displayLogicGraph',
+  ]);
+  final List<Object?> blocks = _listAt(graph, <String>['blocks']);
+  if (blocks.isEmpty && execution.isEmpty) return null;
+
+  final List<({String iff, String then})> rules =
+      <({String iff, String then})>[];
+  final List<String> riskTexts = <String>[];
+  String? positionText;
+  for (final Object? blockRaw in blocks) {
+    final Map<String, Object?> block = _asConfirmMap(blockRaw);
+    final List<Object?> items = _listAt(block, <String>['items']);
+    final List<String> conditions = <String>[];
+    final List<String> actions = <String>[];
+    for (final Object? itemRaw in items) {
+      final Map<String, Object?> item = _asConfirmMap(itemRaw);
+      final String text = _readConfirmString(item['text']);
+      if (text.isEmpty) continue;
+      final String kind = _readConfirmString(item['kind']).toLowerCase();
+      if (kind == 'condition') {
+        conditions.add(text);
+      } else {
+        actions.add(text);
+        if (text.contains('止损') || text.contains('风控')) riskTexts.add(text);
+        if (positionText == null &&
+            (text.contains('仓位') || text.toUpperCase().contains('USDT'))) {
+          positionText = text;
+        }
+      }
+    }
+    if (conditions.isNotEmpty || actions.isNotEmpty) {
+      rules.add((
+        iff: conditions.isEmpty ? '条件成立' : conditions.join('；'),
+        then: actions.isEmpty ? '执行策略动作' : actions.join('\n'),
+      ));
+    }
+  }
+
+  final String exchange = _normalizeConfirmExchange(
+    _readConfirmString(execution['exchange'] ?? execution['venue']),
+  );
+  final String symbol = _readConfirmString(execution['symbol']);
+  final String period = _readConfirmString(execution['timeframe']);
+  final String market = _normalizeConfirmMarket(
+    _readConfirmString(execution['marketType'] ?? execution['market']),
+  );
+  final String fallbackSymbol = symbol.isEmpty ? 'BTCUSDT' : symbol;
+  final String fallbackPeriod = period.isEmpty ? '15m' : period;
+  final String fallbackExchange = exchange.isEmpty ? 'OKX' : exchange;
+  final String fallbackMarket = market.isEmpty ? '永续合约' : market;
+  final String position = positionText ?? _findPositionText(spec) ?? '按策略配置';
+  final List<({String kind, String desc})> risks = riskTexts.isEmpty
+      ? <({String kind, String desc})>[(kind: '风控', desc: '按已发布策略快照执行')]
+      : riskTexts
+            .map((String text) => (kind: _riskKind(text), desc: text))
+            .toList(growable: false);
+
+  return StrategyConfirmView(
+    name: '$fallbackSymbol AI 策略',
+    chips: <({String label, QzChipTone tone})>[
+      (label: 'AI 量化', tone: QzChipTone.accent),
+      (label: fallbackSymbol, tone: QzChipTone.neutral),
+      (label: fallbackPeriod, tone: QzChipTone.neutral),
+      (label: fallbackMarket, tone: QzChipTone.info),
+    ],
+    rules: rules.isEmpty
+        ? <({String iff, String then})>[
+            (iff: '策略条件来自已发布语义图', then: '按后端生成脚本执行'),
+          ]
+        : rules,
+    execute: (
+      exchange: fallbackExchange,
+      symbol: fallbackSymbol,
+      period: fallbackPeriod,
+      position: position,
+      market: fallbackMarket,
+    ),
+    risks: risks,
+    advice: '策略逻辑已由后端生成并校验。请先完成回测，达标后再部署到交易所。',
+  );
+}
+
+Map<String, Object?> _mapAt(Map<String, Object?> source, List<String> keys) {
+  for (final String key in keys) {
+    final Object? value = source[key];
+    final Map<String, Object?> map = _asConfirmMap(value);
+    if (map.isNotEmpty) return map;
+  }
+  return const <String, Object?>{};
+}
+
+List<Object?> _listAt(Map<String, Object?> source, List<String> keys) {
+  for (final String key in keys) {
+    final Object? value = source[key];
+    if (value is List) return value;
+  }
+  return const <Object?>[];
+}
+
+Map<String, Object?> _asConfirmMap(Object? value) {
+  if (value is Map<String, Object?>) return value;
+  if (value is Map) {
+    return value.map(
+      (dynamic key, dynamic entry) => MapEntry<String, Object?>(
+        key.toString(),
+        _normalizeConfirmJson(entry),
+      ),
+    );
+  }
+  return const <String, Object?>{};
+}
+
+String _readConfirmString(Object? value) {
+  final String text = value?.toString().trim() ?? '';
+  return text == 'null' ? '' : text;
+}
+
+String _normalizeConfirmExchange(String raw) {
+  final String value = raw.trim().toLowerCase();
+  if (value.isEmpty) return '';
+  if (value.contains('okx')) return 'OKX';
+  if (value.contains('binance')) return 'Binance';
+  if (value.contains('bybit')) return 'Bybit';
+  if (value.contains('hyper')) return 'Hyperliquid';
+  return raw.toUpperCase();
+}
+
+String _normalizeConfirmMarket(String raw) {
+  final String value = raw.trim().toLowerCase();
+  if (value.contains('spot') || value.contains('现货')) return '现货';
+  if (value.contains('perp') ||
+      value.contains('future') ||
+      value.contains('永续')) {
+    return '永续合约';
+  }
+  return raw;
+}
+
+String? _findPositionText(Map<String, Object?> source) {
+  for (final Object? value in source.values) {
+    if (value is String &&
+        (value.contains('仓位') || value.toUpperCase().contains('USDT'))) {
+      return value;
+    }
+    final Map<String, Object?> child = _asConfirmMap(value);
+    if (child.isNotEmpty) {
+      final String? found = _findPositionText(child);
+      if (found != null) return found;
+    }
+    if (value is List) {
+      for (final Object? item in value) {
+        final Map<String, Object?> itemMap = _asConfirmMap(item);
+        if (itemMap.isEmpty) continue;
+        final String? found = _findPositionText(itemMap);
+        if (found != null) return found;
+      }
+    }
+  }
+  return null;
+}
+
+String _riskKind(String text) {
+  if (text.contains('止损')) return '止损';
+  if (text.contains('止盈')) return '止盈';
+  return '风控';
 }
 
 /// 由会话参数推断展示场景（#2132）。

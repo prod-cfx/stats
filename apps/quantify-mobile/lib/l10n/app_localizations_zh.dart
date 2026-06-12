@@ -108,16 +108,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiSessionDeleteConfirm => '删除';
 
   @override
-  String get aiQuickReply1 => '再跑一次回测';
+  String get aiQuickReply1 => '逻辑图';
 
   @override
-  String get aiQuickReply2 => '把止损改成 1.5%';
+  String get aiQuickReply2 => '回测结果';
 
   @override
-  String get aiQuickReply3 => '换成 ETH 看看';
-
-  @override
-  String get aiQuickReply4 => '部署到 Binance';
+  String get aiQuickReply3 => '部署';
 
   @override
   String get backtestSheetTitle => '回测参数';

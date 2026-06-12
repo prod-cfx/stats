@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import '../helpers/test_overrides.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -88,6 +90,9 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
           );
 
   int sendMessageCalls = 0;
+  int confirmStrategyCalls = 0;
+  String? confirmedSessionId;
+  String? confirmedDigest;
 
   final AiSession session;
 
@@ -120,7 +125,15 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
     String sessionId, {
     required String message,
     String? confirmedCanonicalDigest,
-  }) async => throw UnimplementedError();
+  }) async {
+    confirmStrategyCalls++;
+    confirmedSessionId = sessionId;
+    confirmedDigest = confirmedCanonicalDigest;
+    return _publishedCodegenSession(
+      id: sessionId,
+      canonicalDigest: confirmedCanonicalDigest ?? 'sha256:canonical-1',
+    );
+  }
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) =>
@@ -137,6 +150,21 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async => null;
+}
+
+CodegenSessionResponseDto _publishedCodegenSession({
+  required String id,
+  required String canonicalDigest,
+}) {
+  return CodegenSessionResponseDto(
+    (CodegenSessionResponseDtoBuilder b) => b
+      ..id = id
+      ..status = CodegenSessionResponseDtoStatusEnum.PUBLISHED
+      ..canonicalDigest = canonicalDigest
+      ..scriptCode = 'export default function strategy() { return true; }'
+      ..publishedSnapshotId = 'snapshot-1'
+      ..clarificationGate.replace(BuiltMap<String, JsonObject?>()),
+  );
 }
 
 class _LoadErrorAiChatRepository implements AiChatRepository {
@@ -238,11 +266,11 @@ void main() {
   testWidgets('快捷回复 chips：点击直接发送，user 气泡渲染', (WidgetTester tester) async {
     await _pump(tester);
 
-    // 点第一个 chip：「再跑一次回测」
+    // 点第一个 chip：「逻辑图」
     await tester.tap(find.byKey(const Key('ai-quick-reply-0')));
     await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.text('再跑一次回测'), findsWidgets);
+    expect(find.text('逻辑图'), findsWidgets);
     // 让 stream timer 跑完，避免 "A Timer is still pending"
     for (int i = 0; i < 40; i++) {
       await tester.pump(const Duration(milliseconds: 250));
@@ -291,7 +319,7 @@ void main() {
     expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
   });
 
-  testWidgets('确认门普通文本：显示确认 CTA，回复「是」进入确认页不再普通发送', (WidgetTester tester) async {
+  testWidgets('确认门普通文本：显示确认 CTA，回复「是」后在聊天里生成脚本', (WidgetTester tester) async {
     final _ConfirmIntentAiChatRepository repo =
         _ConfirmIntentAiChatRepository();
     await _pump(
@@ -306,11 +334,54 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-send-button')));
     await tester.pumpAndSettle();
 
+    expect(repo.sendMessageCalls, 0);
+    expect(repo.confirmStrategyCalls, 1);
+    expect(repo.confirmedSessionId, 'codegen-1');
+    expect(repo.confirmedDigest, 'sha256:canonical-1');
+    expect(find.text('确认策略'), findsWidgets);
+    expect(find.textContaining('策略脚本已生成'), findsOneWidget);
     expect(
-      find.text('confirm-route:codegen-1:sha256:canonical-1'),
+      find.textContaining('export default function strategy'),
       findsOneWidget,
     );
-    expect(repo.sendMessageCalls, 0);
+  });
+
+  testWidgets('DRAFTING 澄清仅有 codegenSessionId 时确认文本继续发送', (
+    WidgetTester tester,
+  ) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'drafting-clarification-session',
+        title: '待补标的策略',
+        category: '未分类',
+        updatedAt: DateTime(2026, 6, 11, 20),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'drafting-clarification',
+            role: 'assistant',
+            content: '请选择交易标的',
+            timestamp: DateTime(2026, 6, 11, 20),
+            codegenSessionId: 'drafting-codegen-session',
+          ),
+        ],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(find.text('请选择交易标的'), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('ai-chat-input')), '确认策略');
+    await tester.tap(find.byKey(const Key('ai-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('confirm-route'), findsNothing);
+    expect(repo.sendMessageCalls, 1);
+    expect(find.text('should not send'), findsOneWidget);
   });
 
   testWidgets('无 codegen metadata 的参数气泡不显示确认 CTA', (WidgetTester tester) async {
@@ -345,7 +416,9 @@ void main() {
     expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
   });
 
-  testWidgets('参数气泡内 codegen metadata 可恢复并进入确认页', (WidgetTester tester) async {
+  testWidgets('参数气泡内 codegen metadata 可恢复并在聊天里生成脚本', (
+    WidgetTester tester,
+  ) async {
     final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
       session: AiSession(
         id: 'params-with-codegen',
@@ -378,10 +451,56 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('confirm-route:codegen-from-params:sha256:params-digest'),
-      findsOneWidget,
+    expect(repo.confirmStrategyCalls, 1);
+    expect(repo.confirmedSessionId, 'codegen-from-params');
+    expect(repo.confirmedDigest, 'sha256:params-digest');
+    expect(find.textContaining('策略脚本已生成'), findsOneWidget);
+  });
+
+  testWidgets('新 user 消息后旧 session codegen 不回落，确认文本继续发送', (
+    WidgetTester tester,
+  ) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'stale-session-fallback',
+        title: '旧策略',
+        category: '未分类',
+        updatedAt: DateTime(2026, 6, 10, 22, 42),
+        llmCodegenSessionId: 'stale-codegen',
+        pendingCanonicalDigest: 'sha256:stale',
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'old-assistant',
+            role: 'assistant',
+            content: '旧策略逻辑，请确认。',
+            timestamp: DateTime(2026, 6, 10, 22, 42),
+          ),
+          ChatTurn(
+            id: 'new-user',
+            role: 'user',
+            content: '入场：15m 价格在 EMA20 EMA60 EMA144 上方做多',
+            timestamp: DateTime(2026, 6, 10, 22, 43),
+          ),
+        ],
+      ),
     );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(find.text('旧策略逻辑，请确认。'), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('ai-chat-input')), '确认策略');
+    await tester.tap(find.byKey(const Key('ai-send-button')));
+    await tester.pumpAndSettle();
+
+    expect(repo.sendMessageCalls, 1);
+    expect(find.textContaining('confirm-route'), findsNothing);
+    expect(find.text('确认策略'), findsOneWidget);
+    expect(find.text('should not send'), findsOneWidget);
   });
 
   testWidgets('会话列表加载失败：不再无限 loading，展示错误并可重试', (WidgetTester tester) async {
