@@ -117,6 +117,21 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _scrollToBottom();
   }
 
+  void _openQuickNav(String label) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    if (label == l10n.aiQuickReply1) {
+      context.push('/ai/confirm');
+      return;
+    }
+    if (label == l10n.aiQuickReply2) {
+      context.push('/ai/backtest-result');
+      return;
+    }
+    if (label == l10n.aiQuickReply3) {
+      context.push('/ai/deploy');
+    }
+  }
+
   Future<void> _confirmInChat(ChatTurn turn, AiSession session) async {
     final String? codegenSessionId = _codegenSessionIdFor(turn);
     final String? digest = _canonicalDigestFor(turn);
@@ -304,8 +319,11 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         title: current?.title,
         subtitle: current == null ? null : _formatSubtitle(current),
         historyTooltip: l10n.aiAppBarHistoryTooltip,
+        backtestTooltip: l10n.aiAppBarBacktestTooltip,
+        backtestLabel: l10n.aiAppBarBacktestButton,
         newSessionTooltip: l10n.aiAppBarNewSessionTooltip,
         onOpenHistory: () => _scaffoldKey.currentState?.openDrawer(),
+        onOpenBacktest: () => context.push('/ai/backtest-config'),
         onNewSession: _createSession,
       ),
       body: SafeArea(
@@ -357,7 +375,12 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 : null,
                             // 「确认策略」CTA：只确认当前 CONFIRM_GATE；确认后
                             // 才生成脚本，并把 PUBLISHED 脚本回复回聊天。
-                            onConfirm: canConfirm
+                            onConfirm:
+                                t.role == 'assistant' &&
+                                    t.kind == ChatTurnKind.params &&
+                                    !isDeployed
+                                ? () => context.push('/ai/confirm')
+                                : canConfirm
                                 ? () => _confirmInChat(t, current)
                                 : null,
                             // 已部署锁定态（#1834）：会话 `deployedTo != null`
@@ -380,10 +403,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                     ),
             ),
             if (st.initialized && current != null)
-              QzQuickReplyChips(
-                labels: quickReplies,
-                onTap: (String label) => _send(overrideText: label),
-              ),
+              QzQuickReplyChips(labels: quickReplies, onTap: _openQuickNav),
             _InputBar(
               controller: _input,
               isSending: st.isSending,

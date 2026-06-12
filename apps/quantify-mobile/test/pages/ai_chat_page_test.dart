@@ -41,6 +41,21 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
           return Scaffold(body: Center(child: Text('confirm-route$suffix')));
         },
       ),
+      GoRoute(
+        path: '/ai/backtest-config',
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Center(child: Text('backtest-config-route'))),
+      ),
+      GoRoute(
+        path: '/ai/backtest-result',
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Center(child: Text('backtest-result-route'))),
+      ),
+      GoRoute(
+        path: '/ai/deploy',
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Center(child: Text('deploy-route'))),
+      ),
     ],
   );
 
@@ -244,8 +259,9 @@ void main() {
   ) async {
     await _pump(tester);
 
-    // 顶栏标题展示当前会话标题（默认第一条 — 倒序后 = AVAX 待部署）。
-    expect(find.text('AVAX 突破 · 待部署'), findsOneWidget);
+    // 顶栏标题展示当前会话标题（默认第一条 — 倒序后 = AVAX 待确认）。
+    expect(find.text('AVAX 突破 · 待确认'), findsOneWidget);
+    expect(find.text('AVAX 突破 · 待部署'), findsNothing);
 
     await tester.tap(find.byKey(const Key('ai-appbar-history')));
     await tester.pumpAndSettle();
@@ -263,17 +279,22 @@ void main() {
     expect(find.text('ETH 4H 均值回归'), findsOneWidget);
   });
 
-  testWidgets('快捷回复 chips：点击直接发送，user 气泡渲染', (WidgetTester tester) async {
+  testWidgets('快捷导航 chips：点击进入对应页面，不发送聊天消息', (WidgetTester tester) async {
     await _pump(tester);
 
-    // 点第一个 chip：「逻辑图」
-    await tester.tap(find.byKey(const Key('ai-quick-reply-0')));
-    await tester.pump(const Duration(milliseconds: 250));
+    final List<(Key, String, String)> cases = <(Key, String, String)>[
+      (const Key('ai-quick-reply-0'), '逻辑图', 'confirm-route'),
+      (const Key('ai-quick-reply-1'), '回测结果', 'backtest-result-route'),
+      (const Key('ai-quick-reply-2'), '部署', 'deploy-route'),
+    ];
 
-    expect(find.text('逻辑图'), findsWidgets);
-    // 让 stream timer 跑完，避免 "A Timer is still pending"
-    for (int i = 0; i < 40; i++) {
-      await tester.pump(const Duration(milliseconds: 250));
+    for (final (Key key, String label, String routeText) in cases) {
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+      expect(find.text(routeText), findsOneWidget);
+      expect(find.text(label), findsNothing);
+      GoRouter.of(tester.element(find.text(routeText))).pop();
+      await tester.pumpAndSettle();
     }
   });
 
@@ -297,9 +318,7 @@ void main() {
     }
   });
 
-  testWidgets('待部署 params 气泡：无 codegen metadata 时仅渲染参数', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('待确认 params 气泡：显示逻辑确认文案和查看逻辑图 CTA', (WidgetTester tester) async {
     await _pump(tester);
 
     // 默认进入 s5 → 含 params 气泡（fast_ma=5 / slow_ma=20）。
@@ -316,7 +335,12 @@ void main() {
     expect(joined, contains('fast_ma'));
     expect(joined, contains('slow_ma'));
     expect(find.text('需要我开始回测吗?'), findsNothing);
-    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
+    expect(find.text('请先确认策略逻辑，确认后我会继续生成脚本。'), findsOneWidget);
+    expect(find.text('查看逻辑图'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.pumpAndSettle();
+    expect(find.text('confirm-route'), findsOneWidget);
   });
 
   testWidgets('确认门普通文本：显示确认 CTA，回复「是」后在聊天里生成脚本', (WidgetTester tester) async {
@@ -384,7 +408,9 @@ void main() {
     expect(find.text('should not send'), findsOneWidget);
   });
 
-  testWidgets('无 codegen metadata 的参数气泡不显示确认 CTA', (WidgetTester tester) async {
+  testWidgets('无 codegen metadata 的参数气泡显示查看逻辑图 CTA', (
+    WidgetTester tester,
+  ) async {
     final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
       session: AiSession(
         id: 'params-without-codegen',
@@ -413,7 +439,12 @@ void main() {
     );
 
     expect(find.byKey(const Key('ai-bubble-params')), findsOneWidget);
-    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsNothing);
+    expect(find.byKey(const Key('ai-bubble-confirm-cta')), findsOneWidget);
+    expect(find.text('查看逻辑图'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.pumpAndSettle();
+    expect(find.text('confirm-route'), findsOneWidget);
   });
 
   testWidgets('参数气泡内 codegen metadata 可恢复并在聊天里生成脚本', (
@@ -448,7 +479,8 @@ void main() {
       overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
     );
 
-    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.enterText(find.byKey(const Key('ai-chat-input')), '确认策略');
+    await tester.tap(find.byKey(const Key('ai-send-button')));
     await tester.pumpAndSettle();
 
     expect(repo.confirmStrategyCalls, 1);
@@ -562,7 +594,7 @@ void main() {
     expect(find.text('BTC 趋势 · 双均线'), findsOneWidget);
   });
 
-  testWidgets('顶部栏：仅历史 + 新建会话，无设计稿外的「参数」按钮（#2014）', (
+  testWidgets('顶部栏：历史 + 回测 + 新建会话，无设计稿外的「参数」按钮（#2014）', (
     WidgetTester tester,
   ) async {
     await _pump(tester);
@@ -571,11 +603,15 @@ void main() {
     expect(find.textContaining('count:'), findsNothing);
     expect(find.byKey(const Key('ai-counter-inc')), findsNothing);
 
-    // 设计稿顶栏：左历史 + 右新建会话；无「参数」pill（#2014）。
+    // 设计稿顶栏：左历史 + 右回测 + 新建会话；无「参数」pill（#2014）。
     expect(find.byKey(const Key('ai-appbar-history')), findsOneWidget);
+    expect(find.byKey(const Key('ai-appbar-backtest')), findsOneWidget);
     expect(find.byKey(const Key('ai-appbar-new-session')), findsOneWidget);
-    expect(find.byKey(const Key('ai-backtest-button')), findsNothing);
     expect(find.text('参数'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('ai-appbar-backtest')));
+    await tester.pumpAndSettle();
+    expect(find.text('backtest-config-route'), findsOneWidget);
   });
 
   testWidgets('顶栏左/右按钮：32×32 bgSoft 软背景容器 + 设计 glyph，方钮/圆钮圆角各异（#2015）', (
@@ -627,7 +663,7 @@ void main() {
   ) async {
     await _pump(tester);
 
-    final Text title = tester.widget<Text>(find.text('AVAX 突破 · 待部署'));
+    final Text title = tester.widget<Text>(find.text('AVAX 突破 · 待确认'));
     expect(title.style?.fontSize, 14);
     expect(title.style?.fontWeight, FontWeight.w700);
     expect(title.style?.letterSpacing, -0.2);

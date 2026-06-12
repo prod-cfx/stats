@@ -4,12 +4,12 @@ import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 const String mockGreeting = '告诉我你的交易想法，我会帮你生成策略并回测。回测最大回撤需 ≤ 20% 才能一键部署。';
 
 /// 默认 mock 会话（对齐原型 `__qfChatSessions`）：BTC 实盘 / ETH / SOL /
-/// AVAX 待部署。
+/// AVAX 待确认。
 List<AiSession> buildMockSessions() {
   return <AiSession>[
     AiSession(
       id: 's5',
-      title: 'AVAX 突破 · 待部署',
+      title: 'AVAX 突破 · 待确认',
       category: '突破',
       pair: 'AVAX/USDT',
       timeframe: '1H',

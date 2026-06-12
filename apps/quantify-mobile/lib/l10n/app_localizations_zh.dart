@@ -63,6 +63,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiAppBarHistoryTooltip => '历史会话';
 
   @override
+  String get aiAppBarBacktestTooltip => '回测设置';
+
+  @override
+  String get aiAppBarBacktestButton => '回测';
+
+  @override
   String get aiAppBarNewSessionTooltip => '新建会话';
 
   @override
@@ -1923,7 +1929,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themePreviewStartBacktest => '开始回测';
 
   @override
-  String get aiConfirmStrategy => '确认策略';
+  String get aiConfirmStrategy => '查看逻辑图';
 
   @override
   String get aiConfirmSubtitle => '检查参数无误后开始回测';
@@ -1998,7 +2004,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConfirmNextScript => '下一步：策略脚本';
 
   @override
-  String get aiStartBacktestPrompt => '需要我开始回测吗?';
+  String get aiStartBacktestPrompt => '请先确认策略逻辑，确认后我会继续生成脚本。';
 
   @override
   String get aiParamsBadgePrefix => '已为你识别为';

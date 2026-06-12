@@ -28,8 +28,11 @@ QzAiTopBar _buildTopBar({String? title, String? subtitle}) => QzAiTopBar(
   title: title,
   subtitle: subtitle,
   historyTooltip: '历史',
+  backtestTooltip: '回测设置',
+  backtestLabel: '回测',
   newSessionTooltip: '新建会话',
   onOpenHistory: () {},
+  onOpenBacktest: () {},
   onNewSession: () {},
 );
 
@@ -75,6 +78,7 @@ void main() {
       t,
     ) async {
       expect(find.text('AI'), findsOneWidget);
+      expect(find.byKey(const Key('ai-appbar-backtest')), findsOneWidget);
     }, surfaceSize: _surfaceSize);
     await verifyAllThemes(
       tester,

@@ -18,6 +18,8 @@
   "aiBacktestButton": "Backtest",
   "aiSendButton": "Send",
   "aiAppBarHistoryTooltip": "Sessions",
+  "aiAppBarBacktestTooltip": "Backtest settings",
+  "aiAppBarBacktestButton": "Backtest",
   "aiAppBarNewSessionTooltip": "New session",
   "aiAppBarParamsTooltip": "Params",
   "aiAppBarParamsButton": "Params",
@@ -699,7 +701,7 @@
   "themePreviewTitle": "Preview · AI Strategy",
   "themePreviewIdentified": "Identified as \"Trend Following\" strategy",
   "themePreviewStartBacktest": "Start Backtest",
-  "aiConfirmStrategy": "Confirm Strategy",
+  "aiConfirmStrategy": "View logic graph",
   "aiConfirmSubtitle": "Review params before backtesting",
   "aiStepConfirm": "Confirm",
   "aiStepScript": "Script",
@@ -724,7 +726,7 @@
   "aiConfirmDisclaimer": "Backtests use historical data and cannot guarantee live results. Validate with a paper account before deploying.",
   "aiConfirmBackToChat": "Back to chat",
   "aiConfirmNextScript": "Next: Strategy Script",
-  "aiStartBacktestPrompt": "Shall I start the backtest?",
+  "aiStartBacktestPrompt": "Review the strategy logic first. After confirmation, I will continue generating the script.",
   "aiParamsBadgePrefix": "Identified as",
   "@aiParamsBadgePrefix": {
     "description": "Params bubble category chip prefix, aligned with ScreenAIChat (#1897)"

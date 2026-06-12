@@ -21,8 +21,11 @@ class QzAiTopBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     required this.subtitle,
     required this.historyTooltip,
+    required this.backtestTooltip,
+    required this.backtestLabel,
     required this.newSessionTooltip,
     required this.onOpenHistory,
+    required this.onOpenBacktest,
     required this.onNewSession,
   });
 
@@ -33,8 +36,11 @@ class QzAiTopBar extends StatelessWidget implements PreferredSizeWidget {
   final String? subtitle;
 
   final String historyTooltip;
+  final String backtestTooltip;
+  final String backtestLabel;
   final String newSessionTooltip;
   final VoidCallback onOpenHistory;
+  final VoidCallback onOpenBacktest;
   final VoidCallback onNewSession;
 
   @override
@@ -104,6 +110,36 @@ class QzAiTopBar extends StatelessWidget implements PreferredSizeWidget {
               ],
             ),
       actions: <Widget>[
+        Center(
+          child: Tooltip(
+            message: backtestTooltip,
+            child: Material(
+              color: c.bgSoft,
+              borderRadius: BorderRadius.circular(QzRadii.pill),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: const Key('ai-appbar-backtest'),
+                onTap: onOpenBacktest,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: QzSpacing.sm,
+                    vertical: QzSpacing.xs,
+                  ),
+                  child: Text(
+                    backtestLabel,
+                    style: TextStyle(
+                      color: c.accent,
+                      fontSize: 12,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: QzSpacing.xs),
         // 设计稿右按钮：32×32 / borderRadius 999 / bgSoft 圆钮 + 新建会话 glyph
         // （m-screens-1.jsx:387-393）。
         Padding(

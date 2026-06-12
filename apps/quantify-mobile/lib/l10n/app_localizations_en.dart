@@ -64,6 +64,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiAppBarHistoryTooltip => 'Sessions';
 
   @override
+  String get aiAppBarBacktestTooltip => 'Backtest settings';
+
+  @override
+  String get aiAppBarBacktestButton => 'Backtest';
+
+  @override
   String get aiAppBarNewSessionTooltip => 'New session';
 
   @override
@@ -1976,7 +1982,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themePreviewStartBacktest => 'Start Backtest';
 
   @override
-  String get aiConfirmStrategy => 'Confirm Strategy';
+  String get aiConfirmStrategy => 'View logic graph';
 
   @override
   String get aiConfirmSubtitle => 'Review params before backtesting';
@@ -2053,7 +2059,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConfirmNextScript => 'Next: Strategy Script';
 
   @override
-  String get aiStartBacktestPrompt => 'Shall I start the backtest?';
+  String get aiStartBacktestPrompt =>
+      'Review the strategy logic first. After confirmation, I will continue generating the script.';
 
   @override
   String get aiParamsBadgePrefix => 'Identified as';

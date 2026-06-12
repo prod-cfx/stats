@@ -206,6 +206,18 @@ abstract class AppLocalizations {
   /// **'历史会话'**
   String get aiAppBarHistoryTooltip;
 
+  /// No description provided for @aiAppBarBacktestTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测设置'**
+  String get aiAppBarBacktestTooltip;
+
+  /// No description provided for @aiAppBarBacktestButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测'**
+  String get aiAppBarBacktestButton;
+
   /// No description provided for @aiAppBarNewSessionTooltip.
   ///
   /// In zh, this message translates to:
@@ -3765,7 +3777,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiConfirmStrategy.
   ///
   /// In zh, this message translates to:
-  /// **'确认策略'**
+  /// **'查看逻辑图'**
   String get aiConfirmStrategy;
 
   /// No description provided for @aiConfirmSubtitle.
@@ -3915,7 +3927,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiStartBacktestPrompt.
   ///
   /// In zh, this message translates to:
-  /// **'需要我开始回测吗?'**
+  /// **'请先确认策略逻辑，确认后我会继续生成脚本。'**
   String get aiStartBacktestPrompt;
 
   /// 参数气泡分类 chip 前缀，对齐设计稿 ScreenAIChat「已为你识别为」（#1897）
