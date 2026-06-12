@@ -66,6 +66,58 @@ void main() {
     );
   });
 
+  testWidgets('script generating bubble renders progress semantics', (
+    WidgetTester tester,
+  ) async {
+    await verifyAllThemes(
+      tester,
+      () => const QzChatBubble(
+        role: QzChatRole.assistant,
+        content: '正在生成策略脚本',
+        scriptState: QzScriptBubbleState.generating,
+      ),
+      surfaceSize: const Size(360, 300),
+      (WidgetTester t) async {
+        expect(find.text('正在生成策略脚本'), findsOneWidget);
+        expect(find.text('确认参数 · 生成代码 · 注入风控'), findsOneWidget);
+        expect(
+          find.byKey(const Key('ai-bubble-script-generating')),
+          findsOneWidget,
+        );
+      },
+    );
+  });
+
+  testWidgets('script ready bubble renders code and start backtest CTA', (
+    WidgetTester tester,
+  ) async {
+    int started = 0;
+    await verifyAllThemes(
+      tester,
+      () => QzChatBubble(
+        role: QzChatRole.assistant,
+        content: '策略脚本已生成',
+        scriptState: QzScriptBubbleState.ready,
+        codeBlock: 'export default function strategy() { return true; }',
+        onStartBacktest: () => started++,
+      ),
+      surfaceSize: const Size(360, 420),
+      (WidgetTester t) async {
+        expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
+        expect(find.text('策略脚本已生成'), findsOneWidget);
+        expect(
+          find.text('export default function strategy() { return true; }'),
+          findsOneWidget,
+        );
+        expect(find.text('开始回测'), findsOneWidget);
+      },
+    );
+
+    await tester.tap(find.text('开始回测').first);
+    await tester.pump();
+    expect(started, greaterThan(0));
+  });
+
   testWidgets(
     'params bubble renders category chip + identification话术 + confirm CTA',
     (WidgetTester tester) async {

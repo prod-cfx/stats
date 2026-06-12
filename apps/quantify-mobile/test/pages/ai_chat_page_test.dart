@@ -8,6 +8,7 @@ import '../helpers/test_overrides.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
+import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
@@ -43,8 +44,15 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
       ),
       GoRoute(
         path: '/ai/backtest-config',
-        builder: (BuildContext context, GoRouterState state) =>
-            const Scaffold(body: Center(child: Text('backtest-config-route'))),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          final String suffix = extra is AiPublishedStrategyContext
+              ? ':${extra.publishedSnapshotId}:${extra.codegenSessionId}'
+              : '';
+          return Scaffold(
+            body: Center(child: Text('backtest-config-route$suffix')),
+          );
+        },
       ),
       GoRoute(
         path: '/ai/backtest-result',
@@ -80,29 +88,31 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
 }
 
 class _ConfirmIntentAiChatRepository implements AiChatRepository {
-  _ConfirmIntentAiChatRepository({AiSession? session})
-    : session =
-          session ??
-          AiSession(
-            id: 'confirm-session',
-            title: '基于 OKX 模拟盘 BTC-U',
-            category: '未分类',
-            pair: 'BTC-USDT-SWAP',
-            timeframe: '15m',
-            updatedAt: DateTime(2026, 6, 10, 22, 42),
-            llmCodegenSessionId: 'codegen-1',
-            pendingCanonicalDigest: 'sha256:canonical-1',
-            messages: <ChatTurn>[
-              ChatTurn(
-                id: 'assistant-confirm-gate',
-                role: 'assistant',
-                content: '我整理出的策略逻辑如下。请确认是否按这个逻辑生成脚本。',
-                timestamp: DateTime(2026, 6, 10, 22, 42),
-                codegenSessionId: 'codegen-1',
-                confirmedCanonicalDigest: 'sha256:canonical-1',
-              ),
-            ],
-          );
+  _ConfirmIntentAiChatRepository({
+    AiSession? session,
+    this.confirmDelay = Duration.zero,
+  }) : session =
+           session ??
+           AiSession(
+             id: 'confirm-session',
+             title: '基于 OKX 模拟盘 BTC-U',
+             category: '未分类',
+             pair: 'BTC-USDT-SWAP',
+             timeframe: '15m',
+             updatedAt: DateTime(2026, 6, 10, 22, 42),
+             llmCodegenSessionId: 'codegen-1',
+             pendingCanonicalDigest: 'sha256:canonical-1',
+             messages: <ChatTurn>[
+               ChatTurn(
+                 id: 'assistant-confirm-gate',
+                 role: 'assistant',
+                 content: '我整理出的策略逻辑如下。请确认是否按这个逻辑生成脚本。',
+                 timestamp: DateTime(2026, 6, 10, 22, 42),
+                 codegenSessionId: 'codegen-1',
+                 confirmedCanonicalDigest: 'sha256:canonical-1',
+               ),
+             ],
+           );
 
   int sendMessageCalls = 0;
   int confirmStrategyCalls = 0;
@@ -110,6 +120,7 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
   String? confirmedDigest;
 
   final AiSession session;
+  final Duration confirmDelay;
 
   @override
   Future<List<AiSession>> listSessions() async => <AiSession>[session];
@@ -141,6 +152,9 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
     required String message,
     String? confirmedCanonicalDigest,
   }) async {
+    if (confirmDelay > Duration.zero) {
+      await Future<void>.delayed(confirmDelay);
+    }
     confirmStrategyCalls++;
     confirmedSessionId = sessionId;
     confirmedDigest = confirmedCanonicalDigest;
@@ -344,8 +358,9 @@ void main() {
   });
 
   testWidgets('确认门普通文本：显示确认 CTA，回复「是」后在聊天里生成脚本', (WidgetTester tester) async {
-    final _ConfirmIntentAiChatRepository repo =
-        _ConfirmIntentAiChatRepository();
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      confirmDelay: const Duration(milliseconds: 50),
+    );
     await _pump(
       tester,
       overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
@@ -356,6 +371,15 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('ai-chat-input')), '是');
     await tester.tap(find.byKey(const Key('ai-send-button')));
+
+    await tester.pump();
+    expect(
+      find.byKey(const Key('ai-bubble-script-generating')),
+      findsOneWidget,
+    );
+    expect(find.text('正在生成策略脚本'), findsOneWidget);
+    expect(find.text('确认参数 · 生成代码 · 注入风控'), findsOneWidget);
+
     await tester.pumpAndSettle();
 
     expect(repo.sendMessageCalls, 0);
@@ -363,9 +387,19 @@ void main() {
     expect(repo.confirmedSessionId, 'codegen-1');
     expect(repo.confirmedDigest, 'sha256:canonical-1');
     expect(find.text('确认策略'), findsWidgets);
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
     expect(find.textContaining('策略脚本已生成'), findsOneWidget);
     expect(
       find.textContaining('export default function strategy'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('```'), findsNothing);
+    expect(find.text('开始回测'), findsOneWidget);
+
+    await tester.tap(find.text('开始回测'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('backtest-config-route:snapshot-1:codegen-1'),
       findsOneWidget,
     );
   });
@@ -486,6 +520,7 @@ void main() {
     expect(repo.confirmStrategyCalls, 1);
     expect(repo.confirmedSessionId, 'codegen-from-params');
     expect(repo.confirmedDigest, 'sha256:params-digest');
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
     expect(find.textContaining('策略脚本已生成'), findsOneWidget);
   });
 

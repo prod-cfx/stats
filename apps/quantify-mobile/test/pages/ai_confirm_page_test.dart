@@ -7,12 +7,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:quantify_mobile/l10n/app_localizations.dart';
-import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
+import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/data/services/api_client.dart';
 import 'package:quantify_mobile/pages/ai/ai_confirm_page.dart';
+import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -44,6 +45,7 @@ CodegenSessionResponseDto _codegenSession({
       ..id = 'session-1'
       ..status = status
       ..canonicalDigest = canonicalDigest
+      ..scriptCode = 'export default function strategy() { return true; }'
       ..clarificationGate.replace(BuiltMap<String, JsonObject?>())
       ..specDesc.replace(
         BuiltMap<String, JsonObject?>(
@@ -85,6 +87,19 @@ class _FakeAiChatRepository implements AiChatRepository {
   final List<CodegenSessionResponseDto> _confirmResponses;
   final List<CodegenSessionResponseDto> _getResponses;
   final List<Object> _confirmErrors;
+  final List<AiSession> sessions = <AiSession>[
+    AiSession(
+      id: 'chat-session-1',
+      title: 'BTC 趋势 · 双均线',
+      category: '趋势跟踪',
+      pair: 'BTC/USDT',
+      timeframe: '15m',
+      updatedAt: DateTime(2026, 6, 12),
+      llmCodegenSessionId: 'session-1',
+      pendingCanonicalDigest: 'sha256:canonical-1',
+      messages: const <ChatTurn>[],
+    ),
+  ];
 
   @override
   Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async {
@@ -116,11 +131,20 @@ class _FakeAiChatRepository implements AiChatRepository {
   }
 
   @override
-  Future<List<AiSession>> listSessions() async => <AiSession>[];
+  Future<List<AiSession>> listSessions() async => sessions;
 
   @override
-  Future<AiSession> createSession({String? title}) async =>
-      throw UnimplementedError();
+  Future<AiSession> createSession({String? title}) async {
+    final AiSession session = AiSession(
+      id: 'chat-session-created',
+      title: title ?? '新方案',
+      category: '未分类',
+      updatedAt: DateTime(2026, 6, 12, 1),
+      messages: const <ChatTurn>[],
+    );
+    sessions.insert(0, session);
+    return session;
+  }
 
   @override
   Future<void> deleteSession(String sessionId) async {}
@@ -226,14 +250,16 @@ void main() {
     expect(find.text('缺少策略生成会话，请返回 AI 对话重新确认策略。'), findsOneWidget);
   });
 
-  testWidgets('确认页通过真实 codegen session 提交确认并透传发布参数', (
+  testWidgets('确认页通过真实 codegen session 提交确认后返回 AI 对话并展示脚本卡片', (
     WidgetTester tester,
   ) async {
     final _FakeAiChatRepository repo = _FakeAiChatRepository();
+    Object? backtestExtra;
     late final GoRouter router;
     router = GoRouter(
       routes: <RouteBase>[
         GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(path: '/ai', builder: (_, _) => const AiHomePage()),
         GoRoute(
           path: '/ai/confirm',
           builder: (_, GoRouterState state) => AiConfirmPage(
@@ -243,19 +269,19 @@ void main() {
           ),
         ),
         GoRoute(
-          path: '/ai/script',
+          path: '/ai/backtest-config',
           builder: (_, GoRouterState state) {
-            final AiPublishedStrategyContext extra =
-                state.extra! as AiPublishedStrategyContext;
-            return Text(
-              '${extra.status} '
-              '${extra.params['fast_ma']} '
-              '${extra.publishedSnapshotId} '
-              '${extra.codegenSessionId} '
-              '${extra.strategyInstanceId} '
-              '${extra.hasPublishedSnapshot}',
-            );
+            backtestExtra = state.extra;
+            final Object? extra = state.extra;
+            final String suffix = extra is AiPublishedStrategyContext
+                ? ':${extra.publishedSnapshotId}:${extra.codegenSessionId}'
+                : '';
+            return Text('backtest-config-route$suffix');
           },
+        ),
+        GoRoute(
+          path: '/ai/script',
+          builder: (_, _) => const Text('script-route'),
         ),
       ],
     );
@@ -281,16 +307,50 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('ai-confirm-next-cta')));
-    await tester.pumpAndSettle();
+    for (int i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      if (find
+          .byKey(const Key('ai-bubble-script-generating'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+    }
 
     expect(repo.confirmCalls, hasLength(1));
     expect(repo.confirmCalls.single.sessionId, 'session-1');
     expect(repo.confirmCalls.single.message, '确认策略');
     expect(repo.confirmCalls.single.digest, 'sha256:canonical-1');
     expect(
-      find.text('PUBLISHED 7 snapshot-1 session-1 strategy-1 true'),
+      find.byKey(const Key('ai-bubble-script-generating')),
       findsOneWidget,
     );
+    expect(find.text('确认参数 · 生成代码 · 注入风控'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/ai');
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
+    expect(
+      find.text('export default function strategy() { return true; }'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('```'), findsNothing);
+    expect(find.text('script-route'), findsNothing);
+
+    await tester.tap(find.text('开始回测'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('backtest-config-route:snapshot-1:session-1'),
+      findsOneWidget,
+    );
+    expect(backtestExtra, isA<AiPublishedStrategyContext>());
+    final AiPublishedStrategyContext context =
+        backtestExtra! as AiPublishedStrategyContext;
+    expect(context.publishedSnapshotId, 'snapshot-1');
+    expect(context.codegenSessionId, 'session-1');
   });
 
   testWidgets('确认页优先渲染真实 displayLogicGraph 和 executionContext', (
@@ -373,7 +433,7 @@ void main() {
     expect(find.text('BTC 趋势 · 双均线'), findsNothing);
   });
 
-  testWidgets('确认后等待后端发布快照，再进入策略脚本页', (WidgetTester tester) async {
+  testWidgets('确认后等待后端发布快照，再返回 AI 对话', (WidgetTester tester) async {
     final _FakeAiChatRepository repo = _FakeAiChatRepository(
       getResponses: <CodegenSessionResponseDto>[
         _codegenSession(
@@ -400,6 +460,7 @@ void main() {
     router = GoRouter(
       routes: <RouteBase>[
         GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(path: '/ai', builder: (_, _) => const AiHomePage()),
         GoRoute(
           path: '/ai/confirm',
           builder: (_, GoRouterState state) => AiConfirmPage(
@@ -407,18 +468,6 @@ void main() {
                 ? state.extra! as AiConfirmArgs
                 : null,
           ),
-        ),
-        GoRoute(
-          path: '/ai/script',
-          builder: (_, GoRouterState state) {
-            final AiPublishedStrategyContext extra =
-                state.extra! as AiPublishedStrategyContext;
-            return Text(
-              '${extra.status} '
-              '${extra.publishedSnapshotId} '
-              '${extra.codegenSessionId}',
-            );
-          },
         ),
       ],
     );
@@ -452,10 +501,11 @@ void main() {
 
     expect(repo.confirmCalls, hasLength(1));
     expect(repo.getCalls, <String>['session-1', 'session-1', 'session-1']);
-    expect(find.text('PUBLISHED snapshot-1 session-1'), findsOneWidget);
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/ai');
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
   });
 
-  testWidgets('已发布 session 直接复用快照进入脚本页，不重复确认', (WidgetTester tester) async {
+  testWidgets('已发布 session 直接复用快照返回 AI 对话，不重复确认', (WidgetTester tester) async {
     final _FakeAiChatRepository repo = _FakeAiChatRepository(
       getResponses: <CodegenSessionResponseDto>[
         _codegenSession(
@@ -472,6 +522,7 @@ void main() {
     router = GoRouter(
       routes: <RouteBase>[
         GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(path: '/ai', builder: (_, _) => const AiHomePage()),
         GoRoute(
           path: '/ai/confirm',
           builder: (_, GoRouterState state) => AiConfirmPage(
@@ -479,14 +530,6 @@ void main() {
                 ? state.extra! as AiConfirmArgs
                 : null,
           ),
-        ),
-        GoRoute(
-          path: '/ai/script',
-          builder: (_, GoRouterState state) {
-            final AiPublishedStrategyContext extra =
-                state.extra! as AiPublishedStrategyContext;
-            return Text('${extra.publishedSnapshotId} ${extra.scriptCode}');
-          },
         ),
       ],
     );
@@ -515,7 +558,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.confirmCalls, isEmpty);
-    expect(find.text('snapshot-1 return { ok: true }'), findsOneWidget);
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/ai');
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
   });
 
   testWidgets('确认 409 后拉取已发布 session 恢复脚本上下文', (WidgetTester tester) async {
@@ -546,6 +590,7 @@ void main() {
     router = GoRouter(
       routes: <RouteBase>[
         GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(path: '/ai', builder: (_, _) => const AiHomePage()),
         GoRoute(
           path: '/ai/confirm',
           builder: (_, GoRouterState state) => AiConfirmPage(
@@ -553,14 +598,6 @@ void main() {
                 ? state.extra! as AiConfirmArgs
                 : null,
           ),
-        ),
-        GoRoute(
-          path: '/ai/script',
-          builder: (_, GoRouterState state) {
-            final AiPublishedStrategyContext extra =
-                state.extra! as AiPublishedStrategyContext;
-            return Text('${extra.status} ${extra.publishedSnapshotId}');
-          },
         ),
       ],
     );
@@ -589,7 +626,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.confirmCalls, hasLength(1));
-    expect(find.text('PUBLISHED snapshot-1'), findsOneWidget);
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/ai');
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
   });
 
   testWidgets('digest 不一致时阻止复用旧发布快照', (WidgetTester tester) async {

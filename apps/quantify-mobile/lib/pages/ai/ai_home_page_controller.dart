@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/error/error_router.dart';
 import '../../core/providers/notifier_lifecycle.dart';
 import '../../data/models/ai_chat_models.dart';
+import '../../data/models/ai_strategy_context.dart';
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
@@ -292,8 +293,9 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     final ChatTurn pendingTurn = ChatTurn(
       id: 'confirm-pending-${now.microsecondsSinceEpoch + 1}',
       role: 'assistant',
-      content: '已确认策略，正在生成策略脚本...',
+      content: '正在生成策略脚本',
       timestamp: now.add(const Duration(milliseconds: 1)),
+      kind: ChatTurnKind.scriptGenerating,
       codegenSessionId: codegenSessionId,
       confirmedCanonicalDigest: confirmedCanonicalDigest,
     );
@@ -351,6 +353,76 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     }
   }
 
+  Future<void> consumeConfirmHandoff(
+    CodegenSessionResponseDto result, {
+    required String newSessionTitleFallback,
+  }) async {
+    if (!state.initialized) return;
+
+    String? targetId = state.currentId;
+    if (targetId == null || state.sessions[targetId] == null) {
+      final AiSession fresh = await _chatRepo.createSession(
+        title: newSessionTitleFallback,
+      );
+      if (!mounted) return;
+      state = state.copyWith(
+        sessions: <String, AiSession>{...state.sessions, fresh.id: fresh},
+        order: <String>[fresh.id, ...state.order],
+        currentId: fresh.id,
+      );
+      targetId = fresh.id;
+    }
+
+    final AiSession? session = state.sessions[targetId];
+    if (session == null) return;
+    final String turnSeed = result.id.trim().isNotEmpty == true
+        ? result.id.trim()
+        : 'handoff';
+    final bool alreadyReady = session.messages.any(
+      (ChatTurn turn) =>
+          turn.kind == ChatTurnKind.scriptReady &&
+          turn.strategyContext?.publishedSnapshotId ==
+              result.publishedSnapshotId,
+    );
+    if (alreadyReady) return;
+
+    final DateTime now = DateTime.now();
+    final ChatTurn pendingTurn = ChatTurn(
+      id: 'confirm-handoff-pending-$turnSeed-${now.microsecondsSinceEpoch}',
+      role: 'assistant',
+      content: '正在生成策略脚本',
+      timestamp: now,
+      kind: ChatTurnKind.scriptGenerating,
+      codegenSessionId: result.id,
+      confirmedCanonicalDigest: result.canonicalDigest,
+    );
+    state = state.copyWith(
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        targetId: session.copyWith(
+          messages: <ChatTurn>[...session.messages, pendingTurn],
+          updatedAt: now,
+          llmCodegenSessionId: result.id,
+          pendingCanonicalDigest: result.canonicalDigest,
+        ),
+      },
+      isThinking: true,
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    _replaceAssistantTurn(
+      targetId,
+      pendingTurn.id,
+      _publishedScriptTurn(result),
+      sessionPatch: (AiSession s) => s.copyWith(
+        llmCodegenSessionId: result.id,
+        pendingCanonicalDigest: result.canonicalDigest,
+      ),
+    );
+    if (mounted) state = state.copyWith(isThinking: false);
+  }
+
   Future<CodegenSessionResponseDto> _waitForPublished(
     String sessionId,
     CodegenSessionResponseDto initial,
@@ -396,15 +468,17 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   }
 
   ChatTurn _publishedScriptTurn(CodegenSessionResponseDto result) {
-    final String script = result.scriptCode?.trim() ?? '';
-    final String content = script.isEmpty
-        ? '策略脚本已生成，可以开始回测。'
-        : '策略脚本已生成，可以开始回测。\n\n```javascript\n$script\n```';
+    final AiPublishedStrategyContext strategyContext =
+        AiPublishedStrategyContext.fromCodegen(result);
     return ChatTurn(
       id: 'published-script-${result.id}-${DateTime.now().microsecondsSinceEpoch}',
       role: 'assistant',
-      content: content,
+      content: '策略脚本已生成',
       timestamp: DateTime.now(),
+      kind: ChatTurnKind.scriptReady,
+      codegenSessionId: result.id,
+      confirmedCanonicalDigest: result.canonicalDigest,
+      strategyContext: strategyContext,
     );
   }
 

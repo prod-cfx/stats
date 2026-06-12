@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
-import '../../data/models/ai_strategy_context.dart';
 import '../../data/providers.dart';
 import '../../data/services/api_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -20,6 +19,7 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
+import 'ai_confirm_chat_handoff.dart';
 part 'ai_confirm_page.blocks.part.dart';
 part 'ai_confirm_page.bottombar.part.dart';
 
@@ -31,12 +31,11 @@ part 'ai_confirm_page.bottombar.part.dart';
 ///     多条规则间「AND AT THEN」分隔，区块标题右侧「在对话中修改」链接
 ///   - EXECUTE 块：交易所/标的/周期/仓位/市场 mono chips + 风控告警条
 ///   - AI 提示框（紫底 + bot icon）+ 免责声明条（shield）
-///   - 底部双按钮「返回对话」/「下一步：策略脚本」，顶栏右侧「取消」
+///   - 底部双按钮「返回对话」/「确认策略」，顶栏右侧「取消」
 ///
 /// 流程条（#2130）：顶栏下方展示设计稿统一 [QzStepBar]，对齐
 /// `m-screens-confirm.jsx` 的 `<BtcStepBar active={0} done={[]}/>`——确认页为
-/// 第 1 步 active、done 为空。后续向导页（script / btconfig / ...）复用同组件
-/// 推进 active/done。脚本预览块仍下沉到「策略脚本」目标屏（拆分 #1892）。
+/// 第 1 步 active、done 为空。确认成功后回到 `/ai`，脚本生成态由对话气泡承载。
 ///
 /// 入参：当前会话参数经 `extra` 透传（`Map<String, String>`）。缺省时回退
 /// [_fallbackParams]，保证深链 / widget test 直接打开不崩。
@@ -180,7 +179,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
 
       if (!mounted) return;
       setState(() => _session = result);
-      _openScriptContext(AiPublishedStrategyContext.fromCodegen(result));
+      _returnToChat(result);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -231,7 +230,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
   ) async {
     _ensureDigestCompatible(snapshot);
     if (_hasPublishedSnapshot(snapshot)) {
-      _openScriptContext(AiPublishedStrategyContext.fromCodegen(snapshot));
+      _returnToChat(snapshot);
       return true;
     }
     if (_isProcessingStatus(snapshot.status)) {
@@ -239,7 +238,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
           await _waitForPublishedSnapshot(sessionId, snapshot);
       if (!mounted) return true;
       setState(() => _session = published);
-      _openScriptContext(AiPublishedStrategyContext.fromCodegen(published));
+      _returnToChat(published);
       return true;
     }
     if (_isTerminalFailure(snapshot.status)) {
@@ -340,12 +339,14 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
         status == CodegenSessionResponseDtoStatusEnum.REJECTED;
   }
 
-  void _openScriptContext(AiPublishedStrategyContext strategyContext) {
-    context.push('/ai/script', extra: strategyContext);
+  void _returnToChat(CodegenSessionResponseDto result) {
+    ref
+        .read(aiConfirmChatHandoffProvider.notifier)
+        .set(AiConfirmChatHandoff(result: result));
+    context.go('/ai');
   }
 
-  // #1892 已落地 `/ai/script` 屏。「确认策略」来自会话参数气泡，说明 codegen
-  // 已产出可预览参数；向脚本页透传完成态，避免脚本页本地 Timer 伪造 ready。
+  // `/ai/script` 保留深链兼容；确认页主路径回到对话页展示脚本生成态。
 
   void _backToChat(BuildContext context) => context.pop();
 
@@ -764,7 +765,7 @@ _ConfirmScenario _scenarioOf(Map<String, String> params) {
 ///
 /// 展示文案优先服从设计稿场景模板；仅 fast_ma / slow_ma / stop_loss 等业务参数
 /// 做必要插值。纯静态标签（IF/THEN/EXECUTE 等）走 l10n。业务参数仍经 `extra`
-/// 原样透传到 `/ai/script`，不受此展示映射影响（验收项 4）。
+/// 原样透传到发布 / 回测上下文，不受此展示映射影响。
 StrategyConfirmView confirmStrategyView(
   Map<String, String> params,
   AppLocalizations l10n,

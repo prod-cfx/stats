@@ -15,6 +15,8 @@ import '../../../widgets/qz_button.dart';
 /// rendered as a centered hairline pill, not a left/right bubble.
 enum QzChatRole { user, assistant, system }
 
+enum QzScriptBubbleState { generating, ready }
+
 /// Chat message bubble used by the AI conversation page.
 ///
 /// 设计稿对齐 `design/project/mobile/m-screens-1.jsx` 的 `Bubble`：
@@ -39,6 +41,8 @@ class QzChatBubble extends StatelessWidget {
     this.deployedExchange,
     this.deployedInstanceId,
     this.onViewLive,
+    this.scriptState,
+    this.onStartBacktest,
   });
 
   final QzChatRole role;
@@ -70,6 +74,8 @@ class QzChatBubble extends StatelessWidget {
   final String? deployedExchange;
   final String? deployedInstanceId;
   final VoidCallback? onViewLive;
+  final QzScriptBubbleState? scriptState;
+  final VoidCallback? onStartBacktest;
 
   /// 设计稿对齐：assistant `4/16/16/16`，user `16/16/4/16`。
   static const BorderRadius _assistantRadius = BorderRadius.only(
@@ -94,6 +100,9 @@ class QzChatBubble extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     if (onViewLive != null) {
       return _buildDeployed(context, c);
+    }
+    if (scriptState != null) {
+      return _buildScript(context, c);
     }
     if (role == QzChatRole.system) {
       // 居中提示条：弱化背景 + 细边框，与左右气泡区分开。
@@ -342,6 +351,148 @@ class QzChatBubble extends StatelessWidget {
           return Align(alignment: Alignment.centerRight, child: bubble);
         }
         // assistant: Row(左侧 bot icon + 气泡)，与设计稿一致。
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                key: const Key('ai-bubble-bot-avatar'),
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: c.accentSoft,
+                  borderRadius: BorderRadius.circular(QzSpacing.sm),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.smart_toy_outlined,
+                  size: 16,
+                  color: c.accent,
+                ),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Flexible(child: bubble),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildScript(BuildContext context, QzColorScheme c) {
+    final bool ready = scriptState == QzScriptBubbleState.ready;
+    return LayoutBuilder(
+      builder: (BuildContext ctx, BoxConstraints constraints) {
+        final double maxW = (constraints.maxWidth - 30 - QzSpacing.sm) * 0.82;
+        final Widget bubble = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxW),
+          child: Container(
+            key: Key(
+              ready ? 'ai-bubble-script-ready' : 'ai-bubble-script-generating',
+            ),
+            padding: const EdgeInsets.all(QzSpacing.md),
+            decoration: BoxDecoration(
+              color: c.bgElev,
+              border: Border.all(color: c.borderSoft),
+              borderRadius: _assistantRadius,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(QzSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    borderRadius: BorderRadius.circular(QzRadii.input),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      if (ready)
+                        Icon(Icons.check_circle, size: 18, color: c.accent)
+                      else
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: c.accent,
+                          ),
+                        ),
+                      const SizedBox(width: QzSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          content,
+                          style: TextStyle(
+                            color: c.accent,
+                            fontSize: 14,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: QzSpacing.sm),
+                if (!ready)
+                  Text(
+                    '确认参数 · 生成代码 · 注入风控',
+                    style: TextStyle(
+                      color: c.textDim,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  )
+                else ...<Widget>[
+                  Text(
+                    '脚本已通过发布校验，可以进入回测配置。',
+                    style: TextStyle(color: c.text, fontSize: 13, height: 1.5),
+                  ),
+                  if (codeBlock?.trim().isNotEmpty == true) ...<Widget>[
+                    const SizedBox(height: QzSpacing.sm),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(QzSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: c.border.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(QzRadii.input),
+                      ),
+                      child: Text(
+                        codeBlock!.trim(),
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 12,
+                          height: 1.4,
+                          fontFamily: QzFont.mono,
+                          fontFamilyFallback: QzFont.monoFallback,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: QzSpacing.sm),
+                  QzButton(
+                    key: const Key('ai-bubble-start-backtest'),
+                    label: '开始回测',
+                    variant: QzButtonVariant.accent,
+                    expanded: true,
+                    onPressed: onStartBacktest,
+                  ),
+                ],
+                if (time != null) ...<Widget>[
+                  const SizedBox(height: QzSpacing.xxs),
+                  Text(
+                    _formatTime(time!),
+                    style: TextStyle(color: c.textDim, fontSize: 10),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
         return Align(
           alignment: Alignment.centerLeft,
           child: Row(

@@ -1,13 +1,24 @@
 /// AI 聊天会话相关模型（#1557 多会话）。
 library;
 
+import 'ai_strategy_context.dart';
+
 /// `ChatTurn` 渲染类型。
 ///
 /// - `text` ：普通文本气泡（默认）
 /// - `params`：策略参数代码块（如 `fast_ma=5 / slow_ma=20`）
+/// - `scriptGenerating`：确认策略后，脚本生成中的富气泡
+/// - `scriptReady`：脚本发布完成后的富气泡，携带已发布快照上下文
 /// - `result`：嵌入回测结果卡片（占位，UI 侧组合 `BacktestSummary` 渲染）
 /// - `deployed`：部署终态富气泡（部署成功后写入；UI 侧渲染实例信息）
-enum ChatTurnKind { text, params, result, deployed }
+enum ChatTurnKind {
+  text,
+  params,
+  scriptGenerating,
+  scriptReady,
+  result,
+  deployed,
+}
 
 class ChatTurn {
   final String id;
@@ -31,6 +42,10 @@ class ChatTurn {
   final String? codegenSessionId;
   final String? confirmedCanonicalDigest;
 
+  /// 当 `kind == ChatTurnKind.scriptReady` 时携带发布快照上下文，供气泡内
+  /// 「开始回测」CTA 进入 `/ai/backtest-config`。
+  final AiPublishedStrategyContext? strategyContext;
+
   const ChatTurn({
     required this.id,
     required this.role,
@@ -42,6 +57,7 @@ class ChatTurn {
     this.deployedInstanceId,
     this.codegenSessionId,
     this.confirmedCanonicalDigest,
+    this.strategyContext,
   });
 }
 

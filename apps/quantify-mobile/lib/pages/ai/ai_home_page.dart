@@ -12,6 +12,7 @@ import '../../widgets/qz_ai_top_bar.dart';
 import 'widgets/qz_chat_bubble.dart';
 import '../../widgets/qz_quick_reply_chips.dart';
 import '../../widgets/qz_typing_indicator.dart';
+import 'ai_confirm_chat_handoff.dart';
 import 'ai_home_page_controller.dart';
 import 'ai_home_page_state.dart';
 
@@ -42,6 +43,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   /// 同帧去重哨兵：build 期间不可改 provider，故用本地字段挡住同一帧内的重复
   /// 调度；真正的 provider 标记 [`markLoadedStrategy`] 延后到 post-frame 回调。
   String? _pendingLoadStrategyId;
+  String? _pendingConfirmHandoffId;
 
   AiHomePageController get _ctrl =>
       ref.read(aiHomePageControllerProvider.notifier);
@@ -268,6 +270,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AiHomePageState st = ref.watch(aiHomePageControllerProvider);
+    final AiConfirmChatHandoff? confirmHandoff = ref.watch(
+      aiConfirmChatHandoffProvider,
+    );
     final AiSession? current = st.currentId == null
         ? null
         : st.sessions[st.currentId!];
@@ -289,6 +294,26 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         if (!mounted) return;
         _ctrl.markLoadedStrategy(loadStrategyId);
         _handleLoadStrategy(loadStrategyId);
+      });
+    }
+
+    final String? handoffId = confirmHandoff?.result.id.trim();
+    if (st.initialized &&
+        confirmHandoff != null &&
+        handoffId != null &&
+        handoffId.isNotEmpty &&
+        handoffId != _pendingConfirmHandoffId) {
+      _pendingConfirmHandoffId = handoffId;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        ref.read(aiConfirmChatHandoffProvider.notifier).clear();
+        await _ctrl.consumeConfirmHandoff(
+          confirmHandoff.result,
+          newSessionTitleFallback: l10n.aiSessionUntitled,
+        );
+        if (!mounted) return;
+        _pendingConfirmHandoffId = null;
+        _scrollToBottom();
       });
     }
 
@@ -357,6 +382,14 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                           };
                           final bool isDeployed =
                               t.kind == ChatTurnKind.deployed;
+                          final QzScriptBubbleState? scriptState =
+                              switch (t.kind) {
+                                ChatTurnKind.scriptGenerating =>
+                                  QzScriptBubbleState.generating,
+                                ChatTurnKind.scriptReady =>
+                                  QzScriptBubbleState.ready,
+                                _ => null,
+                              };
                           final bool canConfirm =
                               t.role == 'assistant' &&
                               !isDeployed &&
@@ -372,6 +405,19 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 : t.timestamp,
                             params: t.kind == ChatTurnKind.params
                                 ? t.params
+                                : null,
+                            scriptState: scriptState,
+                            codeBlock: t.kind == ChatTurnKind.scriptReady
+                                ? t.strategyContext?.scriptCode?.trim()
+                                : null,
+                            onStartBacktest:
+                                t.kind == ChatTurnKind.scriptReady &&
+                                    t.strategyContext?.hasPublishedSnapshot ==
+                                        true
+                                ? () => context.push(
+                                    '/ai/backtest-config',
+                                    extra: t.strategyContext,
+                                  )
                                 : null,
                             // 「确认策略」CTA：只确认当前 CONFIRM_GATE；确认后
                             // 才生成脚本，并把 PUBLISHED 脚本回复回聊天。
