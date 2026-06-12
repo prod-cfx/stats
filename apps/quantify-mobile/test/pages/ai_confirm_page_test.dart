@@ -222,7 +222,8 @@ void main() {
     await _pump(tester);
 
     expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
-    expect(find.text('查看逻辑图'), findsWidgets);
+    expect(find.text('逻辑图'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, '确认策略'), findsOneWidget);
     expect(
       find.text(
         '下一步：'

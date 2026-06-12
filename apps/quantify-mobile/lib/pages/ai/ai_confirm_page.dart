@@ -367,7 +367,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
     return Scaffold(
       backgroundColor: c.bg,
       appBar: QzTopBar(
-        title: l10n.aiConfirmStrategy,
+        title: l10n.aiQuickReply1,
         subtitle: l10n.aiConfirmSubtitle,
         onBack: () => context.pop(),
         actions: <Widget>[
@@ -435,7 +435,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
                       backLabel: l10n.aiConfirmBackToChat,
                       nextLabel: _confirming
                           ? '确认中...'
-                          : l10n.aiConfirmStrategy,
+                          : l10n.aiConfirmNextScript,
                       onBack: () => _backToChat(context),
                       onNext: () => _next(context),
                     ),

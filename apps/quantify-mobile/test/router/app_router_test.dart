@@ -503,7 +503,8 @@ void main() {
     expect(find.byType(AiConfirmPage), findsOneWidget);
     // #1891 内容对齐：Hero / 策略逻辑 RuleBlock / EXECUTE / 免责声明 / 双按钮
     // 均渲染（脚本预览块已下沉到 `/ai/script`，本屏不再有 copy-script）。
-    expect(find.text('查看逻辑图'), findsWidgets);
+    expect(find.text('逻辑图'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, '确认策略'), findsOneWidget);
     expect(find.byKey(const Key('ai-confirm-hero')), findsOneWidget);
     expect(find.byKey(const Key('ai-confirm-rule-0')), findsOneWidget);
     // 底部双按钮在 sticky bar（始终在屏）。
