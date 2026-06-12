@@ -191,6 +191,23 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _scrollToBottom();
   }
 
+  void _openConfirmPage(ChatTurn turn) {
+    final String? codegenSessionId = _codegenSessionIdFor(turn);
+    final String? digest = _canonicalDigestFor(turn);
+    if (codegenSessionId != null || digest != null) {
+      context.push(
+        '/ai/confirm',
+        extra: AiConfirmArgs(
+          codegenSessionId: codegenSessionId,
+          confirmedCanonicalDigest: digest,
+          params: turn.params,
+        ),
+      );
+      return;
+    }
+    context.push('/ai/confirm', extra: turn.params);
+  }
+
   bool _isConfirmIntent(String text) {
     final String normalized = text.trim().toLowerCase();
     if (normalized.isEmpty || normalized.length > 12) return false;
@@ -466,11 +483,10 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                             // 才生成脚本，并把 PUBLISHED 脚本回复回聊天。
                             onConfirm:
                                 t.role == 'assistant' &&
-                                    t.kind == ChatTurnKind.params &&
-                                    !isDeployed
-                                ? () => context.push('/ai/confirm')
-                                : canConfirm
-                                ? () => _confirmInChat(t, current)
+                                    !isDeployed &&
+                                    (canConfirm ||
+                                        t.kind == ChatTurnKind.params)
+                                ? () => _openConfirmPage(t)
                                 : null,
                             // 已部署锁定态（#1834）：会话 `deployedTo != null`
                             // 时参数卡顶显示锁定横幅并隐藏「确认策略」CTA。

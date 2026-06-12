@@ -536,6 +536,83 @@ void main() {
     expect(find.textContaining('策略脚本已生成'), findsOneWidget);
   });
 
+  testWidgets('参数气泡确认入口携带 codegen session 与 digest 到确认页', (
+    WidgetTester tester,
+  ) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'params-confirm-route',
+        title: '真实参数',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 10, 22, 42),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'assistant-params',
+            role: 'assistant',
+            content: '策略参数如下。',
+            timestamp: DateTime(2026, 6, 10, 22, 42),
+            kind: ChatTurnKind.params,
+            params: const <String, String>{
+              'category': 'trend',
+              'symbol': 'BTC/USDT',
+              'activeCodegenSessionId': 'codegen-from-params',
+              'canonicalDigest': 'sha256:params-digest',
+            },
+          ),
+        ],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('confirm-route:codegen-from-params:sha256:params-digest'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('文本 CONFIRM_GATE 确认入口携带 codegen session 与 digest 到确认页', (
+    WidgetTester tester,
+  ) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'text-confirm-route',
+        title: '真实文本确认',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 10, 22, 42),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'assistant-confirm',
+            role: 'assistant',
+            content: '请确认是否按这个逻辑生成脚本。',
+            timestamp: DateTime(2026, 6, 10, 22, 42),
+            codegenSessionId: 'codegen-from-text',
+            confirmedCanonicalDigest: 'sha256:text-digest',
+          ),
+        ],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('confirm-route:codegen-from-text:sha256:text-digest'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('新 user 消息后旧 session codegen 不回落，确认文本继续发送', (
     WidgetTester tester,
   ) async {
