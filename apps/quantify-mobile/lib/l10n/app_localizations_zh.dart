@@ -163,7 +163,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '回测结果仅供参考，不构成投资建议；AI 会保留当前对话的策略参数，想换参数请回到对话修改。';
 
   @override
-  String get backtestCollapseButton => '上一步';
+  String get backtestCollapseButton => '返回对话';
 
   @override
   String get backtestStartButton => '开始回测';

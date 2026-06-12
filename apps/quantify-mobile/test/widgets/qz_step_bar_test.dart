@@ -6,6 +6,7 @@ import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_step_bar.dart';
 
 const List<String> _steps = <String>['确认策略', '策略脚本', '回测设置', '回测', '部署'];
+const List<String> _backtestSteps = <String>['回测设置', '回测'];
 
 Future<void> _pump(
   WidgetTester tester,
@@ -69,5 +70,20 @@ void main() {
     await _pump(tester, const QzStepBar(steps: _steps, active: 0));
     expect(find.byIcon(Icons.check_rounded), findsNothing);
     expect(find.text('01'), findsOneWidget);
+  });
+
+  testWidgets('支持回测两步流程标签和 active 序号', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      const QzStepBar(steps: _backtestSteps, active: 1, done: <int>[0]),
+    );
+
+    expect(find.text('回测设置'), findsOneWidget);
+    expect(find.text('回测'), findsOneWidget);
+    expect(find.text('确认策略'), findsNothing);
+    expect(find.text('策略脚本'), findsNothing);
+    expect(find.text('部署'), findsNothing);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(find.text('02'), findsOneWidget);
   });
 }

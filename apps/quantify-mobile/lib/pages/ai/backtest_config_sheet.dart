@@ -316,7 +316,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   }
 
   void _cancel() {
-    context.pop();
+    context.go('/ai');
   }
 
   @override
@@ -348,14 +348,10 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
           children: <Widget>[
             QzStepBar(
               steps: <String>[
-                l10n.aiStepConfirm,
-                l10n.aiStepScript,
                 l10n.aiStepBacktestConfig,
                 l10n.aiStepBacktest,
-                l10n.aiStepDeploy,
               ],
-              active: 2,
-              done: const <int>[0, 1],
+              active: 0,
             ),
             Expanded(
               child: Stack(

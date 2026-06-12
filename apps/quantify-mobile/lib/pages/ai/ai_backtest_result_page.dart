@@ -49,14 +49,11 @@ class AiBacktestResultPage extends ConsumerWidget {
           children: <Widget>[
             QzStepBar(
               steps: <String>[
-                l10n.aiStepConfirm,
-                l10n.aiStepScript,
                 l10n.aiStepBacktestConfig,
                 l10n.aiStepBacktest,
-                l10n.aiStepDeploy,
               ],
-              active: 3,
-              done: const <int>[0, 1, 2],
+              active: 1,
+              done: const <int>[0],
             ),
             Expanded(
               child: providedResult != null
@@ -130,7 +127,7 @@ class _BacktestResultBody extends StatelessWidget {
                 Expanded(
                   child: _SolidSecondaryButton(
                     label: l10n.backtestCollapseButton,
-                    onPressed: () => context.pop(),
+                    onPressed: () => context.go('/ai'),
                   ),
                 ),
                 const SizedBox(width: QzSpacing.md),

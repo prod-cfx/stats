@@ -168,7 +168,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Backtest results are for reference only and not investment advice. Strategy parameters stay tied to this chat — edit the conversation to change them.';
 
   @override
-  String get backtestCollapseButton => 'Back';
+  String get backtestCollapseButton => 'Return to Chat';
 
   @override
   String get backtestStartButton => 'Start Backtest';

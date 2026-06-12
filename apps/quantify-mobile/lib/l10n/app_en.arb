@@ -51,7 +51,7 @@
   "backtestFillMid": "Mid Price",
   "backtestFieldPartialData": "Allow partial data coverage",
   "backtestShieldHint": "Backtest results are for reference only and not investment advice. Strategy parameters stay tied to this chat — edit the conversation to change them.",
-  "backtestCollapseButton": "Back",
+  "backtestCollapseButton": "Return to Chat",
   "backtestStartButton": "Start Backtest",
   "backtestErrorInvalidDate": "Please enter valid start/end date (YYYY-MM-DD)",
   "backtestErrorEndBeforeStart": "End time must be after start time",

@@ -140,14 +140,11 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
           children: <Widget>[
             QzStepBar(
               steps: <String>[
-                l10n.aiStepConfirm,
-                l10n.aiStepScript,
                 l10n.aiStepBacktestConfig,
                 l10n.aiStepBacktest,
-                l10n.aiStepDeploy,
               ],
-              active: 3,
-              done: const <int>[0, 1, 2],
+              active: 1,
+              done: const <int>[0],
             ),
             Expanded(
               child: Stack(

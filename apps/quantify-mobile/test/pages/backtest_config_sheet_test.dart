@@ -38,6 +38,11 @@ Future<GoRouter> _pump(
         ],
       ),
       GoRoute(
+        path: '/ai',
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Center(child: Text('ai-chat-route'))),
+      ),
+      GoRoute(
         path: '/ai/backtest-run',
         builder: (BuildContext context, GoRouterState state) => Text(
           state.extra is AiBacktestRunArgs ? 'backtest-run-args' : 'no-args',
@@ -245,12 +250,12 @@ void main() {
     }
   });
 
-  testWidgets('整屏向导页顶部：回测设置 + 统一 5 步条', (WidgetTester tester) async {
+  testWidgets('整屏向导页顶部：回测设置 + 回测两步条', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.text('回测设置'), findsWidgets);
     expect(find.text('设置如何回测这条策略'), findsOneWidget);
     expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
-    for (final String step in <String>['确认策略', '策略脚本', '回测设置', '回测', '部署']) {
+    for (final String step in <String>['回测设置', '回测']) {
       expect(
         find.descendant(
           of: find.byKey(const Key('qz-step-bar')),
@@ -259,7 +264,16 @@ void main() {
         findsOneWidget,
       );
     }
-    expect(find.text('03'), findsOneWidget);
+    for (final String oldStep in <String>['确认策略', '策略脚本', '部署']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('qz-step-bar')),
+          matching: find.text(oldStep),
+        ),
+        findsNothing,
+      );
+    }
+    expect(find.text('01'), findsOneWidget);
     expect(find.byKey(const Key('backtest-sheet-scrim')), findsNothing);
     expect(find.text('回测参数'), findsNothing);
   });
@@ -282,12 +296,23 @@ void main() {
     expect(after.dy, before.dy);
   });
 
-  testWidgets('footer 文案对齐设计稿：上一步 + 开始回测（#2067）', (WidgetTester tester) async {
+  testWidgets('footer 文案对齐设计稿：返回对话 + 开始回测（#2435）', (WidgetTester tester) async {
     await _pump(tester);
-    expect(find.text('上一步'), findsOneWidget);
+    expect(find.text('返回对话'), findsOneWidget);
     expect(find.text('开始回测'), findsOneWidget);
+    expect(find.text('上一步'), findsNothing);
     expect(find.text('收起'), findsNothing);
     expect(find.text('确认并开始回测'), findsNothing);
+  });
+
+  testWidgets('footer 返回对话按钮显式回到 /ai', (WidgetTester tester) async {
+    final GoRouter router = await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('backtest-collapse')));
+    await tester.pumpAndSettle();
+
+    expect(router.routeInformationProvider.value.uri.path, '/ai');
+    expect(find.text('ai-chat-route'), findsOneWidget);
   });
 
   testWidgets('缺少发布快照时不进入回测进行页', (WidgetTester tester) async {

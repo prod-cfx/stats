@@ -397,18 +397,62 @@ void main() {
     expect(find.byType(AiBacktestRunPage), findsOneWidget);
     expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
     expect(find.text('回测进行中'), findsWidgets);
+    for (final String step in <String>['回测设置', '回测']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('qz-step-bar')),
+          matching: find.text(step),
+        ),
+        findsOneWidget,
+      );
+    }
+    for (final String oldStep in <String>['确认策略', '策略脚本', '部署']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('qz-step-bar')),
+          matching: find.text(oldStep),
+        ),
+        findsNothing,
+      );
+    }
+    expect(find.text('02'), findsOneWidget);
   });
 
   testWidgets('/ai/backtest-result resolves to AiBacktestResultPage', (
     WidgetTester tester,
   ) async {
     final BuildContext ctx = await _pumpApp(tester);
-    GoRouter.of(ctx).push('/ai/backtest-result');
+    GoRouter.of(ctx).push('/ai/backtest-result?jobId=mock-backtest-1');
     await tester.pumpAndSettle();
 
     expect(find.byType(AiBacktestResultPage), findsOneWidget);
     expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
     expect(find.text('回测结果'), findsOneWidget);
+    for (final String step in <String>['回测设置', '回测']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('qz-step-bar')),
+          matching: find.text(step),
+        ),
+        findsOneWidget,
+      );
+    }
+    for (final String oldStep in <String>['确认策略', '策略脚本', '部署']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('qz-step-bar')),
+          matching: find.text(oldStep),
+        ),
+        findsNothing,
+      );
+    }
+    expect(find.text('02'), findsOneWidget);
+    expect(find.text('返回对话'), findsOneWidget);
+
+    await tester.tap(find.text('返回对话'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiHomePage), findsOneWidget);
   });
 
   testWidgets('/ai/deploy resolves to AiDeployPage', (

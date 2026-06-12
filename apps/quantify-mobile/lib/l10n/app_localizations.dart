@@ -407,7 +407,7 @@ abstract class AppLocalizations {
   /// No description provided for @backtestCollapseButton.
   ///
   /// In zh, this message translates to:
-  /// **'上一步'**
+  /// **'返回对话'**
   String get backtestCollapseButton;
 
   /// No description provided for @backtestStartButton.
