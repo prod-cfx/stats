@@ -229,7 +229,11 @@ final Provider<AiChatRepository> aiChatRepositoryProvider =
 
 final Provider<BacktestRepository> backtestRepositoryProvider =
     Provider<BacktestRepository>((Ref ref) {
-      return ApiBacktestRepository(ref.watch(backtestServiceProvider));
+      return ApiBacktestRepository(
+        ref.watch(generatedBackendApiProvider),
+        tokenSupplier: () =>
+            ref.read(sessionControllerProvider).value?.token ?? '',
+      );
     });
 
 /// 回测结果（#2215/#2310）。结果页按真实回测 job id 拉取结果；测试替身环境

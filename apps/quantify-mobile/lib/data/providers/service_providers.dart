@@ -72,10 +72,6 @@ final Provider<LiveStrategyService> liveStrategyServiceProvider =
 final Provider<AiChatService> aiChatServiceProvider = Provider<AiChatService>(
   (Ref ref) => AiChatService(ref.watch(apiClientProvider)),
 );
-final Provider<BacktestService> backtestServiceProvider =
-    Provider<BacktestService>(
-      (Ref ref) => BacktestService(ref.watch(apiClientProvider)),
-    );
 final Provider<AccountService> accountServiceProvider =
     Provider<AccountService>(
       (Ref ref) => AccountService(ref.watch(apiClientProvider)),

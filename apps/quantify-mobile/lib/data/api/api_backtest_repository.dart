@@ -1,18 +1,27 @@
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
+
 import '../models/backtest_models.dart';
 import '../repositories/backtest_repository.dart';
+import '../services/api_client.dart';
 import '../services/json_codec.dart';
-import '../services/strategy_services.dart';
+import '../services/generated_backend_api.dart';
 
 /// [BacktestRepository] 真实现（issue #2189）。
 ///
 /// 走真实 HTTP 发起/查询回测。真实响应缺少深层图表/交易/风险明细时返回空态，
 /// 不回退 mock fixture。
 class ApiBacktestRepository implements BacktestRepository {
-  ApiBacktestRepository(this._service);
+  ApiBacktestRepository(this._api, {String Function()? tokenSupplier})
+    : _tokenSupplier = tokenSupplier;
 
-  final BacktestService _service;
+  final GeneratedBackendApi _api;
+  final String Function()? _tokenSupplier;
   static const int _jobPollLimit = 120;
   static const Duration _jobPollInterval = Duration(milliseconds: 1500);
+
+  BacktestingApi get _backtestingApi => _api.client.getBacktestingApi();
 
   BacktestResult _merge(dynamic raw, {String? fallbackId}) {
     final Map<String, dynamic> envelope = asMap(raw);
@@ -92,55 +101,71 @@ class ApiBacktestRepository implements BacktestRepository {
     if (snapshotId.isEmpty) {
       throw const FormatException('missing publishedSnapshotId for backtest');
     }
-    final String marketType = request.marketType == 'spot' ? 'spot' : 'perp';
+    final String marketType = _marketType(request.marketType);
     final Map<String, dynamic> strategyParams = _strategyParams(
       request.params,
       marketType,
     );
-    final dynamic raw = await _service.run(<String, dynamic>{
-      'symbols': <String>[request.symbol],
-      'baseTimeframe': request.baseTimeframe,
-      'stateTimeframes': <String>[request.baseTimeframe],
-      'initialCash': request.initialCash,
-      if (marketType == 'perp') 'leverage': request.leverage ?? 1,
-      if (request.allowPartial) 'allowPartial': true,
-      if (request.conversationId?.trim().isNotEmpty == true)
-        'conversationId': request.conversationId!.trim(),
-      if (asString(request.params['codegenSessionId']).trim().isNotEmpty)
-        'sessionId': asString(request.params['codegenSessionId']).trim(),
-      'execution': <String, dynamic>{
-        'slippageBps': request.slippageBps,
-        'feeBps': request.feeBps,
-        'priceSource': request.priceSource,
-      },
-      'strategy': <String, dynamic>{
-        'id': request.strategyId.trim().isNotEmpty
-            ? request.strategyId.trim()
-            : snapshotId,
-        'protocolVersion': 'v1',
-        'publishedSnapshotId': snapshotId,
-        'params': strategyParams,
-      },
-      'dataRange': <String, dynamic>{
-        'fromTs': request.startTime.millisecondsSinceEpoch,
-        'toTs': request.endTime.millisecondsSinceEpoch,
-      },
-      'requestedRangeInput': <String, dynamic>{
-        'preset': request.rangePreset == 'custom'
-            ? 'CUSTOM'
-            : request.rangePreset.toUpperCase(),
-        if (request.rangePreset == 'custom')
-          'startAt': request.startTime.toIso8601String(),
-        if (request.rangePreset == 'custom')
-          'endAt': request.endTime.toIso8601String(),
-      },
-    });
-    final Map<String, dynamic> created = asMap(asMap(raw)['data']);
-    if (created.isEmpty) created.addAll(asMap(raw));
+    final BacktestingCreateJobRequestDto payload =
+        BacktestingCreateJobRequestDto((b) {
+          b
+            ..symbols.replace(<String>[request.symbol])
+            ..baseTimeframe = _baseTimeframe(request.baseTimeframe)
+            ..stateTimeframes.replace(
+              <BacktestingCreateJobRequestDtoStateTimeframesEnum>[
+                _stateTimeframe(request.baseTimeframe),
+              ],
+            )
+            ..initialCash = request.initialCash
+            ..allowPartial = request.allowPartial
+            ..execution.replace(
+              BacktestingCreateJobExecutionDto(
+                (e) => e
+                  ..slippageBps = request.slippageBps
+                  ..feeBps = request.feeBps
+                  ..priceSource = _priceSource(request.priceSource),
+              ),
+            )
+            ..strategy.replace(
+              BacktestingCreateJobStrategyDto(
+                (s) => s
+                  ..id = request.strategyId.trim().isNotEmpty
+                      ? request.strategyId.trim()
+                      : snapshotId
+                  ..protocolVersion =
+                      BacktestingCreateJobStrategyDtoProtocolVersionEnum.v1
+                  ..publishedSnapshotId = snapshotId
+                  ..params.replace(_builtJsonObjectMap(strategyParams)),
+              ),
+            )
+            ..dataRange.replace(
+              BacktestingCreateJobRangeDto(
+                (r) => r
+                  ..fromTs = request.startTime.millisecondsSinceEpoch
+                  ..toTs = request.endTime.millisecondsSinceEpoch,
+              ),
+            )
+            ..requestedRangeInput.replace(
+              _requestedRangeInput(
+                request.rangePreset,
+                startTime: request.startTime,
+                endTime: request.endTime,
+              ),
+            );
+          if (marketType == 'perp') b.leverage = request.leverage ?? 1;
+          if (request.conversationId?.trim().isNotEmpty == true) {
+            b.conversationId = request.conversationId!.trim();
+          }
+        });
+    final response = await _backtestingApi.backtestingProxyControllerCreateJob(
+      authorization: _authorization(),
+      backtestingCreateJobRequestDto: payload,
+    );
+    final Map<String, dynamic> created = _createJobResponseMap(response.data);
     final String jobId = asString(pick(created, <String>['id'])).trim();
     final String status = asString(pick(created, <String>['status'])).trim();
     if (jobId.isEmpty || status.isEmpty || _isSucceeded(status)) {
-      return _merge(raw, fallbackId: jobId.isEmpty ? null : jobId);
+      return _merge(created, fallbackId: jobId.isEmpty ? null : jobId);
     }
 
     await _waitForJob(jobId, status);
@@ -167,7 +192,12 @@ class ApiBacktestRepository implements BacktestRepository {
 
   @override
   Future<BacktestResult> getResult(String id) async {
-    return _merge(await _service.getResult(id), fallbackId: id);
+    final response = await _backtestingApi
+        .backtestingProxyControllerGetJobResult(
+          authorization: _authorization(),
+          id: id,
+        );
+    return _merge(_reportResponseMap(response.data), fallbackId: id);
   }
 
   Future<void> _waitForJob(String jobId, String initialStatus) async {
@@ -179,7 +209,11 @@ class ApiBacktestRepository implements BacktestRepository {
       }
       if (i == _jobPollLimit) break;
       await Future<void>.delayed(_jobPollInterval);
-      final Map<String, dynamic> envelope = asMap(await _service.getJob(jobId));
+      final response = await _backtestingApi.backtestingProxyControllerGetJob(
+        authorization: _authorization(),
+        id: jobId,
+      );
+      final Map<String, dynamic> envelope = _jobResponseMap(response.data);
       final Map<String, dynamic> data = asMap(envelope['data']);
       status = asString(
         pick(data.isEmpty ? envelope : data, <String>['status']),
@@ -204,6 +238,266 @@ class ApiBacktestRepository implements BacktestRepository {
     }
   }
 
+  String _authorization() {
+    final String token = _tokenSupplier?.call().trim() ?? '';
+    if (token.isEmpty) {
+      throw const ApiException(message: 'login required', statusCode: 401);
+    }
+    return token.startsWith('Bearer ') ? token : 'Bearer $token';
+  }
+
+  String _marketType(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'spot':
+        return 'spot';
+      case 'perp':
+      case 'futures':
+      case 'future':
+        return 'perp';
+      default:
+        throw FormatException('unsupported backtest marketType: $raw');
+    }
+  }
+
+  BacktestingCreateJobRequestDtoBaseTimeframeEnum _baseTimeframe(String raw) {
+    switch (raw.trim()) {
+      case '1m':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n1m;
+      case '3m':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n3m;
+      case '5m':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n5m;
+      case '15m':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n15m;
+      case '30m':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n30m;
+      case '1h':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n1h;
+      case '4h':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n4h;
+      case '6h':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n6h;
+      case '8h':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n8h;
+      case '12h':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n12h;
+      case '1d':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n1d;
+      case '1w':
+        return BacktestingCreateJobRequestDtoBaseTimeframeEnum.n1w;
+      default:
+        throw FormatException('unsupported backtest baseTimeframe: $raw');
+    }
+  }
+
+  BacktestingCreateJobRequestDtoStateTimeframesEnum _stateTimeframe(
+    String raw,
+  ) {
+    switch (raw.trim()) {
+      case '1m':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n1m;
+      case '3m':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n3m;
+      case '5m':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n5m;
+      case '15m':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n15m;
+      case '30m':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n30m;
+      case '1h':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n1h;
+      case '4h':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n4h;
+      case '6h':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n6h;
+      case '8h':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n8h;
+      case '12h':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n12h;
+      case '1d':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n1d;
+      case '1w':
+        return BacktestingCreateJobRequestDtoStateTimeframesEnum.n1w;
+      default:
+        throw FormatException('unsupported backtest baseTimeframe: $raw');
+    }
+  }
+
+  BacktestingCreateJobExecutionDtoPriceSourceEnum _priceSource(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'open':
+        return BacktestingCreateJobExecutionDtoPriceSourceEnum.open;
+      case 'close':
+        return BacktestingCreateJobExecutionDtoPriceSourceEnum.close;
+      case 'mid':
+        return BacktestingCreateJobExecutionDtoPriceSourceEnum.mid;
+      default:
+        throw FormatException('unsupported backtest priceSource: $raw');
+    }
+  }
+
+  BacktestingCreateJobRequestedRangeInputDto _requestedRangeInput(
+    String raw, {
+    required DateTime startTime,
+    required DateTime endTime,
+  }) {
+    final String preset = raw.trim().toUpperCase();
+    return BacktestingCreateJobRequestedRangeInputDto((b) {
+      switch (preset) {
+        case '7D':
+          b.preset = BacktestingCreateJobRequestedRangeInputDtoPresetEnum.n7d;
+          break;
+        case '30D':
+          b.preset = BacktestingCreateJobRequestedRangeInputDtoPresetEnum.n30d;
+          break;
+        case '90D':
+          b.preset = BacktestingCreateJobRequestedRangeInputDtoPresetEnum.n90d;
+          break;
+        case '1Y':
+          b.preset = BacktestingCreateJobRequestedRangeInputDtoPresetEnum.n1y;
+          break;
+        case 'CUSTOM':
+          b
+            ..preset =
+                BacktestingCreateJobRequestedRangeInputDtoPresetEnum.CUSTOM
+            ..startAt = startTime.toIso8601String()
+            ..endAt = endTime.toIso8601String();
+          break;
+        default:
+          throw FormatException('unsupported backtest rangePreset: $raw');
+      }
+    });
+  }
+
+  BuiltMap<String, JsonObject?> _builtJsonObjectMap(
+    Map<String, dynamic> source,
+  ) {
+    return BuiltMap<String, JsonObject?>(
+      source.map(
+        (String key, dynamic value) =>
+            MapEntry<String, JsonObject?>(key, JsonObject(value)),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _builtJsonMap(BuiltMap<String, JsonObject?>? source) {
+    if (source == null) return <String, dynamic>{};
+    return Map<String, dynamic>.fromEntries(
+      source.entries.map(
+        (MapEntry<String, JsonObject?> entry) =>
+            MapEntry<String, dynamic>(entry.key, entry.value?.value),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _builtJsonMapList(
+    BuiltList<BuiltMap<String, JsonObject?>> source,
+  ) {
+    return source.map(_builtJsonMap).toList(growable: false);
+  }
+
+  Map<String, dynamic> _createJobResponseMap(
+    BacktestingProxyControllerCreateJob200Response? response,
+  ) {
+    final BacktestingCreateJobResponseDto? data = response?.data;
+    if (data == null) return <String, dynamic>{};
+    return <String, dynamic>{
+      'data': <String, dynamic>{
+        'id': data.id,
+        'status': data.status.name,
+        if (data.error != null) 'error': data.error,
+        'inputSummary': _inputSummaryMap(data.inputSummary),
+        if (data.resultSummary != null) 'summary': _resultSummaryMap(data),
+      },
+    };
+  }
+
+  Map<String, dynamic> _jobResponseMap(
+    BacktestingProxyControllerGetJob200Response? response,
+  ) {
+    final BacktestingJobResponseDto? data = response?.data;
+    if (data == null) return <String, dynamic>{};
+    return <String, dynamic>{
+      'data': <String, dynamic>{
+        'id': data.id,
+        'status': data.status.name,
+        'createdAt': data.createdAt,
+        if (data.startedAt != null) 'startedAt': data.startedAt,
+        if (data.finishedAt != null) 'finishedAt': data.finishedAt,
+        if (data.error != null) 'error': data.error,
+        if (data.errorDetails != null)
+          'errorDetails': _builtJsonMap(data.errorDetails),
+        'inputSummary': _builtJsonMap(data.inputSummary),
+        if (data.resultSummary != null)
+          'summary': _builtJsonMap(data.resultSummary),
+      },
+    };
+  }
+
+  Map<String, dynamic> _reportResponseMap(
+    BacktestingProxyControllerGetJobResult200Response? response,
+  ) {
+    final BacktestingReportResponseDto? data = response?.data;
+    if (data == null) return <String, dynamic>{};
+    return <String, dynamic>{
+      'data': <String, dynamic>{
+        'summary': _builtJsonMap(data.summary),
+        'equityCurve': _builtJsonMapList(data.equityCurve),
+        'trades': _builtJsonMapList(data.trades),
+        'markers': _builtJsonMapList(data.markers),
+        'bySymbol': _builtJsonMapList(data.bySymbol),
+        if (data.openPositions != null)
+          'openPositions': _builtJsonMapList(data.openPositions!),
+        if (data.pendingSignals != null)
+          'pendingSignals': _builtJsonMapList(data.pendingSignals!),
+      },
+    };
+  }
+
+  Map<String, dynamic> _resultSummaryMap(BacktestingCreateJobResponseDto data) {
+    final BacktestingCreateJobSummaryDto? summary = data.resultSummary;
+    if (summary == null) return <String, dynamic>{};
+    return <String, dynamic>{
+      'netProfitPct': summary.netProfitPct,
+      'maxDrawdownPct': summary.maxDrawdownPct,
+      'winRate': summary.winRate,
+      if (summary.profitFactor != null) 'profitFactor': summary.profitFactor,
+      'totalTrades': summary.totalTrades,
+    };
+  }
+
+  Map<String, dynamic> _inputSummaryMap(
+    BacktestingCreateJobInputSummaryDto input,
+  ) {
+    return <String, dynamic>{
+      'symbols': input.symbols.toList(growable: false),
+      'baseTimeframe': input.baseTimeframe,
+      'stateTimeframes': input.stateTimeframes.toList(growable: false),
+      'initialCash': input.initialCash,
+      if (input.leverage != null) 'leverage': input.leverage,
+      'marketType': input.marketType.name,
+      'dataRange': _rangeMap(input.dataRange),
+      'requestedRange': _rangeMap(input.requestedRange),
+      if (input.appliedRange != null)
+        'appliedRange': _rangeMap(input.appliedRange!),
+      'allowPartial': input.allowPartial,
+      'isPartial': input.isPartial,
+      'strategyId': input.strategyId,
+      if (input.strategyInstanceId != null)
+        'strategyInstanceId': input.strategyInstanceId,
+      if (input.strategyTemplateId != null)
+        'strategyTemplateId': input.strategyTemplateId,
+      if (input.snapshotId != null) 'snapshotId': input.snapshotId,
+      if (input.snapshotHash != null) 'snapshotHash': input.snapshotHash,
+      if (input.scriptHash != null) 'scriptHash': input.scriptHash,
+      if (input.specHash != null) 'specHash': input.specHash,
+    };
+  }
+
+  Map<String, dynamic> _rangeMap(BacktestingCreateJobRangeDto range) {
+    return <String, dynamic>{'fromTs': range.fromTs, 'toTs': range.toTs};
+  }
+
   List<double> _parseEquityCurve(Map<String, dynamic> m) {
     final Object? raw = pick(m, <String>['equityCurve', 'equity', 'curve']);
     return asList(raw)
@@ -223,6 +517,7 @@ class ApiBacktestRepository implements BacktestRepository {
       'drawdownMarkers',
       'drawdowns',
       'drawdownPoints',
+      'markers',
     ]);
     return asList(raw)
         .map((Object? item) {

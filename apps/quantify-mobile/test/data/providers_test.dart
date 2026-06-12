@@ -8,9 +8,7 @@ import 'package:quantify_mobile/data/models/backtest_models.dart';
 import 'package:quantify_mobile/data/models/exchange_long_short_models.dart';
 import 'package:quantify_mobile/data/api/api.dart';
 import 'package:quantify_mobile/data/providers.dart';
-import 'package:quantify_mobile/data/services/api_client.dart';
 import 'package:quantify_mobile/data/services/generated_backend_api.dart';
-import 'package:quantify_mobile/data/services/strategy_services.dart';
 import 'package:quantify_mobile/data/storage/market_favorites_persistence.dart';
 
 /// 可控的自选持久化桩：用注入的 [seed] 模拟 read()（null=未写盘），
@@ -30,21 +28,6 @@ class _FakeMarketFavoritesPersistence implements MarketFavoritesPersistence {
     if (failWrite) throw StateError('mock write failure');
     lastWritten = symbols;
   }
-}
-
-class _EmptyApiClient extends ApiClient {
-  _EmptyApiClient() : super(baseUrl: 'http://localhost');
-
-  @override
-  Future<dynamic> get(String path, {Map<String, dynamic>? query}) async =>
-      <String, dynamic>{};
-
-  @override
-  Future<dynamic> post(
-    String path, {
-    Object? body,
-    Map<String, dynamic>? query,
-  }) async => <String, dynamic>{};
 }
 
 void main() {
@@ -186,14 +169,28 @@ void main() {
     });
 
     test('真实模式空响应不回退 backtest 或 long-short mock fixture 行', () async {
-      final _EmptyApiClient client = _EmptyApiClient();
-      final ApiBacktestRepository backtest = ApiBacktestRepository(
-        BacktestService(client),
-      );
       final Dio dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
         ..interceptors.add(
           InterceptorsWrapper(
             onRequest: (RequestOptions options, RequestInterceptorHandler h) {
+              if (options.path == '/backtesting/jobs/empty-job/result') {
+                h.resolve(
+                  Response<Object?>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: <String, Object?>{
+                      'data': <String, Object?>{
+                        'summary': <String, Object?>{},
+                        'equityCurve': <Object?>[],
+                        'trades': <Object?>[],
+                        'markers': <Object?>[],
+                        'bySymbol': <Object?>[],
+                      },
+                    },
+                  ),
+                );
+                return;
+              }
               if (options.path == '/markets/long-short-ratio/exchanges') {
                 h.resolve(
                   Response<Object?>(
@@ -211,12 +208,17 @@ void main() {
             },
           ),
         );
+      final GeneratedBackendApi generatedApi = GeneratedBackendApi(dio: dio);
+      final ApiBacktestRepository backtest = ApiBacktestRepository(
+        generatedApi,
+        tokenSupplier: () => 'token',
+      );
       final ApiLongShortRepository longShort = ApiLongShortRepository(
-        GeneratedBackendApi(dio: dio),
+        generatedApi,
       );
 
       final BacktestResult result = await backtest.getResult('empty-job');
-      expect(result.id, isEmpty);
+      expect(result.id, 'empty-job');
       expect(result.equityCurve, isEmpty);
       expect(result.monthlyRows, isEmpty);
       expect(result.trades, isEmpty);

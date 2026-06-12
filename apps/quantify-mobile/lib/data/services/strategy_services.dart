@@ -77,16 +77,3 @@ class LiveStrategyService {
     );
   }
 }
-
-class BacktestService {
-  const BacktestService(this._client);
-  final ApiClient _client;
-
-  Future<dynamic> run(Map<String, dynamic> request) =>
-      _client.post('/backtesting/jobs', body: request);
-
-  Future<dynamic> getJob(String id) => _client.get('/backtesting/jobs/$id');
-
-  Future<dynamic> getResult(String id) =>
-      _client.get('/backtesting/jobs/$id/result');
-}
