@@ -346,7 +346,7 @@ class _PreflightActions extends StatelessWidget {
         Expanded(
           child: QzButton(
             key: const Key('deploy-preflight-back'),
-            label: l10n.deployPreflightBackButton,
+            label: l10n.aiConfirmBackToChat,
             variant: QzButtonVariant.ghost,
             height: 50,
             onPressed: onBack,

@@ -3,6 +3,7 @@ import 'dart:async';
 // ignore_for_file: unused_element, unused_field, prefer_final_fields
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/api_key_models.dart';
@@ -214,7 +215,22 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   }
 
   void _finish() {
+    if (!widget.showHeader) {
+      context.go('/ai');
+      return;
+    }
     Navigator.of(context).pop(_result);
+  }
+
+  void _viewLiveStrategy() {
+    final DeploymentResult? result = _result;
+    if (result == null) return;
+    if (widget.showHeader) {
+      Navigator.of(context).pop(result);
+      return;
+    }
+    final String instanceId = result.instanceId.trim();
+    context.go(instanceId.isEmpty ? '/me/live' : '/me/live/$instanceId');
   }
 
   _DeployTarget _targetFromKeys(List<ExchangeApiKey> keys) {
@@ -333,7 +349,9 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           amount: _amount,
           onAccountChanged: _selectAccount,
           onGoConfigure: _goConfigureApi,
-          onBack: () => Navigator.of(context).maybePop(),
+          onBack: widget.showHeader
+              ? () => Navigator.of(context).maybePop()
+              : () => context.go('/ai'),
           onConfirm: () => _confirmDeploy(target),
           stickyActions: !widget.showHeader,
         );
@@ -360,6 +378,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
         return _DonePane(
           result: _result!,
           onFinish: _finish,
+          onViewLive: _viewLiveStrategy,
           stickyActions: !widget.showHeader,
         );
     }

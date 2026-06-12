@@ -14,6 +14,7 @@ import '../fixtures/mock/mock_auth_repository.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
 import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/models/backtest_models.dart';
+import 'package:quantify_mobile/data/models/deploy_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
 import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
@@ -131,6 +132,22 @@ class _NoTimerBacktestRepository implements BacktestRepository {
   @override
   Future<BacktestResult> getResult(String id) async => mockBacktestResult;
 }
+
+const DeploymentContext _deployContext = DeploymentContext(
+  sessionId: 'sess-router-2436',
+  publishedSnapshotId: 'snap-router-2436',
+  exchangeAccountId: 'k1',
+  amount: 5000,
+  perTradePct: 20,
+  maxDailyLossPct: 10,
+  notifyOpen: true,
+  notifyClose: true,
+  notifyStopLoss: true,
+  symbol: 'ETH/USDT · 1h',
+  exchange: 'binance',
+  marketType: 'perp',
+  leverage: 5,
+);
 
 /// whale 实时 tab 控制器在 `build()` 内启 1s periodic 倒计时（#1986）。路由测试
 /// 切到 whale tab 时该 Timer 会被 StatefulShellRoute 保活，测试体结束仍 pending →
@@ -463,9 +480,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AiDeployPage), findsOneWidget);
-    expect(find.byKey(const Key('qz-step-bar')), findsOneWidget);
+    expect(find.byKey(const Key('qz-step-bar')), findsNothing);
     expect(find.text('部署策略'), findsWidgets);
     expect(find.byKey(const Key('deploy-step-indicator')), findsNothing);
+    for (final String oldStep in <String>['确认策略', '策略脚本', '回测设置', '回测', '部署']) {
+      expect(find.text(oldStep), findsNothing);
+    }
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiHomePage), findsOneWidget);
+  });
+
+  testWidgets('/ai/deploy secondary return button goes back to chat', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).push('/ai/deploy', extra: _deployContext);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiDeployPage), findsOneWidget);
+    expect(find.byKey(const Key('deploy-preflight-back')), findsOneWidget);
+    expect(find.text('返回对话'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('deploy-preflight-back')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiHomePage), findsOneWidget);
   });
 
   testWidgets('/ai/confirm resolves to AiConfirmPage（#1832 确认策略屏）', (

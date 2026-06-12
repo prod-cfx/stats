@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/models/api_key_models.dart';
@@ -309,6 +310,7 @@ void main() {
       expect(find.text('运行中'), findsOneWidget);
       // 启动时间行（#1896）
       expect(find.text('启动时间'), findsOneWidget);
+      expect(find.text('查看实盘策略'), findsOneWidget);
       expect(find.byKey(const Key('deploy-next-live')), findsOneWidget);
       expect(find.byKey(const Key('deploy-next-notify')), findsOneWidget);
       expect(find.byKey(const Key('deploy-next-tune')), findsOneWidget);
@@ -424,5 +426,152 @@ void main() {
     expect(find.byKey(const Key('deploy-context-error')), findsOneWidget);
     expect(find.textContaining('缺少部署上下文'), findsOneWidget);
     expect(aiRepo.deployCalls, isEmpty);
+  });
+
+  testWidgets('QzDeploySheet: 整屏成功态「查看实盘策略」跳转实盘详情（#2436）', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    final GoRouter router = GoRouter(
+      initialLocation: '/deploy',
+      routes: <RouteBase>[
+        GoRoute(
+          path: '/deploy',
+          builder: (BuildContext context, GoRouterState state) =>
+              const Scaffold(
+                body: QzDeploySheet(
+                  showHeader: false,
+                  deploymentContext: _context,
+                ),
+              ),
+        ),
+        GoRoute(
+          path: '/me/live/:id',
+          builder: (BuildContext context, GoRouterState state) =>
+              Scaffold(body: Text('live:${state.pathParameters['id']}')),
+        ),
+        GoRoute(
+          path: '/me/live',
+          builder: (BuildContext context, GoRouterState state) =>
+              const Scaffold(body: Text('live-list')),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          apiKeyRepositoryProvider.overrideWithValue(repo),
+          aiChatRepositoryProvider.overrideWithValue(
+            _FakeAiChatRepo(session: _deployedSession()),
+          ),
+        ],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          routerConfig: router,
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 320));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    expect(find.text('3/3 通过'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2600));
+    await tester.pump();
+
+    expect(find.text('查看实盘策略'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('deploy-next-live')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('live:live-real-2310'), findsOneWidget);
+  });
+
+  testWidgets('QzDeploySheet: 整屏成功态完成按钮返回对话（#2436）', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    final GoRouter router = GoRouter(
+      initialLocation: '/deploy',
+      routes: <RouteBase>[
+        GoRoute(
+          path: '/deploy',
+          builder: (BuildContext context, GoRouterState state) =>
+              const Scaffold(
+                body: QzDeploySheet(
+                  showHeader: false,
+                  deploymentContext: _context,
+                ),
+              ),
+        ),
+        GoRoute(
+          path: '/ai',
+          builder: (BuildContext context, GoRouterState state) =>
+              const Scaffold(body: Text('chat-home')),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          apiKeyRepositoryProvider.overrideWithValue(repo),
+          aiChatRepositoryProvider.overrideWithValue(
+            _FakeAiChatRepo(session: _deployedSession()),
+          ),
+        ],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          routerConfig: router,
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 320));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2600));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('deploy-finish')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('chat-home'), findsOneWidget);
   });
 }

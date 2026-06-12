@@ -5,11 +5,10 @@ import '../../data/models/deploy_models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/theme_context.dart';
 import 'widgets/qz_deploy_sheet.dart';
-import '../../widgets/qz_step_bar.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
 
-/// AI 量化「部署策略」整屏页 — 向导第 5 步。
+/// AI 量化「部署策略」整屏页。
 class AiDeployPage extends StatelessWidget {
   const AiDeployPage({super.key, this.deploymentContext});
 
@@ -27,36 +26,19 @@ class AiDeployPage extends StatelessWidget {
       appBar: QzTopBar(
         title: '部署策略',
         subtitle: subtitle,
-        onBack: () => context.pop(),
+        onBack: () => context.go('/ai'),
         actions: <Widget>[
           QzTopCancelButton(
-            label: l10n.commonCancel,
+            label: l10n.aiConfirmBackToChat,
             onTap: () => context.go('/ai'),
           ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: <Widget>[
-            QzStepBar(
-              steps: <String>[
-                l10n.aiStepConfirm,
-                l10n.aiStepScript,
-                l10n.aiStepBacktestConfig,
-                l10n.aiStepBacktest,
-                l10n.aiStepDeploy,
-              ],
-              active: 4,
-              done: const <int>[0, 1, 2, 3],
-            ),
-            Expanded(
-              child: QzDeploySheet(
-                showHeader: false,
-                deploymentContext: deploymentContext,
-              ),
-            ),
-          ],
+        child: QzDeploySheet(
+          showHeader: false,
+          deploymentContext: deploymentContext,
         ),
       ),
     );

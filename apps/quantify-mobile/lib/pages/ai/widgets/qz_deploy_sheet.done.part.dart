@@ -5,11 +5,13 @@ class _DonePane extends StatelessWidget {
   const _DonePane({
     required this.result,
     required this.onFinish,
+    required this.onViewLive,
     this.stickyActions = false,
   });
 
   final DeploymentResult result;
   final VoidCallback onFinish;
+  final VoidCallback onViewLive;
   final bool stickyActions;
 
   @override
@@ -105,8 +107,7 @@ class _DonePane extends StatelessWidget {
         title: l10n.deployDoneNextLiveTitle,
         sub: l10n.deployDoneNextLiveSub,
         scheme: c,
-        // pop 返回 result：调用方据此跳 /me/live（#1752 联动）。
-        onTap: onFinish,
+        onTap: onViewLive,
       ),
       _NextStepRow(
         stepKey: const Key('deploy-next-notify'),
