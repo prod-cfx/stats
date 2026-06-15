@@ -90,7 +90,6 @@ Serializers _$serializers =
             AdminTradesPairConfigControllerGetAllConfigs200Response.serializer,
           )
           ..add(AdminUserControllerList0200Response.serializer)
-          ..add(AdminUserControllerLogin0200Response.serializer)
           ..add(AdminUserDto.serializer)
           ..add(AdminUserInfoDto.serializer)
           ..add(AggregatedLevelDto.serializer)

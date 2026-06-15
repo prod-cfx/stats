@@ -86,7 +86,6 @@ export 'package:backend_api_contracts/src/model/admin_settings_controller_reload
 export 'package:backend_api_contracts/src/model/admin_trades_pair_config_controller_create_config200_response.dart';
 export 'package:backend_api_contracts/src/model/admin_trades_pair_config_controller_get_all_configs200_response.dart';
 export 'package:backend_api_contracts/src/model/admin_user_controller_list0200_response.dart';
-export 'package:backend_api_contracts/src/model/admin_user_controller_login0200_response.dart';
 export 'package:backend_api_contracts/src/model/admin_user_dto.dart';
 export 'package:backend_api_contracts/src/model/admin_user_info_dto.dart';
 export 'package:backend_api_contracts/src/model/aggregated_level_dto.dart';

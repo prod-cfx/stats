@@ -776,21 +776,6 @@ const AdminRegisterDto = z
     roleCodes: z.array(z.string()).optional(),
   })
   .passthrough()
-const AdminAssignedRoleDto = z
-  .object({ id: z.string(), code: z.string(), name: z.string(), description: z.string().nullish() })
-  .passthrough()
-const AdminUserDto = z
-  .object({
-    id: z.string(),
-    username: z.string(),
-    nickName: z.string().nullable(),
-    email: z.string().nullable(),
-    avatarUrl: z.string().nullable(),
-    phone: z.string().nullable(),
-    isFrozen: z.boolean(),
-    roles: z.array(AdminAssignedRoleDto).default([]),
-  })
-  .passthrough()
 const AdminMenuPermissionDto = z
   .object({
     id: z.string(),
@@ -814,6 +799,21 @@ const AdminUserInfoDto = z
     menuPermissions: z.array(z.string()),
     featurePermissions: z.array(z.string()),
     apiPermissions: z.array(z.string()),
+  })
+  .passthrough()
+const AdminAssignedRoleDto = z
+  .object({ id: z.string(), code: z.string(), name: z.string(), description: z.string().nullish() })
+  .passthrough()
+const AdminUserDto = z
+  .object({
+    id: z.string(),
+    username: z.string(),
+    nickName: z.string().nullable(),
+    email: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    phone: z.string().nullable(),
+    isFrozen: z.boolean(),
+    roles: z.array(AdminAssignedRoleDto).default([]),
   })
   .passthrough()
 const CreateAdminUserDto = z
@@ -1780,10 +1780,10 @@ export const schemas = {
   AdminAuthResponseDto,
   AdminRefreshDto,
   AdminRegisterDto,
-  AdminAssignedRoleDto,
-  AdminUserDto,
   AdminMenuPermissionDto,
   AdminUserInfoDto,
+  AdminAssignedRoleDto,
+  AdminUserDto,
   CreateAdminUserDto,
   UpdateAdminUserDto,
   CreateAdminRoleDto,
@@ -3351,6 +3351,7 @@ const endpoints = makeApi([
     method: 'post',
     path: '/admin/user/login',
     alias: 'AdminUserController_login[0]',
+    description: `请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。`,
     requestFormat: 'json',
     parameters: [
       {
@@ -3359,20 +3360,13 @@ const endpoints = makeApi([
         schema: AdminLoginDto,
       },
     ],
-    response: z
-      .object({
-        accessToken: z.string(),
-        refreshToken: z.string(),
-        expiresIn: z.string(),
-        user: AdminUserDto,
-      })
-      .partial()
-      .passthrough(),
+    response: AdminAuthResponseDto,
   },
   {
     method: 'post',
     path: '/admin/user/refresh',
     alias: 'AdminUserController_refresh[0]',
+    description: `请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。`,
     requestFormat: 'json',
     parameters: [
       {
@@ -3381,15 +3375,7 @@ const endpoints = makeApi([
         schema: z.object({ refreshToken: z.string() }).passthrough(),
       },
     ],
-    response: z
-      .object({
-        accessToken: z.string(),
-        refreshToken: z.string(),
-        expiresIn: z.string(),
-        user: AdminUserDto,
-      })
-      .partial()
-      .passthrough(),
+    response: AdminAuthResponseDto,
   },
   {
     method: 'get',
@@ -3492,6 +3478,7 @@ const endpoints = makeApi([
     method: 'post',
     path: '/admin/users/login',
     alias: 'AdminUserController_login[1]',
+    description: `请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。`,
     requestFormat: 'json',
     parameters: [
       {
@@ -3500,20 +3487,13 @@ const endpoints = makeApi([
         schema: AdminLoginDto,
       },
     ],
-    response: z
-      .object({
-        accessToken: z.string(),
-        refreshToken: z.string(),
-        expiresIn: z.string(),
-        user: AdminUserDto,
-      })
-      .partial()
-      .passthrough(),
+    response: AdminAuthResponseDto,
   },
   {
     method: 'post',
     path: '/admin/users/refresh',
     alias: 'AdminUserController_refresh[1]',
+    description: `请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。`,
     requestFormat: 'json',
     parameters: [
       {
@@ -3522,15 +3502,7 @@ const endpoints = makeApi([
         schema: z.object({ refreshToken: z.string() }).passthrough(),
       },
     ],
-    response: z
-      .object({
-        accessToken: z.string(),
-        refreshToken: z.string(),
-        expiresIn: z.string(),
-        user: AdminUserDto,
-      })
-      .partial()
-      .passthrough(),
+    response: AdminAuthResponseDto,
   },
   {
     method: 'get',

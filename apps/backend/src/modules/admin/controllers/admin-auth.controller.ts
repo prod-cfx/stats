@@ -1,4 +1,3 @@
-import type { AdminUserDto } from '../dto/admin-user.dto'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common'
 import {
@@ -13,6 +12,7 @@ import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AdminAuthResponseDto, AdminProfileDto, AdminRegisterDto } from '../dto/admin-auth.dto'
 import { AdminLoginDto, AdminRefreshDto } from '../dto/admin-login.dto'
+import { buildAdminAuthResponse, buildAdminProfile } from './admin-auth-response.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- NestJS 依赖运行时类型，需保持值导入
 import { AdminUserService } from '../services/admin-user.service'
 
@@ -28,7 +28,7 @@ export class AdminAuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() body: AdminLoginDto): Promise<AdminAuthResponseDto> {
     const result = await this.adminUserService.login(body.username, body.password)
-    return this.buildAuthResponse(result)
+    return buildAdminAuthResponse(this.adminUserService, result)
   }
 
   @Post('refresh')
@@ -38,7 +38,7 @@ export class AdminAuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() body: AdminRefreshDto): Promise<AdminAuthResponseDto> {
     const result = await this.adminUserService.refresh(body.refreshToken)
-    return this.buildAuthResponse(result)
+    return buildAdminAuthResponse(this.adminUserService, result)
   }
 
   @Post('register')
@@ -49,7 +49,7 @@ export class AdminAuthController {
   async register(@Body() body: AdminRegisterDto): Promise<AdminAuthResponseDto> {
     await this.adminUserService.registerInitialAdmin(body)
     const result = await this.adminUserService.login(body.username, body.password)
-    return this.buildAuthResponse(result)
+    return buildAdminAuthResponse(this.adminUserService, result)
   }
 
   @Get('me')
@@ -59,27 +59,6 @@ export class AdminAuthController {
   @ApiOkResponse({ description: '获取成功', schema: { $ref: getSchemaPath(AdminProfileDto) } })
   async me(@CurrentUser('id') adminId: string): Promise<AdminProfileDto> {
     const user = await this.adminUserService.findById(adminId)
-    return this.buildProfile(user)
-  }
-
-  private async buildAuthResponse(result: Awaited<ReturnType<AdminUserService['login']>>): Promise<AdminAuthResponseDto> {
-    return {
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      expiresIn: result.expiresIn,
-      admin: await this.buildProfile(result.user),
-    }
-  }
-
-  private async buildProfile(user: AdminUserDto): Promise<AdminProfileDto> {
-    const info = await this.adminUserService.getAdminInfo(user.id)
-    return {
-      id: user.id,
-      username: user.username,
-      email: user.email ?? null,
-      nickName: user.nickName ?? null,
-      isFrozen: user.isFrozen,
-      menuPermissions: info.menuPermissions,
-    }
+    return buildAdminProfile(this.adminUserService, user)
   }
 }

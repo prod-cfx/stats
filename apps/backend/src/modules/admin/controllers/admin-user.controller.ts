@@ -16,10 +16,12 @@ import { BaseResponseDto } from '@/common/dto/base.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+import { AdminAuthResponseDto } from '../dto/admin-auth.dto'
 import { AdminLoginDto, AdminRefreshDto } from '../dto/admin-login.dto'
 import { AdminUserListQueryDto } from '../dto/admin-user-list.dto'
 import { AdminUserInfoDto } from '../dto/admin-user-info.dto'
 import { AdminUserDto, CreateAdminUserDto, UpdateAdminUserDto } from '../dto/admin-user.dto'
+import { buildAdminAuthResponse } from './admin-auth-response.mapper'
 // eslint-disable-next-line ts/consistent-type-imports
 import { AdminUserService } from '../services/admin-user.service'
 
@@ -31,43 +33,31 @@ export class AdminUserController {
   constructor(private readonly adminUserService: AdminUserService) {}
 
   @Post('login')
-  @ApiOperation({ summary: '管理员登录' })
-  @ApiBody({ type: AdminLoginDto })
-  @ApiOkResponse({
-    description: '登录成功',
-    schema: {
-      type: 'object',
-      properties: {
-        accessToken: { type: 'string' },
-        refreshToken: { type: 'string' },
-        expiresIn: { type: 'string' },
-        user: { $ref: getSchemaPath(AdminUserDto) },
-      },
-    },
+  @ApiOperation({
+    summary: '管理员登录（兼容旧入口，已废弃）',
+    description: '请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。',
+    deprecated: true,
   })
+  @ApiBody({ type: AdminLoginDto })
+  @ApiOkResponse({ description: '登录成功', type: AdminAuthResponseDto })
   @HttpCode(HttpStatus.OK)
-  async login(@Body() body: AdminLoginDto) {
-    return this.adminUserService.login(body.username, body.password)
+  async login(@Body() body: AdminLoginDto): Promise<AdminAuthResponseDto> {
+    const result = await this.adminUserService.login(body.username, body.password)
+    return buildAdminAuthResponse(this.adminUserService, result)
   }
 
   @Post('refresh')
-  @ApiOperation({ summary: '刷新管理员访问令牌' })
-  @ApiBody({ type: AdminRefreshDto })
-  @ApiOkResponse({
-    description: '刷新成功',
-    schema: {
-      type: 'object',
-      properties: {
-        accessToken: { type: 'string' },
-        refreshToken: { type: 'string' },
-        expiresIn: { type: 'string' },
-        user: { $ref: getSchemaPath(AdminUserDto) },
-      },
-    },
+  @ApiOperation({
+    summary: '刷新管理员访问令牌（兼容旧入口，已废弃）',
+    description: '请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。',
+    deprecated: true,
   })
+  @ApiBody({ type: AdminRefreshDto })
+  @ApiOkResponse({ description: '刷新成功', type: AdminAuthResponseDto })
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body() body: AdminRefreshDto) {
-    return this.adminUserService.refresh(body.refreshToken)
+  async refresh(@Body() body: AdminRefreshDto): Promise<AdminAuthResponseDto> {
+    const result = await this.adminUserService.refresh(body.refreshToken)
+    return buildAdminAuthResponse(this.adminUserService, result)
   }
 
   @Get('info')

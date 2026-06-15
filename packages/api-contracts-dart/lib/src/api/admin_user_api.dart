@@ -9,10 +9,10 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
+import 'package:backend_api_contracts/src/model/admin_auth_response_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_login_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_refresh_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_user_controller_list0200_response.dart';
-import 'package:backend_api_contracts/src/model/admin_user_controller_login0200_response.dart';
 import 'package:backend_api_contracts/src/model/admin_user_dto.dart';
 import 'package:backend_api_contracts/src/model/admin_user_info_dto.dart';
 import 'package:backend_api_contracts/src/model/create_admin_user_dto.dart';
@@ -838,8 +838,8 @@ class AdminUserApi {
     );
   }
 
-  /// 管理员登录
-  /// 
+  /// 管理员登录（兼容旧入口，已废弃）
+  /// 请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。
   ///
   /// Parameters:
   /// * [adminLoginDto] 
@@ -850,9 +850,10 @@ class AdminUserApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [AdminUserControllerLogin0200Response] as data
+  /// Returns a [Future] containing a [Response] with a [AdminAuthResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AdminUserControllerLogin0200Response>> adminUserControllerLogin0({ 
+  @Deprecated('This operation has been deprecated')
+  Future<Response<AdminAuthResponseDto>> adminUserControllerLogin0({ 
     required AdminLoginDto adminLoginDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -908,14 +909,14 @@ class AdminUserApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    AdminUserControllerLogin0200Response? _responseData;
+    AdminAuthResponseDto? _responseData;
 
     try {
       final rawResponse = _response.data;
       _responseData = rawResponse == null ? null : _serializers.deserialize(
         rawResponse,
-        specifiedType: const FullType(AdminUserControllerLogin0200Response),
-      ) as AdminUserControllerLogin0200Response;
+        specifiedType: const FullType(AdminAuthResponseDto),
+      ) as AdminAuthResponseDto;
 
     } catch (error, stackTrace) {
       throw DioException(
@@ -927,7 +928,7 @@ class AdminUserApi {
       );
     }
 
-    return Response<AdminUserControllerLogin0200Response>(
+    return Response<AdminAuthResponseDto>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -939,8 +940,8 @@ class AdminUserApi {
     );
   }
 
-  /// 管理员登录
-  /// 
+  /// 管理员登录（兼容旧入口，已废弃）
+  /// 请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。
   ///
   /// Parameters:
   /// * [adminLoginDto] 
@@ -951,9 +952,10 @@ class AdminUserApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [AdminUserControllerLogin0200Response] as data
+  /// Returns a [Future] containing a [Response] with a [AdminAuthResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AdminUserControllerLogin0200Response>> adminUserControllerLogin1({ 
+  @Deprecated('This operation has been deprecated')
+  Future<Response<AdminAuthResponseDto>> adminUserControllerLogin1({ 
     required AdminLoginDto adminLoginDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1009,14 +1011,14 @@ class AdminUserApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    AdminUserControllerLogin0200Response? _responseData;
+    AdminAuthResponseDto? _responseData;
 
     try {
       final rawResponse = _response.data;
       _responseData = rawResponse == null ? null : _serializers.deserialize(
         rawResponse,
-        specifiedType: const FullType(AdminUserControllerLogin0200Response),
-      ) as AdminUserControllerLogin0200Response;
+        specifiedType: const FullType(AdminAuthResponseDto),
+      ) as AdminAuthResponseDto;
 
     } catch (error, stackTrace) {
       throw DioException(
@@ -1028,7 +1030,7 @@ class AdminUserApi {
       );
     }
 
-    return Response<AdminUserControllerLogin0200Response>(
+    return Response<AdminAuthResponseDto>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -1040,8 +1042,8 @@ class AdminUserApi {
     );
   }
 
-  /// 刷新管理员访问令牌
-  /// 
+  /// 刷新管理员访问令牌（兼容旧入口，已废弃）
+  /// 请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。
   ///
   /// Parameters:
   /// * [adminRefreshDto] 
@@ -1052,9 +1054,10 @@ class AdminUserApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [AdminUserControllerLogin0200Response] as data
+  /// Returns a [Future] containing a [Response] with a [AdminAuthResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AdminUserControllerLogin0200Response>> adminUserControllerRefresh0({ 
+  @Deprecated('This operation has been deprecated')
+  Future<Response<AdminAuthResponseDto>> adminUserControllerRefresh0({ 
     required AdminRefreshDto adminRefreshDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1110,14 +1113,14 @@ class AdminUserApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    AdminUserControllerLogin0200Response? _responseData;
+    AdminAuthResponseDto? _responseData;
 
     try {
       final rawResponse = _response.data;
       _responseData = rawResponse == null ? null : _serializers.deserialize(
         rawResponse,
-        specifiedType: const FullType(AdminUserControllerLogin0200Response),
-      ) as AdminUserControllerLogin0200Response;
+        specifiedType: const FullType(AdminAuthResponseDto),
+      ) as AdminAuthResponseDto;
 
     } catch (error, stackTrace) {
       throw DioException(
@@ -1129,7 +1132,7 @@ class AdminUserApi {
       );
     }
 
-    return Response<AdminUserControllerLogin0200Response>(
+    return Response<AdminAuthResponseDto>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -1141,8 +1144,8 @@ class AdminUserApi {
     );
   }
 
-  /// 刷新管理员访问令牌
-  /// 
+  /// 刷新管理员访问令牌（兼容旧入口，已废弃）
+  /// 请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。
   ///
   /// Parameters:
   /// * [adminRefreshDto] 
@@ -1153,9 +1156,10 @@ class AdminUserApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [AdminUserControllerLogin0200Response] as data
+  /// Returns a [Future] containing a [Response] with a [AdminAuthResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AdminUserControllerLogin0200Response>> adminUserControllerRefresh1({ 
+  @Deprecated('This operation has been deprecated')
+  Future<Response<AdminAuthResponseDto>> adminUserControllerRefresh1({ 
     required AdminRefreshDto adminRefreshDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1211,14 +1215,14 @@ class AdminUserApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    AdminUserControllerLogin0200Response? _responseData;
+    AdminAuthResponseDto? _responseData;
 
     try {
       final rawResponse = _response.data;
       _responseData = rawResponse == null ? null : _serializers.deserialize(
         rawResponse,
-        specifiedType: const FullType(AdminUserControllerLogin0200Response),
-      ) as AdminUserControllerLogin0200Response;
+        specifiedType: const FullType(AdminAuthResponseDto),
+      ) as AdminAuthResponseDto;
 
     } catch (error, stackTrace) {
       throw DioException(
@@ -1230,7 +1234,7 @@ class AdminUserApi {
       );
     }
 
-    return Response<AdminUserControllerLogin0200Response>(
+    return Response<AdminAuthResponseDto>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

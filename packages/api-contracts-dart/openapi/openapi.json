@@ -3099,6 +3099,8 @@
     },
     "/admin/user/login": {
       "post": {
+        "deprecated": true,
+        "description": "请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。",
         "operationId": "AdminUserController_login[0]",
         "parameters": [],
         "requestBody": {
@@ -3117,21 +3119,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "accessToken": {
-                      "type": "string"
-                    },
-                    "refreshToken": {
-                      "type": "string"
-                    },
-                    "expiresIn": {
-                      "type": "string"
-                    },
-                    "user": {
-                      "$ref": "#/components/schemas/AdminUserDto"
-                    }
-                  }
+                  "$ref": "#/components/schemas/AdminAuthResponseDto"
                 }
               }
             }
@@ -3142,7 +3130,7 @@
             "bearer": []
           }
         ],
-        "summary": "管理员登录",
+        "summary": "管理员登录（兼容旧入口，已废弃）",
         "tags": [
           "admin-user"
         ]
@@ -3150,6 +3138,8 @@
     },
     "/admin/users/login": {
       "post": {
+        "deprecated": true,
+        "description": "请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。",
         "operationId": "AdminUserController_login[1]",
         "parameters": [],
         "requestBody": {
@@ -3168,21 +3158,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "accessToken": {
-                      "type": "string"
-                    },
-                    "refreshToken": {
-                      "type": "string"
-                    },
-                    "expiresIn": {
-                      "type": "string"
-                    },
-                    "user": {
-                      "$ref": "#/components/schemas/AdminUserDto"
-                    }
-                  }
+                  "$ref": "#/components/schemas/AdminAuthResponseDto"
                 }
               }
             }
@@ -3193,7 +3169,7 @@
             "bearer": []
           }
         ],
-        "summary": "管理员登录",
+        "summary": "管理员登录（兼容旧入口，已废弃）",
         "tags": [
           "admin-user"
         ]
@@ -3201,6 +3177,8 @@
     },
     "/admin/user/refresh": {
       "post": {
+        "deprecated": true,
+        "description": "请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。",
         "operationId": "AdminUserController_refresh[0]",
         "parameters": [],
         "requestBody": {
@@ -3219,21 +3197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "accessToken": {
-                      "type": "string"
-                    },
-                    "refreshToken": {
-                      "type": "string"
-                    },
-                    "expiresIn": {
-                      "type": "string"
-                    },
-                    "user": {
-                      "$ref": "#/components/schemas/AdminUserDto"
-                    }
-                  }
+                  "$ref": "#/components/schemas/AdminAuthResponseDto"
                 }
               }
             }
@@ -3244,7 +3208,7 @@
             "bearer": []
           }
         ],
-        "summary": "刷新管理员访问令牌",
+        "summary": "刷新管理员访问令牌（兼容旧入口，已废弃）",
         "tags": [
           "admin-user"
         ]
@@ -3252,6 +3216,8 @@
     },
     "/admin/users/refresh": {
       "post": {
+        "deprecated": true,
+        "description": "请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。",
         "operationId": "AdminUserController_refresh[1]",
         "parameters": [],
         "requestBody": {
@@ -3270,21 +3236,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "accessToken": {
-                      "type": "string"
-                    },
-                    "refreshToken": {
-                      "type": "string"
-                    },
-                    "expiresIn": {
-                      "type": "string"
-                    },
-                    "user": {
-                      "$ref": "#/components/schemas/AdminUserDto"
-                    }
-                  }
+                  "$ref": "#/components/schemas/AdminAuthResponseDto"
                 }
               }
             }
@@ -3295,7 +3247,7 @@
             "bearer": []
           }
         ],
-        "summary": "刷新管理员访问令牌",
+        "summary": "刷新管理员访问令牌（兼容旧入口，已废弃）",
         "tags": [
           "admin-user"
         ]
