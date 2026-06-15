@@ -1442,6 +1442,8 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     switch (expr.kind) {
       case 'atom': {
+        const expression = this.tryReadAtomExpressionCondition(expr)
+        if (expression) return this.compileExpressionCondition(expression, context, seed)
         // 契约守门（#1494-M3）：本 case 不做 REGISTRY 预检；leaf 是否可编译由 compileAtom
         // 自身负责——`ATOM_CONTRACT_REGISTRY[key].emit.irShape === 'pr3a-condition'` 走
         // REGISTRY emit dispatch，其余 atom 命中 compileAtom 内 legacy switch；两者都
@@ -1489,6 +1491,53 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
     }
+  }
+
+  private tryReadAtomExpressionCondition(
+    expr: import('../types/atom-expr').AtomExprAtom,
+  ): CanonicalExpressionCondition | null {
+    if (expr.key !== 'condition.expression') return null
+    const expression = expr.params?.expression
+    if (!this.isUnknownRecord(expression)) return null
+    const op = expression.op
+    const left = expression.left
+    const right = expression.right
+    if (typeof op !== 'string' || !this.isSemanticExpressionOperator(op)) return null
+    if (!this.isSemanticExpressionOperand(left) || !this.isSemanticExpressionOperand(right)) return null
+    return { kind: 'expression', op, left, right }
+  }
+
+  private isSemanticExpressionOperator(value: string): value is CanonicalExpressionCondition['op'] {
+    return value === 'GT'
+      || value === 'GTE'
+      || value === 'LT'
+      || value === 'LTE'
+      || value === 'EQ'
+      || value === 'CROSS_OVER'
+      || value === 'CROSS_UNDER'
+  }
+
+  private isSemanticExpressionOperand(value: unknown): value is SemanticExpressionOperand {
+    if (!this.isUnknownRecord(value) || typeof value.kind !== 'string') return false
+    switch (value.kind) {
+      case 'series':
+        return value.source === 'bar' && typeof value.field === 'string'
+      case 'indicator':
+        return typeof value.name === 'string' && this.isUnknownRecord(value.params)
+      case 'position':
+      case 'account':
+        return typeof value.field === 'string'
+      case 'constant':
+        return typeof value.value === 'number' || typeof value.value === 'string' || typeof value.value === 'boolean'
+      case 'memory':
+        return typeof value.memoryKey === 'string'
+      default:
+        return false
+    }
+  }
+
+  private isUnknownRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 
   private resolveLogicalPredicateKind(

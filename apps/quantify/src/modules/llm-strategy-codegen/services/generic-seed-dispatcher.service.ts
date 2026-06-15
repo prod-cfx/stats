@@ -8,9 +8,9 @@ import type {
 } from '../atom-contracts/atom-contract-surface.types'
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import { isRuleEffectsByRole } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
-import type { SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
+import type { SemanticIntentCoverageDiagnostics, SemanticIntentCoverageItem, SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
  *
@@ -59,6 +59,7 @@ export interface AtomMatch {
 export type DispatchResult = {
   contextSlots?: CodegenSemanticPatch['contextSlots']
   rules?: SemanticRule[]
+  diagnostics?: CodegenSemanticPatch['diagnostics']
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1365,9 +1366,11 @@ export class GenericSeedDispatcher {
       this.repairDcaRulesMainflow(this.buildTypedRulesFromFlatPatch(flatPatch, text), text),
       text,
     )
+    const intentCoverage = this.buildIntentCoverageDiagnostics(text, flatPatch, rules)
     return {
       ...(flatPatch.contextSlots ? { contextSlots: flatPatch.contextSlots } : {}),
       ...(rules.length > 0 ? { rules } : {}),
+      ...(intentCoverage.items.length > 0 ? { diagnostics: { intentCoverage } } : {}),
     }
   }
 
@@ -1431,8 +1434,12 @@ export class GenericSeedDispatcher {
         const timeframeFanout = clauseTimeframes.length > 1 && isTimeframeGroupableTriggerKey(m.atomKey)
           ? clauseTimeframes
           : [null]
-        const phase = m.phase ?? 'entry'
-        const sideScope = m.sideScope ?? 'both'
+        let phase = m.phase ?? 'entry'
+        let sideScope = m.sideScope ?? 'both'
+        if (slot === 'triggers' && this.shouldPromoteTriggerToExit(m.clauseText, text, phase)) {
+          phase = 'exit'
+          sideScope = this.resolveExitSideForTrigger(m.clauseText, text, m.direction, sideScope)
+        }
 
         for (const fanoutTimeframe of timeframeFanout) {
           const params = fanoutTimeframe === null
@@ -1622,6 +1629,45 @@ export class GenericSeedDispatcher {
     return rules
   }
 
+  private shouldPromoteTriggerToExit(
+    clause: string,
+    userMessage: string,
+    phase: SemanticRule['phase'] | null,
+  ): boolean {
+    if (phase === 'exit') return false
+    if (!this.hasCloseActionIntent(userMessage)) return false
+    if (this.hasOpenActionIntent(clause)) return false
+    if (this.hasCloseActionIntent(clause)) return true
+    if (!this.hasExitTriggerConditionSignal(clause)) return false
+
+    const index = userMessage.indexOf(clause)
+    if (index < 0) return false
+    const before = userMessage.slice(0, index)
+    const after = userMessage.slice(index + clause.length)
+    const lastExitHeader = Math.max(before.lastIndexOf('出场'), before.lastIndexOf('退出'), before.lastIndexOf('离场'))
+    const lastEntryHeader = Math.max(before.lastIndexOf('入场'), before.lastIndexOf('进场'), before.lastIndexOf('开仓'))
+    if (lastExitHeader > lastEntryHeader) return true
+    return /^(?:[^。；;\n]{0,32})?(?:任一触发|任意触发|触发即|则|就)?[^。；;\n]{0,32}(?:平仓|平多|平空|卖出|退出|离场|close|exit|sell)/iu.test(after)
+  }
+
+  private hasExitTriggerConditionSignal(clause: string): boolean {
+    return /(?:价格|收盘价|close|EMA|MA|SMA|布林|上轨|下轨|中轨|均线)[^，。；;\n]{0,24}(?:跌破|下破|跌穿|低于|小于|下穿|突破|上破|高于|大于|上穿|回到|触及)/iu.test(clause)
+      || /(?:跌破|下破|跌穿|低于|小于|下穿|突破|上破|高于|大于|上穿|回到|触及)[^，。；;\n]{0,24}(?:价格|收盘价|close|EMA|MA|SMA|布林|上轨|下轨|中轨|均线)/iu.test(clause)
+  }
+
+  private resolveExitSideForTrigger(
+    clause: string,
+    userMessage: string,
+    direction: Direction | null,
+    fallback: 'long' | 'short' | 'both',
+  ): 'long' | 'short' | 'both' {
+    const closeSide = detectCloseSide(clause) ?? detectCloseSide(userMessage)
+    if (closeSide) return closeSide
+    if (direction === 'cross_under' || direction === 'lte' || direction === 'breakout_down' || direction === 'touch_upper') return 'long'
+    if (direction === 'cross_over' || direction === 'gte' || direction === 'breakout_up' || direction === 'touch_lower') return 'short'
+    return fallback
+  }
+
   private repairPairSpreadEntryRules(rules: SemanticRule[], userMessage: string): SemanticRule[] {
     if (!this.hasLegScopeIntent(userMessage) || !this.hasOpenActionIntent(userMessage) || this.hasCloseActionIntent(userMessage)) {
       return rules
@@ -1652,7 +1698,161 @@ export class GenericSeedDispatcher {
 
   private hasLifecycleEvidenceIntent(userMessage: string): boolean {
     return /每\s*\d+\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu.test(userMessage)
+      || /(?:按)?每\s*\d+\s*根?[^，。；;\n]{0,24}(?:节奏|频率)[^，。；;\n]{0,12}(?:开仓|开多|开空|入场|交易|触发)/iu.test(userMessage)
       || /持仓(?:超过|达到)?\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu.test(userMessage)
+      || /持仓满\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)?/iu.test(userMessage)
+  }
+
+  private buildIntentCoverageDiagnostics(
+    userMessage: string,
+    flatPatch: InternalSeedDraft,
+    rules: readonly SemanticRule[],
+  ): SemanticIntentCoverageDiagnostics {
+    const specs = this.extractIntentCoverageSpecs(userMessage)
+    const items = specs.map(spec => this.resolveIntentCoverageItem(spec, flatPatch, rules))
+    return {
+      items,
+      uncoveredRequired: items.filter(item => item.required && item.status !== 'covered'),
+    }
+  }
+
+  private extractIntentCoverageSpecs(userMessage: string): Array<Omit<SemanticIntentCoverageItem, 'status' | 'evidenceKeys'>> {
+    const out: Array<Omit<SemanticIntentCoverageItem, 'status' | 'evidenceKeys'>> = []
+    const pushUnique = (item: Omit<SemanticIntentCoverageItem, 'status' | 'evidenceKeys'>): void => {
+      if (out.some(existing => existing.slot === item.slot && existing.text === item.text && existing.target === item.target)) return
+      out.push(item)
+    }
+
+    const market = this.extractMarketContextEvidence(userMessage)
+    if (market) {
+      pushUnique({ slot: 'market_context', text: market, required: true, target: 'executable policy/config' })
+    }
+    for (const match of this.extractPriceIndicatorComparisonClauses(userMessage)) {
+      pushUnique({ slot: 'condition', text: match.evidenceText, required: true, target: 'SemanticRule.condition' })
+    }
+    for (const match of this.extractIndicatorComparisonClauses(userMessage)) {
+      pushUnique({ slot: 'condition', text: match.evidenceText, required: true, target: 'SemanticRule.condition' })
+    }
+
+    const cadence = userMessage.match(/(?:按)?每\s*\d+\s*根?[^，。；;\n]{0,24}(?:节奏|频率)[^，。；;\n]{0,12}(?:开仓|开多|开空|入场|交易|触发)/iu)
+    if (cadence?.[0]) {
+      pushUnique({ slot: 'risk', text: cadence[0].trim(), required: true, target: 'SemanticRule.effects.risks' })
+    }
+    const timeStop = userMessage.match(/持仓满\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)?/iu)
+      ?? userMessage.match(/持仓(?:超过|达到)?\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu)
+    if (timeStop?.[0]) {
+      pushUnique({ slot: 'risk', text: this.trimIntentEvidenceAtJoiner(timeStop[0]), required: true, target: 'SemanticRule.effects.risks' })
+    }
+    const takeProfit = userMessage.match(/止盈\s*\d+(?:\.\d+)?\s*%/iu)
+    if (takeProfit?.[0]) {
+      pushUnique({ slot: 'risk', text: takeProfit[0].trim(), required: true, target: 'SemanticRule.effects.risks' })
+    }
+    const stopLoss = userMessage.match(/止损\s*\d+(?:\.\d+)?\s*%/iu)
+    if (stopLoss?.[0]) {
+      pushUnique({ slot: 'risk', text: stopLoss[0].trim(), required: true, target: 'SemanticRule.effects.risks' })
+    }
+    const sizing = userMessage.match(/(?:单笔|仓位|每次|每笔)[^，。；;\n]{0,8}\d+(?:\.\d+)?\s*%/iu)
+    if (sizing?.[0]) {
+      pushUnique({ slot: 'position', text: sizing[0].trim(), required: true, target: 'SemanticRule.effects.positions' })
+    }
+    const openAction = userMessage.match(/开多|做多|买入|开空|做空|卖空/iu)
+    if (openAction?.[0]) {
+      pushUnique({ slot: 'action', text: openAction[0].trim(), required: true, target: 'SemanticRule.effects.actions' })
+    }
+    const closeAction = userMessage.match(/平多|平空|平仓/iu)
+      ?? userMessage.match(/卖出|离场|出场/iu)
+    if (closeAction?.[0]) {
+      pushUnique({ slot: 'action', text: closeAction[0].trim(), required: true, target: 'SemanticRule.effects.actions' })
+    }
+    return out
+  }
+
+  private resolveIntentCoverageItem(
+    spec: Omit<SemanticIntentCoverageItem, 'status' | 'evidenceKeys'>,
+    flatPatch: InternalSeedDraft,
+    rules: readonly SemanticRule[],
+  ): SemanticIntentCoverageItem {
+    const evidenceKeys = this.findIntentCoverageEvidenceKeys(spec, flatPatch, rules)
+    return {
+      ...spec,
+      status: evidenceKeys.length > 0 ? 'covered' : 'missing',
+      evidenceKeys,
+    }
+  }
+
+  private findIntentCoverageEvidenceKeys(
+    spec: Omit<SemanticIntentCoverageItem, 'status' | 'evidenceKeys'>,
+    flatPatch: InternalSeedDraft,
+    rules: readonly SemanticRule[],
+  ): string[] {
+    if (spec.slot === 'market_context') {
+      const keys = Object.keys(flatPatch.contextSlots ?? {}).filter(key => ['exchange', 'symbol', 'marketType', 'timeframe'].includes(key))
+      return keys.length >= 2 ? keys.map(key => `contextSlots.${key}`) : []
+    }
+
+    const conditionLeaves = rules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => ({ leaf, role: 'condition' as const })))
+    const effectLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+
+    if (spec.target === 'SemanticRule.condition') {
+      return conditionLeaves
+        .filter(({ leaf }) => this.intentTextMatchesLeaf(spec.text, leaf))
+        .map(({ leaf }) => `condition.${leaf.key}`)
+    }
+
+    return effectLeaves
+      .filter(leaf => this.intentTextMatchesLeaf(spec.text, leaf))
+      .filter(leaf => this.effectLeafMatchesCoverageSlot(spec.slot, leaf.key))
+      .map(leaf => `${spec.target}.${leaf.key}`)
+  }
+
+  private intentTextMatchesLeaf(text: string, leaf: { key: string, evidence?: unknown, params?: Record<string, unknown> }): boolean {
+    const evidenceText = readPatchEvidenceText(leaf)
+    if (evidenceText && (text.includes(evidenceText) || evidenceText === text)) return true
+    const serializedParams = JSON.stringify(leaf.params ?? {})
+    if (/EMA|MA|SMA/iu.test(text)) {
+      const periods = [...text.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)].map(match => match[1]).filter(Boolean)
+      if (periods.length > 0 && periods.every(period => serializedParams.includes(String(period)))) return true
+    }
+    if (/止盈/iu.test(text)) return leaf.key === this.readAtomRegistryKey('risk.take_profit_pct')
+    if (/止损/iu.test(text)) return leaf.key === this.readAtomRegistryKey('risk.stop_loss_pct')
+    if (/节奏|频率|每\s*\d+\s*根/iu.test(text)) return leaf.key === this.readAtomRegistryKey('risk.cooldown')
+    if (/持仓/iu.test(text)) return leaf.key === 'risk.time_stop_bars'
+    if (/单笔|仓位|每次|每笔/iu.test(text)) return leaf.key === this.readAtomRegistryKey('position.sizing')
+    if (/开多|做多|买入/iu.test(text)) return leaf.key === this.readAtomRegistryKey('action.open_long')
+    if (/开空|做空|卖空/iu.test(text)) return leaf.key === this.readAtomRegistryKey('action.open_short')
+    if (/平多|平仓|卖出|离场|出场/iu.test(text)) return leaf.key === this.readAtomRegistryKey('action.close_long')
+    if (/平空/iu.test(text)) return leaf.key === this.readAtomRegistryKey('action.close_short')
+    return false
+  }
+
+  private readAtomRegistryKey(key: keyof typeof ATOM_CONTRACT_REGISTRY): string {
+    return ATOM_CONTRACT_REGISTRY[key].key
+  }
+
+  private effectLeafMatchesCoverageSlot(slot: SemanticIntentCoverageItem['slot'], key: string): boolean {
+    if (slot === 'action') return key.startsWith('action.')
+    if (slot === 'risk') return key.startsWith('risk.')
+    if (slot === 'position') return key.startsWith('position.')
+    if (slot === 'orchestration') return key.startsWith('scope.') || key.startsWith('gate.') || key.startsWith('orchestration.')
+    if (slot === 'program') return key.startsWith('program.') || key.startsWith('grid.')
+    return false
+  }
+
+  private trimIntentEvidenceAtJoiner(text: string): string {
+    return text.split(/(?:、|，|,|或|任一)/u)[0]?.trim() ?? text.trim()
+  }
+
+  private extractMarketContextEvidence(userMessage: string): string | null {
+    const parts: string[] = []
+    const exchange = userMessage.match(/\b(?:OKX|BINANCE|HYPERLIQUID)\b/iu)?.[0]
+    const marketType = userMessage.match(/合约|永续|现货|perp|swap|spot/iu)?.[0]
+    const symbol = userMessage.match(/\b[A-Z]{2,10}(?:USDT|USDC|USD)\b/u)?.[0]
+    const timeframe = userMessage.match(/\b\d+\s*(?:m|min|分钟|h|小时|d|天)\b/iu)?.[0]
+    if (exchange) parts.push(exchange)
+    if (marketType) parts.push(marketType)
+    if (symbol) parts.push(symbol)
+    if (timeframe) parts.push(timeframe)
+    return parts.length > 0 ? parts.join(' ') : null
   }
 
   private appendLifecycleRiskEffects(
@@ -1690,6 +1890,7 @@ export class GenericSeedDispatcher {
 
   private extractEntryCooldownBars(userMessage: string): number | null {
     const matched = userMessage.match(/每\s*(\d+)\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu)
+      ?? userMessage.match(/(?:按)?每\s*(\d+)\s*根?[^，。；;\n]{0,24}(?:节奏|频率)[^，。；;\n]{0,12}(?:开仓|开多|开空|入场|交易|触发)/iu)
     if (!matched?.[1]) return null
     const value = Number(matched[1])
     return Number.isInteger(value) && value > 0 ? value : null
@@ -1697,6 +1898,7 @@ export class GenericSeedDispatcher {
 
   private extractTimeStopBars(userMessage: string): number | null {
     const matched = userMessage.match(/持仓(?:超过|达到)?\s*(\d+)\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu)
+      ?? userMessage.match(/持仓满\s*(\d+)\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)?/iu)
     if (!matched?.[1]) return null
     const value = Number(matched[1])
     return Number.isInteger(value) && value > 0 ? value : null
@@ -2366,7 +2568,82 @@ export class GenericSeedDispatcher {
         evidence: { text: userMessage.trim(), source: 'user_explicit' },
       })
     }
-    return mergeCompatiblePatchAtomNodes(out.filter(item => !this.isFalseCandlePatternFromIndicatorSlope(item, userMessage)))
+    const expressionCorrected = this.applyRulesMainflowExpressionPredicates(out, userMessage)
+    return mergeCompatiblePatchAtomNodes(expressionCorrected.filter(item => !this.isFalseCandlePatternFromIndicatorSlope(item, userMessage)))
+  }
+
+  private applyRulesMainflowExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
+    let out = [...items]
+    out = this.applyIndicatorVsIndicatorExpressionPredicates(out, userMessage)
+    return out
+  }
+
+  private applyIndicatorVsIndicatorExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
+    const matches = this.extractIndicatorComparisonClauses(userMessage)
+    if (matches.length === 0) return items
+    const out = items.filter(item => !matches.some(match => this.isDegradedIndicatorComparisonAtom(item, match)))
+    for (const match of matches) {
+      if (out.some(item => item.key === 'condition.expression' && readPatchEvidenceText(item) === match.evidenceText)) continue
+      out.push({
+        key: 'condition.expression',
+        phase: this.hasCloseActionIntent(match.evidenceText) ? 'exit' : 'entry',
+        sideScope: match.operator === 'LT' ? 'short' : 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: match.operator,
+            left: { kind: 'indicator', name: match.indicator, params: { period: match.leftPeriod } },
+            right: { kind: 'indicator', name: match.indicator, params: { period: match.rightPeriod } },
+          },
+        },
+        evidence: { text: match.evidenceText, source: 'user_explicit' },
+      })
+    }
+    return out
+  }
+
+  private extractIndicatorComparisonClauses(userMessage: string): Array<{ evidenceText: string, indicator: string, leftPeriod: number, rightPeriod: number, operator: 'GT' | 'LT' }> {
+    const out: Array<{ evidenceText: string, indicator: string, leftPeriod: number, rightPeriod: number, operator: 'GT' | 'LT' }> = []
+    const pattern = /(EMA|MA|SMA)\s*(\d{1,4})\s*(高于|大于|>|低于|小于|<)\s*(EMA|MA|SMA)\s*(\d{1,4})(?:\s*(?:上方|下方|之上|之下))?/giu
+    for (const match of userMessage.matchAll(pattern)) {
+      if (!match[1] || !match[2] || !match[3] || !match[4] || !match[5]) continue
+      const leftPeriod = Number(match[2])
+      const rightPeriod = Number(match[5])
+      if (!Number.isInteger(leftPeriod) || !Number.isInteger(rightPeriod)) continue
+      const leftIndicator = match[1].toLowerCase()
+      const rightIndicator = match[4].toLowerCase()
+      const indicator = leftIndicator === 'ema' || rightIndicator === 'ema' ? 'ema' : leftIndicator
+      const operator = /低于|小于|</u.test(match[3]) ? 'LT' : 'GT'
+      out.push({ evidenceText: match[0].trim(), indicator, leftPeriod, rightPeriod, operator })
+    }
+    return out
+  }
+
+  private extractPriceIndicatorComparisonClauses(userMessage: string): Array<{ evidenceText: string, indicator: string, period: number, operator: 'GT' | 'LT' }> {
+    const out: Array<{ evidenceText: string, indicator: string, period: number, operator: 'GT' | 'LT' }> = []
+    const pattern = /(?:价格|收盘价|close)\s*(高于|大于|站上|突破|>|低于|小于|跌破|下破|跌穿|<)\s*(EMA|MA|SMA)\s*(\d{1,4})/giu
+    for (const match of userMessage.matchAll(pattern)) {
+      if (!match[1] || !match[2] || !match[3]) continue
+      const period = Number(match[3])
+      if (!Number.isInteger(period)) continue
+      const operator = /低于|小于|跌破|下破|跌穿|</u.test(match[1]) ? 'LT' : 'GT'
+      out.push({ evidenceText: match[0].trim(), indicator: match[2].toLowerCase(), period, operator })
+    }
+    return out
+  }
+
+  private isDegradedIndicatorComparisonAtom(item: PatchAtomNode, match: { leftPeriod: number, rightPeriod: number, operator: 'GT' | 'LT' }): boolean {
+    const key = match.operator === 'LT' ? ATOM_CONTRACT_REGISTRY['indicator.below'].key : ATOM_CONTRACT_REGISTRY['indicator.above'].key
+    if (item.key !== key) return false
+    const evidenceText = readPatchEvidenceText(item) ?? ''
+    if (!evidenceText.includes(String(match.leftPeriod)) || !evidenceText.includes(String(match.rightPeriod))) return false
+    const period = this.readNumberParam(item.params, 'period') ?? this.readNumberParam(item.params, 'reference.period')
+    return period === match.leftPeriod
+  }
+
+  private readNumberParam(params: Record<string, unknown> | undefined, key: string): number | null {
+    const value = params?.[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
   private isFalseCandlePatternFromIndicatorSlope(item: PatchAtomNode, userMessage: string): boolean {

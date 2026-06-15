@@ -3,6 +3,7 @@ import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
 import type {
   SemanticEvidence,
   SemanticExpression,
+  SemanticIntentCoverageDiagnostics,
   SemanticNodeStatus,
   SemanticOrchestrationDataSourceRole,
   SemanticOrchestrationDataSourceSchema,
@@ -44,6 +45,9 @@ export interface CodegenSemanticPatch {
    * 单 atom case = 单叶子 rule.condition；AND/OR/NOT/SEQUENCE 嵌套见 ./atom-expr.ts。
    */
   rules?: import('./atom-expr').SemanticRule[]
+  diagnostics?: {
+    intentCoverage?: SemanticIntentCoverageDiagnostics
+  }
 }
 
 export type CodegenSemanticOrchestrationNodePatch =

@@ -217,14 +217,14 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('grid-runtime')
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
     expect(snapshots.every(item => item.content.backtestConfigDefaults.priceSource === 'close')).toBe(true)
-    for (const snapshot of snapshots) {
-      const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === snapshot.templateId)
-      expect(snapshot.content.backtestConfigDefaults.range).toEqual({
-        preset: 'CUSTOM',
-        startAt: new Date(evidence!.backtestFrom).toISOString(),
-        endAt: new Date(evidence!.backtestTo).toISOString(),
-      })
-    }
+    const sevenDayTemplateIds = new Set(['ema-trend-continuation', 'breakdown-short-follow'])
+
+    expect(snapshots
+      .filter(item => sevenDayTemplateIds.has(item.templateId))
+      .every(item => item.content.backtestConfigDefaults.range.preset === '7D')).toBe(true)
+    expect(snapshots
+      .filter(item => !sevenDayTemplateIds.has(item.templateId))
+      .every(item => item.content.backtestConfigDefaults.range.preset === '30D')).toBe(true)
   })
 
   it('builds backtest adapters for all official signal-generator snapshots', async () => {
@@ -271,6 +271,65 @@ describe('OfficialStrategyPlazaTemplateService', () => {
       action: 'OPEN_LONG',
       size: { mode: 'RATIO', value: 0.1 },
       meta: { templateId: 'low-drawdown-regime-gate' },
+    })
+  })
+
+  it('EMA trend continuation official script follows EMA20-over-EMA50 cadence exits', async () => {
+    const template = service.getRequired('ema-trend-continuation')
+    const content = buildOfficialStrategySnapshotContent(template)
+    const strategy = await new BacktestStrategyAdapterService().build({
+      id: template.id,
+      protocolVersion: 'v1',
+      scriptCode: content.scriptSnapshot,
+      params: content.paramsSnapshot,
+      executionEnvelope: content.executionEnvelope,
+    })
+    const trendingBars = Array.from({ length: 61 }, (_, index) => ({
+      timestamp: index + 1,
+      time: index + 1,
+      open: 100 + index,
+      high: 101 + index,
+      low: 99 + index,
+      close: 100 + index,
+      volume: 1,
+    }))
+
+    await expect(strategy.fn({
+      bars: trendingBars,
+      currentPrice: 160,
+      position: { side: 'flat', qty: 0 },
+    } satisfies StrategyExecutionContextV1)).resolves.toMatchObject({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.25 },
+      meta: { templateId: 'ema-trend-continuation' },
+    })
+
+    await expect(strategy.fn({
+      bars: trendingBars,
+      currentPrice: 160,
+      position: { side: 'long', qty: 1, barsHeld: 4 },
+    } satisfies StrategyExecutionContextV1)).resolves.toMatchObject({
+      action: 'CLOSE_LONG',
+      meta: { templateId: 'ema-trend-continuation' },
+    })
+
+    const breakdownBars = [...trendingBars.slice(0, -1), {
+      timestamp: 61,
+      time: 61,
+      open: 100,
+      high: 101,
+      low: 70,
+      close: 70,
+      volume: 1,
+    }]
+
+    await expect(strategy.fn({
+      bars: breakdownBars,
+      currentPrice: 70,
+      position: { side: 'long', qty: 1, barsHeld: 1 },
+    } satisfies StrategyExecutionContextV1)).resolves.toMatchObject({
+      action: 'CLOSE_LONG',
+      meta: { templateId: 'ema-trend-continuation' },
     })
   })
 
@@ -326,6 +385,27 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(template.editSeed.locales?.en?.initialMessage).toContain('does not open short positions')
     expect(template.editSeed.guideConfig?.exitRuleExample).toBe('MACD DIF 下穿 DEA 时平多')
     expect(template.editSeed.locales?.en?.guideConfig?.exitRuleExample).toBe('MACD DIF crosses below DEA to close long')
+  })
+
+  it('describes EMA trend continuation as cadence-based EMA20-over-EMA50 continuation', () => {
+    const template = service.getRequired('ema-trend-continuation')
+
+    expect(template.description).toBe('价格高于 EMA50 且 EMA20 高于 EMA50 时，按 4 根 15m K 线节奏开多。')
+    expect(template.logicDescription).toContain('EMA20 高于 EMA50')
+    expect(template.logicDescription).toContain('持仓满 4 根 K 线')
+    expect(template.editSeed.initialMessage).toContain('价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多')
+    expect(template.editSeed.initialMessage).toContain('止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20')
+    expect(template.editSeed.initialMessage).not.toContain('EMA20 上穿 EMA50')
+    expect(template.expectedAtomKeys).toEqual(expect.arrayContaining([
+      'indicator.above',
+      'condition.expression',
+      'indicator.below',
+      'risk.cooldown',
+      'risk.time_stop_bars',
+      'risk.take_profit_pct',
+      'risk.stop_loss_pct',
+    ]))
+    expect(template.expectedAtomKeys).not.toContain('indicator.cross_over')
   })
 
   it('throws when template id is not found', () => {

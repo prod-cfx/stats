@@ -1,7 +1,9 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
+import { SemanticAtomInvariantService } from '../semantic-atom-invariant.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { collectAtomLeaves } from '../../types/atom-expr'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '@/modules/strategy-plaza/constants/official-strategy-plaza-templates'
@@ -34,6 +36,23 @@ function buildCompiledIrFromPrompt(text: string): ReturnType<CanonicalSpecV2IrCo
       positionPct,
     },
   })
+}
+
+function buildInvariantFailuresFromPrompt(text: string) {
+  const state = buildSemanticStateFromPrompt(text)
+  const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+  const compiled = new CanonicalSpecV2IrCompilerService().compile({
+    canonicalSpec,
+    fallback: {
+      exchange: canonicalSpec.market.exchange,
+      symbol: canonicalSpec.market.symbol ?? 'BTCUSDT',
+      baseTimeframe: canonicalSpec.market.defaultTimeframe ?? canonicalSpec.market.timeframe ?? '15m',
+      positionPct: canonicalSpec.sizing?.mode === 'RATIO' ? Number((canonicalSpec.sizing.value * 100).toFixed(4)) : 10,
+    },
+  })
+  const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+  return new SemanticAtomInvariantService().validate({ semanticState: state, canonicalSpec, ir: compiled.ir, ast })
+    .filter(check => check.level === 'critical' && check.status === 'failed')
 }
 
 function semanticAtomKeys(state: BuiltSemanticState): Set<string> {
@@ -104,6 +123,22 @@ describe('Strategy Plaza rules-mainflow codegen regressions', () => {
       }),
     ]))
     expect(entryAnd?.args.filter(arg => /breakout|rolling_extrema/.test(arg))).toHaveLength(1)
+  })
+
+  it('does not reject EMA trend continuation with price-below-EMA exit as semantic expression drift', () => {
+    const failures = buildInvariantFailuresFromPrompt('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 上穿 EMA50 时开多；价格跌破 EMA20 时平多；风控：仓位 25%，2 倍杠杆，亏损 2% 止损。')
+
+    expect(failures.map(check => check.message)).not.toEqual(expect.arrayContaining([
+      expect.stringMatching(/semantic expression drift/),
+    ]))
+  })
+
+  it('does not reject indicator-vs-indicator EMA expression as semantic expression drift', () => {
+    const failures = buildInvariantFailuresFromPrompt('OKX 合约 BTCUSDT 15m，价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多，单笔 1%。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。')
+
+    expect(failures.map(check => check.message)).not.toEqual(expect.arrayContaining([
+      expect.stringMatching(/semantic expression drift/),
+    ]))
   })
 
   it('compiles funding-rate percent thresholds into runtime ratio values', () => {

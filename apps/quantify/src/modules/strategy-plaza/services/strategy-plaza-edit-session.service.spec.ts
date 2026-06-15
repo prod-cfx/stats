@@ -5,20 +5,6 @@ import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strateg
 import { buildOfficialTemplateBacktestConfigDefaults } from '../utils/official-strategy-plaza-snapshot-content'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
-const thirtyDayBacktestDraftConfig = {
-  range: {
-    preset: '30D' as const,
-  },
-  execution: {
-    initialCash: 10000,
-    leverage: 2,
-    slippageBps: 10,
-    feeBps: 5,
-    priceSource: 'close' as const,
-    allowPartial: false,
-  },
-}
-
 describe('StrategyPlazaEditSessionService', () => {
   it('compiles in Nest without a custom backtest draft builder provider', async () => {
     const moduleRef = await Test.createTestingModule({
@@ -221,19 +207,19 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
       'conversation-book',
       'user-1',
-      thirtyDayBacktestDraftConfig,
+      expect.objectContaining({ range: { preset: '30D' } }),
     )
   })
 
-  it('uses the verified evidence backtest window for templates that depend on external event feeds', () => {
+  it('uses the 30D default backtest window for templates that depend on external event feeds', () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const fundingOiTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'funding-oi-confirmation')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(orderbookTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
+      range: expect.objectContaining({ preset: '30D' }),
     }))
     expect(buildOfficialTemplateBacktestConfigDefaults(fundingOiTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
+      range: expect.objectContaining({ preset: '30D' }),
     }))
   })
 
@@ -302,15 +288,45 @@ describe('StrategyPlazaEditSessionService', () => {
     )
   })
 
-  it('keeps the verified fixed backtest window for templates without external event feeds', () => {
+  it('uses the 30D default backtest window for templates without external event feeds', () => {
     const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({
-        preset: 'CUSTOM',
-        startAt: expect.any(String),
-        endAt: expect.any(String),
-      }),
+      range: expect.objectContaining({ preset: '30D' }),
     }))
+  })
+
+  it('uses the 7D default backtest window only for selected official templates', async () => {
+    const emaTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ema-trend-continuation')!
+    const breakdownTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'breakdown-short-follow')!
+    const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
+    const templates = { getRequired: jest.fn().mockReturnValue(breakdownTemplate) }
+    const codegenConversationService = {
+      startSession: jest.fn().mockResolvedValue({ id: 'session-breakdown', conversationId: 'conversation-breakdown' }),
+      updateConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
+    }
+    const service = new StrategyPlazaEditSessionService(
+      templates as never,
+      codegenConversationService as never,
+    )
+
+    await service.startEditSession({ userId: 'user-1', templateId: 'breakdown-short-follow' })
+
+    expect(buildOfficialTemplateBacktestConfigDefaults(emaTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({ preset: '7D' }),
+    }))
+    expect(buildOfficialTemplateBacktestConfigDefaults(breakdownTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({ preset: '7D' }),
+    }))
+    expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({ preset: '30D' }),
+    }))
+    expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
+      'conversation-breakdown',
+      'user-1',
+      expect.objectContaining({
+        range: expect.objectContaining({ preset: '7D' }),
+      }),
+    )
   })
 })

@@ -204,6 +204,11 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
         excludes: ['EMA20 低于 EMA20'],
       },
       {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 上穿 EMA50 时开多；价格跌破 EMA20 时平多；风控：仓位 25%，2 倍杠杆，亏损 2% 止损。',
+        contains: ['价格在 EMA50 上方', 'EMA20 上穿 EMA50', '出场：价格低于 EMA20 → 平多'],
+        excludes: ['同时 收盘价低于EMA20', '价格低于 EMA20 同时 收盘价低于EMA20'],
+      },
+      {
         prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。',
         contains: ['资金费率大于 0.01%', 'RSI14 高于或等于 70'],
         excludes: ['资金费率条件'],

@@ -9,6 +9,7 @@ import type {
   MarketInstrumentSymbolSource,
 } from '../types/market-instrument-symbol'
 import type {
+  SemanticIntentCoverageDiagnostics,
   SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
@@ -316,6 +317,11 @@ export class SemanticSeedStateBuilderService {
     // Issue #1395 (mute-spider) Stage I.C: 把 planner 写入 semanticPatch.__zodQuarantine 透传到
     //   state.diagnostics.zodQuarantine（数据透传层，下游 reader 不消费；供 follow-up 观测）。
     const zodQuarantine = this.extractZodQuarantine(semanticPatch)
+    const intentCoverage = this.extractIntentCoverageDiagnostics(semanticPatch)
+    const diagnostics = {
+      ...(zodQuarantine ? { zodQuarantine } : {}),
+      ...(intentCoverage ? { intentCoverage } : {}),
+    }
 
     return this.withRequiredSeedOpenSlots({
       version: 1,
@@ -327,8 +333,32 @@ export class SemanticSeedStateBuilderService {
       updatedAt: new Date().toISOString(),
       // Issue #1395: 透传 rules[] 到 state，供 IR compiler (compileAtomExpr) 接表达式树
       ...(normalizedExplicitRules.length > 0 ? { rules: normalizedExplicitRules } : {}),
-      ...(zodQuarantine ? { diagnostics: { zodQuarantine } } : {}),
+      ...(Object.keys(diagnostics).length > 0 ? { diagnostics } : {}),
     })
+  }
+
+  private extractIntentCoverageDiagnostics(semanticPatch: SemanticPatchRecord): SemanticIntentCoverageDiagnostics | null {
+    const diagnostics = semanticPatch.diagnostics
+    if (!this.isRecord(diagnostics)) return null
+    const intentCoverage = diagnostics.intentCoverage
+    if (!this.isRecord(intentCoverage)) return null
+    const items = Array.isArray(intentCoverage.items) ? intentCoverage.items : []
+    const uncoveredRequired = Array.isArray(intentCoverage.uncoveredRequired) ? intentCoverage.uncoveredRequired : []
+    return {
+      items: items.filter(item => this.isIntentCoverageItem(item)),
+      uncoveredRequired: uncoveredRequired.filter(item => this.isIntentCoverageItem(item)),
+    }
+  }
+
+  private isIntentCoverageItem(value: unknown): value is SemanticIntentCoverageDiagnostics['items'][number] {
+    if (!this.isRecord(value)) return false
+    return typeof value.slot === 'string'
+      && typeof value.text === 'string'
+      && typeof value.required === 'boolean'
+      && typeof value.status === 'string'
+      && typeof value.target === 'string'
+      && Array.isArray(value.evidenceKeys)
+      && value.evidenceKeys.every(item => typeof item === 'string')
   }
 
   private normalizeExplicitRulesForMainflow(rules: readonly SemanticRule[]): SemanticRule[] {

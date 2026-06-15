@@ -54,6 +54,71 @@ describe('evaluateExprPool', () => {
     expect(values.close_above_ema_1h).toBe(true)
   })
 
+  it('recomputes cached EMA values when a same-length rolling bar window advances', () => {
+    const exprPool: Parameters<typeof evaluateExprPool>[1] = [
+      {
+        id: 'close_15m',
+        nodeType: 'series' as const,
+        sourceRef: 'close_15m',
+        payload: { kind: 'PRICE', field: 'close', timeframe: '15m' },
+        deps: [],
+      },
+      {
+        id: 'ema_2_15m',
+        nodeType: 'series' as const,
+        sourceRef: 'ema_2_15m',
+        payload: { kind: 'EMA', params: { period: 2 }, timeframe: '15m' },
+        deps: ['close_15m'],
+      },
+    ]
+    const compiledState = { barIndex: 1, lastTriggeredByProgram: {} }
+
+    const first = evaluateExprPool(
+      {
+        __compiledDecisionState: compiledState,
+        data: {
+          primary: {
+            '15m': {
+              bars: [
+                { open: 10, high: 10, low: 10, close: 10, volume: 1, timestamp: 1_000 },
+                { open: 10, high: 10, low: 10, close: 10, volume: 1, timestamp: 2_000 },
+                { open: 10, high: 10, low: 10, close: 10, volume: 1, timestamp: 3_000 },
+              ],
+              indicators: {},
+              currentPrice: 10,
+            },
+          },
+        },
+      },
+      exprPool,
+      ['close_15m', 'ema_2_15m'],
+    )
+
+    const second = evaluateExprPool(
+      {
+        __compiledDecisionState: compiledState,
+        data: {
+          primary: {
+            '15m': {
+              bars: [
+                { open: 20, high: 20, low: 20, close: 20, volume: 1, timestamp: 2_000 },
+                { open: 20, high: 20, low: 20, close: 20, volume: 1, timestamp: 3_000 },
+                { open: 20, high: 20, low: 20, close: 20, volume: 1, timestamp: 4_000 },
+              ],
+              indicators: {},
+              currentPrice: 20,
+            },
+          },
+        },
+      },
+      exprPool,
+      ['close_15m', 'ema_2_15m'],
+    )
+
+    expect(first.ema_2_15m).toBe(10)
+    expect(second.ema_2_15m).toBe(20)
+  })
+
   it('evaluates orderbook spread_pct predicates from best bid and ask', () => {
     const values = evaluateExprPool(
       {

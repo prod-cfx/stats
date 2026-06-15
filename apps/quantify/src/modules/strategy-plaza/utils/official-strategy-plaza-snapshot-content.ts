@@ -1,4 +1,4 @@
-import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import type { OfficialStrategyPlazaTemplate, StrategyPlazaBacktestRangePreset } from '../types/official-strategy-plaza-template'
 import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
 
 function evidenceFor(template: OfficialStrategyPlazaTemplate) {
@@ -37,8 +37,6 @@ export function buildOfficialTemplateStrategyConfig(template: OfficialStrategyPl
 }
 
 export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
-  const evidence = evidenceFor(template)
-
   return {
     initialCash: 10000,
     leverage: resolveOfficialTemplateLeverage(template),
@@ -46,12 +44,12 @@ export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialSt
     feeBps: 5,
     priceSource: resolveOfficialTemplateBacktestPriceSource(template.runConfig.deploymentExecutionConfig.priceSource),
     allowPartial: false,
-    range: {
-      preset: 'CUSTOM',
-      startAt: new Date(evidence.backtestFrom).toISOString(),
-      endAt: new Date(evidence.backtestTo).toISOString(),
-    },
+    range: { preset: resolveOfficialTemplateBacktestRangePreset(template) },
   }
+}
+
+export function resolveOfficialTemplateBacktestRangePreset(template: OfficialStrategyPlazaTemplate): StrategyPlazaBacktestRangePreset {
+  return template.backtestRangePreset ?? '30D'
 }
 
 export function buildOfficialTemplateDeploymentExecutionDefaults(
