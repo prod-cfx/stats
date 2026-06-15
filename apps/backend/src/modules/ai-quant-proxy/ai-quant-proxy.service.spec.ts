@@ -1,6 +1,10 @@
 import { ErrorCode } from '@ai/shared'
+import { AccountAiQuantStrategiesProxyService } from './account-ai-quant-strategies-proxy.service'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
+import { AiQuantProxySupportService } from './ai-quant-proxy-support.service'
 import { QuantifyClientError } from './clients/quantify-ai-quant.client'
+import { LlmStrategyInstancesProxyService } from './llm-strategy-instances-proxy.service'
+import { LlmStrategySubscriptionsProxyService } from './llm-strategy-subscriptions-proxy.service'
 
 describe('aiQuantProxyService', () => {
   const codegenTimeoutMs = 60_000
@@ -23,7 +27,14 @@ describe('aiQuantProxyService', () => {
       startCodegen: jest.fn(),
       continueCodegen: jest.fn(),
       getCodegenSession: jest.fn(),
+      listLlmInstances: jest.fn(),
+      getLlmInstanceDetail: jest.fn(),
+      listLlmInstanceSignals: jest.fn(),
       createLlmSubscription: jest.fn(),
+      listLlmSubscriptions: jest.fn(),
+      getLlmSubscriptionDetail: jest.fn(),
+      updateLlmSubscription: jest.fn(),
+      cancelLlmSubscription: jest.fn(),
       getBacktestCapabilities: jest.fn(),
       createBacktestJob: jest.fn(),
       checkBacktestSymbolSupport: jest.fn(),
@@ -34,9 +45,91 @@ describe('aiQuantProxyService', () => {
       list: jest.fn().mockResolvedValue([]),
     }
 
-    const service = new AiQuantProxyService(quantifyClient as any, exchangeAccountsService as any)
-    return { service, quantifyClient, exchangeAccountsService }
+    const support = new AiQuantProxySupportService()
+    const accountStrategiesService = new AccountAiQuantStrategiesProxyService(
+      quantifyClient as any,
+      exchangeAccountsService as any,
+      support,
+    )
+    const llmInstancesService = new LlmStrategyInstancesProxyService(quantifyClient as any, support)
+    const llmSubscriptionsService = new LlmStrategySubscriptionsProxyService(quantifyClient as any, support)
+    const service = new AiQuantProxyService(
+      quantifyClient as any,
+      support,
+      accountStrategiesService,
+      llmInstancesService,
+      llmSubscriptionsService,
+    )
+    return {
+      service,
+      quantifyClient,
+      exchangeAccountsService,
+      accountStrategiesService,
+      llmInstancesService,
+      llmSubscriptionsService,
+    }
   }
+
+  it('keeps account strategy list parameter mapping in the account strategies proxy service', async () => {
+    const { accountStrategiesService, quantifyClient } = createService()
+    quantifyClient.listAccountStrategies.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+
+    await accountStrategiesService.listAccountStrategies('user-1', 'Bearer token-1', {
+      page: 1,
+      limit: 20,
+      status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
+    })
+
+    expect(quantifyClient.listAccountStrategies).toHaveBeenCalledWith(
+      {
+        page: 1,
+        limit: 20,
+        status: 'running',
+        subscribedOnly: true,
+        excludeDraft: true,
+      },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('keeps optional user identity mapping in the LLM instances proxy service', async () => {
+    const { llmInstancesService, quantifyClient } = createService()
+    quantifyClient.listLlmInstances.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+
+    await llmInstancesService.listLlmInstances('user-1', {
+      page: 1,
+      limit: 20,
+      llmModel: 'gpt-5',
+      strategyId: 'strategy-1',
+    })
+
+    expect(quantifyClient.listLlmInstances).toHaveBeenCalledWith({
+      page: 1,
+      limit: 20,
+      llmModel: 'gpt-5',
+      strategyId: 'strategy-1',
+      userId: 'user-1',
+    })
+  })
+
+  it('keeps backend-controlled user identity mapping in the LLM subscriptions proxy service', async () => {
+    const { llmSubscriptionsService, quantifyClient } = createService()
+    quantifyClient.createLlmSubscription.mockResolvedValue({ id: 'subscription-1' })
+
+    await llmSubscriptionsService.createLlmSubscription('user-1', {
+      llmStrategyInstanceId: 'instance-1',
+      userId: 'attacker',
+      exchangeAccountId: 'account-1',
+    })
+
+    expect(quantifyClient.createLlmSubscription).toHaveBeenCalledWith({
+      llmStrategyInstanceId: 'instance-1',
+      userId: 'user-1',
+      exchangeAccountId: 'account-1',
+    })
+  })
 
   it('injects user identity and authorization into account strategy list requests', async () => {
     const { service, quantifyClient } = createService()
