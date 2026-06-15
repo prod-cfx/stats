@@ -1,5 +1,4 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {
   DataPullJob,
   DataPullJobContext,
@@ -7,12 +6,11 @@ import type {
   JobRunResult,
 } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 /**
  * Binance K 线数据游标
@@ -133,9 +131,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   private readonly defaultMarketType: 'PERPETUAL' | 'SPOT' = 'PERPETUAL'
   private readonly defaultInterval: MarketTimeframe = '5m'
 
-  constructor(
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
-  ) {}
+  constructor(private readonly marketDataRepository: DataSyncMarketDataRepository) {}
 
   /**
    * 根据市场类型返回 API limit 上限
@@ -164,19 +160,14 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       typeof cursor.backfillCompletedAt === 'number' &&
       Date.now() - cursor.backfillCompletedAt < this.BACKFILL_RECHECK_WINDOW_MS
 
-    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     if (!shouldSkipBackfillCheck) {
-      const earliestRecord = await dbClient.futuresPriceHistory.findFirst({
-        where: {
-          symbol: cursor.symbol,
-          exchangeCode: 'BINANCE',
-          contractType: cursor.marketType === 'PERPETUAL' ? 'PERPETUAL' : null,
-          interval: prismaInterval,
-        },
-        orderBy: { timestamp: 'asc' },
-        select: { timestamp: true },
+      const earliestRecord = await this.marketDataRepository.findEarliestFuturesPriceHistory({
+        symbol: cursor.symbol,
+        exchangeCode: 'BINANCE',
+        contractType: cursor.marketType === 'PERPETUAL' ? 'PERPETUAL' : null,
+        interval: prismaInterval,
       })
 
       if (earliestRecord) {
@@ -265,11 +256,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
 
       for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
         const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-        const result = await dbClient.futuresPriceHistory.createMany({
-          data: batch,
-          skipDuplicates: true,
-        })
-        insertedCount += result.count
+        insertedCount += await this.marketDataRepository.createFuturesPriceHistoryMany(batch)
       }
     }
 
@@ -352,7 +339,6 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       }
     }
 
-    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
     const pointsWithTimestamps = klineData.map(point => ({
       openTime: point[0],
@@ -384,11 +370,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
     let insertedCount = 0
     for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
       const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-      const result = await dbClient.futuresPriceHistory.createMany({
-        data: batch,
-        skipDuplicates: true,
-      })
-      insertedCount += result.count
+      insertedCount += await this.marketDataRepository.createFuturesPriceHistoryMany(batch)
     }
 
     const oldestFetched =

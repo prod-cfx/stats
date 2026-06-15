@@ -1,13 +1,12 @@
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
+import type { PairsMarketPointInput } from '../repositories/data-sync-market-data.repository'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface PairsMarketsCursor {
   /**
@@ -20,34 +19,10 @@ interface PairsMarketsCursor {
   lastSnapshotTime?: string
 }
 
-interface PairsMarketsDataPoint {
-  instrument_id: string
-  exchange_name: string
-  symbol: string
-  current_price: number
-  index_price?: number
-  price_change_percent_24h?: number
-  volume_usd: number
-  volume_usd_change_percent_24h?: number
-  long_volume_usd?: number
-  short_volume_usd?: number
-  long_volume_quantity?: number
-  short_volume_quantity?: number
-  open_interest_quantity?: number
-  open_interest_usd?: number
-  open_interest_change_percent_24h?: number
-  long_liquidation_usd_24h?: number
-  short_liquidation_usd_24h?: number
-  funding_rate?: number
-  next_funding_time?: number
-  open_interest_volume_radio?: number
-  oi_vol_ratio_change_percent_24h?: number
-}
-
 interface PairsMarketsApiResponse {
   code: string
   msg: string
-  data?: PairsMarketsDataPoint[]
+  data?: PairsMarketPointInput[]
 }
 
 @Injectable()
@@ -60,7 +35,7 @@ export class CoinglassPairsMarketsJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
@@ -109,7 +84,6 @@ export class CoinglassPairsMarketsJob implements DataPullJob {
       }
     }
 
-    const client = this.txHost.tx
     const now = new Date()
 
     // 过滤无效数据点（必需字段校验）
@@ -129,84 +103,13 @@ export class CoinglassPairsMarketsJob implements DataPullJob {
       return true
     })
 
-    // 批量 upsert（限制并发数为 10 以避免连接池耗尽）
-    let upsertedCount = 0
-    let failedCount = 0
-    const batchSize = 10
-    for (let i = 0; i < validDataPoints.length; i += batchSize) {
-      const batch = validDataPoints.slice(i, i + batchSize)
-      const results = await Promise.allSettled(
-        batch.map(async (point) => {
-          await client.futuresPairsMarket.upsert({
-            where: {
-              symbol_exchangeName_instrumentId: {
-                symbol: point.symbol,
-                exchangeName: point.exchange_name,
-                instrumentId: point.instrument_id,
-              },
-            },
-            update: {
-              currentPrice: point.current_price.toString(),
-              indexPrice: point.index_price?.toString(),
-              priceChangePercent24h: point.price_change_percent_24h?.toString(),
-              volumeUsd: point.volume_usd.toString(),
-              volumeUsdChangePercent24h: point.volume_usd_change_percent_24h?.toString(),
-              longVolumeUsd: point.long_volume_usd?.toString(),
-              shortVolumeUsd: point.short_volume_usd?.toString(),
-              longVolumeQuantity: point.long_volume_quantity?.toString(),
-              shortVolumeQuantity: point.short_volume_quantity?.toString(),
-              openInterestQuantity: point.open_interest_quantity?.toString(),
-              openInterestUsd: point.open_interest_usd?.toString(),
-              openInterestChangePercent24h: point.open_interest_change_percent_24h?.toString(),
-              longLiquidationUsd24h: point.long_liquidation_usd_24h?.toString(),
-              shortLiquidationUsd24h: point.short_liquidation_usd_24h?.toString(),
-              fundingRate: point.funding_rate?.toString(),
-              nextFundingTime: point.next_funding_time ? BigInt(point.next_funding_time) : null,
-              openInterestVolumeRatio: point.open_interest_volume_radio?.toString(),
-              oiVolRatioChangePercent24h: point.oi_vol_ratio_change_percent_24h?.toString(),
-              updatedAt: now,
-            },
-            create: {
-              exchangeName: point.exchange_name,
-              instrumentId: point.instrument_id,
-              symbol: point.symbol,
-              currentPrice: point.current_price.toString(),
-              indexPrice: point.index_price?.toString(),
-              priceChangePercent24h: point.price_change_percent_24h?.toString(),
-              volumeUsd: point.volume_usd.toString(),
-              volumeUsdChangePercent24h: point.volume_usd_change_percent_24h?.toString(),
-              longVolumeUsd: point.long_volume_usd?.toString(),
-              shortVolumeUsd: point.short_volume_usd?.toString(),
-              longVolumeQuantity: point.long_volume_quantity?.toString(),
-              shortVolumeQuantity: point.short_volume_quantity?.toString(),
-              openInterestQuantity: point.open_interest_quantity?.toString(),
-              openInterestUsd: point.open_interest_usd?.toString(),
-              openInterestChangePercent24h: point.open_interest_change_percent_24h?.toString(),
-              longLiquidationUsd24h: point.long_liquidation_usd_24h?.toString(),
-              shortLiquidationUsd24h: point.short_liquidation_usd_24h?.toString(),
-              fundingRate: point.funding_rate?.toString(),
-              nextFundingTime: point.next_funding_time ? BigInt(point.next_funding_time) : null,
-              openInterestVolumeRatio: point.open_interest_volume_radio?.toString(),
-              oiVolRatioChangePercent24h: point.oi_vol_ratio_change_percent_24h?.toString(),
-              source: 'COINGLASS',
-            },
-          })
-          return point
-        }),
-      )
-
-      for (let j = 0; j < results.length; j++) {
-        const result = results[j]
-        if (result.status === 'fulfilled') {
-          upsertedCount += 1
-        } else {
-          failedCount += 1
-          const failedPoint = batch[j]
-          this.logger.warn(`Failed to upsert pairs-market record: ${result.reason}`)
-          this.logger.warn(`Failed data point: ${JSON.stringify(failedPoint)}`)
-        }
-      }
+    const upsertResult = await this.marketDataRepository.upsertPairsMarkets(validDataPoints, now)
+    for (const failure of upsertResult.failures) {
+      this.logger.warn(`Failed to upsert pairs-market record: ${failure.reason}`)
+      this.logger.warn(`Failed data point: ${JSON.stringify(failure.point)}`)
     }
+
+    const { upsertedCount, failedCount } = upsertResult
 
     if (failedCount > 0) {
       this.logger.warn(

@@ -24,6 +24,7 @@ import {
 import { TRADES_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
+import { DataSyncMarketDataRepository } from './repositories/data-sync-market-data.repository'
 import { HyperliquidDexPerpetualTradesWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-trades-ws.adapter'
 import { HyperliquidTradesWsConfig } from './services/adapters/hyperliquid/hyperliquid-trades-ws.config'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
@@ -56,6 +57,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     // 仓储
     DataPullTaskRepository,
     DataPullExecutionRepository,
+    DataSyncMarketDataRepository,
     // Job 实现 + registry
     ...DATA_PULL_JOB_PROVIDERS,
     PolymarketGammaClient,
