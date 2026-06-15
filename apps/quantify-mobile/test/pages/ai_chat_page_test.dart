@@ -251,7 +251,7 @@ class _LoadErrorAiChatRepository implements AiChatRepository {
 }
 
 void main() {
-  testWidgets('AI 对话页：输入消息发送 → user 气泡显示 → 流式 assistant 回复', (
+  testWidgets('AI 对话页：输入消息发送 → user 气泡显示 → 完整 assistant 回复', (
     WidgetTester tester,
   ) async {
     await _pump(tester);
@@ -259,12 +259,9 @@ void main() {
     // Send "hi"
     await tester.enterText(find.byKey(const Key('ai-chat-input')), 'hi');
     await tester.tap(find.byKey(const Key('ai-send-button')));
-    // 等 200ms 思考延迟 + 流式
+    // 等 200ms 思考延迟；reply 到达后应完整显示，不再本地逐字吐字。
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('hi'), findsOneWidget);
-    for (int i = 0; i < 30; i++) {
-      await tester.pump(const Duration(milliseconds: 250));
-    }
     expect(find.text('已收到："hi"。这是一段 mock 回复。'), findsOneWidget);
   });
 
@@ -329,13 +326,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byKey(const Key('ai-typing-indicator')), findsOneWidget);
 
-    // 思考延迟过后 → indicator 消失（流式开始）
+    // 思考延迟过后 → indicator 消失，完整回复立即显示。
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('ai-typing-indicator')), findsNothing);
-
-    for (int i = 0; i < 30; i++) {
-      await tester.pump(const Duration(milliseconds: 250));
-    }
+    expect(find.text('已收到："测试 typing"。这是一段 mock 回复。'), findsOneWidget);
   });
 
   testWidgets('待确认 params 气泡：显示逻辑确认文案和查看逻辑图 CTA', (WidgetTester tester) async {

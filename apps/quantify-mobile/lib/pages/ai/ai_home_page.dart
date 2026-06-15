@@ -24,7 +24,7 @@ import 'ai_home_page_state.dart';
 /// - 左侧 Drawer 用 `QzAiSessionDrawer` 列出 / 新建 / 删除会话
 /// - 顶栏中部渲染当前会话标题 + 分类副标题
 /// - 输入框上方挂 `QzQuickReplyChips` 快捷回复
-/// - assistant 回复前 200ms 思考窗显示 `QzTypingIndicator`，到达后切回流式逐字
+/// - assistant 回复前 200ms 思考窗显示 `QzTypingIndicator`，到达后立即显示完整回复
 /// - 草稿按 sessionId 独立存储（`_drafts`），切会话不串台
 ///
 class AiHomePage extends ConsumerStatefulWidget {
@@ -36,7 +36,7 @@ class AiHomePage extends ConsumerStatefulWidget {
 
 class _AiHomePageState extends ConsumerState<AiHomePage> {
   /// 渲染层 controller 保留在 widget（依赖 BuildContext / 渲染层）；
-  /// 会话/流式态全量迁入 [AiHomePageController]。
+  /// 会话/发送态全量迁入 [AiHomePageController]。
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -361,9 +361,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       if (!mounted) return;
       final int previousCount = _messageCount(previous);
       final int nextCount = _messageCount(next);
-      final bool streamingChanged =
-          previous?.isStreaming == true && !next.isStreaming;
-      if (next.isStreaming || streamingChanged || previousCount != nextCount) {
+      if (previousCount != nextCount) {
         _scrollToBottom();
       }
     });

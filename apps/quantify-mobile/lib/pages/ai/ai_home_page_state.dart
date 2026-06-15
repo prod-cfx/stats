@@ -4,9 +4,8 @@ import '../../data/models/ai_chat_models.dart';
 
 /// AI 多会话对话页的不可变页面态（issue #2186 三件套迁移）。
 ///
-/// 承载会话集合（[sessions]/[order]/[currentId]/[drafts]）与流式态
-/// （[isThinking]/[isStreaming]）+ 初始化/加载哨兵（[initialized]/
-/// [lastLoadedStrategyId]）。`_streamTimer` 由 controller 持有，不属状态。
+/// 承载会话集合（[sessions]/[order]/[currentId]/[drafts]）与发送态
+/// （[isThinking]）+ 初始化/加载哨兵（[initialized]/[lastLoadedStrategyId]）。
 /// `_input`/`_scroll` 等渲染层 controller 留在 widget，不进此处。
 @immutable
 class AiHomePageState {
@@ -16,7 +15,6 @@ class AiHomePageState {
     this.currentId,
     this.drafts = const <String, String>{},
     this.isThinking = false,
-    this.isStreaming = false,
     this.initialized = false,
     this.loadError,
     this.lastLoadedStrategyId,
@@ -34,7 +32,6 @@ class AiHomePageState {
   final Map<String, String> drafts;
 
   final bool isThinking;
-  final bool isStreaming;
 
   /// listSessions 是否已完成首帧加载。
   final bool initialized;
@@ -45,7 +42,7 @@ class AiHomePageState {
   /// 已处理过的 `?loadStrategy=<id>`，避免重复注入。
   final String? lastLoadedStrategyId;
 
-  bool get isSending => isThinking || isStreaming;
+  bool get isSending => isThinking;
 
   /// 按 [order] 投影出有序会话列表。
   List<AiSession> get orderedSessions => <AiSession>[
@@ -61,7 +58,6 @@ class AiHomePageState {
     Object? currentId = _unset,
     Map<String, String>? drafts,
     bool? isThinking,
-    bool? isStreaming,
     bool? initialized,
     Object? loadError = _unset,
     Object? lastLoadedStrategyId = _unset,
@@ -74,7 +70,6 @@ class AiHomePageState {
           : currentId as String?,
       drafts: drafts ?? this.drafts,
       isThinking: isThinking ?? this.isThinking,
-      isStreaming: isStreaming ?? this.isStreaming,
       initialized: initialized ?? this.initialized,
       loadError: identical(loadError, _unset)
           ? this.loadError

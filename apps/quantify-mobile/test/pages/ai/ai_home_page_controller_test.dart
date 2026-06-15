@@ -19,7 +19,7 @@ class _FakeAiChatRepository implements AiChatRepository {
   int listSessionsCalls = 0;
   Object? listSessionsError;
 
-  /// sendMessageTo 返回的固定回复内容（逐字流式铺设的源串）。
+  /// sendMessageTo 返回的固定回复内容。
   String replyContent = 'hi';
 
   @override
@@ -150,7 +150,7 @@ void main() {
       expect(s.loadError, contains('network down'));
     });
 
-    test('send 全流转：thinking → streaming → done（逐字铺设完成）', () {
+    test('send 全流转：thinking → 完整 reply 立即显示', () {
       fakeAsync((FakeAsync async) {
         final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
           _session('a'),
@@ -165,17 +165,11 @@ void main() {
         // 发送：第一个 await 之前同步置 thinking。
         ctrl(c).send('hello');
         expect(read(c).isThinking, isTrue);
-        expect(read(c).isStreaming, isFalse);
 
-        // reply 到达（fake 立即返回，微任务排空）：thinking 关、streaming 开。
+        // reply 到达（fake 立即返回，微任务排空）：thinking 关、完整内容出现。
         async.flushMicrotasks();
-        expect(read(c).isThinking, isFalse);
-        expect(read(c).isStreaming, isTrue);
-
-        // 逐字流式：3 字符 × 250ms 后 streaming 关、内容铺满
-        async.elapse(const Duration(milliseconds: 250 * 4));
         final AiHomePageState s = read(c);
-        expect(s.isStreaming, isFalse);
+        expect(s.isThinking, isFalse);
         final ChatTurn last = s.sessions['a']!.messages.last;
         expect(last.role, 'assistant');
         expect(last.content, 'abc');
@@ -197,9 +191,8 @@ void main() {
         expect(read(c).isSending, isFalse);
         expect(read(c).sessions['a']!.messages, isEmpty);
 
-        // 进入发送中后再次 send 被守卫
+        // 进入发送中后再次 send 被守卫。
         ctrl(c).send('first');
-        async.flushMicrotasks();
         ctrl(c).send('second');
         async.flushMicrotasks();
         final List<ChatTurn> userTurns = read(c).sessions['a']!.messages
@@ -268,7 +261,7 @@ void main() {
         ctrl(c).persistDraft('old draft');
         ctrl(c).send('hello');
         async.flushMicrotasks();
-        expect(read(c).isStreaming, isTrue);
+        expect(read(c).isSending, isFalse);
 
         ctrl(c).createSession('新方案');
         async.flushMicrotasks();
@@ -279,7 +272,6 @@ void main() {
         expect(s.drafts['new-1'], isNull);
         expect(s.drafts['a'], '');
         expect(s.isThinking, isFalse);
-        expect(s.isStreaming, isFalse);
       });
     });
   });
