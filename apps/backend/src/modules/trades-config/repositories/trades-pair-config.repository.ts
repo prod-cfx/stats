@@ -3,17 +3,18 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type { CreateTradesPairConfigDto } from '../dto/create-trades-pair-config.dto'
 import type { QueryTradesPairConfigDto } from '../dto/query-trades-pair-config.dto'
 import type { UpdateTradesPairConfigDto } from '../dto/update-trades-pair-config.dto'
-import type { TradesPairConfig } from '@/prisma/prisma.types'
+import type { Prisma as PrismaTypes, TradesPairConfig } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class TradesPairConfigRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findAll(filter?: QueryTradesPairConfigDto): Promise<TradesPairConfig[]> {
 
-    const where: any = {}
+    const where: PrismaTypes.TradesPairConfigWhereInput = {}
 
     if (filter?.exchange) {
       where.exchange = filter.exchange
@@ -71,11 +72,15 @@ export class TradesPairConfigRepository {
     dto: UpdateTradesPairConfigDto,
     options?: { canonicalInstId?: string | null },
   ): Promise<TradesPairConfig> {
-    const data: any = {}
+    const data: PrismaTypes.TradesPairConfigUpdateInput = {}
 
     if (dto.enabled !== undefined) data.enabled = dto.enabled
     if (dto.priority !== undefined) data.priority = dto.priority
-    if (dto.metadata !== undefined) data.metadata = dto.metadata
+    if (dto.metadata !== undefined) {
+      data.metadata = dto.metadata === null
+        ? Prisma.DbNull
+        : (dto.metadata as unknown as PrismaTypes.InputJsonValue)
+    }
     if (dto.description !== undefined) data.description = dto.description
     if (options && 'canonicalInstId' in options) data.canonicalInstId = options.canonicalInstId
 
@@ -98,7 +103,6 @@ export class TradesPairConfigRepository {
     })
   }
 }
-
 
 
 

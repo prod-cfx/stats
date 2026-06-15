@@ -3,17 +3,18 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
-import type { OrderbookPairConfig } from '@/prisma/prisma.types'
+import type { OrderbookPairConfig, Prisma as PrismaTypes } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class OrderbookPairConfigRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findAll(filter?: QueryOrderbookPairConfigDto): Promise<OrderbookPairConfig[]> {
 
-    const where: any = {}
+    const where: PrismaTypes.OrderbookPairConfigWhereInput = {}
 
     if (filter?.venue) {
       where.venue = filter.venue
@@ -71,13 +72,17 @@ export class OrderbookPairConfigRepository {
   }
 
   async update(id: string, dto: UpdateOrderbookPairConfigDto): Promise<OrderbookPairConfig> {
-    const data: any = {}
+    const data: PrismaTypes.OrderbookPairConfigUpdateInput = {}
 
     if (dto.enabled !== undefined) data.enabled = dto.enabled
     if (dto.pullIntervalSeconds !== undefined) data.pullIntervalSeconds = dto.pullIntervalSeconds
     if (dto.depthLevels !== undefined) data.depthLevels = dto.depthLevels
     if (dto.priority !== undefined) data.priority = dto.priority
-    if (dto.metadata !== undefined) data.metadata = dto.metadata
+    if (dto.metadata !== undefined) {
+      data.metadata = dto.metadata === null
+        ? Prisma.DbNull
+        : (dto.metadata as unknown as PrismaTypes.InputJsonValue)
+    }
     if (dto.description !== undefined) data.description = dto.description
 
     return this.txHost.tx.orderbookPairConfig.update({
@@ -99,4 +104,3 @@ export class OrderbookPairConfigRepository {
     })
   }
 }
-
