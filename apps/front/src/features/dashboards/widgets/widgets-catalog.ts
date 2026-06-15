@@ -1,3 +1,5 @@
+import type { DashboardWidgetConfig } from '../store/dashboard-store'
+
 export type WidgetType =
   | "market.kline"
   | "market.prediction"
@@ -17,7 +19,7 @@ export interface WidgetCatalogItem {
   description: string;
   iconKey: string;
   defaultLayout: { w: number; h: number; minW: number; minH: number; maxW: number; maxH: number };
-  defaultConfig: Record<string, any>;
+  defaultConfig: DashboardWidgetConfig;
   allowMultiple: boolean;
 }
 
@@ -133,5 +135,3 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
     ],
   },
 ];
-
-

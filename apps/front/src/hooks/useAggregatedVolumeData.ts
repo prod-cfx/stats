@@ -1,7 +1,8 @@
-/* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchKlineData } from '@/lib/api'
 import { logger } from '@/utils/logger'
+import { useInterval } from './useInterval'
+import { useTimeout } from './useTimeout'
 
 export interface AggregatedVolumeBar {
   time: number
@@ -22,45 +23,46 @@ export interface UseAggregatedVolumeDataOptions {
  */
 export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions) {
   const { symbol, interval, enabled = true } = options
-  const [data, setData] = useState<AggregatedVolumeBar[]>([])
+  const stateKey = `${symbol}:${interval}`
+  const [dataState, setDataState] = useState<{ key: string, data: AggregatedVolumeBar[] }>(() => ({
+    key: stateKey,
+    data: [],
+  }))
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const [errorState, setErrorState] = useState<{ key: string, error: Error | null }>(() => ({
+    key: stateKey,
+    error: null,
+  }))
+  const [retryDelayMs, setRetryDelayMs] = useState<number | null>(null)
   const dataMapRef = useRef<Map<number, number>>(new Map())
   const retryCountRef = useRef(0)
   const lastFetchTimeRef = useRef<number>(0)
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const inFlightRef = useRef(false)
+  const inFlightKeyRef = useRef<string | null>(null)
+  const stateKeyRef = useRef(stateKey)
   const MAX_RETRIES = 3
 
-  // P1-1: 当 symbol/interval 变化时重置状态，避免混入旧数据
-  useEffect(() => {
+  const resetForKey = useCallback((nextKey: string) => {
+    if (stateKeyRef.current === nextKey) return
+    stateKeyRef.current = nextKey
     dataMapRef.current.clear()
     lastFetchTimeRef.current = 0
     retryCountRef.current = 0
-     
-    setData([])
-     
-    setError(null)
-  }, [symbol, interval])
+    setRetryDelayMs(null)
+  }, [])
 
-  useEffect(() => {
-    if (!enabled || !symbol || !interval) {
-      return
-    }
+  const fetchData = useCallback(async (isRetry = false) => {
+    if (!enabled || !symbol || !interval) return
 
-    // P2-1: 使用 isActive 标记防止卸载后 setState
-    let isActive = true
+    const requestKey = stateKey
+    resetForKey(requestKey)
+    if (inFlightKeyRef.current === requestKey) return
+    if (retryDelayMs != null && !isRetry) return
 
-    const fetchData = async (isRetry = false) => {
-      if (!isActive) return
-      if (inFlightRef.current) return
-      if (retryTimerRef.current && !isRetry) return
-
-      try {
-        inFlightRef.current = true
-        setLoading(true)
-        setError(null)
-        const now = Math.floor(Date.now() / 1000)
+    try {
+      inFlightKeyRef.current = requestKey
+      setLoading(true)
+      setErrorState({ key: requestKey, error: null })
+      const now = Math.floor(Date.now() / 1000)
 
         // 增量更新：首次加载获取 24 小时数据，后续只获取新数据
         const from = lastFetchTimeRef.current || now - 24 * 60 * 60
@@ -84,6 +86,8 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
 
         logger.debug('[useAggregatedVolumeData] Received bars', { count: bars.length })
 
+        if (stateKeyRef.current !== requestKey) return
+
         // 清理超过 24 小时的旧数据（防止内存泄漏）
         const cutoffTime = (now - 24 * 60 * 60) * 1000
         const keysToDelete: number[] = []
@@ -106,14 +110,15 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
           .map(([time, volume]) => ({ time, volume }))
           .sort((a, b) => a.time - b.time)
 
-        if (!isActive) return
-        setData(volumeData)
-        lastFetchTimeRef.current = now // 更新最后获取时间
-        retryCountRef.current = 0 // 成功后重置重试计数
-      } catch (err) {
-        if (!isActive) return
-        const fetchError = err as Error
-        logger.error('[useAggregatedVolumeData] Failed to fetch data', fetchError)
+      setDataState({ key: requestKey, data: volumeData })
+      lastFetchTimeRef.current = now // 更新最后获取时间
+      retryCountRef.current = 0 // 成功后重置重试计数
+      setRetryDelayMs(null)
+    } catch (err) {
+      const fetchError = err as Error
+      logger.error('[useAggregatedVolumeData] Failed to fetch data', fetchError)
+
+      if (stateKeyRef.current !== requestKey) return
 
         // 重试逻辑（指数退避）
         if (retryCountRef.current < MAX_RETRIES) {
@@ -124,46 +129,39 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
             maxRetries: MAX_RETRIES,
             delayMs: retryDelay,
           })
-          // P2-1: 记录 timer id 以便清理
-          retryTimerRef.current = setTimeout(() => {
-            retryTimerRef.current = null
-            void fetchData(true)
-          }, retryDelay)
-        } else {
-          setError(fetchError)
-          logger.error('[useAggregatedVolumeData] Max retries reached', {
-            maxRetries: MAX_RETRIES,
-          })
-        }
-      } finally {
-        inFlightRef.current = false
-        if (isActive) {
-          setLoading(false)
-        }
+        setRetryDelayMs(retryDelay)
+      } else {
+        setErrorState({ key: requestKey, error: fetchError })
+        logger.error('[useAggregatedVolumeData] Max retries reached', {
+          maxRetries: MAX_RETRIES,
+        })
+      }
+    } finally {
+      if (inFlightKeyRef.current === requestKey) {
+        inFlightKeyRef.current = null
+        setLoading(false)
       }
     }
+  }, [enabled, interval, resetForKey, retryDelayMs, stateKey, symbol])
 
-    // 立即执行一次
+  useEffect(() => {
+    if (!enabled || !symbol || !interval) return
     void fetchData()
+  }, [enabled, fetchData, interval, symbol])
 
-    // 每3分钟更新一次
-    const intervalId = setInterval(
-      () => {
-        void fetchData()
-      },
-      3 * 60 * 1000,
-    )
+  useInterval(() => {
+    void fetchData()
+  }, enabled && symbol && interval ? 3 * 60 * 1000 : null)
 
-    return () => {
-      isActive = false
-      clearInterval(intervalId)
-      // P2-1: 清理重试定时器
-      if (retryTimerRef.current) {
-        clearTimeout(retryTimerRef.current)
-        retryTimerRef.current = null
-      }
-    }
-  }, [symbol, interval, enabled])
+  useTimeout(() => {
+    setRetryDelayMs(null)
+    void fetchData(true)
+  }, retryDelayMs)
 
-  return { data, loading, error, dataMapRef }
+  const data = dataState.key === stateKey ? dataState.data : []
+  const error = errorState.key === stateKey ? errorState.error : null
+
+  const result = useMemo(() => ({ data, loading, error, dataMapRef }), [data, error, loading])
+
+  return result
 }

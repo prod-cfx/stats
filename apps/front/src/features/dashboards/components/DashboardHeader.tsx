@@ -1,10 +1,9 @@
-/* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
 'use client'
 
 import type { DashboardDoc } from '../store/dashboard-store'
 import { Check, Edit2, Image, Loader2, Save, X } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { deleteDashboard, updateDashboardMeta, upsertDashboard } from '../store/dashboard-store'
@@ -31,21 +30,10 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   )
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [savePublishStatus, setSavePublishStatus] = useState<SavePublishStatus>('idle')
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastSavedStateRef = useRef(JSON.stringify(dashboard))
-
-  useEffect(() => {
-    if (isEditingTitle) return
-    setTitleValue(dashboard.name)
-  }, [dashboard.id, dashboard.name, isEditingTitle])
-
-  // 监听看板变化，检测是否有未保存的修改
-  useEffect(() => {
-    const currentState = JSON.stringify(dashboard)
-
-    setHasUnsavedChanges(currentState !== lastSavedStateRef.current)
-  }, [dashboard])
+  const displayedTitleValue = isEditingTitle ? titleValue : dashboard.name
+  const hasUnsavedChanges = JSON.stringify(dashboard) !== lastSavedStateRef.current
 
   const handleSaveTitle = () => {
     updateDashboardMeta(dashboard.id, { name: titleValue })
@@ -145,7 +133,6 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
 
       // 更新最后保存状态
       lastSavedStateRef.current = JSON.stringify(dashboard)
-      setHasUnsavedChanges(false)
       setSavePublishStatus('success')
 
       toast.success({
@@ -191,7 +178,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         {isEditingTitle ? (
           <input
             type="text"
-            value={titleValue}
+            value={displayedTitleValue}
             onChange={e => setTitleValue(e.target.value)}
             onBlur={handleSaveTitle}
             onKeyDown={e => {
@@ -211,7 +198,10 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         )}
         <button
           type="button"
-          onClick={() => setIsEditingTitle(!isEditingTitle)}
+          onClick={() => {
+            setTitleValue(dashboard.name)
+            setIsEditingTitle(!isEditingTitle)
+          }}
           className="p-2 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
           title={t('dashboard.editor.actions.editTitle')}
         >

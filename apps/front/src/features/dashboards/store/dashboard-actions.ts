@@ -1,4 +1,5 @@
 import type { WidgetCatalogItem } from '../widgets/widgets-catalog'
+import type { GridLayoutItem } from './dashboard-store'
 import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
 import { updateDashboard } from './dashboard-store'
 
@@ -43,10 +44,10 @@ export function removeWidgetFromDashboard(dashboardId: string, widgetId: string)
   }))
 }
 
-export function updateDashboardLayout(dashboardId: string, layout: any[]) {
+export function updateDashboardLayout(dashboardId: string, layout: GridLayoutItem[]) {
   updateDashboard(dashboardId, (doc) => {
     // Snap every layout item to the nearest preset (S/M/L/XL) to prevent height runaway.
-    const normalized = (layout || []).map((l: any) => {
+    const normalized = (layout || []).map((l) => {
       const i = String(l.i)
       const x0 = Number.isFinite(l.x) ? Number(l.x) : 0
       const y0 = Number.isFinite(l.y) ? Number(l.y) : 0
@@ -58,6 +59,6 @@ export function updateDashboardLayout(dashboardId: string, layout: any[]) {
       const y = Math.max(0, y0)
       return { i, x, y, w: snapped.w, h: snapped.h }
     })
-    return { ...doc, layout: normalized as any, updatedAt: Date.now() }
+    return { ...doc, layout: normalized, updatedAt: Date.now() }
   })
 }

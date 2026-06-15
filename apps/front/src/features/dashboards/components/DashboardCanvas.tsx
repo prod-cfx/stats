@@ -1,9 +1,11 @@
 'use client'
 
+import type { DashboardWidgetInstance, GridLayoutItem } from '../store/dashboard-store'
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useEventListener } from '@/hooks/useEventListener'
 import { removeWidgetFromDashboard, updateDashboardLayout } from '../store/dashboard-actions'
 import { ensureDashboard, getDashboard } from '../store/dashboard-store'
 import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
@@ -21,37 +23,65 @@ const AddWidgetModal = dynamic(
   { ssr: false, loading: () => null },
 )
 
-type GridLayoutComponent = React.ComponentType<any> | null
+interface DashboardLayoutItem extends GridLayoutItem {
+  minW?: number
+  maxW?: number
+}
+
+interface GridLayoutProps {
+  children: React.ReactNode
+  className?: string
+  cols: number
+  draggableCancel?: string
+  draggableHandle?: string
+  isDraggable?: boolean
+  isResizable?: boolean
+  key?: React.Key
+  layout: DashboardLayoutItem[]
+  margin?: [number, number]
+  onLayoutChange?: (layout: DashboardLayoutItem[]) => void
+  resizeHandles?: string[]
+  rowHeight: number
+  width: number
+}
+
+type GridLayoutComponent = React.ComponentType<GridLayoutProps> | null
+
+interface PendingLayoutSave {
+  dashboardId: string
+  layout: DashboardLayoutItem[]
+}
 
 function useContainerWidth() {
   const [el, setEl] = useState<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(1200)
+  const read = React.useCallback(() => {
+    if (!el) return
+    const w = Math.floor(el.getBoundingClientRect().width)
+    if (w > 0) setWidth(w)
+  }, [el])
+
   useEffect(() => {
     if (!el) return
-    const read = () => {
-      const w = Math.floor(el.getBoundingClientRect().width)
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- debounced resize handler
-      if (w > 0) setWidth(w)
-    }
     read()
-    const RO = (window as any).ResizeObserver as typeof ResizeObserver | undefined
+    const RO = window.ResizeObserver
     const ro = RO ? new RO(read) : null
     ro?.observe(el)
-    window.addEventListener('resize', read)
-    return () => {
-      window.removeEventListener('resize', read)
-      ro?.disconnect()
-    }
-  }, [el])
+    return () => ro?.disconnect()
+  }, [el, read])
+  useEventListener(typeof window === 'undefined' ? null : window, 'resize', read)
   return { setEl, width }
 }
 
 // Clamp helper:
 // - All widgets now respect their snapped preset size if available
 // - Fallback to 6x3 if snapping fails or no type
-const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
+const clampLayout = (
+  items: GridLayoutItem[] | undefined,
+  widgetsById: Map<string, DashboardWidgetInstance>,
+): DashboardLayoutItem[] =>
   (items || []).map(n => {
-    const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
+    const widgetType = widgetsById.get(String(n.i))?.type
     if (widgetType) {
       const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
       return {
@@ -89,47 +119,56 @@ export function DashboardCanvas(props: { dashboardId: string }) {
 
   const { setEl: containerRef, width } = useContainerWidth()
   const isMobileLayout = useDashboardMobileLayout()
-  const saveTimerRef = useRef<any>(null)
+  const saveTimerPendingRef = useRef(false)
+  const [pendingLayout, setPendingLayout] = useState<PendingLayoutSave | null>(null)
 
   useEffect(() => {
     if (isMobileLayout) return
-    import('react-grid-layout').then((mod: any) => {
-      setGridLayout(() => mod?.default || mod?.GridLayout)
+    import('react-grid-layout').then((mod: { default?: GridLayoutComponent, GridLayout?: GridLayoutComponent }) => {
+      setGridLayout(() => mod.default || mod.GridLayout || null)
     })
   }, [isMobileLayout])
 
-  useEffect(() => {
-    const refresh = () => {
-      if (props.dashboardId === 'draft') {
-        const freshDoc = ensureDashboard('draft')
-        setDoc(freshDoc)
-        if (!saveTimerRef.current) {
-          const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
-          setLayoutState(clampLayout(freshDoc.layout, map))
-        }
-        return
-      }
-      const freshDoc = getDashboard(props.dashboardId)
-      if (!freshDoc) return // do not recreate deleted dashboards
+  const refreshDashboard = React.useCallback(() => {
+    if (props.dashboardId === 'draft') {
+      const freshDoc = ensureDashboard('draft')
       setDoc(freshDoc)
-      if (!saveTimerRef.current) {
+      if (!saveTimerPendingRef.current) {
         const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
         setLayoutState(clampLayout(freshDoc.layout, map))
       }
+      return
     }
-    // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleanup in return
-    window.addEventListener('coinflux_dashboards_updated', refresh as any)
-    return () => window.removeEventListener('coinflux_dashboards_updated', refresh as any)
+    const freshDoc = getDashboard(props.dashboardId)
+    if (!freshDoc) return // do not recreate deleted dashboards
+    setDoc(freshDoc)
+    if (!saveTimerPendingRef.current) {
+      const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
+      setLayoutState(clampLayout(freshDoc.layout, map))
+    }
   }, [props.dashboardId])
+  useEventListener(
+    typeof window === 'undefined' ? null : window,
+    'coinflux_dashboards_updated',
+    refreshDashboard,
+  )
 
-  const onLayoutChange = (next: any[]) => {
+  useEffect(() => {
+    if (!pendingLayout) return
+    const timer = window.setTimeout(() => {
+      const { dashboardId, layout } = pendingLayout
+      saveTimerPendingRef.current = false
+      setPendingLayout(null)
+      updateDashboardLayout(dashboardId, layout)
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [pendingLayout])
+
+  const onLayoutChange = (next: DashboardLayoutItem[]) => {
     const clamped = clampLayout(next, widgetsById)
     setLayoutState(clamped)
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      updateDashboardLayout(props.dashboardId, clamped)
-      saveTimerRef.current = null
-    }, 500)
+    saveTimerPendingRef.current = true
+    setPendingLayout({ dashboardId: props.dashboardId, layout: clamped })
   }
 
   const handleResetLayout = () => {
@@ -194,7 +233,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   if (!isMobileLayout && !GridLayout)
     return <div className="p-10 text-center text-white/30">{t('common.loading')}</div>
 
-  const DesktopGridLayout = GridLayout as React.ComponentType<any>
+  const DesktopGridLayout = GridLayout
   const rowHeight = 10
   const marginY = 6
 
@@ -224,7 +263,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       <div ref={containerRef} className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
         {isMobileLayout ? (
           <div data-testid="mobile-dashboard-canvas" className="flex w-full min-w-0 flex-col gap-4 overflow-hidden">
-            {sortLayoutForMobile(layoutState as any).map((l: any) => {
+            {sortLayoutForMobile(layoutState).map((l) => {
               const w = widgetsById.get(l.i)
               if (!w) return null
               return (
@@ -252,7 +291,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         ) : (
           <DesktopGridLayout
             key={resetKey}
-            layout={layoutState as any}
+            layout={layoutState}
             cols={12}
             rowHeight={rowHeight}
             margin={[8, marginY]}
@@ -264,7 +303,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
             draggableHandle=".react-draggable-handle"
             draggableCancel=".react-draggable-cancel"
           >
-            {layoutState.map((l: any) => {
+            {layoutState.map((l) => {
               const w = widgetsById.get(l.i)
               if (!w) return null
               return (

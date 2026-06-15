@@ -162,7 +162,7 @@ export async function fetchWhaleHoldings(
         pnl,
         roe,
         snapshotTime,
-      } as any as WhaleHoldingApiItem
+      } satisfies WhaleHoldingApiItem
     })
   }
 }
@@ -315,7 +315,7 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
     return {
       recommended: Array.from({ length: 3 }).map((_, i) => makeTrader('recommended', i)),
       details: Array.from({ length: 18 }).map((_, i) => makeTrader('detail', i + 10)),
-    } as any as WhaleDiscoverResponse
+    } satisfies WhaleDiscoverResponse
   }
 }
 
@@ -394,7 +394,7 @@ export async function fetchTraderSnapshot(
       perp: { accountValue: perpAccountValue, totalMarginUsed, totalPositionValue, withdrawable, marginUsagePercent, leverageRatio, unrealizedPnl, roi },
       spot: { totalValue: spotAccountValue, balances },
       total: { accountValue: totalAccountValue, perpPercent: perpPercent * 100, spotPercent: spotPercent * 100 },
-    } as any as TraderSnapshotResponse
+    } satisfies TraderSnapshotResponse
   }
 }
 
@@ -497,7 +497,7 @@ export async function fetchTraderPositions(
       type,
       perp: type === 'spot' ? [] : perpCoins.slice(0, 3).map(makePerp),
       spot: type === 'perp' ? [] : spotCoins.slice(0, 4).map(makeSpot),
-    } as any as TraderPositionsResponse
+    } satisfies TraderPositionsResponse
   }
 }
 
@@ -561,7 +561,7 @@ export async function fetchTraderOpenOrders(
           createdAt: new Date(now - idx * 5 * 60_000).toISOString(),
         }
       }),
-    } as any as TraderOpenOrdersResponse
+    } satisfies TraderOpenOrdersResponse
   }
 }
 
@@ -636,7 +636,7 @@ export async function fetchRealtimeWhaleAlerts(
         position_size: Number(positionSize.toFixed(6)),
         entry_price: String(entryPrice.toFixed(2)),
         create_time: new Date(now - minutesAgo * 60_000).toISOString(),
-      } as any as RealtimeWhaleAlertItem
+      } satisfies RealtimeWhaleAlertItem
     })
   }
 }
@@ -750,7 +750,7 @@ export async function fetchUserPortfolio(
       currentValue: history[points - 1].value,
       pnl24h: 12500,
       pnlPercent24h: 1.25,
-    } as any as UserPortfolioResponse
+    } satisfies UserPortfolioResponse
   }
 }
 
@@ -774,7 +774,7 @@ export async function fetchUserFills(
     }, 'FETCH_USER_FILLS')
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
-    return { fills: [] } as any as UserFillsResponse
+    return { fills: [] } satisfies UserFillsResponse
   }
 }
 
@@ -809,6 +809,6 @@ export async function fetchTraderFullData(
       },
       positions: [],
       history: [],
-    } as any as TraderFullDataResponse
+    } satisfies TraderFullDataResponse
   }
 }

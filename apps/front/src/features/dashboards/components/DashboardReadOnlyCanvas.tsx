@@ -1,7 +1,9 @@
 'use client'
 
+import type { DashboardWidgetInstance, GridLayoutItem } from '../store/dashboard-store'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useEventListener } from '@/hooks/useEventListener'
 import { DASHBOARD_UPDATED_EVENT, ensureDashboard, getDashboard } from '../store/dashboard-store'
 import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
@@ -11,40 +13,56 @@ import {
   useDashboardMobileLayout,
 } from './dashboard-layout-utils'
 
-type GridLayoutComponent = React.ComponentType<any> | null
+interface DashboardLayoutItem extends GridLayoutItem {
+  minW?: number
+  maxW?: number
+}
+
+interface GridLayoutProps {
+  children: React.ReactNode
+  cols: number
+  compactType?: null
+  isDraggable?: boolean
+  isResizable?: boolean
+  layout: DashboardLayoutItem[]
+  margin?: [number, number]
+  preventCollision?: boolean
+  rowHeight: number
+  width: number
+}
+
+type GridLayoutComponent = React.ComponentType<GridLayoutProps> | null
 
 function useContainerWidth() {
   const [el, setEl] = useState<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(1200)
+  const read = React.useCallback(() => {
+    if (!el) return
+    const w = Math.floor(el.getBoundingClientRect().width)
+    if (w > 0) setWidth(w)
+  }, [el])
 
   useEffect(() => {
     if (!el) return
-    const read = () => {
-      const w = Math.floor(el.getBoundingClientRect().width)
-      if (w > 0) {
-        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync container width
-        setWidth(w)
-      }
-    }
     read()
-    const RO = (window as any).ResizeObserver as typeof ResizeObserver | undefined
+    const RO = window.ResizeObserver
     const ro = RO ? new RO(read) : null
     ro?.observe(el)
-    window.addEventListener('resize', read)
-    return () => {
-      window.removeEventListener('resize', read)
-      ro?.disconnect()
-    }
-  }, [el])
+    return () => ro?.disconnect()
+  }, [el, read])
+  useEventListener(typeof window === 'undefined' ? null : window, 'resize', read)
 
   return { setEl, width }
 }
 
 // Same clamp logic as editor canvas (read-only):
 // - All widgets respect preset width/height
-const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
+const clampLayout = (
+  items: GridLayoutItem[] | undefined,
+  widgetsById: Map<string, DashboardWidgetInstance>,
+): DashboardLayoutItem[] =>
   (items || []).map(n => {
-    const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
+    const widgetType = widgetsById.get(String(n.i))?.type
     if (widgetType) {
       const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
       return { ...n, w: snapped.w, h: snapped.h, minW: snapped.w, maxW: snapped.w }
@@ -70,38 +88,31 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
 
   useEffect(() => {
     if (isMobileLayout) return
-    import('react-grid-layout').then((mod: any) => {
-      setGridLayout(() => mod?.default || mod?.GridLayout)
+    import('react-grid-layout').then((mod: { default?: GridLayoutComponent, GridLayout?: GridLayoutComponent }) => {
+      setGridLayout(() => mod.default || mod.GridLayout || null)
     })
   }, [isMobileLayout])
 
-  useEffect(() => {
-    const refresh = () => {
-      if (props.dashboardId === 'draft') {
-        const freshDoc = ensureDashboard('draft')
-        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync draft dashboard
-        setDoc(freshDoc)
-        const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
-        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync layout from storage
-        setLayoutState(clampLayout(freshDoc.layout, map))
-        return
-      }
-      const freshDoc = getDashboard(props.dashboardId)
-      if (!freshDoc) return // do not recreate deleted dashboards
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync stored dashboard
+  const refreshDashboard = React.useCallback(() => {
+    if (props.dashboardId === 'draft') {
+      const freshDoc = ensureDashboard('draft')
       setDoc(freshDoc)
       const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync layout from storage
       setLayoutState(clampLayout(freshDoc.layout, map))
+      return
     }
-    refresh()
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
-    window.addEventListener('storage', refresh)
-    return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
-      window.removeEventListener('storage', refresh)
-    }
+    const freshDoc = getDashboard(props.dashboardId)
+    if (!freshDoc) return // do not recreate deleted dashboards
+    setDoc(freshDoc)
+    const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
+    setLayoutState(clampLayout(freshDoc.layout, map))
   }, [props.dashboardId])
+
+  useEffect(() => {
+    refreshDashboard()
+  }, [refreshDashboard])
+  useEventListener(typeof window === 'undefined' ? null : window, DASHBOARD_UPDATED_EVENT, refreshDashboard)
+  useEventListener(typeof window === 'undefined' ? null : window, 'storage', refreshDashboard)
 
   if (!doc) return <div className="p-10 text-center text-white/30">{t('dashboard.notFound')}</div>
   if (isMobileLayout) {
@@ -110,7 +121,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
         data-testid="mobile-readonly-canvas"
         className="flex h-full w-full min-w-0 flex-col gap-4 overflow-hidden"
       >
-        {sortLayoutForMobile(layoutState as any).map((l: any) => {
+        {sortLayoutForMobile(layoutState).map((l) => {
           const w = widgetsById.get(l.i)
           if (!w) return null
           return (
@@ -136,7 +147,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div ref={containerRef} className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
         <GridLayout
-          layout={layoutState as any}
+          layout={layoutState}
           cols={12}
           rowHeight={rowHeight}
           margin={[8, marginY]}
@@ -146,7 +157,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
           preventCollision
           compactType={null}
         >
-          {layoutState.map((l: any) => {
+          {layoutState.map((l) => {
             const w = widgetsById.get(l.i)
             if (!w) return null
             return (

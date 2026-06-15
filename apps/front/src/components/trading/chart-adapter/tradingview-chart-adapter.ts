@@ -1,12 +1,49 @@
 import type { ChartAdapter, Unsubscribe } from '@/components/trading/chart-adapter/chart-adapter'
 
-type TvWidget = any
+interface TradingViewSubscription<TParam = unknown> {
+  subscribe?: (context: unknown, handler: (param: TParam) => void) => void
+  unsubscribe?: (context: unknown, handler: (param: TParam) => void) => void
+}
+
+interface TradingViewScale {
+  coordinateToPrice?: (y: number) => unknown
+  getVisiblePriceRange?: () => unknown
+  isInverted?: () => unknown
+}
+
+interface TradingViewPane {
+  getHeight?: () => unknown
+  getMainSourcePriceScale?: () => TradingViewScale | null | undefined
+}
+
+interface TradingViewChart {
+  crossHairMoved?: () => TradingViewSubscription
+  getPanes?: () => unknown
+  onDataLoaded?: () => TradingViewSubscription
+  onVisibleRangeChanged?: () => TradingViewSubscription
+  subscribeClick?: (handler: (param: unknown) => void) => void
+  unsubscribeClick?: (handler: (param: unknown) => void) => void
+}
+
+interface TvWidget {
+  activeChart?: () => TradingViewChart | null | undefined
+  chart?: () => TradingViewChart | null | undefined
+}
+
+interface CrosshairLike {
+  point?: { y?: unknown }
+  price?: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v)
 }
 
-function safeGetChart(widget: TvWidget): any | null {
+function safeGetChart(widget: TvWidget): TradingViewChart | null {
   try {
     return widget?.activeChart?.() || widget?.chart?.() || null
   } catch {
@@ -14,28 +51,28 @@ function safeGetChart(widget: TvWidget): any | null {
   }
 }
 
-function safeGetMainPane(chart: any): any | null {
+function safeGetMainPane(chart: TradingViewChart | null): TradingViewPane | null {
   try {
     const panes = chart?.getPanes?.()
-    return Array.isArray(panes) && panes.length ? panes[0] : null
+    return Array.isArray(panes) && panes.length && isRecord(panes[0]) ? panes[0] : null
   } catch {
     return null
   }
 }
 
-function safeGetVisiblePriceRange(chart: any): { from: number; to: number } | null {
+function safeGetVisiblePriceRange(chart: TradingViewChart | null): { from: number; to: number } | null {
   try {
     const pane = safeGetMainPane(chart)
     const scale = pane?.getMainSourcePriceScale?.()
     const range = scale?.getVisiblePriceRange?.()
-    if (!range || !isFiniteNumber(range.from) || !isFiniteNumber(range.to)) return null
+    if (!isRecord(range) || !isFiniteNumber(range.from) || !isFiniteNumber(range.to)) return null
     return { from: range.from, to: range.to }
   } catch {
     return null
   }
 }
 
-function safeGetPaneHeight(chart: any): number | null {
+function safeGetPaneHeight(chart: TradingViewChart | null): number | null {
   try {
     const pane = safeGetMainPane(chart)
     const h = pane?.getHeight?.()
@@ -45,7 +82,7 @@ function safeGetPaneHeight(chart: any): number | null {
   }
 }
 
-function safeGetMainScale(chart: any): any | null {
+function safeGetMainScale(chart: TradingViewChart | null): TradingViewScale | null {
   try {
     const pane = safeGetMainPane(chart)
     return pane?.getMainSourcePriceScale?.() || null
@@ -83,7 +120,7 @@ function safeGetPaneTopFromDom(containerEl: HTMLElement): number | null {
   }
 }
 
-function safeIsScaleInverted(chart: any): boolean {
+function safeIsScaleInverted(chart: TradingViewChart | null): boolean {
   try {
     const pane = safeGetMainPane(chart)
     const scale = pane?.getMainSourcePriceScale?.()
@@ -126,10 +163,12 @@ export function createTradingViewChartAdapter(args: {
     }
   }
 
-  const updatePaneTopFromCrosshair = (params: any) => {
+  const updatePaneTopFromCrosshair = (params: unknown) => {
     try {
-      const pt = params?.point
-      const price = params?.price
+      if (!isRecord(params)) return
+      const point = isRecord(params.point) ? params.point : null
+      const pt: CrosshairLike['point'] | null = point
+      const price = params.price
       if (!pt || !isFiniteNumber(pt.y) || !isFiniteNumber(price)) return
 
       refreshGeometry()
@@ -244,7 +283,7 @@ export function createTradingViewChartAdapter(args: {
     const chart = safeGetChart(args.widget)
     if (!chart) return () => {}
 
-    const handler = (p: any) => {
+    const handler = (p: unknown) => {
       updatePaneTopFromCrosshair(p)
       cb(p)
     }
@@ -264,7 +303,7 @@ export function createTradingViewChartAdapter(args: {
     const chart = safeGetChart(args.widget)
 
     // Prefer TradingView's own click subscription (works inside iframe).
-    const tvHandler = (p: any) => {
+    const tvHandler = (p: unknown) => {
       try {
         // Some builds provide point/price, some only provide point.
         // Reuse crosshair-based geometry update if possible.
@@ -311,10 +350,10 @@ export function createTradingViewChartAdapter(args: {
 
         // Use pointerdown only to avoid double-firing (pointerdown + mousedown) which would
         // immediately toggle the lock on/off in the liquidation-map click handler.
-        doc.addEventListener('pointerdown', handler as any, true)
+        doc.addEventListener('pointerdown', handler, true)
         return () => {
           try {
-            doc.removeEventListener('pointerdown', handler as any, true)
+            doc.removeEventListener('pointerdown', handler, true)
           } catch {
             // ignore
           }
@@ -351,4 +390,3 @@ export function createTradingViewChartAdapter(args: {
     getCurrentPrice: args.getCurrentPrice,
   }
 }
-

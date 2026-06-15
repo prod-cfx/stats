@@ -26,7 +26,14 @@ import {
 } from '@/lib/liquidation-map/mock-liquidation-map'
 import { logger } from '@/utils/logger'
 import { createMockDatafeed } from './mock-datafeed'
-import { extractLongShortRatioItems, getSafeChartFromWidget } from './trading-view-chart.helpers'
+import {
+  extractLongShortRatioItems,
+  findAndDedupeStudyByName,
+  getSafeChartFromWidget,
+  moveButtonsToHeaderRight,
+  resolveMaybePromiseId,
+  tryExecuteActionInsertIndicator,
+} from './trading-view-chart.helpers'
 
 // P2-6: TradingView 最小类型定义，替代 any
 // 这些类型基于 TradingView Charting Library 的实际 API，但由于库未提供完整类型，
@@ -224,43 +231,6 @@ const LiquidationMapChart = dynamic(
   () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
   { ssr: false, loading: () => null },
 )
-
-function resolveMaybePromiseId(maybe: any, onResolved: (id: string) => void) {
-  if (!maybe) return
-  if (typeof maybe?.then === 'function') {
-    void (maybe as Promise<any>)
-      .then(id => {
-        if (id) onResolved(String(id))
-      })
-      .catch(() => {
-        // ignore promise rejection
-      })
-    return
-  }
-  onResolved(String(maybe))
-}
-
-function findAndDedupeStudyByName(chart: any, studyName: string): string | null {
-  try {
-    const studies = chart?.getAllStudies?.() as Array<{ id: any; name: string }> | undefined
-    if (!Array.isArray(studies) || studies.length === 0) return null
-    const matches = studies.filter(s => s?.name === studyName)
-    if (matches.length === 0) return null
-    const keep = matches[0]
-    // Remove duplicates beyond the first one.
-    for (let i = 1; i < matches.length; i++) {
-      const s = matches[i]
-      try {
-        chart?.removeEntity?.(s.id)
-      } catch {
-        // ignore
-      }
-    }
-    return keep?.id ? String(keep.id) : null
-  } catch {
-    return null
-  }
-}
 
 function loadTradingViewScript(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve()
@@ -1207,92 +1177,6 @@ function createBodyDropdown(
   })
 
   return menu
-}
-
-function moveButtonsToHeaderRight(widget: any, buttons: HTMLElement[]) {
-  try {
-    const win =
-      (typeof widget?._innerWindow === 'function' ? widget._innerWindow() : undefined) ||
-      (widget?._iFrame?.contentWindow as Window | undefined) ||
-      (widget?._iframe?.contentWindow as Window | undefined) ||
-      (widget?.activeChart?.()?.contentWindow as Window | undefined)
-    const doc = win?.document
-    if (!doc) return
-
-    // 尽量找到 header 根节点
-    const headerRoot =
-      doc.querySelector('.header-chart-panel') ||
-      doc.querySelector('[class*="header-chart-panel"]') ||
-      doc.querySelector('.tradingview-widget-header') ||
-      doc.body
-    if (!headerRoot) return
-
-    // 只在“顶部区域”内找 header 按钮
-    const allButtons = Array.from(
-      headerRoot.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-    )
-      .map(b => ({ b, rect: b.getBoundingClientRect() }))
-      .filter(x => x.rect.width > 2 && x.rect.height > 2 && x.rect.top >= 0 && x.rect.top < 150)
-
-    if (allButtons.length === 0) {
-      // 兜底：如果找不到任何按钮，尝试直接 append 到 headerRoot
-      buttons.forEach(btn => headerRoot.appendChild(btn))
-      return
-    }
-
-    allButtons.sort((a, b) => b.rect.right - a.rect.right)
-    const rightmostBtn = allButtons[0].b
-
-    let group: HTMLElement | null = rightmostBtn.closest('div')
-    while (group) {
-      const cs = win.getComputedStyle(group)
-      if (cs.display === 'flex' && group.querySelectorAll('button').length >= 1) break
-      group = group.parentElement
-    }
-    if (!group) group = rightmostBtn.parentElement as HTMLElement | null
-    if (!group) return
-
-    const groupButtons = Array.from(
-      group.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-    )
-      .map(b => ({ b, rect: b.getBoundingClientRect() }))
-      .filter(x => x.rect.width > 2 && x.rect.height > 2)
-    groupButtons.sort((a, b) => b.rect.right - a.rect.right)
-    const anchor = groupButtons[0]?.b || null
-
-    // 放到最右侧：插入到 group 的最后一个按钮之后
-    buttons.forEach(btn => {
-      try {
-        if (anchor && anchor.parentElement === group) {
-          const next = anchor.nextSibling
-          if (next) group.insertBefore(btn, next)
-          else group.appendChild(btn)
-        } else {
-          group.appendChild(btn)
-        }
-      } catch {
-        // ignore
-      }
-    })
-  } catch {
-    // ignore
-  }
-}
-
-function tryExecuteActionInsertIndicator(widget: any) {
-  const chart = widget?.activeChart?.() || widget?.chart?.()
-  // Charting Library 不同版本暴露点略有差异，尽量兼容
-  try {
-    chart?.executeActionById?.('insertIndicator')
-    return
-  } catch {
-    // ignore
-  }
-  try {
-    widget?.activeChart?.()?.executeActionById?.('insertIndicator')
-  } catch {
-    // ignore
-  }
 }
 
 type TradingViewChartComponentProps = TradingViewChartProps & {

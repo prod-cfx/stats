@@ -3,7 +3,7 @@ import type { WidgetType } from '../widgets/widgets-catalog'
 export interface DashboardWidgetInstance {
   id: string
   type: WidgetType
-  config: Record<string, any>
+  config: DashboardWidgetConfig
 }
 
 export interface GridLayoutItem {
@@ -13,6 +13,12 @@ export interface GridLayoutItem {
   w: number
   h: number
 }
+
+export type DashboardWidgetConfigValue = string | number | boolean | null | DashboardWidgetConfigValue[] | {
+  [key: string]: DashboardWidgetConfigValue
+}
+
+export type DashboardWidgetConfig = Record<string, DashboardWidgetConfigValue>
 
 export interface DashboardDoc {
   id: string
