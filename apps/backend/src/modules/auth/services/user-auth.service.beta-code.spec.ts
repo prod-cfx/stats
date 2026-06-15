@@ -14,6 +14,7 @@ import { BetaCodeService } from '@/modules/beta-code/services/beta-code.service'
 import { AppRole } from '../rbac/permissions'
 import { UserAuthRepository } from '../repositories/user-auth.repository'
 import { UserAuthService } from './user-auth.service'
+import { VerificationCodeService } from './verification-code.service'
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),
@@ -92,6 +93,7 @@ describe('UserAuthService beta code creation flows', () => {
         { provide: CacheService, useValue: cacheService },
         { provide: TransactionEventsService, useValue: { afterCommit: jest.fn() } satisfies Partial<TransactionEventsService> },
         { provide: BetaCodeService, useValue: betaCodeService },
+        { provide: VerificationCodeService, useValue: {} satisfies Partial<VerificationCodeService> },
       ],
     }).compile()
 

@@ -17,7 +17,7 @@ import type { BindTelegramRequestDto } from '../dto/requests/bind-telegram.reque
 import type { CreateTelegramDesktopIntentRequestDto } from '../dto/requests/create-telegram-desktop-intent.request.dto'
 import type { TelegramBotWebhookRequestDto } from '../dto/requests/telegram-bot-webhook.request.dto'
 import type { TelegramDesktopExchangeRequestDto } from '../dto/requests/telegram-desktop-exchange.request.dto'
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { ErrorCode, PrincipalType, UserCredentialType, VerificationCodePurpose } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/JwtService，保留值导入
@@ -26,15 +26,12 @@ import { JwtService } from '@nestjs/jwt'
 import { Prisma } from '@/prisma/prisma.types'
 import { compare, hash } from 'bcrypt'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { EnvService } from '@/common/services/env.service'
-import { MailService } from '@/common/services/mail.service'
 import { CacheService } from '@/common/services/cache.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BetaCodeService } from '@/modules/beta-code/services/beta-code.service'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { UserAuthRepository } from '../repositories/user-auth.repository'
+import { VerificationCodeService } from './verification-code.service'
 import {
   EmailAlreadyTakenException,
   InvalidCredentialsException,
@@ -52,10 +49,6 @@ const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 
 const PASSWORD_SALT_ROUNDS = 10
 const DEFAULT_TOKEN_EXPIRES_SECONDS = 30 * 24 * 60 * 60 // 30 天
-const VERIFICATION_CODE_TTL_MINUTES = 15
-const FIXED_VERIFICATION_CODE_FOR_TEST = '123456'
-const VERIFICATION_CODE_MIN = 100000
-const VERIFICATION_CODE_MAX = 1000000
 const TELEGRAM_CREDENTIAL_PREFIX = 'telegram:'
 const TELEGRAM_PLACEHOLDER_DOMAIN = 'telegram.local'
 const TELEGRAM_AUTH_MAX_AGE_SECONDS = 5 * 60
@@ -86,11 +79,9 @@ export class UserAuthService {
     private readonly userAuthRepository: UserAuthRepository,
     @Inject(JwtService) private readonly jwtService: JwtService,
     @Inject(ConfigService) private readonly configService: ConfigService,
-    @Inject(MailService) private readonly mailService: MailService,
-    @Inject(EnvService) private readonly envService: EnvService,
     @Inject(CacheService) private readonly cacheService: CacheService,
-    private readonly txEvents: TransactionEventsService,
     private readonly betaCodeService: BetaCodeService,
+    private readonly verificationCodeService: VerificationCodeService,
   ) {
     this.tokenExpiresInSeconds = this.resolveExpiresInSeconds(
       this.configService.get<string | number>('jwt.expiresIn'),
@@ -155,25 +146,7 @@ export class UserAuthService {
   }
 
   async requestPasswordReset(dto: PasswordResetRequestDto): Promise<void> {
-    const email = this.normalizeEmail(dto.email)
-    const user = await this.userAuthRepository.findUserByEmail(email)
-    if (!user) {
-      // 防止邮箱枚举攻击：静默返回，不记录任何日志
-      return
-    }
-    const code = this.generateVerificationCode()
-    await this.userAuthRepository.createVerificationCode({
-      email,
-      code,
-      purpose: VerificationCodePurpose.PASSWORD_RESET,
-      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-    })
-
-    const maskedEmail = this.maskEmail(email)
-    this.txEvents.afterCommit(async () => {
-      await this.mailService.sendVerificationCode(email, code, 'password_reset')
-      this.logger.log(`Sent password reset code to ${maskedEmail}`)
-    })
+    await this.verificationCodeService.requestPasswordReset(dto)
   }
 
   async verifyPasswordReset(dto: VerifyPasswordResetRequestDto): Promise<void> {
@@ -200,58 +173,11 @@ export class UserAuthService {
   }
 
   async sendVerificationCode(dto: SendVerificationCodeRequestDto): Promise<void> {
-    const email = this.normalizeEmail(dto.email)
-
-    // 针对注册场景：检查邮箱是否已注册
-    if (dto.purpose === VerificationCodePurpose.EMAIL_VERIFICATION) {
-      const existingUser = await this.userAuthRepository.findUserByEmail(email)
-      if (existingUser) {
-        throw new EmailAlreadyTakenException({ email })
-      }
-    }
-
-    // 针对密码重置场景：检查用户是否存在
-    if (dto.purpose === VerificationCodePurpose.PASSWORD_RESET) {
-      const user = await this.userAuthRepository.findUserByEmail(email)
-      if (!user) {
-        // 防止邮箱枚举攻击：静默返回，不记录任何日志
-        return
-      }
-    }
-
-    const code = this.generateVerificationCode()
-    await this.userAuthRepository.createVerificationCode({
-      email,
-      code,
-      purpose: dto.purpose,
-      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-    })
-
-    // 邮件发送属于外部 I/O，移到事务提交后执行，避免长时间持锁
-    const purpose = dto.purpose === VerificationCodePurpose.EMAIL_VERIFICATION ? 'registration' : 'password_reset'
-    const maskedEmail = this.maskEmail(email)
-    this.txEvents.afterCommit(async () => {
-      await this.mailService.sendVerificationCode(email, code, purpose)
-      this.logger.log(`Sent ${dto.purpose} code to ${maskedEmail}`)
-    })
+    await this.verificationCodeService.sendVerificationCode(dto)
   }
 
   async sendEmailLoginCode(dto: SendEmailLoginCodeRequestDto): Promise<void> {
-    const email = this.normalizeEmail(dto.email)
-    const code = this.generateVerificationCode()
-
-    await this.userAuthRepository.createVerificationCode({
-      email,
-      code,
-      purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
-      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-    })
-
-    const maskedEmail = this.maskEmail(email)
-    this.txEvents.afterCommit(async () => {
-      await this.mailService.sendVerificationCode(email, code, 'registration')
-      this.logger.log(`Sent EMAIL_LOGIN code to ${maskedEmail}`)
-    })
+    await this.verificationCodeService.sendEmailLoginCode(dto)
   }
 
   async getTelegramLoginConfig(): Promise<{ botName: string | null, betaCodeGateEnabled: boolean }> {
@@ -609,25 +535,7 @@ export class UserAuthService {
   }
 
   async resendVerification(dto: ResendVerificationRequestDto): Promise<void> {
-    const email = this.normalizeEmail(dto.email)
-    const user = await this.userAuthRepository.findUserByEmail(email)
-    if (!user || user.emailVerified) {
-      // 静默返回，不记录任何日志（避免泄露用户状态）
-      return
-    }
-    const code = this.generateVerificationCode()
-    await this.userAuthRepository.createVerificationCode({
-      email,
-      code,
-      purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
-      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-    })
-    // 邮件发送属于外部 I/O，移到事务提交后执行
-    const maskedEmail = this.maskEmail(email)
-    this.txEvents.afterCommit(async () => {
-      await this.mailService.sendVerificationCode(email, code, 'registration')
-      this.logger.log(`Sent verification code to ${maskedEmail}`)
-    })
+    await this.verificationCodeService.resendVerification(dto)
   }
 
   private async ensureDefaultRoleAssignment(userId: string) {
@@ -965,48 +873,6 @@ export class UserAuthService {
       emailVerifiedAt: null,
       isGuest: true,
     })
-  }
-
-  /**
-   * 邮箱脱敏：保留前 2 位和域名，中间打码
-   * 例如：user@example.com -> us***@example.com
-   */
-  private maskEmail(email: string): string {
-    const [localPart, domain] = email.split('@')
-    if (!domain || localPart.length <= 2) {
-      return `***@${  domain || '***'}`
-    }
-    return `${localPart.slice(0, 2)}***@${domain}`
-  }
-
-  private generateVerificationCode(): string {
-    // 仅在本地开发和单元测试环境使用固定验证码
-    // staging/e2e/production 等环境使用随机验证码以保证安全性
-    const appEnv = this.configService.get<string>('app.appEnv')
-    const useFixedCode = this.envService.isDev() || appEnv === 'test'
-
-    if (useFixedCode) {
-      this.logger.debug('Using fixed verification code for local development/testing')
-      return FIXED_VERIFICATION_CODE_FOR_TEST
-    }
-
-    const isStaging = appEnv === 'staging'
-    const stagingFixedOtpEnabled = isStaging && this.envService.getBoolean('STAGING_FIXED_EMAIL_OTP_ENABLED', false) === true
-    if (stagingFixedOtpEnabled) {
-      const configuredCode = this.envService.getString('STAGING_FIXED_EMAIL_OTP_CODE')?.trim()
-      const fixedCode = /^\d{6}$/.test(configuredCode ?? '')
-        ? configuredCode!
-        : FIXED_VERIFICATION_CODE_FOR_TEST
-      this.logger.warn('Using fixed verification code for staging because STAGING_FIXED_EMAIL_OTP_ENABLED=true')
-      return fixedCode
-    }
-
-    this.logger.debug('Using random verification code for non-development environments')
-    return randomInt(VERIFICATION_CODE_MIN, VERIFICATION_CODE_MAX).toString()
-  }
-
-  private addMinutes(date: Date, minutes: number): Date {
-    return new Date(date.getTime() + minutes * 60 * 1000)
   }
 
   private resolveExpiresInSeconds(value?: string | number | null): number {

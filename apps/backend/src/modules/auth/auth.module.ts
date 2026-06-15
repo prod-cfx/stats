@@ -22,6 +22,7 @@ import { AuditLogService } from './services/audit-log.service'
 import { PermissionCacheService } from './services/permission-cache.service'
 import { PermissionService } from './services/permission.service'
 import { UserAuthService } from './services/user-auth.service'
+import { VerificationCodeService } from './services/verification-code.service'
 import { JwtStrategy } from './strategies/jwt.strategy'
 
 @Module({
@@ -66,6 +67,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
     PermissionCacheService,
     AuditLogService,
     UserAuthService,
+    VerificationCodeService,
     MailService,
   ],
   exports: [
