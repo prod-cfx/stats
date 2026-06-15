@@ -62,7 +62,7 @@ function buildPlazaEditBacktestDraftConfig(
   const priceSource = template.runConfig.deploymentExecutionConfig.priceSource as unknown
 
   return {
-    range: { preset: '30D' },
+    range: { preset: '7D' },
     execution: {
       initialCash: 10000,
       leverage: template.runConfig.marketType === 'spot' ? 1 : template.runConfig.leverage ?? 1,

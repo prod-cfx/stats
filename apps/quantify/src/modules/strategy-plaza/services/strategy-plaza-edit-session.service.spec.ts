@@ -5,20 +5,6 @@ import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strateg
 import { buildOfficialTemplateBacktestConfigDefaults } from '../utils/official-strategy-plaza-snapshot-content'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
-const thirtyDayBacktestDraftConfig = {
-  range: {
-    preset: '30D' as const,
-  },
-  execution: {
-    initialCash: 10000,
-    leverage: 2,
-    slippageBps: 10,
-    feeBps: 5,
-    priceSource: 'close' as const,
-    allowPartial: false,
-  },
-}
-
 describe('StrategyPlazaEditSessionService', () => {
   it('compiles in Nest without a custom backtest draft builder provider', async () => {
     const moduleRef = await Test.createTestingModule({
@@ -82,7 +68,7 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-1',
       'user-1',
       expect.objectContaining({
-        range: expect.objectContaining({ preset: '30D' }),
+        range: expect.objectContaining({ preset: '7D' }),
         execution: expect.objectContaining({ leverage: 2, allowPartial: false }),
       }),
     )
@@ -189,7 +175,7 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(result.initialMessage).toBe('Create a MA crossover strategy')
   })
 
-  it('persists a 30D backtest range for plaza edit conversations', async () => {
+  it('persists a 7D backtest range for plaza edit conversations', async () => {
     const template = {
       id: 'orderbook-imbalance-long',
       editSeed: {
@@ -221,23 +207,23 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
       'conversation-book',
       'user-1',
-      thirtyDayBacktestDraftConfig,
+      expect.objectContaining({ range: { preset: '7D' } }),
     )
   })
 
-  it('uses the verified evidence backtest window for templates that depend on external event feeds', () => {
+  it('uses the 7D default backtest window for templates that depend on external event feeds', () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const fundingOiTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'funding-oi-confirmation')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(orderbookTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
+      range: expect.objectContaining({ preset: '7D' }),
     }))
     expect(buildOfficialTemplateBacktestConfigDefaults(fundingOiTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: 'CUSTOM', startAt: expect.any(String), endAt: expect.any(String) }),
+      range: expect.objectContaining({ preset: '7D' }),
     }))
   })
 
-  it('persists a 30D backtest range when using the default draft builder', async () => {
+  it('persists a 7D backtest range when using the default draft builder', async () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const templates = { getRequired: jest.fn().mockReturnValue(orderbookTemplate) }
     const codegenConversationService = {
@@ -255,7 +241,7 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-book',
       'user-1',
       expect.objectContaining({
-        range: expect.objectContaining({ preset: '30D' }),
+        range: expect.objectContaining({ preset: '7D' }),
       }),
     )
   })
@@ -296,21 +282,17 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-dca',
       'user-1',
       expect.objectContaining({
-        range: { preset: '30D' },
+        range: { preset: '7D' },
         execution: expect.objectContaining({ leverage: 2 }),
       }),
     )
   })
 
-  it('keeps the verified fixed backtest window for templates without external event feeds', () => {
+  it('uses the 7D default backtest window for templates without external event feeds', () => {
     const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({
-        preset: 'CUSTOM',
-        startAt: expect.any(String),
-        endAt: expect.any(String),
-      }),
+      range: expect.objectContaining({ preset: '7D' }),
     }))
   })
 })

@@ -37,8 +37,6 @@ export function buildOfficialTemplateStrategyConfig(template: OfficialStrategyPl
 }
 
 export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
-  const evidence = evidenceFor(template)
-
   return {
     initialCash: 10000,
     leverage: resolveOfficialTemplateLeverage(template),
@@ -46,11 +44,7 @@ export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialSt
     feeBps: 5,
     priceSource: resolveOfficialTemplateBacktestPriceSource(template.runConfig.deploymentExecutionConfig.priceSource),
     allowPartial: false,
-    range: {
-      preset: 'CUSTOM',
-      startAt: new Date(evidence.backtestFrom).toISOString(),
-      endAt: new Date(evidence.backtestTo).toISOString(),
-    },
+    range: { preset: '7D' },
   }
 }
 
