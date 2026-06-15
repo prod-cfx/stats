@@ -1,4 +1,3 @@
-import type { AdminUserListQueryDto } from '../dto/admin-user-list.dto'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query } from '@nestjs/common'
 import {
@@ -18,6 +17,7 @@ import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { AdminLoginDto, AdminRefreshDto } from '../dto/admin-login.dto'
+import { AdminUserListQueryDto } from '../dto/admin-user-list.dto'
 import { AdminUserInfoDto } from '../dto/admin-user-info.dto'
 import { AdminUserDto, CreateAdminUserDto, UpdateAdminUserDto } from '../dto/admin-user.dto'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -153,4 +153,3 @@ export class AdminUserController {
     await this.adminUserService.delete(id)
   }
 }
-

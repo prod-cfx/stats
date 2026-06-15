@@ -1,4 +1,3 @@
-import type { AdminRoleListQueryDto } from '../dto/admin-role-list.dto'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common'
 import {
@@ -16,6 +15,7 @@ import { BaseResponseDto } from '@/common/dto/base.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { AdminDeleteResultResponseDto } from '../dto/admin-operation-result.response.dto'
+import { AdminRoleListQueryDto } from '../dto/admin-role-list.dto'
 import { CreateAdminRoleDto, UpdateAdminRoleDto } from '../dto/admin-role.dto'
 import { AdminRoleResponseDto } from '../dto/admin-role.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -123,4 +123,3 @@ export class AdminRoleController {
     return { success: true }
   }
 }
-
