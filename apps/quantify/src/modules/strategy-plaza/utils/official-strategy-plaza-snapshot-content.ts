@@ -44,7 +44,7 @@ export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialSt
     feeBps: 5,
     priceSource: resolveOfficialTemplateBacktestPriceSource(template.runConfig.deploymentExecutionConfig.priceSource),
     allowPartial: false,
-    range: { preset: '7D' },
+    range: { preset: '30D' },
   }
 }
 

@@ -68,7 +68,7 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-1',
       'user-1',
       expect.objectContaining({
-        range: expect.objectContaining({ preset: '7D' }),
+        range: expect.objectContaining({ preset: '30D' }),
         execution: expect.objectContaining({ leverage: 2, allowPartial: false }),
       }),
     )
@@ -175,7 +175,7 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(result.initialMessage).toBe('Create a MA crossover strategy')
   })
 
-  it('persists a 7D backtest range for plaza edit conversations', async () => {
+  it('persists a 30D backtest range for plaza edit conversations', async () => {
     const template = {
       id: 'orderbook-imbalance-long',
       editSeed: {
@@ -207,23 +207,23 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
       'conversation-book',
       'user-1',
-      expect.objectContaining({ range: { preset: '7D' } }),
+      expect.objectContaining({ range: { preset: '30D' } }),
     )
   })
 
-  it('uses the 7D default backtest window for templates that depend on external event feeds', () => {
+  it('uses the 30D default backtest window for templates that depend on external event feeds', () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const fundingOiTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'funding-oi-confirmation')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(orderbookTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: '7D' }),
+      range: expect.objectContaining({ preset: '30D' }),
     }))
     expect(buildOfficialTemplateBacktestConfigDefaults(fundingOiTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: '7D' }),
+      range: expect.objectContaining({ preset: '30D' }),
     }))
   })
 
-  it('persists a 7D backtest range when using the default draft builder', async () => {
+  it('persists a 30D backtest range when using the default draft builder', async () => {
     const orderbookTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'orderbook-imbalance-long')!
     const templates = { getRequired: jest.fn().mockReturnValue(orderbookTemplate) }
     const codegenConversationService = {
@@ -241,7 +241,7 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-book',
       'user-1',
       expect.objectContaining({
-        range: expect.objectContaining({ preset: '7D' }),
+        range: expect.objectContaining({ preset: '30D' }),
       }),
     )
   })
@@ -282,17 +282,17 @@ describe('StrategyPlazaEditSessionService', () => {
       'conversation-dca',
       'user-1',
       expect.objectContaining({
-        range: { preset: '7D' },
+        range: { preset: '30D' },
         execution: expect.objectContaining({ leverage: 2 }),
       }),
     )
   })
 
-  it('uses the 7D default backtest window for templates without external event feeds', () => {
+  it('uses the 30D default backtest window for templates without external event feeds', () => {
     const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
 
     expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
-      range: expect.objectContaining({ preset: '7D' }),
+      range: expect.objectContaining({ preset: '30D' }),
     }))
   })
 })

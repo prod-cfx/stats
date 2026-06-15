@@ -543,7 +543,7 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
           feeBps: 5,
           priceSource: 'close',
           allowPartial: false,
-          range: { preset: '7D' },
+          range: { preset: '30D' },
         },
         deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
         deploymentExecutionConstraints: {
