@@ -1,5 +1,6 @@
 import type { LoggerService } from '@nestjs/common'
 import type { ConfigService } from '@nestjs/config'
+import type { EnvService } from './env.service'
 import Redis from 'ioredis'
 import { RedisService } from './redis.service'
 
@@ -25,6 +26,23 @@ function createLogger(): LoggerService {
   }
 }
 
+function createEnvService(values: {
+  isTest?: boolean
+  isE2E?: boolean
+  shouldSkipRedisConnect?: boolean
+  useMockData?: boolean
+} = {}) {
+  return {
+    isTest: jest.fn(() => values.isTest ?? false),
+    isE2E: jest.fn(() => values.isE2E ?? false),
+    shouldSkipRedisConnect: jest.fn(() => values.shouldSkipRedisConnect ?? false),
+    getBoolean: jest.fn((key: string, defaultValue?: boolean) => {
+      if (key === 'USE_MOCK_DATA') return values.useMockData ?? defaultValue
+      return defaultValue
+    }),
+  } as unknown as EnvService
+}
+
 describe('RedisService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -37,13 +55,28 @@ describe('RedisService', () => {
       USE_MOCK_DATA: false,
     })
     const logger = createLogger()
+    const envService = createEnvService()
 
-    expect(() => new RedisService(configService, logger)).toThrow()
+    expect(() => new RedisService(configService, logger, envService)).toThrow()
     expect(Redis).not.toHaveBeenCalled()
     expect(logger.error).toHaveBeenCalledWith(
       '[RedisService] constructor: failed to create redis client',
       expect.any(Error),
     )
+  })
+
+  it('does not enable mock mode when USE_MOCK_DATA is the string false', () => {
+    const configService = createConfigService({
+      'app.appEnv': 'production',
+      'redis.url': undefined,
+      USE_MOCK_DATA: 'false',
+    })
+    const logger = createLogger()
+    const envService = createEnvService({ useMockData: false })
+
+    expect(() => new RedisService(configService, logger, envService)).toThrow()
+    expect(Redis).not.toHaveBeenCalled()
+    expect(jest.mocked(envService.getBoolean)).toHaveBeenCalledWith('USE_MOCK_DATA', false)
   })
 
   it('uses the mock client in test when REDIS_URL is missing', () => {
@@ -53,34 +86,31 @@ describe('RedisService', () => {
       USE_MOCK_DATA: false,
     })
     const logger = createLogger()
+    const envService = createEnvService({ isTest: true })
 
-    const service = new RedisService(configService, logger)
+    const service = new RedisService(configService, logger, envService)
 
     expect(service.isReady()).toBe(true)
     expect(Redis).not.toHaveBeenCalled()
     expect(logger.warn).toHaveBeenCalledWith('[RedisService] mock redis mode is enabled, using mock redis client')
+    expect(jest.mocked(envService.isTest)).toHaveBeenCalled()
   })
 
-  it('uses the mock client when SKIP_REDIS_CONNECT=true even in production with REDIS_URL present', () => {
-    const prev = process.env.SKIP_REDIS_CONNECT
-    process.env.SKIP_REDIS_CONNECT = 'true'
-    try {
-      const configService = createConfigService({
-        'app.appEnv': 'production',
-        'redis.url': 'redis://localhost:6379/0',
-        USE_MOCK_DATA: false,
-      })
-      const logger = createLogger()
+  it('uses the mock client when EnvService says redis connect should be skipped', () => {
+    const configService = createConfigService({
+      'app.appEnv': 'production',
+      'redis.url': 'redis://localhost:6379/0',
+      USE_MOCK_DATA: false,
+    })
+    const logger = createLogger()
+    const envService = createEnvService({ shouldSkipRedisConnect: true })
 
-      const service = new RedisService(configService, logger)
+    const service = new RedisService(configService, logger, envService)
 
-      expect(service.isReady()).toBe(true)
-      expect(Redis).not.toHaveBeenCalled()
-      expect(logger.warn).toHaveBeenCalledWith('[RedisService] mock redis mode is enabled, using mock redis client')
-    } finally {
-      if (prev === undefined) delete process.env.SKIP_REDIS_CONNECT
-      else process.env.SKIP_REDIS_CONNECT = prev
-    }
+    expect(service.isReady()).toBe(true)
+    expect(Redis).not.toHaveBeenCalled()
+    expect(jest.mocked(envService.shouldSkipRedisConnect)).toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith('[RedisService] mock redis mode is enabled, using mock redis client')
   })
 
   it('creates a real client from REDIS_URL outside mock mode', () => {
@@ -90,8 +120,9 @@ describe('RedisService', () => {
       USE_MOCK_DATA: false,
     })
     const logger = createLogger()
+    const envService = createEnvService()
 
-    const service = new RedisService(configService, logger)
+    const service = new RedisService(configService, logger, envService)
 
     expect(service.isReady()).toBe(true)
     expect(Redis).toHaveBeenCalledWith('redis://localhost:6379/0')

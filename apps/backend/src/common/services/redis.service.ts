@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config'
 import Redis from 'ioredis'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { EnvService } from './env.service'
 
 @Injectable()
 export class RedisService implements OnApplicationShutdown {
@@ -13,6 +14,7 @@ export class RedisService implements OnApplicationShutdown {
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER) private readonly logger: LoggerService,
+    private readonly envService: EnvService,
   ) {
     this.logger.debug?.('[RedisService] constructor: creating client...')
     try {
@@ -38,16 +40,15 @@ export class RedisService implements OnApplicationShutdown {
     // Swagger/OpenAPI 导出只读路由元数据，不触达 Redis；跳过真实连接，
     // 避免脱离 dx env 注入（如 dart SDK 生成直调 nx run backend:swagger）时
     // 因 REDIS_URL 缺省而抛 redis.connection_error。与 SKIP_PRISMA_CONNECT 同源约定。
-    if (process.env.SKIP_REDIS_CONNECT === 'true') {
+    if (this.envService.shouldSkipRedisConnect()) {
       return true
     }
 
-    if (this.configService.get<boolean>('USE_MOCK_DATA', false)) {
+    if (this.envService.getBoolean('USE_MOCK_DATA', false) === true) {
       return true
     }
 
-    const appEnv = this.configService.get<string>('app.appEnv') ?? process.env.APP_ENV ?? process.env.NODE_ENV
-    return appEnv === 'test' || appEnv === 'e2e'
+    return this.envService.isTest() || this.envService.isE2E()
   }
 
   private createMockClient(): Redis {

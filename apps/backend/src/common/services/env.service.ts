@@ -10,6 +10,11 @@ export class EnvService {
   constructor(@Inject(ConfigService) private readonly configService: ConfigService) {}
 
   private resolveAppEnv(): AppEnv {
+    const configuredAppEnv = this.configService?.get<string>('app.appEnv')
+    if (configuredAppEnv) {
+      return normalizeAppEnv(configuredAppEnv)
+    }
+
     const rawAppEnv = this.configService?.get<string>('APP_ENV') ?? process.env.APP_ENV
     if (rawAppEnv) {
       return normalizeAppEnv(rawAppEnv)
@@ -45,6 +50,14 @@ export class EnvService {
 
   isDebugMode(): boolean {
     return this.configService?.get<string>('DEBUG') === 'true'
+  }
+
+  isSwaggerExport(): boolean {
+    return this.getBoolean('BACKEND_SWAGGER_EXPORT', false) === true
+  }
+
+  shouldSkipRedisConnect(): boolean {
+    return this.getBoolean('SKIP_REDIS_CONNECT', false) === true || this.isSwaggerExport()
   }
 
   getString(key: string, defaultValue?: string): string | undefined {
