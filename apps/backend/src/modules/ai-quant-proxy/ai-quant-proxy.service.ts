@@ -23,8 +23,11 @@ import type {
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { AccountExchangeAccountsService } from '@/modules/account-exchange-accounts/account-exchange-accounts.service'
-import { QuantifyAiQuantClient, QuantifyClientError } from './clients/quantify-ai-quant.client'
+import { AccountAiQuantStrategiesProxyService } from './account-ai-quant-strategies-proxy.service'
+import { AiQuantProxySupportService } from './ai-quant-proxy-support.service'
+import { QuantifyAiQuantClient } from './clients/quantify-ai-quant.client'
+import { LlmStrategyInstancesProxyService } from './llm-strategy-instances-proxy.service'
+import { LlmStrategySubscriptionsProxyService } from './llm-strategy-subscriptions-proxy.service'
 
 @Injectable()
 export class AiQuantProxyService {
@@ -36,21 +39,19 @@ export class AiQuantProxyService {
   private static readonly BACKTEST_JOB_BACKOFF_BASE_MS = 200
   private static readonly BACKTEST_JOB_BACKOFF_MAX_MS = 800
   private static readonly CODEGEN_REQUEST_TIMEOUT_MS = 60_000
-  private static readonly DEPLOY_RETRY_ATTEMPTS = 3
-  private static readonly DEPLOY_BACKOFF_BASE_MS = 200
-  private static readonly DEPLOY_BACKOFF_MAX_MS = 1_000
-  private static readonly DEPLOY_BACKOFF_JITTER_MS = 80
-  private static readonly TRANSIENT_UPSTREAM_CODES = new Set([
-    'UPSTREAM_REQUEST_FAILED',
-    'UPSTREAM_INVALID_RESPONSE',
-  ])
   private readonly logger = new Logger(AiQuantProxyService.name)
 
   constructor(
     @Inject(QuantifyAiQuantClient)
     private readonly quantifyClient: QuantifyAiQuantClient,
-    @Inject(AccountExchangeAccountsService)
-    private readonly exchangeAccountsService: AccountExchangeAccountsService,
+    @Inject(AiQuantProxySupportService)
+    private readonly support: AiQuantProxySupportService,
+    @Inject(AccountAiQuantStrategiesProxyService)
+    private readonly accountStrategiesService: AccountAiQuantStrategiesProxyService,
+    @Inject(LlmStrategyInstancesProxyService)
+    private readonly llmInstancesService: LlmStrategyInstancesProxyService,
+    @Inject(LlmStrategySubscriptionsProxyService)
+    private readonly llmSubscriptionsService: LlmStrategySubscriptionsProxyService,
   ) {}
 
   async listAccountStrategies(
@@ -58,10 +59,7 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     query: Record<string, string | number | boolean | undefined>,
   ): Promise<BasePaginationResponseDto<AccountAiQuantStrategyListItemResponseDto>> {
-    return this.quantifyClient.listAccountStrategies<BasePaginationResponseDto<AccountAiQuantStrategyListItemResponseDto>>(query, {
-      userId,
-      headers: this.userHeaders(userId, authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.accountStrategiesService.listAccountStrategies(userId, authorization, query)
   }
 
   async getAccountStrategyDetail(
@@ -69,10 +67,7 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     strategyId: string,
   ): Promise<AccountAiQuantStrategyDetailResponseDto> {
-    return this.quantifyClient.getAccountStrategyDetail<AccountAiQuantStrategyDetailResponseDto>(strategyId, {
-      userId,
-      headers: this.userHeaders(userId, authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.accountStrategiesService.getAccountStrategyDetail(userId, authorization, strategyId)
   }
 
   async getDeployResult(
@@ -80,10 +75,7 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     deployRequestId: string,
   ): Promise<AccountAiQuantStrategyDeployResultResponseDto> {
-    return this.quantifyClient.getDeployResult<AccountAiQuantStrategyDeployResultResponseDto>(deployRequestId, {
-      userId,
-      headers: this.userHeaders(userId, authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.accountStrategiesService.getDeployResult(userId, authorization, deployRequestId)
   }
 
   async performAccountStrategyAction(
@@ -92,11 +84,7 @@ export class AiQuantProxyService {
     strategyId: string,
     body: Record<string, unknown>,
   ): Promise<AccountAiQuantStrategyDetailResponseDto> {
-    return this.quantifyClient.performAccountStrategyAction<AccountAiQuantStrategyDetailResponseDto>(
-      strategyId,
-      { ...body, userId },
-      { userId, headers: this.userHeaders(userId, authorization) },
-    ).catch(error => { throw this.mapQuantifyError(error) })
+    return this.accountStrategiesService.performAccountStrategyAction(userId, authorization, strategyId, body)
   }
 
   async deployAccountStrategy(
@@ -104,55 +92,7 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     body: Record<string, unknown>,
   ): Promise<AccountAiQuantStrategyDetailResponseDto> {
-    await this.assertExchangeAccountExists(userId, body.exchangeAccountId)
-
-    const payload: Record<string, unknown> = {
-      userId,
-      name: body.name,
-      deployRequestId: body.deployRequestId,
-      publishedSnapshotId: body.publishedSnapshotId,
-    }
-    if (body.exchangeAccountId !== undefined) payload.exchangeAccountId = body.exchangeAccountId
-    if (body.exchangeAccountName !== undefined) payload.exchangeAccountName = body.exchangeAccountName
-    if (body.deploymentExecutionConfig !== undefined) {
-      payload.deploymentExecutionConfig = body.deploymentExecutionConfig
-    }
-
-    for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
-      try {
-        return await this.quantifyClient.deployAccountStrategy<AccountAiQuantStrategyDetailResponseDto>(
-          payload,
-          { userId, headers: this.userHeaders(userId, authorization) },
-        )
-      } catch (error) {
-        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
-        const isLastAttempt = attempt >= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS
-        if (!isTransientUpstreamFailure || isLastAttempt) {
-          if (isTransientUpstreamFailure) {
-            const reconciledResult = await this.tryReconcileTransientDeployResult(
-              userId,
-              authorization,
-              body.deployRequestId,
-            )
-            if (reconciledResult) {
-              this.logger.warn(
-                `event=deploy_reconciled_after_transient_failure deployRequestId=${String(body.deployRequestId ?? '')} reason=${this.describeError(error)}`,
-              )
-              // 瞬时失败后用 deploy-result 兜底，运行期结构不变；仅类型层归一到 deploy 主返回契约
-              return reconciledResult as unknown as AccountAiQuantStrategyDetailResponseDto
-            }
-          }
-          throw this.mapQuantifyError(error)
-        }
-        this.logger.warn(`event=deploy_retry reason=${this.describeError(error)} attempt=${attempt}`)
-        await this.sleep(this.getDeployBackoffMs(attempt))
-      }
-    }
-
-    throw new DomainException('Quantify request failed', {
-      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-      status: HttpStatus.SERVICE_UNAVAILABLE,
-    })
+    return this.accountStrategiesService.deployAccountStrategy(userId, authorization, body)
   }
 
   async updateAccountStrategyExecutionLeverage(
@@ -161,28 +101,7 @@ export class AiQuantProxyService {
     strategyId: string,
     body: Record<string, unknown>,
   ): Promise<AccountAiQuantStrategyDetailResponseDto> {
-    return this.quantifyClient.updateAccountStrategyExecutionLeverage<AccountAiQuantStrategyDetailResponseDto>(
-      strategyId,
-      { userId, leverage: body.leverage },
-      { userId, headers: this.userHeaders(userId, authorization) },
-    ).catch(error => { throw this.mapQuantifyError(error) })
-  }
-
-  private async assertExchangeAccountExists(userId: string, exchangeAccountId: unknown): Promise<void> {
-    if (typeof exchangeAccountId !== 'string' || exchangeAccountId.trim().length === 0) return
-
-    const accounts = await this.exchangeAccountsService.list(userId)
-    const exists = accounts.some(account => account.id === exchangeAccountId)
-    if (exists) return
-
-    throw new DomainException('exchange account not found', {
-      code: ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
-      status: HttpStatus.NOT_FOUND,
-      args: {
-        accountId: exchangeAccountId,
-        reasonMessage: 'exchange account not found',
-      },
-    })
+    return this.accountStrategiesService.updateAccountStrategyExecutionLeverage(userId, authorization, strategyId, body)
   }
 
   async deleteAccountStrategy(
@@ -191,11 +110,7 @@ export class AiQuantProxyService {
     strategyId: string,
     options: { deleteStoppedStrategy?: boolean } = {},
   ): Promise<void> {
-    await this.quantifyClient.deleteAccountStrategy(strategyId, {
-      userId,
-      headers: this.userHeaders(userId, authorization),
-      deleteStoppedStrategy: options.deleteStoppedStrategy === true,
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    await this.accountStrategiesService.deleteAccountStrategy(userId, authorization, strategyId, options)
   }
 
   async startCodegen(
@@ -325,17 +240,11 @@ export class AiQuantProxyService {
     userId: string | undefined,
     query: Record<string, string | number | undefined>,
   ): Promise<BasePaginationResponseDto<LlmStrategyInstanceResponseDto>> {
-    return this.quantifyClient.listLlmInstances<BasePaginationResponseDto<LlmStrategyInstanceResponseDto>>({
-      page: query.page,
-      limit: query.limit,
-      llmModel: query.llmModel,
-      strategyId: query.strategyId,
-      userId,
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmInstancesService.listLlmInstances(userId, query)
   }
 
   async getLlmInstanceDetail(id: string, userId?: string): Promise<LlmStrategyInstanceResponseDto> {
-    return this.quantifyClient.getLlmInstanceDetail<LlmStrategyInstanceResponseDto>(id, userId).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmInstancesService.getLlmInstanceDetail(id, userId)
   }
 
   async listLlmInstanceSignals(
@@ -343,45 +252,30 @@ export class AiQuantProxyService {
     id: string,
     query: Record<string, string | number | undefined>,
   ): Promise<BasePaginationResponseDto<LlmStrategyInstanceSignalResponseDto>> {
-    return this.quantifyClient.listLlmInstanceSignals<BasePaginationResponseDto<LlmStrategyInstanceSignalResponseDto>>(id, {
-      userId,
-      page: query.page,
-      limit: query.limit,
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmInstancesService.listLlmInstanceSignals(userId, id, query)
   }
 
   async createLlmSubscription(userId: string, body: Record<string, unknown>): Promise<LlmSubscriptionResponseDto> {
-    return this.quantifyClient.createLlmSubscription<LlmSubscriptionResponseDto>({
-      ...body,
-      userId,
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmSubscriptionsService.createLlmSubscription(userId, body)
   }
 
   async listLlmSubscriptions(
     userId: string,
     query: Record<string, string | number | undefined>,
   ): Promise<BasePaginationResponseDto<LlmSubscriptionResponseDto>> {
-    return this.quantifyClient.listLlmSubscriptions<BasePaginationResponseDto<LlmSubscriptionResponseDto>>({
-      userId,
-      page: query.page,
-      limit: query.limit,
-      status: query.status,
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmSubscriptionsService.listLlmSubscriptions(userId, query)
   }
 
   async getLlmSubscriptionDetail(userId: string, subscriptionId: string): Promise<LlmSubscriptionResponseDto> {
-    return this.quantifyClient.getLlmSubscriptionDetail<LlmSubscriptionResponseDto>(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmSubscriptionsService.getLlmSubscriptionDetail(userId, subscriptionId)
   }
 
   async updateLlmSubscription(userId: string, subscriptionId: string, body: Record<string, unknown>): Promise<LlmSubscriptionResponseDto> {
-    return this.quantifyClient.updateLlmSubscription<LlmSubscriptionResponseDto>(subscriptionId, {
-      ...body,
-      userId,
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmSubscriptionsService.updateLlmSubscription(userId, subscriptionId, body)
   }
 
   async cancelLlmSubscription(userId: string, subscriptionId: string): Promise<void> {
-    return this.quantifyClient.cancelLlmSubscription(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
+    return this.llmSubscriptionsService.cancelLlmSubscription(userId, subscriptionId)
   }
 
   async getBacktestCapabilities(
@@ -501,111 +395,31 @@ export class AiQuantProxyService {
   }
 
   private userHeaders(userId: string, authorization: string | undefined) {
-    return {
-      'x-user-id': userId,
-      ...(authorization ? { authorization } : {}),
-    }
+    return this.support.userHeaders(userId, authorization)
   }
 
   private authorizationHeaders(authorization: string | undefined) {
-    return authorization ? { authorization } : {}
+    return this.support.authorizationHeaders(authorization)
   }
 
   private proxyHeaders(authorization: string | undefined, requestId?: string) {
-    return {
-      ...(authorization ? { authorization } : {}),
-      ...(requestId ? { 'x-request-id': requestId } : {}),
-    }
+    return this.support.proxyHeaders(authorization, requestId)
   }
 
   private userProxyHeaders(userId: string, authorization: string | undefined, requestId?: string) {
-    return {
-      ...this.userHeaders(userId, authorization),
-      ...(requestId ? { 'x-request-id': requestId } : {}),
-    }
+    return this.support.userProxyHeaders(userId, authorization, requestId)
   }
 
   private mapQuantifyError(error: unknown): DomainException {
-    if (this.isTransientUpstreamFailure(error)) {
-      return this.buildTransientUnavailableException(error)
-    }
-
-    if (error instanceof QuantifyClientError) {
-      return this.toDomainException(error.status, error.code, error.args, error.message)
-    }
-
-    if (this.isQuantifyErrorShape(error)) {
-      return this.toDomainException(error.status, error.code, error.args, error.message)
-    }
-
-    if (error instanceof DomainException) {
-      return error
-    }
-
-    return new DomainException('Quantify request failed', {
-      code: ErrorCode.INTERNAL_SERVER_ERROR,
-      status: HttpStatus.INTERNAL_SERVER_ERROR,
-    })
-  }
-
-  private buildTransientUnavailableException(error: unknown): DomainException {
-    return new DomainException('量化服务暂时不可用，请稍后重试', {
-      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-      status: HttpStatus.SERVICE_UNAVAILABLE,
-      args: {
-        reasonMessage: '量化服务暂时不可用，请稍后重试',
-        retryable: true,
-        upstreamCode: this.getQuantifyErrorCode(error),
-      },
-    })
-  }
-
-  private toDomainException(
-    status: number,
-    code: string | undefined,
-    args: Record<string, unknown> | undefined,
-    fallbackMessage: string,
-  ): DomainException {
-    return new DomainException(
-      typeof args?.reasonMessage === 'string' ? args.reasonMessage : fallbackMessage,
-      {
-        code: (code as ErrorCode | undefined) ?? ErrorCode.BAD_REQUEST,
-        args,
-        status,
-      },
-    )
-  }
-
-  private isQuantifyErrorShape(error: unknown): error is {
-    status: number
-    code?: string
-    args?: Record<string, unknown>
-    message: string
-  } {
-    return typeof error === 'object'
-      && error !== null
-      && 'status' in error
-      && typeof (error as { status?: unknown }).status === 'number'
-      && 'message' in error
-      && typeof (error as { message?: unknown }).message === 'string'
+    return this.support.mapQuantifyError(error)
   }
 
   private mapBacktestingJobError(error: unknown, requestId?: string): DomainException {
-    if (this.isTransientUpstreamFailure(error)) {
-      this.logger.warn(
-        `event=backtesting_job_retryable_error reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'}`,
-      )
-      return new DomainException('Backtesting upstream temporarily unavailable', {
-        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-        status: HttpStatus.SERVICE_UNAVAILABLE,
-      })
-    }
-    return this.mapQuantifyError(error)
+    return this.support.mapBacktestingJobError(error, requestId)
   }
 
   private isTransientUpstreamFailure(error: unknown): boolean {
-    const code = this.getQuantifyErrorCode(error)
-    return typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code)
+    return this.support.isTransientUpstreamFailure(error)
   }
 
   private getBacktestJobBackoffMs(attempt: number): number {
@@ -615,45 +429,8 @@ export class AiQuantProxyService {
     )
   }
 
-  private async tryReconcileTransientDeployResult(
-    userId: string,
-    authorization: string | undefined,
-    deployRequestId: unknown,
-  ): Promise<AccountAiQuantStrategyDeployResultResponseDto | null> {
-    if (typeof deployRequestId !== 'string' || deployRequestId.trim().length === 0) {
-      return null
-    }
-
-    try {
-      return await this.quantifyClient.getDeployResult<AccountAiQuantStrategyDeployResultResponseDto>(deployRequestId.trim(), {
-        userId,
-        headers: this.userHeaders(userId, authorization),
-      })
-    } catch (error) {
-      this.logger.warn(
-        `event=deploy_reconciliation_failed deployRequestId=${deployRequestId.trim()} reason=${this.describeError(error)}`,
-      )
-      return null
-    }
-  }
-
-  private getQuantifyErrorCode(error: unknown): string | undefined {
-    if (error instanceof QuantifyClientError) return error.code
-    if (this.isQuantifyErrorShape(error)) return error.code
-    return undefined
-  }
-
   private describeError(error: unknown): string {
-    if (error instanceof QuantifyClientError) {
-      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
-    }
-    if (this.isQuantifyErrorShape(error)) {
-      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
-    }
-    if (error instanceof Error) {
-      return error.message
-    }
-    return String(error)
+    return this.support.describeError(error)
   }
 
   private sleep(ms: number): Promise<void> {
@@ -669,12 +446,4 @@ export class AiQuantProxyService {
     return expo + jitter
   }
 
-  private getDeployBackoffMs(attempt: number): number {
-    const expo = Math.min(
-      AiQuantProxyService.DEPLOY_BACKOFF_BASE_MS * 2 ** (attempt - 1),
-      AiQuantProxyService.DEPLOY_BACKOFF_MAX_MS,
-    )
-    const jitter = Math.floor(Math.random() * AiQuantProxyService.DEPLOY_BACKOFF_JITTER_MS)
-    return expo + jitter
-  }
 }
