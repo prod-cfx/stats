@@ -200,6 +200,61 @@ describe('stage1 typed rules corpus fixture', () => {
     }))
   })
 
+  it('keeps indicator-vs-indicator filters, cadence, and exit clauses in rules mainflow', () => {
+    const patch = new GenericSeedDispatcher().dispatch('OKX 合约 BTCUSDT 15m，价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多，单笔 1%。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。')
+    const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
+    const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
+    const entryLeaves = entryRule ? collectAtomLeaves(entryRule.condition) : []
+    const exitLeaves = exitRule ? collectAtomLeaves(exitRule.condition) : []
+    const effects = allEffectLeaves(patch)
+
+    expect(entryRule).toBeDefined()
+    expect(exitRule).toBeDefined()
+    expect(entryLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({ indicator: 'ema', period: 50 }),
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        params: expect.objectContaining({
+          expression: expect.objectContaining({
+            op: 'GT',
+            left: expect.objectContaining({ kind: 'indicator', name: 'ema', params: expect.objectContaining({ period: 20 }) }),
+            right: expect.objectContaining({ kind: 'indicator', name: 'ema', params: expect.objectContaining({ period: 50 }) }),
+          }),
+        }),
+      }),
+    ]))
+    expect(entryLeaves).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        evidence: expect.objectContaining({ text: expect.stringContaining('EMA20 高于 EMA50') }),
+        params: expect.objectContaining({ indicator: 'ema', period: 20 }),
+      }),
+    ]))
+    expect(exitLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        params: expect.objectContaining({
+          expression: expect.objectContaining({
+            op: 'LT',
+            left: expect.objectContaining({ kind: 'series', source: 'bar', field: 'close' }),
+            right: expect.objectContaining({ kind: 'indicator', name: 'ema', params: expect.objectContaining({ period: 20 }) }),
+          }),
+        }),
+      }),
+    ]))
+    expect(ruleEffectKeys(exitRule!)).toContain('action.close_long')
+    expect(effects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.cooldown', params: expect.objectContaining({ durationBars: 4 }) }),
+      expect.objectContaining({ key: 'risk.time_stop_bars', params: expect.objectContaining({ maxBars: 4, effect: 'close_position' }) }),
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.12 }) }),
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 1.5 }) }),
+      expect.objectContaining({ key: 'position.sizing', params: expect.objectContaining({ sizing: expect.objectContaining({ kind: 'ratio', value: 0.01 }) }) }),
+    ]))
+  })
+
   describe('official Strategy Plaza semantic parameter regressions', () => {
     it('keeps open-interest window and percent change in breakout confirmation entry', () => {
       const patch = new GenericSeedDispatcher().dispatch('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建持仓量突破确认策略。规则：未平仓量 1 小时增加超过 5% 且价格突破过去 20 根 K 线高点时开多；跌破 EMA20 时平多；风控：仓位 10%，亏损 2% 止损。')

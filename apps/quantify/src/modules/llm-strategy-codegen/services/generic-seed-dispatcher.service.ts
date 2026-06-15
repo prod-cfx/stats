@@ -1652,7 +1652,9 @@ export class GenericSeedDispatcher {
 
   private hasLifecycleEvidenceIntent(userMessage: string): boolean {
     return /每\s*\d+\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu.test(userMessage)
+      || /(?:按)?每\s*\d+\s*根?[^，。；;\n]{0,24}(?:节奏|频率)[^，。；;\n]{0,12}(?:开仓|开多|开空|入场|交易|触发)/iu.test(userMessage)
       || /持仓(?:超过|达到)?\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu.test(userMessage)
+      || /持仓满\s*\d+\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)?/iu.test(userMessage)
   }
 
   private appendLifecycleRiskEffects(
@@ -1690,6 +1692,7 @@ export class GenericSeedDispatcher {
 
   private extractEntryCooldownBars(userMessage: string): number | null {
     const matched = userMessage.match(/每\s*(\d+)\s*根?\s*K?\s*线?[^，。；;\n]{0,16}(?:最多|至多|限制)[^，。；;\n]{0,8}(?:开仓|入场|交易|触发)一次/iu)
+      ?? userMessage.match(/(?:按)?每\s*(\d+)\s*根?[^，。；;\n]{0,24}(?:节奏|频率)[^，。；;\n]{0,12}(?:开仓|开多|开空|入场|交易|触发)/iu)
     if (!matched?.[1]) return null
     const value = Number(matched[1])
     return Number.isInteger(value) && value > 0 ? value : null
@@ -1697,6 +1700,7 @@ export class GenericSeedDispatcher {
 
   private extractTimeStopBars(userMessage: string): number | null {
     const matched = userMessage.match(/持仓(?:超过|达到)?\s*(\d+)\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)/iu)
+      ?? userMessage.match(/持仓满\s*(\d+)\s*(?:根\s*)?K?\s*线?[^，。；;\n]{0,8}(?:平仓|平多|平空|离场|出场)?/iu)
     if (!matched?.[1]) return null
     const value = Number(matched[1])
     return Number.isInteger(value) && value > 0 ? value : null
@@ -2366,7 +2370,110 @@ export class GenericSeedDispatcher {
         evidence: { text: userMessage.trim(), source: 'user_explicit' },
       })
     }
-    return mergeCompatiblePatchAtomNodes(out.filter(item => !this.isFalseCandlePatternFromIndicatorSlope(item, userMessage)))
+    const expressionCorrected = this.applyRulesMainflowExpressionPredicates(out, userMessage)
+    return mergeCompatiblePatchAtomNodes(expressionCorrected.filter(item => !this.isFalseCandlePatternFromIndicatorSlope(item, userMessage)))
+  }
+
+  private applyRulesMainflowExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
+    let out = [...items]
+    out = this.applyIndicatorVsIndicatorExpressionPredicates(out, userMessage)
+    out = this.applyPriceVsIndicatorExpressionPredicates(out, userMessage)
+    return out
+  }
+
+  private applyIndicatorVsIndicatorExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
+    const matches = this.extractIndicatorComparisonClauses(userMessage)
+    if (matches.length === 0) return items
+    const out = items.filter(item => !matches.some(match => this.isDegradedIndicatorComparisonAtom(item, match)))
+    for (const match of matches) {
+      if (out.some(item => item.key === 'condition.expression' && readPatchEvidenceText(item) === match.evidenceText)) continue
+      out.push({
+        key: 'condition.expression',
+        phase: this.hasCloseActionIntent(match.evidenceText) ? 'exit' : 'entry',
+        sideScope: match.operator === 'LT' ? 'short' : 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: match.operator,
+            left: { kind: 'indicator', name: match.indicator, params: { period: match.leftPeriod } },
+            right: { kind: 'indicator', name: match.indicator, params: { period: match.rightPeriod } },
+          },
+        },
+        evidence: { text: match.evidenceText, source: 'user_explicit' },
+      })
+    }
+    return out
+  }
+
+  private applyPriceVsIndicatorExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
+    const matches = this.extractPriceIndicatorComparisonClauses(userMessage)
+    if (matches.length === 0) return items
+    const out = [...items]
+    for (const match of matches) {
+      if (out.some(item => item.key === 'condition.expression' && readPatchEvidenceText(item) === match.evidenceText)) continue
+      const phase = this.hasCloseActionIntent(match.evidenceText) || (match.operator === 'LT' && this.hasCloseActionIntent(userMessage))
+        ? 'exit'
+        : 'entry'
+      out.push({
+        key: 'condition.expression',
+        phase,
+        sideScope: match.operator === 'LT' ? 'long' : 'short',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: match.operator,
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: match.indicator, params: { period: match.period } },
+          },
+        },
+        evidence: { text: match.evidenceText, source: 'user_explicit' },
+      })
+    }
+    return out
+  }
+
+  private extractIndicatorComparisonClauses(userMessage: string): Array<{ evidenceText: string, indicator: string, leftPeriod: number, rightPeriod: number, operator: 'GT' | 'LT' }> {
+    const out: Array<{ evidenceText: string, indicator: string, leftPeriod: number, rightPeriod: number, operator: 'GT' | 'LT' }> = []
+    const pattern = /(EMA|MA|SMA)\s*(\d{1,4})\s*(高于|大于|>|低于|小于|<)\s*(EMA|MA|SMA)\s*(\d{1,4})(?:\s*(?:上方|下方|之上|之下))?/giu
+    for (const match of userMessage.matchAll(pattern)) {
+      if (!match[1] || !match[2] || !match[3] || !match[4] || !match[5]) continue
+      const leftPeriod = Number(match[2])
+      const rightPeriod = Number(match[5])
+      if (!Number.isInteger(leftPeriod) || !Number.isInteger(rightPeriod)) continue
+      const leftIndicator = match[1].toLowerCase()
+      const rightIndicator = match[4].toLowerCase()
+      const indicator = leftIndicator === 'ema' || rightIndicator === 'ema' ? 'ema' : leftIndicator
+      const operator = /低于|小于|</u.test(match[3]) ? 'LT' : 'GT'
+      out.push({ evidenceText: match[0].trim(), indicator, leftPeriod, rightPeriod, operator })
+    }
+    return out
+  }
+
+  private extractPriceIndicatorComparisonClauses(userMessage: string): Array<{ evidenceText: string, indicator: string, period: number, operator: 'GT' | 'LT' }> {
+    const out: Array<{ evidenceText: string, indicator: string, period: number, operator: 'GT' | 'LT' }> = []
+    const pattern = /(?:价格|收盘价|close)\s*(高于|大于|站上|突破|>|低于|小于|跌破|下破|跌穿|<)\s*(EMA|MA|SMA)\s*(\d{1,4})/giu
+    for (const match of userMessage.matchAll(pattern)) {
+      if (!match[1] || !match[2] || !match[3]) continue
+      const period = Number(match[3])
+      if (!Number.isInteger(period)) continue
+      const operator = /低于|小于|跌破|下破|跌穿|</u.test(match[1]) ? 'LT' : 'GT'
+      out.push({ evidenceText: match[0].trim(), indicator: match[2].toLowerCase(), period, operator })
+    }
+    return out
+  }
+
+  private isDegradedIndicatorComparisonAtom(item: PatchAtomNode, match: { leftPeriod: number, rightPeriod: number, operator: 'GT' | 'LT' }): boolean {
+    const key = match.operator === 'LT' ? ATOM_CONTRACT_REGISTRY['indicator.below'].key : ATOM_CONTRACT_REGISTRY['indicator.above'].key
+    if (item.key !== key) return false
+    const evidenceText = readPatchEvidenceText(item) ?? ''
+    if (!evidenceText.includes(String(match.leftPeriod)) || !evidenceText.includes(String(match.rightPeriod))) return false
+    const period = this.readNumberParam(item.params, 'period') ?? this.readNumberParam(item.params, 'reference.period')
+    return period === match.leftPeriod
+  }
+
+  private readNumberParam(params: Record<string, unknown> | undefined, key: string): number | null {
+    const value = params?.[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
   private isFalseCandlePatternFromIndicatorSlope(item: PatchAtomNode, userMessage: string): boolean {
