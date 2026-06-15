@@ -331,6 +331,7 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     timeframe: '15m',
     positionPct: 20,
     leverage: 2,
+    backtestRangePreset: '7D',
     displayOrder: 140,
     initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建跌破跟随做空策略。规则：价格跌破过去 20 根 K 线低点开空；价格重新站上 EMA20 平空；风控：仓位 20%，亏损 2% 止损。',
     expectedAtomKeys: ['price.breakout_down', 'indicator.above', 'action.open_short', 'action.close_short', 'position.sizing', 'risk.stop_loss_pct'],

@@ -296,12 +296,13 @@ describe('StrategyPlazaEditSessionService', () => {
     }))
   })
 
-  it('uses the 7D default backtest window only for the EMA trend continuation template', async () => {
+  it('uses the 7D default backtest window only for selected official templates', async () => {
     const emaTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ema-trend-continuation')!
+    const breakdownTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'breakdown-short-follow')!
     const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
-    const templates = { getRequired: jest.fn().mockReturnValue(emaTemplate) }
+    const templates = { getRequired: jest.fn().mockReturnValue(breakdownTemplate) }
     const codegenConversationService = {
-      startSession: jest.fn().mockResolvedValue({ id: 'session-ema', conversationId: 'conversation-ema' }),
+      startSession: jest.fn().mockResolvedValue({ id: 'session-breakdown', conversationId: 'conversation-breakdown' }),
       updateConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
     }
     const service = new StrategyPlazaEditSessionService(
@@ -309,16 +310,19 @@ describe('StrategyPlazaEditSessionService', () => {
       codegenConversationService as never,
     )
 
-    await service.startEditSession({ userId: 'user-1', templateId: 'ema-trend-continuation' })
+    await service.startEditSession({ userId: 'user-1', templateId: 'breakdown-short-follow' })
 
     expect(buildOfficialTemplateBacktestConfigDefaults(emaTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({ preset: '7D' }),
+    }))
+    expect(buildOfficialTemplateBacktestConfigDefaults(breakdownTemplate)).toEqual(expect.objectContaining({
       range: expect.objectContaining({ preset: '7D' }),
     }))
     expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
       range: expect.objectContaining({ preset: '30D' }),
     }))
     expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
-      'conversation-ema',
+      'conversation-breakdown',
       'user-1',
       expect.objectContaining({
         range: expect.objectContaining({ preset: '7D' }),
