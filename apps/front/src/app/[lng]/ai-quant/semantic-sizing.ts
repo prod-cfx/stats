@@ -6,7 +6,7 @@ export type QuantSizing =
   | { mode: 'QTY', value: number, asset?: string }
   | { mode: 'INVALID', value: number }
 
-type RawSizing = {
+interface RawSizing {
   mode?: unknown
   value?: unknown
   asset?: unknown

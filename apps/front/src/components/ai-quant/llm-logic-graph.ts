@@ -1,10 +1,11 @@
+import type { StrategyLogicGraph } from './logic-graph-model'
+import type {QuantSizing} from '@/app/[lng]/ai-quant/semantic-sizing';
 import {
   derivePositionPctFromSizing,
   formatSizing,
-  normalizeSizingFromCanonicalValue,
-  type QuantSizing,
+  normalizeSizingFromCanonicalValue
+
 } from '@/app/[lng]/ai-quant/semantic-sizing'
-import type { StrategyLogicGraph } from './logic-graph-model'
 
 interface CodegenSpecMarket {
   symbols?: string[]

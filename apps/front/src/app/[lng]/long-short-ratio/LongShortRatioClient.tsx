@@ -228,7 +228,7 @@ export function LongShortRatioClient() {
             longLabel={t('longShort.summary.long')}
             shortLabel={t('longShort.summary.short')}
           />
-          <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden shadow-lg animate-in fade-in duration-500">
+          <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-x-auto shadow-lg animate-in fade-in duration-500">
             <div className="hidden items-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 px-5 py-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] uppercase md:flex">
               <span className="w-[180px] pl-10">{t('longShort.table.exchange')}</span>
               <span className="flex-1 text-center">{t('longShort.table.ratio')}</span>

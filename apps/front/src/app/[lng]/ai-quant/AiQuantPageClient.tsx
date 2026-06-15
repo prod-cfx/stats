@@ -28,7 +28,6 @@ import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
-import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
@@ -37,6 +36,7 @@ import {
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
+import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
 import { getSameOriginReturnHref } from '@/components/navigation/return-href'
 import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'

@@ -34,7 +34,7 @@ const EMAIL_OTP_ERROR_KEYS: Record<string, string> = {
 }
 
 function isEmailOtpAddressValid(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  return /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email)
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -48,7 +48,7 @@ function getErrorCode(error: unknown): string | undefined {
   }
 
   const message = error instanceof Error ? error.message : ''
-  if (/^(?:[A-Z][A-Z0-9_]*|HTTP_\d{3})$/.test(message)) {
+  if (/^[A-Z][A-Z0-9_]*$/.test(message)) {
     return message
   }
 

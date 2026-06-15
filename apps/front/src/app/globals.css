@@ -531,7 +531,7 @@ button.primary:disabled {
 }
 
 .cf-ios-sheet-panel::before {
-  content: "";
+  content: '';
   display: block;
   width: 36px;
   height: 4px;

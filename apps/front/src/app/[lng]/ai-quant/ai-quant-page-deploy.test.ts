@@ -1,29 +1,30 @@
-import { describe, expect, it, beforeEach } from '@jest/globals'
+import type { ConversationState } from './ai-quant-page-conversation'
 
-const mockToastSuccess = jest.fn()
-const mockToastError = jest.fn()
+import { describe, expect, it, beforeEach } from '@jest/globals'
+import { deployAccountAiQuantStrategy, fetchAccountAiQuantDeployResult, fetchUserExchangeAccountStatuses } from '@/lib/api'
+import { toast } from '@/lib/toast'
+import { confirmAiQuantDeploy } from './ai-quant-page-deploy'
 
 jest.mock('@/lib/toast', () => ({
   toast: {
-    success: mockToastSuccess,
-    error: mockToastError,
+    success: jest.fn(),
+    error: jest.fn(),
     warning: jest.fn(),
     info: jest.fn(),
   },
 }))
 
-const mockDeploy = jest.fn()
-const mockFetchAccounts = jest.fn()
-const mockFetchDeployResult = jest.fn()
-
 jest.mock('@/lib/api', () => ({
-  deployAccountAiQuantStrategy: mockDeploy,
-  fetchAccountAiQuantDeployResult: mockFetchDeployResult,
-  fetchUserExchangeAccountStatuses: mockFetchAccounts,
+  deployAccountAiQuantStrategy: jest.fn(),
+  fetchAccountAiQuantDeployResult: jest.fn(),
+  fetchUserExchangeAccountStatuses: jest.fn(),
 }))
 
-import { confirmAiQuantDeploy } from './ai-quant-page-deploy'
-import type { ConversationState } from './ai-quant-page-conversation'
+const mockToastSuccess = jest.mocked(toast.success)
+const mockToastError = jest.mocked(toast.error)
+const mockDeploy = jest.mocked(deployAccountAiQuantStrategy)
+const mockFetchAccounts = jest.mocked(fetchUserExchangeAccountStatuses)
+const mockFetchDeployResult = jest.mocked(fetchAccountAiQuantDeployResult)
 
 const t = (key: string, options?: Record<string, unknown>) => {
   if (key === 'aiQuant.messages.deploySuccess') {

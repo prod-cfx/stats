@@ -1,5 +1,6 @@
+import type {Root} from 'react-dom/client';
 import React, { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot  } from 'react-dom/client'
 import { DashboardReadOnlyCanvas } from './DashboardReadOnlyCanvas'
 
 jest.mock('react-i18next', () => ({
@@ -48,7 +49,7 @@ function seedDashboard() {
   )
 }
 
-describe('DashboardReadOnlyCanvas mobile layout', () => {
+describe('dashboardReadOnlyCanvas mobile layout', () => {
   let host: HTMLDivElement
   let root: Root
 

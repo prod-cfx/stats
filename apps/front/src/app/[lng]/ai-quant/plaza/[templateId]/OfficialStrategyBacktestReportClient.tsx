@@ -5,14 +5,14 @@ import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchStrategyPlazaTemplate } from '@/lib/api'
+import { normalizeBacktestMarketType } from '../../backtest/[id]/backtest-result-presentation'
+import { BacktestEquityChart } from '../../backtest/[id]/BacktestEquityChart'
 import {
   AiAnalysisPanel,
   DecisionSummarySection,
   RiskCard,
   TradeDetailsSection,
 } from '../../backtest/[id]/BacktestReportClient'
-import { BacktestEquityChart } from '../../backtest/[id]/BacktestEquityChart'
-import { normalizeBacktestMarketType } from '../../backtest/[id]/backtest-result-presentation'
 import { createOfficialBacktestReportData } from './official-backtest-report-data'
 
 interface OfficialStrategyBacktestReportClientProps {

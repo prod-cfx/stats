@@ -1,5 +1,6 @@
+import type {Root} from 'react-dom/client';
 import React, { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot  } from 'react-dom/client'
 import { DashboardHeader } from './DashboardHeader'
 
 jest.mock('next/navigation', () => ({
@@ -23,7 +24,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
   value: true,
 })
 
-describe('DashboardHeader mobile layout', () => {
+describe('dashboardHeader mobile layout', () => {
   let host: HTMLDivElement
   let root: Root
 

@@ -1,11 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
+import type {AccountAiQuantStrategyDetail} from '@/lib/api';
 import {
-  type AccountAiQuantStrategyDetail,
+
   deployAccountAiQuantStrategy,
   fetchAccountAiQuantDeployResult,
-  fetchUserExchangeAccountStatuses,
+  fetchUserExchangeAccountStatuses
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import { toast } from '@/lib/toast'

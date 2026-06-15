@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import React, { createContext, useCallback, use, useMemo, useState } from 'react'
 import { normalizeAuthRedirect } from '@/features/auth/auth-redirect'
 import { AuthSheet } from '@/features/auth/components/AuthSheet'
 
@@ -56,7 +56,7 @@ export function AuthSheetProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({ openAuth, closeAuth }), [closeAuth, openAuth])
 
   return (
-    <AuthSheetContext.Provider value={value}>
+    <AuthSheetContext value={value}>
       {children}
       <AuthSheet
         open={state.open}
@@ -67,12 +67,12 @@ export function AuthSheetProvider({ children }: { children: React.ReactNode }) {
         }}
         onSuccess={handleSuccess}
       />
-    </AuthSheetContext.Provider>
+    </AuthSheetContext>
   )
 }
 
 export function useAuthSheet() {
-  const value = useContext(AuthSheetContext)
+  const value = use(AuthSheetContext)
   if (!value) {
     throw new Error('useAuthSheet must be used within AuthSheetProvider')
   }

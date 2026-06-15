@@ -1,5 +1,6 @@
 'use client'
 
+import type {DashboardDoc} from '@/features/dashboards/store/dashboard-store';
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
@@ -8,10 +9,10 @@ import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
 import {
   DASHBOARD_UPDATED_EVENT,
-  type DashboardDoc,
+
   ensureDashboard,
   getDashboard,
-  updateDashboard,
+  updateDashboard
 } from '@/features/dashboards/store/dashboard-store'
 
 const AddWidgetModal = dynamic(() => import('./AddWidgetModal').then(mod => mod.AddWidgetModal), {

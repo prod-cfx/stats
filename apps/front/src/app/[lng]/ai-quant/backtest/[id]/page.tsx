@@ -4,8 +4,8 @@ import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { fetchBacktestJobServer } from '@/lib/server-api'
-import { BacktestReportClient } from './BacktestReportClient'
 import { normalizeBacktestMarketType } from './backtest-result-presentation'
+import { BacktestReportClient } from './BacktestReportClient'
 
 interface CoverageRange {
   fromTs: number

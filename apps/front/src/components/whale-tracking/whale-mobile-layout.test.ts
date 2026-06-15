@@ -58,7 +58,7 @@ describe('issue #1350 whale mobile layouts', () => {
     expect(profileTabs).toContain('mobileHistorySentinelRef')
     expect(profileTabs).toContain('desktopHistorySentinelRef')
     expect(profileTabs).toMatch(/const sentinelEls = \[[\s\S]*mobileHistorySentinelRef\.current[\s\S]*desktopHistorySentinelRef\.current[\s\S]*\]/)
-    expect(profileTabs).toMatch(/sentinelEls\.forEach\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*observer\.observe\(\s*\1\s*\)\s*\)/)
+    expect(profileTabs).toMatch(/sentinelEls\.forEach\(\s*(?:\(\s*)?(\w+)\s*(?:\)\s*)?=>\s*observer\.observe\(\s*\1\s*\)\s*\)/)
   })
 
   it('keeps destructive address monitor actions behind confirmation', () => {

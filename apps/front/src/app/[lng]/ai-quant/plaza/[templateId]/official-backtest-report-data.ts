@@ -1,5 +1,5 @@
-import type { StrategyPlazaTemplate } from '@/lib/api'
 import type { BacktestReportData, EquityPoint } from '../../backtest/[id]/backtest-report-data'
+import type { StrategyPlazaTemplate } from '@/lib/api'
 import { createBacktestReportDataFromLive } from '../../backtest/[id]/backtest-report-data'
 
 export interface OfficialBacktestReportData {

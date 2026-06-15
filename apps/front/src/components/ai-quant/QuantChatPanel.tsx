@@ -9,10 +9,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useMobileKeyboardInset } from '@/hooks/useMobileKeyboardInset'
 import { validateBacktestRange } from './backtest-range'
 import { parseDynamicParamInputValue } from './dynamic-params'
 import { PublicationGateCard } from './PublicationGateCard'
-import { useMobileKeyboardInset } from '@/hooks/useMobileKeyboardInset'
 
 export interface QuantMessage {
   id: string

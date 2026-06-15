@@ -1,8 +1,9 @@
 import type { BacktestCapabilities } from './backtest-capability-client'
+import type {QuantSizing} from '@/app/[lng]/ai-quant/semantic-sizing';
 import {
   derivePositionPctFromSizing,
-  normalizeSizingFromCanonicalValue,
-  type QuantSizing,
+  normalizeSizingFromCanonicalValue
+
 } from '@/app/[lng]/ai-quant/semantic-sizing'
 
 export interface StrategyParamSyncFallback {

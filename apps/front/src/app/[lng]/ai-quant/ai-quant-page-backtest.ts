@@ -1,8 +1,8 @@
 import type { MutableRefObject } from 'react'
 
 import type { ConversationState } from './ai-quant-page-conversation'
-import type { BacktestJob, CreateBacktestJobPayload } from '@/components/ai-quant/backtest-job-client'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
+import type { BacktestJob, CreateBacktestJobPayload } from '@/components/ai-quant/backtest-job-client'
 import {
   buildLocalizedBacktestErrorMessage,
   parseAiQuantErrorMeta,
@@ -65,7 +65,7 @@ export function buildSyntheticWebhookEventStreamsFromScript(
     if (!sourceFeedId.startsWith('webhook.') || streams[sourceFeedId]) continue
 
     streams[sourceFeedId] = [{
-      id: `synthetic-${sourceFeedId.replace(/[^a-zA-Z0-9]+/g, '-')}-${Math.trunc(eventTs)}`,
+      id: `synthetic-${sourceFeedId.replace(/[^a-z0-9]+/gi, '-')}-${Math.trunc(eventTs)}`,
       ts: Math.trunc(eventTs),
       payload: { signalId },
     }]

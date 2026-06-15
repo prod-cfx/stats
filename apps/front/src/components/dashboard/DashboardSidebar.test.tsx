@@ -1,5 +1,6 @@
+import type {Root} from 'react-dom/client';
 import React, { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot  } from 'react-dom/client'
 import { DashboardSidebar } from './DashboardSidebar'
 
 const mockPush = jest.fn()
@@ -44,7 +45,7 @@ function seedDashboards() {
   )
 }
 
-describe('DashboardSidebar', () => {
+describe('dashboardSidebar', () => {
   let host: HTMLDivElement
   let root: Root
 

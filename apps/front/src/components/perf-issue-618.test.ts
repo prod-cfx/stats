@@ -9,7 +9,7 @@ function readFrontSource(relativePath: string) {
 }
 
 describe('issue #618 chart bundle guards', () => {
-  it('exposes the minimal echarts runtime API required by echarts-for-react', () => {
+  it('exposes the minimal echarts runtime API required by echarts-for-react', async () => {
     jest.resetModules()
 
     jest.doMock('echarts/charts', () => ({
@@ -37,7 +37,7 @@ describe('issue #618 chart bundle guards', () => {
       use: jest.fn(),
     }))
 
-    const { echarts } = require('@/components/charts/echarts-runtime')
+    const { echarts } = await import('@/components/charts/echarts-runtime')
 
     expect(typeof echarts.init).toBe('function')
     expect(typeof echarts.getInstanceByDom).toBe('function')

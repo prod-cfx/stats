@@ -1,7 +1,8 @@
+import type {QuantSizing} from '@/app/[lng]/ai-quant/semantic-sizing';
 import {
   formatSizing,
-  normalizeSizingFromCanonicalValue,
-  type QuantSizing,
+  normalizeSizingFromCanonicalValue
+
 } from '@/app/[lng]/ai-quant/semantic-sizing'
 
 type DisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECUTE'
@@ -1084,7 +1085,7 @@ function localizeDisplayText(text: string): string {
     .replace(/^不支持的条件，待补充$/u, 'Unsupported condition, pending details')
     .replace(/^未支持的动作，待补充$/u, 'Unsupported action, pending details')
     .replace(/^启动时执行$/u, 'Execute on start')
-    .replace(/^市场:\s*(.+)$/u, (_match, value: string) => `Market: ${localizeMarketTypeText(value)}`)
+    .replace(/^市场:\s*(\S.*)$/u, (_match, value: string) => `Market: ${localizeMarketTypeText(value)}`)
 
   next = next
     .replace(/风控:/gu, 'Risk:')

@@ -1987,11 +1987,11 @@ export const TradingViewChart = (
             }
 
             try {
-              // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
               const fallbackWidgetOptions: TradingViewWidgetConfig = {
                 ...widgetOptions,
                 container: containerEl,
               }
+              // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
               widget = new TradingView.widget(fallbackWidgetOptions) as TradingViewWidget
             } catch (fallbackError) {
               console.error('[TradingView] Widget init failed (primary + fallback):', {

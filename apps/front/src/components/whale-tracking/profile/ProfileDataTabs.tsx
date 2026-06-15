@@ -508,16 +508,6 @@ export const ProfileDataTabs = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  const formatDurationLabel = (value: string) => {
-    // 925小时 35分 -> 925h 35m (English-friendly), keep as-is if unknown format
-    const h = value.match(/(\d+)\s*小时/)
-    const m = value.match(/(\d+)\s*分/)
-    if (!h && !m) return value
-    const hh = h ? Number.parseInt(h[1], 10) : 0
-    const mm = m ? Number.parseInt(m[1], 10) : 0
-    return t('whaleTracking.time.duration', { hours: hh, minutes: mm })
-  }
-
   const translateMarginType = (key: string) => {
     return t(`whaleTracking.margin.${key}`)
   }
