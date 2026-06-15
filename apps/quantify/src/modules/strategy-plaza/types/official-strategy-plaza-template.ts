@@ -44,6 +44,7 @@ export type StrategyPlazaDeploymentOrderType = 'market'
 export type StrategyPlazaDeploymentTimeInForce = 'ioc'
 export type StrategyPlazaEvidenceExchange = 'okx' | 'binance'
 export type StrategyPlazaEvidenceMarketType = 'spot' | 'swap'
+export type StrategyPlazaBacktestRangePreset = '7D' | '30D'
 
 export interface OfficialStrategyPlazaBacktestAdmission {
   maxDrawdownPctCeiling: number
@@ -207,6 +208,7 @@ export interface OfficialStrategyPlazaTemplate {
   status: StrategyPlazaTemplateStatus
   displayOrder: number
   runConfig: OfficialStrategyPlazaRunConfig
+  backtestRangePreset?: StrategyPlazaBacktestRangePreset
   editSeed: OfficialStrategyPlazaEditSeed
   expectedAtomKeys: readonly string[]
   admission: OfficialStrategyPlazaTemplateAdmission

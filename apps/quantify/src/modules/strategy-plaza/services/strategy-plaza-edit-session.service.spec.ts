@@ -295,4 +295,34 @@ describe('StrategyPlazaEditSessionService', () => {
       range: expect.objectContaining({ preset: '30D' }),
     }))
   })
+
+  it('uses the 7D default backtest window only for the EMA trend continuation template', async () => {
+    const emaTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ema-trend-continuation')!
+    const maTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ma-cross')!
+    const templates = { getRequired: jest.fn().mockReturnValue(emaTemplate) }
+    const codegenConversationService = {
+      startSession: jest.fn().mockResolvedValue({ id: 'session-ema', conversationId: 'conversation-ema' }),
+      updateConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
+    }
+    const service = new StrategyPlazaEditSessionService(
+      templates as never,
+      codegenConversationService as never,
+    )
+
+    await service.startEditSession({ userId: 'user-1', templateId: 'ema-trend-continuation' })
+
+    expect(buildOfficialTemplateBacktestConfigDefaults(emaTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({ preset: '7D' }),
+    }))
+    expect(buildOfficialTemplateBacktestConfigDefaults(maTemplate)).toEqual(expect.objectContaining({
+      range: expect.objectContaining({ preset: '30D' }),
+    }))
+    expect(codegenConversationService.updateConversationBacktestDraft).toHaveBeenCalledWith(
+      'conversation-ema',
+      'user-1',
+      expect.objectContaining({
+        range: expect.objectContaining({ preset: '7D' }),
+      }),
+    )
+  })
 })

@@ -1,5 +1,6 @@
 import type { OfficialStrategyPlazaCategory } from './official-strategy-plaza-category'
 import type {
+  StrategyPlazaBacktestRangePreset,
   OfficialStrategyPlazaEvidenceDataSource,
   OfficialStrategyPlazaTemplate,
   StrategyPlazaMarketType,
@@ -30,6 +31,7 @@ interface TemplateSeed {
   timeframe: string
   positionPct: number
   leverage: number | null
+  backtestRangePreset?: StrategyPlazaBacktestRangePreset
   displayOrder: number
   initialMessage: string
   expectedAtomKeys: readonly string[]
@@ -140,6 +142,7 @@ function toTemplate(seed: TemplateSeed): OfficialStrategyPlazaTemplate {
       publishedSnapshotId: `official-plaza-${seed.id}-v1-snapshot`,
       deploymentExecutionConfig: { leverage: seed.leverage, priceSource, orderType: 'market', timeInForce: 'ioc' },
     },
+    ...(seed.backtestRangePreset ? { backtestRangePreset: seed.backtestRangePreset } : {}),
     editSeed: {
       initialMessage: seed.initialMessage,
       guideConfig: seed.guideConfig,
@@ -212,6 +215,7 @@ const TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     timeframe: '15m',
     positionPct: 25,
     leverage: 2,
+    backtestRangePreset: '7D',
     displayOrder: 30,
     initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。风控：仓位 25%，2 倍杠杆。',
     expectedAtomKeys: ['indicator.above', 'condition.expression', 'indicator.below', 'action.open_long', 'action.close_long', 'position.sizing', 'risk.cooldown', 'risk.time_stop_bars', 'risk.take_profit_pct', 'risk.stop_loss_pct'],

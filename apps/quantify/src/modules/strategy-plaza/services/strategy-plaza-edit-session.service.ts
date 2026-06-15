@@ -3,6 +3,7 @@ import type { AiQuantConversationBacktestConfigDto } from '@/modules/llm-strateg
 import { CodegenConversationService } from '@/modules/llm-strategy-codegen/services/codegen-conversation.service'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 import type { OfficialStrategyPlazaEditSeed, OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import { resolveOfficialTemplateBacktestRangePreset } from '../utils/official-strategy-plaza-snapshot-content'
 
 function normalizeLocale(locale: string | null | undefined): 'zh' | 'en' {
   return locale === 'en' ? 'en' : 'zh'
@@ -62,7 +63,7 @@ function buildPlazaEditBacktestDraftConfig(
   const priceSource = template.runConfig.deploymentExecutionConfig.priceSource as unknown
 
   return {
-    range: { preset: '30D' },
+    range: { preset: resolveOfficialTemplateBacktestRangePreset(template) },
     execution: {
       initialCash: 10000,
       leverage: template.runConfig.marketType === 'spot' ? 1 : template.runConfig.leverage ?? 1,

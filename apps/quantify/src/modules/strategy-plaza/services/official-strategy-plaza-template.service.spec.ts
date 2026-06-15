@@ -217,7 +217,10 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('grid-runtime')
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
     expect(snapshots.every(item => item.content.backtestConfigDefaults.priceSource === 'close')).toBe(true)
-    expect(snapshots.every(item => item.content.backtestConfigDefaults.range.preset === '30D')).toBe(true)
+    expect(snapshots.find(item => item.templateId === 'ema-trend-continuation')?.content.backtestConfigDefaults.range.preset).toBe('7D')
+    expect(snapshots
+      .filter(item => item.templateId !== 'ema-trend-continuation')
+      .every(item => item.content.backtestConfigDefaults.range.preset === '30D')).toBe(true)
   })
 
   it('builds backtest adapters for all official signal-generator snapshots', async () => {
