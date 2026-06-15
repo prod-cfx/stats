@@ -1434,8 +1434,12 @@ export class GenericSeedDispatcher {
         const timeframeFanout = clauseTimeframes.length > 1 && isTimeframeGroupableTriggerKey(m.atomKey)
           ? clauseTimeframes
           : [null]
-        const phase = m.phase ?? 'entry'
-        const sideScope = m.sideScope ?? 'both'
+        let phase = m.phase ?? 'entry'
+        let sideScope = m.sideScope ?? 'both'
+        if (slot === 'triggers' && this.shouldPromoteTriggerToExit(m.clauseText, text, phase)) {
+          phase = 'exit'
+          sideScope = this.resolveExitSideForTrigger(m.clauseText, text, m.direction, sideScope)
+        }
 
         for (const fanoutTimeframe of timeframeFanout) {
           const params = fanoutTimeframe === null
@@ -1623,6 +1627,45 @@ export class GenericSeedDispatcher {
       }
     }
     return rules
+  }
+
+  private shouldPromoteTriggerToExit(
+    clause: string,
+    userMessage: string,
+    phase: SemanticRule['phase'] | null,
+  ): boolean {
+    if (phase === 'exit') return false
+    if (!this.hasCloseActionIntent(userMessage)) return false
+    if (this.hasOpenActionIntent(clause)) return false
+    if (this.hasCloseActionIntent(clause)) return true
+    if (!this.hasExitTriggerConditionSignal(clause)) return false
+
+    const index = userMessage.indexOf(clause)
+    if (index < 0) return false
+    const before = userMessage.slice(0, index)
+    const after = userMessage.slice(index + clause.length)
+    const lastExitHeader = Math.max(before.lastIndexOf('出场'), before.lastIndexOf('退出'), before.lastIndexOf('离场'))
+    const lastEntryHeader = Math.max(before.lastIndexOf('入场'), before.lastIndexOf('进场'), before.lastIndexOf('开仓'))
+    if (lastExitHeader > lastEntryHeader) return true
+    return /^(?:[^。；;\n]{0,32})?(?:任一触发|任意触发|触发即|则|就)?[^。；;\n]{0,32}(?:平仓|平多|平空|卖出|退出|离场|close|exit|sell)/iu.test(after)
+  }
+
+  private hasExitTriggerConditionSignal(clause: string): boolean {
+    return /(?:价格|收盘价|close|EMA|MA|SMA|布林|上轨|下轨|中轨|均线)[^，。；;\n]{0,24}(?:跌破|下破|跌穿|低于|小于|下穿|突破|上破|高于|大于|上穿|回到|触及)/iu.test(clause)
+      || /(?:跌破|下破|跌穿|低于|小于|下穿|突破|上破|高于|大于|上穿|回到|触及)[^，。；;\n]{0,24}(?:价格|收盘价|close|EMA|MA|SMA|布林|上轨|下轨|中轨|均线)/iu.test(clause)
+  }
+
+  private resolveExitSideForTrigger(
+    clause: string,
+    userMessage: string,
+    direction: Direction | null,
+    fallback: 'long' | 'short' | 'both',
+  ): 'long' | 'short' | 'both' {
+    const closeSide = detectCloseSide(clause) ?? detectCloseSide(userMessage)
+    if (closeSide) return closeSide
+    if (direction === 'cross_under' || direction === 'lte' || direction === 'breakout_down' || direction === 'touch_upper') return 'long'
+    if (direction === 'cross_over' || direction === 'gte' || direction === 'breakout_up' || direction === 'touch_lower') return 'short'
+    return fallback
   }
 
   private repairPairSpreadEntryRules(rules: SemanticRule[], userMessage: string): SemanticRule[] {
@@ -2532,7 +2575,6 @@ export class GenericSeedDispatcher {
   private applyRulesMainflowExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
     let out = [...items]
     out = this.applyIndicatorVsIndicatorExpressionPredicates(out, userMessage)
-    out = this.applyPriceVsIndicatorExpressionPredicates(out, userMessage)
     return out
   }
 
@@ -2552,33 +2594,6 @@ export class GenericSeedDispatcher {
             op: match.operator,
             left: { kind: 'indicator', name: match.indicator, params: { period: match.leftPeriod } },
             right: { kind: 'indicator', name: match.indicator, params: { period: match.rightPeriod } },
-          },
-        },
-        evidence: { text: match.evidenceText, source: 'user_explicit' },
-      })
-    }
-    return out
-  }
-
-  private applyPriceVsIndicatorExpressionPredicates(items: PatchAtomNode[], userMessage: string): PatchAtomNode[] {
-    const matches = this.extractPriceIndicatorComparisonClauses(userMessage)
-    if (matches.length === 0) return items
-    const out = [...items]
-    for (const match of matches) {
-      if (out.some(item => item.key === 'condition.expression' && readPatchEvidenceText(item) === match.evidenceText)) continue
-      const phase = this.hasCloseActionIntent(match.evidenceText) || (match.operator === 'LT' && this.hasCloseActionIntent(userMessage))
-        ? 'exit'
-        : 'entry'
-      out.push({
-        key: 'condition.expression',
-        phase,
-        sideScope: match.operator === 'LT' ? 'long' : 'short',
-        params: {
-          expression: {
-            kind: 'predicate',
-            op: match.operator,
-            left: { kind: 'series', source: 'bar', field: 'close' },
-            right: { kind: 'indicator', name: match.indicator, params: { period: match.period } },
           },
         },
         evidence: { text: match.evidenceText, source: 'user_explicit' },

@@ -1285,6 +1285,8 @@ export class SemanticAtomInvariantService {
   ): GenericExpressionLayerSnapshot {
     const matchedExpected = candidates.filter(candidate => this.matchesGenericExpressionExpected(candidate, expected))
     const conflicts = candidates.filter(candidate =>
+      this.isGenericExpressionCandidate(candidate)
+      &&
       !expectedBucket.some(expectedCandidate => this.matchesGenericExpressionExpected(candidate, expectedCandidate)),
     )
 
@@ -1300,6 +1302,10 @@ export class SemanticAtomInvariantService {
       conflicts,
       candidates,
     }
+  }
+
+  private isGenericExpressionCandidate(candidate: GenericExpressionSnapshot): boolean {
+    return candidate.id.includes('_expression')
   }
 
   private matchesGenericExpressionExpected(
@@ -1594,11 +1600,38 @@ export class SemanticAtomInvariantService {
         side: null,
       })
     }
+    const indicatorOperand = this.normalizeIrIndicatorExpressionOperand(series)
+    if (indicatorOperand) return indicatorOperand
     return JSON.stringify({
       kind: 'ir_series',
       seriesKind: series.kind,
       timeframe: series.timeframe ?? null,
       params: this.stableRecord(series.params ?? {}),
+    })
+  }
+
+  private normalizeIrIndicatorExpressionOperand(series: SeriesDef): string | null {
+    const indicatorNameByKind: Partial<Record<SeriesDef['kind'], string>> = {
+      EMA: 'ema',
+      SMA: 'sma',
+      RSI: 'rsi',
+      ATR: 'atr',
+      MACD_LINE: 'macd',
+      MACD_SIGNAL: 'macd',
+    }
+    const name = indicatorNameByKind[series.kind]
+    if (!name) return null
+
+    const params = this.stableRecord(series.params ?? {})
+    return JSON.stringify({
+      kind: 'indicator',
+      name,
+      params,
+      output: series.kind === 'MACD_LINE'
+        ? 'line'
+        : series.kind === 'MACD_SIGNAL'
+          ? 'signal'
+          : 'value',
     })
   }
 

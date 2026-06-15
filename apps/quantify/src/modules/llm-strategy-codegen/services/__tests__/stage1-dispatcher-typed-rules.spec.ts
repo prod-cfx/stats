@@ -203,7 +203,7 @@ describe('stage1 typed rules corpus fixture', () => {
   it('keeps indicator-vs-indicator filters, cadence, and exit clauses in rules mainflow', () => {
     const patch = new GenericSeedDispatcher().dispatch('OKX 合约 BTCUSDT 15m，价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多，单笔 1%。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。')
     const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
-    const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
+    const exitRule = patch.rules?.find(rule => rule.phase === 'exit' && collectAtomLeaves(rule.condition).some(leaf => leaf.key === 'indicator.below'))
     const entryLeaves = entryRule ? collectAtomLeaves(entryRule.condition) : []
     const exitLeaves = exitRule ? collectAtomLeaves(exitRule.condition) : []
     const effects = allEffectLeaves(patch)
@@ -235,14 +235,8 @@ describe('stage1 typed rules corpus fixture', () => {
     ]))
     expect(exitLeaves).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'condition.expression',
-        params: expect.objectContaining({
-          expression: expect.objectContaining({
-            op: 'LT',
-            left: expect.objectContaining({ kind: 'series', source: 'bar', field: 'close' }),
-            right: expect.objectContaining({ kind: 'indicator', name: 'ema', params: expect.objectContaining({ period: 20 }) }),
-          }),
-        }),
+        key: 'indicator.below',
+        params: expect.objectContaining({ indicator: 'ema', period: 20 }),
       }),
     ]))
     expect(ruleEffectKeys(exitRule!)).toContain('action.close_long')
