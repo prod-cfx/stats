@@ -1,8 +1,9 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { DataPullTask as DataPullTaskModel } from '@/prisma/prisma.types'
+import type { DataPullTask as DataPullTaskModel, Prisma as PrismaTypes } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@/prisma/prisma.types'
 import { formatDataPullError } from './data-pull-error-message'
 
 export type DataPullTaskRunState = 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED'
@@ -140,7 +141,7 @@ export class DataPullTaskRepository {
     taskId: number,
     finishedAt: Date,
     newCursor: string | null,
-    _resultMeta: Record<string, any> | undefined,
+    _resultMeta: Record<string, unknown> | undefined,
   ): Promise<void> {
     await this.txHost.tx.dataPullTask.update({
       where: { id: taskId },
@@ -154,7 +155,7 @@ export class DataPullTaskRepository {
     })
   }
 
-  async markFailed(taskId: number, finishedAt: Date, error: any): Promise<void> {
+  async markFailed(taskId: number, finishedAt: Date, error: unknown): Promise<void> {
     const message = this.truncateError(error)
     await this.txHost.tx.dataPullTask.update({
       where: { id: taskId },
@@ -185,7 +186,7 @@ export class DataPullTaskRepository {
     return result.count === 1
   }
 
-  private truncateError(error: any, maxLength = 1000): string {
+  private truncateError(error: unknown, maxLength = 1000): string {
     return formatDataPullError(error, maxLength)
   }
 
@@ -205,7 +206,7 @@ export class DataPullTaskRepository {
     enabled?: boolean
   }): Promise<{ total: number; items: DataPullTask[] }> {
     const { page, limit, key, name, enabled } = params
-    const where: Record<string, any> = {}
+    const where: PrismaTypes.DataPullTaskWhereInput = {}
 
     if (key) {
       where.key = {
@@ -252,20 +253,27 @@ export class DataPullTaskRepository {
     /**
      * 任务级自定义配置参数，将直接写入 data_pull_tasks.meta（Json）
      */
-    meta?: Record<string, any> | null
+    meta?: Record<string, unknown> | null
   }): Promise<DataPullTask> {
+    const data: PrismaTypes.DataPullTaskCreateInput = {
+      key: payload.key,
+      name: payload.name,
+      source: payload.source,
+      type: payload.type,
+      cron: payload.cron,
+      intervalSeconds: payload.intervalSeconds ?? null,
+      enabled: payload.enabled ?? true,
+      cursor: payload.cursor ?? null,
+    }
+
+    if (payload.meta !== undefined) {
+      data.meta = payload.meta === null
+        ? Prisma.DbNull
+        : (payload.meta as PrismaTypes.InputJsonValue)
+    }
+
     return this.txHost.tx.dataPullTask.create({
-      data: {
-        key: payload.key,
-        name: payload.name,
-        source: payload.source,
-        type: payload.type,
-        cron: payload.cron,
-        intervalSeconds: payload.intervalSeconds ?? null,
-        enabled: payload.enabled ?? true,
-        cursor: payload.cursor ?? null,
-        meta: payload.meta ?? undefined,
-      },
+      data,
     })
   }
 
@@ -282,14 +290,28 @@ export class DataPullTaskRepository {
       /**
        * 任务级自定义配置参数，将直接写入 data_pull_tasks.meta（Json）
        */
-      meta?: Record<string, any> | null
+      meta?: Record<string, unknown> | null
     },
   ): Promise<DataPullTask> {
+    const data: PrismaTypes.DataPullTaskUpdateInput = {}
+
+    if (payload.name !== undefined) data.name = payload.name
+    if (payload.source !== undefined) data.source = payload.source
+    if (payload.type !== undefined) data.type = payload.type
+    if (payload.cron !== undefined) data.cron = payload.cron
+    if (payload.intervalSeconds !== undefined) data.intervalSeconds = payload.intervalSeconds
+    if (payload.enabled !== undefined) data.enabled = payload.enabled
+    if (payload.cursor !== undefined) data.cursor = payload.cursor
+
+    if (payload.meta !== undefined) {
+      data.meta = payload.meta === null
+        ? Prisma.DbNull
+        : (payload.meta as PrismaTypes.InputJsonValue)
+    }
+
     return this.txHost.tx.dataPullTask.update({
       where: { id },
-      data: {
-        ...payload,
-      },
+      data,
     })
   }
 

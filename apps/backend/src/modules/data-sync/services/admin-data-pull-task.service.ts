@@ -86,11 +86,11 @@ export class AdminDataPullTaskService {
     const exec = await this.execRepo.createStart(task.id, now)
 
     try {
-      const ctx: DataPullJobContext = {
+      const ctx: DataPullJobContext<Record<string, unknown>> = {
         taskId: task.id,
         key: task.key,
         cursor: task.cursor ?? null,
-        meta: (task.meta ?? null) as any,
+        meta: (task.meta ?? null) as Record<string, unknown> | null,
         now,
       }
 

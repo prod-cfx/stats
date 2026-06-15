@@ -20,7 +20,7 @@ export function toAdminDataPullTaskResponseDto(task: DataPullTask): AdminDataPul
   dto.lastRunAt = task.lastRunAt
   dto.lastSuccessAt = task.lastSuccessAt
   dto.lastError = task.lastError
-  dto.meta = (task.meta ?? null) as any
+  dto.meta = (task.meta ?? null) as Record<string, unknown> | null
   dto.createdAt = task.createdAt
   dto.updatedAt = task.updatedAt
   return dto
@@ -35,6 +35,6 @@ export function toAdminDataPullExecutionResponseDto(exec: DataPullExecution): Ad
   dto.startedAt = exec.startedAt
   dto.finishedAt = exec.finishedAt
   dto.errorMessage = exec.errorMessage
-  dto.meta = (exec.meta ?? null) as any
+  dto.meta = (exec.meta ?? null) as Record<string, unknown> | null
   return dto
 }

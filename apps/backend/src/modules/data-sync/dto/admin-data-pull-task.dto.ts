@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator'
+import { IsBoolean, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
+import { IsValidMetadata } from '@/common/validation/metadata.validator'
 
 export class AdminDataPullTaskListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '按任务 key 模糊搜索' })
@@ -47,7 +48,7 @@ export class AdminDataPullExecutionResponseDto {
   errorMessage?: string | null
 
   @ApiPropertyOptional({ nullable: true, type: Object })
-  meta?: Record<string, any> | null
+  meta?: Record<string, unknown> | null
 }
 
 export class CreateAdminDataPullTaskDto {
@@ -133,8 +134,9 @@ export class CreateAdminDataPullTaskDto {
     type: Object,
   })
   @IsOptional()
-  // 这里不对结构做强校验，由具体 Job 自行解析和校验
-  meta?: Record<string, any> | null
+  @IsObject()
+  @IsValidMetadata({ maxDepth: 5, maxSizeBytes: 10240, allowArrays: false })
+  meta?: Record<string, unknown> | null
 }
 
 export class UpdateAdminDataPullTaskDto {
@@ -204,7 +206,9 @@ export class UpdateAdminDataPullTaskDto {
     type: Object,
   })
   @IsOptional()
-  meta?: Record<string, any> | null
+  @IsObject()
+  @IsValidMetadata({ maxDepth: 5, maxSizeBytes: 10240, allowArrays: false })
+  meta?: Record<string, unknown> | null
 }
 
 export class AdminDataPullTaskResponseDto {
@@ -248,7 +252,7 @@ export class AdminDataPullTaskResponseDto {
   lastError?: string | null
 
   @ApiPropertyOptional({ nullable: true, type: Object })
-  meta?: Record<string, any> | null
+  meta?: Record<string, unknown> | null
 
   @ApiProperty({ description: '任务创建时间', example: '2026-06-06T08:00:00.000Z' })
   createdAt!: Date
@@ -256,6 +260,5 @@ export class AdminDataPullTaskResponseDto {
   @ApiProperty({ description: '任务更新时间', example: '2026-06-06T09:00:00.000Z' })
   updatedAt!: Date
 }
-
 
 
