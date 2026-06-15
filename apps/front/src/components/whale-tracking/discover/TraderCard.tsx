@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/toast';
+import { copyTextToClipboard } from '@/utils/clipboard';
 
 export interface TraderCardProps {
   variant: 'recommended' | 'detail';
@@ -121,38 +122,9 @@ export const TraderCard = ({
 
     if (hasCopied) return;
 
-    const tryClipboard = async () => {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(address)
-        return true
-      }
-      return false
-    }
-
-    const fallbackCopy = () => {
-      try {
-        const el = document.createElement('textarea')
-        el.value = address
-        el.setAttribute('readonly', '')
-        el.style.position = 'fixed'
-        el.style.left = '-9999px'
-        el.style.top = '0'
-        document.body.appendChild(el)
-        el.select()
-        const ok = document.execCommand('copy')
-        el.remove()
-        return ok
-      } catch {
-        return false
-      }
-    }
-
     try {
-      const ok = await tryClipboard()
-      if (!ok) {
-        const fallbackOk = fallbackCopy()
-        if (!fallbackOk) throw new Error('copy_failed')
-      }
+      const ok = await copyTextToClipboard(address)
+      if (!ok) throw new Error('copy_failed')
       setHasCopied(true)
       setTimeout(() => setHasCopied(false), 2000)
       toast.success({ title: tr('common.copied', '已复制', 'Copied'), description: address, duration: 2000 })

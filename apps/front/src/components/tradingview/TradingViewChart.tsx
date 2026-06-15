@@ -128,25 +128,16 @@ interface CustomIndicator {
   metainfo: StudyMetaInfo
   constructor: (this: IndicatorThis) => void
 }
-// 日志控制：仅在开发环境或显式启用时输出调试日志
-const isDevelopment = process.env.NODE_ENV === 'development'
-const enableOIDebugLogs = isDevelopment || process.env.NEXT_PUBLIC_ENABLE_OI_DEBUG === 'true'
-
 // 持仓量数据日志辅助函数
 const oiLogger = {
   debug: (...args: unknown[]) => {
-    if (enableOIDebugLogs) {
-      console.log('[OI]', ...args)
-    }
+    logger.debug('[OI]', ...args)
   },
   warn: (...args: unknown[]) => {
-    if (enableOIDebugLogs) {
-      console.warn('[OI]', ...args)
-    }
+    logger.warn('[OI]', ...args)
   },
   error: (...args: unknown[]) => {
-    // 错误日志始终输出
-    console.error('[OI]', ...args)
+    logger.error('[OI]', ...args)
   },
 }
 

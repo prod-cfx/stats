@@ -171,19 +171,24 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
       <div className="flex gap-3 mb-6 flex-none">
         <button
           type="button"
-          onClick={() => console.log('TODO: Open Long')}
-          className="flex-1 bg-[#2ea043] hover:bg-[#3fb950] text-white font-bold py-2.5 rounded text-sm transition-all active:scale-[0.98] shadow-lg shadow-green-900/20"
+          disabled
+          title={t('tradePanel.tradingUnavailable', { defaultValue: 'Trading is not available yet' })}
+          className="flex-1 cursor-not-allowed bg-[#2ea043]/45 text-white/70 font-bold py-2.5 rounded text-sm shadow-lg shadow-green-900/10"
         >
           {t('tradePanel.openLong')}
         </button>
         <button
           type="button"
-          onClick={() => console.log('TODO: Open Short')}
-          className="flex-1 bg-[#da3633] hover:bg-[#f85149] text-white font-bold py-2.5 rounded text-sm transition-all active:scale-[0.98] shadow-lg shadow-red-900/20"
+          disabled
+          title={t('tradePanel.tradingUnavailable', { defaultValue: 'Trading is not available yet' })}
+          className="flex-1 cursor-not-allowed bg-[#da3633]/45 text-white/70 font-bold py-2.5 rounded text-sm shadow-lg shadow-red-900/10"
         >
           {t('tradePanel.openShort')}
         </button>
       </div>
+      <p className="-mt-4 mb-6 flex-none text-center text-xs text-[color:var(--cf-muted)]">
+        {t('tradePanel.tradingUnavailable', { defaultValue: 'Trading is not available yet' })}
+      </p>
 
       {/* Cost Info - Fixed below buttons */}
       <div className="space-y-2 text-xs border-t border-[color:var(--cf-border)] pt-4 mt-4 flex-none">

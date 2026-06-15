@@ -11,6 +11,7 @@ import { useTheme } from '@/components/providers/ThemeProvider'
 import { createLightweightChartAdapter } from '@/components/trading/chart-adapter/lightweight-chart-adapter'
 import { generateLiquidationMapMockData } from '@/lib/liquidation-map/mock-liquidation-map'
 import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market'
+import { logger } from '@/utils/logger'
 
 const LiquidationMapChart = dynamic(
   () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
@@ -823,7 +824,7 @@ export const TradingViewLightweightChart = ({
         axisLabelVisible: true,
         title: '',
       })
-      console.log('[LOCKED PRICE LINE CREATED]', lockedPrice)
+      logger.debug('[LOCKED PRICE LINE CREATED]', lockedPrice)
     }
 
     // 初始化四个可选 chartSeries（仅创建一次；显示与否由 setData([]) 控制）
@@ -1148,7 +1149,7 @@ export const TradingViewLightweightChart = ({
     if (typeof lockedPrice !== 'number' || !Number.isFinite(lockedPrice)) return
     if (!lockedPriceLineRef.current) return
     lockedPriceLineRef.current.applyOptions({ price: lockedPrice, axisLabelVisible: true })
-    console.log('[LOCKED PRICE LINE UPDATED]', lockedPrice)
+    logger.debug('[LOCKED PRICE LINE UPDATED]', lockedPrice)
   }, [lockedPrice])
 
   // 切换周期/切换指标时：只更新 K 线数据与指标数据，不重建 chart（从而保证 priceLine 永远只有一条且不重建。

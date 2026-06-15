@@ -21,6 +21,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={htmlLang} suppressHydrationWarning>
       <head>
         <script
+          // Static boot script only. Do not interpolate props, query params, localStorage values, or API data into this HTML sink.
           // eslint-disable-next-line react-dom/no-dangerously-set-innerhtml
           dangerouslySetInnerHTML={{
             __html: `

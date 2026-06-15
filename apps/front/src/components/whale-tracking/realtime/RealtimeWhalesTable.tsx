@@ -18,6 +18,8 @@ import { createWhaleNotificationRule } from '@/features/whale-notification/api/w
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { fetchWhaleTradesRealtime } from '@/lib/api'
 import { toast } from '@/lib/toast'
+import { copyTextToClipboard } from '@/utils/clipboard'
+import { logger } from '@/utils/logger'
 
 const WhaleTradingStatsModal = dynamic(
   () => import('../WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
@@ -248,21 +250,8 @@ export const RealtimeWhalesTable = () => {
   const handleCopy = async (address: string) => {
     if (copiedAddress === address) return
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(address)
-      } else {
-        const el = document.createElement('textarea')
-        el.value = address
-        el.setAttribute('readonly', '')
-        el.style.position = 'fixed'
-        el.style.left = '-9999px'
-        el.style.top = '0'
-        document.body.appendChild(el)
-        el.select()
-        const ok = document.execCommand('copy')
-        el.remove()
-        if (!ok) throw new Error('copy_failed')
-      }
+      const ok = await copyTextToClipboard(address)
+      if (!ok) throw new Error('copy_failed')
       setCopiedAddress(address)
       toast.success({
         title: t('whaleTracking.realtime.toast.copied'),
@@ -271,7 +260,7 @@ export const RealtimeWhalesTable = () => {
       })
       setTimeout(() => setCopiedAddress(null), 2000)
     } catch (err) {
-      console.error('Copy failed', err)
+      logger.error('Copy failed', err)
       toast.error({ title: t('common.error'), description: t('common.tryAgain'), duration: 2500 })
     }
   }

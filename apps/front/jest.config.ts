@@ -22,6 +22,8 @@ const config: Config = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@ai/shared$': '<rootDir>/../../packages/shared/src/index.ts',
+    '^@ai/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1',
   },
   collectCoverageFrom: ['src/**/*.{ts,tsx,js,jsx}'],
   coverageDirectory: '<rootDir>/coverage',
