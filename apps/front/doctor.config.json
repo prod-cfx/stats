@@ -1,0 +1,10 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "rootDir": "../..",
+  "ignore": {
+    "files": [
+      "apps/front/public/tradingview/charting_library/**",
+      "public/tradingview/charting_library/**"
+    ]
+  }
+}

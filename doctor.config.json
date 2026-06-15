@@ -1,0 +1,9 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "ignore": {
+    "files": [
+      "apps/front/public/tradingview/charting_library/**",
+      "public/tradingview/charting_library/**"
+    ]
+  }
+}
