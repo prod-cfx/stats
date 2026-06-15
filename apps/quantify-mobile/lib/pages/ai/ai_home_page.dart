@@ -177,6 +177,47 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     return null;
   }
 
+  AiPublishedStrategyContext? _latestBacktestableStrategyContext(
+    AiSession session,
+  ) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      final AiPublishedStrategyContext? strategyContext = turn.strategyContext;
+      if (turn.kind == ChatTurnKind.scriptReady &&
+          strategyContext?.hasPublishedSnapshot == true &&
+          strategyContext?.requiresRepublishForBacktest != true) {
+        return strategyContext;
+      }
+    }
+    return null;
+  }
+
+  bool _hasRepublishRequiredBacktestContext(AiSession session) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      final AiPublishedStrategyContext? strategyContext = turn.strategyContext;
+      if (turn.kind == ChatTurnKind.scriptReady &&
+          strategyContext?.hasPublishedSnapshot == true) {
+        return strategyContext?.requiresRepublishForBacktest == true;
+      }
+    }
+    return false;
+  }
+
+  void _openBacktestFromTopBar(AiSession? current) {
+    if (current == null) return;
+    final AiPublishedStrategyContext? strategyContext =
+        _latestBacktestableStrategyContext(current);
+    if (strategyContext != null) {
+      context.push('/ai/backtest-config', extra: strategyContext);
+      return;
+    }
+    final String message = _hasRepublishRequiredBacktestContext(current)
+        ? '当前已发布快照需要重新确认策略后再回测。'
+        : '请先确认策略并生成脚本后再回测。';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _confirmInChat(ChatTurn turn, AiSession session) async {
     final String? codegenSessionId = _codegenSessionIdFor(turn);
     final String? digest = _canonicalDigestFor(turn);
@@ -408,7 +449,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         backtestLabel: l10n.aiAppBarBacktestButton,
         newSessionTooltip: l10n.aiAppBarNewSessionTooltip,
         onOpenHistory: () => _scaffoldKey.currentState?.openDrawer(),
-        onOpenBacktest: () => context.push('/ai/backtest-config'),
+        onOpenBacktest: () => _openBacktestFromTopBar(current),
         onNewSession: _createSession,
       ),
       body: SafeArea(

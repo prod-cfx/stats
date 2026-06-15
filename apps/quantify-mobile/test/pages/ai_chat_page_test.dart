@@ -734,8 +734,51 @@ void main() {
     expect(find.text('参数'), findsNothing);
 
     await tester.tap(find.byKey(const Key('ai-appbar-backtest')));
+    await tester.pump();
+    expect(find.text('请先确认策略并生成脚本后再回测。'), findsOneWidget);
+    expect(find.text('backtest-config-route'), findsNothing);
+  });
+
+  testWidgets('顶部栏回测使用当前会话最新已发布策略快照进入配置页', (WidgetTester tester) async {
+    final AiPublishedStrategyContext strategyContext =
+        AiPublishedStrategyContext.fromCodegen(
+          _publishedCodegenSession(
+            id: 'codegen-topbar-1',
+            canonicalDigest: 'sha256:topbar-1',
+          ),
+        );
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'published-session',
+        title: 'BTC 已发布策略',
+        category: '趋势跟踪',
+        pair: 'BTC/USDT',
+        timeframe: '15m',
+        updatedAt: DateTime(2026, 6, 15, 10, 30),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'published-script-1',
+            role: 'assistant',
+            content: '策略脚本已生成',
+            timestamp: DateTime(2026, 6, 15, 10, 30),
+            kind: ChatTurnKind.scriptReady,
+            strategyContext: strategyContext,
+          ),
+        ],
+      ),
+    );
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-appbar-backtest')));
     await tester.pumpAndSettle();
-    expect(find.text('backtest-config-route'), findsOneWidget);
+
+    expect(
+      find.text('backtest-config-route:snapshot-1:codegen-topbar-1'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('顶栏左/右按钮：32×32 bgSoft 软背景容器 + 设计 glyph，方钮/圆钮圆角各异（#2015）', (
