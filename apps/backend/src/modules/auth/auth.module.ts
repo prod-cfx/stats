@@ -1,44 +1,23 @@
-import type { JwtSignOptions } from '@nestjs/jwt'
-import { forwardRef, Module } from '@nestjs/common'
-import { ConfigModule, ConfigService } from '@nestjs/config'
-import { JwtModule } from '@nestjs/jwt'
-import { PassportModule } from '@nestjs/passport'
+import { Module } from '@nestjs/common'
+import { ConfigModule } from '@nestjs/config'
 import { seconds, ThrottlerModule } from '@nestjs/throttler'
-import { AccessControlModule } from 'nest-access-control'
 import { MailService } from '@/common/services/mail.service'
 import { RedisService } from '@/common/services/redis.service'
 import { BetaCodeModule } from '@/modules/beta-code/beta-code.module'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { AuthAccessModule } from './auth-access.module'
 import { AuthController } from './auth.controller'
-import { ACGuard } from './guards/ac.guard'
 import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard'
-import { JwtAuthGuard } from './guards/jwt-auth.guard'
-import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard'
 import { ThrottlerRedisStorage } from './guards/throttler-redis-storage'
-import { RBAC_PERMISSIONS } from './rbac/permissions'
-import { RoleAssignmentRepository } from './repositories/role-assignment.repository'
 import { UserAuthRepository } from './repositories/user-auth.repository'
-import { AuditLogService } from './services/audit-log.service'
-import { PermissionCacheService } from './services/permission-cache.service'
-import { PermissionService } from './services/permission.service'
 import { UserAuthService } from './services/user-auth.service'
 import { VerificationCodeService } from './services/verification-code.service'
-import { JwtStrategy } from './strategies/jwt.strategy'
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
-    PassportModule.register({ defaultStrategy: 'jwt', property: 'user', session: false }),
-    JwtModule.registerAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('jwt.secret'),
-        signOptions: {
-          expiresIn: config.get<string>('jwt.expiresIn', '30d') as JwtSignOptions['expiresIn'],
-        },
-      }),
-    }),
+    AuthAccessModule,
     ThrottlerModule.forRootAsync({
       inject: [RedisService],
       useFactory: (redisService: RedisService) => ({
@@ -51,35 +30,19 @@ import { JwtStrategy } from './strategies/jwt.strategy'
         storage: new ThrottlerRedisStorage(redisService),
       }),
     }),
-    AccessControlModule.forRoles(RBAC_PERMISSIONS),
-    forwardRef(() => BetaCodeModule),
+    BetaCodeModule,
   ],
   controllers: [AuthController],
   providers: [
-    JwtStrategy,
-    JwtAuthGuard,
-    OptionalJwtAuthGuard,
-    ACGuard,
     AuthRateLimitGuard,
-    RoleAssignmentRepository,
     UserAuthRepository,
-    PermissionService,
-    PermissionCacheService,
-    AuditLogService,
     UserAuthService,
     VerificationCodeService,
     MailService,
   ],
   exports: [
-    JwtAuthGuard,
-    OptionalJwtAuthGuard,
-    ACGuard,
+    AuthAccessModule,
     AuthRateLimitGuard,
-    PermissionService,
-    AuditLogService,
-    AccessControlModule,
-    JwtModule,
-    PassportModule,
   ],
 })
 export class AuthModule {}
