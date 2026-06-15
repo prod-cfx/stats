@@ -1,7 +1,7 @@
 /* eslint-disable perfectionist/sort-imports */
 
 import type { OrderbookAdapterKey, OrderbookWsAdapter } from './orderbook-ws-adapter'
-import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
+import type { OnApplicationShutdown, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -12,10 +12,12 @@ import { ORDERBOOK_WS_ADAPTER_REGISTRY } from '../data-sync.tokens'
 import { toAdapterKey } from './orderbook-ws-adapter'
 
 @Injectable()
-export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdown {
+export class OrderbookWsSyncManager implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown {
   private readonly logger = new Logger(OrderbookWsSyncManager.name)
   private timer: NodeJS.Timeout | null = null
+  private currentTick: Promise<void> | null = null
   private isRunning = false
+  private isShuttingDown = false
   // 记录当前哪些 adapter 处于「活跃」状态（至少有一个目标配置）
   private readonly activeAdapters = new Map<OrderbookAdapterKey, boolean>()
 
@@ -52,12 +54,35 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
   }
 
   async onApplicationShutdown(): Promise<void> {
+    await this.shutdown()
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.shutdown()
+  }
+
+  private async shutdown(): Promise<void> {
+    this.isShuttingDown = true
+
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
     }
 
-    await Promise.allSettled(this.adapters.map(a => a.shutdown()))
+    await this.currentTick?.catch(err => {
+      this.logger.error(
+        `Orderbook WS sync shutdown waited for failed tick: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    })
+
+    const results = await Promise.allSettled(this.adapters.map(a => a.shutdown()))
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const adapter = this.adapters[index]
+        const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
+        this.logger.error(`Orderbook WS adapter shutdown failed for key=${adapter.key}: ${reason}`)
+      }
+    })
   }
 
   private isEnabled(): boolean {
@@ -88,11 +113,24 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
   }
 
   private async tick(): Promise<void> {
+    if (this.currentTick) return this.currentTick
+
+    const promise = this.executeTick().finally(() => {
+      if (this.currentTick === promise) this.currentTick = null
+    })
+    this.currentTick = promise
+    return promise
+  }
+
+  private async executeTick(): Promise<void> {
+    if (this.isShuttingDown) return
     if (this.isRunning) return
     this.isRunning = true
 
     try {
       const configs = await this.orderbookPairConfigService.findEnabledConfigs()
+      if (this.isShuttingDown) return
+
       const grouped = this.groupByAdapterKey(configs)
 
       // 按 adapter 维度增量管理连接：
@@ -100,6 +138,8 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
       // - 无目标配置且之前有过 → 做一次退订清理后关闭连接
       // - 无目标配置且之前也没有 → 不做任何操作，避免无意义连接
       for (const adapter of this.adapters) {
+        if (this.isShuttingDown) return
+
         const target = grouped.get(adapter.key) ?? []
         const wasActive = this.activeAdapters.get(adapter.key) === true
         // 检查 per-adapter 环境变量开关
@@ -116,11 +156,15 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
         try {
           if (hasTarget) {
             await adapter.ensureConnected()
+            if (this.isShuttingDown) return
+
             await adapter.syncTargetConfigs(target)
             if (!wasActive) this.activeAdapters.set(adapter.key, true)
           } else if (wasActive) {
             // 目标从非空变为空：做一次退订/状态清理，然后关闭连接
             await adapter.syncTargetConfigs([])
+            if (this.isShuttingDown) return
+
             await adapter.shutdown()
             this.activeAdapters.set(adapter.key, false)
           }

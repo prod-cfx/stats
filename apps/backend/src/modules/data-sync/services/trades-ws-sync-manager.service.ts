@@ -1,12 +1,10 @@
 /* eslint-disable perfectionist/sort-imports */
 
-import { ErrorCode } from '@ai/shared'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from './trades-ws-adapter'
-import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
+import type { OnApplicationShutdown, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { createHash } from 'node:crypto'
-import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { DomainException } from '@/common/exceptions/domain.exception'
 import { TRADES_WS_ADAPTER_REGISTRY } from '../data-sync.tokens'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TradesPairConfigService } from '@/modules/trades-config/services/trades-pair-config.service'
@@ -16,10 +14,12 @@ import { TradesPairConfigService } from '@/modules/trades-config/services/trades
  * 负责管理所有交易记录的 WebSocket 订阅适配器
  */
 @Injectable()
-export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown {
+export class TradesWsSyncManager implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown {
   private readonly logger = new Logger(TradesWsSyncManager.name)
   private timer: NodeJS.Timeout | null = null
+  private currentTick: Promise<void> | null = null
   private isRunning = false
+  private isShuttingDown = false
   private readonly activeAdapters = new Map<TradesAdapterKey, boolean>()
   
   /**
@@ -61,35 +61,41 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
   }
 
   async onApplicationShutdown(): Promise<void> {
+    await this.shutdown()
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.shutdown()
+  }
+
+  private async shutdown(): Promise<void> {
+    this.isShuttingDown = true
+
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
     }
 
+    await this.currentTick?.catch(err => {
+      this.logger.error(
+        `Trades WS sync shutdown waited for failed tick: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    })
+
     if (!this.adapters.length) return
 
     const results = await Promise.allSettled(this.adapters.map(a => a.shutdown()))
-
-    const failed: string[] = []
 
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
         const adapter = this.adapters[index]
         const reason =
           result.reason instanceof Error ? result.reason.message : String(result.reason)
-        failed.push(`${adapter.key}: ${reason}`)
         this.logger.error(
           `Trades WS adapter shutdown failed for key=${adapter.key}: ${reason}`,
         )
       }
     })
-
-    if (failed.length) {
-      throw new DomainException(
-        'data_sync.trades_ws_sync_manager.shutdown_failed',
-        { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: `Trades WS sync manager shutdown failed for adapters: ${failed.join('; ')}` } },
-      )
-    }
   }
 
   private isEnabled(): boolean {
@@ -105,11 +111,23 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
   }
 
   private async tick(): Promise<void> {
+    if (this.currentTick) return this.currentTick
+
+    const promise = this.executeTick().finally(() => {
+      if (this.currentTick === promise) this.currentTick = null
+    })
+    this.currentTick = promise
+    return promise
+  }
+
+  private async executeTick(): Promise<void> {
+    if (this.isShuttingDown) return
     if (this.isRunning) return
     this.isRunning = true
 
     try {
       const configs = await this.getTradesConfigs()
+      if (this.isShuttingDown) return
 
       // 计算配置哈希，检测变更
       const newHash = this.computeConfigHash(configs)
@@ -124,6 +142,8 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       let allSucceeded = true
 
       for (const adapter of this.adapters) {
+        if (this.isShuttingDown) return
+
         const target = grouped.get(adapter.key) ?? []
         const hasTarget = target.length > 0
         const wasActive = this.activeAdapters.get(adapter.key) === true
@@ -131,10 +151,14 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
         try {
           if (hasTarget) {
             await adapter.ensureConnected()
+            if (this.isShuttingDown) return
+
             await adapter.syncTargetConfigs(target)
             if (!wasActive) this.activeAdapters.set(adapter.key, true)
           } else if (wasActive) {
             await adapter.syncTargetConfigs([])
+            if (this.isShuttingDown) return
+
             await adapter.shutdown()
             this.activeAdapters.set(adapter.key, false)
           }
@@ -253,4 +277,3 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       .digest('hex')
   }
 }
-

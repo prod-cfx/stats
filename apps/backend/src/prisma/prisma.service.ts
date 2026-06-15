@@ -1,4 +1,4 @@
-import type { INestApplication, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import type { BeforeApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import type { ConfigService } from '@nestjs/config'
 import type { EnvService } from '../common/services/env.service'
 import type { PrismaModuleOptions } from './prisma.constants'
@@ -23,7 +23,7 @@ interface PrismaLogDefinition {
 const MODELS_NEEDING_SHORT_ID: readonly string[] = []
 
 @Injectable()
-export class PrismaService extends (PrismaClientBase as any) implements OnModuleInit, OnModuleDestroy {
+export class PrismaService extends (PrismaClientBase as any) implements OnModuleInit, BeforeApplicationShutdown {
   private readonly logger = new Logger(PrismaService.name)
   private extendedClient: ExtendedPrismaClient | null = null
   private static readonly MODEL_DELEGATES = [] as const
@@ -137,7 +137,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     this.setupQueryLogging()
   }
 
-  async onModuleDestroy() {
+  async beforeApplicationShutdown() {
     // SKIP_PRISMA_CONNECT/USE_MOCK_DATA: 离线/Mock 模式下跳过 Prisma 断开
     if (
       defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) ||
@@ -271,12 +271,6 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
         lowerQuery.includes(`update \`${t}\``) ||
         lowerQuery.includes(` ${t} `)
       )
-    })
-  }
-
-  async enableShutdownHooks(app: INestApplication) {
-    ;(this as any).$on('beforeExit' as never, async () => {
-      await app.close()
     })
   }
 

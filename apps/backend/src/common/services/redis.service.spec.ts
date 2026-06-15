@@ -127,4 +127,22 @@ describe('RedisService', () => {
     expect(service.isReady()).toBe(true)
     expect(Redis).toHaveBeenCalledWith('redis://localhost:6379/0')
   })
+
+  it('quits the mock client on application shutdown and allows repeated shutdown', async () => {
+    const configService = createConfigService({
+      'app.appEnv': 'test',
+      'redis.url': undefined,
+      USE_MOCK_DATA: false,
+    })
+    const logger = createLogger()
+    const envService = createEnvService({ isTest: true })
+    const service = new RedisService(configService, logger, envService)
+    const client = service.getClient()
+    const quit = jest.spyOn(client, 'quit')
+
+    await expect(service.onApplicationShutdown()).resolves.toBeUndefined()
+    await expect(service.onApplicationShutdown()).resolves.toBeUndefined()
+
+    expect(quit).toHaveBeenCalledTimes(2)
+  })
 })
