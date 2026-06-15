@@ -15,23 +15,13 @@ import type { QueryTraderSnapshotDto, TraderSnapshotResponseDto } from './dto/tr
 import type {
   QueryWhaleAddressPerformanceDto,
   WhaleAddressPerformanceResponseDto,
-  WhaleAssetPerformanceDto,
-  WhaleTradeHistoryItemDto,
-  WhaleTraderSummaryPerformanceDto,
 } from './dto/whale-address-performance.dto'
-import type {
-  ClearinghouseStateResponse,
-  HyperliquidAssetPosition,
-  HyperliquidOpenOrder,
-  HyperliquidSpotBalance,
-} from './services/hyperliquid-api.service'
 import type { HyperliquidWhaleAlert } from '@/prisma/prisma.types'
-import { safeParseFloat } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { EnvService } from '@/common/services/env.service'
 // eslint-disable-next-line ts/consistent-type-imports
-import { HyperliquidApiService } from './services'
+import { WhalePerformanceService, WhaleSnapshotService } from './services'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { WhaleTrackingRepository } from './whale-tracking.repository'
 
@@ -66,8 +56,9 @@ export class WhaleTrackingService {
 
   constructor(
     private readonly whaleTrackingRepository: WhaleTrackingRepository,
-    private readonly hyperliquidApi: HyperliquidApiService,
     private readonly envService: EnvService,
+    private readonly whalePerformanceService: WhalePerformanceService,
+    private readonly whaleSnapshotService: WhaleSnapshotService,
   ) {}
 
   async getDiscoverWhales(): Promise<WhaleDiscoverResponseDto> {
@@ -306,149 +297,7 @@ export class WhaleTrackingService {
     address: string,
     query: QueryWhaleAddressPerformanceDto,
   ): Promise<WhaleAddressPerformanceResponseDto> {
-    const lookbackDays = typeof query.timeRangeDays === 'number' ? query.timeRangeDays : 30
-    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
-
-    const where = {
-      userAddress: address,
-      createTime: {
-        gte: since,
-      },
-      ...(query.symbol ? { symbol: query.symbol } : {}),
-    }
-
-    // 1）使用数据库端聚合计算 summary 级统计信息，避免在 Node 层对大量记录做手工聚合
-    const summaryAgg = await this.whaleTrackingRepository.groupAlertsByAddressForSummary(where)
-
-    let totalValueUsd = 0
-    let tradesCount = 0
-
-    if (summaryAgg.length > 0) {
-      const agg = summaryAgg[0]
-      const sumVal = agg._sum.positionValueUsd ?? 0
-      totalValueUsd = Number(sumVal)
-      tradesCount = agg._count._all ?? 0
-    }
-
-    // 2）按 symbol 维度在数据库端聚合，以获取 byAsset 统计
-    const byAssetAgg = await this.whaleTrackingRepository.groupAlertsBySymbol(where)
-
-    // 批量查询 long 和 short 方向的计数，避免 N+1 查询问题
-    const [longAgg, shortAgg] = await Promise.all([
-      // 查询所有 long 持仓（positionSize > 0）按 symbol 分组的计数
-      this.whaleTrackingRepository.groupAlertsBySymbolWithPositionFilter({
-        ...where,
-        positionSize: { gt: 0 },
-      }),
-      // 查询所有 short 持仓（positionSize < 0）按 symbol 分组的计数
-      this.whaleTrackingRepository.groupAlertsBySymbolWithPositionFilter({
-        ...where,
-        positionSize: { lt: 0 },
-      }),
-    ])
-
-    // 构建 Map 方便快速查找每个 symbol 的 long/short 计数
-    const longCountMap = new Map<string, number>()
-    const shortCountMap = new Map<string, number>()
-
-    for (const item of longAgg) {
-      longCountMap.set(item.symbol, item._count._all)
-    }
-
-    for (const item of shortAgg) {
-      shortCountMap.set(item.symbol, item._count._all)
-    }
-
-    // 组装结果，从 Map 中读取预先计算好的 long/short 计数
-    const byAssetWithDirection = byAssetAgg.map((agg: (typeof byAssetAgg)[number]) => {
-      const symbol = agg.symbol
-      const symbolLong = longCountMap.get(symbol) ?? 0
-      const symbolShort = shortCountMap.get(symbol) ?? 0
-
-      return {
-        agg,
-        symbol,
-        symbolLong,
-        symbolShort,
-      }
-    })
-
-    let longCount = 0
-    let shortCount = 0
-
-    const byAsset: WhaleAssetPerformanceDto[] = byAssetWithDirection.map(
-      (item: (typeof byAssetWithDirection)[number]) => {
-        const sumVal = item.agg._sum.positionValueUsd ?? 0
-        const totalVal = Number(sumVal)
-        const trades = item.agg._count._all ?? 0
-
-        longCount += item.symbolLong
-        shortCount += item.symbolShort
-
-        return {
-          symbol: item.symbol,
-          totalValueUsd: Number(totalVal.toFixed(2)),
-          trades,
-          longCount: item.symbolLong,
-          shortCount: item.symbolShort,
-        }
-      },
-    )
-
-    byAsset.sort((a, b) => b.totalValueUsd - a.totalValueUsd)
-
-    const positionsCount = byAsset.length
-
-    const totalDirectional = longCount + shortCount
-    const winRatePct =
-      totalDirectional > 0 ? Number(((longCount / totalDirectional) * 100).toFixed(2)) : 50
-
-    const pnlScale = 0.08
-    const directionFactor = totalDirectional > 0 ? (longCount >= shortCount ? 1 : -1) : 1
-    const rawPnl = totalValueUsd * pnlScale * directionFactor
-    const pnlUsd = Number(rawPnl.toFixed(2))
-
-    const summary: WhaleTraderSummaryPerformanceDto = {
-      address,
-      lookbackDays,
-      symbolFilter: query.symbol,
-      trades: tradesCount,
-      positions: positionsCount,
-      totalValueUsd: Number(totalValueUsd.toFixed(2)),
-      longCount,
-      shortCount,
-      winRatePct,
-      pnlUsd,
-    }
-
-    const limit =
-      typeof query.limit === 'number' && query.limit > 0 ? Math.min(query.limit, 500) : 200
-
-    // 3）针对交易明细，仅拉取有限条数到 Node 层，避免一次性加载过多记录
-    const tradesSource: HyperliquidWhaleAlert[] = await this.whaleTrackingRepository.findManyAlertsWithLimit(where, limit)
-
-    const trades: WhaleTradeHistoryItemDto[] = tradesSource.map(a => {
-      const positionSize = Number(a.positionSize ?? 0)
-      const side: 'LONG' | 'SHORT' = positionSize >= 0 ? 'LONG' : 'SHORT'
-
-      return {
-        address: a.userAddress,
-        symbol: a.symbol,
-        side,
-        positionSize,
-        positionValueUsd: Number(a.positionValueUsd ?? 0),
-        entryPrice: Number(a.entryPrice ?? 0),
-        liquidationPrice: Number(a.liquidationPrice ?? 0),
-        positionAction: a.positionAction,
-        createTime: a.createTime.toISOString(),
-      }
-    })
-
-    return {
-      summary,
-      byAsset,
-      trades,
-    }
+    return this.whalePerformanceService.getTraderPerformance(address, query)
   }
 
   private toTraderDto(stats: AggregatedWhaleStats, index: number): WhaleDiscoverTraderDto {
@@ -573,105 +422,7 @@ export class WhaleTrackingService {
     address: string,
     query: QueryTraderSnapshotDto,
   ): Promise<TraderSnapshotResponseDto> {
-    const skipCache = query.skipCache ?? false
-
-    // 并行请求永续和现货账户状态
-    const [perpState, spotState] = await Promise.all([
-      this.hyperliquidApi.getClearinghouseState(address, skipCache),
-      this.hyperliquidApi.getSpotClearinghouseState(address, skipCache),
-    ])
-
-    // 解析永续合约账户数据
-    const perpSummary =
-      perpState.marginSummary || ({} as ClearinghouseStateResponse['marginSummary'])
-    const accountValue = safeParseFloat(perpSummary.accountValue)
-    const totalMarginUsed = safeParseFloat(perpSummary.totalMarginUsed)
-    const totalPositionValue = safeParseFloat(perpSummary.totalNtlPos)
-    const withdrawable = safeParseFloat(perpState.withdrawable)
-
-    // 计算保证金使用率和杠杆倍数
-    const marginUsagePercent = accountValue > 0 ? (totalMarginUsed / accountValue) * 100 : 0
-    const leverageRatio = totalMarginUsed > 0 ? totalPositionValue / totalMarginUsed : 0
-
-    // 计算未实现盈亏和 ROI
-    let unrealizedPnl = 0
-    const assetPositions: HyperliquidAssetPosition[] = perpState.assetPositions || []
-    for (const ap of assetPositions) {
-      unrealizedPnl += safeParseFloat(ap.position?.unrealizedPnl)
-    }
-    const roi = totalMarginUsed > 0 ? (unrealizedPnl / totalMarginUsed) * 100 : 0
-
-    // 解析现货账户数据
-    const spotBalances: HyperliquidSpotBalance[] = spotState.balances || []
-    let spotTotalValue = 0
-
-    // TODO(PERF-002): 现货价值计算硬编码为 0，需要实现 getMetaInfo() 获取币种价格
-    // 实现方案：
-    // 1. HyperliquidApiService.getMetaInfo() 获取所有币种的中间价
-    // 2. 根据 balance.coin 查询对应价格
-    // 3. value = total * price
-    // 4. 添加价格缓存（TTL 5秒）避免频繁请求
-    if (spotBalances.length > 0) {
-      this.logger.warn(
-        `[PERF-002] 现货余额价值计算暂未实现 (address=${address}, balances=${spotBalances.length}), 返回值为 0`,
-      )
-    }
-
-    interface BalanceWithValue {
-      coin: string
-      total: number
-      hold: number
-      value: number
-      sharePercent: number
-    }
-    const balances: BalanceWithValue[] = []
-
-    for (const balance of spotBalances) {
-      const total = safeParseFloat(balance.total)
-      const hold = safeParseFloat(balance.hold)
-      const value = 0 // TODO(PERF-002): 等待价格 API 实现
-      spotTotalValue += value
-
-      balances.push({
-        coin: balance.coin,
-        total,
-        hold,
-        value,
-        sharePercent: 0, // 稍后计算
-      })
-    }
-
-    // 计算现货余额占比
-    for (const balance of balances) {
-      balance.sharePercent = spotTotalValue > 0 ? (balance.value / spotTotalValue) * 100 : 0
-    }
-
-    // 计算汇总数据
-    const totalAccountValue = accountValue + spotTotalValue
-    const perpPercent = totalAccountValue > 0 ? (accountValue / totalAccountValue) * 100 : 0
-    const spotPercent = totalAccountValue > 0 ? (spotTotalValue / totalAccountValue) * 100 : 0
-
-    return {
-      perp: {
-        accountValue,
-        totalMarginUsed,
-        totalPositionValue,
-        withdrawable,
-        marginUsagePercent: Number(marginUsagePercent.toFixed(2)),
-        leverageRatio: Number(leverageRatio.toFixed(2)),
-        unrealizedPnl: Number(unrealizedPnl.toFixed(2)),
-        roi: Number(roi.toFixed(2)),
-      },
-      spot: {
-        totalValue: spotTotalValue,
-        balances,
-      },
-      total: {
-        accountValue: totalAccountValue,
-        perpPercent: Number(perpPercent.toFixed(3)),
-        spotPercent: Number(spotPercent.toFixed(3)),
-      },
-    }
+    return this.whaleSnapshotService.getTraderSnapshot(address, query)
   }
 
   /**
@@ -685,137 +436,7 @@ export class WhaleTrackingService {
     address: string,
     query: QueryTraderPositionsDto,
   ): Promise<TraderPositionsResponseDto> {
-    const skipCache = query.skipCache ?? false
-    const type = query.type ?? 'all'
-
-    // 根据类型筛选决定请求哪些接口
-    const needPerp = type === 'all' || type === 'perp'
-    const needSpot = type === 'all' || type === 'spot'
-
-    const [perpState, spotState] = await Promise.all([
-      needPerp ? this.hyperliquidApi.getClearinghouseState(address, skipCache) : null,
-      needSpot ? this.hyperliquidApi.getSpotClearinghouseState(address, skipCache) : null,
-    ])
-
-    // 定义永续持仓内部类型
-    interface PerpPositionItem {
-      coin: string
-      side: 'LONG' | 'SHORT'
-      size: number
-      entryPrice: number
-      markPrice: number
-      liquidationPrice: number
-      positionValue: number
-      marginUsed: number
-      leverage: { type: 'cross' | 'isolated'; value: number }
-      unrealizedPnl: number
-      unrealizedPnlPercent: number
-      fundingRate?: number
-      roi: number
-    }
-
-    // 解析永续合约持仓
-    const perpPositions: PerpPositionItem[] = []
-    if (perpState) {
-      const assetPositions: HyperliquidAssetPosition[] = perpState.assetPositions || []
-      for (const ap of assetPositions) {
-        const position = ap.position
-        if (!position) continue
-
-        const szi = safeParseFloat(position.szi)
-        const side: 'LONG' | 'SHORT' = szi > 0 ? 'LONG' : 'SHORT'
-
-        // entryPx 解析
-        const entryPrice = safeParseFloat(position.entryPx)
-
-        // 标记价格获取（技术债务）：
-        // 需要调用 Hyperliquid API 的 meta 端点获取实时标记价格
-        // 实现方案：
-        // 1. HyperliquidApiService.getMetaInfo() 获取所有币种的标记价格
-        // 2. 根据 position.coin 查询对应的 markPx
-        // 3. 添加价格缓存（TTL 5秒）避免频繁请求
-        // 临时方案：使用 positionValue 和 szi 反推近似价格
-        const markPrice = szi !== 0 ? Math.abs(safeParseFloat(position.positionValue) / szi) : 0
-
-        const liquidationPrice = safeParseFloat(position.liquidationPx)
-        const positionValue = safeParseFloat(position.positionValue)
-        const marginUsed = safeParseFloat(position.marginUsed)
-        const unrealizedPnl = safeParseFloat(position.unrealizedPnl)
-        const unrealizedPnlPercent = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
-        const roi = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
-
-        const cumFunding = position.cumFunding
-        const fundingRate = cumFunding ? safeParseFloat(cumFunding.sinceOpen) : undefined
-
-        const leverage = position.leverage || { type: 'cross' as const, value: 1 }
-        const leverageType: 'cross' | 'isolated' =
-          leverage.type === 'isolated' ? 'isolated' : 'cross'
-        const leverageValue = Number(leverage.value || 1)
-
-        perpPositions.push({
-          coin: position.coin,
-          side,
-          size: szi,
-          entryPrice,
-          markPrice,
-          liquidationPrice,
-          positionValue,
-          marginUsed,
-          leverage: {
-            type: leverageType,
-            value: leverageValue,
-          },
-          unrealizedPnl: Number(unrealizedPnl.toFixed(2)),
-          unrealizedPnlPercent: Number(unrealizedPnlPercent.toFixed(2)),
-          fundingRate: fundingRate !== undefined ? Number(fundingRate.toFixed(2)) : undefined,
-          roi: Number(roi.toFixed(2)),
-        })
-      }
-    }
-
-    // 定义现货余额内部类型
-    interface SpotBalanceItem {
-      coin: string
-      total: number
-      hold: number
-      available: number
-      value: number
-    }
-
-    // 解析现货余额
-    const spotBalancesResult: SpotBalanceItem[] = []
-    if (spotState) {
-      const balances: HyperliquidSpotBalance[] = spotState.balances || []
-
-      // TODO(PERF-002): 现货价值计算硬编码为 0，需要实现 getMetaInfo() 获取币种价格
-      if (balances.length > 0) {
-        this.logger.warn(
-          `[PERF-002] 持仓详情现货价值计算暂未实现 (address=${address}, balances=${balances.length}), 返回值为 0`,
-        )
-      }
-
-      for (const balance of balances) {
-        const total = safeParseFloat(balance.total)
-        if (total === 0) continue // 跳过零余额
-
-        const hold = safeParseFloat(balance.hold)
-        const available = total - hold
-        const value = 0 // TODO(PERF-002): 等待价格 API 实现
-
-        spotBalancesResult.push({
-          coin: balance.coin,
-          total,
-          hold,
-          available,
-          value,
-        })
-      }
-    }
-
-    return {
-      perp: perpPositions,
-      spot: spotBalancesResult,
-    }
+    return this.whaleSnapshotService.getTraderPositions(address, query)
   }
 
   /**
@@ -829,46 +450,7 @@ export class WhaleTrackingService {
     address: string,
     query: QueryTraderOpenOrdersDto,
   ): Promise<TraderOpenOrdersResponseDto> {
-    const skipCache = query.skipCache ?? false
-    const coinFilter = query.coin
-
-    // 调用 Hyperliquid API 获取挂单
-    const openOrders: HyperliquidOpenOrder[] = await this.hyperliquidApi.getOpenOrders(
-      address,
-      skipCache,
-    )
-
-    // 过滤和转换数据
-    let filteredOrders = openOrders || []
-    if (coinFilter) {
-      filteredOrders = filteredOrders.filter(order => order.coin === coinFilter)
-    }
-
-    const orders = filteredOrders.map(order => {
-      const side: 'BUY' | 'SELL' = order.side === 'A' ? 'BUY' : 'SELL'
-      const limitPrice = safeParseFloat(order.limitPx)
-      const size = safeParseFloat(order.sz)
-      const origSize = safeParseFloat(order.origSz)
-      const value = limitPrice * size
-      const timestamp = new Date(order.timestamp).toISOString()
-
-      return {
-        orderId: order.oid,
-        coin: order.coin,
-        side,
-        type: order.orderType || 'limit',
-        price: limitPrice,
-        size,
-        origSize,
-        value,
-        timestamp,
-        triggerPrice: order.triggerPx ? safeParseFloat(order.triggerPx) : null,
-        triggerCondition: order.triggerCondition || null,
-        reduceOnly: order.reduceOnly || false,
-      }
-    })
-
-    return { orders }
+    return this.whaleSnapshotService.getTraderOpenOrders(address, query)
   }
 
   async getTraderDiscoverTags(address: string): Promise<{
