@@ -61,12 +61,18 @@ class MarketDetailPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _toggleFavorite(BuildContext context, WidgetRef ref) async {
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    WidgetRef ref,
+    String favoriteSymbol,
+  ) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool wasFavorite = ref.read(marketFavoritesProvider).contains(symbol);
+    final bool wasFavorite = ref
+        .read(marketFavoritesProvider)
+        .contains(favoriteSymbol);
     try {
-      await ref.read(marketFavoritesProvider.notifier).toggle(symbol);
+      await ref.read(marketFavoritesProvider.notifier).toggle(favoriteSymbol);
     } catch (_) {
       // 写盘失败由 notifier 回滚 state；不弹成功 toast。
       return;
@@ -132,7 +138,10 @@ class MarketDetailPage extends ConsumerWidget {
     final MarketDetailController controller = ref.read(
       marketDetailControllerProvider(symbol).notifier,
     );
-    final bool isFavorite = ref.watch(marketFavoritesProvider).contains(symbol);
+    final String favoriteSymbol = s.priceSnapshot?.symbol ?? symbol;
+    final bool isFavorite = ref
+        .watch(marketFavoritesProvider)
+        .contains(favoriteSymbol);
     return Scaffold(
       appBar: QzTopBar(
         title: _topBarTitle(symbol),
@@ -150,7 +159,8 @@ class MarketDetailPage extends ConsumerWidget {
               size: 20,
               color: isFavorite ? context.qzScheme.statusWarn : null,
             ),
-            onPressed: () => unawaited(_toggleFavorite(context, ref)),
+            onPressed: () =>
+                unawaited(_toggleFavorite(context, ref, favoriteSymbol)),
             tooltip: l10nForBar.marketDetailStarTooltip,
           ),
           IconButton(

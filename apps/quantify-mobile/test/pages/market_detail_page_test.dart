@@ -420,6 +420,32 @@ void main() {
     );
   });
 
+  testWidgets('MarketDetailPage base 路由收藏写入完整 ticker symbol', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeOrderbookRepository(),
+      symbol: 'BTC',
+      prefsSeed: <String, Object>{
+        MarketFavoritesPersistence.kKey: <String>['ETHUSDT'],
+      },
+    );
+
+    await tester.tap(find.byKey(const Key('market-detail-favorite')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('已加入自选'), findsOneWidget);
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final List<String> stored = prefs.getStringList(
+      MarketFavoritesPersistence.kKey,
+    )!;
+    expect(stored, contains('BTCUSDT'));
+    expect(stored, isNot(contains('BTC')));
+  });
+
   // #1755 取消收藏：默认已收藏（prefs 含当前 symbol），点击切回未收藏。
   testWidgets('MarketDetailPage 收藏按钮点击：已收藏 → 取消 + toast', (
     WidgetTester tester,
