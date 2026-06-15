@@ -775,6 +775,70 @@ void main() {
     );
   });
 
+  testWidgets('脚本气泡默认收起为 8 行，并支持展开全部和收起', (WidgetTester tester) async {
+    final String longScript = List<String>.generate(
+      14,
+      (int index) => 'script_line_$index();',
+    ).join('\n');
+    final AiPublishedStrategyContext strategyContext =
+        AiPublishedStrategyContext.fromCodegen(
+          _publishedCodegenSession(
+            id: 'codegen-collapsible-script',
+            canonicalDigest: 'sha256:collapsible-script',
+          ).rebuild((CodegenSessionResponseDtoBuilder b) {
+            b.scriptCode = longScript;
+          }),
+        );
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'collapsible-script-session',
+        title: 'BTC 长脚本策略',
+        category: '趋势跟踪',
+        pair: 'BTC/USDT',
+        timeframe: '15m',
+        updatedAt: DateTime(2026, 6, 15, 10, 40),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'published-script-long',
+            role: 'assistant',
+            content: '策略脚本已生成',
+            timestamp: DateTime(2026, 6, 15, 10, 40),
+            kind: ChatTurnKind.scriptReady,
+            strategyContext: strategyContext,
+          ),
+        ],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    Text codeText = tester.widget<Text>(
+      find.byKey(const Key('ai-bubble-code-text')),
+    );
+    expect(codeText.maxLines, 8);
+    expect(find.text('展开全部'), findsOneWidget);
+    expect(find.text('开始回测'), findsOneWidget);
+
+    await tester.tap(find.text('展开全部'));
+    await tester.pumpAndSettle();
+    codeText = tester.widget<Text>(
+      find.byKey(const Key('ai-bubble-code-text')),
+    );
+    expect(codeText.maxLines, isNull);
+    expect(find.text('收起'), findsOneWidget);
+
+    await tester.tap(find.text('收起'));
+    await tester.pumpAndSettle();
+    codeText = tester.widget<Text>(
+      find.byKey(const Key('ai-bubble-code-text')),
+    );
+    expect(codeText.maxLines, 8);
+    expect(find.text('展开全部'), findsOneWidget);
+  });
+
   testWidgets('顶栏左/右按钮：32×32 bgSoft 软背景容器 + 设计 glyph，方钮/圆钮圆角各异（#2015）', (
     WidgetTester tester,
   ) async {

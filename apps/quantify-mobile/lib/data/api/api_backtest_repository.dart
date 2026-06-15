@@ -1,6 +1,8 @@
 import 'package:backend_api_contracts/backend_api_contracts.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/serializer.dart';
 import 'package:built_value/json_object.dart';
+import 'package:dio/dio.dart';
 
 import '../models/backtest_models.dart';
 import '../repositories/backtest_repository.dart';
@@ -27,35 +29,48 @@ class ApiBacktestRepository implements BacktestRepository {
   Future<BacktestSymbolSupportResult> checkSymbolSupport(
     BacktestSymbolSupportRequest request,
   ) async {
-    final response = await _backtestingApi
-        .backtestingProxyControllerCheckSymbolSupport(
-          authorization: _authorization(),
-          backtestingSymbolSupportRequestDto:
-              BacktestingSymbolSupportRequestDto(
-                (b) => b
-                  ..exchange = _symbolSupportExchange(request.exchange)
-                  ..marketType = _symbolSupportMarketType(request.marketType)
-                  ..symbol = request.symbol.trim().toUpperCase()
-                  ..baseTimeframe = _symbolSupportBaseTimeframe(
-                    request.baseTimeframe,
-                  ),
-              ),
+    final BacktestingSymbolSupportRequestDto payload =
+        BacktestingSymbolSupportRequestDto(
+          (b) => b
+            ..exchange = _symbolSupportExchange(request.exchange)
+            ..marketType = _symbolSupportMarketType(request.marketType)
+            ..symbol = request.symbol.trim().toUpperCase()
+            ..baseTimeframe = _symbolSupportBaseTimeframe(
+              request.baseTimeframe,
+            ),
         );
-    final BacktestingSymbolSupportResponseDto? data = response.data;
-    if (data == null) {
+    final Object body = _api.client.serializers.serialize(
+      payload,
+      specifiedType: const FullType(BacktestingSymbolSupportRequestDto),
+    )!;
+    final Response<Object?> response = await _api.dio.request<Object?>(
+      '/backtesting/symbols/check',
+      data: body,
+      options: Options(
+        method: 'POST',
+        headers: <String, dynamic>{'authorization': _authorization()},
+        contentType: 'application/json',
+      ),
+    );
+    final Map<String, dynamic> envelope = asMap(response.data);
+    final Map<String, dynamic> payloadData = asMap(envelope['data']);
+    if (payloadData.isEmpty) {
       return const BacktestSymbolSupportResult(
         supported: false,
         reason: '当前交易对或周期暂不支持回测',
       );
     }
-    switch (data.status) {
-      case BacktestingSymbolSupportResponseDtoStatusEnum.supported:
-      case BacktestingSymbolSupportResponseDtoStatusEnum.refreshedThenSupported:
+    switch (asString(payloadData['status'])) {
+      case 'supported':
+      case 'refreshed_then_supported':
         return const BacktestSymbolSupportResult(supported: true);
-      case BacktestingSymbolSupportResponseDtoStatusEnum.notSupported:
+      case 'not_supported':
         return BacktestSymbolSupportResult(
           supported: false,
-          reason: data.reasonCode ?? '当前交易对或周期暂不支持回测',
+          reason: asString(
+            payloadData['reasonCode'],
+            fallback: '当前交易对或周期暂不支持回测',
+          ),
         );
       default:
         return const BacktestSymbolSupportResult(
