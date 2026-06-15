@@ -19,33 +19,34 @@ export class TransactionEventsService {
   ) {}
 
   afterCommit(task: Task): void {
+    let inTx: boolean
+
     try {
-      const inTx = this.txHost.isTransactionActive()
-
-      if (!inTx) {
-        Promise.resolve()
-          .then(() => task())
-          .catch(error => {
-            const meta = { err: (error as Error)?.message, stack: (error as Error)?.stack }
-            this.logger.warn(`afterCommit fallback task failed: ${meta.err}\n${meta.stack ?? ''}`)
-          })
-        return
-      }
-
-      const list = (this.cls.get(AFTER_COMMIT_TASKS_KEY) as Task[] | undefined) || []
-      list.push(task)
-      this.cls.set(AFTER_COMMIT_TASKS_KEY, list)
+      inTx = this.txHost.isTransactionActive()
     } catch (error) {
-      this.logger.warn(
-        `afterCommit called without CLS context, executing task immediately: ${(error as Error)?.message}`,
+      this.rejectUnsafeAfterCommit(
+        `afterCommit called without CLS context; use withAfterCommit() for non-HTTP work: ${(error as Error)?.message}`,
       )
-      Promise.resolve()
-        .then(() => task())
-        .catch(err => {
-          const meta = { err: (err as Error)?.message, stack: (err as Error)?.stack }
-          this.logger.warn(`afterCommit fallback task failed: ${meta.err}\n${meta.stack ?? ''}`)
-        })
+      return
     }
+
+    if (!inTx) {
+      this.rejectUnsafeAfterCommit(
+        'afterCommit called without an active transaction; use @TransactionalWithAfterCommit() for HTTP handlers or withAfterCommit() for non-HTTP work',
+      )
+      return
+    }
+
+    const list = (this.cls.get(AFTER_COMMIT_TASKS_KEY) as Task[] | undefined) || []
+    list.push(task)
+    this.cls.set(AFTER_COMMIT_TASKS_KEY, list)
+  }
+
+  private rejectUnsafeAfterCommit(message: string): void {
+    if (process.env.NODE_ENV === 'test') {
+      throw new Error(message)
+    }
+    this.logger.error(message)
   }
 
   drainAfterCommitTasks(): Task[] {
