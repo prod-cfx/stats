@@ -92,6 +92,21 @@ class BacktestTrade {
   });
 }
 
+/// 回测结束时仍未平仓的持仓（未平仓持仓 Tab）。
+class BacktestOpenPosition {
+  final String symbol;
+  final double qty;
+  final double avgEntryPrice;
+  final double unrealizedPnl;
+
+  const BacktestOpenPosition({
+    required this.symbol,
+    required this.qty,
+    required this.avgEntryPrice,
+    required this.unrealizedPnl,
+  });
+}
+
 /// 风险分析行的语义色调，映射到 `QzColorScheme` 状态色。
 enum BacktestRiskTone { danger, warn, neutral }
 
@@ -124,6 +139,14 @@ class BacktestMonthlyRow {
   const BacktestMonthlyRow({required this.year, required this.values});
 }
 
+/// front 回测报告同源净值点：保留时间戳，移动端当前图只画 equity，后续可补 x 轴。
+class BacktestEquityPoint {
+  final DateTime? time;
+  final double equity;
+
+  const BacktestEquityPoint({required this.time, required this.equity});
+}
+
 /// 完整回测结果。对齐设计稿 `ScreenBacktestResult`：Hero 累计净值/CAGR、
 /// 关键指标 8 格、月度热力 / 交易记录 / 风险分析三段，以及 AI 评估。
 class BacktestResult {
@@ -152,12 +175,30 @@ class BacktestResult {
   /// 总交易笔数（5 年内开仓次数）。
   final int totalTrades;
 
+  /// front 对齐指标：已平仓收益（%）。
+  final double closedReturnPercent;
+
+  /// front 对齐指标：已平仓胜率（%）。
+  final double closedWinRatePercent;
+
+  /// front 对齐指标：已平仓笔数。
+  final int closedTrades;
+
+  /// front 对齐指标：未平仓笔数。
+  final int openTrades;
+
+  /// front 对齐指标：浮动盈亏。
+  final double openPnl;
+
   /// 回测区间。
   final DateTime rangeStart;
   final DateTime rangeEnd;
 
   /// 归一化净值曲线（Hero 图）。
   final List<double> equityCurve;
+
+  /// front 原始净值点，来自 `equityCurve: [{ ts, equity }]`。
+  final List<BacktestEquityPoint> equityPoints;
 
   /// 净值曲线上回撤红点标记的索引（落在 [equityCurve] 上）。
   final List<int> drawdownMarkers;
@@ -167,6 +208,9 @@ class BacktestResult {
 
   /// 交易记录。
   final List<BacktestTrade> trades;
+
+  /// 未平仓持仓。
+  final List<BacktestOpenPosition> openPositions;
 
   /// 风险分析行。
   final List<BacktestRiskRow> riskRows;
@@ -185,12 +229,19 @@ class BacktestResult {
     required this.profitLossRatio,
     required this.avgHoldDuration,
     required this.totalTrades,
+    this.closedReturnPercent = 0,
+    this.closedWinRatePercent = 0,
+    this.closedTrades = 0,
+    this.openTrades = 0,
+    this.openPnl = 0,
     required this.rangeStart,
     required this.rangeEnd,
     required this.equityCurve,
+    this.equityPoints = const <BacktestEquityPoint>[],
     required this.drawdownMarkers,
     required this.monthlyRows,
     required this.trades,
+    this.openPositions = const <BacktestOpenPosition>[],
     required this.riskRows,
     required this.aiAssessment,
   });

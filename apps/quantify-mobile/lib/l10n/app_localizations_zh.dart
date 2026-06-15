@@ -372,16 +372,61 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestResultMetricAvgHoldSub => '单笔交易时长';
 
   @override
+  String get backtestResultMetricClosedReturn => '已平仓收益';
+
+  @override
+  String get backtestResultMetricClosedReturnSub => '已实现收益率';
+
+  @override
+  String get backtestResultMetricClosedWinRate => '已平仓胜率';
+
+  @override
+  String get backtestResultMetricClosedWinRateSub => '闭合交易胜率';
+
+  @override
+  String get backtestResultMetricClosedTrades => '已平仓笔数';
+
+  @override
+  String get backtestResultMetricClosedTradesSub => '闭合交易数量';
+
+  @override
+  String get backtestResultMetricOpenTrades => '未平仓笔数';
+
+  @override
+  String get backtestResultMetricOpenTradesSub => '回测结束仍持仓';
+
+  @override
+  String get backtestResultMetricOpenPnl => '浮动盈亏';
+
+  @override
+  String get backtestResultMetricOpenPnlSub => '未实现盈亏';
+
+  @override
   String get backtestResultTabMonthly => '月度回报';
 
   @override
   String get backtestResultTabTrades => '交易记录';
 
   @override
+  String get backtestResultTabOpenPositions => '未平仓';
+
+  @override
   String get backtestResultTabRisk => '风险分析';
 
   @override
   String get backtestResultMonthlyLegendLabel => '月度 % 收益';
+
+  @override
+  String get backtestResultOpenPositionsEmpty => '暂无未平仓持仓';
+
+  @override
+  String get backtestResultOpenPositionFallbackSymbol => '持仓';
+
+  @override
+  String get backtestResultOpenPositionQty => '数量';
+
+  @override
+  String get backtestResultOpenPositionAvgEntry => '均价';
 
   @override
   String get backtestResultTradeSideLong => '多';
@@ -571,6 +616,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployDoneCloseButton => '完成';
 
   @override
+  String get deployDoneRunningButton => '已部署运行';
+
+  @override
   String get deploySystemMessagePrefix => '策略已部署到 ';
 
   @override
@@ -670,19 +718,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deployPreflightApiOkSub => '读取 + 现货 + 永续 · 未启用提币（安全）';
+  String get deployPreflightApiOkSub => '已检测到该交易所已绑定账户';
 
   @override
-  String get deployPreflightBalanceOkTitle => '账户余额充足';
+  String get deployPreflightBalanceOkTitle => '部署参数已准备';
 
   @override
-  String get deployPreflightBalanceOkSub => '可用资金满足部署所需，留有余裕';
+  String get deployPreflightBalanceOkSub => '快照、交易所、市场类型和部署参数完整';
 
   @override
-  String get deployPreflightLatencyOkTitle => '网络与交易所时延正常';
+  String get deployPreflightLatencyOkTitle => '部署时服务端校验';
 
   @override
-  String get deployPreflightLatencyOkSub => '下单延时 < 200ms · 数据流稳定';
+  String get deployPreflightLatencyOkSub => '余额、权限和交易所连通性将在提交部署时由后端校验';
 
   @override
   String get deployPreflightBackButton => '返回';
@@ -697,16 +745,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployPreflightApiFailSub => '未检测到可用密钥，去绑定 API 后重试';
 
   @override
-  String get deployPreflightBalanceFailTitle => '账户余额不足';
+  String get deployPreflightBalanceFailTitle => '部署参数不完整';
 
   @override
-  String get deployPreflightBalanceFailSub => '可用资金低于部署所需，请充值或调低投入金额';
+  String get deployPreflightBalanceFailSub => '缺少策略快照、交易所或部署参数';
 
   @override
-  String get deployPreflightLatencyFailTitle => '网络或交易所时延异常';
+  String get deployPreflightLatencyFailTitle => '部署校验未完成';
 
   @override
-  String get deployPreflightLatencyFailSub => '下单延时偏高 · 数据流不稳定，建议稍后重试';
+  String get deployPreflightLatencyFailSub => '请稍后重试或提交部署后查看后端返回原因';
 
   @override
   String get deployConfirmSummaryReturn => '累计净值';
@@ -2014,6 +2062,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiConfirmNextScript => '确认策略';
+
+  @override
+  String get aiConfirmConfirmed => '已确认';
 
   @override
   String get aiStartBacktestPrompt => '请先确认策略逻辑，确认后我会继续生成脚本。';

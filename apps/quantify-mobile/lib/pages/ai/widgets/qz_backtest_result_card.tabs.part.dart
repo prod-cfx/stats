@@ -116,53 +116,46 @@ class _MetricsGrid extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     final List<_Metric> metrics = <_Metric>[
       _Metric(
-        label: l10n.backtestResultMetricCagr,
+        label: l10n.backtestResultMetricClosedReturn,
         value:
-            '${result.cagrPercent >= 0 ? '+' : ''}${result.cagrPercent.toStringAsFixed(1)}%',
-        sub: l10n.backtestResultMetricCagrSub,
-        color: result.cagrPercent >= 0 ? c.marketUp : c.marketDown,
-      ),
-      _Metric(
-        label: l10n.backtestResultSharpe,
-        value: result.sharpe.toStringAsFixed(2),
-        sub: l10n.backtestResultMetricSharpeSub,
-        color: c.text,
+            '${result.closedReturnPercent >= 0 ? '+' : ''}${result.closedReturnPercent.toStringAsFixed(1)}%',
+        sub: l10n.backtestResultMetricClosedReturnSub,
+        color: result.closedReturnPercent >= 0 ? c.marketUp : c.marketDown,
       ),
       _Metric(
         label: l10n.backtestResultMaxDrawdown,
-        value: '${result.maxDrawdownPercent.toStringAsFixed(1)}%',
+        value: '-${result.maxDrawdownPercent.abs().toStringAsFixed(1)}%',
         sub: l10n.backtestResultMetricMaxDrawdownSub,
         color: c.marketDown,
       ),
       _Metric(
-        label: l10n.backtestResultMetricCalmar,
-        value: result.calmar.toStringAsFixed(2),
-        sub: l10n.backtestResultMetricCalmarSub,
+        label: l10n.backtestResultMetricClosedWinRate,
+        value: '${result.closedWinRatePercent.toStringAsFixed(1)}%',
+        sub: l10n.backtestResultMetricClosedWinRateSub,
         color: c.text,
       ),
       _Metric(
-        label: l10n.backtestResultMetricWinRate,
-        value: '${result.winRatePercent.toStringAsFixed(1)}%',
-        sub: l10n.backtestResultMetricWinRateSub,
+        label: l10n.backtestResultMetricClosedTrades,
+        value: '${result.closedTrades}',
+        sub: l10n.backtestResultMetricClosedTradesSub,
         color: c.text,
       ),
       _Metric(
-        label: l10n.backtestResultMetricProfitLoss,
-        value: result.profitLossRatio.toStringAsFixed(2),
-        sub: l10n.backtestResultMetricProfitLossSub,
+        label: l10n.backtestResultMetricOpenTrades,
+        value: '${result.openTrades}',
+        sub: l10n.backtestResultMetricOpenTradesSub,
         color: c.text,
       ),
       _Metric(
-        label: l10n.backtestResultMetricTotalTrades,
-        value: '${result.totalTrades}${l10n.backtestResultTradesSuffix}',
-        sub: l10n.backtestResultMetricTotalTradesSub,
-        color: c.text,
-      ),
-      _Metric(
-        label: l10n.backtestResultMetricAvgHold,
-        value: result.avgHoldDuration,
-        sub: l10n.backtestResultMetricAvgHoldSub,
-        color: c.text,
+        label: l10n.backtestResultMetricOpenPnl,
+        value:
+            '${result.openPnl > 0 ? '+' : ''}${result.openPnl.toStringAsFixed(2)}',
+        sub: l10n.backtestResultMetricOpenPnlSub,
+        color: result.openPnl > 0
+            ? c.marketUp
+            : result.openPnl < 0
+            ? c.marketDown
+            : c.text,
       ),
     ];
 

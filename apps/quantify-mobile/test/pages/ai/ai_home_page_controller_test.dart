@@ -1,5 +1,7 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +19,10 @@ class _FakeAiChatRepository implements AiChatRepository {
   final List<AiSession> _seed;
   int _seq = 0;
   int listSessionsCalls = 0;
+  int getCodegenSessionCalls = 0;
   Object? listSessionsError;
+  Object? getCodegenSessionError;
+  CodegenSessionResponseDto? codegenSession;
 
   /// sendMessageTo 返回的固定回复内容。
   String replyContent = 'hi';
@@ -57,7 +62,16 @@ class _FakeAiChatRepository implements AiChatRepository {
 
   @override
   Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
-      throw UnimplementedError();
+      _getCodegenSession(sessionId);
+
+  Future<CodegenSessionResponseDto> _getCodegenSession(String sessionId) async {
+    getCodegenSessionCalls++;
+    final Object? error = getCodegenSessionError;
+    if (error != null) throw error;
+    final CodegenSessionResponseDto? response = codegenSession;
+    if (response == null) throw StateError('missing codegen session');
+    return response;
+  }
 
   @override
   Future<CodegenSessionResponseDto> confirmStrategy(
@@ -77,6 +91,7 @@ class _FakeAiChatRepository implements AiChatRepository {
   Future<AiSession?> markDeployed(
     String sessionId,
     String publishedSnapshotId, {
+    String? strategyName,
     String? exchangeAccountId,
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
@@ -90,6 +105,28 @@ AiSession _session(String id, {List<ChatTurn>? messages}) => AiSession(
   updatedAt: DateTime(2026, 1, 1),
   messages: messages ?? const <ChatTurn>[],
 );
+
+CodegenSessionResponseDto _publishedCodegenSession({
+  String id = 'codegen-1',
+  String snapshotId = 'snapshot-1',
+  String canonicalDigest = 'sha256:restored',
+}) {
+  return CodegenSessionResponseDto(
+    (CodegenSessionResponseDtoBuilder b) => b
+      ..id = id
+      ..status = CodegenSessionResponseDtoStatusEnum.PUBLISHED
+      ..canonicalDigest = canonicalDigest
+      ..publishedSnapshotId = snapshotId
+      ..scriptCode = 'export default function strategy() { return true; }'
+      ..clarificationGate.replace(BuiltMap<String, JsonObject?>())
+      ..publishedSnapshotParamValues.replace(
+        BuiltMap<String, JsonObject?>(<String, JsonObject?>{
+          'symbol': JsonObject('BTCUSDT'),
+          'baseTimeframe': JsonObject('15m'),
+        }),
+      ),
+  );
+}
 
 void main() {
   ProviderContainer makeContainer(_FakeAiChatRepository repo) {
@@ -133,6 +170,77 @@ void main() {
       expect(s.initialized, isTrue);
       expect(s.order, <String>['a', 'b']);
       expect(s.currentId, 'a');
+    });
+
+    test('loadSessions 恢复当前会话远端已发布脚本状态', () async {
+      final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
+        _session('a').copyWith(llmCodegenSessionId: 'codegen-1'),
+      ])..codegenSession = _publishedCodegenSession();
+      final ProviderContainer c = makeContainer(repo);
+      pin(c);
+
+      await ctrl(c).loadSessions();
+
+      final AiSession session = read(c).sessions['a']!;
+      expect(repo.getCodegenSessionCalls, 1);
+      expect(session.messages.length, 2);
+      final ChatTurn logic = session.messages.first;
+      expect(logic.kind, ChatTurnKind.params);
+      expect(logic.params?['symbol'], 'BTCUSDT');
+      expect(logic.params?['baseTimeframe'], '15m');
+      expect(logic.codegenSessionId, 'codegen-1');
+      expect(logic.confirmedCanonicalDigest, 'sha256:restored');
+      final ChatTurn restored = session.messages.last;
+      expect(restored.kind, ChatTurnKind.scriptReady);
+      expect(restored.strategyContext?.publishedSnapshotId, 'snapshot-1');
+      expect(restored.strategyContext?.scriptCode, contains('strategy'));
+      expect(session.llmCodegenSessionId, 'codegen-1');
+      expect(session.pendingCanonicalDigest, 'sha256:restored');
+    });
+
+    test('loadSessions 已有 scriptReady 时不重复恢复', () async {
+      final ChatTurn ready = ChatTurn(
+        id: 'ready-1',
+        role: 'assistant',
+        content: '策略脚本已生成',
+        timestamp: DateTime(2026, 1, 1),
+        kind: ChatTurnKind.scriptReady,
+      );
+      final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
+        _session(
+          'a',
+          messages: <ChatTurn>[ready],
+        ).copyWith(llmCodegenSessionId: 'codegen-1'),
+      ])..codegenSession = _publishedCodegenSession();
+      final ProviderContainer c = makeContainer(repo);
+      pin(c);
+
+      await ctrl(c).loadSessions();
+
+      expect(repo.getCodegenSessionCalls, 0);
+      expect(read(c).sessions['a']!.messages, <ChatTurn>[ready]);
+    });
+
+    test('loadSessions 远端恢复失败时保留本地聊天记录', () async {
+      final ChatTurn local = ChatTurn(
+        id: 'local-1',
+        role: 'assistant',
+        content: '请确认策略',
+        timestamp: DateTime(2026, 1, 1),
+      );
+      final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
+        _session(
+          'a',
+          messages: <ChatTurn>[local],
+        ).copyWith(llmCodegenSessionId: 'codegen-1'),
+      ])..getCodegenSessionError = StateError('network down');
+      final ProviderContainer c = makeContainer(repo);
+      pin(c);
+
+      await ctrl(c).loadSessions();
+
+      expect(repo.getCodegenSessionCalls, 1);
+      expect(read(c).sessions['a']!.messages, <ChatTurn>[local]);
     });
 
     test('loadSessions 失败时结束初始化并记录错误', () async {

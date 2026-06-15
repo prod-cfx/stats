@@ -36,7 +36,7 @@ class QzBacktestResultCard extends StatefulWidget {
   State<QzBacktestResultCard> createState() => _QzBacktestResultCardState();
 }
 
-enum _ResultTab { monthly, trades, risk }
+enum _ResultTab { monthly, trades, openPositions, risk }
 
 class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
   _ResultTab _tab = _ResultTab.monthly;
@@ -58,6 +58,11 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
     final BacktestResult r = widget.result;
     final bool up = r.totalReturnPercent >= 0;
     final Color heroColor = up ? c.marketUp : c.marketDown;
+    final List<double> equityValues = r.equityPoints.isNotEmpty
+        ? r.equityPoints
+              .map((BacktestEquityPoint point) => point.equity)
+              .toList(growable: false)
+        : r.equityCurve;
 
     return QzCard(
       child: Column(
@@ -137,7 +142,7 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
             width: double.infinity,
             child: CustomPaint(
               painter: _EquityCurvePainter(
-                points: r.equityCurve,
+                points: equityValues,
                 markers: r.drawdownMarkers,
                 lineColor: heroColor,
                 fillColor: heroColor.withValues(alpha: 0.16),
@@ -155,17 +160,21 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
             options: <String>[
               l10n.backtestResultTabMonthly,
               l10n.backtestResultTabTrades,
+              l10n.backtestResultTabOpenPositions,
               l10n.backtestResultTabRisk,
             ],
             value: switch (_tab) {
               _ResultTab.monthly => l10n.backtestResultTabMonthly,
               _ResultTab.trades => l10n.backtestResultTabTrades,
+              _ResultTab.openPositions => l10n.backtestResultTabOpenPositions,
               _ResultTab.risk => l10n.backtestResultTabRisk,
             },
             onChanged: (String v) {
               setState(() {
                 if (v == l10n.backtestResultTabTrades) {
                   _tab = _ResultTab.trades;
+                } else if (v == l10n.backtestResultTabOpenPositions) {
+                  _tab = _ResultTab.openPositions;
                 } else if (v == l10n.backtestResultTabRisk) {
                   _tab = _ResultTab.risk;
                 } else {
@@ -178,6 +187,9 @@ class _QzBacktestResultCardState extends State<QzBacktestResultCard> {
           switch (_tab) {
             _ResultTab.monthly => _MonthlyHeatmap(rows: r.monthlyRows),
             _ResultTab.trades => _TradeList(trades: r.trades),
+            _ResultTab.openPositions => _OpenPositionList(
+              positions: r.openPositions,
+            ),
             _ResultTab.risk => _RiskAnalysis(rows: r.riskRows),
           },
           const SizedBox(height: QzSpacing.md),

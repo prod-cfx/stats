@@ -68,13 +68,35 @@ class DeployPreflightResult {
     required this.latencyReady,
   });
 
+  DeployPreflightResult.fromDeploymentContext({
+    required this.apiConnected,
+    required DeploymentContext deploymentContext,
+  }) : balanceReady = isDeploymentContextReady(deploymentContext),
+       latencyReady = true;
+
   const DeployPreflightResult.failed()
     : apiConnected = false,
       balanceReady = false,
       latencyReady = false;
 
+  static bool isDeploymentContextReady(DeploymentContext context) {
+    final String marketType = context.marketType?.trim().toLowerCase() ?? '';
+    final bool leverageReady =
+        marketType == 'spot' ||
+        ((context.leverage ?? 0) > 0 && marketType.isNotEmpty);
+    return context.publishedSnapshotId.trim().isNotEmpty &&
+        (context.exchange?.trim().isNotEmpty ?? false) &&
+        marketType.isNotEmpty &&
+        context.amount > 0 &&
+        leverageReady;
+  }
+
   final bool apiConnected;
+
+  /// Legacy field name. UI now uses it as "deployment parameters ready".
   final bool balanceReady;
+
+  /// Legacy field name. UI now uses it as "server validation on deploy".
   final bool latencyReady;
 }
 

@@ -7,8 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/api_key_models.dart';
+import '../../../data/models/ai_chat_models.dart';
 import '../../../data/models/deploy_models.dart';
 import '../../../data/providers.dart';
+import '../../../data/repositories/live_strategy_repository.dart';
+import '../../../domain/models/live_strategy_models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../me/api_form_sheet.dart';
 import '../../../theme/colors.dart';
@@ -134,6 +137,115 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   bool _notifyClose = true;
   bool _notifyStopLoss = true;
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreExistingDeployment());
+  }
+
+  @override
+  void didUpdateWidget(covariant QzDeploySheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deploymentContext != widget.deploymentContext) {
+      unawaited(_restoreExistingDeployment());
+    }
+  }
+
+  Future<void> _restoreExistingDeployment() async {
+    final DeploymentContext? deploymentContext = widget.deploymentContext;
+    if (deploymentContext == null) return;
+    try {
+      final List<AiSession> sessions = await ref
+          .read(aiChatRepositoryProvider)
+          .listSessions();
+      final AiSession? deployed = _findDeployedSession(
+        sessions,
+        deploymentContext,
+      );
+      final DeploymentResult? result = deployed == null
+          ? await _findDeploymentResultFromLiveStrategy(deploymentContext)
+          : _deploymentResultFromSession(deployed, deploymentContext);
+      if (!mounted || widget.deploymentContext != deploymentContext) return;
+      if (result == null) return;
+      setState(() {
+        _deployError = null;
+        _result = result;
+        _step = DeployStep.success;
+      });
+    } catch (_) {
+      // Existing-deploy reconciliation is best effort; normal deploy flow remains.
+    }
+  }
+
+  AiSession? _findDeployedSession(
+    List<AiSession> sessions,
+    DeploymentContext context,
+  ) {
+    final String sessionId = context.sessionId.trim();
+    if (sessionId.isEmpty) return null;
+    for (final AiSession session in sessions) {
+      final String deployedTo = session.deployedTo?.trim() ?? '';
+      if (deployedTo.isEmpty) continue;
+      if (session.id == sessionId || session.llmCodegenSessionId == sessionId) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  Future<DeploymentResult?> _findDeploymentResultFromLiveStrategy(
+    DeploymentContext context,
+  ) async {
+    final String snapshotId = context.publishedSnapshotId.trim();
+    if (snapshotId.isEmpty) return null;
+    final LiveStrategyRepository repository = ref.read(
+      liveStrategyRepositoryProvider,
+    );
+    final List<LiveStrategy> strategies = await repository.listStrategies();
+    for (final LiveStrategy strategy in strategies) {
+      if (strategy.name.trim() != snapshotId) continue;
+      if (strategy.status == LiveStrategyStatus.stopped) continue;
+      return _deploymentResultFromLiveStrategy(strategy, context);
+    }
+    return null;
+  }
+
+  DeploymentResult _deploymentResultFromSession(
+    AiSession session,
+    DeploymentContext context,
+  ) {
+    final DateTime now = DateTime.now();
+    return DeploymentResult(
+      exchange: context.exchange ?? '',
+      instanceId: session.deployedTo!,
+      deployedAt: now,
+      strategyId: session.deployedTo,
+      symbol: context.symbol ?? session.pair,
+      amount: context.amount,
+      leverage: context.leverage == null ? null : '${context.leverage}x · 全仓',
+      startedAt: now,
+    );
+  }
+
+  DeploymentResult _deploymentResultFromLiveStrategy(
+    LiveStrategy strategy,
+    DeploymentContext context,
+  ) {
+    final DateTime now = DateTime.now();
+    return DeploymentResult(
+      exchange: strategy.exchange.isNotEmpty
+          ? strategy.exchange
+          : (context.exchange ?? ''),
+      instanceId: strategy.id,
+      deployedAt: now,
+      strategyId: strategy.id,
+      symbol: context.symbol ?? strategy.pair,
+      amount: context.amount,
+      leverage: context.leverage == null ? null : '${context.leverage}x · 全仓',
+      startedAt: now,
+    );
+  }
+
   /// 预检查通过「确认部署」→ 部署中。
   /// 实际部署结果在分步动画跑完后由 `_onDeployingDone` 回填。
   void _confirmDeploy(_DeployTarget target) {
@@ -156,6 +268,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           .markDeployed(
             deploymentContext.sessionId,
             deploymentContext.publishedSnapshotId,
+            strategyName: _strategyNameForDeploy(deploymentContext),
             exchangeAccountId: target!.apiKey!.id,
             exchangeAccountName: target.apiKey!.label,
             deploymentExecutionConfig: deploymentContext.toExecutionConfig(
@@ -188,6 +301,17 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       if (!mounted) return;
       setState(() => _deployError = e);
     }
+  }
+
+  String _strategyNameForDeploy(DeploymentContext context) {
+    final String explicit = context.strategyName?.trim() ?? '';
+    if (explicit.isNotEmpty) return explicit;
+    final String symbol = context.symbol?.trim() ?? '';
+    if (symbol.isNotEmpty) {
+      final String base = symbol.split('·').first.trim();
+      if (base.isNotEmpty) return '$base AI策略';
+    }
+    return context.publishedSnapshotId;
   }
 
   /// 兼容旧入口（空列表场景），打开当前策略交易所 API 表单。
@@ -241,10 +365,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       orElse: () => _kExchangeCatalog[0],
     );
     final List<ExchangeApiKey> accounts = keys
-        .where(
-          (ExchangeApiKey k) =>
-              k.exchange.toLowerCase() == catalog.code && !k.isTestnet,
-        )
+        .where((ExchangeApiKey k) => k.exchange.toLowerCase() == catalog.code)
         .toList(growable: false);
     final ExchangeApiKey? selected = accounts.isEmpty
         ? null

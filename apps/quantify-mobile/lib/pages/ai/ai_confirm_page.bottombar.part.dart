@@ -37,12 +37,14 @@ class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.backLabel,
     required this.nextLabel,
+    required this.nextEnabled,
     required this.onBack,
     required this.onNext,
   });
 
   final String backLabel;
   final String nextLabel;
+  final bool nextEnabled;
   final VoidCallback onBack;
   final VoidCallback onNext;
 
@@ -73,7 +75,12 @@ class _BottomBar extends StatelessWidget {
           const SizedBox(width: QzSpacing.sm),
           Expanded(
             flex: 2,
-            child: _PrimaryCta(label: nextLabel, onTap: onNext, scheme: c),
+            child: _PrimaryCta(
+              label: nextLabel,
+              enabled: nextEnabled,
+              onTap: nextEnabled ? onNext : null,
+              scheme: c,
+            ),
           ),
         ],
       ),
@@ -127,12 +134,14 @@ class _SecondaryCta extends StatelessWidget {
 class _PrimaryCta extends StatelessWidget {
   const _PrimaryCta({
     required this.label,
+    required this.enabled,
     required this.onTap,
     required this.scheme,
   });
 
   final String label;
-  final VoidCallback onTap;
+  final bool enabled;
+  final VoidCallback? onTap;
   final QzColorScheme scheme;
 
   @override
@@ -148,9 +157,11 @@ class _PrimaryCta extends StatelessWidget {
           height: 50,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            gradient: scheme.accentGrad,
+            color: enabled ? null : scheme.bgSoft,
+            gradient: enabled ? scheme.accentGrad : null,
+            border: enabled ? null : Border.all(color: scheme.border),
             borderRadius: BorderRadius.circular(QzRadii.card),
-            boxShadow: <BoxShadow>[scheme.accentShadow],
+            boxShadow: enabled ? <BoxShadow>[scheme.accentShadow] : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -159,17 +170,19 @@ class _PrimaryCta extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: scheme.accentOn,
+                  color: enabled ? scheme.accentOn : scheme.textDim,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: QzSpacing.xs),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: scheme.accentOn,
-              ),
+              if (enabled) ...<Widget>[
+                const SizedBox(width: QzSpacing.xs),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: scheme.accentOn,
+                ),
+              ],
             ],
           ),
         ),

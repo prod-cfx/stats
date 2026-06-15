@@ -128,10 +128,10 @@ class _DonePane extends StatelessWidget {
     ];
     final Widget action = QzButton(
       key: const Key('deploy-finish'),
-      label: l10n.deployDoneCloseButton,
+      label: l10n.deployDoneRunningButton,
       variant: QzButtonVariant.accent,
       height: 50,
-      onPressed: onFinish,
+      onPressed: null,
     );
 
     if (stickyActions) {

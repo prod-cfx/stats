@@ -5,6 +5,7 @@ import 'package:built_collection/built_collection.dart';
 import 'package:built_value/json_object.dart';
 
 import '../models/ai_chat_models.dart';
+import '../models/ai_strategy_context.dart';
 import '../repositories/ai_chat_repository.dart';
 import '../services/account_services.dart';
 import '../services/api_client.dart';
@@ -53,14 +54,37 @@ ChatTurn _parseTurn(Map<String, dynamic> m) {
 }
 
 AiSession _parseSession(Map<String, dynamic> m) {
+  final List<ChatTurn> messages = asMapList(
+    pick(m, <String>['messages', 'conversationMessages']),
+  ).map(_parseTurn).toList(growable: true);
+  final DateTime updatedAt = asDateTime(pick(m, <String>['updatedAt']));
+  final ChatTurn? scriptReadyTurn = _scriptReadyTurnFromConversation(
+    m,
+    timestamp: updatedAt,
+  );
+  if (scriptReadyTurn != null &&
+      !messages.any((ChatTurn turn) => turn.kind == ChatTurnKind.scriptReady)) {
+    messages.add(scriptReadyTurn);
+  }
+  final ChatTurn? backtestTurn = _backtestResultTurnFromConversation(
+    m,
+    timestamp: updatedAt,
+  );
+  if (backtestTurn != null &&
+      !messages.any(
+        (ChatTurn turn) =>
+            turn.kind == ChatTurnKind.result &&
+            turn.backtestSummary?.id == backtestTurn.backtestSummary?.id,
+      )) {
+    messages.add(backtestTurn);
+  }
+
   return AiSession(
     id: asString(pick(m, <String>['id'])),
     title: asString(pick(m, <String>['title', 'conversationTitle'])),
     category: asString(pick(m, <String>['category']), fallback: '未分类'),
-    updatedAt: asDateTime(pick(m, <String>['updatedAt'])),
-    messages: asMapList(
-      pick(m, <String>['messages', 'conversationMessages']),
-    ).map(_parseTurn).toList(growable: false),
+    updatedAt: updatedAt,
+    messages: messages.toList(growable: false),
     pair: asStringOrNull(pick(m, <String>['pair'])),
     timeframe: asStringOrNull(pick(m, <String>['timeframe'])),
     cagrLabel: asStringOrNull(pick(m, <String>['cagrLabel'])),
@@ -76,6 +100,96 @@ AiSession _parseSession(Map<String, dynamic> m) {
     pendingCanonicalDigest: asStringOrNull(
       pick(m, <String>['pendingCanonicalDigest', 'canonicalDigest']),
     ),
+  );
+}
+
+ChatTurn? _scriptReadyTurnFromConversation(
+  Map<String, dynamic> m, {
+  required DateTime timestamp,
+}) {
+  final String scriptCode = asString(pick(m, <String>['scriptCode'])).trim();
+  final String snapshotId = asString(
+    pick(m, <String>['publishedSnapshotId']),
+  ).trim();
+  if (scriptCode.isEmpty || snapshotId.isEmpty) return null;
+  CodegenSessionResponseDto response;
+  try {
+    response = _codegenSessionFromConversation(m);
+  } catch (_) {
+    return null;
+  }
+  final AiPublishedStrategyContext strategyContext =
+      AiPublishedStrategyContext.fromCodegen(response);
+  return ChatTurn(
+    id: 'published-script-${response.id}',
+    role: 'assistant',
+    content: '策略脚本已生成',
+    timestamp: timestamp,
+    kind: ChatTurnKind.scriptReady,
+    codegenSessionId: response.id,
+    confirmedCanonicalDigest: response.canonicalDigest,
+    strategyContext: strategyContext,
+  );
+}
+
+CodegenSessionResponseDto _codegenSessionFromConversation(
+  Map<String, dynamic> m,
+) {
+  final Map<String, dynamic> raw = Map<String, dynamic>.of(m);
+  final String activeCodegenSessionId = asString(
+    pick(raw, <String>[
+      'activeCodegenSessionId',
+      'llmCodegenSessionId',
+      'codegenSessionId',
+      'sessionId',
+    ]),
+  ).trim();
+  if (activeCodegenSessionId.isNotEmpty) raw['id'] = activeCodegenSessionId;
+  raw['conversationId'] = asString(pick(m, <String>['id'])).trim();
+  final String status = asString(raw['status']).trim();
+  if (status.isEmpty &&
+      asString(raw['scriptCode']).trim().isNotEmpty &&
+      asString(raw['publishedSnapshotId']).trim().isNotEmpty) {
+    raw['status'] = 'PUBLISHED';
+  }
+  return _codegenSessionFromRaw(raw);
+}
+
+ChatTurn? _backtestResultTurnFromConversation(
+  Map<String, dynamic> m, {
+  required DateTime timestamp,
+}) {
+  final Map<String, dynamic> ref = asMap(m['lastBacktestRef']);
+  final BacktestSummary? summary = _backtestSummaryFromRef(ref);
+  if (summary == null) return null;
+  final DateTime completedAt = asDateTime(
+    pick(ref, <String>['completedAt']),
+    fallback: timestamp,
+  );
+  return ChatTurn(
+    id: 'backtest-result-${summary.id}',
+    role: 'assistant',
+    content:
+        '回测完成，可在下方「回测结果」查看完整曲线和指标。已平仓收益 ${summary.totalReturnPercent >= 0 ? '+' : ''}${summary.totalReturnPercent.toStringAsFixed(1)}%，最大回撤 -${summary.maxDrawdownPercent.abs().toStringAsFixed(1)}%。',
+    timestamp: completedAt,
+    kind: ChatTurnKind.result,
+    backtestSummary: summary,
+  );
+}
+
+BacktestSummary? _backtestSummaryFromRef(Map<String, dynamic> ref) {
+  final String jobId = asString(pick(ref, <String>['jobId', 'id'])).trim();
+  final Map<String, dynamic> summary = asMap(ref['summary']);
+  if (jobId.isEmpty || summary.isEmpty) return null;
+  return BacktestSummary(
+    id: jobId,
+    totalReturnPercent: asDouble(
+      pick(summary, <String>['totalReturnPct', 'totalReturnPercent']),
+    ),
+    maxDrawdownPercent: asDouble(
+      pick(summary, <String>['maxDrawdownPct', 'maxDrawdownPercent']),
+    ),
+    trades: asInt(pick(summary, <String>['tradeCount', 'trades'])),
   );
 }
 
@@ -365,14 +479,17 @@ class ApiAiChatRepository implements AiChatRepository {
     GeneratedBackendApi? generatedApi,
     String Function()? tokenSupplier,
     Duration sessionPollInterval = const Duration(milliseconds: 500),
+    Duration deployPollInterval = const Duration(seconds: 2),
   }) : _generatedApi = generatedApi,
        _tokenSupplier = tokenSupplier,
-       _sessionPollInterval = sessionPollInterval;
+       _sessionPollInterval = sessionPollInterval,
+       _deployPollInterval = deployPollInterval;
 
   final AiChatService _service;
   final GeneratedBackendApi? _generatedApi;
   final String Function()? _tokenSupplier;
   final Duration _sessionPollInterval;
+  final Duration _deployPollInterval;
   final Map<String, String> _localCodegenSessionIds = <String, String>{};
 
   AccountAiQuantApi? get _accountAiQuantApi =>
@@ -638,42 +755,49 @@ class ApiAiChatRepository implements AiChatRepository {
   }
 
   /// deploy 结果轮询上限（有界，防死循环）。
-  static const int _deployPollLimit = 3;
+  static const int _deployPollLimit = 45;
 
-  @override
-  Future<AiSession?> markDeployed(
-    String sessionId,
-    String publishedSnapshotId, {
-    String? exchangeAccountId,
-    String? exchangeAccountName,
-    Map<String, Object?>? deploymentExecutionConfig,
-  }) async {
-    final String deployRequestId = '$sessionId-$publishedSnapshotId';
-    final AccountAiQuantApi? api = _accountAiQuantApi;
-    if (api != null) {
-      final response = await api.accountAiQuantStrategiesControllerDeploy(
-        authorization: _authorization(),
-        accountAiQuantDeployRequestDto: AccountAiQuantDeployRequestDto((b) {
-          b
-            ..name = publishedSnapshotId
-            ..deployRequestId = deployRequestId
-            ..publishedSnapshotId = publishedSnapshotId;
-          if (exchangeAccountId?.trim().isNotEmpty == true) {
-            b.exchangeAccountId = exchangeAccountId!.trim();
-          }
-          if (exchangeAccountName?.trim().isNotEmpty == true) {
-            b.exchangeAccountName = exchangeAccountName!.trim();
-          }
-          final BuiltMap<String, JsonObject?>? config = _builtJsonObjectMap(
-            deploymentExecutionConfig,
-          );
-          if (config != null) b.deploymentExecutionConfig.replace(config);
-        }),
-      );
-      final AccountAiQuantStrategyDetailResponseDto? data = response.data?.data;
-      if (data != null) return _sessionFromStrategyDetail(data);
+  String _deployName(String publishedSnapshotId, String? strategyName) {
+    final String name = strategyName?.trim() ?? '';
+    return name.isNotEmpty ? name : publishedSnapshotId;
+  }
 
-      for (int i = 0; i < _deployPollLimit; i++) {
+  ApiException? _apiExceptionFrom(Object error) {
+    if (error is ApiException) return error;
+    if (error is DioException) {
+      final Object? inner = error.error;
+      if (inner is ApiException) return inner;
+      return ApiException.fromDio(error);
+    }
+    return null;
+  }
+
+  bool _isTransientDeployError(Object error) {
+    final ApiException? apiError = _apiExceptionFrom(error);
+    final String code = apiError?.code ?? '';
+    final int? status = apiError?.statusCode;
+    final String message = (apiError?.message ?? error.toString())
+        .toLowerCase();
+    if (code == 'SERVICE_TEMPORARILY_UNAVAILABLE' || code == 'API_TIMEOUT') {
+      return true;
+    }
+    if (status == 502 || status == 503 || status == 504) return true;
+    return message.contains('timeout') ||
+        message.contains('timed out') ||
+        message.contains('took longer') ||
+        message.contains('receive data') ||
+        message.contains('aborted');
+  }
+
+  Future<AiSession?> _pollGeneratedDeployResult(
+    AccountAiQuantApi api,
+    String deployRequestId,
+  ) async {
+    for (int i = 0; i < _deployPollLimit; i++) {
+      if (i > 0 && _deployPollInterval > Duration.zero) {
+        await Future<void>.delayed(_deployPollInterval);
+      }
+      try {
         final deployResult = await api
             .accountAiQuantStrategiesControllerDeployResult(
               authorization: _authorization(),
@@ -682,12 +806,84 @@ class ApiAiChatRepository implements AiChatRepository {
         final AccountAiQuantStrategyDetailResponseDto? result =
             deployResult.data?.data;
         if (result != null) return _sessionFromStrategyDetail(result);
+      } catch (error) {
+        if (!_isTransientDeployError(error)) rethrow;
       }
-      return null;
+    }
+    return null;
+  }
+
+  Future<AiSession?> _pollManualDeployResult(String deployRequestId) async {
+    for (int i = 0; i < _deployPollLimit; i++) {
+      if (i > 0 && _deployPollInterval > Duration.zero) {
+        await Future<void>.delayed(_deployPollInterval);
+      }
+      try {
+        final Map<String, dynamic> envelope = asMap(
+          await _service.getDeployResult(deployRequestId),
+        );
+        // 信封含 data 键：data==null 视为 pending，继续轮询；非空才解析。
+        // 无 data 键则回退原 map（仿 ApiAuthRepository 扁平响应回退）。
+        final bool hasData = envelope.containsKey('data');
+        final Object? data = envelope['data'];
+        if (hasData) {
+          if (data == null) continue;
+          final Map<String, dynamic> result = asMap(data);
+          if (result.isNotEmpty) return _parseSession(result);
+          continue;
+        }
+        if (envelope.isNotEmpty) return _parseSession(envelope);
+      } catch (error) {
+        if (!_isTransientDeployError(error)) rethrow;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? strategyName,
+    String? exchangeAccountId,
+    String? exchangeAccountName,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) async {
+    final String deployRequestId = '$sessionId-$publishedSnapshotId';
+    final String name = _deployName(publishedSnapshotId, strategyName);
+    final AccountAiQuantApi? api = _accountAiQuantApi;
+    if (api != null) {
+      try {
+        final response = await api.accountAiQuantStrategiesControllerDeploy(
+          authorization: _authorization(),
+          accountAiQuantDeployRequestDto: AccountAiQuantDeployRequestDto((b) {
+            b
+              ..name = name
+              ..deployRequestId = deployRequestId
+              ..publishedSnapshotId = publishedSnapshotId;
+            if (exchangeAccountId?.trim().isNotEmpty == true) {
+              b.exchangeAccountId = exchangeAccountId!.trim();
+            }
+            if (exchangeAccountName?.trim().isNotEmpty == true) {
+              b.exchangeAccountName = exchangeAccountName!.trim();
+            }
+            final BuiltMap<String, JsonObject?>? config = _builtJsonObjectMap(
+              deploymentExecutionConfig,
+            );
+            if (config != null) b.deploymentExecutionConfig.replace(config);
+          }),
+        );
+        final AccountAiQuantStrategyDetailResponseDto? data =
+            response.data?.data;
+        if (data != null) return _sessionFromStrategyDetail(data);
+      } catch (error) {
+        if (!_isTransientDeployError(error)) rethrow;
+      }
+      return _pollGeneratedDeployResult(api, deployRequestId);
     }
 
     final Map<String, dynamic> body = <String, dynamic>{
-      'name': publishedSnapshotId,
+      'name': name,
       'deployRequestId': deployRequestId,
       'publishedSnapshotId': publishedSnapshotId,
     };
@@ -701,24 +897,21 @@ class ApiAiChatRepository implements AiChatRepository {
       body['deploymentExecutionConfig'] = deploymentExecutionConfig;
     }
 
-    await _service.deployStrategy(body);
-
-    for (int i = 0; i < _deployPollLimit; i++) {
-      final Map<String, dynamic> envelope = asMap(
-        await _service.getDeployResult(deployRequestId),
+    try {
+      final Map<String, dynamic> deployEnvelope = asMap(
+        await _service.deployStrategy(body),
       );
-      // 信封含 data 键：data==null 视为 pending，继续轮询；非空才解析。
-      // 无 data 键则回退原 map（仿 ApiAuthRepository 扁平响应回退）。
-      final bool hasData = envelope.containsKey('data');
-      final Object? data = envelope['data'];
+      final bool hasData = deployEnvelope.containsKey('data');
+      final Object? data = deployEnvelope['data'];
       if (hasData) {
-        if (data == null) continue; // pending
-        final Map<String, dynamic> result = asMap(data);
-        if (result.isNotEmpty) return _parseSession(result);
-        continue;
+        final Map<String, dynamic> direct = asMap(data);
+        if (direct.isNotEmpty) return _parseSession(direct);
+      } else if (deployEnvelope.isNotEmpty) {
+        return _parseSession(deployEnvelope);
       }
-      if (envelope.isNotEmpty) return _parseSession(envelope);
+    } catch (error) {
+      if (!_isTransientDeployError(error)) rethrow;
     }
-    return null; // 始终 pending：返回 null，不抛、不死循环。
+    return _pollManualDeployResult(deployRequestId);
   }
 }

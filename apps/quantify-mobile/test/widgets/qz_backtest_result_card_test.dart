@@ -12,29 +12,40 @@ void main() {
     child: QzBacktestResultCard(result: mockBacktestResult),
   );
 
-  testWidgets('result card renders Hero + 8 metrics across 9 themes', (
-    WidgetTester tester,
-  ) async {
-    await verifyAllThemes(tester, harness, (WidgetTester t) async {
-      // 状态行 + 区间
-      expect(find.text('回测完成'), findsOneWidget);
-      expect(find.text('可部署'), findsOneWidget);
-      expect(find.text('2021-01 → 2026-05'), findsOneWidget);
-      // Hero：累计净值 +312.4%
-      expect(find.text('+312.4%'), findsOneWidget);
-      // 关键指标 8 格关键值（验收 #3）
-      expect(find.text('+31.6%'), findsOneWidget); // CAGR
-      expect(find.text('1.78'), findsOneWidget); // Sharpe
-      expect(find.text('-12.4%'), findsOneWidget); // 最大回撤
-      expect(find.text('2.55'), findsOneWidget); // Calmar
-      expect(find.text('55.4%'), findsOneWidget); // 胜率
-      expect(find.text('2.04'), findsOneWidget); // 盈亏比
-      expect(find.text('184 笔'), findsOneWidget); // 总交易
-      expect(find.text('14h 23m'), findsOneWidget); // 平均持仓
-    }, surfaceSize: const Size(360, 1200));
-  });
+  testWidgets(
+    'result card renders Hero + front-aligned 6 metrics across themes',
+    (WidgetTester tester) async {
+      await verifyAllThemes(tester, harness, (WidgetTester t) async {
+        // 状态行 + 区间
+        expect(find.text('回测完成'), findsOneWidget);
+        expect(find.text('可部署'), findsOneWidget);
+        expect(find.text('2021-01 → 2026-05'), findsOneWidget);
+        // Hero：累计净值 +312.4%
+        expect(find.text('+312.4%'), findsWidgets);
+        // 关键指标 6 格对齐 front：已平仓收益 / 回撤 / 已平仓胜率 / 已平仓笔数 / 未平仓笔数 / 浮动盈亏。
+        expect(find.text('已平仓收益'), findsOneWidget);
+        expect(find.text('+312.4%'), findsWidgets);
+        expect(find.text('-12.4%'), findsOneWidget); // 最大回撤
+        expect(find.text('已平仓胜率'), findsOneWidget);
+        expect(find.text('55.4%'), findsOneWidget);
+        expect(find.text('已平仓笔数'), findsOneWidget);
+        expect(find.text('184'), findsOneWidget);
+        expect(find.text('未平仓笔数'), findsOneWidget);
+        expect(find.text('1'), findsWidgets);
+        expect(find.text('浮动盈亏'), findsOneWidget);
+        expect(find.text('+91.86'), findsOneWidget);
+        expect(
+          find.textContaining('CAGR'),
+          findsOneWidget,
+        ); // Hero inline only.
+        expect(find.text('Sharpe'), findsNothing);
+        expect(find.text('Calmar'), findsNothing);
+        expect(find.text('盈亏比'), findsNothing);
+      }, surfaceSize: const Size(360, 1200));
+    },
+  );
 
-  testWidgets('tabs switch between monthly / trades / risk', (
+  testWidgets('tabs switch between monthly / trades / open positions / risk', (
     WidgetTester tester,
   ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -45,6 +56,7 @@ void main() {
     expect(find.byKey(const Key('backtest-result-tabs')), findsOneWidget);
     final double monthlyY = tester.getTopLeft(find.text('月度回报')).dy;
     expect(tester.getTopLeft(find.text('交易记录')).dy, monthlyY);
+    expect(tester.getTopLeft(find.text('未平仓')).dy, monthlyY);
     expect(tester.getTopLeft(find.text('风险分析')).dy, monthlyY);
 
     // 切到 交易记录
@@ -52,11 +64,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     expect(find.textContaining('持仓 4h 12m'), findsOneWidget);
 
+    // 切到 未平仓
+    await tester.tap(find.text('未平仓'));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.text('BTCUSDT'), findsOneWidget);
+    expect(find.textContaining('数量 0.0012'), findsOneWidget);
+    expect(find.textContaining('均价 78,538.46'), findsOneWidget);
+    expect(find.text('+91.86'), findsWidgets);
+
     // 切到 风险分析
     await tester.tap(find.text('风险分析'));
     await tester.pump(const Duration(milliseconds: 16));
-    expect(find.text('回撤恢复'), findsOneWidget);
-    expect(find.text('波动率 (年化)'), findsOneWidget);
+    expect(find.text('最大回撤幅度'), findsOneWidget);
+    expect(find.text('回撤恢复天数'), findsOneWidget);
+    expect(find.text('年化波动率'), findsOneWidget);
+    expect(find.text('夏普比率'), findsOneWidget);
+    expect(find.text('下行偏度'), findsNothing);
+    expect(find.text('连续亏损'), findsNothing);
   });
 
   testWidgets('AI assessment bar renders', (WidgetTester tester) async {
@@ -70,6 +94,59 @@ void main() {
           w.text.toPlainText().contains('优于阈值'),
     );
     expect(bar, findsOneWidget);
+  });
+
+  testWidgets('monthly heatmap keeps small return decimals', (
+    WidgetTester tester,
+  ) async {
+    final BacktestResult result = BacktestResult(
+      id: 'bt-monthly-small',
+      totalReturnPercent: -0.3,
+      cagrPercent: -0.3,
+      maxDrawdownPercent: 0.4,
+      sharpe: 0,
+      calmar: 0,
+      winRatePercent: 0,
+      profitLossRatio: 0,
+      avgHoldDuration: '--',
+      totalTrades: 0,
+      rangeStart: DateTime.utc(2026, 5, 16),
+      rangeEnd: DateTime.utc(2026, 6, 15),
+      equityCurve: const <double>[10000, 9970],
+      drawdownMarkers: const <int>[],
+      monthlyRows: const <BacktestMonthlyRow>[
+        BacktestMonthlyRow(
+          year: 2026,
+          values: <double?>[
+            null,
+            null,
+            null,
+            null,
+            -0.03,
+            -0.27,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+          ],
+        ),
+      ],
+      trades: const <BacktestTrade>[],
+      riskRows: const <BacktestRiskRow>[],
+      aiAssessment: '',
+    );
+
+    await pumpQz(
+      tester,
+      SingleChildScrollView(child: QzBacktestResultCard(result: result)),
+      surfaceSize: const Size(360, 900),
+    );
+
+    expect(find.text('0.0'), findsOneWidget);
+    expect(find.text('-0.3'), findsOneWidget);
+    expect(find.text('-0'), findsNothing);
   });
 
   testWidgets('missing timestamps render neutral range instead of epoch', (

@@ -28,9 +28,7 @@ class _ExchangePicker extends ConsumerWidget {
               final ExchangeApiKey? account = list
                   .cast<ExchangeApiKey?>()
                   .firstWhere(
-                    (ExchangeApiKey? k) =>
-                        k?.exchange.toLowerCase() == e.code &&
-                        !(k?.isTestnet ?? false),
+                    (ExchangeApiKey? k) => k?.exchange.toLowerCase() == e.code,
                     orElse: () => null,
                   );
               return _DeployTarget(

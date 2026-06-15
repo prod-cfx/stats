@@ -10,6 +10,8 @@ import 'package:quantify_mobile/data/models/deploy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/data/repositories/api_key_repository.dart';
+import 'package:quantify_mobile/data/repositories/live_strategy_repository.dart';
+import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
@@ -38,11 +40,9 @@ class _FakeApiKeyRepo implements ApiKeyRepository {
     final bool hasAccount = _keys.any(
       (ExchangeApiKey key) => key.id == exchangeAccountId,
     );
-    if (!hasAccount) return const DeployPreflightResult.failed();
-    return const DeployPreflightResult(
-      apiConnected: true,
-      balanceReady: true,
-      latencyReady: true,
+    return DeployPreflightResult.fromDeploymentContext(
+      apiConnected: hasAccount,
+      deploymentContext: deploymentContext,
     );
   }
 
@@ -61,14 +61,20 @@ class _FakeApiKeyRepo implements ApiKeyRepository {
 }
 
 class _FakeAiChatRepo implements AiChatRepository {
-  _FakeAiChatRepo({this.session, this.error});
+  _FakeAiChatRepo({
+    this.session,
+    this.error,
+    this.sessions = const <AiSession>[],
+  });
 
   final AiSession? session;
   final Object? error;
+  final List<AiSession> sessions;
   final List<
     ({
       String sessionId,
       String publishedSnapshotId,
+      String? strategyName,
       String? exchangeAccountId,
       String? exchangeAccountName,
       Map<String, Object?>? deploymentExecutionConfig,
@@ -79,6 +85,7 @@ class _FakeAiChatRepo implements AiChatRepository {
         ({
           String sessionId,
           String publishedSnapshotId,
+          String? strategyName,
           String? exchangeAccountId,
           String? exchangeAccountName,
           Map<String, Object?>? deploymentExecutionConfig,
@@ -86,7 +93,7 @@ class _FakeAiChatRepo implements AiChatRepository {
       >[];
 
   @override
-  Future<List<AiSession>> listSessions() async => <AiSession>[];
+  Future<List<AiSession>> listSessions() async => sessions;
 
   @override
   Future<AiSession> createSession({String? title}) async =>
@@ -122,6 +129,7 @@ class _FakeAiChatRepo implements AiChatRepository {
   Future<AiSession?> markDeployed(
     String sessionId,
     String publishedSnapshotId, {
+    String? strategyName,
     String? exchangeAccountId,
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
@@ -129,6 +137,7 @@ class _FakeAiChatRepo implements AiChatRepository {
     deployCalls.add((
       sessionId: sessionId,
       publishedSnapshotId: publishedSnapshotId,
+      strategyName: strategyName,
       exchangeAccountId: exchangeAccountId,
       exchangeAccountName: exchangeAccountName,
       deploymentExecutionConfig: deploymentExecutionConfig,
@@ -136,6 +145,48 @@ class _FakeAiChatRepo implements AiChatRepository {
     if (error != null) throw error!;
     return session;
   }
+}
+
+class _FakeLiveStrategyRepo implements LiveStrategyRepository {
+  const _FakeLiveStrategyRepo([this.strategies = const <LiveStrategy>[]]);
+
+  final List<LiveStrategy> strategies;
+
+  @override
+  Future<List<LiveStrategy>> listStrategies() async => strategies;
+
+  @override
+  Future<LiveStrategy> getStrategy(String id) async =>
+      strategies.firstWhere((LiveStrategy strategy) => strategy.id == id);
+
+  @override
+  Future<LiveStrategySummary> getSummary() async => throw UnimplementedError();
+
+  @override
+  Future<LiveStrategyPosition?> getPosition(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<LiveStrategyTrade>> listTrades(
+    String id, {
+    int limit = 6,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<List<LiveStrategyParam>> listParams(String id) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<LiveStrategy> pause(String id) async => throw UnimplementedError();
+
+  @override
+  Future<LiveStrategy> resume(String id) async => throw UnimplementedError();
+
+  @override
+  Future<void> softDelete(String id) async => throw UnimplementedError();
+
+  @override
+  Future<void> permanentDelete(String id) async => throw UnimplementedError();
 }
 
 const DeploymentContext _context = DeploymentContext(
@@ -149,6 +200,7 @@ const DeploymentContext _context = DeploymentContext(
   notifyClose: true,
   notifyStopLoss: true,
   symbol: 'ETH/USDT · 1h',
+  strategyName: 'ETH/USDT AI策略',
   exchange: 'binance',
   marketType: 'perp',
   leverage: 5,
@@ -164,10 +216,35 @@ AiSession _deployedSession() => AiSession(
   deployedTo: 'live-real-2310',
 );
 
+LiveStrategy _liveStrategyFromSnapshot({
+  String id = 'live-from-snapshot-1',
+  String name = 'snap-real-2327',
+  LiveStrategyStatus status = LiveStrategyStatus.running,
+}) => LiveStrategy(
+  id: id,
+  name: name,
+  pair: 'ETH/USDT · 1h',
+  timeframe: '1h',
+  exchange: 'Binance',
+  exchangeGlyph: 'B',
+  market: '合约 5x',
+  status: status,
+  runFor: '1 天',
+  todayPct: 0,
+  todayPnl: 0,
+  totalPct: 0,
+  totalPnl: 0,
+  capital: 5000,
+  trades: 0,
+  winRate: 0,
+  spark: const <double>[],
+);
+
 Future<DeploymentResult?> _pumpSheet(
   WidgetTester tester, {
   required ApiKeyRepository repo,
   AiChatRepository? aiRepo,
+  LiveStrategyRepository liveRepo = const _FakeLiveStrategyRepo(),
   DeploymentContext? context = _context,
 }) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
@@ -179,6 +256,7 @@ Future<DeploymentResult?> _pumpSheet(
         aiChatRepositoryProvider.overrideWithValue(
           aiRepo ?? _FakeAiChatRepo(session: _deployedSession()),
         ),
+        liveStrategyRepositoryProvider.overrideWithValue(liveRepo),
       ],
       child: MaterialApp(
         locale: const Locale('zh'),
@@ -294,6 +372,7 @@ void main() {
       expect(aiRepo.deployCalls, hasLength(1));
       expect(aiRepo.deployCalls.single.sessionId, 'sess-real-2327');
       expect(aiRepo.deployCalls.single.publishedSnapshotId, 'snap-real-2327');
+      expect(aiRepo.deployCalls.single.strategyName, 'ETH/USDT AI策略');
       expect(aiRepo.deployCalls.single.exchangeAccountId, 'k2');
       expect(aiRepo.deployCalls.single.exchangeAccountName, '子账户');
       expect(
@@ -330,7 +409,7 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump();
-    expect(find.text('3/3 未通过'), findsOneWidget);
+    expect(find.text('1/3 未通过'), findsOneWidget);
     expect(
       tester
           .widget<QzButton>(find.byKey(const Key('deploy-preflight-confirm')))
@@ -344,6 +423,93 @@ void main() {
     expect(find.text('部署前检查'), findsNothing);
     expect(find.text('Binance API'), findsOneWidget);
   });
+
+  testWidgets('QzDeploySheet: 已部署会话打开时直接显示成功页且按钮禁用', (
+    WidgetTester tester,
+  ) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    final AiSession deployedSession = AiSession(
+      id: 'sess-real-2327',
+      title: 'BTC 趋势',
+      category: '趋势跟踪',
+      updatedAt: DateTime.utc(2026),
+      messages: const <ChatTurn>[],
+      pair: 'ETH/USDT · 1h',
+      deployedTo: 'live-real-2310',
+    );
+    await _pumpSheet(
+      tester,
+      repo: repo,
+      aiRepo: _FakeAiChatRepo(sessions: <AiSession>[deployedSession]),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(find.text('部署成功'), findsWidgets);
+    expect(find.byKey(const Key('deploy-done-detail')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-preflight-confirm')), findsNothing);
+    expect(find.text('已部署运行'), findsOneWidget);
+    expect(
+      tester.widget<QzButton>(find.byKey(const Key('deploy-finish'))).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets(
+    'QzDeploySheet: conversation 无 deployedTo 时按 publishedSnapshotId 对账实盘策略',
+    (WidgetTester tester) async {
+      final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+        ExchangeApiKey(
+          id: 'k1',
+          exchange: 'binance',
+          label: '主账户',
+          maskedKey: 'AKIA****1234',
+          createdAt: DateTime.utc(2026),
+        ),
+      ]);
+      final AiSession conversation = AiSession(
+        id: 'sess-real-2327',
+        title: 'BTC 趋势',
+        category: '趋势跟踪',
+        updatedAt: DateTime.utc(2026),
+        messages: const <ChatTurn>[],
+        llmCodegenSessionId: 'codegen-real-2327',
+      );
+
+      await _pumpSheet(
+        tester,
+        repo: repo,
+        aiRepo: _FakeAiChatRepo(sessions: <AiSession>[conversation]),
+        liveRepo: _FakeLiveStrategyRepo(<LiveStrategy>[
+          _liveStrategyFromSnapshot(),
+        ]),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.text('部署成功'), findsWidgets);
+      expect(find.byKey(const Key('deploy-done-detail')), findsOneWidget);
+      expect(find.byKey(const Key('deploy-preflight-confirm')), findsNothing);
+      expect(find.text('live-from-snapshot-1'), findsWidgets);
+      expect(find.text('已部署运行'), findsOneWidget);
+      expect(
+        tester
+            .widget<QzButton>(find.byKey(const Key('deploy-finish')))
+            .onPressed,
+        isNull,
+      );
+    },
+  );
 
   testWidgets('QzDeploySheet: 预检查扫描期间「确认部署」disabled，扫完全通过后可点（#2064）', (
     WidgetTester tester,
@@ -372,6 +538,53 @@ void main() {
       find.byKey(const Key('deploy-preflight-confirm')),
     );
     expect(confirmDone.onPressed, isNotNull, reason: '全通过后应允许部署');
+  });
+
+  testWidgets('QzDeploySheet: 测试网账户也可作为部署账户参与预检查', (WidgetTester tester) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'okx-testnet-1',
+        exchange: 'okx',
+        label: 'mobile-test',
+        maskedKey: '785d****33da',
+        isTestnet: true,
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    final _FakeAiChatRepo aiRepo = _FakeAiChatRepo(session: _deployedSession());
+    const DeploymentContext okxContext = DeploymentContext(
+      sessionId: 'sess-okx-testnet',
+      publishedSnapshotId: 'snap-okx-testnet',
+      exchangeAccountId: 'okx-testnet-1',
+      amount: 5000,
+      perTradePct: 20,
+      maxDailyLossPct: 10,
+      notifyOpen: true,
+      notifyClose: true,
+      notifyStopLoss: true,
+      symbol: 'BTCUSDT · 15m',
+      exchange: 'okx',
+      marketType: 'perp',
+      leverage: 1,
+    );
+
+    await _pumpSheet(tester, repo: repo, aiRepo: aiRepo, context: okxContext);
+
+    expect(find.text('OKX'), findsWidgets);
+    expect(find.text('mobile-test'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    expect(find.text('3/3 通过'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2200));
+    await tester.pump();
+
+    expect(aiRepo.deployCalls, hasLength(1));
+    expect(aiRepo.deployCalls.single.exchangeAccountId, 'okx-testnet-1');
+    expect(aiRepo.deployCalls.single.exchangeAccountName, 'mobile-test');
   });
 
   testWidgets('QzDeploySheet: 部署失败显示仓库错误且不进入成功态（#2310）', (
@@ -505,7 +718,7 @@ void main() {
     expect(find.text('live:live-real-2310'), findsOneWidget);
   });
 
-  testWidgets('QzDeploySheet: 整屏成功态完成按钮返回对话（#2436）', (
+  testWidgets('QzDeploySheet: 整屏成功态底部显示已部署运行且不可点击', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
@@ -569,9 +782,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2600));
     await tester.pump();
 
+    expect(find.text('已部署运行'), findsOneWidget);
+    expect(
+      tester.widget<QzButton>(find.byKey(const Key('deploy-finish'))).onPressed,
+      isNull,
+    );
     await tester.tap(find.byKey(const Key('deploy-finish')));
     await tester.pumpAndSettle();
-
-    expect(find.text('chat-home'), findsOneWidget);
+    expect(find.text('chat-home'), findsNothing);
   });
 }

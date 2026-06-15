@@ -27,6 +27,7 @@ abstract class AiChatRepository {
   Future<AiSession?> markDeployed(
     String sessionId,
     String publishedSnapshotId, {
+    String? strategyName,
     String? exchangeAccountId,
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,

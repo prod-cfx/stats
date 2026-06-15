@@ -387,16 +387,61 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestResultMetricAvgHoldSub => 'Duration per trade';
 
   @override
+  String get backtestResultMetricClosedReturn => 'Closed Return';
+
+  @override
+  String get backtestResultMetricClosedReturnSub => 'Realized return';
+
+  @override
+  String get backtestResultMetricClosedWinRate => 'Closed Win Rate';
+
+  @override
+  String get backtestResultMetricClosedWinRateSub => 'Closed trade win rate';
+
+  @override
+  String get backtestResultMetricClosedTrades => 'Closed Trades';
+
+  @override
+  String get backtestResultMetricClosedTradesSub => 'Closed trade count';
+
+  @override
+  String get backtestResultMetricOpenTrades => 'Open Trades';
+
+  @override
+  String get backtestResultMetricOpenTradesSub => 'Open at backtest end';
+
+  @override
+  String get backtestResultMetricOpenPnl => 'Open P&L';
+
+  @override
+  String get backtestResultMetricOpenPnlSub => 'Unrealized P&L';
+
+  @override
   String get backtestResultTabMonthly => 'Monthly Return';
 
   @override
   String get backtestResultTabTrades => 'Trades';
 
   @override
+  String get backtestResultTabOpenPositions => 'Open Positions';
+
+  @override
   String get backtestResultTabRisk => 'Risk';
 
   @override
   String get backtestResultMonthlyLegendLabel => 'Monthly % return';
+
+  @override
+  String get backtestResultOpenPositionsEmpty => 'No open positions';
+
+  @override
+  String get backtestResultOpenPositionFallbackSymbol => 'Position';
+
+  @override
+  String get backtestResultOpenPositionQty => 'Qty';
+
+  @override
+  String get backtestResultOpenPositionAvgEntry => 'Avg Entry';
 
   @override
   String get backtestResultTradeSideLong => 'L';
@@ -600,6 +645,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deployDoneCloseButton => 'Done';
 
   @override
+  String get deployDoneRunningButton => 'Deployed and running';
+
+  @override
   String get deploySystemMessagePrefix => 'Strategy deployed to ';
 
   @override
@@ -703,22 +751,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deployPreflightApiOkSub =>
-      'Read + spot + perp · withdraw disabled (safe)';
+      'Bound account detected for this exchange';
 
   @override
-  String get deployPreflightBalanceOkTitle => 'Sufficient balance';
+  String get deployPreflightBalanceOkTitle => 'Deployment parameters ready';
 
   @override
   String get deployPreflightBalanceOkSub =>
-      'Available funds cover the deployment with headroom';
+      'Snapshot, exchange, market type, and deploy settings are complete';
 
   @override
-  String get deployPreflightLatencyOkTitle =>
-      'Network & exchange latency normal';
+  String get deployPreflightLatencyOkTitle => 'Server validation on deploy';
 
   @override
   String get deployPreflightLatencyOkSub =>
-      'Order latency < 200ms · stable data feed';
+      'Balance, permissions, and exchange connectivity will be checked by backend when submitted';
 
   @override
   String get deployPreflightBackButton => 'Back';
@@ -734,19 +781,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'No usable key detected, bind API and retry';
 
   @override
-  String get deployPreflightBalanceFailTitle => 'Insufficient account balance';
+  String get deployPreflightBalanceFailTitle =>
+      'Deployment parameters incomplete';
 
   @override
   String get deployPreflightBalanceFailSub =>
-      'Available funds below deploy requirement, top up or lower the amount';
+      'Missing strategy snapshot, exchange, or deploy settings';
 
   @override
   String get deployPreflightLatencyFailTitle =>
-      'Network or exchange latency abnormal';
+      'Deployment validation incomplete';
 
   @override
   String get deployPreflightLatencyFailSub =>
-      'High order latency · unstable feed, retry later';
+      'Retry later or submit deploy to view backend validation reason';
 
   @override
   String get deployConfirmSummaryReturn => 'Cumulative net value';
@@ -2073,6 +2121,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiConfirmNextScript => 'Confirm strategy';
+
+  @override
+  String get aiConfirmConfirmed => 'Confirmed';
 
   @override
   String get aiStartBacktestPrompt =>

@@ -798,6 +798,66 @@ abstract class AppLocalizations {
   /// **'单笔交易时长'**
   String get backtestResultMetricAvgHoldSub;
 
+  /// No description provided for @backtestResultMetricClosedReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已平仓收益'**
+  String get backtestResultMetricClosedReturn;
+
+  /// No description provided for @backtestResultMetricClosedReturnSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'已实现收益率'**
+  String get backtestResultMetricClosedReturnSub;
+
+  /// No description provided for @backtestResultMetricClosedWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'已平仓胜率'**
+  String get backtestResultMetricClosedWinRate;
+
+  /// No description provided for @backtestResultMetricClosedWinRateSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'闭合交易胜率'**
+  String get backtestResultMetricClosedWinRateSub;
+
+  /// No description provided for @backtestResultMetricClosedTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'已平仓笔数'**
+  String get backtestResultMetricClosedTrades;
+
+  /// No description provided for @backtestResultMetricClosedTradesSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'闭合交易数量'**
+  String get backtestResultMetricClosedTradesSub;
+
+  /// No description provided for @backtestResultMetricOpenTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'未平仓笔数'**
+  String get backtestResultMetricOpenTrades;
+
+  /// No description provided for @backtestResultMetricOpenTradesSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测结束仍持仓'**
+  String get backtestResultMetricOpenTradesSub;
+
+  /// No description provided for @backtestResultMetricOpenPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'浮动盈亏'**
+  String get backtestResultMetricOpenPnl;
+
+  /// No description provided for @backtestResultMetricOpenPnlSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏'**
+  String get backtestResultMetricOpenPnlSub;
+
   /// No description provided for @backtestResultTabMonthly.
   ///
   /// In zh, this message translates to:
@@ -810,6 +870,12 @@ abstract class AppLocalizations {
   /// **'交易记录'**
   String get backtestResultTabTrades;
 
+  /// No description provided for @backtestResultTabOpenPositions.
+  ///
+  /// In zh, this message translates to:
+  /// **'未平仓'**
+  String get backtestResultTabOpenPositions;
+
   /// No description provided for @backtestResultTabRisk.
   ///
   /// In zh, this message translates to:
@@ -821,6 +887,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'月度 % 收益'**
   String get backtestResultMonthlyLegendLabel;
+
+  /// No description provided for @backtestResultOpenPositionsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无未平仓持仓'**
+  String get backtestResultOpenPositionsEmpty;
+
+  /// No description provided for @backtestResultOpenPositionFallbackSymbol.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get backtestResultOpenPositionFallbackSymbol;
+
+  /// No description provided for @backtestResultOpenPositionQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量'**
+  String get backtestResultOpenPositionQty;
+
+  /// No description provided for @backtestResultOpenPositionAvgEntry.
+  ///
+  /// In zh, this message translates to:
+  /// **'均价'**
+  String get backtestResultOpenPositionAvgEntry;
 
   /// No description provided for @backtestResultTradeSideLong.
   ///
@@ -1176,6 +1266,12 @@ abstract class AppLocalizations {
   /// **'完成'**
   String get deployDoneCloseButton;
 
+  /// No description provided for @deployDoneRunningButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'已部署运行'**
+  String get deployDoneRunningButton;
+
   /// No description provided for @deploySystemMessagePrefix.
   ///
   /// In zh, this message translates to:
@@ -1353,31 +1449,31 @@ abstract class AppLocalizations {
   /// No description provided for @deployPreflightApiOkSub.
   ///
   /// In zh, this message translates to:
-  /// **'读取 + 现货 + 永续 · 未启用提币（安全）'**
+  /// **'已检测到该交易所已绑定账户'**
   String get deployPreflightApiOkSub;
 
   /// No description provided for @deployPreflightBalanceOkTitle.
   ///
   /// In zh, this message translates to:
-  /// **'账户余额充足'**
+  /// **'部署参数已准备'**
   String get deployPreflightBalanceOkTitle;
 
   /// No description provided for @deployPreflightBalanceOkSub.
   ///
   /// In zh, this message translates to:
-  /// **'可用资金满足部署所需，留有余裕'**
+  /// **'快照、交易所、市场类型和部署参数完整'**
   String get deployPreflightBalanceOkSub;
 
   /// No description provided for @deployPreflightLatencyOkTitle.
   ///
   /// In zh, this message translates to:
-  /// **'网络与交易所时延正常'**
+  /// **'部署时服务端校验'**
   String get deployPreflightLatencyOkTitle;
 
   /// No description provided for @deployPreflightLatencyOkSub.
   ///
   /// In zh, this message translates to:
-  /// **'下单延时 < 200ms · 数据流稳定'**
+  /// **'余额、权限和交易所连通性将在提交部署时由后端校验'**
   String get deployPreflightLatencyOkSub;
 
   /// No description provided for @deployPreflightBackButton.
@@ -1407,25 +1503,25 @@ abstract class AppLocalizations {
   /// No description provided for @deployPreflightBalanceFailTitle.
   ///
   /// In zh, this message translates to:
-  /// **'账户余额不足'**
+  /// **'部署参数不完整'**
   String get deployPreflightBalanceFailTitle;
 
   /// No description provided for @deployPreflightBalanceFailSub.
   ///
   /// In zh, this message translates to:
-  /// **'可用资金低于部署所需，请充值或调低投入金额'**
+  /// **'缺少策略快照、交易所或部署参数'**
   String get deployPreflightBalanceFailSub;
 
   /// No description provided for @deployPreflightLatencyFailTitle.
   ///
   /// In zh, this message translates to:
-  /// **'网络或交易所时延异常'**
+  /// **'部署校验未完成'**
   String get deployPreflightLatencyFailTitle;
 
   /// No description provided for @deployPreflightLatencyFailSub.
   ///
   /// In zh, this message translates to:
-  /// **'下单延时偏高 · 数据流不稳定，建议稍后重试'**
+  /// **'请稍后重试或提交部署后查看后端返回原因'**
   String get deployPreflightLatencyFailSub;
 
   /// No description provided for @deployConfirmSummaryReturn.
@@ -3947,6 +4043,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'确认策略'**
   String get aiConfirmNextScript;
+
+  /// No description provided for @aiConfirmConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认'**
+  String get aiConfirmConfirmed;
 
   /// No description provided for @aiStartBacktestPrompt.
   ///

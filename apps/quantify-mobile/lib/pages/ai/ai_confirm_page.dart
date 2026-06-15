@@ -359,6 +359,13 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
     final StrategyConfirmView view =
         confirmStrategyViewFromSession(_session) ??
         confirmStrategyView(_params, l10n);
+    final CodegenSessionResponseDto? session = _session;
+    final bool confirmed = session != null && _hasPublishedSnapshot(session);
+    final String nextLabel = _confirming
+        ? '确认中...'
+        : confirmed
+        ? l10n.aiConfirmConfirmed
+        : l10n.aiConfirmNextScript;
     final List<Widget> statusWidgets = <Widget>[
       if (_loading)
         Padding(
@@ -446,9 +453,8 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
                           bottom: 0,
                           child: _BottomBar(
                             backLabel: l10n.aiConfirmBackToChat,
-                            nextLabel: _confirming
-                                ? '确认中...'
-                                : l10n.aiConfirmNextScript,
+                            nextLabel: nextLabel,
+                            nextEnabled: !confirmed,
                             onBack: () => _backToChat(context),
                             onNext: () => _next(context),
                           ),

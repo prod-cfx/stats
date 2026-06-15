@@ -139,6 +139,46 @@ void main() {
       expect(s.id, isEmpty);
       expect(s.pair, isEmpty);
     });
+
+    test('生产解析不读取 mock-only 字段，draft 不进入实盘列表', () async {
+      final _StubLiveStrategyService svc = _StubLiveStrategyService(
+        listResponse: <String, dynamic>{
+          'data': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 'real-1',
+              'name': '真实策略',
+              'symbol': 'BTCUSDT',
+              'pair': 'MOCK/USDT',
+              'exchange': 'okx',
+              'exchangeGlyph': 'M',
+              'market': 'mock market',
+              'runFor': '99 天',
+              'statusNote': 'mock note',
+              'trades': 999,
+              'winRate': 99,
+              'spark': <num>[1, 2, 3],
+              'status': 'running',
+              'metrics': <String, dynamic>{'tradeCount': 2, 'winRatePct': 50},
+            },
+            <String, dynamic>{'id': 'draft-1', 'name': '草稿', 'status': 'draft'},
+          ],
+        },
+      );
+      final ApiLiveStrategyRepository repo = ApiLiveStrategyRepository(svc);
+
+      final List<LiveStrategy> rows = await repo.listStrategies();
+
+      expect(rows, hasLength(1));
+      expect(rows.single.id, 'real-1');
+      expect(rows.single.pair, 'BTCUSDT');
+      expect(rows.single.exchangeGlyph, 'O');
+      expect(rows.single.market, isEmpty);
+      expect(rows.single.runFor, isEmpty);
+      expect(rows.single.statusNote, isNull);
+      expect(rows.single.trades, 2);
+      expect(rows.single.winRate, 50);
+      expect(rows.single.spark, isEmpty);
+    });
   });
 
   group('详情 tab 真实数据解析', () {

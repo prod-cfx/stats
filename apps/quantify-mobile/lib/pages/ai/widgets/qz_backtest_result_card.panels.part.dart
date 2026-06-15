@@ -17,6 +17,14 @@ class _MonthlyHeatmap extends StatelessWidget {
     return c.marketDown.withValues(alpha: a);
   }
 
+  String _cellLabel(double? v) {
+    if (v == null) return '';
+    final double normalized = v.abs() < 0.05 ? 0 : v;
+    final int decimals = normalized.abs() < 10 ? 1 : 0;
+    final String sign = normalized > 0 ? '+' : '';
+    return '$sign${normalized.toStringAsFixed(decimals)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
@@ -64,9 +72,7 @@ class _MonthlyHeatmap extends StatelessWidget {
                         ),
                         alignment: Alignment.center,
                         child: Text(
-                          v == null
-                              ? ''
-                              : '${v > 0 ? '+' : ''}${v.toStringAsFixed(0)}',
+                          _cellLabel(v),
                           style: TextStyle(
                             color: v == null
                                 ? c.textFaint
@@ -222,6 +228,122 @@ class _TradeList extends StatelessWidget {
                     '${trades[i].pnlPercent > 0 ? '+' : ''}${trades[i].pnlPercent.toStringAsFixed(2)}%',
                     style: TextStyle(
                       color: trades[i].win ? c.marketUp : c.marketDown,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 未平仓持仓列表。
+class _OpenPositionList extends StatelessWidget {
+  const _OpenPositionList({required this.positions});
+
+  final List<BacktestOpenPosition> positions;
+
+  String _fmtNumber(double v, {int decimals = 4}) {
+    final String fixed = v.toStringAsFixed(decimals);
+    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  String _fmtPrice(double v) {
+    final String s = v.toStringAsFixed(2);
+    final List<String> parts = s.split('.');
+    final String intPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'),
+      (Match m) => '${m[1]},',
+    );
+    return '$intPart.${parts[1]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    if (positions.isEmpty) {
+      return QzCard(
+        padding: const EdgeInsets.all(QzSpacing.lg),
+        child: Center(
+          child: Text(
+            l10n.backtestResultOpenPositionsEmpty,
+            style: TextStyle(color: c.textDim, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    return QzCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: <Widget>[
+          for (int i = 0; i < positions.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: QzSpacing.md,
+                vertical: QzSpacing.md,
+              ),
+              decoration: BoxDecoration(
+                border: i == 0
+                    ? null
+                    : Border(top: BorderSide(color: c.borderSoft)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.account_balance_wallet_outlined,
+                      size: 13,
+                      color: c.accent,
+                    ),
+                  ),
+                  const SizedBox(width: QzSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          positions[i].symbol.isEmpty
+                              ? l10n.backtestResultOpenPositionFallbackSymbol
+                              : positions[i].symbol,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${l10n.backtestResultOpenPositionQty} ${_fmtNumber(positions[i].qty)} · ${l10n.backtestResultOpenPositionAvgEntry} ${_fmtPrice(positions[i].avgEntryPrice)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: c.textDim, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: QzSpacing.sm),
+                  Text(
+                    '${positions[i].unrealizedPnl > 0 ? '+' : ''}${positions[i].unrealizedPnl.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: positions[i].unrealizedPnl > 0
+                          ? c.marketUp
+                          : positions[i].unrealizedPnl < 0
+                          ? c.marketDown
+                          : c.text,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),

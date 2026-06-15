@@ -164,41 +164,43 @@ final List<BacktestTrade> _trades = <BacktestTrade>[
   ),
 ];
 
+const List<BacktestOpenPosition> _openPositions = <BacktestOpenPosition>[
+  BacktestOpenPosition(
+    symbol: 'BTCUSDT',
+    qty: 0.0012,
+    avgEntryPrice: 78538.46,
+    unrealizedPnl: 91.86,
+  ),
+];
+
 const List<BacktestRiskRow> _riskRows = <BacktestRiskRow>[
   BacktestRiskRow(
-    label: '最大回撤',
+    label: '最大回撤幅度',
     value: '-12.4%',
     barFraction: 0.62,
-    tone: BacktestRiskTone.danger,
+    tone: BacktestRiskTone.neutral,
     note: '2022-06 ~ 2022-09 · 持续 92 天',
   ),
   BacktestRiskRow(
-    label: '回撤恢复',
+    label: '回撤恢复天数',
     value: '34 天',
     barFraction: 0.40,
     tone: BacktestRiskTone.warn,
-    note: '平均回撤恢复时长',
+    note: '最深回撤恢复耗时 34 天。',
   ),
   BacktestRiskRow(
-    label: '波动率 (年化)',
+    label: '年化波动率',
     value: '17.8%',
     barFraction: 0.45,
     tone: BacktestRiskTone.neutral,
-    note: '低于 BTC 自身波动 (28.3%)',
+    note: '基于净值曲线收益序列按时间间隔年化。',
   ),
   BacktestRiskRow(
-    label: '下行偏度',
-    value: '-0.31',
-    barFraction: 0.30,
+    label: '夏普比率',
+    value: '1.78',
+    barFraction: 0.59,
     tone: BacktestRiskTone.neutral,
-    note: '分布略偏负，需关注尾部风险',
-  ),
-  BacktestRiskRow(
-    label: '连续亏损',
-    value: '5 笔',
-    barFraction: 0.50,
-    tone: BacktestRiskTone.warn,
-    note: '历史最长连亏次数',
+    note: '按 front 口径由净值收益均值和标准差计算。',
   ),
 ];
 
@@ -213,12 +215,18 @@ final BacktestResult mockBacktestResult = BacktestResult(
   profitLossRatio: 2.04,
   avgHoldDuration: '14h 23m',
   totalTrades: 184,
+  closedReturnPercent: 312.4,
+  closedWinRatePercent: 55.4,
+  closedTrades: 184,
+  openTrades: 1,
+  openPnl: 91.86,
   rangeStart: DateTime(2021, 1),
   rangeEnd: DateTime(2026, 5),
   equityCurve: _equitySeed,
   drawdownMarkers: const <int>[18, 28, 44],
   monthlyRows: _monthlyRows,
   trades: _trades,
+  openPositions: _openPositions,
   riskRows: _riskRows,
   aiAssessment: '该策略最大回撤 12.4% 优于阈值 (20%)，可一键部署。建议在牛市加速期降低杠杆。',
 );

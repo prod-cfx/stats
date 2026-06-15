@@ -108,7 +108,12 @@ class _PreflightPaneState extends ConsumerState<_PreflightPane> {
     });
     _startScan();
     if (!_hasAccount) {
-      setState(() => _result = const DeployPreflightResult.failed());
+      setState(
+        () => _result = DeployPreflightResult.fromDeploymentContext(
+          apiConnected: false,
+          deploymentContext: widget.deploymentContext,
+        ),
+      );
       return;
     }
     final DeployPreflightResult result = await ref

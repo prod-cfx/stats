@@ -255,10 +255,12 @@ class AiBacktestRunArgs {
   const AiBacktestRunArgs({
     required this.strategyContext,
     required this.config,
+    this.sessionId,
   });
 
   final AiPublishedStrategyContext strategyContext;
   final Map<String, String> config;
+  final String? sessionId;
 
   Map<String, String> get params => <String, String>{
     ...strategyContext.toRouteParams(),

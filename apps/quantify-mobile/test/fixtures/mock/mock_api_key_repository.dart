@@ -22,11 +22,9 @@ class MockApiKeyRepository implements ApiKeyRepository {
     final bool hasAccount = _keys.any(
       (ExchangeApiKey key) => key.id == exchangeAccountId,
     );
-    if (!hasAccount) return const DeployPreflightResult.failed();
-    return const DeployPreflightResult(
-      apiConnected: true,
-      balanceReady: true,
-      latencyReady: true,
+    return DeployPreflightResult.fromDeploymentContext(
+      apiConnected: hasAccount,
+      deploymentContext: deploymentContext,
     );
   }
 

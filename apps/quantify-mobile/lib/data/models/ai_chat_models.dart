@@ -46,6 +46,10 @@ class ChatTurn {
   /// 「开始回测」CTA 进入 `/ai/backtest-config`。
   final AiPublishedStrategyContext? strategyContext;
 
+  /// 当 `kind == ChatTurnKind.result` 时携带最近一次回测摘要。
+  /// 完整结果仍通过 `BacktestRepository.getResult(id)` 拉取，聊天只保存轻量入口。
+  final BacktestSummary? backtestSummary;
+
   const ChatTurn({
     required this.id,
     required this.role,
@@ -58,6 +62,7 @@ class ChatTurn {
     this.codegenSessionId,
     this.confirmedCanonicalDigest,
     this.strategyContext,
+    this.backtestSummary,
   });
 }
 

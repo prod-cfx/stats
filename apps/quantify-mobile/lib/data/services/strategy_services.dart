@@ -52,8 +52,10 @@ class LiveStrategyService {
   const LiveStrategyService(this._client);
   final ApiClient _client;
 
-  Future<dynamic> listStrategies() =>
-      _client.get('/account/ai-quant/strategies');
+  Future<dynamic> listStrategies() => _client.get(
+    '/account/ai-quant/strategies',
+    query: <String, dynamic>{'excludeDraft': true},
+  );
 
   Future<dynamic> getStrategy(String id) =>
       _client.get('/account/ai-quant/strategies/$id');

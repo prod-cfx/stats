@@ -12,6 +12,7 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
+import 'ai_home_page_controller.dart';
 import 'backtest_config_sheet_controller.dart';
 import 'backtest_config_sheet_state.dart';
 part 'backtest_config_sheet.form.part.dart';
@@ -351,6 +352,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       '/ai/backtest-run',
       extra: AiBacktestRunArgs(
         strategyContext: ctx,
+        sessionId: ref.read(aiHomePageControllerProvider).currentId,
         config: <String, String>{
           'exchange': exchange,
           'symbol': symbol,

@@ -92,6 +92,12 @@ class _Hero extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final LiveStatusStyle st = liveStatusStyle(strategy.status, c, l10n);
     final bool up = strategy.totalPct >= 0;
+    final String meta = <String>[
+      strategy.pair,
+      strategy.timeframe,
+      strategy.market,
+      strategy.exchange,
+    ].where((String part) => part.trim().isNotEmpty).join(' · ');
 
     return QzCard(
       child: Column(
@@ -171,18 +177,19 @@ class _Hero extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${strategy.pair} · ${strategy.timeframe} · '
-                      '${strategy.market} · ${strategy.exchange}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: c.textDim,
-                        fontSize: 11,
-                        fontFamily: QzFont.mono,
-                        fontFamilyFallback: QzFont.monoFallback,
+                    if (meta.isNotEmpty) ...<Widget>[
+                      Text(
+                        meta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: c.textDim,
+                          fontSize: 11,
+                          fontFamily: QzFont.mono,
+                          fontFamilyFallback: QzFont.monoFallback,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -222,7 +229,8 @@ class _Hero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: QzSpacing.md),
-          LiveEquityCurve(points: strategy.spark, up: up),
+          if (strategy.spark.isNotEmpty)
+            LiveEquityCurve(points: strategy.spark, up: up),
           if (strategy.statusNote != null) ...<Widget>[
             const SizedBox(height: QzSpacing.md),
             Container(
@@ -278,19 +286,28 @@ class _OverviewTab extends StatelessWidget {
         '${strategy.totalPct >= 0 ? '+' : ''}${strategy.totalPct.toStringAsFixed(2)}%',
         strategy.totalPct >= 0 ? c.marketUp : c.marketDown,
       ),
-      (
-        l10n.liveStatCapital,
-        '\$${strategy.capital.toStringAsFixed(0)}',
-        c.text,
-      ),
-      (
-        l10n.liveStatTrades,
-        '${strategy.trades} ${l10n.liveStatTradesUnit}'.trim(),
-        c.text,
-      ),
-      (l10n.liveStatWinRate, '${strategy.winRate.toStringAsFixed(1)}%', c.text),
-      (l10n.liveStatRunFor, strategy.runFor, c.text),
-      (l10n.liveStatExchange, strategy.exchange, c.text),
+      if (strategy.capital > 0)
+        (
+          l10n.liveStatCapital,
+          '\$${strategy.capital.toStringAsFixed(0)}',
+          c.text,
+        ),
+      if (strategy.trades > 0)
+        (
+          l10n.liveStatTrades,
+          '${strategy.trades} ${l10n.liveStatTradesUnit}'.trim(),
+          c.text,
+        ),
+      if (strategy.winRate > 0)
+        (
+          l10n.liveStatWinRate,
+          '${strategy.winRate.toStringAsFixed(1)}%',
+          c.text,
+        ),
+      if (strategy.runFor.trim().isNotEmpty)
+        (l10n.liveStatRunFor, strategy.runFor, c.text),
+      if (strategy.exchange.trim().isNotEmpty)
+        (l10n.liveStatExchange, strategy.exchange, c.text),
     ];
 
     return Column(
@@ -305,7 +322,11 @@ class _OverviewTab extends StatelessWidget {
                   children: <Widget>[
                     Expanded(child: _StatCell(item: stats[row])),
                     Container(width: 1, height: 56, color: c.borderSoft),
-                    Expanded(child: _StatCell(item: stats[row + 1])),
+                    Expanded(
+                      child: row + 1 < stats.length
+                          ? _StatCell(item: stats[row + 1])
+                          : const SizedBox.shrink(),
+                    ),
                   ],
                 ),
             ],

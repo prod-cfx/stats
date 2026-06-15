@@ -130,7 +130,7 @@ class _BacktestResultBody extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: QzButton(
-                    label: '一键部署到交易所',
+                    label: l10n.deployButton,
                     variant: QzButtonVariant.accent,
                     onPressed: () {
                       if (strategyContext == null) {

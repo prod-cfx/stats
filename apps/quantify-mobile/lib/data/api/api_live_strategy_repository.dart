@@ -5,10 +5,61 @@ import '../services/strategy_services.dart';
 
 LiveStrategyStatus _statusFromApi(Object? raw) {
   final String s = asString(raw).toLowerCase();
+  if (s == 'draft') return LiveStrategyStatus.stopped;
   for (final LiveStrategyStatus v in LiveStrategyStatus.values) {
     if (v.name == s) return v;
   }
-  return LiveStrategyStatus.running;
+  return LiveStrategyStatus.stopped;
+}
+
+bool _isDraftStrategy(Map<String, dynamic> m) {
+  return asString(pick(m, <String>['status'])).trim().toLowerCase() == 'draft';
+}
+
+String _exchangeGlyph(String exchange) {
+  final String value = exchange.trim();
+  return value.isEmpty ? '' : value[0].toUpperCase();
+}
+
+Map<String, dynamic> _metrics(Map<String, dynamic> m) =>
+    asMap(pick(m, <String>['metrics']));
+
+Object? _pickMetric(Map<String, dynamic> m, List<String> keys) {
+  final Map<String, dynamic> metrics = _metrics(m);
+  return pick(metrics, keys);
+}
+
+String _marketLabel(Map<String, dynamic> m) {
+  final String raw = asString(
+    _pickMetric(m, <String>['marketType', 'market', 'contractType']),
+  ).trim();
+  switch (raw.toLowerCase()) {
+    case 'spot':
+      return '现货';
+    case 'perp':
+    case 'perpetual':
+    case 'swap':
+      return '永续';
+    case 'future':
+    case 'futures':
+      return '合约';
+    default:
+      return raw;
+  }
+}
+
+List<double> _spark(Map<String, dynamic> m) {
+  final Object? raw = _pickMetric(m, <String>['equitySeries', 'spark']);
+  final List<Object?> values = asList(raw);
+  return values
+      .map((Object? value) {
+        if (value is Map) {
+          return asDouble(pick(asMap(value), <String>['value', 'equity']));
+        }
+        return asDouble(value);
+      })
+      .where((double value) => value != 0)
+      .toList(growable: false);
 }
 
 /// [LiveStrategyRepository] 真实现（issue #2189）。
@@ -28,32 +79,30 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
   }
 
   LiveStrategy _parse(Map<String, dynamic> m) {
+    final String exchange = asString(pick(m, <String>['exchange']));
     return LiveStrategy(
       id: asString(pick(m, <String>['id'])),
       name: asString(pick(m, <String>['name'])),
-      // 契约 symbol 优先，保留 mock 键 pair 兜底
-      pair: asString(pick(m, <String>['symbol', 'pair'])),
+      pair: asString(pick(m, <String>['symbol'])),
       timeframe: asString(pick(m, <String>['timeframe'])),
-      exchange: asString(pick(m, <String>['exchange'])),
-      // exchangeGlyph/market: 契约无 typed 源，保留现有 pick 键待富契约
-      exchangeGlyph: asString(pick(m, <String>['exchangeGlyph'])),
-      market: asString(pick(m, <String>['market'])),
+      exchange: exchange,
+      exchangeGlyph: _exchangeGlyph(exchange),
+      market: _marketLabel(m),
       status: _statusFromApi(pick(m, <String>['status'])),
-      // runFor: 契约无 typed 源，保留现有 pick 键待富契约
-      runFor: asString(pick(m, <String>['runFor'])),
-      // todayPct/totalPct: 契约无 typed 字段，真实后端为 0 by design
-      todayPct: asDouble(pick(m, <String>['todayPct'])),
-      todayPnl: asDouble(pick(m, <String>['todayPnl'])),
-      totalPct: asDouble(pick(m, <String>['totalPct'])),
-      totalPnl: asDouble(pick(m, <String>['totalPnl'])),
-      // capital/trades/winRate/spark/statusNote: 契约无 typed 源，保留现有 pick 键待富契约
-      capital: asDouble(pick(m, <String>['capital'])),
-      trades: asInt(pick(m, <String>['trades'])),
-      winRate: asDouble(pick(m, <String>['winRate'])),
-      spark: asList(
-        pick(m, <String>['spark']),
-      ).map((Object? e) => asDouble(e)).toList(growable: false),
-      statusNote: asStringOrNull(pick(m, <String>['statusNote'])),
+      runFor: asString(_pickMetric(m, <String>['runFor', 'duration'])),
+      todayPct: asDouble(_pickMetric(m, <String>['todayPct', 'todayPnlPct'])),
+      todayPnl: asDouble(
+        pick(m, <String>['todayPnl']) ?? _pickMetric(m, <String>['todayPnl']),
+      ),
+      totalPct: asDouble(_pickMetric(m, <String>['totalPct', 'totalPnlPct'])),
+      totalPnl: asDouble(
+        pick(m, <String>['totalPnl']) ?? _pickMetric(m, <String>['totalPnl']),
+      ),
+      capital: asDouble(_pickMetric(m, <String>['capital', 'totalCapital'])),
+      trades: asInt(_pickMetric(m, <String>['trades', 'tradeCount'])),
+      winRate: asDouble(_pickMetric(m, <String>['winRate', 'winRatePct'])),
+      spark: _spark(m),
+      statusNote: null,
     );
   }
 
@@ -64,7 +113,10 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
         ? pick(asMap(raw), <String>['items', 'data'])
         : raw;
     final List<Map<String, dynamic>> rows = asMapList(list ?? raw);
-    return rows.map(_parse).toList(growable: false);
+    return rows
+        .where((Map<String, dynamic> row) => !_isDraftStrategy(row))
+        .map(_parse)
+        .toList(growable: false);
   }
 
   @override

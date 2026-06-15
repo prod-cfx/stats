@@ -182,7 +182,8 @@ class _MetaLine extends StatelessWidget {
       strategy.timeframe,
       strategy.market,
       strategy.exchange,
-    ];
+    ].where((String part) => part.trim().isNotEmpty).toList(growable: false);
+    if (parts.isEmpty) return const SizedBox.shrink();
     return Wrap(
       spacing: 6,
       runSpacing: 2,
@@ -274,9 +275,13 @@ class _Footer extends StatelessWidget {
         ? l10n.liveActionResume
         : (canStart ? l10n.liveActionStart : l10n.liveActionPause);
 
-    final String winRate = strategy.winRate == strategy.winRate.roundToDouble()
-        ? strategy.winRate.toStringAsFixed(0)
-        : strategy.winRate.toStringAsFixed(1);
+    final List<String> metaParts = <String>[
+      strategy.id,
+      if (strategy.runFor.trim().isNotEmpty)
+        l10n.liveCardRunFor(strategy.runFor),
+      if (strategy.trades > 0) l10n.liveCardTrades(strategy.trades),
+      if (strategy.winRate > 0) l10n.liveCardWinRate(_formatWinRate(strategy)),
+    ].where((String part) => part.trim().isNotEmpty).toList(growable: false);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -286,16 +291,7 @@ class _Footer extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Expanded(
-            child: _FooterMeta(
-              parts: <String>[
-                strategy.id,
-                l10n.liveCardRunFor(strategy.runFor),
-                l10n.liveCardTrades(strategy.trades),
-                l10n.liveCardWinRate(winRate),
-              ],
-            ),
-          ),
+          Expanded(child: _FooterMeta(parts: metaParts)),
           const SizedBox(width: QzSpacing.sm),
           _ActionBtn(
             key: const Key('live-card-toggle'),
@@ -316,6 +312,12 @@ class _Footer extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatWinRate(LiveStrategy strategy) {
+  return strategy.winRate == strategy.winRate.roundToDouble()
+      ? strategy.winRate.toStringAsFixed(0)
+      : strategy.winRate.toStringAsFixed(1);
 }
 
 class _ActionBtn extends StatelessWidget {

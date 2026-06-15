@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/ai_strategy_context.dart';
+import '../../data/models/backtest_models.dart';
+import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -13,6 +15,7 @@ import '../../widgets/qz_ai_top_bar.dart';
 import 'widgets/qz_chat_bubble.dart';
 import '../../widgets/qz_quick_reply_chips.dart';
 import '../../widgets/qz_typing_indicator.dart';
+import 'ai_backtest_chat_handoff.dart';
 import 'ai_confirm_chat_handoff.dart';
 import 'ai_home_page_controller.dart';
 import 'ai_home_page_state.dart';
@@ -45,6 +48,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   /// 调度；真正的 provider 标记 [`markLoadedStrategy`] 延后到 post-frame 回调。
   String? _pendingLoadStrategyId;
   String? _pendingConfirmHandoffId;
+  String? _pendingBacktestHandoffId;
+  String? _pendingDeployJobId;
 
   AiHomePageController get _ctrl =>
       ref.read(aiHomePageControllerProvider.notifier);
@@ -120,7 +125,7 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _scrollToBottom();
   }
 
-  void _openQuickNav(String label) {
+  Future<void> _openQuickNav(String label) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AiHomePageState st = ref.read(aiHomePageControllerProvider);
     final AiSession? current = st.currentId == null
@@ -141,15 +146,89 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       return;
     }
     if (label == l10n.aiQuickReply2) {
+      final ChatTurn? resultTurn = current == null
+          ? null
+          : _latestBacktestResultTurn(current);
+      final String? jobId = resultTurn?.backtestSummary?.id.trim();
+      if (jobId != null && jobId.isNotEmpty) {
+        final AiPublishedStrategyContext? strategyContext =
+            resultTurn?.strategyContext ??
+            (current == null ? null : _latestPublishedStrategyContext(current));
+        context.push(
+          '/ai/backtest-result?jobId=${Uri.encodeComponent(jobId)}',
+          extra: strategyContext == null
+              ? null
+              : AiBacktestResultArgs(
+                  jobId: jobId,
+                  strategyContext: strategyContext,
+                ),
+        );
+        return;
+      }
       context.push('/ai/backtest-result');
       return;
     }
     if (label == l10n.aiQuickReply3) {
-      final AiPublishedStrategyContext? strategyContext = current == null
-          ? null
-          : _latestPublishedStrategyContext(current);
-      context.push('/ai/deploy', extra: strategyContext?.toDeploymentContext());
+      await _openDeployFromQuickReply(current);
     }
+  }
+
+  Future<void> _openDeployFromQuickReply(AiSession? current) async {
+    final AiPublishedStrategyContext? strategyContext = current == null
+        ? null
+        : _latestPublishedStrategyContext(current);
+    final ChatTurn? resultTurn = current == null
+        ? null
+        : _latestBacktestResultTurn(current);
+    final String jobId = resultTurn?.backtestSummary?.id.trim() ?? '';
+    if (strategyContext == null || jobId.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('请先完成回测后再部署。')));
+      return;
+    }
+    if (_pendingDeployJobId == jobId) return;
+    _pendingDeployJobId = jobId;
+
+    BacktestResult? result;
+    try {
+      result = await ref.read(backtestRepositoryProvider).getResult(jobId);
+    } catch (_) {
+      result = _backtestResultFromSummary(resultTurn?.backtestSummary);
+    }
+    if (!mounted) return;
+    context.push(
+      '/ai/deploy',
+      extra: strategyContext.toDeploymentContext(backtestResult: result),
+    );
+    _pendingDeployJobId = null;
+  }
+
+  BacktestResult? _backtestResultFromSummary(BacktestSummary? summary) {
+    if (summary == null) return null;
+    final DateTime epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    return BacktestResult(
+      id: summary.id,
+      totalReturnPercent: summary.totalReturnPercent,
+      cagrPercent: summary.totalReturnPercent,
+      maxDrawdownPercent: summary.maxDrawdownPercent,
+      sharpe: 0,
+      calmar: 0,
+      winRatePercent: 0,
+      profitLossRatio: 0,
+      avgHoldDuration: '--',
+      totalTrades: summary.trades,
+      closedReturnPercent: summary.totalReturnPercent,
+      closedTrades: summary.trades,
+      rangeStart: epoch,
+      rangeEnd: epoch,
+      equityCurve: const <double>[],
+      drawdownMarkers: const <int>[],
+      monthlyRows: const <BacktestMonthlyRow>[],
+      trades: const <BacktestTrade>[],
+      riskRows: const <BacktestRiskRow>[],
+      aiAssessment: '',
+    );
   }
 
   Map<String, String>? _latestParams(AiSession? session) {
@@ -172,6 +251,15 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       final AiPublishedStrategyContext? strategyContext = turn.strategyContext;
       if (strategyContext?.hasPublishedSnapshot == true) {
         return strategyContext;
+      }
+    }
+    return null;
+  }
+
+  ChatTurn? _latestBacktestResultTurn(AiSession session) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      if (turn.kind == ChatTurnKind.result && turn.backtestSummary != null) {
+        return turn;
       }
     }
     return null;
@@ -372,6 +460,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     final AiConfirmChatHandoff? confirmHandoff = ref.watch(
       aiConfirmChatHandoffProvider,
     );
+    final AiBacktestChatHandoff? backtestHandoff = ref.watch(
+      aiBacktestChatHandoffProvider,
+    );
     final AiSession? current = st.currentId == null
         ? null
         : st.sessions[st.currentId!];
@@ -412,6 +503,28 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
         );
         if (!mounted) return;
         _pendingConfirmHandoffId = null;
+        _scrollToBottom();
+      });
+    }
+
+    final String? backtestHandoffId = backtestHandoff?.result.id.trim();
+    if (st.initialized &&
+        backtestHandoff != null &&
+        backtestHandoffId != null &&
+        backtestHandoffId.isNotEmpty &&
+        backtestHandoffId != _pendingBacktestHandoffId) {
+      _pendingBacktestHandoffId = backtestHandoffId;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        ref.read(aiBacktestChatHandoffProvider.notifier).clear();
+        await _ctrl.consumeBacktestHandoff(
+          backtestHandoff.result,
+          strategyContext: backtestHandoff.strategyContext,
+          sessionId: backtestHandoff.sessionId,
+          newSessionTitleFallback: l10n.aiSessionUntitled,
+        );
+        if (!mounted) return;
+        _pendingBacktestHandoffId = null;
         _scrollToBottom();
       });
     }

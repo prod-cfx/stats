@@ -7,6 +7,7 @@ import '../../core/error/error_router.dart';
 import '../../core/providers/notifier_lifecycle.dart';
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/ai_strategy_context.dart';
+import '../../data/models/backtest_models.dart';
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
@@ -77,6 +78,125 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       initialized: true,
       loadError: null,
     );
+    await _restorePublishedCodegenForCurrentSession();
+    await _restoreLatestBacktestForCurrentSession();
+  }
+
+  Future<void> _restoreLatestBacktestForCurrentSession() async {
+    final String? id = state.currentId;
+    if (id == null) return;
+    final AiSession? session = state.sessions[id];
+    if (session == null || _latestBacktestSummary(session) != null) return;
+    BacktestSummary? summary;
+    try {
+      summary = await _chatRepo.latestBacktest(id);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || summary == null || summary.id.trim().isEmpty) return;
+    final AiSession? latest = state.sessions[id];
+    if (latest == null || _latestBacktestSummary(latest) != null) return;
+    final DateTime now = DateTime.now();
+    state = state.copyWith(
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        id: latest.copyWith(
+          messages: <ChatTurn>[
+            ...latest.messages,
+            _backtestResultTurn(summary, now),
+          ],
+          updatedAt: now,
+        ),
+      },
+    );
+  }
+
+  BacktestSummary? _latestBacktestSummary(AiSession session) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      if (turn.kind == ChatTurnKind.result && turn.backtestSummary != null) {
+        return turn.backtestSummary;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _restorePublishedCodegenForCurrentSession() async {
+    final String? id = state.currentId;
+    if (id == null) return;
+    final AiSession? session = state.sessions[id];
+    if (session == null) return;
+    if (_hasScriptReadyTurn(session)) return;
+    final String? codegenSessionId = _firstNonBlank(<String?>[
+      session.llmCodegenSessionId,
+      _latestCodegenSessionId(session),
+    ]);
+    if (codegenSessionId == null) return;
+
+    CodegenSessionResponseDto result;
+    try {
+      result = await _chatRepo.getCodegenSession(codegenSessionId);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    if (result.status != CodegenSessionResponseDtoStatusEnum.PUBLISHED) return;
+    final AiPublishedStrategyContext strategyContext =
+        AiPublishedStrategyContext.fromCodegen(result);
+    if (!strategyContext.hasPublishedSnapshot && !strategyContext.hasScript) {
+      return;
+    }
+    final AiSession? latest = state.sessions[id];
+    if (latest == null || _hasScriptReadyTurn(latest)) return;
+    final DateTime now = DateTime.now();
+    final List<ChatTurn> restoredTurns = <ChatTurn>[];
+    final ChatTurn? logicTurn = _publishedLogicTurn(result, now);
+    if (logicTurn != null && !_hasConfirmParamsTurn(latest, result.id)) {
+      restoredTurns.add(logicTurn);
+    }
+    final ChatTurn restored = _publishedScriptTurn(result);
+    state = state.copyWith(
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        id: latest.copyWith(
+          messages: <ChatTurn>[...latest.messages, ...restoredTurns, restored],
+          updatedAt: now,
+          llmCodegenSessionId: result.id,
+          pendingCanonicalDigest: result.canonicalDigest,
+        ),
+      },
+    );
+  }
+
+  bool _hasScriptReadyTurn(AiSession session) {
+    return session.messages.any(
+      (ChatTurn turn) => turn.kind == ChatTurnKind.scriptReady,
+    );
+  }
+
+  bool _hasConfirmParamsTurn(AiSession session, String codegenSessionId) {
+    return session.messages.any(
+      (ChatTurn turn) =>
+          turn.kind == ChatTurnKind.params &&
+          _codegenSessionIdForTurn(turn) == codegenSessionId,
+    );
+  }
+
+  String? _latestCodegenSessionId(AiSession session) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      final String? codegenSessionId = _codegenSessionIdForTurn(turn);
+      if (codegenSessionId != null) return codegenSessionId;
+    }
+    return null;
+  }
+
+  String? _codegenSessionIdForTurn(ChatTurn turn) {
+    return _firstNonBlank(<String?>[
+      turn.codegenSessionId,
+      turn.params?['codegenSessionId'],
+      turn.params?['llmCodegenSessionId'],
+      turn.params?['activeCodegenSessionId'],
+      turn.params?['sessionId'],
+    ]);
   }
 
   /// 切会话；返回是否真正切换（false = 点中当前会话，widget 仅关 drawer）。
@@ -360,6 +480,86 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     if (mounted) state = state.copyWith(isThinking: false);
   }
 
+  Future<void> consumeBacktestHandoff(
+    BacktestResult result, {
+    AiPublishedStrategyContext? strategyContext,
+    String? sessionId,
+    required String newSessionTitleFallback,
+  }) async {
+    if (!state.initialized) return;
+    final String? preferredId = _firstNonBlank(<String?>[
+      sessionId,
+      state.currentId,
+    ]);
+
+    String? targetId = preferredId;
+    if (targetId == null || state.sessions[targetId] == null) {
+      final AiSession fresh = await _chatRepo.createSession(
+        title: newSessionTitleFallback,
+      );
+      if (!mounted) return;
+      state = state.copyWith(
+        sessions: <String, AiSession>{...state.sessions, fresh.id: fresh},
+        order: <String>[fresh.id, ...state.order],
+        currentId: fresh.id,
+      );
+      targetId = fresh.id;
+    }
+
+    final AiSession? session = state.sessions[targetId];
+    if (session == null) return;
+    final String jobId = result.id.trim();
+    if (jobId.isEmpty) return;
+    final bool alreadyAdded = session.messages.any(
+      (ChatTurn turn) =>
+          turn.kind == ChatTurnKind.result && turn.backtestSummary?.id == jobId,
+    );
+    if (alreadyAdded) {
+      state = state.copyWith(currentId: targetId);
+      return;
+    }
+
+    final BacktestSummary summary = BacktestSummary(
+      id: jobId,
+      totalReturnPercent: result.closedReturnPercent,
+      maxDrawdownPercent: result.maxDrawdownPercent,
+      trades: result.closedTrades,
+    );
+    final DateTime now = DateTime.now();
+    final ChatTurn resultTurn = _backtestResultTurn(
+      summary,
+      now,
+      strategyContext: strategyContext,
+    );
+    state = state.copyWith(
+      currentId: targetId,
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        targetId: session.copyWith(
+          messages: <ChatTurn>[...session.messages, resultTurn],
+          updatedAt: now,
+        ),
+      },
+    );
+  }
+
+  ChatTurn _backtestResultTurn(
+    BacktestSummary summary,
+    DateTime timestamp, {
+    AiPublishedStrategyContext? strategyContext,
+  }) {
+    return ChatTurn(
+      id: 'backtest-result-${summary.id}-${timestamp.microsecondsSinceEpoch}',
+      role: 'assistant',
+      content:
+          '回测完成，可在下方「回测结果」查看完整曲线和指标。已平仓收益 ${summary.totalReturnPercent >= 0 ? '+' : ''}${summary.totalReturnPercent.toStringAsFixed(1)}%，最大回撤 -${summary.maxDrawdownPercent.abs().toStringAsFixed(1)}%。',
+      timestamp: timestamp,
+      kind: ChatTurnKind.result,
+      strategyContext: strategyContext,
+      backtestSummary: summary,
+    );
+  }
+
   Future<CodegenSessionResponseDto> _waitForPublished(
     String sessionId,
     CodegenSessionResponseDto initial,
@@ -417,6 +617,47 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       confirmedCanonicalDigest: result.canonicalDigest,
       strategyContext: strategyContext,
     );
+  }
+
+  ChatTurn? _publishedLogicTurn(
+    CodegenSessionResponseDto result,
+    DateTime timestamp,
+  ) {
+    final Map<String, String> params = _stringParamsFromCodegen(result);
+    if (params.isEmpty) return null;
+    return ChatTurn(
+      id: 'published-logic-${result.id}-${timestamp.microsecondsSinceEpoch}',
+      role: 'assistant',
+      content: result.assistantPrompt?.trim().isNotEmpty == true
+          ? result.assistantPrompt!.trim()
+          : '策略逻辑已生成，请确认后继续生成脚本。',
+      timestamp: timestamp,
+      kind: ChatTurnKind.params,
+      params: params,
+      codegenSessionId: result.id,
+      confirmedCanonicalDigest: result.canonicalDigest,
+    );
+  }
+
+  Map<String, String> _stringParamsFromCodegen(
+    CodegenSessionResponseDto result,
+  ) {
+    final Map<String, String> params = <String, String>{};
+    void collect(dynamic source) {
+      if (source == null) return;
+      for (final dynamic entry in source.entries) {
+        final String key = entry.key.toString();
+        final Object? raw = entry.value?.value;
+        final String value = raw?.toString().trim() ?? '';
+        if (key.trim().isNotEmpty && value.isNotEmpty && value != 'null') {
+          params[key] = value;
+        }
+      }
+    }
+
+    collect(result.publishedSnapshotParamValues);
+    if (params.isEmpty) collect(result.specDesc);
+    return params;
   }
 
   void _replaceAssistantTurn(
@@ -543,6 +784,8 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     deployedInstanceId: reply.deployedInstanceId,
     codegenSessionId: reply.codegenSessionId,
     confirmedCanonicalDigest: reply.confirmedCanonicalDigest,
+    strategyContext: reply.strategyContext,
+    backtestSummary: reply.backtestSummary,
   );
 
   String? _firstNonBlank(Iterable<String?> values) {

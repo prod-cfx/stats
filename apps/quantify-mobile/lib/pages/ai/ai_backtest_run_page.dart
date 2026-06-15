@@ -12,6 +12,7 @@ import 'ai_error_text.dart';
 import 'widgets/qz_backtest_progress_card.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_top_cancel_button.dart';
+import 'ai_backtest_chat_handoff.dart';
 
 /// AI 量化「回测进行中」整屏页 — 向导第 4 步。
 class AiBacktestRunPage extends ConsumerStatefulWidget {
@@ -96,6 +97,15 @@ class _AiBacktestRunPageState extends ConsumerState<AiBacktestRunPage> {
           );
       if (!mounted) return;
       setState(() => _progress = 1);
+      ref
+          .read(aiBacktestChatHandoffProvider.notifier)
+          .set(
+            AiBacktestChatHandoff(
+              result: result,
+              strategyContext: strategyContext,
+              sessionId: widget.args?.sessionId,
+            ),
+          );
       final String location =
           '/ai/backtest-result?jobId=${Uri.encodeComponent(result.id)}';
       if (strategyContext == null) {

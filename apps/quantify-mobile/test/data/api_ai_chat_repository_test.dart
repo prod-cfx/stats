@@ -5,14 +5,15 @@ import 'package:quantify_mobile/data/services/account_services.dart';
 import 'package:quantify_mobile/data/services/api_client.dart';
 
 /// 用预置响应替身校验 [ApiAiChatRepository] 的异步 deploy 预埋
-/// （deploy → 轮询 deploy-requests/{id}/result，上限 3 次）与 latestBacktest
+/// （deploy → 轮询 deploy-requests/{id}/result，上限 45 次）与 latestBacktest
 /// unsupported 行为；不发真实 HTTP（issue #2285）。
 class _StubAiChatService extends AiChatService {
-  _StubAiChatService({required this.deployResults})
+  _StubAiChatService({required this.deployResults, this.deployError})
     : super(ApiClient(baseUrl: 'http://localhost'));
 
   /// 每次 getDeployResult 顺序返回；超出长度后复用最后一项。
   final List<Object?> deployResults;
+  final Object? deployError;
 
   int deployCallCount = 0;
   int resultCallCount = 0;
@@ -22,6 +23,8 @@ class _StubAiChatService extends AiChatService {
   Future<dynamic> deployStrategy(Map<String, dynamic> body) async {
     deployCallCount++;
     deployBodies.add(body);
+    final Object? error = deployError;
+    if (error != null) throw error;
     return <String, dynamic>{'data': <String, dynamic>{}};
   }
 
@@ -122,6 +125,73 @@ void main() {
 
       expect(sessions.single.llmCodegenSessionId, 'codegen-active-1');
       expect(sessions.single.pendingCanonicalDigest, 'sha256:active-1');
+    });
+
+    test('front 后端会话恢复脚本和回测结果入口', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'cmq9u5ykn0bh9eaqs5rqt2o0r',
+            'conversationTitle': '入场：15m k线里面 价格在e',
+            'updatedAt': '2026-06-15T08:10:08.616Z',
+            'activeCodegenSessionId': 'cmq9u5yka0bh3eaqsjnuvpn41',
+            'status': 'PUBLISHED',
+            'canonicalDigest': 'sha256:872719e1',
+            'scriptCode': 'export default function strategy() { return true; }',
+            'publishedSnapshotId': 'cmqen7ulv0p0hlwqsgdtyptkm',
+            'publishedSnapshotParamValues': <String, dynamic>{
+              'symbol': 'BTCUSDT',
+              'baseTimeframe': '15m',
+              'marketType': 'perp',
+            },
+            'publishedSnapshotBacktestConfigDefaults': <String, dynamic>{
+              'baseTimeframe': '15m',
+              'symbol': 'BTCUSDT',
+            },
+            'conversationMessages': <Map<String, dynamic>>[
+              <String, dynamic>{'role': 'assistant', 'content': '我整理出的策略逻辑如下。'},
+              <String, dynamic>{'role': 'user', 'content': '确认策略'},
+            ],
+            'lastBacktestRef': <String, dynamic>{
+              'jobId': 'btjob-1781511007550-ae332028',
+              'publishedSnapshotId': 'cmqen7ulv0p0hlwqsgdtyptkm',
+              'summary': <String, dynamic>{
+                'maxDrawdownPct': 0.39,
+                'totalReturnPct': -0.33,
+                'winRatePct': 1.44,
+                'tradeCount': 139,
+                'openTradeCount': 1,
+                'openPnl': 0.37,
+                'marketType': 'perp',
+              },
+              'completedAt': '2026-06-15T08:10:08.616Z',
+            },
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final AiSession session = (await repo.listSessions()).single;
+
+      expect(session.id, 'cmq9u5ykn0bh9eaqs5rqt2o0r');
+      expect(session.llmCodegenSessionId, 'cmq9u5yka0bh3eaqsjnuvpn41');
+      final ChatTurn scriptReady = session.messages.firstWhere(
+        (ChatTurn turn) => turn.kind == ChatTurnKind.scriptReady,
+      );
+      expect(
+        scriptReady.strategyContext?.publishedSnapshotId,
+        'cmqen7ulv0p0hlwqsgdtyptkm',
+      );
+      expect(scriptReady.strategyContext?.scriptCode, contains('strategy'));
+      expect(scriptReady.strategyContext?.symbol, 'BTCUSDT');
+
+      final ChatTurn resultTurn = session.messages.firstWhere(
+        (ChatTurn turn) => turn.kind == ChatTurnKind.result,
+      );
+      expect(resultTurn.backtestSummary?.id, 'btjob-1781511007550-ae332028');
+      expect(resultTurn.backtestSummary?.totalReturnPercent, -0.33);
+      expect(resultTurn.backtestSummary?.maxDrawdownPercent, 0.39);
+      expect(resultTurn.backtestSummary?.trades, 139);
     });
   });
 
@@ -570,7 +640,7 @@ void main() {
 
   group('ApiAiChatRepository.markDeployed 异步两段预埋', () {
     test('首次 pending（data:null）后成功（data:{...}）→ 返回非空 session，'
-        '轮询次数 ≤ 3', () async {
+        '轮询次数 ≤ 45', () async {
       final _StubAiChatService svc = _StubAiChatService(
         deployResults: <Object?>[
           <String, dynamic>{'data': null},
@@ -579,29 +649,35 @@ void main() {
           },
         ],
       );
-      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
 
       final AiSession? s = await repo.markDeployed('sess-1', 'inst-1');
 
       expect(s, isNotNull);
       expect(s!.id, 's-1');
       expect(s.title, '已部署');
-      expect(svc.resultCallCount, lessThanOrEqualTo(3));
+      expect(svc.resultCallCount, lessThanOrEqualTo(45));
       expect(svc.resultCallCount, 2);
     });
 
-    test('恒 pending（data:null）→ 返回 null 且轮询恰 3 次（有界，不死循环）', () async {
+    test('恒 pending（data:null）→ 返回 null 且轮询恰 45 次（有界，不死循环）', () async {
       final _StubAiChatService svc = _StubAiChatService(
         deployResults: <Object?>[
           <String, dynamic>{'data': null},
         ],
       );
-      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
 
       final AiSession? s = await repo.markDeployed('sess-1', 'inst-1');
 
       expect(s, isNull);
-      expect(svc.resultCallCount, 3);
+      expect(svc.resultCallCount, 45);
     });
 
     test('同一 (sessionId,instanceId) 两次调用 → deployRequestId 一致'
@@ -611,7 +687,10 @@ void main() {
           <String, dynamic>{'data': null},
         ],
       );
-      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
 
       await repo.markDeployed('sess-X', 'inst-Y');
       await repo.markDeployed('sess-X', 'inst-Y');
@@ -631,11 +710,15 @@ void main() {
             <String, dynamic>{'data': null},
           ],
         );
-        final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+        final ApiAiChatRepository repo = ApiAiChatRepository(
+          svc,
+          deployPollInterval: Duration.zero,
+        );
 
         await repo.markDeployed(
           'sess-A',
           'inst-B',
+          strategyName: 'BTCUSDT 15m AI策略',
           exchangeAccountId: 'acct-1',
           exchangeAccountName: 'OKX 主账户',
         );
@@ -645,9 +728,37 @@ void main() {
         expect(body['publishedSnapshotId'], 'inst-B');
         expect(body['exchangeAccountId'], 'acct-1');
         expect(body['exchangeAccountName'], 'OKX 主账户');
-        expect(body.containsKey('name'), isTrue);
+        expect(body['name'], 'BTCUSDT 15m AI策略');
       },
     );
+
+    test('deploy POST 超时后用同一 deployRequestId 对账成功', () async {
+      final _StubAiChatService svc = _StubAiChatService(
+        deployError: const ApiException(message: 'The request took longer'),
+        deployResults: <Object?>[
+          <String, dynamic>{'data': null},
+          <String, dynamic>{
+            'data': <String, dynamic>{'id': 's-timeout', 'title': '对账成功'},
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
+
+      final AiSession? s = await repo.markDeployed(
+        'sess-timeout',
+        'snap-timeout',
+        strategyName: 'BTCUSDT 15m AI策略',
+      );
+
+      expect(s, isNotNull);
+      expect(s!.id, 's-timeout');
+      expect(s.title, '对账成功');
+      expect(svc.deployBodies.single['name'], 'BTCUSDT 15m AI策略');
+      expect(svc.resultCallCount, 2);
+    });
   });
 
   group('ApiAiChatRepository.latestBacktest 读取真实 lastBacktestRef', () {

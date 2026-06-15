@@ -176,6 +176,7 @@ class _FakeAiChatRepository implements AiChatRepository {
   Future<AiSession?> markDeployed(
     String sessionId,
     String publishedSnapshotId, {
+    String? strategyName,
     String? exchangeAccountId,
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
@@ -513,7 +514,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.confirmCalls, hasLength(1));
-    expect(repo.getCalls, <String>['session-1', 'session-1', 'session-1']);
+    expect(repo.getCalls.take(3), <String>[
+      'session-1',
+      'session-1',
+      'session-1',
+    ]);
     expect(router.routerDelegate.currentConfiguration.uri.path, '/ai');
     expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
   });
@@ -573,6 +578,70 @@ void main() {
     expect(repo.confirmCalls, isEmpty);
     expect(router.routerDelegate.currentConfiguration.uri.path, '/ai');
     expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
+  });
+
+  testWidgets('已确认逻辑图主按钮显示已确认且不可点击', (WidgetTester tester) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository(
+      getResponses: <CodegenSessionResponseDto>[
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.PUBLISHED,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
+        _codegenSession(
+          status: CodegenSessionResponseDtoStatusEnum.PUBLISHED,
+          canonicalDigest: 'sha256:canonical-1',
+        ),
+      ],
+    );
+    late final GoRouter router;
+    router = GoRouter(
+      routes: <RouteBase>[
+        GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(path: '/ai', builder: (_, _) => const AiHomePage()),
+        GoRoute(
+          path: '/ai/confirm',
+          builder: (_, GoRouterState state) => AiConfirmPage(
+            args: state.extra is AiConfirmArgs
+                ? state.extra! as AiConfirmArgs
+                : null,
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildQzThemeData(
+            const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+          ),
+          routerConfig: router,
+        ),
+      ),
+    );
+    router.push(
+      '/ai/confirm',
+      extra: const AiConfirmArgs(codegenSessionId: 'session-1'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(InkWell, '已确认'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, '确认策略'), findsNothing);
+    final InkWell nextCta = tester.widget<InkWell>(
+      find.byKey(const Key('ai-confirm-next-cta')),
+    );
+    expect(nextCta.onTap, isNull);
+
+    await tester.tap(find.byKey(const Key('ai-confirm-next-cta')));
+    await tester.pumpAndSettle();
+
+    expect(repo.confirmCalls, isEmpty);
+    expect(find.byKey(const Key('ai-confirm-disclaimer')), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsNothing);
   });
 
   testWidgets('确认 409 后拉取已发布 session 恢复脚本上下文', (WidgetTester tester) async {

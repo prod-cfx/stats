@@ -9,8 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
+import 'package:quantify_mobile/data/models/backtest_models.dart';
+import 'package:quantify_mobile/data/models/deploy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
+import 'package:quantify_mobile/data/repositories/backtest_repository.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -20,8 +23,8 @@ import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
 /// Pump AI page with a minimal router. Sized 400×1200 so 3 mock sessions +
-/// input bar fit; await an extra 100ms tick so `_loadSessions` (50ms repo
-/// delay) resolves before assertions.
+/// input bar fit; await an extra tick so `_loadSessions` and optional
+/// `latestBacktest` restore resolve before assertions.
 Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
   await tester.binding.setSurfaceSize(const Size(400, 1200));
   final GoRouter router = GoRouter(
@@ -56,13 +59,24 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
       ),
       GoRoute(
         path: '/ai/backtest-result',
-        builder: (BuildContext context, GoRouterState state) =>
-            const Scaffold(body: Center(child: Text('backtest-result-route'))),
+        builder: (BuildContext context, GoRouterState state) {
+          final String suffix = state.uri.queryParameters['jobId'] == null
+              ? ''
+              : ':${state.uri.queryParameters['jobId']}';
+          return Scaffold(
+            body: Center(child: Text('backtest-result-route$suffix')),
+          );
+        },
       ),
       GoRoute(
         path: '/ai/deploy',
-        builder: (BuildContext context, GoRouterState state) =>
-            const Scaffold(body: Center(child: Text('deploy-route'))),
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          final String suffix = extra is DeploymentContext
+              ? ':${extra.publishedSnapshotId}:${extra.backtestReturn}:${extra.backtestSharpe}:${extra.backtestMaxDrawdown}'
+              : '';
+          return Scaffold(body: Center(child: Text('deploy-route$suffix')));
+        },
       ),
     ],
   );
@@ -82,14 +96,16 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
     ),
   );
   await tester.pump();
-  // 让 postFrame loadSessions（50ms 延迟）解析
-  await tester.pump(const Duration(milliseconds: 100));
+  // 让 postFrame loadSessions（50ms）和 latestBacktest（200ms）解析。
+  await tester.pump(const Duration(milliseconds: 350));
   await tester.pump();
 }
 
 class _ConfirmIntentAiChatRepository implements AiChatRepository {
   _ConfirmIntentAiChatRepository({
     AiSession? session,
+    this.codegenSession,
+    this.latestBacktestSummary,
     this.confirmDelay = Duration.zero,
   }) : session =
            session ??
@@ -116,10 +132,13 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
 
   int sendMessageCalls = 0;
   int confirmStrategyCalls = 0;
+  int getCodegenSessionCalls = 0;
   String? confirmedSessionId;
   String? confirmedDigest;
 
   final AiSession session;
+  final CodegenSessionResponseDto? codegenSession;
+  final BacktestSummary? latestBacktestSummary;
   final Duration confirmDelay;
 
   @override
@@ -143,8 +162,12 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
   }
 
   @override
-  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async =>
-      throw UnimplementedError();
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) async {
+    getCodegenSessionCalls++;
+    final CodegenSessionResponseDto? response = codegenSession;
+    if (response == null) throw UnimplementedError();
+    return response;
+  }
 
   @override
   Future<CodegenSessionResponseDto> confirmStrategy(
@@ -169,17 +192,92 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
       const Stream<ChatTurn>.empty();
 
   @override
-  Future<BacktestSummary?> latestBacktest(String sessionId) async => null;
+  Future<BacktestSummary?> latestBacktest(String sessionId) async =>
+      latestBacktestSummary;
 
   @override
   Future<AiSession?> markDeployed(
     String sessionId,
     String publishedSnapshotId, {
+    String? strategyName,
     String? exchangeAccountId,
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
   }) async => null;
 }
+
+class _ResultBacktestRepository implements BacktestRepository {
+  _ResultBacktestRepository(this.result, {this.delay = Duration.zero});
+
+  final BacktestResult result;
+  final Duration delay;
+  String? requestedJobId;
+  int getResultCalls = 0;
+
+  @override
+  Future<BacktestSymbolSupportResult> checkSymbolSupport(
+    BacktestSymbolSupportRequest request,
+  ) async => const BacktestSymbolSupportResult(supported: true);
+
+  @override
+  Future<BacktestResult> run(BacktestRequest request) async => result;
+
+  @override
+  Future<BacktestResult> getResult(String id) async {
+    getResultCalls++;
+    requestedJobId = id;
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    return result;
+  }
+}
+
+const AiPublishedStrategyContext _publishedStrategyContext =
+    AiPublishedStrategyContext(
+      codegenSessionId: 'codegen-published-1',
+      conversationId: 'session-deployable',
+      publishedSnapshotId: 'snapshot-1',
+      status: 'PUBLISHED',
+      scriptCode: 'export default function strategy() { return true; }',
+      params: <String, String>{},
+      snapshotParamValues: <String, Object?>{
+        'symbol': 'BTCUSDT',
+        'baseTimeframe': '15m',
+        'marketType': 'perp',
+      },
+      strategyConfig: <String, Object?>{},
+      backtestConfigDefaults: <String, Object?>{},
+      deploymentExecutionDefaults: <String, Object?>{'exchange': 'okx'},
+      deploymentExecutionConstraints: <String, Object?>{},
+      compatibilityMetadata: <String, Object?>{},
+    );
+
+final BacktestResult _deployBacktestResult = BacktestResult(
+  id: 'btjob-deploy-1',
+  totalReturnPercent: -0.33,
+  cagrPercent: -4.5,
+  maxDrawdownPercent: 0.39,
+  sharpe: -0.12,
+  calmar: 0,
+  winRatePercent: 1.4,
+  profitLossRatio: 0,
+  avgHoldDuration: '--',
+  totalTrades: 139,
+  closedReturnPercent: -0.33,
+  closedWinRatePercent: 1.4,
+  closedTrades: 139,
+  openTrades: 1,
+  openPnl: 0.37,
+  rangeStart: DateTime.utc(2026, 5, 16),
+  rangeEnd: DateTime.utc(2026, 6, 15),
+  equityCurve: const <double>[10000, 9961.8],
+  drawdownMarkers: const <int>[],
+  monthlyRows: const <BacktestMonthlyRow>[],
+  trades: const <BacktestTrade>[],
+  riskRows: const <BacktestRiskRow>[],
+  aiAssessment: '',
+);
 
 CodegenSessionResponseDto _publishedCodegenSession({
   required String id,
@@ -192,6 +290,12 @@ CodegenSessionResponseDto _publishedCodegenSession({
       ..canonicalDigest = canonicalDigest
       ..scriptCode = 'export default function strategy() { return true; }'
       ..publishedSnapshotId = 'snapshot-1'
+      ..publishedSnapshotParamValues.replace(
+        BuiltMap<String, JsonObject?>(<String, JsonObject?>{
+          'symbol': JsonObject('BTCUSDT'),
+          'baseTimeframe': JsonObject('15m'),
+        }),
+      )
       ..clarificationGate.replace(BuiltMap<String, JsonObject?>()),
   );
 }
@@ -244,6 +348,7 @@ class _LoadErrorAiChatRepository implements AiChatRepository {
   Future<AiSession?> markDeployed(
     String sessionId,
     String publishedSnapshotId, {
+    String? strategyName,
     String? exchangeAccountId,
     String? exchangeAccountName,
     Map<String, Object?>? deploymentExecutionConfig,
@@ -302,7 +407,6 @@ void main() {
     final List<(Key, String, String)> cases = <(Key, String, String)>[
       (const Key('ai-quick-reply-0'), '逻辑图', 'confirm-route'),
       (const Key('ai-quick-reply-1'), '回测结果', 'backtest-result-route'),
-      (const Key('ai-quick-reply-2'), '部署', 'deploy-route'),
     ];
 
     for (final (Key key, String label, String routeText) in cases) {
@@ -310,9 +414,186 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining(routeText), findsOneWidget);
       expect(find.text(label), findsNothing);
-      GoRouter.of(tester.element(find.text(routeText))).pop();
+      GoRouter.of(tester.element(find.textContaining(routeText))).pop();
       await tester.pumpAndSettle();
     }
+
+    await tester.tap(find.byKey(const Key('ai-quick-reply-2')));
+    await tester.pumpAndSettle();
+    expect(find.text('请先完成回测后再部署。'), findsOneWidget);
+    expect(find.textContaining('deploy-route'), findsNothing);
+  });
+
+  testWidgets('快捷导航回测结果优先打开当前会话最新 job', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'session-with-backtest',
+        title: 'BTC 已回测策略',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 15, 10, 30),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'result-turn-1',
+            role: 'assistant',
+            content: '回测完成',
+            timestamp: DateTime(2026, 6, 15, 10, 30),
+            kind: ChatTurnKind.result,
+            backtestSummary: const BacktestSummary(
+              id: 'btjob-mobile-1',
+              totalReturnPercent: 0,
+              maxDrawdownPercent: -0.97,
+              trades: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-quick-reply-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('backtest-result-route:btjob-mobile-1'), findsOneWidget);
+  });
+
+  testWidgets('重装后从 latestBacktest 恢复回测结果入口', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'session-with-remote-backtest',
+        title: 'BTC 远端回测策略',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 15, 10, 30),
+        messages: const <ChatTurn>[],
+      ),
+      latestBacktestSummary: const BacktestSummary(
+        id: 'btjob-remote-1',
+        totalReturnPercent: 0,
+        maxDrawdownPercent: -0.97,
+        trades: 0,
+      ),
+    );
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(find.textContaining('回测完成'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ai-quick-reply-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('backtest-result-route:btjob-remote-1'), findsOneWidget);
+  });
+
+  testWidgets('快捷导航部署先拉最新回测结果再传入部署上下文', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'session-deployable',
+        title: 'BTC 已回测策略',
+        category: 'AI 量化',
+        updatedAt: DateTime(2026, 6, 15, 10, 30),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'script-ready-1',
+            role: 'assistant',
+            content: '策略脚本已生成',
+            timestamp: DateTime(2026, 6, 15, 10),
+            kind: ChatTurnKind.scriptReady,
+            strategyContext: _publishedStrategyContext,
+          ),
+          ChatTurn(
+            id: 'result-turn-1',
+            role: 'assistant',
+            content: '回测完成',
+            timestamp: DateTime(2026, 6, 15, 10, 30),
+            kind: ChatTurnKind.result,
+            backtestSummary: const BacktestSummary(
+              id: 'btjob-deploy-1',
+              totalReturnPercent: -0.33,
+              maxDrawdownPercent: 0.39,
+              trades: 139,
+            ),
+          ),
+        ],
+      ),
+    );
+    final _ResultBacktestRepository backtestRepo = _ResultBacktestRepository(
+      _deployBacktestResult,
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[
+        aiChatRepositoryProvider.overrideWithValue(repo),
+        backtestRepositoryProvider.overrideWithValue(backtestRepo),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-quick-reply-2')));
+    await tester.pumpAndSettle();
+
+    expect(backtestRepo.requestedJobId, 'btjob-deploy-1');
+    expect(
+      find.textContaining('deploy-route:snapshot-1:-0.33:-0.12:0.39'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('快捷导航部署异步拉取期间重复点击不会重复入栈', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'session-deployable',
+        title: 'BTC 已回测策略',
+        category: 'AI 量化',
+        updatedAt: DateTime(2026, 6, 15, 10, 30),
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'script-ready-1',
+            role: 'assistant',
+            content: '策略脚本已生成',
+            timestamp: DateTime(2026, 6, 15, 10),
+            kind: ChatTurnKind.scriptReady,
+            strategyContext: _publishedStrategyContext,
+          ),
+          ChatTurn(
+            id: 'result-turn-1',
+            role: 'assistant',
+            content: '回测完成',
+            timestamp: DateTime(2026, 6, 15, 10, 30),
+            kind: ChatTurnKind.result,
+            backtestSummary: const BacktestSummary(
+              id: 'btjob-deploy-1',
+              totalReturnPercent: -0.33,
+              maxDrawdownPercent: 0.39,
+              trades: 139,
+            ),
+          ),
+        ],
+      ),
+    );
+    final _ResultBacktestRepository backtestRepo = _ResultBacktestRepository(
+      _deployBacktestResult,
+      delay: const Duration(milliseconds: 200),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[
+        aiChatRepositoryProvider.overrideWithValue(repo),
+        backtestRepositoryProvider.overrideWithValue(backtestRepo),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-quick-reply-2')));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.byKey(const Key('ai-quick-reply-2')));
+    await tester.pumpAndSettle();
+
+    expect(backtestRepo.getResultCalls, 1);
+    expect(find.textContaining('deploy-route:snapshot-1'), findsOneWidget);
   });
 
   testWidgets('typing indicator：发送消息后到 reply 到达前显示', (
@@ -361,6 +642,44 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
     await tester.pumpAndSettle();
     expect(find.text('confirm-route'), findsOneWidget);
+  });
+
+  testWidgets('重装后恢复已发布脚本时保留查看逻辑图入口', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'restored-published-session',
+        title: 'BTC 已发布策略',
+        category: '趋势跟踪',
+        pair: 'BTCUSDT',
+        timeframe: '15m',
+        updatedAt: DateTime(2026, 6, 15, 14, 36),
+        llmCodegenSessionId: 'codegen-restored-1',
+        pendingCanonicalDigest: 'sha256:restored-1',
+        messages: const <ChatTurn>[],
+      ),
+      codegenSession: _publishedCodegenSession(
+        id: 'codegen-restored-1',
+        canonicalDigest: 'sha256:restored-1',
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[aiChatRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(repo.getCodegenSessionCalls, 1);
+    expect(find.byKey(const Key('ai-bubble-params')), findsOneWidget);
+    expect(find.text('查看逻辑图'), findsOneWidget);
+    expect(find.byKey(const Key('ai-bubble-script-ready')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ai-bubble-confirm-cta')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('confirm-route:codegen-restored-1:sha256:restored-1'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('确认门普通文本：显示确认 CTA，回复「是」后在聊天里生成脚本', (WidgetTester tester) async {
@@ -931,8 +1250,8 @@ void main() {
     expect(placeholder.style?.fontWeight, FontWeight.w700);
     expect(placeholder.style?.letterSpacing, -0.2);
 
-    // 排空 postFrame loadSessions（50ms）定时器，避免 dispose 时残留 pending timer。
-    await tester.pump(const Duration(milliseconds: 100));
+    // 排空 postFrame loadSessions（50ms）与 latestBacktest（200ms）定时器。
+    await tester.pump(const Duration(milliseconds: 350));
   });
 
   testWidgets('草稿不串台：在 s5 输入后切到 s2 输入框为空，再切回 s5 草稿仍在', (
