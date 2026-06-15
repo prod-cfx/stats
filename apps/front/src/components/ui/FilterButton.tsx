@@ -2,6 +2,7 @@
 
 import { ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 type FilterOption = string | { value: string; label: string };
 
@@ -16,7 +17,10 @@ interface FilterButtonProps {
 
 export const FilterButton = ({ value, options, onChange, minWidth = "100px", className = "", size = 'md' }: FilterButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const padding = size === 'sm' ? 'px-2 py-1' : 'px-3 py-1.5';
   const itemPadding = size === 'sm' ? 'px-2 py-1.5' : 'px-3 py-2';
@@ -28,8 +32,27 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
     options.find(opt => getOptionValue(opt) === value) ?? value
   );
 
+  const updateMenuPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) {
+      return;
+    }
+
+    const rect = button.getBoundingClientRect();
+    setMenuStyle({
+      left: rect.left,
+      minWidth: rect.width,
+      top: rect.bottom + 4,
+    });
+  }, []);
+
   const handleClickOutside = useCallback((event: MouseEvent) => {
-    if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    const target = event.target as Node;
+    if (
+      dropdownRef.current
+      && !dropdownRef.current.contains(target)
+      && !menuRef.current?.contains(target)
+    ) {
       setIsOpen(false);
     }
   }, [])
@@ -39,11 +62,66 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [handleClickOutside]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setMenuStyle(null);
+      return;
+    }
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [isOpen, updateMenuPosition]);
+
+  const menu = isOpen && typeof document !== 'undefined'
+    ? createPortal(
+        <div
+          ref={menuRef}
+          className="animate-in fade-in zoom-in fixed z-50 overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm duration-150"
+          style={menuStyle ?? undefined}
+        >
+          <div className="max-h-60 overflow-y-auto no-scrollbar">
+            {options.map((opt) => {
+              const optValue = getOptionValue(opt);
+              const optLabel = getOptionLabel(opt);
+              return (
+                <button
+                  key={optValue}
+                  type="button"
+                  onClick={() => {
+                    onChange(optValue);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left ${itemPadding} ${textSize} transition-colors ${
+                    value === optValue
+                      ? 'bg-gradient-to-r from-primary to-secondary text-white'
+                      : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-primary'
+                  }`}
+                >
+                  {optLabel}
+                </button>
+              )
+            })}
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button 
+        ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(prev => !prev)}
+        onClick={() => {
+          updateMenuPosition();
+          setIsOpen(prev => !prev);
+        }}
         className={`flex items-center justify-between ${padding} rounded-full border bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text)] ${textSize} transition-colors ${
           isOpen 
             ? 'border-transparent bg-gradient-to-r from-primary to-secondary text-white shadow-sm' 
@@ -54,33 +132,7 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
         <span className={`mr-2 ${isOpen ? 'text-white' : ''}`}>{selectedLabel}</span>
         <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[color:var(--cf-muted)]'}`} />
       </button>
-      
-      {isOpen && (
-        <div className="animate-in fade-in zoom-in absolute top-full left-0 z-20 mt-1 w-full overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm duration-150">
-          <div className="max-h-60 overflow-y-auto no-scrollbar">
-            {options.map((opt) => {
-              const optValue = getOptionValue(opt);
-              const optLabel = getOptionLabel(opt);
-              return (
-              <button
-                key={optValue}
-                type="button"
-                onClick={() => {
-                  onChange(optValue);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left ${itemPadding} ${textSize} transition-colors ${
-                  value === optValue 
-                    ? 'bg-gradient-to-r from-primary to-secondary text-white' 
-                    : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-primary'
-                }`}
-              >
-                {optLabel}
-              </button>
-            )})}
-          </div>
-        </div>
-      )}
+      {menu}
     </div>
   );
 };

@@ -175,7 +175,7 @@ export function LongShortRatioClient() {
           <BodyText>{t('longShort.subtitle')}</BodyText>
         </div>
 
-        <div className="no-scrollbar flex min-w-0 items-center gap-2 overflow-visible pb-2 md:gap-3 md:pb-0">
+        <div className="no-scrollbar flex min-w-0 items-center gap-2 overflow-x-auto pb-2 md:gap-3 md:overflow-visible md:pb-0">
           <div className="flex flex-shrink-0 gap-1">
             <FilterButton value={symbol} options={['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'DOGE', 'BNB']} onChange={setSymbol} minWidth="70px" size="sm" />
             <FilterButton

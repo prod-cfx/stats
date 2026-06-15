@@ -34,7 +34,7 @@ describe('LongShortRatioClient filters', () => {
     container.remove()
   })
 
-  it('keeps symbol and time dropdown menus outside clipping overflow', async () => {
+  it('keeps filters horizontally scrollable on mobile and outside clipping overflow on desktop', async () => {
     await act(async () => {
       root.render(<LongShortRatioClient />)
     })
@@ -44,7 +44,30 @@ describe('LongShortRatioClient filters', () => {
     const toolbar = symbolButton?.parentElement?.parentElement?.parentElement
 
     expect(toolbar).not.toBeNull()
-    expect(toolbar?.className).not.toContain('overflow-x-auto')
-    expect(toolbar?.className).toContain('overflow-visible')
+    expect(toolbar?.className).toContain('overflow-x-auto')
+    expect(toolbar?.className).toContain('md:overflow-visible')
+  })
+
+  it('renders filter menus outside the scrollable toolbar', async () => {
+    await act(async () => {
+      root.render(<LongShortRatioClient />)
+    })
+
+    const symbolButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('BTC'))
+    const toolbar = symbolButton?.parentElement?.parentElement?.parentElement
+
+    expect(symbolButton).toBeDefined()
+    expect(toolbar).not.toBeNull()
+
+    await act(async () => {
+      symbolButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const solOption = Array.from(document.body.querySelectorAll('button'))
+      .find(button => button.textContent === 'SOL')
+
+    expect(solOption).toBeDefined()
+    expect(toolbar?.contains(solOption ?? null)).toBe(false)
   })
 })

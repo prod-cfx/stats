@@ -1,6 +1,10 @@
 packages:
   - apps/*
   - packages/*
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  - chokidar@4.0.3
 onlyBuiltDependencies:
   - '@nestjs/core'
   - '@openapitools/openapi-generator-cli'
@@ -16,4 +20,3 @@ onlyBuiltDependencies:
   - sharp
   - unrs-resolver
   - utf-8-validate
-
