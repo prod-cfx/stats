@@ -2,6 +2,8 @@ import type { DataPullJob, DataPullJobContext } from './contracts/data-pull-job'
 import type { DataPullTask } from './repositories/data-pull-task.repository'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
 // eslint-disable-next-line ts/consistent-type-imports
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
@@ -19,6 +21,7 @@ export class DataSyncOrchestrator {
     jobs: DataPullJob[],
     private readonly taskRepo: DataPullTaskRepository,
     private readonly execRepo: DataPullExecutionRepository,
+    private readonly txEvents: TransactionEventsService,
   ) {
     this.registryResolver = new DataPullJobRegistryResolver(jobs)
   }
@@ -69,7 +72,7 @@ export class DataSyncOrchestrator {
         `Running data-pull task key=${job.key}, cursor=${ctx.cursor ?? 'null'}`,
       )
 
-      const result = await job.run(ctx)
+      const result = await this.txEvents.withAfterCommit(() => job.run(ctx))
 
       const finished = new Date()
       await this.execRepo.markSuccess(exec.id, finished, result)

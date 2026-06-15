@@ -9,8 +9,6 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionEventsService } from '@/common/services/transaction-events.service'
 
 /**
  * 任务配置参数（存放在 data_pull_tasks.meta 中，创建后不变）
@@ -118,11 +116,10 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
   constructor(
     private readonly configService: ConfigService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
-    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext<AggregatedLiquidationMeta>): Promise<JobRunResult> {
-    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+    return this.execute(ctx)
   }
 
   private async execute(ctx: DataPullJobContext<AggregatedLiquidationMeta>): Promise<JobRunResult> {

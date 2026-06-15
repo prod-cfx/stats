@@ -6,8 +6,6 @@ import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
-import { TransactionEventsService } from '@/common/services/transaction-events.service'
-// eslint-disable-next-line ts/consistent-type-imports
 import { HyperliquidApiService } from '@/modules/whale-tracking/services/hyperliquid-api.service'
 
 interface UserFundingCursor {
@@ -44,11 +42,10 @@ export class HyperliquidUserFundingSyncJob implements DataPullJob {
   constructor(
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
     private readonly hyperliquidApi: HyperliquidApiService,
-    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
-    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+    return this.execute(ctx)
   }
 
   private async execute(ctx: DataPullJobContext): Promise<JobRunResult> {

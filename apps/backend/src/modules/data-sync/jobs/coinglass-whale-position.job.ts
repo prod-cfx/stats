@@ -8,8 +8,6 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionEventsService } from '@/common/services/transaction-events.service'
 
 interface WhalePositionCursor {
   /**
@@ -72,11 +70,10 @@ export class CoinglassWhalePositionJob implements DataPullJob {
   constructor(
     private readonly configService: ConfigService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
-    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(_ctx: DataPullJobContext): Promise<JobRunResult> {
-    return this.txEvents.withAfterCommit(() => this.execute(_ctx))
+    return this.execute(_ctx)
   }
 
   private async execute(_ctx: DataPullJobContext): Promise<JobRunResult> {

@@ -9,8 +9,6 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionEventsService } from '@/common/services/transaction-events.service'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { INTERVAL_MS } from '@/modules/kline/utils/kline-time.utils'
 
@@ -115,11 +113,10 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   constructor(
     private readonly configService: ConfigService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
-    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
-    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+    return this.execute(ctx)
   }
 
   private async execute(ctx: DataPullJobContext): Promise<JobRunResult> {

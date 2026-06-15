@@ -6,9 +6,6 @@ import { HyperliquidUserFundingSyncJob } from './hyperliquid-user-funding-sync.j
 import { HyperliquidUserOrdersSyncJob } from './hyperliquid-user-orders-sync.job'
 
 describe('hyperliquid user sync job config validation', () => {
-  const txEvents = {
-    withAfterCommit: (fn: () => Promise<unknown>) => fn(),
-  }
   const txHost = { tx: {} }
   const hyperliquidApi = {}
   type JobClass = typeof HyperliquidUserFillsSyncJob
@@ -19,12 +16,11 @@ describe('hyperliquid user sync job config validation', () => {
     ['funding', HyperliquidUserFundingSyncJob],
   ])('returns bad request for %s template task without userAddress', async (_name, JobClass) => {
     const ctor = JobClass as JobClass
-    const [txHostArg, hyperliquidApiArg, txEventsArg] = [
+    const [txHostArg, hyperliquidApiArg] = [
       txHost,
       hyperliquidApi,
-      txEvents,
     ] as unknown as ConstructorParameters<JobClass>
-    const job = new ctor(txHostArg, hyperliquidApiArg, txEventsArg)
+    const job = new ctor(txHostArg, hyperliquidApiArg)
 
     let error: unknown
     try {
@@ -67,7 +63,7 @@ describe('hyperliquid user sync job config validation', () => {
         reduceOnly: false,
       } }]),
     }
-    const job = new HyperliquidUserOrdersSyncJob(txHost as never, hyperliquidApi as never, txEvents as never)
+    const job = new HyperliquidUserOrdersSyncJob(txHost as never, hyperliquidApi as never)
 
     const result = await job.run({
       taskId: 1,
@@ -105,7 +101,7 @@ describe('hyperliquid user sync job config validation', () => {
         fundingRate: '-0.0000049837',
       } }]),
     }
-    const job = new HyperliquidUserFundingSyncJob(txHost as never, hyperliquidApi as never, txEvents as never)
+    const job = new HyperliquidUserFundingSyncJob(txHost as never, hyperliquidApi as never)
 
     const result = await job.run({
       taskId: 1,
@@ -152,7 +148,7 @@ describe('hyperliquid user sync job config validation', () => {
         tid: 1001962798821134,
       }]),
     }
-    const job = new HyperliquidUserFillsSyncJob(txHost as never, hyperliquidApi as never, txEvents as never)
+    const job = new HyperliquidUserFillsSyncJob(txHost as never, hyperliquidApi as never)
 
     const result = await job.run({
       taskId: 1,

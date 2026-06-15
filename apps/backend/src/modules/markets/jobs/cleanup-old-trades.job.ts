@@ -4,6 +4,8 @@ import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron } from '@nestjs/schedule'
 // eslint-disable-next-line ts/consistent-type-imports
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
+// eslint-disable-next-line ts/consistent-type-imports
 import { MarketTradesRepository } from '../repositories/market-trades.repository'
 
 const DEFAULT_MAX_COUNT_PER_SYMBOL = 5000
@@ -15,6 +17,7 @@ export class CleanupOldTradesJob {
   constructor(
     private readonly marketTradesRepository: MarketTradesRepository,
     private readonly configService: ConfigService,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   private getMaxCountPerSymbol(): number {
@@ -56,11 +59,13 @@ export class CleanupOldTradesJob {
         const batch = symbolGroups.slice(i, i + BATCH_SIZE)
         const results = await Promise.allSettled(
           batch.map(async ({ exchange, instrumentType, symbol }) => {
-            const deleted = await this.marketTradesRepository.deleteExcessTrades(
-              exchange,
-              instrumentType,
-              symbol,
-              maxCount,
+            const deleted = await this.txEvents.withAfterCommit(() =>
+              this.marketTradesRepository.deleteExcessTrades(
+                exchange,
+                instrumentType,
+                symbol,
+                maxCount,
+              ),
             )
             return { exchange, instrumentType, symbol, deleted }
           }),

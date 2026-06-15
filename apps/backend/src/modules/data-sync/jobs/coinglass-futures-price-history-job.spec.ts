@@ -28,8 +28,7 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const txEvents = { withAfterCommit: (fn: () => Promise<any>) => fn() }
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any, txEvents as any)
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
@@ -82,8 +81,7 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const txEvents = { withAfterCommit: (fn: () => Promise<any>) => fn() }
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any, txEvents as any)
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
@@ -129,8 +127,7 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const txEvents = { withAfterCommit: (fn: () => Promise<any>) => fn() }
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any, txEvents as any)
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
