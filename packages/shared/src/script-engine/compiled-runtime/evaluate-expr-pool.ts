@@ -864,6 +864,7 @@ function resolvePriceIndicatorValue(
 interface PriceIndicatorCacheEntry {
   values: number[]
   prefixSums: number[]
+  originTimestamp: number | null
 }
 
 function resolvePriceIndicatorCache(ctx: StrategyExecutionContextV1, key: string): PriceIndicatorCacheEntry | null {
@@ -874,7 +875,7 @@ function resolvePriceIndicatorCache(ctx: StrategyExecutionContextV1, key: string
     ? record.__priceIndicatorCache as Record<string, PriceIndicatorCacheEntry>
     : {}
   if (!record.__priceIndicatorCache) record.__priceIndicatorCache = caches
-  caches[key] ??= { values: [], prefixSums: [] }
+  caches[key] ??= { values: [], prefixSums: [], originTimestamp: null }
   return caches[key]
 }
 
@@ -887,6 +888,13 @@ function extendPriceIndicatorCache(
   endExclusive: number,
   executionModel?: Record<string, unknown>,
 ): void {
+  const originTimestamp = bars[0]?.timestamp ?? null
+  if (cache.originTimestamp !== originTimestamp || bars.length < cache.values.length) {
+    cache.values = []
+    cache.prefixSums = []
+    cache.originTimestamp = originTimestamp
+  }
+
   const multiplier = 2 / (period + 1)
   for (let index = cache.values.length; index < endExclusive; index += 1) {
     const price = readBarField(bars[index], field, executionModel)
