@@ -233,7 +233,10 @@ void main() {
 
     test('checkSymbolSupport 调用真实 generated symbols check contract', () async {
       final _BacktestApiHarness harness = _BacktestApiHarness(
-        result: const <String, Object?>{'status': 'supported'},
+        result: const <String, Object?>{
+          'data': <String, Object?>{'status': 'supported'},
+          'message': 'Success',
+        },
       );
       final ApiBacktestRepository repo = ApiBacktestRepository(
         harness.build(),
@@ -263,9 +266,12 @@ void main() {
       final ApiBacktestRepository repo = ApiBacktestRepository(
         _BacktestApiHarness(
           result: const <String, Object?>{
-            'status': 'not_supported',
-            'reasonCode': 'symbol_not_supported',
-            'args': <String, Object?>{'symbol': 'BTCUSDT'},
+            'data': <String, Object?>{
+              'status': 'not_supported',
+              'reasonCode': 'symbol_not_supported',
+              'args': <String, Object?>{'symbol': 'BTCUSDT'},
+            },
+            'message': 'Success',
           },
         ).build(),
         tokenSupplier: () => 'token',

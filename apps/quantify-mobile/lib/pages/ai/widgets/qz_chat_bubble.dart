@@ -304,24 +304,7 @@ class QzChatBubble extends StatelessWidget {
                 ] else if (codeBlock != null &&
                     codeBlock!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: QzSpacing.sm),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(QzSpacing.sm),
-                    decoration: BoxDecoration(
-                      color: c.border.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(QzRadii.input),
-                    ),
-                    child: Text(
-                      codeBlock!,
-                      style: TextStyle(
-                        color: fg,
-                        fontSize: 12,
-                        height: 1.4,
-                        fontFamily: QzFont.mono,
-                        fontFamilyFallback: QzFont.monoFallback,
-                      ),
-                    ),
-                  ),
+                  _CollapsibleCodeBlock(code: codeBlock!, textColor: fg),
                 ],
                 if ((params == null || params!.isEmpty) &&
                     onConfirm != null &&
@@ -454,23 +437,9 @@ class QzChatBubble extends StatelessWidget {
                   ),
                   if (codeBlock?.trim().isNotEmpty == true) ...<Widget>[
                     const SizedBox(height: QzSpacing.sm),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(QzSpacing.sm),
-                      decoration: BoxDecoration(
-                        color: c.border.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(QzRadii.input),
-                      ),
-                      child: Text(
-                        codeBlock!.trim(),
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 12,
-                          height: 1.4,
-                          fontFamily: QzFont.mono,
-                          fontFamilyFallback: QzFont.monoFallback,
-                        ),
-                      ),
+                    _CollapsibleCodeBlock(
+                      code: codeBlock!.trim(),
+                      textColor: c.text,
                     ),
                   ],
                   const SizedBox(height: QzSpacing.sm),
@@ -677,5 +646,95 @@ class QzChatBubble extends StatelessWidget {
   static String _formatTime(DateTime t) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(t.hour)}:${two(t.minute)}';
+  }
+}
+
+class _CollapsibleCodeBlock extends StatefulWidget {
+  const _CollapsibleCodeBlock({required this.code, required this.textColor});
+
+  static const int collapsedLineCount = 8;
+
+  final String code;
+  final Color textColor;
+
+  @override
+  State<_CollapsibleCodeBlock> createState() => _CollapsibleCodeBlockState();
+}
+
+class _CollapsibleCodeBlockState extends State<_CollapsibleCodeBlock> {
+  bool _expanded = false;
+
+  @override
+  void didUpdateWidget(covariant _CollapsibleCodeBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code) {
+      _expanded = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final String code = widget.code.trim();
+    final bool canToggle =
+        code.split(RegExp(r'\r?\n')).length >
+        _CollapsibleCodeBlock.collapsedLineCount;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(QzSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.border.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(QzRadii.input),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            code,
+            key: const Key('ai-bubble-code-text'),
+            maxLines: canToggle && !_expanded
+                ? _CollapsibleCodeBlock.collapsedLineCount
+                : null,
+            overflow: canToggle && !_expanded
+                ? TextOverflow.fade
+                : TextOverflow.visible,
+            style: TextStyle(
+              color: widget.textColor,
+              fontSize: 12,
+              height: 1.4,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
+          ),
+          if (canToggle) ...<Widget>[
+            const SizedBox(height: QzSpacing.xs),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: const Key('ai-bubble-code-toggle'),
+                style: TextButton.styleFrom(
+                  foregroundColor: c.accent,
+                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  _expanded ? '收起' : '展开全部',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

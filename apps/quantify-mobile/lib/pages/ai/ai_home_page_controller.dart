@@ -16,21 +16,17 @@ import 'ai_home_page_state.dart';
 
 /// AI 多会话对话页控制器（issue #2186 三件套迁移）。
 ///
-/// 持有会话集合 + 流式态，经 `ref.read(aiChatRepositoryProvider)` /
-/// `strategyRepositoryProvider` 取数。流式逐字由 controller 持有的
-/// [_streamTimer] 驱动，`ref.onDispose` 中取消；异步回调前以
-/// [NotifierLifecycle] mounted 守卫。
+/// 持有会话集合，经 `ref.read(aiChatRepositoryProvider)` /
+/// `strategyRepositoryProvider` 取数。异步回调前以 [NotifierLifecycle]
+/// mounted 守卫。
 ///
 /// 边界：导航 / `TextEditingController` / `ScrollController` / drawer pop 等
 /// 渲染层副作用留在 widget；本控制器只推进 [AiHomePageState]。
 class AiHomePageController extends Notifier<AiHomePageState> {
-  /// Streaming cadence: 1 char / 250 ms（保留 #1508 节奏）。
-  static const Duration streamTick = Duration(milliseconds: 250);
   static const int _publishPollLimit = 80;
   static const Duration _publishPollInterval = Duration(milliseconds: 1500);
 
   final NotifierLifecycle _life = NotifierLifecycle();
-  Timer? _streamTimer;
 
   bool get mounted => _life.mounted;
 
@@ -40,7 +36,6 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   @override
   AiHomePageState build() {
     _life.attach(ref);
-    ref.onDispose(() => _streamTimer?.cancel());
     return const AiHomePageState();
   }
 
@@ -87,19 +82,13 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   /// 切会话；返回是否真正切换（false = 点中当前会话，widget 仅关 drawer）。
   bool switchSession(String id) {
     if (id == state.currentId) return false;
-    _streamTimer?.cancel();
-    state = state.copyWith(
-      currentId: id,
-      isThinking: false,
-      isStreaming: false,
-    );
+    state = state.copyWith(currentId: id, isThinking: false);
     return true;
   }
 
   Future<void> createSession(String untitledTitle) async {
     final AiSession fresh = await _chatRepo.createSession(title: untitledTitle);
     if (!mounted) return;
-    _streamTimer?.cancel();
     final Map<String, String> drafts = Map<String, String>.of(state.drafts)
       ..remove(fresh.id);
     state = state.copyWith(
@@ -108,7 +97,6 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       currentId: fresh.id,
       drafts: drafts,
       isThinking: false,
-      isStreaming: false,
     );
   }
 
@@ -133,7 +121,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     );
   }
 
-  /// 发送一条消息：追加 user turn → thinking → 取 reply → 逐字 streaming → done。
+  /// 发送一条消息：追加 user turn → thinking → 取完整 reply → 立即显示。
   ///
   /// [text] 已 trim；空文本或正在发送时由调用方守卫（此处再兜一层）。
   Future<void> send(String text) async {
@@ -201,15 +189,15 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       state = state.copyWith(isThinking: false);
       return;
     }
-    // mock 已把 userTurn + reply 都追加；剥掉 reply 再插入空内容以逐字铺。
+    // 部分 mock 会把 reply 同步追加到对应 session；剥掉同 id 尾项后
+    // 统一由 controller 追加完整回复，避免重复显示。
     final List<ChatTurn> base = List<ChatTurn>.of(cur2.messages);
     if (base.isNotEmpty && base.last.id == reply.id) base.removeLast();
-    final int idx = base.length;
     state = state.copyWith(
       sessions: <String, AiSession>{
         ...state.sessions,
         id: cur2.copyWith(
-          messages: <ChatTurn>[...base, _replyWith(reply, '')],
+          messages: <ChatTurn>[...base, _replyWith(reply, reply.content)],
           llmCodegenSessionId: _firstNonBlank(<String?>[
             reply.codegenSessionId,
             cur2.llmCodegenSessionId,
@@ -221,58 +209,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
         ),
       },
       isThinking: false,
-      isStreaming: true,
     );
-
-    final String full = reply.content;
-    int cursor = 0;
-    _streamTimer?.cancel();
-    _streamTimer = Timer.periodic(streamTick, (Timer t) {
-      cursor++;
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      final AiSession? s = state.sessions[id];
-      if (s == null) {
-        t.cancel();
-        return;
-      }
-      final List<ChatTurn> msgs = List<ChatTurn>.of(s.messages);
-      if (idx >= msgs.length) {
-        t.cancel();
-        return;
-      }
-      if (cursor >= full.length) {
-        t.cancel();
-        msgs[idx] = _replyWith(reply, full);
-        state = state.copyWith(
-          sessions: <String, AiSession>{
-            ...state.sessions,
-            id: s.copyWith(
-              messages: msgs,
-              llmCodegenSessionId: _firstNonBlank(<String?>[
-                reply.codegenSessionId,
-                s.llmCodegenSessionId,
-              ]),
-              pendingCanonicalDigest: _firstNonBlank(<String?>[
-                reply.confirmedCanonicalDigest,
-                s.pendingCanonicalDigest,
-              ]),
-            ),
-          },
-          isStreaming: false,
-        );
-        return;
-      }
-      msgs[idx] = _replyWith(reply, full.substring(0, cursor));
-      state = state.copyWith(
-        sessions: <String, AiSession>{
-          ...state.sessions,
-          id: s.copyWith(messages: msgs),
-        },
-      );
-    });
   }
 
   Future<void> confirmStrategyInChat(
