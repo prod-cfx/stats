@@ -253,6 +253,20 @@ describe('stage1 typed rules corpus fixture', () => {
       expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 1.5 }) }),
       expect.objectContaining({ key: 'position.sizing', params: expect.objectContaining({ sizing: expect.objectContaining({ kind: 'ratio', value: 0.01 }) }) }),
     ]))
+    expect(patch.diagnostics?.intentCoverage?.uncoveredRequired).toEqual([])
+    expect(patch.diagnostics?.intentCoverage?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slot: 'condition', text: '价格高于 EMA50', status: 'covered', target: 'SemanticRule.condition' }),
+      expect.objectContaining({ slot: 'condition', text: 'EMA20 高于 EMA50', status: 'covered', target: 'SemanticRule.condition' }),
+      expect.objectContaining({ slot: 'risk', text: '按每 4 根 15m K线的节奏开多', status: 'covered', target: 'SemanticRule.effects.risks' }),
+      expect.objectContaining({ slot: 'action', text: '开多', status: 'covered', target: 'SemanticRule.effects.actions' }),
+      expect.objectContaining({ slot: 'position', text: '单笔 1%', status: 'covered', target: 'SemanticRule.effects.positions' }),
+      expect.objectContaining({ slot: 'risk', text: '止盈 0.12%', status: 'covered', target: 'SemanticRule.effects.risks' }),
+      expect.objectContaining({ slot: 'risk', text: '止损 1.5%', status: 'covered', target: 'SemanticRule.effects.risks' }),
+      expect.objectContaining({ slot: 'risk', text: '持仓满 4 根 K线', status: 'covered', target: 'SemanticRule.effects.risks' }),
+      expect.objectContaining({ slot: 'condition', text: '价格跌破 EMA20', status: 'covered', target: 'SemanticRule.condition' }),
+      expect.objectContaining({ slot: 'action', text: '平多', status: 'covered', target: 'SemanticRule.effects.actions' }),
+      expect.objectContaining({ slot: 'market_context', text: 'OKX 合约 BTCUSDT 15m', status: 'covered', target: 'executable policy/config' }),
+    ]))
   })
 
   describe('official Strategy Plaza semantic parameter regressions', () => {

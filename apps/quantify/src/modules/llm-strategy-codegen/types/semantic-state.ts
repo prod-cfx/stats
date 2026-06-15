@@ -643,5 +643,40 @@ export interface SemanticState {
       readonly errorPath: string
       readonly rawSnippet: string
     }>
+    readonly intentCoverage?: SemanticIntentCoverageDiagnostics
   }
+}
+
+export type SemanticIntentCoverageSlot =
+  | 'condition'
+  | 'action'
+  | 'program'
+  | 'position'
+  | 'risk'
+  | 'orchestration'
+  | 'market_context'
+
+export type SemanticIntentCoverageStatus = 'covered' | 'missing' | 'open_slot' | 'unsupported'
+
+export interface SemanticIntentCoverageItem {
+  readonly slot: SemanticIntentCoverageSlot
+  readonly text: string
+  readonly required: boolean
+  readonly status: SemanticIntentCoverageStatus
+  readonly target:
+    | 'SemanticRule.condition'
+    | 'SemanticRule.effects.actions'
+    | 'SemanticRule.effects.programs'
+    | 'SemanticRule.effects.positions'
+    | 'SemanticRule.effects.risks'
+    | 'SemanticRule.effects.orchestration'
+    | 'executable policy/config'
+    | 'blocking open slot'
+    | 'unsupported'
+  readonly evidenceKeys: readonly string[]
+}
+
+export interface SemanticIntentCoverageDiagnostics {
+  readonly items: readonly SemanticIntentCoverageItem[]
+  readonly uncoveredRequired: readonly SemanticIntentCoverageItem[]
 }

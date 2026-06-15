@@ -495,6 +495,52 @@ describe('SemanticSeedStateBuilderService — rules-only seed input', () => {
     })
   })
 
+  it('preserves dispatcher intent coverage diagnostics without blocking seed build', () => {
+    const service = new SemanticSeedStateBuilderService()
+
+    const state = service.build({
+      rules: [{
+        id: 'dispatcher-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', period: 50 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: { phase: 'entry' } }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+      diagnostics: {
+        intentCoverage: {
+          items: [{
+            slot: 'condition',
+            text: '价格高于 EMA50',
+            required: true,
+            status: 'covered',
+            target: 'SemanticRule.condition',
+            evidenceKeys: ['condition.indicator.above'],
+          }],
+          uncoveredRequired: [],
+        },
+      },
+    })
+
+    expect(state?.rules).toHaveLength(1)
+    expect(state?.diagnostics?.intentCoverage).toEqual({
+      items: [{
+        slot: 'condition',
+        text: '价格高于 EMA50',
+        required: true,
+        status: 'covered',
+        target: 'SemanticRule.condition',
+        evidenceKeys: ['condition.indicator.above'],
+      }],
+      uncoveredRequired: [],
+    })
+  })
+
   it('ignores legacy flat bucket patch input after Stage 3 hard delete', () => {
     const service = new SemanticSeedStateBuilderService()
 
