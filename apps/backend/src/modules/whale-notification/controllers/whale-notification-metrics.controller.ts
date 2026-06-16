@@ -1,10 +1,12 @@
 import type { WhaleNotificationMetricsService } from '../services/whale-notification-metrics.service'
 import { Controller, Get, Inject } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 import { WhaleNotificationMetricsService as WhaleNotificationMetricsServiceToken } from '../services/whale-notification-metrics.service'
 
 @ApiTags('WhaleNotification')
 @Controller('whale-notification/metrics')
+@Public()
 export class WhaleNotificationMetricsController {
   constructor(
     @Inject(WhaleNotificationMetricsServiceToken)

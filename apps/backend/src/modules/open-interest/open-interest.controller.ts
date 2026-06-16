@@ -29,6 +29,7 @@ import {
   ReadAny,
   RequireAuth,
 } from '@/modules/auth/decorators/access-control.decorator'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // QueryOpenInterestDto 需要运行时类构造函数，用于 class-validator 校验和 Swagger 推导，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -149,6 +150,7 @@ export class OpenInterestController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: '查询持仓量数据' })
   @ApiQuery({ name: 'exchange', required: false, type: String, description: '交易所名称', example: 'All' })
   @ApiQuery({ name: 'symbol', required: false, type: String, description: '币种符号', example: 'BTC' })
@@ -205,6 +207,7 @@ export class OpenInterestController {
   }
 
   @Get('aggregate/:symbol')
+  @Public()
   @ApiOperation({
     summary: '获取聚合持仓量快照',
     description: '返回某币种最新时间戳下的总计与各交易所行，供移动端聚合盘口页 OI 表消费',

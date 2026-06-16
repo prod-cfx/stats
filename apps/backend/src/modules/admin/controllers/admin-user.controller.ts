@@ -15,6 +15,7 @@ import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { AdminAuthResponseDto } from '../dto/admin-auth.dto'
 import { AdminLoginDto, AdminRefreshDto } from '../dto/admin-login.dto'
@@ -33,6 +34,7 @@ export class AdminUserController {
   constructor(private readonly adminUserService: AdminUserService) {}
 
   @Post('login')
+  @Public()
   @ApiOperation({
     summary: '管理员登录（兼容旧入口，已废弃）',
     description: '请使用 POST /admin/auth/login。此兼容入口仅保留到所有消费方迁移完成。',
@@ -47,6 +49,7 @@ export class AdminUserController {
   }
 
   @Post('refresh')
+  @Public()
   @ApiOperation({
     summary: '刷新管理员访问令牌（兼容旧入口，已废弃）',
     description: '请使用 POST /admin/auth/refresh。此兼容入口仅保留到所有消费方迁移完成。',

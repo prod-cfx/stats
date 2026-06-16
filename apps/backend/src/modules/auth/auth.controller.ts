@@ -23,6 +23,7 @@ import { TelegramDesktopIntentStatusResponseDto } from './dto/responses/telegram
 import { TelegramBotWebhookResponseDto } from './dto/responses/telegram-bot-webhook.response.dto'
 import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
+import { Public } from './decorators/public.decorator'
 // NestJS DI 需要运行时引用 UserAuthService，用于生成设计时类型元数据
 // eslint-disable-next-line ts/consistent-type-imports
 import { UserAuthService } from './services/user-auth.service'
@@ -50,6 +51,7 @@ export class AuthController {
   constructor(private readonly userAuthService: UserAuthService) {}
 
   @Get('telegram/login-config')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '获取 Telegram 登录配置' })
   @ApiResponse({
@@ -78,6 +80,7 @@ export class AuthController {
   }
 
   @Get('telegram/web/authorize-url')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '获取 Telegram 网页授权地址' })
@@ -106,6 +109,7 @@ export class AuthController {
   }
 
   @Post('telegram/desktop/intent')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -122,6 +126,7 @@ export class AuthController {
   }
 
   @Get('telegram/desktop/intent/:intentId')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '查询 Telegram 桌面端登录意图状态' })
   @ApiOkResponse({
@@ -135,6 +140,7 @@ export class AuthController {
   }
 
   @Post('telegram/desktop/exchange')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -168,6 +174,7 @@ export class AuthController {
   }
 
   @Post('telegram/bot/webhook')
+  @Public()
   @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Telegram Bot Webhook 回调' })
@@ -185,6 +192,7 @@ export class AuthController {
   }
 
   @Post('send-verification-code')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
@@ -196,6 +204,7 @@ export class AuthController {
   }
 
   @Post('email/send-code')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
@@ -207,6 +216,7 @@ export class AuthController {
   }
 
   @Post('email/verify-code')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -222,6 +232,7 @@ export class AuthController {
   }
 
   @Post('telegram/exchange')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -237,6 +248,7 @@ export class AuthController {
   }
 
   @Post('guest')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -251,6 +263,7 @@ export class AuthController {
   }
 
   @Post('register')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.CREATED)
@@ -266,6 +279,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '用户登录' })
@@ -280,6 +294,7 @@ export class AuthController {
   }
 
   @Post('password-reset')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
@@ -291,6 +306,7 @@ export class AuthController {
   }
 
   @Post('password-reset/verify')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -302,6 +318,7 @@ export class AuthController {
   }
 
   @Post('verify-email')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @Transactional()
   @HttpCode(HttpStatus.OK)
@@ -313,6 +330,7 @@ export class AuthController {
   }
 
   @Post('resend-verification')
+  @Public()
   @UseGuards(AuthRateLimitGuard)
   @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)

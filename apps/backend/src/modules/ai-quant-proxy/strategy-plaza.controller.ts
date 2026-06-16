@@ -4,6 +4,7 @@ import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, 
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { AccountAiQuantStrategyDetailResponseDto } from './dto/account-ai-quant-strategy.response.dto'
 import {
@@ -40,6 +41,7 @@ export class StrategyPlazaProxyController {
   ) {}
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Publicly list strategy plaza templates through the backend proxy.' })
   @ApiOkResponse({
     description: 'Strategy plaza template list proxied from quantify.',
@@ -60,6 +62,7 @@ export class StrategyPlazaProxyController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Publicly get strategy plaza template detail through the backend proxy.' })
   @ApiOkResponse({
     description: 'Strategy plaza template detail proxied from quantify.',
@@ -70,6 +73,7 @@ export class StrategyPlazaProxyController {
   }
 
   @Get(':id/signals')
+  @Public()
   @ApiOperation({ summary: 'Publicly list strategy plaza template signals through the backend proxy.' })
   @ApiQuery({ name: 'limit', required: false })
   @ApiOkResponse({
@@ -98,6 +102,7 @@ export class StrategyPlazaProxyController {
   }
 
   @Get(':id/equity-curve')
+  @Public()
   @ApiOperation({ summary: 'Publicly get strategy plaza template equity curve through the backend proxy.' })
   @ApiQuery({ name: 'timeframe', required: false })
   @ApiOkResponse({

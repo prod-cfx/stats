@@ -10,6 +10,7 @@ import {
 } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 import { AdminAuthResponseDto, AdminProfileDto, AdminRegisterDto } from '../dto/admin-auth.dto'
 import { AdminLoginDto, AdminRefreshDto } from '../dto/admin-login.dto'
 import { buildAdminAuthResponse, buildAdminProfile } from './admin-auth-response.mapper'
@@ -22,6 +23,7 @@ export class AdminAuthController {
   constructor(private readonly adminUserService: AdminUserService) {}
 
   @Post('login')
+  @Public()
   @ApiOperation({ summary: '管理员登录' })
   @ApiBody({ type: AdminLoginDto })
   @ApiOkResponse({ description: '登录成功', type: AdminAuthResponseDto })
@@ -32,6 +34,7 @@ export class AdminAuthController {
   }
 
   @Post('refresh')
+  @Public()
   @ApiOperation({ summary: '刷新管理员访问令牌' })
   @ApiBody({ type: AdminRefreshDto })
   @ApiOkResponse({ description: '刷新成功', type: AdminAuthResponseDto })
@@ -42,6 +45,7 @@ export class AdminAuthController {
   }
 
   @Post('register')
+  @Public()
   @Transactional()
   @ApiOperation({ summary: '注册首个管理员账号' })
   @ApiBody({ type: AdminRegisterDto })

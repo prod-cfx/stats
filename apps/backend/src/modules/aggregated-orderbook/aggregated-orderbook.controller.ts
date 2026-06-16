@@ -1,5 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiExtraModels, ApiOperation, ApiResponse, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 // Nest 注入需要运行时引用，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { AggregatedOrderbookService } from './aggregated-orderbook.service'
@@ -11,6 +12,7 @@ import { QueryAggregatedOrderbookDto } from './dto/query-aggregated-orderbook.dt
 @ApiTags('orderbook')
 @Controller('orderbook')
 @ApiExtraModels(AggregatedOrderbookMarketResponseDto, AggregatedOrderbookResponseDto)
+@Public()
 export class AggregatedOrderbookController {
   constructor(private readonly service: AggregatedOrderbookService) {}
 

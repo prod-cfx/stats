@@ -1,10 +1,12 @@
 import { Controller, Get } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 // eslint-disable-next-line ts/consistent-type-imports
 import { HealthService } from './health.service'
 
 @ApiTags('Health')
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
@@ -35,4 +37,3 @@ export class HealthController {
     return this.healthService.getHealth()
   }
 }
-

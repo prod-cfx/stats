@@ -1,5 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiExtraModels, ApiOperation, ApiResponse, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { Public } from '@/modules/auth/decorators/public.decorator'
 // KlineBarDto 需要运行时类构造函数，用于 Swagger 推导，保留值导入
 
 import { KlineBarDto } from './dto/kline-bar.dto'
@@ -13,6 +14,7 @@ import { KlineService } from './kline.service'
 @ApiTags('kline')
 @Controller('kline')
 @ApiExtraModels(KlineBarDto)
+@Public()
 export class KlineController {
   constructor(private readonly service: KlineService) {}
 
