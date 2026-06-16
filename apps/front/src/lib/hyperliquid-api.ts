@@ -23,7 +23,7 @@ type Infer<T extends ZodTypeAny> = T['_output']
 // 复用后端 DTO 类型定义
 type TraderSnapshotResponse = Infer<typeof schemas.TraderSnapshotResponseDto>
 type TraderPositionsResponse = Infer<typeof schemas.TraderPositionsResponseDto>
-export type TraderOpenOrdersResponse = Infer<typeof schemas.TraderOpenOrdersResponseDto>
+type TraderOpenOrdersResponse = Infer<typeof schemas.TraderOpenOrdersResponseDto>
 
 // 前端专用的历史数据响应类型
 export interface UserPortfolioResponse {
@@ -797,46 +797,6 @@ function transformToTraderOpenOrders(orders: HyperliquidOpenOrder[]): TraderOpen
 // ============================================================================
 // 公共 API（导出给 lib/api.ts 使用）
 // ============================================================================
-
-/**
- * 从 Hyperliquid 获取交易者账户快照
- *
- * @param address - 用户地址（42 字符十六进制格式）
- * @returns 账户快照数据（兼容后端 DTO 格式）
- */
-/**
- * 从 Hyperliquid 获取交易者挂单列表
- *
- * @param address - 用户地址（42 字符十六进制格式）
- * @param options - 查询选项
- * @param options.coin - 指定币种过滤
- * @returns 挂单列表数据（兼容后端 DTO 格式）
- */
-export async function fetchTraderOpenOrdersFromHyperliquid(
-  address: string,
-  options: { coin?: string } = {},
-): Promise<TraderOpenOrdersResponse> {
-  if (!isValidEthereumAddress(address)) {
-    throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
-  }
-
-  try {
-    const orders = await postHyperliquidInfo<HyperliquidOpenOrder[]>({
-      type: 'openOrders',
-      user: address,
-    })
-
-    // 如果指定了 coin，进行过滤
-    const filteredOrders = options.coin
-      ? orders.filter(order => order.coin === options.coin)
-      : orders
-
-    return transformToTraderOpenOrders(filteredOrders)
-  } catch (error) {
-    logError('FETCH_TRADER_OPEN_ORDERS_FROM_HYPERLIQUID', error, { address, coin: options.coin })
-    throw error
-  }
-}
 
 /**
  * 从 Hyperliquid 获取用户投资组合历史数据

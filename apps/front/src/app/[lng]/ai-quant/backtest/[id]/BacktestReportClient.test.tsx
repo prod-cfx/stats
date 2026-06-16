@@ -1,5 +1,6 @@
 /** @jest-environment jsdom */
 
+import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -19,13 +20,7 @@ jest.mock('next/link', () => ({
     children: React.ReactNode
     onClick?: React.MouseEventHandler<HTMLAnchorElement>
   }) => (
-    <a
-      href={href}
-      onClick={(event) => {
-        event.preventDefault()
-        onClick?.(event)
-      }}
-    >
+    <a href={href} onClick={onClick}>
       {children}
     </a>
   ),
@@ -78,6 +73,14 @@ describe('BacktestReportClient', () => {
       root.unmount()
     })
     container.remove()
+  })
+
+  it('does not key duplicated insight rows by display text alone', () => {
+    const source = readFileSync(__filename.replace(/\.test\.tsx$/, '.tsx'), 'utf8')
+
+    expect(source).toContain('buildInsightRows(insights)')
+    expect(source).toContain('key={insight.key}')
+    expect(source).not.toContain('key={insight}')
   })
 
   it('loads detailed report data on mount when only summary metrics are preloaded', async () => {

@@ -74,6 +74,12 @@ describe('dx command config', () => {
     assert.doesNotMatch(unitAllCommand, /\bdx test e2e\b/)
   })
 
+  it('routes app unit file paths through Jest runTestsByPath', () => {
+    assert.equal(commands.test.unit.front.command, 'npx nx test front --runTestsByPath')
+    assert.equal(commands.test.unit.admin.command, 'npx nx test admin-front --runTestsByPath')
+    assert.equal(commands.test.unit.backend.command, 'npx nx test backend --runTestsByPath')
+  })
+
   it('blocks pathless e2e runs and preserves file-path forwarding', () => {
     assert.equal(commands.test.e2e.backend.requiresPath, true)
     assert.match(commands.test.e2e.backend.command, /E2E 必须指定文件或目录/)

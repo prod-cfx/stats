@@ -79,4 +79,14 @@ describe('issue #1350 whale mobile layouts', () => {
     expect(profileTabs).not.toContain('加载最近成交失败')
     expect(profileTabs).not.toContain('暂无最近成交')
   })
+
+  it('keys recent trade rows by source fill identity on mobile and desktop', () => {
+    const profileTabs = readFrontSource('components/whale-tracking/profile/ProfileDataTabs.tsx')
+
+    expect(profileTabs).toContain('id: String(fill.tid)')
+    expect(profileTabs).toMatch(/key=\{`\$\{trade\.id\}-mobile`\}/)
+    expect(profileTabs).toContain('key={trade.id}')
+    expect(profileTabs).not.toMatch(/key=\{`\$\{trade\.timestamp\}-\$\{trade\.asset\}-\$\{trade\.action\}-\$\{trade\.value\}-mobile`\}/)
+    expect(profileTabs).not.toMatch(/key=\{`\$\{trade\.timestamp\}-\$\{trade\.asset\}-\$\{trade\.action\}-\$\{trade\.value\}`\}/)
+  })
 })

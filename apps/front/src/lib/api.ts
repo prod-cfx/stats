@@ -369,11 +369,6 @@ export interface AccountAiQuantDeployPayload {
   deploymentExecutionConfig?: AccountAiQuantDeploymentExecutionConfig
 }
 
-export interface AccountAiQuantUpdateLeveragePayload {
-  userId: string
-  leverage: number
-}
-
 export interface LlmCodegenSessionResponse {
   id: string
   conversationId?: string | null

@@ -11,6 +11,47 @@ interface WidgetGroupPreviewProps {
   onSelectWidget: (item: WidgetCatalogItem) => void
 }
 
+const klinePreviewBars = [
+  { key: 'open', height: 40 },
+  { key: 'breakout', height: 60 },
+  { key: 'pullback', height: 45 },
+  { key: 'rally', height: 70 },
+  { key: 'base', height: 55 },
+  { key: 'extension', height: 80 },
+  { key: 'range', height: 65 },
+  { key: 'close', height: 50 },
+] as const
+
+const orderbookPreviewRows = [
+  { key: 'top', width: 85 },
+  { key: 'near', width: 70 },
+  { key: 'mid', width: 55 },
+  { key: 'far', width: 40 },
+] as const
+
+const liquidationHeatPreviewBars = [
+  { key: 'deep-short', height: 30, side: 'short' },
+  { key: 'short', height: 50, side: 'short' },
+  { key: 'near-short', height: 70, side: 'short' },
+  { key: 'risk-short', height: 90, side: 'short' },
+  { key: 'near-long', height: 60, side: 'long' },
+  { key: 'long', height: 40, side: 'long' },
+  { key: 'deep-long', height: 55, side: 'long' },
+  { key: 'range-long', height: 75, side: 'long' },
+  { key: 'tail-long', height: 45, side: 'long' },
+] as const
+
+const volumePreviewBars = [
+  { key: 'asia-open', height: 40 },
+  { key: 'asia-mid', height: 55 },
+  { key: 'asia-close', height: 48 },
+  { key: 'eu-open', height: 62 },
+  { key: 'eu-mid', height: 70 },
+  { key: 'us-open', height: 58 },
+  { key: 'us-mid', height: 75 },
+  { key: 'us-close', height: 65 },
+] as const
+
 export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGroupPreviewProps) {
   const { t } = useTranslation()
   return (
@@ -55,11 +96,11 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               {/* Simplified visual preview based on type */}
               {item.type.includes('kline') && (
                 <div className="w-full h-full flex items-end justify-around px-4 pb-4">
-                  {[40, 60, 45, 70, 55, 80, 65, 50].map((h, i) => (
+                  {klinePreviewBars.map(bar => (
                     <div
-                      key={`kline-${i + 1}-${h}`}
+                      key={bar.key}
                       className="w-1.5 bg-gradient-to-t from-primary/60 to-primary/20 rounded-t"
-                      style={{ height: `${h}%` }}
+                      style={{ height: `${bar.height}%` }}
                     />
                   ))}
                 </div>
@@ -106,13 +147,13 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               {item.type.includes('orderbook') && (
                 <div className="w-full p-4 flex gap-2">
                   <div className="flex-1 space-y-1">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={`bid-${i}`} className="h-2 bg-green-500/30 rounded" style={{ width: `${100 - i * 15}%` }} />
+                    {orderbookPreviewRows.map(row => (
+                      <div key={`bid-${row.key}`} className="h-2 bg-green-500/30 rounded" style={{ width: `${row.width}%` }} />
                     ))}
                   </div>
                   <div className="flex-1 space-y-1">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={`ask-${i}`} className="h-2 bg-red-500/30 rounded ml-auto" style={{ width: `${100 - i * 15}%` }} />
+                    {orderbookPreviewRows.map(row => (
+                      <div key={`ask-${row.key}`} className="h-2 bg-red-500/30 rounded ml-auto" style={{ width: `${row.width}%` }} />
                     ))}
                   </div>
                 </div>
@@ -120,11 +161,11 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               {item.type.includes('liquidation.map') && (
                 <div className="w-full h-full p-4">
                   <div className="h-full flex items-end justify-around">
-                    {[30, 50, 70, 90, 60, 40, 55, 75, 45].map((h, i) => (
+                    {liquidationHeatPreviewBars.map(bar => (
                       <div
-                        key={`heat-${i + 1}-${h}`}
-                        className={`w-1 rounded-t ${i < 4 ? 'bg-red-500/40' : 'bg-green-500/40'}`}
-                        style={{ height: `${h}%` }}
+                        key={bar.key}
+                        className={`w-1 rounded-t ${bar.side === 'short' ? 'bg-red-500/40' : 'bg-green-500/40'}`}
+                        style={{ height: `${bar.height}%` }}
                       />
                     ))}
                   </div>
@@ -132,11 +173,11 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               )}
               {(item.type.includes('open_interest') || item.type.includes('volume')) && (
                 <div className="w-full h-full p-4 flex items-end justify-around">
-                  {[40, 55, 48, 62, 70, 58, 75, 65].map((h, i) => (
+                  {volumePreviewBars.map(bar => (
                     <div
-                      key={`volume-${i + 1}-${h}`}
+                      key={bar.key}
                       className="w-2 bg-primary/40 rounded-t"
-                      style={{ height: `${h}%` }}
+                      style={{ height: `${bar.height}%` }}
                     />
                   ))}
                 </div>

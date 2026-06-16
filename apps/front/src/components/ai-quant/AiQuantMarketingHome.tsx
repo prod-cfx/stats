@@ -136,16 +136,11 @@ function GradientTitle({ title, lng }: { title: string, lng: 'zh' | 'en' }) {
 
   return (
     <>
-      {parts.map((part, index) => (
-        <span key={`${part}-${index}`}>
-          {part}
-          {index < parts.length - 1 && (
-            <span className="bg-gradient-to-r from-[#3e69ff] via-[#6d57ff] to-[#8a5bff] bg-clip-text text-transparent dark:from-[#60a5fa] dark:via-primary dark:to-[#c084fc]">
-              {target}
-            </span>
-          )}
-        </span>
-      ))}
+      <span>{parts[0]}</span>
+      <span className="bg-gradient-to-r from-[#3e69ff] via-[#6d57ff] to-[#8a5bff] bg-clip-text text-transparent dark:from-[#60a5fa] dark:via-primary dark:to-[#c084fc]">
+        {target}
+      </span>
+      <span>{parts.slice(1).join(target)}</span>
     </>
   )
 }
@@ -589,13 +584,20 @@ function StrategyPlazaVisual() {
   const { t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
   const bars = [
-    { height: 42, className: 'bg-emerald-400/70' },
-    { height: 58, className: 'bg-emerald-400/78' },
-    { height: 50, className: 'bg-emerald-400/66' },
-    { height: 34, className: 'bg-rose-400/72' },
-    { height: 72, className: 'bg-emerald-400/82' },
-    { height: 84, className: 'bg-emerald-400/80' },
-    { height: 63, className: 'bg-emerald-400/72' },
+    { key: 'warmup', height: 42, className: 'bg-emerald-400/70' },
+    { key: 'entry', height: 58, className: 'bg-emerald-400/78' },
+    { key: 'pullback', height: 50, className: 'bg-emerald-400/66' },
+    { key: 'drawdown', height: 34, className: 'bg-rose-400/72' },
+    { key: 'recovery', height: 72, className: 'bg-emerald-400/82' },
+    { key: 'peak', height: 84, className: 'bg-emerald-400/80' },
+    { key: 'settled', height: 63, className: 'bg-emerald-400/72' },
+  ]
+  const reversionBars = [
+    { key: 'base', height: 36, variant: 'positive' },
+    { key: 'rise', height: 52, variant: 'positive' },
+    { key: 'extension', height: 64, variant: 'positive' },
+    { key: 'snapback', height: 28, variant: 'negative' },
+    { key: 'continuation', height: 74, variant: 'positive' },
   ]
   const backgroundCards = [
     {
@@ -660,8 +662,8 @@ function StrategyPlazaVisual() {
               {card.stat && <div className="mt-3 text-[18px] font-black text-emerald-500/52 dark:text-emerald-400/48">{card.stat}</div>}
               {card.id === 'reversion' && (
                 <div className="mt-5 flex h-9 items-end gap-1">
-                  {[36, 52, 64, 28, 74].map((height, index) => (
-                    <span key={height} className={`w-1.5 rounded-t ${index === 3 ? 'bg-rose-400/42 dark:bg-rose-400/36' : 'bg-emerald-500/48 dark:bg-emerald-400/45'}`} style={{ height: `${height}%` }} />
+                  {reversionBars.map(bar => (
+                    <span key={bar.key} className={`w-1.5 rounded-t ${bar.variant === 'negative' ? 'bg-rose-400/42 dark:bg-rose-400/36' : 'bg-emerald-500/48 dark:bg-emerald-400/45'}`} style={{ height: `${bar.height}%` }} />
                   ))}
                 </div>
               )}
@@ -697,7 +699,7 @@ function StrategyPlazaVisual() {
           <div className="mt-7 flex h-11 items-end gap-2">
             {bars.map((bar, index) => (
               <motion.div
-                key={`${bar.height}-${index}`}
+                key={bar.key}
                 initial={shouldReduceMotion ? false : { height: 0 }}
                 whileInView={shouldReduceMotion ? undefined : { height: `${bar.height}%` }}
                 animate={shouldReduceMotion ? { height: `${bar.height}%` } : undefined}

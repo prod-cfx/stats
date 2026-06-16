@@ -310,17 +310,17 @@
         "description": "运行全部单元/配置/脚本测试"
       },
       "front": {
-        "command": "npx nx test front",
+        "command": "npx nx test front --runTestsByPath",
         "app": "front",
         "description": "运行前端单元测试(front)"
       },
       "admin": {
-        "command": "npx nx test admin-front",
+        "command": "npx nx test admin-front --runTestsByPath",
         "app": "admin-front",
         "description": "运行前端单元测试(admin-front)"
       },
       "backend": {
-        "command": "npx nx test backend",
+        "command": "npx nx test backend --runTestsByPath",
         "app": "backend",
         "description": "运行后端单元测试"
       },

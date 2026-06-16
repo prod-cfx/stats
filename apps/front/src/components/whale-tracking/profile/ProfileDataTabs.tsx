@@ -230,6 +230,7 @@ function getOpenOrderKey(order: OpenOrder): string {
 }
 
 interface RecentTrade {
+  id: string
   time: string
   timestamp: number
   asset: string
@@ -663,6 +664,7 @@ function useProfileDataTabsRender({
         const valueUsd = fill.price * fill.size
 
         return {
+          id: String(fill.tid),
           time: new Date(fill.time).toLocaleDateString('zh-CN', {
             year: 'numeric',
             month: 'long',
@@ -953,8 +955,8 @@ function useProfileDataTabsRender({
             {t('whaleTracking.profile.recentTrades.empty')}
           </div>
         ) : activeTab === 'spot' ? (
-          filteredSpotData.map((pos, idx) => (
-            <article key={`${pos.asset}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+          filteredSpotData.map(pos => (
+            <article key={`${pos.asset}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <span className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{pos.asset}</span>
                 <span className="text-xs font-bold text-[color:var(--cf-text-strong)]">{pos.share}</span>
@@ -967,8 +969,8 @@ function useProfileDataTabsRender({
             </article>
           ))
         ) : activeTab === 'perpetual' ? (
-          filteredPerpData.map((pos, idx) => (
-            <article key={`${pos.asset}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+          filteredPerpData.map(pos => (
+            <article key={`${pos.asset}-${pos.side}-${pos.marginType}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-bold text-[color:var(--cf-text-strong)]">{pos.asset}</div>
@@ -1017,8 +1019,8 @@ function useProfileDataTabsRender({
             )
           })
         ) : activeTab === 'trades' ? (
-          filteredRecentTrades.map((trade, idx) => (
-            <article key={`${trade.asset}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+          filteredRecentTrades.map(trade => (
+            <article key={`${trade.id}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{trade.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(trade.timestamp)}</div></div>
                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${getTradeActionBadgeClass(trade.action)}`}>{translateTradeAction(trade.action)}</span>
@@ -1037,8 +1039,8 @@ function useProfileDataTabsRender({
           ) : filteredHistoryOrders.length === 0 ? (
             <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.noData')}</div>
           ) : (
-            filteredHistoryOrders.map((order, idx) => (
-              <article key={`${order.id}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+            filteredHistoryOrders.map(order => (
+              <article key={`${order.id}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{order.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(order.timestamp)}</div></div>
                   {renderSideBadge(order.side)}
@@ -1606,7 +1608,7 @@ function useProfileDataTabsRender({
               })
             ) : activeTab === 'trades' ? (
               filteredRecentTrades.map(trade => (
-                <tr key={`${trade.timestamp}-${trade.asset}-${trade.action}-${trade.value}`} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+                <tr key={trade.id} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
                     {formatRelativeTime(trade.timestamp)}
                   </td>

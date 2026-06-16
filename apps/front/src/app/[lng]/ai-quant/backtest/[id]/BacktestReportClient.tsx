@@ -177,6 +177,7 @@ function formatSignedPnl(value: number): string {
 // --- 4. AI Analysis Panel ---
 export function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] }) {
   const [expanded, setExpanded] = useState(true)
+  const insightRows = buildInsightRows(insights)
 
   return (
     <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 transition-colors duration-200">
@@ -202,15 +203,29 @@ export function AiAnalysisPanel({ lng, insights }: { lng: string; insights: stri
 
       {expanded && (
         <ul className="mt-4 list-disc space-y-3 pl-5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
-          {insights.map((insight, index) => (
-            <li key={`${index}-${insight}`}>
-              <p>{lng === 'en' ? insight : insight}</p>
+          {insightRows.map(insight => (
+            <li key={insight.key}>
+              <p>{lng === 'en' ? insight.text : insight.text}</p>
             </li>
           ))}
         </ul>
       )}
     </div>
   )
+}
+
+function buildInsightRows(insights: string[]): Array<{ key: string, text: string }> {
+  const occurrences = new Map<string, number>()
+
+  return insights.map(text => {
+    const occurrence = occurrences.get(text) ?? 0
+    occurrences.set(text, occurrence + 1)
+
+    return {
+      key: `${text}-${occurrence}`,
+      text,
+    }
+  })
 }
 
 export function DecisionSummarySection({

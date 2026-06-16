@@ -34,9 +34,9 @@ export function SemanticGraphValidationAlert({
     <section className="rounded-2xl border border-rose-300/40 bg-rose-500/10 p-5">
       <h2 className="text-lg font-semibold text-rose-200">Semantic Graph Validation</h2>
       <div className="mt-3 space-y-2">
-        {visibleErrors.map((error, index) => (
+        {visibleErrors.map(error => (
           <div
-            key={`${error.code}-${index}`}
+            key={`${error.code}-${error.message}`}
             className="rounded-xl border border-rose-300/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
           >
             <div className="font-medium">{error.code}</div>

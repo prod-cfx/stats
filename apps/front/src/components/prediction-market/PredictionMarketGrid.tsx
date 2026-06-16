@@ -59,6 +59,28 @@ function formatRuleText(text: string): string {
   return text.replace(ISO_DATE_REGEX, match => formatDateTimeFull(match))
 }
 
+function buildRuleParagraphItems(predictionId: string, paragraphs: string[]) {
+  const seen = new Map<string, number>()
+  const items: Array<{ key: string, text: string, hasSpacer: boolean }> = []
+
+  for (const paragraph of paragraphs) {
+    const occurrence = (seen.get(paragraph) ?? 0) + 1
+    seen.set(paragraph, occurrence)
+    items.push({
+      key: `${predictionId}-rule-${paragraph}-${occurrence}`,
+      text: paragraph,
+      hasSpacer: true,
+    })
+  }
+
+  const lastItem = items.at(-1)
+  if (lastItem) {
+    lastItem.hasSpacer = false
+  }
+
+  return items
+}
+
 function isFromNestedInteractiveElement(
   event: React.MouseEvent<HTMLDivElement> | React.KeyboardEvent<HTMLDivElement>,
 ): boolean {
@@ -209,9 +231,9 @@ export const PredictionMarketGrid = () => {
               </p>
               {selectedPrediction?.options?.length ? (
                 <div className="space-y-2.5">
-                  {selectedPrediction.options.map((opt, idx) => (
+                  {selectedPrediction.options.map(opt => (
                     <div
-                      key={`${opt.label}-${idx}`}
+                      key={`${selectedPrediction.id}-option-${opt.label}`}
                       className="flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2.5"
                     >
                       <span className="min-w-0 break-words !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
@@ -240,10 +262,12 @@ export const PredictionMarketGrid = () => {
               {t('predictionMarket.modal.rules')}
             </h4>
             <div className="min-w-0 px-1 !text-sm !font-normal !leading-[22px] break-words text-[color:var(--cf-text)]">
-              {(selectedPrediction?.rules?.paragraphs || []).map((p, idx) => (
-                <React.Fragment key={`rule-${idx + 1}-${p}`}>
-                  <p>{formatRuleText(p)}</p>
-                  {idx !== (selectedPrediction?.rules?.paragraphs?.length ?? 0) - 1 && (
+              {(selectedPrediction
+                ? buildRuleParagraphItems(selectedPrediction.id, selectedPrediction.rules?.paragraphs || [])
+                : []).map(item => (
+                <React.Fragment key={item.key}>
+                  <p>{formatRuleText(item.text)}</p>
+                  {item.hasSpacer && (
                     <div className="h-5" />
                   )}
                 </React.Fragment>

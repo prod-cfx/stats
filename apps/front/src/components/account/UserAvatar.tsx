@@ -62,8 +62,10 @@ function getIdenticonCells(userId: string) {
     const mirroredCol = col > 2 ? 4 - col : col
     const bitIndex = row * 3 + mirroredCol
     const active = ((hash >> bitIndex) & 1) === 1 || (row === 2 && mirroredCol === 1)
-    if (!active) return palette.base
-    return palette.colors[(hash + row + mirroredCol) % palette.colors.length]
+    return {
+      key: `cell-${row}-${col}`,
+      className: active ? palette.colors[(hash + row + mirroredCol) % palette.colors.length] : palette.base,
+    }
   })
 }
 
@@ -99,8 +101,8 @@ export function UserAvatar({
           className={`grid shrink-0 grid-cols-5 grid-rows-5 overflow-hidden ${identiconClassNames[size]}`}
           aria-hidden="true"
         >
-          {cells.map((cellClassName, index) => (
-            <span key={`${userId}-cell-${index}`} className={cellClassName} />
+          {cells.map(cell => (
+            <span key={`${userId}-${cell.key}`} className={cell.className} />
           ))}
         </span>
       )}
