@@ -4058,6 +4058,53 @@ const endpoints = makeApi([
   },
   {
     method: 'get',
+    path: '/health/live',
+    alias: 'HealthController_live',
+    requestFormat: 'json',
+    response: z
+      .object({
+        data: z
+          .object({
+            service: z.string(),
+            status: z.enum(['ok', 'degraded', 'down']),
+            timestamp: z.string(),
+          })
+          .partial()
+          .passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/health/ready',
+    alias: 'HealthController_ready',
+    requestFormat: 'json',
+    response: z
+      .object({
+        data: z
+          .object({
+            service: z.string(),
+            status: z.enum(['ok', 'degraded', 'down']),
+            timestamp: z.string(),
+          })
+          .partial()
+          .passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
+    errors: [
+      {
+        status: 503,
+        description: `服务依赖未就绪或应用正在停机`,
+        schema: z.void(),
+      },
+    ],
+  },
+  {
+    method: 'get',
     path: '/kline',
     alias: 'KlineController_getKlineBars',
     description: `查询期货价格历史 OHLC 数据，支持单交易所或聚合模式`,
