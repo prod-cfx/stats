@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.28.2",
+  "reactDoctor": {
+    "ignore": {
+      "files": [
+        "apps/front/public/tradingview/charting_library/**",
+        "public/tradingview/charting_library/**"
+      ]
+    }
+  },
   "engines": {
     "node": ">=22.22.0"
   },

@@ -3,6 +3,14 @@
   "type": "module",
   "version": "0.2.6-beta.3",
   "private": true,
+  "reactDoctor": {
+    "ignore": {
+      "files": [
+        "apps/front/public/tradingview/charting_library/**",
+        "public/tradingview/charting_library/**"
+      ]
+    }
+  },
   "scripts": {
     "prestart:dev": "pnpm --filter @ai/shared run build",
     "start:dev": "next dev -H 0.0.0.0 -p 3001",

@@ -18,7 +18,7 @@ Current vendored package metadata is recorded in `charting_library/package.json`
 
 ## React Doctor Boundary
 
-React Doctor excludes `apps/front/public/tradingview/charting_library/**` through `doctor.config.json` at the repo root and `apps/front/doctor.config.json`. The exclusion is intentional because `charting_library/**` is a third-party vendor bundle, not source maintained by this repository.
+React Doctor excludes `apps/front/public/tradingview/charting_library/**` through the root `package.json` and `apps/front/package.json` `reactDoctor` configuration. The exclusion is intentional because `charting_library/**` is a third-party vendor bundle, not source maintained by this repository.
 
 React Doctor warnings such as `insecure-crypto-risk`, `postmessage-origin-risk`, and `dangerous-html-sink` inside this directory must be tracked as vendor acceptance and upgrade risk. They must not be treated as patched by local source edits unless the vendored TradingView package itself is replaced by an updated licensed distribution.
 
