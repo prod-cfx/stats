@@ -4,6 +4,7 @@ import type { ClsService } from 'nestjs-cls'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
+import { defaultEnvAccessor } from '../env/env.accessor'
 
 const AFTER_COMMIT_TASKS_KEY = 'AFTER_COMMIT_TASKS'
 
@@ -43,7 +44,7 @@ export class TransactionEventsService {
   }
 
   private rejectUnsafeAfterCommit(message: string): void {
-    if (process.env.NODE_ENV === 'test') {
+    if (defaultEnvAccessor.nodeEnv() === 'test') {
       throw new Error(message)
     }
     this.logger.error(message)

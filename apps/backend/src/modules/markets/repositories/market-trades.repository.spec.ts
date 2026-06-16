@@ -26,9 +26,13 @@ function createRepository(marketTrade: {
 
 describe('MarketTradesRepository', () => {
   const originalUseMockData = process.env.USE_MOCK_DATA
+  const originalAppEnv = process.env.APP_ENV
+  const originalNodeEnv = process.env.NODE_ENV
 
   beforeEach(() => {
     process.env.USE_MOCK_DATA = 'false'
+    process.env.APP_ENV = 'production'
+    process.env.NODE_ENV = 'production'
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
   })
@@ -38,6 +42,16 @@ describe('MarketTradesRepository', () => {
       delete process.env.USE_MOCK_DATA
     } else {
       process.env.USE_MOCK_DATA = originalUseMockData
+    }
+    if (originalAppEnv === undefined) {
+      delete process.env.APP_ENV
+    } else {
+      process.env.APP_ENV = originalAppEnv
+    }
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV
+    } else {
+      process.env.NODE_ENV = originalNodeEnv
     }
     jest.restoreAllMocks()
   })
@@ -94,6 +108,7 @@ describe('MarketTradesRepository', () => {
 
   it('keeps returning mock trades when mock mode is enabled', async () => {
     process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'development'
     const repository = createRepository({ findMany: jest.fn() })
 
     const trades = await repository.findTrades({ symbol: 'BTCUSDT', limit: 3 })
@@ -103,6 +118,7 @@ describe('MarketTradesRepository', () => {
 
   it('keeps returning latest mock trades when mock mode is enabled', async () => {
     process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'development'
     const findMany = jest.fn()
     const count = jest.fn()
     const repository = createRepository({ findMany, count })
@@ -120,5 +136,44 @@ describe('MarketTradesRepository', () => {
     ]))
     expect(findMany).not.toHaveBeenCalled()
     expect(count).not.toHaveBeenCalled()
+  })
+
+  it('queries trades in production even when USE_MOCK_DATA is enabled', async () => {
+    process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'production'
+    const row = { id: 1, symbol: 'BTCUSDT' } as MarketTrade
+    const findMany = jest.fn().mockResolvedValue([row])
+    const repository = createRepository({ findMany })
+    const mockSpy = jest.spyOn(
+      repository as unknown as MockableMarketTradesRepository,
+      'generateMockTrades',
+    )
+
+    await expect(repository.findTrades({ symbol: 'BTCUSDT', limit: 10 })).resolves.toEqual([row])
+
+    expect(findMany).toHaveBeenCalledTimes(1)
+    expect(mockSpy).not.toHaveBeenCalled()
+  })
+
+  it('queries latest trades in production even when USE_MOCK_DATA is enabled', async () => {
+    process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'production'
+    const row = { id: 1, symbol: 'BTCUSDT' } as MarketTrade
+    const findMany = jest.fn().mockResolvedValue([row])
+    const count = jest.fn().mockResolvedValue(1)
+    const repository = createRepository({ findMany, count })
+    const mockSpy = jest.spyOn(
+      repository as unknown as MockableMarketTradesRepository,
+      'generateMockTrades',
+    )
+
+    await expect(repository.findLatestTrades('Binance', 'FUTURES', 'BTCUSDT')).resolves.toEqual({
+      items: [row],
+      total: 1,
+    })
+
+    expect(findMany).toHaveBeenCalledTimes(1)
+    expect(count).toHaveBeenCalledTimes(1)
+    expect(mockSpy).not.toHaveBeenCalled()
   })
 })

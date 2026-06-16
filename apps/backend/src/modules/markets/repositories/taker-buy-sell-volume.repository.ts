@@ -2,12 +2,16 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type { TakerBuySellVolume } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable } from '@nestjs/common'
-import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { isMockDataAllowed } from '@/common/env/mock-data-mode'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class TakerBuySellVolumeRepository {
+  private readonly logger = new Logger(TakerBuySellVolumeRepository.name)
+
   constructor(
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
   ) {}
@@ -109,7 +113,7 @@ export class TakerBuySellVolumeRepository {
     symbol: string
     range: string
   }): Promise<TakerBuySellVolume[]> {
-    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+    if (isMockDataAllowed()) {
       return this.generateMockVolumes(params)
     }
     try {
@@ -127,7 +131,7 @@ export class TakerBuySellVolumeRepository {
       })
 
       if (latestTimestamp.length === 0) {
-        return this.generateMockVolumes(params)
+        return []
       }
 
       // 获取每个交易所最新时间点的数据
@@ -143,9 +147,22 @@ export class TakerBuySellVolumeRepository {
         orderBy: [{ exchange: 'asc' }],
       })
     } catch (error) {
-      console.error('Database error in findLatestBySymbol, falling back to mock data', error)
-      return this.generateMockVolumes(params)
+      this.logDatabaseError('findLatestBySymbol', params, error)
+      throw new DomainException('taker_buy_sell_volume.database_error', {
+        code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { detail: 'DatabaseError' },
+      })
     }
+  }
+
+  private logDatabaseError(method: string, payload: unknown, error: unknown): void {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : undefined
+    this.logger.error(
+      `Database error in ${method}: ${JSON.stringify({ payload, errorMessage })}`,
+      stack,
+    )
   }
 
   private generateMockVolumes(params: { symbol: string; range: string }): TakerBuySellVolume[] {

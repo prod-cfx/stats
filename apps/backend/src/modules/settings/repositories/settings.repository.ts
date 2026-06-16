@@ -5,7 +5,7 @@ import type { SystemSetting } from '@/prisma/prisma.types'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { ErrorCode } from '@ai/shared'
-import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { isMockDataAllowed } from '@/common/env/mock-data-mode'
 import { DomainException } from '@/common/exceptions/domain.exception'
 
 @Injectable()
@@ -16,7 +16,7 @@ export class SettingsRepository {
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
   ) {}
   async findAll(): Promise<SystemSetting[]> {
-    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+    if (isMockDataAllowed()) {
       return this.generateMockSettings()
     }
     try {
@@ -62,7 +62,7 @@ export class SettingsRepository {
   }
 
   async findByKey(key: string): Promise<SystemSetting | null> {
-    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+    if (isMockDataAllowed()) {
       return this.generateMockSettings().find(s => s.key === key) || null
     }
     try {

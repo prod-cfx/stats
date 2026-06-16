@@ -4,7 +4,7 @@ import type { MarketTrade } from '@/prisma/prisma.types'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { ErrorCode } from '@ai/shared'
-import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { isMockDataAllowed } from '@/common/env/mock-data-mode'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { Prisma } from '@/prisma/prisma.types'
 
@@ -54,7 +54,7 @@ export class MarketTradesRepository {
    * 查询交易记录
    */
   async findTrades(options: FindTradesOptions): Promise<MarketTrade[]> {
-    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+    if (isMockDataAllowed()) {
       return this.generateMockTrades(
         options.exchange || 'Binance',
         options.instrumentType || 'FUTURES',
@@ -128,7 +128,7 @@ export class MarketTradesRepository {
     limit = 50,
     page = 1,
   ): Promise<{ items: MarketTrade[], total: number }> {
-    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+    if (isMockDataAllowed()) {
       const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
       return { items, total: items.length }
     }

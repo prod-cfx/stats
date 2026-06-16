@@ -6,6 +6,7 @@ import { ErrorCode, generateShortId } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { isMockDataAllowed } from '@/common/env/mock-data-mode'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaClient as PrismaClientBase } from '@/prisma/prisma.types'
 import { defaultEnvAccessor, setProcessEnvValue } from '../common/env/env.accessor'
@@ -42,7 +43,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     // USE_MOCK_DATA: 本地/演示模式下允许无数据库启动（仓库层会自行回退到 mock）
     const skipConnect =
       defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) ||
-      defaultEnvAccessor.bool('USE_MOCK_DATA', false)
+      isMockDataAllowed()
 
     const logConfig: PrismaLogDefinition[] = [
       // query 事件统一通过 setupQueryLogging 走 Nest Logger
@@ -92,7 +93,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
 
   async onModuleInit() {
     // SKIP_PRISMA_CONNECT: 用于 Swagger/Contracts 生成等离线场景，跳过数据库连接
-    if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) || defaultEnvAccessor.bool('USE_MOCK_DATA', false)) {
+    if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) || isMockDataAllowed()) {
       this.logger.log('SKIP_PRISMA_CONNECT or USE_MOCK_DATA is true, skipping database connection')
       this.applyShortIdExtension()
       return
@@ -141,7 +142,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     // SKIP_PRISMA_CONNECT/USE_MOCK_DATA: 离线/Mock 模式下跳过 Prisma 断开
     if (
       defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) ||
-      defaultEnvAccessor.bool('USE_MOCK_DATA', false)
+      isMockDataAllowed()
     ) {
       this.logger.log('SKIP_PRISMA_CONNECT or USE_MOCK_DATA is true, skipping database disconnect')
       return

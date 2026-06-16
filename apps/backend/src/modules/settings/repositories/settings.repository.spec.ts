@@ -21,9 +21,13 @@ function createRepository(systemSetting: {
 
 describe('SettingsRepository', () => {
   const originalUseMockData = process.env.USE_MOCK_DATA
+  const originalAppEnv = process.env.APP_ENV
+  const originalNodeEnv = process.env.NODE_ENV
 
   beforeEach(() => {
     process.env.USE_MOCK_DATA = 'false'
+    process.env.APP_ENV = 'production'
+    process.env.NODE_ENV = 'production'
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
   })
@@ -33,6 +37,16 @@ describe('SettingsRepository', () => {
       delete process.env.USE_MOCK_DATA
     } else {
       process.env.USE_MOCK_DATA = originalUseMockData
+    }
+    if (originalAppEnv === undefined) {
+      delete process.env.APP_ENV
+    } else {
+      process.env.APP_ENV = originalAppEnv
+    }
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV
+    } else {
+      process.env.NODE_ENV = originalNodeEnv
     }
     jest.restoreAllMocks()
   })
@@ -57,6 +71,7 @@ describe('SettingsRepository', () => {
 
   it('keeps returning mock settings when mock mode is enabled', async () => {
     process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'development'
     const repository = createRepository({ findMany: jest.fn() })
 
     await expect(repository.findAll()).resolves.toEqual(expect.arrayContaining([
@@ -66,6 +81,7 @@ describe('SettingsRepository', () => {
 
   it('keeps returning a mock setting by key when mock mode is enabled', async () => {
     process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'development'
     const findUnique = jest.fn()
     const repository = createRepository({ findUnique })
 
@@ -78,10 +94,31 @@ describe('SettingsRepository', () => {
 
   it('keeps returning null for unknown mock settings when mock mode is enabled', async () => {
     process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'development'
     const findUnique = jest.fn()
     const repository = createRepository({ findUnique })
 
     await expect(repository.findByKey('missing.setting')).resolves.toBeNull()
     expect(findUnique).not.toHaveBeenCalled()
+  })
+
+  it('ignores mock settings in production even when USE_MOCK_DATA is enabled', async () => {
+    process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'production'
+    const findMany = jest.fn().mockResolvedValue([])
+    const repository = createRepository({ findMany })
+
+    await expect(repository.findAll()).resolves.toEqual([])
+    expect(findMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('queries database by key in production even when USE_MOCK_DATA is enabled', async () => {
+    process.env.USE_MOCK_DATA = 'true'
+    process.env.APP_ENV = 'production'
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repository = createRepository({ findUnique })
+
+    await expect(repository.findByKey('app.name')).resolves.toBeNull()
+    expect(findUnique).toHaveBeenCalledWith({ where: { key: 'app.name' } })
   })
 })

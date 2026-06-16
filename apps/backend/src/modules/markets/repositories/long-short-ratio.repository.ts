@@ -4,8 +4,10 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type {LongShortRatio as LongShortRatioModel} from '@/prisma/prisma.types';
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable } from '@nestjs/common'
-import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { isMockDataAllowed } from '@/common/env/mock-data-mode'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import {  Prisma } from '@/prisma/prisma.types'
 
@@ -35,13 +37,15 @@ export interface LongShortRatioUpsertInput {
 
 @Injectable()
 export class LongShortRatioRepository {
+  private readonly logger = new Logger(LongShortRatioRepository.name)
+
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   /**
    * 按交易对 + 时间范围查询多空比时间序列
    * 默认按时间倒序返回最新的 limit 条数据
    */
   async findByPairAndTime(query: LongShortRatioQuery): Promise<{ items: LongShortRatio[], total: number }> {
-    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+    if (isMockDataAllowed()) {
       const items = this.generateMockRatios(query)
       return { items, total: items.length }
     }
@@ -78,10 +82,22 @@ export class LongShortRatioRepository {
       // 反转数组使时间从旧到新排列，便于前端绘制曲线
       return { items: result.reverse(), total }
     } catch (error) {
-      console.error('Database error in findByPairAndTime, falling back to mock data', error)
-      const items = this.generateMockRatios(query)
-      return { items, total: items.length }
+      this.logDatabaseError('findByPairAndTime', query, error)
+      throw new DomainException('long_short_ratio.database_error', {
+        code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { detail: 'DatabaseError' },
+      })
     }
+  }
+
+  private logDatabaseError(method: string, payload: unknown, error: unknown): void {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : undefined
+    this.logger.error(
+      `Database error in ${method}: ${JSON.stringify({ payload, errorMessage })}`,
+      stack,
+    )
   }
 
   private generateMockRatios(query: LongShortRatioQuery): LongShortRatio[] {
@@ -161,5 +177,3 @@ export class LongShortRatioRepository {
     })
   }
 }
-
-
