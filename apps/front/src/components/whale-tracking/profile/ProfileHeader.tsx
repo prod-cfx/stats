@@ -1,6 +1,7 @@
 'use client'
 
 import { Check, Copy, RefreshCw } from 'lucide-react'
+import Image from 'next/image'
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageTitle } from '@/components/ui/Typography'
@@ -65,10 +66,13 @@ export const ProfileHeader = ({
       <div className="flex flex-col gap-3">
         <div className="flex min-w-0 items-center gap-3 md:gap-4">
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]">
-            <img
+            <Image
               src={`https://api.dicebear.com/7.x/identicon/svg?seed=${address}`}
               alt="avatar"
+              width={40}
+              height={40}
               className="h-full w-full"
+              unoptimized
             />
           </div>
           <div className="flex min-w-0 items-center gap-3">

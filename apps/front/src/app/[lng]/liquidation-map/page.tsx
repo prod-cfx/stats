@@ -1,8 +1,19 @@
+import type { Metadata } from 'next'
 import React, { Suspense } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { getServerTranslator } from '@/lib/i18n/server'
+import { getPageMetadata } from '@/lib/page-metadata'
 import { LiquidationMapClient } from './LiquidationMapClient'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}): Promise<Metadata> {
+  const resolved = await Promise.resolve(params)
+  return getPageMetadata('liquidation-map', resolved.lng)
+}
 
 export default async function LiquidationMapPage({
   params,

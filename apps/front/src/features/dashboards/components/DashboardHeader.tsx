@@ -2,6 +2,7 @@
 
 import type { DashboardDoc } from '../store/dashboard-store'
 import { Check, Edit2, Image, Loader2, Save, X } from 'lucide-react'
+import NextImage from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -166,11 +167,14 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       <div className="flex min-w-0 items-center gap-3">
         {/* Thumbnail Preview */}
         {dashboard.thumbnail && (
-          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[color:var(--cf-border)]">
-            <img
+          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[color:var(--cf-border)]">
+            <NextImage
               src={dashboard.thumbnail}
               alt="Dashboard thumbnail"
+              fill
+              sizes="48px"
               className="h-full w-full object-cover"
+              unoptimized
             />
           </div>
         )}

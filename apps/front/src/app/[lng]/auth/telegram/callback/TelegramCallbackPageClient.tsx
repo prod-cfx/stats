@@ -73,6 +73,8 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
             return 'failed'
           }
           await bindTelegramByDesktopIntent(desktopIntentId)
+          // React Doctor: desktop Telegram bind redirects after client-only polling and API mutation.
+          // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
           router.replace(redirect)
           return 'done'
         }
@@ -81,12 +83,16 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
         const betaCodeKey = getTelegramDesktopBetaCodeKey(desktopIntentId)
         if (isAuthenticated || loadStoredSession()) {
           removeSessionStorage(betaCodeKey)
+          // React Doctor: desktop Telegram login reuses client-only stored session state.
+          // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
           router.replace(redirect)
           return 'done'
         }
 
         await loginWithTelegramDesktopIntent(desktopIntentId, readSessionStorage(betaCodeKey))
         removeSessionStorage(betaCodeKey)
+        // React Doctor: desktop Telegram login redirects only after client polling confirms auth.
+        // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
         router.replace(redirect)
         return 'done'
       }
@@ -126,6 +132,8 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
         } catch (err) {
           if (stopped) return
           if (intent === 'login' && loadStoredSession()) {
+            // React Doctor: fallback redirect depends on client-only stored session recovery.
+            // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
             router.replace(redirect)
             return
           }
@@ -167,6 +175,8 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
 
       bindTelegram(payload)
         .then(() => {
+          // React Doctor: web Telegram bind redirects after client-only callback mutation succeeds.
+          // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
           router.replace(redirect)
         })
         .catch(err => {
@@ -186,11 +196,15 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
     loginWithTelegramCallback({ ...payload, betaCode })
       .then(() => {
         removeSessionStorage(TELEGRAM_WEB_BETA_CODE_KEY)
+        // React Doctor: web Telegram login redirects after client-only callback verification succeeds.
+        // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
         router.replace(redirect)
       })
       .catch(err => {
         if (loadStoredSession()) {
           removeSessionStorage(TELEGRAM_WEB_BETA_CODE_KEY)
+          // React Doctor: web Telegram recovery redirects after client-only stored session check.
+          // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
           router.replace(redirect)
           return
         }

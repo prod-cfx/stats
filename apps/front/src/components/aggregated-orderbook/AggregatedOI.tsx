@@ -2,6 +2,7 @@
 
 import type { OpenInterestApiItem } from '@/lib/api'
 import { AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react'
+import Image from 'next/image'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SectionTitle } from '@/components/ui/Typography'
@@ -213,13 +214,16 @@ function ExchangeLogo({
   const src = candidates[Math.min(idx, candidates.length - 1)]
 
   return (
-    <img
+    <Image
       src={src}
       alt={exchange}
+      width={24}
+      height={24}
       className={className}
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setIdx(i => Math.min(i + 1, candidates.length - 1))}
+      unoptimized
     />
   )
 }

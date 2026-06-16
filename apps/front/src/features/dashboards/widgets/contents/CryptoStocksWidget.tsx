@@ -1,6 +1,7 @@
 'use client'
 
 import { ArrowUpDown } from 'lucide-react'
+import Image from 'next/image'
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -148,14 +149,28 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
                 <tr key={index} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className={`${paddingX} ${paddingY}`}>
                     <div className="flex items-center gap-2">
-                      <img src={row.assetLogo} alt={row.asset} className={`${iconSize} rounded-full object-contain bg-white rounded-full`} />
+                      <Image
+                        src={row.assetLogo}
+                        alt={row.asset}
+                        width={32}
+                        height={32}
+                        className={`${iconSize} rounded-full bg-white object-contain`}
+                        unoptimized
+                      />
                       <span className="font-medium">{row.asset}</span>
                     </div>
                   </td>
                   <td className={`${paddingX} ${paddingY}`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <div className={`${logoSize} rounded-full bg-white p-0.5 flex-none overflow-hidden`}>
-                        <img src={row.logo} alt={row.name} className="w-full h-full object-contain" />
+                        <Image
+                          src={row.logo}
+                          alt={row.name}
+                          width={32}
+                          height={32}
+                          className="h-full w-full object-contain"
+                          unoptimized
+                        />
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span className="font-semibold truncate max-w-[120px]">{row.name}</span>

@@ -46,6 +46,18 @@ jest.mock('./prediction-market/PredictionMarketGridClient', () => ({
   PredictionMarketGridClient: () => null,
 }))
 
+jest.mock('./MarketPageClient', () => ({
+  MarketPageClient: () => null,
+}))
+
+jest.mock('./ai-quant/plaza/PlazaPageClient', () => ({
+  AiQuantPlazaPageClient: () => null,
+}))
+
+jest.mock('./liquidation-map/LiquidationMapClient', () => ({
+  LiquidationMapClient: () => null,
+}))
+
 jest.mock('@/components/public-companies/PublicCompaniesTable', () => ({
   PublicCompaniesTable: () => null,
 }))
@@ -127,6 +139,38 @@ const pageExpectations: PageExpectation[] = [
     },
   },
   {
+    name: 'market',
+    loadModule: async () => import('./market/page'),
+    zh: {
+      title: '加密市场行情与聚合数据 | Coinflux',
+      description: '查看加密资产价格、成交量、资金费率和市场结构数据。',
+      locale: 'zh_CN',
+      url: 'https://coinflux.ai/zh/market',
+    },
+    en: {
+      title: 'Crypto Market Data & Aggregated Signals | Coinflux',
+      description: 'View crypto prices, volume, funding rates, and market structure data.',
+      locale: 'en_US',
+      url: 'https://coinflux.ai/en/market',
+    },
+  },
+  {
+    name: 'ai-quant/plaza',
+    loadModule: async () => import('./ai-quant/plaza/page'),
+    zh: {
+      title: 'AI量化策略广场 | Coinflux',
+      description: '浏览、筛选和复用社区量化策略模板与实盘策略。',
+      locale: 'zh_CN',
+      url: 'https://coinflux.ai/zh/ai-quant/plaza',
+    },
+    en: {
+      title: 'AI Quant Strategy Plaza | Coinflux',
+      description: 'Browse, filter, and reuse community quant strategy templates and live strategies.',
+      locale: 'en_US',
+      url: 'https://coinflux.ai/en/ai-quant/plaza',
+    },
+  },
+  {
     name: 'whale-tracking/discover',
     loadModule: async () => import('./whale-tracking/discover/page'),
     zh: {
@@ -188,6 +232,22 @@ const pageExpectations: PageExpectation[] = [
       description: 'Track real-time liquidations across the market',
       locale: 'en_US',
       url: 'https://coinflux.ai/en/liquidation-data',
+    },
+  },
+  {
+    name: 'liquidation-map',
+    loadModule: async () => import('./liquidation-map/page'),
+    zh: {
+      title: '加密清算热力图 | Coinflux',
+      description: '查看主要交易对的清算密集区和潜在流动性位置。',
+      locale: 'zh_CN',
+      url: 'https://coinflux.ai/zh/liquidation-map',
+    },
+    en: {
+      title: 'Crypto Liquidation Heatmap | Coinflux',
+      description: 'Inspect liquidation clusters and potential liquidity zones across major pairs.',
+      locale: 'en_US',
+      url: 'https://coinflux.ai/en/liquidation-map',
     },
   },
   {

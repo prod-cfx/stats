@@ -2,6 +2,7 @@
 
 import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { Bookmark, Grid3x3, Layout, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import Image from 'next/image'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -122,10 +123,13 @@ export function DashboardClient() {
         >
           {dash.thumbnail ? (
             <div className="absolute inset-0">
-              <img
+              <Image
                 src={dash.thumbnail}
                 alt={resolvedName}
+                fill
+                sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                 className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
+                unoptimized
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             </div>

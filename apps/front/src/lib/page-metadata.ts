@@ -5,11 +5,14 @@ import { getRequestLocale } from '@/lib/i18n/server'
 type PageMetadataKey =
   | 'home'
   | 'ai-quant'
+  | 'ai-quant/plaza'
+  | 'market'
   | 'trade'
   | 'whale-tracking/discover'
   | 'whale-tracking/profile'
   | 'aggregated-orderbook'
   | 'liquidation-data'
+  | 'liquidation-map'
   | 'prediction-market'
   | 'public-companies'
 
@@ -49,6 +52,28 @@ const PAGE_METADATA_DEFINITIONS: Record<PageMetadataKey, PageMetadataDefinition>
     en: {
       title: 'AI Quant Strategy Builder',
       description: 'Create strategies via chat, backtest, and deploy in one click.',
+    },
+  },
+  'ai-quant/plaza': {
+    pathname: '/ai-quant/plaza',
+    zh: {
+      title: 'AI量化策略广场',
+      description: '浏览、筛选和复用社区量化策略模板与实盘策略。',
+    },
+    en: {
+      title: 'AI Quant Strategy Plaza',
+      description: 'Browse, filter, and reuse community quant strategy templates and live strategies.',
+    },
+  },
+  market: {
+    pathname: '/market',
+    zh: {
+      title: '加密市场行情与聚合数据',
+      description: '查看加密资产价格、成交量、资金费率和市场结构数据。',
+    },
+    en: {
+      title: 'Crypto Market Data & Aggregated Signals',
+      description: 'View crypto prices, volume, funding rates, and market structure data.',
     },
   },
   trade: {
@@ -105,6 +130,17 @@ const PAGE_METADATA_DEFINITIONS: Record<PageMetadataKey, PageMetadataDefinition>
     en: {
       title: 'Real-Time Crypto Liquidation Data',
       description: 'Track real-time liquidations across the market',
+    },
+  },
+  'liquidation-map': {
+    pathname: '/liquidation-map',
+    zh: {
+      title: '加密清算热力图',
+      description: '查看主要交易对的清算密集区和潜在流动性位置。',
+    },
+    en: {
+      title: 'Crypto Liquidation Heatmap',
+      description: 'Inspect liquidation clusters and potential liquidity zones across major pairs.',
     },
   },
   'prediction-market': {

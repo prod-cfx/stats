@@ -106,6 +106,8 @@ export const DashboardEditorSidebar = ({
     if (dashboardId === 'draft') return
     if (!docLoaded) return
     if (doc) return
+    // React Doctor: deleted local dashboard is known only after client storage hydration.
+    // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
     router.replace(`/${lng}/dashboard/?tab=saved`)
   }, [dashboardId, doc, docLoaded, lng, router])
 

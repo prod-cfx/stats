@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -23,8 +24,8 @@ export const DashboardListItem = ({
   const { t } = useTranslation()
   return (
     <div className="group flex items-center gap-4 rounded-xl border border-[#30363d] bg-[#161b22]/30 p-4 transition-all hover:border-[#3b82f6]/30 hover:bg-[#161b22]/50">
-      <div className="h-12 w-12 flex-none overflow-hidden rounded-lg border border-[#30363d] bg-[#0d1117]">
-        <img src={image} alt={title} className="h-full w-full object-cover" />
+      <div className="relative h-12 w-12 flex-none overflow-hidden rounded-lg border border-[#30363d] bg-[#0d1117]">
+        <Image src={image} alt={title} fill sizes="48px" className="h-full w-full object-cover" unoptimized />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">

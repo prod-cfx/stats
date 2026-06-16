@@ -38,4 +38,15 @@ describe('UserAvatar', () => {
 
     expect(secondCells).toEqual(firstCells)
   })
+
+  it('renders a named avatar image when src is provided', async () => {
+    await act(async () => {
+      root.render(<UserAvatar userId="user-2" name="Ada" src="https://example.com/avatar.png" />)
+    })
+
+    const image = container.querySelector('img[alt="Ada"]')
+
+    expect(image).not.toBeNull()
+    expect(image?.getAttribute('src')).toContain('avatar.png')
+  })
 })

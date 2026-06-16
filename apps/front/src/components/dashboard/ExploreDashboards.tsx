@@ -1,6 +1,7 @@
 'use client';
 
 import { Search } from 'lucide-react';
+import Image from 'next/image';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
@@ -176,8 +177,17 @@ export const ExploreDashboards = () => {
         loading={loading}
       >
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="aspect-video w-full rounded-2xl overflow-hidden border border-[#30363d]">
-            <img src={selectedDashboard?.image} className="w-full h-full object-cover" alt="" />
+          <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-[#30363d]">
+            {selectedDashboard?.image ? (
+              <Image
+                src={selectedDashboard.image}
+                className="w-full h-full object-cover"
+                alt=""
+                fill
+                sizes="(min-width: 768px) 896px, 100vw"
+                unoptimized
+              />
+            ) : null}
           </div>
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">

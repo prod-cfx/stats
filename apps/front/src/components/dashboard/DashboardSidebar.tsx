@@ -11,6 +11,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
@@ -135,8 +136,8 @@ export const DashboardSidebar = ({
                     className="flex flex-1 items-center gap-2 truncate rounded px-3 py-2 text-left text-xs text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                   >
                     {dash.thumbnail ? (
-                      <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded">
-                        <img src={dash.thumbnail} alt="" className="h-full w-full object-cover" />
+                      <div className="relative h-4 w-4 flex-shrink-0 overflow-hidden rounded">
+                        <Image src={dash.thumbnail} alt="" fill sizes="16px" className="h-full w-full object-cover" unoptimized />
                       </div>
                     ) : (
                       <div className="bg-primary/10 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded">
@@ -233,8 +234,8 @@ export const DashboardSidebar = ({
                     className="flex flex-1 items-center gap-2 truncate rounded px-3 py-2 text-left text-xs text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                   >
                     {dash.thumbnail ? (
-                      <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded">
-                        <img src={dash.thumbnail} alt="" className="h-full w-full object-cover" />
+                      <div className="relative h-4 w-4 flex-shrink-0 overflow-hidden rounded">
+                        <Image src={dash.thumbnail} alt="" fill sizes="16px" className="h-full w-full object-cover" unoptimized />
                       </div>
                     ) : (
                       <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-[color:var(--cf-surface-2)]">

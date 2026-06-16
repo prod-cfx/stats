@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 type UserAvatarSize = 'sm' | 'md' | 'lg'
 
 interface UserAvatarProps {
@@ -83,11 +85,14 @@ export function UserAvatar({
       className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm ${sizeClassNames[size]} ${className}`}
     >
       {src ? (
-        <img
+        <Image
           src={src}
           alt={label}
+          fill
+          sizes={size === 'lg' ? '56px' : size === 'md' ? '40px' : '32px'}
           className="h-full w-full object-cover"
           referrerPolicy="no-referrer"
+          unoptimized
         />
       ) : (
         <span

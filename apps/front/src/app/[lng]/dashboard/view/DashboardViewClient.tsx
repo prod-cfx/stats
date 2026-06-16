@@ -2,6 +2,7 @@
 
 import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { ArrowLeft } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
@@ -92,8 +93,8 @@ export function DashboardViewClient() {
 
           <div className="flex min-w-0 items-center gap-4">
             {dashboard.thumbnail ? (
-              <div className="border-primary/30 h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border">
-                <img src={dashboard.thumbnail} alt="" className="h-full w-full object-cover" />
+              <div className="border-primary/30 relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border">
+                <Image src={dashboard.thumbnail} alt="" fill sizes="56px" className="h-full w-full object-cover" unoptimized />
               </div>
             ) : null}
             <div className="min-w-0">

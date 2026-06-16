@@ -70,6 +70,8 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
     if (dashboardId === DEFAULT_DASHBOARD_ID) return
     if (!docLoaded) return
     if (doc) return
+    // React Doctor: missing local dashboard is known only after client storage hydration.
+    // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
     router.replace(`/${lng}/dashboard/?tab=saved`)
   }, [dashboardId, doc, docLoaded, lng, router])
 

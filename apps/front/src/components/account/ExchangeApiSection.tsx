@@ -5,6 +5,7 @@ import type {
   UserExchangeAccountStatus,
   UserExchangeId,
 } from '@/lib/api'
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -356,10 +357,13 @@ export function ExchangeApiSection() {
                 >
                   <div className="flex min-w-0 items-start gap-3">
                     <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
-                      <img
+                      <Image
                         src={`/images/exchanges/${exchangeId}.png`}
                         alt=""
+                        width={28}
+                        height={28}
                         className="h-full w-full object-contain"
+                        unoptimized
                       />
                     </span>
                     <div className="min-w-0">

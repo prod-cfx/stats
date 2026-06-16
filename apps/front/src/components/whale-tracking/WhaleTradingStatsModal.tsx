@@ -2,6 +2,7 @@
 
 import type { WhaleAddressPerformanceResponse } from '@/lib/api'
 import { ChevronDown } from 'lucide-react'
+import Image from 'next/image'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LazyReactECharts } from '@/components/charts/LazyReactECharts'
@@ -84,7 +85,7 @@ const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) =
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">
-            <img src={icon} alt={asset} className="h-full w-full object-contain" />
+            <Image src={icon} alt={asset} width={24} height={24} className="h-full w-full object-contain" unoptimized />
           </div>
           <span className="text-body truncate font-bold text-[color:var(--cf-text-strong)]">
             {asset}
@@ -135,7 +136,7 @@ const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: Performance
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-6 w-6 items-center justify-center">
-            <img src={icon} alt={asset} className="h-full w-full object-contain" />
+            <Image src={icon} alt={asset} width={24} height={24} className="h-full w-full object-contain" unoptimized />
           </div>
           <span className="text-body font-bold text-[color:var(--cf-text-strong)]">{asset}</span>
         </div>
@@ -188,7 +189,7 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-6 w-6 items-center justify-center">
-            <img src={icon} alt={asset} className="h-full w-full object-contain" />
+            <Image src={icon} alt={asset} width={24} height={24} className="h-full w-full object-contain" unoptimized />
           </div>
           <span className="text-body font-bold text-[color:var(--cf-text-strong)]">{asset}</span>
           <span

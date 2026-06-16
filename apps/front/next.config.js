@@ -105,6 +105,34 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'development-file.tang-bao.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'api.dicebear.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.jsdelivr.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cryptologos.cc',
+      },
+      {
+        protocol: 'https',
+        hostname: 'upload.wikimedia.org',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.circle.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'bitmine.tech',
+      },
+      {
+        protocol: 'https',
+        hostname: 'dydx.exchange',
+      },
     ],
   },
   // Help with hydration errors

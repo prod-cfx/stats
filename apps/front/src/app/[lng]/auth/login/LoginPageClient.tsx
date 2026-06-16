@@ -22,6 +22,8 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
 
   useEffect(() => {
     if (isAuthenticated) {
+      // React Doctor: redirect depends on client auth state from local storage/session hydration.
+      // react-doctor-disable-next-line react-doctor/nextjs-no-client-side-redirect
       router.replace(redirect)
     }
   }, [isAuthenticated, redirect, router])
