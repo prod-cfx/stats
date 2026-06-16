@@ -184,7 +184,7 @@ describe('account ai-quant detail/action mock fallback guard', () => {
       'http://localhost:3000/api/account/ai-quant/strategies/strategy-1/actions',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ userId: 'user-1', action: 'liquidate_and_stop' }),
+        body: JSON.stringify({ action: 'liquidate_and_stop' }),
       }),
     )
   })

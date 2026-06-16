@@ -280,7 +280,7 @@ export async function performAccountAiQuantStrategyAction(
       {
         method: 'POST',
         headers: buildAccountAiQuantHeaders(payload.userId.trim()),
-        body: JSON.stringify({ userId: payload.userId.trim(), action: payload.action }),
+        body: JSON.stringify({ action: payload.action }),
       },
     )
     const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
