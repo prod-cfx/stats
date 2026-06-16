@@ -45,6 +45,19 @@ const UpdateSettingDto = z
     isSystem: z.boolean().optional(),
   })
   .passthrough()
+const UserProfileResponseDto = z
+  .object({
+    id: z.string(),
+    email: z.string(),
+    nickname: z.string().nullish(),
+    avatarUrl: z.string().optional(),
+    emailVerified: z.boolean(),
+    isGuest: z.boolean(),
+    roles: z.array(z.string()),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
 const TelegramWebAuthorizeUrlResponseDto = z.object({ authorizeUrl: z.string() }).passthrough()
 const CreateTelegramDesktopIntentRequestDto = z
   .object({
@@ -69,26 +82,26 @@ const TelegramDesktopIntentStatusResponseDto = z
 const TelegramDesktopExchangeRequestDto = z
   .object({ intentId: z.string(), betaCode: z.string().optional() })
   .passthrough()
-const UserProfileResponseDto = z
-  .object({
-    id: z.string(),
-    email: z.string(),
-    nickname: z.string().nullish(),
-    avatarUrl: z.string().optional(),
-    emailVerified: z.boolean(),
-    isGuest: z.boolean(),
-    roles: z.array(z.string()),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
 const AuthResponseDto = z
   .object({ accessToken: z.string(), user: UserProfileResponseDto })
   .passthrough()
 const TelegramBotWebhookRequestDto = z
   .object({
+    update_id: z.number(),
     message: z.object({}).partial().passthrough(),
     edited_message: z.object({}).partial().passthrough(),
+    channel_post: z.object({}).partial().passthrough(),
+    edited_channel_post: z.object({}).partial().passthrough(),
+    callback_query: z.object({}).partial().passthrough(),
+    inline_query: z.object({}).partial().passthrough(),
+    chosen_inline_result: z.object({}).partial().passthrough(),
+    shipping_query: z.object({}).partial().passthrough(),
+    pre_checkout_query: z.object({}).partial().passthrough(),
+    poll: z.object({}).partial().passthrough(),
+    poll_answer: z.object({}).partial().passthrough(),
+    my_chat_member: z.object({}).partial().passthrough(),
+    chat_member: z.object({}).partial().passthrough(),
+    chat_join_request: z.object({}).partial().passthrough(),
   })
   .partial()
   .passthrough()
@@ -429,6 +442,7 @@ const BacktestingCreateJobRequestDto = z
     leverage: z.number().optional(),
     allowPartial: z.boolean().optional(),
     conversationId: z.string().optional(),
+    sessionId: z.string().optional(),
     execution: BacktestingCreateJobExecutionDto,
     strategy: BacktestingCreateJobStrategyDto,
     dataRange: BacktestingCreateJobRangeDto,
@@ -628,7 +642,13 @@ const LlmStrategyInstanceSignalResponseDto = z
     updatedAt: z.string(),
   })
   .passthrough()
-const Function = z.object({}).partial().passthrough()
+const LlmSubscriptionCreateRequestDto = z
+  .object({
+    llmStrategyInstanceId: z.string(),
+    customParams: z.object({}).partial().passthrough().nullish(),
+    exchangeAccountId: z.string(),
+  })
+  .passthrough()
 const LlmSubscriptionResponseDto = z
   .object({
     id: z.string(),
@@ -647,6 +667,14 @@ const LlmSubscriptionResponseDto = z
     createdAt: z.string(),
     updatedAt: z.string(),
   })
+  .passthrough()
+const LlmSubscriptionUpdateRequestDto = z
+  .object({
+    status: z.enum(['active', 'paused', 'cancelled']),
+    customParams: z.object({}).partial().passthrough().nullable(),
+    exchangeAccountId: z.string().nullable(),
+  })
+  .partial()
   .passthrough()
 const StrategyPlazaDisplayMetricsResponseDto = z
   .object({
@@ -1701,12 +1729,12 @@ export const schemas = {
   SettingResponseDto,
   CreateSettingDto,
   UpdateSettingDto,
+  UserProfileResponseDto,
   TelegramWebAuthorizeUrlResponseDto,
   CreateTelegramDesktopIntentRequestDto,
   TelegramDesktopIntentResponseDto,
   TelegramDesktopIntentStatusResponseDto,
   TelegramDesktopExchangeRequestDto,
-  UserProfileResponseDto,
   AuthResponseDto,
   TelegramBotWebhookRequestDto,
   TelegramBotWebhookResponseDto,
@@ -1762,8 +1790,9 @@ export const schemas = {
   LlmCodegenContinueRequestDto,
   LlmStrategyInstanceResponseDto,
   LlmStrategyInstanceSignalResponseDto,
-  Function,
+  LlmSubscriptionCreateRequestDto,
   LlmSubscriptionResponseDto,
+  LlmSubscriptionUpdateRequestDto,
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaOfficialBacktestMetricsResponseDto,
   StrategyPlazaOfficialBacktestEquityPointResponseDto,
@@ -2873,9 +2902,14 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
-        name: 'code',
+        name: 'page',
         type: 'Query',
-        schema: z.string().optional(),
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'name',
@@ -2883,14 +2917,9 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
       {
-        name: 'limit',
+        name: 'code',
         type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().optional(),
+        schema: z.string().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -2985,9 +3014,14 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
-        name: 'code',
+        name: 'page',
         type: 'Query',
-        schema: z.string().optional(),
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'name',
@@ -2995,14 +3029,9 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
       {
-        name: 'limit',
+        name: 'code',
         type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().optional(),
+        schema: z.string().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3257,19 +3286,19 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
-        name: 'keyword',
+        name: 'page',
         type: 'Query',
-        schema: z.string().optional(),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().optional(),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
-        name: 'page',
+        name: 'keyword',
         type: 'Query',
-        schema: z.number().optional(),
+        schema: z.string().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3384,19 +3413,19 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
-        name: 'keyword',
+        name: 'page',
         type: 'Query',
-        schema: z.string().optional(),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().optional(),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
-        name: 'page',
+        name: 'keyword',
         type: 'Query',
-        schema: z.number().optional(),
+        schema: z.string().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -4142,6 +4171,28 @@ const endpoints = makeApi([
     path: '/llm-strategy-instances',
     alias: 'LlmStrategyInstancesController_list',
     requestFormat: 'json',
+    parameters: [
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
+      },
+      {
+        name: 'llmModel',
+        type: 'Query',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'strategyId',
+        type: 'Query',
+        schema: z.string().optional(),
+      },
+    ],
     response: BasePaginationResponseDto.and(
       z
         .object({ items: z.array(LlmStrategyInstanceResponseDto) })
@@ -4174,6 +4225,16 @@ const endpoints = makeApi([
         type: 'Path',
         schema: z.string(),
       },
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
+      },
     ],
     response: BasePaginationResponseDto.and(
       z
@@ -4191,7 +4252,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({}).partial().passthrough(),
+        schema: LlmSubscriptionCreateRequestDto,
       },
     ],
     response: LlmSubscriptionResponseDto,
@@ -4201,6 +4262,23 @@ const endpoints = makeApi([
     path: '/llm-strategy-subscriptions',
     alias: 'LlmStrategySubscriptionsController_list',
     requestFormat: 'json',
+    parameters: [
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
+      },
+      {
+        name: 'status',
+        type: 'Query',
+        schema: z.enum(['active', 'paused', 'cancelled']).optional(),
+      },
+    ],
     response: BasePaginationResponseDto.and(
       z
         .object({ items: z.array(LlmSubscriptionResponseDto) })
@@ -4231,7 +4309,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({}).partial().passthrough(),
+        schema: LlmSubscriptionUpdateRequestDto,
       },
       {
         name: 'subscriptionId',
