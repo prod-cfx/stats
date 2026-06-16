@@ -284,294 +284,286 @@ export const RightPanel = ({
   // WebSocket 连接管理 - Trades 实时数据
   useEffect(() => {
     const wsBaseUrl = getWsBaseUrl()
-    let socket: Socket | null = null
+    // 获取 token（从 localStorage）
+    const token = localStorage.getItem(AUTH_TOKEN_KEY) || ''
 
-    const connectWebSocket = () => {
-      // 获取 token（从 localStorage）
-      const token = localStorage.getItem(AUTH_TOKEN_KEY) || ''
+    // 创建 Socket.IO 连接
+    const socket: Socket = io(`${wsBaseUrl}/kline`, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      auth: { token },
+    })
 
-      // 创建 Socket.IO 连接
-      socket = io(`${wsBaseUrl}/kline`, {
-        transports: ['websocket'],
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5,
-        auth: { token },
+    // 监听连接事件
+    socket.on('connect', () => {
+      logger.debug('[RightPanel] Socket.IO connected, subscribing to trades')
+
+      const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE'
+      const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+
+      // 发送订阅请求
+      const minValue = tradeTab === 'large' ? 100000 : undefined
+      socket.emit('subscribeTrades', {
+        exchange,
+        instrumentType,
+        symbol: symbol.toUpperCase(),
+        minValue,
+        limit: 50,
       })
 
-      // 监听连接事件
-      socket.on('connect', () => {
-        logger.debug('[RightPanel] Socket.IO connected, subscribing to trades')
+      // 发送 Order Book 订阅请求
+      socket.emit('subscribeOrderbook', {
+        exchange,
+        instrumentType,
+        symbol: symbol.toUpperCase(),
+        isAggregated,
+        depth: 60,
+      })
 
-        const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE'
-        const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+      // 发送 Ticker 订阅请求
+      const selectedBase = extractBaseSymbol(symbol)
+      socket.emit('subscribeTicker', {
+        symbol: selectedBase,
+        exchange: isAggregated ? undefined : exchange,
+        instrumentType: isAggregated ? undefined : instrumentType,
+      })
+      logger.debug(`[RightPanel] Subscribed to ticker: ${selectedBase}`)
+    })
 
-        // 发送订阅请求
-        const minValue = tradeTab === 'large' ? 100000 : undefined
-        socket?.emit('subscribeTrades', {
-          exchange,
-          instrumentType,
-          symbol: symbol.toUpperCase(),
-          minValue,
-          limit: 50,
+    // 监听订阅确认
+    socket.on('tradesSubscribed', (data: TradesSubscribedData) => {
+      logger.debug('[RightPanel] Trades subscribed:', data)
+    })
+
+    // 监听 Order Book 订阅确认
+    socket.on('orderbookSubscribed', (data: OrderbookSubscribedData) => {
+      logger.debug('[RightPanel] Orderbook subscribed:', data)
+      setLoading(false)
+    })
+
+    // 监听实时 trades 数据
+    socket.on('trades', (data: TradesEventData) => {
+      const { trades: receivedTrades } = data
+
+      if (receivedTrades && Array.isArray(receivedTrades)) {
+        // 格式化 trades 数据
+        const formattedTrades = receivedTrades.map((trade: TradeData) => {
+          const side = trade.side?.toLowerCase()
+          return {
+            id: trade.id, // 使用数据库主键作为唯一标识
+            price: Number(trade.price).toFixed(fractionDigits),
+            amount: Number(trade.size).toFixed(5),
+            time: formatHmsLocal(Number(trade.tradeTimestamp)),
+            type: (side === 'buy' || side === 'sell' ? side : 'buy') as 'buy' | 'sell',
+          }
         })
 
-        // 发送 Order Book 订阅请求
-        socket?.emit('subscribeOrderbook', {
-          exchange,
-          instrumentType,
-          symbol: symbol.toUpperCase(),
-          isAggregated,
-          depth: 60,
-        })
+        setTrades(formattedTrades)
 
-        // 发送 Ticker 订阅请求
-        const selectedBase = extractBaseSymbol(symbol)
-        socket?.emit('subscribeTicker', {
-          symbol: selectedBase,
-          exchange: isAggregated ? undefined : exchange,
-          instrumentType: isAggregated ? undefined : instrumentType,
-        })
-        logger.debug(`[RightPanel] Subscribed to ticker: ${selectedBase}`)
-      })
-
-      // 监听订阅确认
-      socket.on('tradesSubscribed', (data: TradesSubscribedData) => {
-        logger.debug('[RightPanel] Trades subscribed:', data)
-      })
-
-      // 监听 Order Book 订阅确认
-      socket.on('orderbookSubscribed', (data: OrderbookSubscribedData) => {
-        logger.debug('[RightPanel] Orderbook subscribed:', data)
-        setLoading(false)
-      })
-
-      // 监听实时 trades 数据
-      socket.on('trades', (data: TradesEventData) => {
-        const { trades: receivedTrades } = data
-
-        if (receivedTrades && Array.isArray(receivedTrades)) {
-          // 格式化 trades 数据
-          const formattedTrades = receivedTrades.map((trade: TradeData) => {
-            const side = trade.side?.toLowerCase()
-            return {
-              id: trade.id, // 使用数据库主键作为唯一标识
-              price: Number(trade.price).toFixed(fractionDigits),
-              amount: Number(trade.size).toFixed(5),
-              time: formatHmsLocal(Number(trade.tradeTimestamp)),
-              type: (side === 'buy' || side === 'sell' ? side : 'buy') as 'buy' | 'sell',
-            }
-          })
-
-          setTrades(formattedTrades)
-
-          // 更新最新成交价（Last Price）- 业内标准做法
-          if (receivedTrades.length > 0) {
-            const latestTrade = receivedTrades[0] // trades 数组按时间倒序，第一个是最新的
-            const price = Number(latestTrade.price)
-            if (Number.isFinite(price)) {
-              setLastPrice(price)
-            }
+        // 更新最新成交价（Last Price）- 业内标准做法
+        if (receivedTrades.length > 0) {
+          const latestTrade = receivedTrades[0] // trades 数组按时间倒序，第一个是最新的
+          const price = Number(latestTrade.price)
+          if (Number.isFinite(price)) {
+            setLastPrice(price)
           }
         }
+      }
+    })
+
+    // 监听实时 orderbook 数据
+    socket.on('orderbook', (data: OrderbookEventData) => {
+      logger.debug('[RightPanel] Orderbook data received:', {
+        exchange: data.exchange,
+        instrumentType: data.instrumentType,
+        symbol: data.symbol,
+        isAggregated: data.isAggregated,
+        bidsCount: data.orderbook?.bids?.length ?? 0,
+        asksCount: data.orderbook?.asks?.length ?? 0,
+        bestBid: data.orderbook?.bids?.[0],
+        bestAsk: data.orderbook?.asks?.[0],
       })
 
-      // 监听实时 orderbook 数据
-      socket.on('orderbook', (data: OrderbookEventData) => {
-        logger.debug('[RightPanel] Orderbook data received:', {
-          exchange: data.exchange,
-          instrumentType: data.instrumentType,
+      const { orderbook } = data
+
+      if (orderbook && orderbook.bids?.length > 0 && orderbook.asks?.length > 0) {
+        // 计算累计量用于深度百分比
+        const bidsSlice = (orderbook.bids || []).slice(0, 60)
+        const asksSlice = (orderbook.asks || []).slice(0, 60)
+
+        // 计算买卖双方的最大累计量
+        let bidsCumulative = 0
+        const bidsWithCumulative = bidsSlice.map(level => {
+          const size = 'size' in level ? level.size : 'sizeTotal' in level ? level.sizeTotal : 0
+          bidsCumulative += size
+          return { level, cumulative: bidsCumulative }
+        })
+
+        let asksCumulative = 0
+        const asksWithCumulative = asksSlice.map(level => {
+          const size = 'size' in level ? level.size : 'sizeTotal' in level ? level.sizeTotal : 0
+          asksCumulative += size
+          return { level, cumulative: asksCumulative }
+        })
+
+        const maxCumulative = Math.max(bidsCumulative, asksCumulative)
+
+        const formatLevel = (item: {
+          level: SharedOrderBookLevel | AggregatedLevel
+          cumulative: number
+        }) => {
+          const { level, cumulative } = item
+          const price = 'price' in level ? level.price : 0
+          const size = 'size' in level ? level.size : 'sizeTotal' in level ? level.sizeTotal : 0
+          // 基于累计量计算深度百分比
+          const depth = maxCumulative > 0 ? (cumulative / maxCumulative) * 100 : 0
+          return {
+            price: price.toFixed(fractionDigits),
+            amount: size.toFixed(5),
+            total: (price * size).toFixed(2),
+            depth,
+          }
+        }
+
+        const formattedOrderbook = {
+          sells: asksWithCumulative.map(formatLevel).reverse(),
+          buys: bidsWithCumulative.map(formatLevel),
+        }
+
+        logger.debug('[RightPanel] Formatted orderbook:', {
+          sellsCount: formattedOrderbook.sells.length,
+          buysCount: formattedOrderbook.buys.length,
+          topSell: formattedOrderbook.sells[formattedOrderbook.sells.length - 1],
+          topBuy: formattedOrderbook.buys[0],
+        })
+
+        setOrderbook(formattedOrderbook)
+      } else {
+        logger.warn('[RightPanel] Orderbook data is empty or invalid, keeping mock data')
+      }
+    })
+
+    // 监听取消订阅确认
+    socket.on('tradesUnsubscribed', (data: TradesUnsubscribedData) => {
+      logger.debug('[RightPanel] Trades unsubscribed:', data)
+    })
+
+    // 监听 Order Book 取消订阅确认
+    socket.on('orderbookUnsubscribed', (data: OrderbookUnsubscribedData) => {
+      logger.debug('[RightPanel] Orderbook unsubscribed:', data)
+    })
+
+    // Ticker WebSocket 事件监听器
+    socket.on(
+      'tickerSubscribed',
+      (data: {
+        exchange: string
+        instrumentType: string
+        symbol: string
+        subscriptionKey: string
+      }) => {
+        logger.debug('[RightPanel] Ticker subscribed:', data)
+      },
+    )
+
+    socket.on(
+      'ticker',
+      (data: {
+        symbol: string
+        currentPrice: number | null
+        indexPrice: number | null
+        fundingRate: number | null
+        priceChangePercent24h: number | null
+        volumeUsd: number | null
+        openInterestUsd: number | null
+        high24h: number | null
+        low24h: number | null
+        timestamp: number
+      }) => {
+        logger.debug('[RightPanel] Received ticker data:', data)
+
+        const currentBase = extractBaseSymbol(symbol)
+
+        // 验证 symbol 是否匹配当前订阅
+        if (data.symbol !== currentBase) {
+          logger.debug(`[RightPanel] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
+          return
+        }
+
+        // 更新 tickerData
+        setTickerData({
           symbol: data.symbol,
-          isAggregated: data.isAggregated,
-          bidsCount: data.orderbook?.bids?.length ?? 0,
-          asksCount: data.orderbook?.asks?.length ?? 0,
-          bestBid: data.orderbook?.bids?.[0],
-          bestAsk: data.orderbook?.asks?.[0],
+          currentPrice: data.currentPrice?.toString() ?? '0',
+          indexPrice: data.indexPrice?.toString() ?? undefined,
+          fundingRate: data.fundingRate?.toString() ?? undefined,
+          priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
+          volumeUsd: data.volumeUsd?.toString() ?? '0',
+          openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+          high24h: data.high24h?.toString() ?? undefined,
+          low24h: data.low24h?.toString() ?? undefined,
         })
+      },
+    )
 
-        const { orderbook } = data
+    socket.on(
+      'tickerUnsubscribed',
+      (data: {
+        exchange: string
+        instrumentType: string
+        symbol: string
+        subscriptionKey: string
+      }) => {
+        logger.debug('[RightPanel] Ticker unsubscribed:', data)
+      },
+    )
 
-        if (orderbook && orderbook.bids?.length > 0 && orderbook.asks?.length > 0) {
-          // 计算累计量用于深度百分比
-          const bidsSlice = (orderbook.bids || []).slice(0, 60)
-          const asksSlice = (orderbook.asks || []).slice(0, 60)
+    // 监听连接错误
+    socket.on('connect_error', error => {
+      logger.error('[RightPanel] Socket.IO connection error:', error)
+      setLoading(true)
+    })
 
-          // 计算买卖双方的最大累计量
-          let bidsCumulative = 0
-          const bidsWithCumulative = bidsSlice.map(level => {
-            const size = 'size' in level ? level.size : 'sizeTotal' in level ? level.sizeTotal : 0
-            bidsCumulative += size
-            return { level, cumulative: bidsCumulative }
-          })
-
-          let asksCumulative = 0
-          const asksWithCumulative = asksSlice.map(level => {
-            const size = 'size' in level ? level.size : 'sizeTotal' in level ? level.sizeTotal : 0
-            asksCumulative += size
-            return { level, cumulative: asksCumulative }
-          })
-
-          const maxCumulative = Math.max(bidsCumulative, asksCumulative)
-
-          const formatLevel = (item: {
-            level: SharedOrderBookLevel | AggregatedLevel
-            cumulative: number
-          }) => {
-            const { level, cumulative } = item
-            const price = 'price' in level ? level.price : 0
-            const size = 'size' in level ? level.size : 'sizeTotal' in level ? level.sizeTotal : 0
-            // 基于累计量计算深度百分比
-            const depth = maxCumulative > 0 ? (cumulative / maxCumulative) * 100 : 0
-            return {
-              price: price.toFixed(fractionDigits),
-              amount: size.toFixed(5),
-              total: (price * size).toFixed(2),
-              depth,
-            }
-          }
-
-          const formattedOrderbook = {
-            sells: asksWithCumulative.map(formatLevel).reverse(),
-            buys: bidsWithCumulative.map(formatLevel),
-          }
-
-          logger.debug('[RightPanel] Formatted orderbook:', {
-            sellsCount: formattedOrderbook.sells.length,
-            buysCount: formattedOrderbook.buys.length,
-            topSell: formattedOrderbook.sells[formattedOrderbook.sells.length - 1],
-            topBuy: formattedOrderbook.buys[0],
-          })
-
-          setOrderbook(formattedOrderbook)
-        } else {
-          logger.warn('[RightPanel] Orderbook data is empty or invalid, keeping mock data')
-        }
-      })
-
-      // 监听取消订阅确认
-      socket.on('tradesUnsubscribed', (data: TradesUnsubscribedData) => {
-        logger.debug('[RightPanel] Trades unsubscribed:', data)
-      })
-
-      // 监听 Order Book 取消订阅确认
-      socket.on('orderbookUnsubscribed', (data: OrderbookUnsubscribedData) => {
-        logger.debug('[RightPanel] Orderbook unsubscribed:', data)
-      })
-
-      // Ticker WebSocket 事件监听器
-      socket.on(
-        'tickerSubscribed',
-        (data: {
-          exchange: string
-          instrumentType: string
-          symbol: string
-          subscriptionKey: string
-        }) => {
-          logger.debug('[RightPanel] Ticker subscribed:', data)
-        },
-      )
-
-      socket.on(
-        'ticker',
-        (data: {
-          symbol: string
-          currentPrice: number | null
-          indexPrice: number | null
-          fundingRate: number | null
-          priceChangePercent24h: number | null
-          volumeUsd: number | null
-          openInterestUsd: number | null
-          high24h: number | null
-          low24h: number | null
-          timestamp: number
-        }) => {
-          logger.debug('[RightPanel] Received ticker data:', data)
-
-          const currentBase = extractBaseSymbol(symbol)
-
-          // 验证 symbol 是否匹配当前订阅
-          if (data.symbol !== currentBase) {
-            logger.debug(`[RightPanel] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
-            return
-          }
-
-          // 更新 tickerData
-          setTickerData({
-            symbol: data.symbol,
-            currentPrice: data.currentPrice?.toString() ?? '0',
-            indexPrice: data.indexPrice?.toString() ?? undefined,
-            fundingRate: data.fundingRate?.toString() ?? undefined,
-            priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
-            volumeUsd: data.volumeUsd?.toString() ?? '0',
-            openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
-            high24h: data.high24h?.toString() ?? undefined,
-            low24h: data.low24h?.toString() ?? undefined,
-          })
-        },
-      )
-
-      socket.on(
-        'tickerUnsubscribed',
-        (data: {
-          exchange: string
-          instrumentType: string
-          symbol: string
-          subscriptionKey: string
-        }) => {
-          logger.debug('[RightPanel] Ticker unsubscribed:', data)
-        },
-      )
-
-      // 监听连接错误
-      socket.on('connect_error', error => {
-        logger.error('[RightPanel] Socket.IO connection error:', error)
-        setLoading(true)
-      })
-
-      // 监听断开连接
-      socket.on('disconnect', reason => {
-        logger.warn('[RightPanel] Socket.IO disconnected:', reason)
-        setLoading(true)
-      })
-    }
-
-    connectWebSocket()
+    // 监听断开连接
+    socket.on('disconnect', reason => {
+      logger.warn('[RightPanel] Socket.IO disconnected:', reason)
+      setLoading(true)
+    })
 
     return () => {
-      if (socket) {
-        const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE'
-        const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
-        const minValue = tradeTab === 'large' ? 100000 : undefined
+      const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE'
+      const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+      const minValue = tradeTab === 'large' ? 100000 : undefined
 
-        // 发送取消订阅请求
-        socket.emit('unsubscribeTrades', {
-          exchange,
-          instrumentType,
-          symbol: symbol.toUpperCase(),
-          minValue,
-        })
+      // 发送取消订阅请求
+      socket.emit('unsubscribeTrades', {
+        exchange,
+        instrumentType,
+        symbol: symbol.toUpperCase(),
+        minValue,
+      })
 
-        // 发送 Order Book 取消订阅请求
-        socket.emit('unsubscribeOrderbook', {
-          exchange,
-          instrumentType,
-          symbol: symbol.toUpperCase(),
-          isAggregated,
-          depth: 60,
-        })
+      // 发送 Order Book 取消订阅请求
+      socket.emit('unsubscribeOrderbook', {
+        exchange,
+        instrumentType,
+        symbol: symbol.toUpperCase(),
+        isAggregated,
+        depth: 60,
+      })
 
-        // 发送 Ticker 取消订阅请求
-        const selectedBase = extractBaseSymbol(symbol)
-        socket.emit('unsubscribeTicker', {
-          symbol: selectedBase,
-          exchange: isAggregated ? undefined : exchange,
-          instrumentType: isAggregated ? undefined : instrumentType,
-        })
-        logger.debug(`[RightPanel] Unsubscribed from ticker: ${selectedBase}`)
+      // 发送 Ticker 取消订阅请求
+      const selectedBase = extractBaseSymbol(symbol)
+      socket.emit('unsubscribeTicker', {
+        symbol: selectedBase,
+        exchange: isAggregated ? undefined : exchange,
+        instrumentType: isAggregated ? undefined : instrumentType,
+      })
+      logger.debug(`[RightPanel] Unsubscribed from ticker: ${selectedBase}`)
 
-        // 断开连接
-        socket.disconnect()
-      }
+      // 断开连接
+      socket.disconnect()
     }
   }, [symbol, selectedExchange, marketType, isAggregated, tradeTab, fractionDigits]) // 依赖项：symbol/exchange/marketType/tab 变化时重新订阅
 

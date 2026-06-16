@@ -177,234 +177,201 @@ export const TopBar = ({
   useEffect(() => {
     if (!selectedSymbol) return
 
-    if (!socketRef.current) {
-      const wsBaseUrl = getWsBaseUrl()
-      notifyWsStatus('connecting')
-      socketRef.current = io(`${wsBaseUrl}/kline`, {
-        transports: ['websocket'],
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5,
-      })
+    const wsBaseUrl = getWsBaseUrl()
+    const socket: Socket = io(`${wsBaseUrl}/kline`, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+    })
+    const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
+    const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
 
-      const socket = socketRef.current
-
-      socket.on('connect', () => {
-        logger.debug('[TopBar] WebSocket connected')
-        logger.debug(`[TopBar] Current selectedSymbol: ${selectedSymbol}`)
-        logger.debug(`[TopBar] Current selectedSymbolRef: ${selectedSymbolRef.current}`)
-        notifyWsStatus('connected')
-        // 使用闭包中的 selectedSymbol,因为 prevSymbolRef.current 在首次连接时还未设置
-        if (selectedSymbol) {
-          // 订阅 K线
-          socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' })
-          logger.debug(`[TopBar] Subscribed to kline: ${selectedSymbol}`)
-
-          // 订阅 Ticker
-          const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
-          const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
-          socket.emit('subscribeTicker', {
-            symbol: selectedBase,
-            exchange: isAggregated ? undefined : exchange,
-            instrumentType: isAggregated ? undefined : instrumentType,
-          })
-          logger.debug(`[TopBar] Subscribed to ticker: ${selectedBase}`)
-        }
-        fetchLatestKline(klineParamsRef.current)
-      })
-
-      socket.on('kline', (data: { symbol: string; interval: string; bar: { close: number } }) => {
-        logger.debug(`[TopBar] Received kline data:`, data)
-        const { symbol, bar } = data
-
-        logger.debug(
-          `[TopBar] Comparing symbols - received: ${symbol}, current: ${selectedSymbolRef.current}`,
-        )
-
-        // Validate symbol matches current subscription
-        if (symbol !== selectedSymbolRef.current) {
-          logger.debug(
-            `[TopBar] Ignoring kline for ${symbol}, current: ${selectedSymbolRef.current}`,
-          )
-          return
-        }
-
-        logger.debug(`[TopBar] Symbol matched! Processing bar.close: ${bar.close}`)
-
-        if (Number.isFinite(bar.close)) {
-          const now = Date.now()
-          if (now - lastKlineUpdateTimeRef.current >= THROTTLE_INTERVAL) {
-            logger.debug(`[TopBar] Updating klineClosePrice to ${bar.close}`)
-            setKlineClosePrice(bar.close)
-            lastKlineUpdateTimeRef.current = now
-            logger.debug(`[TopBar] Real-time price update: ${bar.close} for ${symbol}`)
-          } else {
-            logger.debug(
-              `[TopBar] Throttled - skipping update (${now - lastKlineUpdateTimeRef.current}ms since last)`,
-            )
-          }
-        } else {
-          logger.warn(`[TopBar] Invalid bar.close value: ${bar.close}`)
-        }
-      })
-
-      socket.on('ping', () => {
-        logger.debug('[TopBar] Ping sent')
-      })
-
-      socket.on('pong', (latency: number) => {
-        logger.debug(`[TopBar] Pong received, latency: ${latency}ms`)
-      })
-
-      socket.on('disconnect', () => {
-        logger.debug('[TopBar] WebSocket disconnected')
-        notifyWsStatus('disconnected')
-      })
-
-      socket.on('connect_error', error => {
-        logger.error('[TopBar] WebSocket connection error:', error)
-        notifyWsStatus('error')
-      })
-
-      socket.on('error', error => {
-        logger.error('[TopBar] WebSocket error:', error)
-        notifyWsStatus('error')
-      })
-
-      // Ticker WebSocket 事件监听器
-      socket.on(
-        'tickerSubscribed',
-        (data: {
-          exchange: string
-          instrumentType: string
-          symbol: string
-          subscriptionKey: string
-        }) => {
-          logger.debug('[TopBar] Ticker subscribed:', data)
-        },
-      )
-
-      socket.on(
-        'ticker',
-        (data: {
-          symbol: string
-          currentPrice: number | null
-          indexPrice: number | null
-          fundingRate: number | null
-          priceChangePercent24h: number | null
-          volumeUsd: number | null
-          openInterestUsd: number | null
-          high24h: number | null
-          low24h: number | null
-          timestamp: number
-        }) => {
-          logger.debug('[TopBar] Received ticker data:', data)
-
-          // Use ref to avoid stale closure
-          const currentSymbol = selectedSymbolRef.current
-          let currentBase = 'BTC'
-          if (currentSymbol) {
-            currentBase = extractBaseSymbol(currentSymbol)
-          }
-
-          // 验证 symbol 是否匹配当前订阅
-          if (data.symbol !== currentBase) {
-            logger.debug(`[TopBar] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
-            return
-          }
-
-          // 更新 tickerData
-          setTickerData({
-            symbol: data.symbol,
-            currentPrice: data.currentPrice?.toString() ?? '0',
-            indexPrice: data.indexPrice?.toString() ?? undefined,
-            fundingRate: data.fundingRate?.toString() ?? undefined,
-            priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
-            volumeUsd: data.volumeUsd?.toString() ?? '0',
-            openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
-            high24h: data.high24h?.toString() ?? undefined,
-            low24h: data.low24h?.toString() ?? undefined,
-          })
-        },
-      )
-
-      socket.on(
-        'tickerUnsubscribed',
-        (data: {
-          exchange: string
-          instrumentType: string
-          symbol: string
-          subscriptionKey: string
-        }) => {
-          logger.debug('[TopBar] Ticker unsubscribed:', data)
-        },
-      )
-    }
-
-    const socket = socketRef.current
-    const prevSymbol = prevSymbolRef.current
-
-    if (prevSymbol && prevSymbol !== selectedSymbol) {
-      // 取消订阅旧的 K线
-      socket.emit('unsubscribe', { symbol: prevSymbol, interval: '1m' })
-
-      // 取消订阅旧的 Ticker
-      const prevBase = extractBaseSymbol(prevSymbol)
-      const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
-      const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
-      socket.emit('unsubscribeTicker', {
-        symbol: prevBase,
-        exchange: isAggregated ? undefined : exchange,
-        instrumentType: isAggregated ? undefined : instrumentType,
-      })
-    }
-
+    socketRef.current = socket
     prevSymbolRef.current = selectedSymbol
     lastKlineUpdateTimeRef.current = 0
+    notifyWsStatus('connecting')
 
-    if (socket.connected) {
-      // 订阅新的 K线
+    const subscribeCurrent = () => {
       socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' })
+      logger.debug(`[TopBar] Subscribed to kline: ${selectedSymbol}`)
 
-      // 订阅新的 Ticker
-      const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
-      const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
       socket.emit('subscribeTicker', {
         symbol: selectedBase,
         exchange: isAggregated ? undefined : exchange,
         instrumentType: isAggregated ? undefined : instrumentType,
       })
-    } else {
-      notifyWsStatus('connecting')
+      logger.debug(`[TopBar] Subscribed to ticker: ${selectedBase}`)
     }
 
-    return () => {}
-  }, [selectedSymbol, notifyWsStatus, selectedExchange, marketType, isAggregated, selectedBase])
+    const unsubscribeCurrent = () => {
+      socket.emit('unsubscribe', { symbol: selectedSymbol, interval: '1m' })
+      socket.emit('unsubscribeTicker', {
+        symbol: selectedBase,
+        exchange: isAggregated ? undefined : exchange,
+        instrumentType: isAggregated ? undefined : instrumentType,
+      })
+    }
 
-  useEffect(() => {
-    return () => {
-      if (!socketRef.current) return
-      if (prevSymbolRef.current) {
-        // 取消订阅 K线
-        socketRef.current.emit('unsubscribe', {
-          symbol: prevSymbolRef.current,
-          interval: '1m',
-        })
+    const handleConnect = () => {
+      logger.debug('[TopBar] WebSocket connected')
+      logger.debug(`[TopBar] Current selectedSymbol: ${selectedSymbol}`)
+      logger.debug(`[TopBar] Current selectedSymbolRef: ${selectedSymbolRef.current}`)
+      notifyWsStatus('connected')
+      subscribeCurrent()
+      fetchLatestKline(klineParamsRef.current)
+    }
 
-        // 取消订阅 Ticker
-        const prevBase = extractBaseSymbol(prevSymbolRef.current)
-        const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
-        const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
-        socketRef.current.emit('unsubscribeTicker', {
-          symbol: prevBase,
-          exchange: isAggregated ? undefined : exchange,
-          instrumentType: isAggregated ? undefined : instrumentType,
-        })
+    const handleKline = (data: { symbol: string; interval: string; bar: { close: number } }) => {
+      logger.debug(`[TopBar] Received kline data:`, data)
+      const { symbol, bar } = data
+
+      logger.debug(
+        `[TopBar] Comparing symbols - received: ${symbol}, current: ${selectedSymbolRef.current}`,
+      )
+
+      // Validate symbol matches current subscription
+      if (symbol !== selectedSymbolRef.current) {
+        logger.debug(`[TopBar] Ignoring kline for ${symbol}, current: ${selectedSymbolRef.current}`)
+        return
       }
-      socketRef.current.disconnect()
-      socketRef.current = null
+
+      logger.debug(`[TopBar] Symbol matched! Processing bar.close: ${bar.close}`)
+
+      if (Number.isFinite(bar.close)) {
+        const now = Date.now()
+        if (now - lastKlineUpdateTimeRef.current >= THROTTLE_INTERVAL) {
+          logger.debug(`[TopBar] Updating klineClosePrice to ${bar.close}`)
+          setKlineClosePrice(bar.close)
+          lastKlineUpdateTimeRef.current = now
+          logger.debug(`[TopBar] Real-time price update: ${bar.close} for ${symbol}`)
+        } else {
+          logger.debug(
+            `[TopBar] Throttled - skipping update (${now - lastKlineUpdateTimeRef.current}ms since last)`,
+          )
+        }
+      } else {
+        logger.warn(`[TopBar] Invalid bar.close value: ${bar.close}`)
+      }
     }
-  }, [selectedExchange, marketType, isAggregated])
+
+    const handlePing = () => {
+      logger.debug('[TopBar] Ping sent')
+    }
+
+    const handlePong = (latency: number) => {
+      logger.debug(`[TopBar] Pong received, latency: ${latency}ms`)
+    }
+
+    const handleDisconnect = () => {
+      logger.debug('[TopBar] WebSocket disconnected')
+      notifyWsStatus('disconnected')
+    }
+
+    const handleConnectError = (error: Error) => {
+      logger.error('[TopBar] WebSocket connection error:', error)
+      notifyWsStatus('error')
+    }
+
+    const handleError = (error: Error) => {
+      logger.error('[TopBar] WebSocket error:', error)
+      notifyWsStatus('error')
+    }
+
+    const handleTickerSubscribed = (data: {
+      exchange: string
+      instrumentType: string
+      symbol: string
+      subscriptionKey: string
+    }) => {
+      logger.debug('[TopBar] Ticker subscribed:', data)
+    }
+
+    const handleTicker = (data: {
+      symbol: string
+      currentPrice: number | null
+      indexPrice: number | null
+      fundingRate: number | null
+      priceChangePercent24h: number | null
+      volumeUsd: number | null
+      openInterestUsd: number | null
+      high24h: number | null
+      low24h: number | null
+      timestamp: number
+    }) => {
+      logger.debug('[TopBar] Received ticker data:', data)
+
+      // Use ref to avoid stale closure
+      const currentSymbol = selectedSymbolRef.current
+      let currentBase = 'BTC'
+      if (currentSymbol) {
+        currentBase = extractBaseSymbol(currentSymbol)
+      }
+
+      // 验证 symbol 是否匹配当前订阅
+      if (data.symbol !== currentBase) {
+        logger.debug(`[TopBar] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
+        return
+      }
+
+      // 更新 tickerData
+      setTickerData({
+        symbol: data.symbol,
+        currentPrice: data.currentPrice?.toString() ?? '0',
+        indexPrice: data.indexPrice?.toString() ?? undefined,
+        fundingRate: data.fundingRate?.toString() ?? undefined,
+        priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
+        volumeUsd: data.volumeUsd?.toString() ?? '0',
+        openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+        high24h: data.high24h?.toString() ?? undefined,
+        low24h: data.low24h?.toString() ?? undefined,
+      })
+    }
+
+    const handleTickerUnsubscribed = (data: {
+      exchange: string
+      instrumentType: string
+      symbol: string
+      subscriptionKey: string
+    }) => {
+      logger.debug('[TopBar] Ticker unsubscribed:', data)
+    }
+
+    socket.on('connect', handleConnect)
+    socket.on('kline', handleKline)
+    socket.on('ping', handlePing)
+    socket.on('pong', handlePong)
+    socket.on('disconnect', handleDisconnect)
+    socket.on('connect_error', handleConnectError)
+    socket.on('error', handleError)
+    socket.on('tickerSubscribed', handleTickerSubscribed)
+    socket.on('ticker', handleTicker)
+    socket.on('tickerUnsubscribed', handleTickerUnsubscribed)
+
+    if (socket.connected) {
+      subscribeCurrent()
+    }
+
+    return () => {
+      if (socket.connected) {
+        unsubscribeCurrent()
+      }
+      socket.off('connect', handleConnect)
+      socket.off('kline', handleKline)
+      socket.off('ping', handlePing)
+      socket.off('pong', handlePong)
+      socket.off('disconnect', handleDisconnect)
+      socket.off('connect_error', handleConnectError)
+      socket.off('error', handleError)
+      socket.off('tickerSubscribed', handleTickerSubscribed)
+      socket.off('ticker', handleTicker)
+      socket.off('tickerUnsubscribed', handleTickerUnsubscribed)
+      socket.disconnect()
+      if (socketRef.current === socket) {
+        socketRef.current = null
+      }
+    }
+  }, [selectedSymbol, notifyWsStatus, selectedExchange, marketType, isAggregated, selectedBase])
 
   // Mock raw values (keep as numbers so locale switching works)
   const basePriceByAsset: Record<string, number> = {
