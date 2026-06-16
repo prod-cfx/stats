@@ -4,6 +4,6 @@ export const IS_PUBLIC_KEY = 'isPublic'
 
 /**
  * Marks an HTTP route as intentionally public.
- * This is semantic metadata only; current auth behavior remains unchanged.
+ * The global auth boundary guard reads this metadata and skips JWT authentication.
  */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true)

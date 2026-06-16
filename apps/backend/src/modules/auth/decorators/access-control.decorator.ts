@@ -7,6 +7,7 @@ import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard'
 import 'reflect-metadata'
 
 const ROLES_METADATA_KEY = 'roles'
+export const IS_OPTIONAL_AUTH_KEY = 'isOptionalAuth'
 
 /**
  * 仅应用 JWT 认证守卫（不包含权限检查）
@@ -61,6 +62,6 @@ export const AccessControl = (...rules: RequiredRule[]) =>
  * - 如果未携带或 token 无效，则按 VISITOR 角色做最小权限判定
  * 必须搭配 @ReadAny/@ReadOwn 等规则装饰器使用。
  */
-export const OptionalAccessControl = () => applyDecorators(UseGuards(OptionalJwtAuthGuard, ACGuard))
-
+export const OptionalAccessControl = () =>
+  applyDecorators(SetMetadata(IS_OPTIONAL_AUTH_KEY, true), UseGuards(OptionalJwtAuthGuard, ACGuard))
 

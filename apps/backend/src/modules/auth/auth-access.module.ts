@@ -6,6 +6,7 @@ import { PassportModule } from '@nestjs/passport'
 import { AccessControlModule } from 'nest-access-control'
 import { CacheModule } from '@/common/modules/cache.module'
 import { ACGuard } from './guards/ac.guard'
+import { GlobalJwtAuthBoundaryGuard } from './guards/global-jwt-auth-boundary.guard'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
 import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard'
 import { RBAC_PERMISSIONS } from './rbac/permissions'
@@ -33,6 +34,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
   ],
   providers: [
     JwtStrategy,
+    GlobalJwtAuthBoundaryGuard,
     JwtAuthGuard,
     OptionalJwtAuthGuard,
     ACGuard,
@@ -43,6 +45,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
   ],
   exports: [
     JwtAuthGuard,
+    GlobalJwtAuthBoundaryGuard,
     OptionalJwtAuthGuard,
     ACGuard,
     PermissionService,

@@ -27,6 +27,7 @@ import { AggregatedLiquidationModule } from './aggregated-liquidation/aggregated
 import { AggregatedOrderbookModule } from './aggregated-orderbook/aggregated-orderbook.module'
 import { AiQuantProxyModule } from './ai-quant-proxy/ai-quant-proxy.module'
 import { AuthModule } from './auth/auth.module'
+import { GlobalJwtAuthBoundaryGuard } from './auth/guards/global-jwt-auth-boundary.guard'
 import { BetaCodeModule } from './beta-code/beta-code.module'
 import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quotes.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
@@ -122,6 +123,10 @@ const currentEnv = defaultEnvAccessor.appEnv()
     {
       provide: APP_GUARD,
       useClass: GlobalRateLimitGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: GlobalJwtAuthBoundaryGuard,
     },
     {
       provide: APP_INTERCEPTOR,
