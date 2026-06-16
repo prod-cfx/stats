@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, Bot, ChevronDown, ChevronRight, FileText, Github, LogIn, LogOut, Menu, Search, Send, Settings, X } from 'lucide-react'
+import { Bell, Bot, LogIn, LogOut, Menu, Search, Settings, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +21,8 @@ import {
   buildDataNavLinks,
   buildMobileWhaleLinks,
 } from './navbar.nav-data'
+import { NavbarDesktopLinks } from './NavbarDesktopLinks'
+import { NavbarMobileMenu } from './NavbarMobileMenu'
 import { ThemeToggle } from './ThemeToggle'
 
 const COPYRIGHT_YEAR = 2026
@@ -353,71 +355,12 @@ export const Navbar = () => {
           </Link>
         </div>
 
-        <div className="hidden h-full items-center gap-6 md:flex">
-          {navLinks.map(link => {
-            const isActive =
-              pathname === link.href ||
-              (link.href === withLng('/ai-quant') && pathname === withLng('/')) ||
-              (link.children && link.children.some(child => pathname === child.href))
-
-            if (link.children) {
-              return (
-                <div key={link.name} className="group relative flex h-full items-center">
-                  <Link
-                    href={link.href}
-                    className={`relative flex h-full cursor-pointer items-center gap-1 !text-[13px] !font-semibold !leading-5 no-underline transition-colors ${
-                      isActive
-                        ? 'text-[color:var(--cf-text-strong)]'
-                        : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
-                    }`}
-                  >
-                    {link.name}
-                    <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
-                    {isActive && (
-                      <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-[2px] bg-gradient-to-r" />
-                    )}
-                  </Link>
-
-                  {/* Dropdown Menu */}
-                  <div className="invisible absolute top-[95%] left-0 z-50 w-40 translate-y-1.5 transform overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] opacity-0 shadow-sm transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
-                    <div className="py-1.5">
-                      {link.children.map(child => (
-                        <Link
-                          key={child.name}
-                          href={child.href}
-                          className={`mx-1.5 block rounded-md px-3 py-2 !text-xs !font-semibold !leading-5 transition-colors ${
-                            pathname === child.href
-                              ? 'from-primary to-secondary bg-gradient-to-r !text-white'
-                              : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
-                          }`}
-                        >
-                          {child.name}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )
-            }
-
-            return (
-              <Link
-                key={link.name}
-                href={link.href}
-                className={`relative flex h-full items-center !text-[13px] !font-semibold !leading-5 transition-colors ${
-                  isActive
-                    ? 'text-[color:var(--cf-text-strong)]'
-                    : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
-                }`}
-              >
-                {link.name}
-                {isActive && (
-                  <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-[2px] bg-gradient-to-r" />
-                )}
-              </Link>
-            )
-          })}
-        </div>
+        <NavbarDesktopLinks
+          links={navLinks}
+          pathname={pathname}
+          aiQuantHref={withLng('/ai-quant')}
+          homeHref={withLng('/')}
+        />
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-2.5">
@@ -700,160 +643,19 @@ export const Navbar = () => {
           ))}
       </div>
 
-      {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="animate-in slide-in-from-top-10 fixed inset-0 z-[60] flex flex-col bg-[color:var(--cf-bg)] duration-200 md:hidden">
-          <div className="flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] px-4">
-            <div className="flex items-center">
-              <CoinfluxMark className="h-7 w-7" />
-              <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)]">
-                oinflux
-              </span>
-            </div>
-            <button
-              type="button"
-              aria-label={t('nav.closeMenu', { defaultValue: 'Close menu' })}
-              onClick={() => setMobileMenuOpen(false)}
-              className="p-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
-            >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-
-          <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
-            {mobileNavLinks.map((link, index) => {
-              const hasChildren = link.children && link.children.length > 0
-              const isExpanded = expandedMobileMenus.includes(link.name)
-              const submenuId = `mobile-nav-submenu-${index}`
-
-              if (hasChildren) {
-                return (
-                  <div key={link.name} className="flex flex-col">
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      aria-controls={submenuId}
-                      onClick={() => toggleMobileSubmenu(link.name)}
-                      className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                    >
-                      {link.name}
-                      <ChevronDown
-                        className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </button>
-
-                    {isExpanded && (
-                      <div
-                        id={submenuId}
-                        role="region"
-                        aria-label={link.name}
-                        className="mb-2 flex flex-col overflow-hidden rounded-lg bg-[color:var(--cf-surface)]/80 ring-1 ring-inset ring-[color:var(--cf-border)]/60"
-                      >
-                        {link.children!.map((child, index) => (
-                          <Link
-                            key={child.name}
-                            href={child.href}
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={`px-4 py-3 text-base text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] ${
-                              index > 0 ? 'border-t border-[color:var(--cf-border)]/70' : ''
-                            }`}
-                          >
-                            {child.name}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              }
-
-              return (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)]"
-                >
-                  <span>{link.name}</span>
-                  <ChevronRight className="h-5 w-5 text-[color:var(--cf-muted)]" />
-                </Link>
-              )
-            })}
-
-            {ENABLE_USER_SYSTEM && !session && (
-              <button
-                type="button"
-                onClick={openLoginSheet}
-                className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-primary to-secondary px-4 py-3 text-base font-semibold !text-white shadow-sm transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              >
-                <LogIn className="h-4 w-4 !text-white" aria-hidden="true" />
-                {t('nav.login')}
-              </button>
-            )}
-
-            <div className="mt-auto border-t border-[color:var(--cf-border)]/70 pt-6">
-              <div className="flex flex-col items-center gap-3">
-                <Link
-                  href={withLng('/')}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center no-underline"
-                >
-                  <CoinfluxMark className="h-7 w-7" />
-                  <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)]">
-                    oinflux
-                  </span>
-                </Link>
-                <p className="text-center text-sm text-[color:var(--cf-muted)]">
-                  {t('footer.tagline', { defaultValue: '专业的加密资产 数据聚合与多维行情分析终端' })}
-                </p>
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    type="button"
-                    onClick={handleMobileFooterSocialClick}
-                    className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
-                    aria-label="Telegram"
-                  >
-                    <Send className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleMobileFooterSocialClick}
-                    className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
-                    aria-label="X"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleMobileFooterSocialClick}
-                    className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
-                    aria-label="GitHub"
-                  >
-                    <Github className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleMobileFooterSocialClick()
-                      setMobileMenuOpen(false)
-                    }}
-                    className="flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-[color:var(--cf-muted)] no-underline transition-colors hover:text-[color:var(--cf-text-strong)]"
-                  >
-                    <FileText className="h-4 w-4" />
-                    {t('nav.docs', { defaultValue: '文档' })}
-                  </button>
-                </div>
-              </div>
-              <div className="mt-5 border-t border-[color:var(--cf-border)]/50 pt-5 text-center text-xs leading-6 text-[color:var(--cf-muted)]">
-                <p>
-                  {t('footer.copyrightLine', { year })}
-                  <br />
-                  {t('footer.ownership')}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <NavbarMobileMenu
+          links={mobileNavLinks}
+          expandedMenus={expandedMobileMenus}
+          showLoginEntry={ENABLE_USER_SYSTEM && !session}
+          year={year}
+          t={t}
+          withLng={withLng}
+          onClose={() => setMobileMenuOpen(false)}
+          onToggleSubmenu={toggleMobileSubmenu}
+          onOpenLogin={openLoginSheet}
+          onFooterSocialClick={handleMobileFooterSocialClick}
+        />
       )}
     </nav>
   )

@@ -6,7 +6,7 @@ export interface NavbarLink {
   children?: NavbarLink[]
 }
 
-export type NavbarTranslate = (key: string, options?: { defaultValue?: string }) => string
+export type NavbarTranslate = (key: string, options?: Record<string, unknown>) => string
 
 interface MobileNavInput {
   lng: string

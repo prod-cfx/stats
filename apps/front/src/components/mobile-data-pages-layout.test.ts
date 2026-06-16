@@ -12,7 +12,7 @@ describe('mobile data pages layout contracts', () => {
     const marketPage = readSource('app/[lng]/MarketPageClient.tsx')
     const topBar = readSource('components/trading/top-bar/TopBar.tsx')
     const centerChartPanel = readSource('components/trading/center-chart-panel/CenterChartPanel.tsx')
-    const rightPanel = readSource('components/trading/right-panel/RightPanel.tsx')
+    const rightPanel = readSource('components/trading/right-panel/components/RightPanelView.tsx')
 
     expect(marketPage).toContain('sticky top-0 z-40 md:static')
     expect(marketPage).toContain('min-h-[360px]')

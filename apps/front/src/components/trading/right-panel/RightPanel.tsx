@@ -4,16 +4,13 @@ import type { AggregatedLevel, OrderBookLevel as SharedOrderBookLevel } from '@a
 import type { Socket } from 'socket.io-client'
 import type { TickerData } from '@/lib/api'
 import type { DataSource, MarketType } from '@/types/trading'
-import { AlignJustify, ArrowDownUp, ChevronDown, Copy, RotateCcw } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
-import { Spinner } from '@/components/ui/loading'
 import { logger } from '@/lib/logger'
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market'
 import { getWsBaseUrl } from '@/lib/ws'
-import { OrderbookRow } from './components/OrderbookRow'
-import { TradeRow } from './components/TradeRow'
+import { RightPanelView } from './components/RightPanelView'
 
 // 常量定义
 const AUTH_TOKEN_KEY = 'token'
@@ -163,12 +160,6 @@ export const RightPanel = ({
   const sellsRef = useRef<HTMLDivElement>(null)
   const decimalMenuRef = useRef<HTMLDivElement>(null)
   const tabLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // NOTE: Work around a ReactNode type mismatch (multiple @types/react copies) that can make lucide icons fail JSX typing.
-  const ChevronDownIcon = ChevronDown as unknown as React.ComponentType<any>
-  const CopyIcon = Copy as unknown as React.ComponentType<any>
-  const RotateCcwIcon = RotateCcw as unknown as React.ComponentType<any>
-  const AlignJustifyIcon = AlignJustify as unknown as React.ComponentType<any>
-  const ArrowDownUpIcon = ArrowDownUp as unknown as React.ComponentType<any>
 
   useEffect(() => {
     return () => {
@@ -668,218 +659,36 @@ export const RightPanel = ({
     marketType === 'spot' && symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}/USDT` : symbol
 
   return (
-    <div className="relative flex w-full min-w-0 flex-col rounded-none border-l-0 md:rounded-lg md:border-l border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]">
-      {loading && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[color:var(--cf-surface)]/80 backdrop-blur-sm">
-          <Spinner size="md" className="text-primary" />
-        </div>
-      )}
-
-      {/* --- MODULE 1: Top Static Info --- */}
-      <div className="flex-none border-b border-[color:var(--cf-border)]">
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="!text-[15px] !font-semibold !leading-[22px]">{displaySymbol}</span>
-            <CopyIcon className="h-3 w-3 cursor-pointer text-[color:var(--cf-muted)]" />
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            <span className="from-primary to-secondary bg-gradient-to-br bg-clip-text !text-xs !font-semibold !leading-5 text-transparent">
-              {isAggregated
-                ? t('chart.toolbar.aggregationOn')
-                : t(
-                    `rightPanel.exchange${(selectedExchange || 'binance').charAt(0).toUpperCase() + (selectedExchange || 'binance').slice(1)}`,
-                  )}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1 px-3 pb-2 !text-xs !font-normal !leading-5">
-          <div className="flex items-center justify-between">
-            <span className="whitespace-nowrap text-[color:var(--cf-muted)]">
-              {isAggregated ? t('rightPanel.accumulatedTurnoverUsd') : t('rightPanel.turnoverUsd')}:
-            </span>
-            <span className="font-medium whitespace-nowrap">
-              {compactFormatter.format(turnoverVal)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="whitespace-nowrap text-[color:var(--cf-muted)]">
-              {isAggregated
-                ? t('rightPanel.accumulatedNetInflowUsd')
-                : t('rightPanel.netInflowUsd')}
-              :
-            </span>
-            <span className="font-medium whitespace-nowrap text-red-400">
-              {compactFormatter.format(netInflowVal)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="whitespace-nowrap text-[color:var(--cf-muted)]">
-              {t('rightPanel.high')}:
-            </span>
-            <span className="font-medium whitespace-nowrap">{formatUsd(highVal)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="whitespace-nowrap text-[color:var(--cf-muted)]">
-              {t('rightPanel.low')}:
-            </span>
-            <span className="font-medium whitespace-nowrap">{formatUsd(lowVal)}</span>
-          </div>
-        </div>
-
-        {/* 用户系统未接入：隐藏“加预警/加自选/策略/简况”等用户态入口 */}
-      </div>
-
-      {/* --- MODULE 2: Orderbook --- */}
-      <div className="flex flex-col">
-        <div className="flex-none">
-          <div className="relative flex items-center justify-between px-2 py-1.5 text-[color:var(--cf-muted)]">
-            <div className="flex items-center gap-3">
-              <RotateCcwIcon className="h-3.5 w-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-              <AlignJustifyIcon className="h-3.5 w-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-              <ArrowDownUpIcon className="h-3.5 w-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-            </div>
-            <div className="flex items-center gap-2" ref={decimalMenuRef}>
-              <button
-                type="button"
-                onClick={() => setIsDecimalMenuOpen(v => !v)}
-                className="flex items-center gap-1 text-[10px] whitespace-nowrap hover:text-[color:var(--cf-text)]"
-              >
-                <span>{precisionLabel}</span>
-                <ChevronDownIcon className="h-3 w-3" />
-              </button>
-
-              {isDecimalMenuOpen && (
-                <div className="absolute top-full right-2 z-50 mt-1 w-[120px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] py-1 shadow-sm">
-                  {[2, 1, 0, -1, -2].map(p => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => {
-                        setPricePrecision(p)
-                        setIsDecimalMenuOpen(false)
-                      }}
-                      className={`w-full px-3 py-2 text-left !text-xs !leading-5 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
-                        pricePrecision === p
-                          ? 'bg-gradient-to-r from-primary to-secondary !font-semibold text-white'
-                          : 'text-[color:var(--cf-text)]'
-                      }`}
-                    >
-                      {p >= 0
-                        ? t('rightPanel.decimalPlaces', { count: p })
-                        : t('rightPanel.integerPlaces', { count: Math.abs(p) })}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center px-2 py-1 text-[10px] text-[color:var(--cf-muted)]">
-            <span className="w-[35%]">{t('rightPanel.price')}</span>
-            <span className="w-[30%] text-right">
-              {t('rightPanel.amount', { asset: baseAsset })}
-            </span>
-            <span className="w-[35%] pr-1 text-right">{t('rightPanel.orderValue')}</span>
-          </div>
-        </div>
-
-        <div className="flex flex-col">
-          <div ref={sellsRef} className="cf-scrollbar h-[160px] md:h-[200px] overflow-y-auto pr-1">
-            {orderbook.sells.map(s => (
-              <OrderbookRow
-                key={`sell-${s.price}-${s.amount}-${s.total}`}
-                price={s.price}
-                amount={s.amount}
-                total={s.total}
-                type="sell"
-                depthPercent={s.depth}
-              />
-            ))}
-          </div>
-
-          {/* Orderbook 中间栏“价格 + 24h 涨跌幅”展示：
-              - 价格：displayLastPrice（ticker last 优先；ticker 缺失时回退到 midPrice）
-              - 涨跌幅：displayChangePct（ticker 24h 涨跌幅优先；ticker 缺失时回退到 mock 百分比） */}
-          <div className="z-10 my-0.5 flex flex-none items-center justify-between border-y border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] px-2 py-1">
-            <div className="flex flex-col">
-              <span className="!text-base !font-semibold !leading-6 text-green-400">
-                {priceFormatter.format(displayLastPrice)}
-              </span>
-              <span className="text-[10px] text-[color:var(--cf-muted)]">
-                {formatUsd(displayLastPrice)}
-              </span>
-            </div>
-            <div className="flex flex-col items-end">
-              <span
-                className={`text-xs ${displayChangePct >= 0 ? 'text-green-400' : 'text-red-400'} font-semibold`}
-              >
-                {`${displayChangePct >= 0 ? '+' : ''}${displayChangePct.toFixed(2)}%`}
-              </span>
-              <span
-                className={`text-[10px] ${displayChangePct >= 0 ? 'text-green-400' : 'text-red-400'} font-medium`}
-              >
-                {`${displayChangePct >= 0 ? '+' : ''}${priceFormatter.format(displayChangeAbs)}`}
-              </span>
-            </div>
-          </div>
-
-          <div className="cf-scrollbar h-[160px] md:h-[200px] overflow-y-auto pr-1">
-            {orderbook.buys.map(b => (
-              <OrderbookRow
-                key={`buy-${b.price}-${b.amount}-${b.total}`}
-                price={b.price}
-                amount={b.amount}
-                total={b.total}
-                type="buy"
-                depthPercent={b.depth}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* --- MODULE 3: Trades --- */}
-      <div className="flex h-[360px] md:h-[420px] flex-none flex-col border-t-4 border-[color:var(--cf-bg)]">
-        <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2">
-          <div className="flex gap-4">
-            {['latest', 'large'].map(id => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleTabChange(id)}
-                className={`relative border-b-2 py-2 !text-xs !font-semibold !leading-5 transition-colors ${tradeTab === id ? 'border-transparent text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
-              >
-                {id === 'latest' ? t('rightPanel.latestTrades') : t('rightPanel.largeTrades')}
-                {tradeTab === id && (
-                  <span className="absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <ArrowDownUpIcon className="h-3.5 w-3.5 cursor-pointer text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]" />
-          </div>
-        </div>
-
-        <div className="flex items-center bg-[color:var(--cf-surface)] px-2 py-1 text-[10px] text-[color:var(--cf-muted)]">
-          <span className="w-[35%]">{t('rightPanel.price')}</span>
-          <span className="w-[30%] text-right">{t('rightPanel.amount', { asset: baseAsset })}</span>
-          <span className="w-[35%] pr-1 text-right">{t('rightPanel.tradeTime')}</span>
-        </div>
-
-        <div className="cf-scrollbar flex-1 overflow-y-auto bg-[color:var(--cf-surface)] pr-1">
-          {trades.map(t => (
-            <TradeRow
-              key={t.id}
-              price={t.price}
-              amount={t.amount}
-              time={t.time}
-              type={t.type as 'buy' | 'sell'}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
+    <RightPanelView
+      loading={loading}
+      displaySymbol={displaySymbol}
+      isAggregated={isAggregated}
+      selectedExchange={selectedExchange}
+      baseAsset={baseAsset}
+      turnoverLabel={compactFormatter.format(turnoverVal)}
+      netInflowLabel={compactFormatter.format(netInflowVal)}
+      highLabel={formatUsd(highVal)}
+      lowLabel={formatUsd(lowVal)}
+      orderbook={orderbook}
+      trades={trades}
+      tradeTab={tradeTab}
+      precisionLabel={precisionLabel}
+      pricePrecision={pricePrecision}
+      isDecimalMenuOpen={isDecimalMenuOpen}
+      displayLastPriceLabel={priceFormatter.format(displayLastPrice)}
+      displayLastPriceUsdLabel={formatUsd(displayLastPrice)}
+      displayChangePctLabel={`${displayChangePct >= 0 ? '+' : ''}${displayChangePct.toFixed(2)}%`}
+      displayChangeAbsLabel={`${displayChangePct >= 0 ? '+' : ''}${priceFormatter.format(displayChangeAbs)}`}
+      displayChangePositive={displayChangePct >= 0}
+      sellsRef={sellsRef}
+      decimalMenuRef={decimalMenuRef}
+      t={t}
+      onToggleDecimalMenu={() => setIsDecimalMenuOpen(v => !v)}
+      onSelectPrecision={precision => {
+        setPricePrecision(precision)
+        setIsDecimalMenuOpen(false)
+      }}
+      onTabChange={handleTabChange}
+    />
   )
 }
