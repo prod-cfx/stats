@@ -38,6 +38,7 @@ describe('backtestingProxyController', () => {
     const pipe = new ValidationPipe({
       whitelist: true,
       transform: true,
+      forbidNonWhitelisted: true,
     })
 
     return pipe.transform(value, {
@@ -110,6 +111,7 @@ describe('backtestingProxyController', () => {
       },
       allowPartial: false,
       conversationId: 'conversation-1',
+      sessionId: 'session-1',
       eventStreams: {
         'webhook.tradingview_buy': [{
           id: 'synthetic-webhook-tradingview-buy-1',
@@ -149,6 +151,7 @@ describe('backtestingProxyController', () => {
       }),
       allowPartial: false,
       conversationId: 'conversation-1',
+      sessionId: 'session-1',
       eventStreams: {
         'webhook.tradingview_buy': [{
           id: 'synthetic-webhook-tradingview-buy-1',

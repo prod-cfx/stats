@@ -211,6 +211,12 @@ export class BacktestingCreateJobRequestDto {
   @IsNotEmpty()
   conversationId?: string
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionId?: string
+
   @ApiProperty({ type: BacktestingCreateJobExecutionDto })
   @ValidateNested()
   @Type(() => BacktestingCreateJobExecutionDto)
