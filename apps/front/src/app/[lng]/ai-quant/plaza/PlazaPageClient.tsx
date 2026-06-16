@@ -23,8 +23,8 @@ import {
   startStrategyPlazaEditSession,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
+import { STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE } from './strategy-plaza-client-errors'
 
-const OKX_DEMO_API_KEY_REQUIRED_CODE = 'strategy_plaza.okx_demo_api_key_required'
 const INTENT_TTL_MS = 10 * 60 * 1000
 
 function isExistingStrategyPlazaRunResult(
@@ -191,7 +191,10 @@ export function AiQuantPlazaPageClient() {
       }
       router.push(strategyDetailHref(strategy.id))
     } catch (error) {
-      if (error instanceof ApiError && error.code === OKX_DEMO_API_KEY_REQUIRED_CODE) {
+      if (
+        error instanceof ApiError &&
+        error.code === STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE
+      ) {
         setIntent({ type: 'plaza-run', templateId })
         router.push(
           `/${lng}/account?tab=settings&redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}#exchange-api`,

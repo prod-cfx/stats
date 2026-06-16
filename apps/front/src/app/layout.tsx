@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { headers } from 'next/headers'
+import Script from 'next/script'
+import { ROOT_LAYOUT_BOOTSTRAP_SCRIPT } from './layout-bootstrap-script'
 import './globals.css'
 
 const ROUTE_LOCALE_HEADER = 'x-coinflux-locale'
@@ -20,35 +22,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang={htmlLang} suppressHydrationWarning>
       <head>
-        <script
-          // Static boot script only. Do not interpolate props, query params, localStorage values, or API data into this HTML sink.
-          // eslint-disable-next-line react-dom/no-dangerously-set-innerhtml
-          dangerouslySetInnerHTML={{
-            __html: `
-              // Theme init: apply before paint to avoid flicker
-              ;(() => {
-                try {
-                  const key = 'cf-theme'
-                  const stored = localStorage.getItem(key)
-                  const theme = stored === 'light' || stored === 'dark' ? stored : 'dark'
-                  document.documentElement.dataset.theme = theme
-                  document.documentElement.classList.toggle('dark', theme === 'dark')
-                  document.documentElement.style.colorScheme = theme
-                } catch {}
-              })()
-
-              // Ignore extension-injected ethereum redefinition errors
-              window.addEventListener('error', (event) => {
-                if (event.message && (
-                  event.message.includes('Cannot redefine property: ethereum') ||
-                  event.message.includes('inpage.js')
-                )) {
-                  event.stopImmediatePropagation();
-                }
-              }, true);
-            `,
-          }}
-        />
+        <Script id="root-layout-bootstrap" strategy="beforeInteractive">
+          {ROOT_LAYOUT_BOOTSTRAP_SCRIPT}
+        </Script>
       </head>
       <body
         className="selection:bg-primary/30 min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] antialiased"

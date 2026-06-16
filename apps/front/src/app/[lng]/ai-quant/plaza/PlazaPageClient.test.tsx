@@ -1,11 +1,14 @@
 /** @jest-environment jsdom */
 
 import type { StrategyPlazaTemplate } from '@/lib/api'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ApiError } from '@/lib/errors'
 import { AiQuantPlazaPageClient } from './PlazaPageClient'
+import { STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE } from './strategy-plaza-client-errors'
 
 const mockPush = jest.fn()
 const mockFetchStrategyPlazaTemplates = jest.fn<() => Promise<StrategyPlazaTemplate[]>>()
@@ -525,5 +528,14 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockPush).toHaveBeenCalledWith(
       '/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api',
     )
+  })
+
+  it('uses a non-secret client-side name for the OKX binding error code', () => {
+    expect(STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE).toBe(
+      'strategy_plaza.okx_demo_api_key_required',
+    )
+
+    const source = readFileSync(join(__dirname, 'PlazaPageClient.tsx'), 'utf8')
+    expect(source).not.toContain('OKX_DEMO_API_KEY_REQUIRED_CODE')
   })
 })

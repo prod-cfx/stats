@@ -1,0 +1,2 @@
+export const STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE =
+  'strategy_plaza.okx_demo_api_key_required'
