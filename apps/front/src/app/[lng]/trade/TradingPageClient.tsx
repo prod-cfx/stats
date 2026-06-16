@@ -11,6 +11,7 @@ import { LeftTradePanel } from '@/components/trading/left-trade-panel'
 import { RightPanel } from '@/components/trading/right-panel'
 import { TopBar } from '@/components/trading/top-bar'
 import { Skeleton } from '@/components/ui/loading'
+import { createSearchParamReader } from '@/lib/search-params'
 
 const CenterChartPanel = dynamic(
   () => import('@/components/trading/center-chart-panel').then(mod => mod.CenterChartPanel),
@@ -32,7 +33,10 @@ function normalizeSymbol(raw: string | null): string | null {
 }
 
 export default function TradingPageClient() {
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
+  const { get, has } = useMemo(() => createSearchParamReader(searchParams), [searchParams])
   const [isAggregated, setIsAggregated] = useState(true)
   const [selectedExchange, setSelectedExchange] = useState<DataSource>('binance')
   const [marketType, setMarketType] = useState<MarketType>('futures')
@@ -41,14 +45,14 @@ export default function TradingPageClient() {
   const initializedRef = useRef(false)
 
   const initialFromUrl = useMemo(() => {
-    const symbol = normalizeSymbol(searchParams?.get('symbol') ?? null)
-    const mt = searchParams?.get('marketType')
+    const symbol = normalizeSymbol(get('symbol'))
+    const mt = get('marketType')
     const marketTypeParam: MarketType | null =
       mt === 'spot' || mt === 'futures' ? (mt as MarketType) : null
-    const agg = searchParams?.get('agg')
+    const agg = get('agg')
     const isAggParam = agg === '1' ? true : agg === '0' ? false : null
     return { symbol, marketType: marketTypeParam, isAggregated: isAggParam }
-  }, [searchParams])
+  }, [get])
 
   // Init from URL params or localStorage (first mount only).
   useEffect(() => {
@@ -81,18 +85,16 @@ export default function TradingPageClient() {
   // If user navigates to the same page with different query params (e.g. via global search),
   // update state accordingly. Only apply when URL actually provides overrides.
   useEffect(() => {
-    if (!searchParams) return
-    const hasOverrides =
-      searchParams.has('symbol') || searchParams.has('marketType') || searchParams.has('agg')
+    const hasOverrides = has('symbol') || has('marketType') || has('agg')
     if (!hasOverrides) return
 
-    const nextSymbol = normalizeSymbol(searchParams.get('symbol'))
-    const nextMarketTypeRaw = searchParams.get('marketType')
+    const nextSymbol = normalizeSymbol(get('symbol'))
+    const nextMarketTypeRaw = get('marketType')
     const nextMarketType: MarketType | null =
       nextMarketTypeRaw === 'spot' || nextMarketTypeRaw === 'futures'
         ? (nextMarketTypeRaw as MarketType)
         : null
-    const agg = searchParams.get('agg')
+    const agg = get('agg')
     const nextAgg: boolean | null = agg === '1' ? true : agg === '0' ? false : null
 
     // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- event-driven navigation update
@@ -101,7 +103,7 @@ export default function TradingPageClient() {
     if (nextMarketType && nextMarketType !== marketType) setMarketType(nextMarketType)
     // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- event-driven navigation update
     if (typeof nextAgg === 'boolean' && nextAgg !== isAggregated) setIsAggregated(nextAgg)
-  }, [isAggregated, marketType, searchParams, selectedSymbol])
+  }, [get, has, isAggregated, marketType, selectedSymbol])
 
   // Persist to localStorage so global search can deep-link without a user system.
   useEffect(() => {

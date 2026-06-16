@@ -1,11 +1,22 @@
+import type { Metadata } from 'next'
 import type { BacktestReportContext, BacktestReportMetrics } from './backtest-report-data'
 import type { BacktestJobResultSummary } from '@/lib/server-api'
 import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { getPageMetadata } from '@/lib/page-metadata'
 import { fetchBacktestJobServer } from '@/lib/server-api'
 import { normalizeBacktestMarketType } from './backtest-result-presentation'
 import { BacktestReportClient } from './BacktestReportClient'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lng: string, id: string }> | { lng: string, id: string }
+}): Promise<Metadata> {
+  const resolved = await Promise.resolve(params)
+  return getPageMetadata('ai-quant/backtest', resolved.lng, `/ai-quant/backtest/${resolved.id}`)
+}
 
 interface CoverageRange {
   fromTs: number

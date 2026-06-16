@@ -12,6 +12,7 @@ import { shouldSuppressAuthGate, suppressNextAuthGate } from '@/features/auth/au
 import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
 import { useAuth } from '@/hooks/use-auth'
+import { createSearchParamReader } from '@/lib/search-params'
 
 function maskEmail(email: string) {
   const [name, domain] = email.split('@')
@@ -33,7 +34,10 @@ interface AccountPageClientProps {
 
 export function AccountPageClient({ lng }: AccountPageClientProps) {
   const router = useRouter()
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
+  const { get } = useMemo(() => createSearchParamReader(searchParams), [searchParams])
   const { t } = useTranslation()
   const { error, success } = useToast()
   const { session, isLoading, sendEmailCode, bindEmail, logout } = useAuth()
@@ -60,7 +64,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
   }, [accountRedirect, isLoading, lng, openAuth, session])
 
   const loginMethods = useMemo(() => new Set(session?.loginMethods || []), [session?.loginMethods])
-  const tabParam = searchParams?.get('tab')
+  const tabParam = get('tab')
   const currentTab: AccountTab = tabParam === 'ai-quant' ? 'ai-quant' : 'settings'
 
   if (!session) {
