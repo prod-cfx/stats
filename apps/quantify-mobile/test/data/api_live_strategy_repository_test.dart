@@ -119,6 +119,44 @@ void main() {
       expect(s.pair, 'SOLUSDT');
     });
 
+    test('getStrategy 解析部署快照字段用于部署成功页回访', () async {
+      final _StubLiveStrategyService svc = _StubLiveStrategyService(
+        detailResponse: <String, dynamic>{
+          'data': <String, dynamic>{
+            'id': 'cmqepafqd0ag4duqs0jxmlcda',
+            'name': '交易标的是 BTC-USDT-S',
+            'symbol': 'BTCUSDT',
+            'timeframe': '15m',
+            'exchange': 'okx',
+            'status': 'running',
+            'accountOverview': <String, dynamic>{
+              'initialBalance': 66154.74714299,
+            },
+            'snapshot': <String, dynamic>{
+              'publishedSnapshotId': 'cmqepafqv0ag5duqsm0z3utqd',
+              'deployAt': '2026-06-15T17:39:15.153Z',
+              'deployAccountName': 'mobile-test',
+              'strategyConfig': <String, dynamic>{'marketType': 'perp'},
+              'deploymentExecutionCurrent': <String, dynamic>{'leverage': 1},
+            },
+          },
+        },
+      );
+      final ApiLiveStrategyRepository repo = ApiLiveStrategyRepository(svc);
+
+      final LiveStrategy s = await repo.getStrategy(
+        'cmqepafqd0ag4duqs0jxmlcda',
+      );
+
+      expect(s.status, LiveStrategyStatus.running);
+      expect(s.market, '永续');
+      expect(s.capital, 66154.74714299);
+      expect(s.publishedSnapshotId, 'cmqepafqv0ag5duqsm0z3utqd');
+      expect(s.deployedAt, DateTime.parse('2026-06-15T17:39:15.153Z'));
+      expect(s.deployAccountName, 'mobile-test');
+      expect(s.deploymentLeverage, 1);
+    });
+
     test('空 data → listStrategies 返回空列表且不回退 mock', () async {
       final _StubLiveStrategyService svc = _StubLiveStrategyService(
         listResponse: <String, dynamic>{'data': <Map<String, dynamic>>[]},

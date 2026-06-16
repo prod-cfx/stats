@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/ai_chat_models.dart';
 import '../../data/models/ai_strategy_context.dart';
+import '../../data/providers/repository_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -36,6 +38,97 @@ String stratFileName(Map<String, String> params) {
   final String symbol = params['symbol'] ?? 'BTC/USDT';
   final String base = symbol.split('/').first.toLowerCase();
   return '${base}_trend_ma.js';
+}
+
+class _ResolvingScriptInput extends StatelessWidget {
+  const _ResolvingScriptInput();
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(QzSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.6,
+                color: c.accent,
+              ),
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            Text(
+              '正在检查策略逻辑图',
+              key: const Key('ai-script-resolving-title'),
+              style: TextStyle(
+                color: c.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.xs),
+            Text(
+              '正在确认当前会话是否已有策略逻辑图。',
+              style: TextStyle(color: c.textDim, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResolveScriptInputError extends StatelessWidget {
+  const _ResolveScriptInputError({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(QzSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.error_outline, size: 42, color: c.statusDanger),
+            const SizedBox(height: QzSpacing.md),
+            Text(
+              '逻辑图状态检查失败',
+              key: const Key('ai-script-resolve-error-title'),
+              style: TextStyle(
+                color: c.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.xs),
+            Text(
+              '${l10n.commonLoadError}: $error',
+              style: TextStyle(color: c.textDim, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            OutlinedButton(
+              key: const Key('ai-script-resolve-retry'),
+              onPressed: onRetry,
+              child: Text(l10n.commonRetry),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// 从参数生成 mock 策略脚本（对齐 `m-screens-confirm.jsx` STRAT_SCRIPT_BTC）。
@@ -102,21 +195,31 @@ class AiScriptPage extends ConsumerStatefulWidget {
 class _AiScriptPageState extends ConsumerState<AiScriptPage> {
   static const int _collapsedLines = 12;
 
+  AiPublishedStrategyContext? _resolvedStrategyContext;
+  bool _resolvingInput = false;
+  Object? _resolveError;
+  int _resolveEpoch = 0;
+
   AiScriptPageController get _ctrl =>
       ref.read(aiScriptPageControllerProvider.notifier);
 
-  bool get _hasInputData =>
+  AiPublishedStrategyContext? get _strategyContext =>
+      widget.strategyContext ?? _resolvedStrategyContext;
+
+  bool get _hasDirectInputData =>
       widget.strategyContext != null || widget.params?.isNotEmpty == true;
 
+  bool get _hasInputData =>
+      _strategyContext != null || widget.params?.isNotEmpty == true;
+
   Map<String, String> get _params =>
-      widget.strategyContext?.toRouteParams() ??
+      _strategyContext?.toRouteParams() ??
       ((widget.params != null && widget.params!.isNotEmpty)
           ? widget.params!
           : kStratFallbackParams);
 
-  String get _script =>
-      widget.strategyContext?.scriptCode?.trim().isNotEmpty == true
-      ? widget.strategyContext!.scriptCode!.trim()
+  String get _script => _strategyContext?.scriptCode?.trim().isNotEmpty == true
+      ? _strategyContext!.scriptCode!.trim()
       : buildStratScript(_params);
   String get _fileName => stratFileName(_params);
   String? get _codegenStatus =>
@@ -124,18 +227,77 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
       _params['codegen_status'] ??
       _params['status'];
   String? get _codegenError => _params['codegenError'] ?? _params['error'];
-  bool get _canBacktest => widget.strategyContext?.hasPublishedSnapshot == true;
+  bool get _canBacktest => _strategyContext?.hasPublishedSnapshot == true;
 
   @override
   void initState() {
     super.initState();
-    Future<void>.microtask(_syncCodegenStatus);
+    _resolvingInput = !_hasDirectInputData;
+    Future<void>.microtask(_resolveInputData);
   }
 
   @override
   void didUpdateWidget(covariant AiScriptPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.params != widget.params) _syncCodegenStatus();
+    if (oldWidget.params != widget.params ||
+        oldWidget.strategyContext != widget.strategyContext) {
+      _resolveInputData();
+    }
+  }
+
+  Future<void> _resolveInputData() async {
+    final int epoch = ++_resolveEpoch;
+    if (_hasDirectInputData) {
+      if (mounted) {
+        setState(() {
+          _resolvedStrategyContext = null;
+          _resolvingInput = false;
+          _resolveError = null;
+        });
+      }
+      _syncCodegenStatus();
+      return;
+    }
+
+    setState(() {
+      _resolvedStrategyContext = null;
+      _resolvingInput = true;
+      _resolveError = null;
+    });
+    try {
+      final List<AiSession> sessions = await ref
+          .read(aiChatRepositoryProvider)
+          .listSessions();
+      final AiPublishedStrategyContext? context = _latestScriptContext(
+        sessions,
+      );
+      if (!mounted || epoch != _resolveEpoch) return;
+      setState(() {
+        _resolvedStrategyContext = context;
+        _resolvingInput = false;
+      });
+      _syncCodegenStatus();
+    } catch (error) {
+      if (!mounted || epoch != _resolveEpoch) return;
+      setState(() {
+        _resolveError = error;
+        _resolvingInput = false;
+      });
+    }
+  }
+
+  AiPublishedStrategyContext? _latestScriptContext(List<AiSession> sessions) {
+    for (final AiSession session in sessions) {
+      for (final ChatTurn turn in session.messages.reversed) {
+        final AiPublishedStrategyContext? context = turn.strategyContext;
+        if (turn.kind == ChatTurnKind.scriptReady &&
+            context != null &&
+            (context.hasPublishedSnapshot || context.hasScript)) {
+          return context;
+        }
+      }
+    }
+    return null;
   }
 
   void _syncCodegenStatus() {
@@ -157,10 +319,11 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
   }
 
   void _next() {
+    final AiPublishedStrategyContext? strategyContext = _strategyContext;
     if (!ref.read(aiScriptPageControllerProvider).ready || !_canBacktest) {
       return;
     }
-    context.push('/ai/backtest-config', extra: widget.strategyContext);
+    context.push('/ai/backtest-config', extra: strategyContext);
   }
 
   @override
@@ -184,7 +347,14 @@ class _AiScriptPageState extends ConsumerState<AiScriptPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _hasInputData
+        child: _resolvingInput
+            ? const _ResolvingScriptInput()
+            : _resolveError != null
+            ? _ResolveScriptInputError(
+                error: _resolveError.toString(),
+                onRetry: _resolveInputData,
+              )
+            : _hasInputData
             ? Column(
                 children: <Widget>[
                   Expanded(

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
+import '../../data/models/ai_strategy_context.dart';
 import '../../data/providers.dart';
 import '../../data/services/api_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -59,20 +60,117 @@ class AiConfirmPage extends ConsumerStatefulWidget {
   ConsumerState<AiConfirmPage> createState() => _AiConfirmPageState();
 }
 
+class _ResolvingConfirmInput extends StatelessWidget {
+  const _ResolvingConfirmInput();
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(QzSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.6,
+                color: c.accent,
+              ),
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            Text(
+              '正在检查策略逻辑图',
+              key: const Key('ai-confirm-resolving-title'),
+              style: TextStyle(
+                color: c.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.xs),
+            Text(
+              '正在确认当前会话是否已有策略逻辑图。',
+              style: TextStyle(color: c.textDim, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResolveConfirmInputError extends StatelessWidget {
+  const _ResolveConfirmInputError({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(QzSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.error_outline, size: 42, color: c.statusDanger),
+            const SizedBox(height: QzSpacing.md),
+            Text(
+              '逻辑图状态检查失败',
+              key: const Key('ai-confirm-resolve-error-title'),
+              style: TextStyle(
+                color: c.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.xs),
+            Text(
+              '${l10n.commonLoadError}: $error',
+              style: TextStyle(color: c.textDim, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            OutlinedButton(
+              key: const Key('ai-confirm-resolve-retry'),
+              onPressed: onRetry,
+              child: Text(l10n.commonRetry),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
   static const int _confirmGateAdvanceLimit = 2;
   static const int _publishPollLimit = 60;
   static const Duration _publishPollInterval = Duration(milliseconds: 500);
 
   CodegenSessionResponseDto? _session;
+  AiConfirmArgs? _resolvedArgs;
+  bool _resolvingInput = false;
+  Object? _resolveError;
+  int _resolveEpoch = 0;
   bool _loading = false;
   bool _confirming = false;
   String? _error;
 
+  AiConfirmArgs? get _effectiveArgs => widget.args ?? _resolvedArgs;
+
   Map<String, String> get _params {
     final Map<String, String> remote = _paramsFromSession(_session);
     if (remote.isNotEmpty) return remote;
-    final Map<String, String>? argParams = widget.args?.params;
+    final Map<String, String>? argParams = _effectiveArgs?.params;
     if (argParams != null && argParams.isNotEmpty) return argParams;
     if (widget.params != null && widget.params!.isNotEmpty) {
       return widget.params!;
@@ -81,22 +179,123 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
   }
 
   String? get _sessionId =>
-      widget.args?.codegenSessionId?.trim().isNotEmpty == true
-      ? widget.args!.codegenSessionId!.trim()
+      _effectiveArgs?.codegenSessionId?.trim().isNotEmpty == true
+      ? _effectiveArgs!.codegenSessionId!.trim()
       : null;
+
+  bool get _hasDirectInputData =>
+      widget.args != null || widget.params?.isNotEmpty == true;
 
   bool get _hasInputData =>
       _session != null ||
       _sessionId != null ||
-      widget.args?.params?.isNotEmpty == true ||
+      _effectiveArgs?.params?.isNotEmpty == true ||
       widget.params?.isNotEmpty == true;
 
   @override
   void initState() {
     super.initState();
-    if (_sessionId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadSession());
+    _resolvingInput = !_hasDirectInputData;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resolveInputData());
+  }
+
+  @override
+  void didUpdateWidget(covariant AiConfirmPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.args != widget.args || oldWidget.params != widget.params) {
+      _resolveInputData();
     }
+  }
+
+  Future<void> _resolveInputData() async {
+    final int epoch = ++_resolveEpoch;
+    if (_hasDirectInputData) {
+      if (mounted) {
+        setState(() {
+          _resolvedArgs = null;
+          _resolvingInput = false;
+          _resolveError = null;
+        });
+      }
+      if (_sessionId != null) await _loadSession();
+      return;
+    }
+
+    setState(() {
+      _resolvedArgs = null;
+      _session = null;
+      _resolvingInput = true;
+      _resolveError = null;
+      _error = null;
+    });
+    try {
+      final List<AiSession> sessions = await ref
+          .read(aiChatRepositoryProvider)
+          .listSessions();
+      final AiConfirmArgs? args = _latestConfirmArgs(sessions);
+      CodegenSessionResponseDto? session;
+      final String? sessionId = args?.codegenSessionId?.trim();
+      if (sessionId != null && sessionId.isNotEmpty) {
+        try {
+          session = await ref
+              .read(aiChatRepositoryProvider)
+              .getCodegenSession(sessionId);
+        } catch (error) {
+          if (args?.params?.isNotEmpty != true) rethrow;
+        }
+      }
+      if (!mounted || epoch != _resolveEpoch) return;
+      setState(() {
+        _resolvedArgs = args;
+        _session = session;
+        _resolvingInput = false;
+      });
+    } catch (error) {
+      if (!mounted || epoch != _resolveEpoch) return;
+      setState(() {
+        _resolveError = error;
+        _resolvingInput = false;
+      });
+    }
+  }
+
+  AiConfirmArgs? _latestConfirmArgs(List<AiSession> sessions) {
+    for (final AiSession session in sessions) {
+      for (final ChatTurn turn in session.messages.reversed) {
+        if (turn.kind == ChatTurnKind.params &&
+            turn.params?.isNotEmpty == true) {
+          return AiConfirmArgs(
+            codegenSessionId: _turnCodegenSessionId(turn, session),
+            confirmedCanonicalDigest:
+                turn.confirmedCanonicalDigest ?? session.pendingCanonicalDigest,
+            params: turn.params,
+          );
+        }
+        final AiPublishedStrategyContext? context = turn.strategyContext;
+        if (turn.kind == ChatTurnKind.scriptReady && context != null) {
+          return AiConfirmArgs(
+            codegenSessionId: context.codegenSessionId,
+            params: context.toRouteParams(),
+          );
+        }
+      }
+      final String? sessionId = session.llmCodegenSessionId;
+      if (sessionId?.trim().isNotEmpty == true) {
+        return AiConfirmArgs(
+          codegenSessionId: sessionId!.trim(),
+          confirmedCanonicalDigest: session.pendingCanonicalDigest,
+        );
+      }
+    }
+    return null;
+  }
+
+  String? _turnCodegenSessionId(ChatTurn turn, AiSession session) {
+    final String? turnSessionId = turn.codegenSessionId;
+    if (turnSessionId?.trim().isNotEmpty == true) return turnSessionId!.trim();
+    final String? sessionId = session.llmCodegenSessionId;
+    if (sessionId?.trim().isNotEmpty == true) return sessionId!.trim();
+    return null;
   }
 
   Future<void> _loadSession() async {
@@ -161,6 +360,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
               message: '确认策略',
               confirmedCanonicalDigest:
                   widget.args?.confirmedCanonicalDigest ??
+                  _resolvedArgs?.confirmedCanonicalDigest ??
                   _session?.canonicalDigest,
             );
       } catch (error) {
@@ -278,6 +478,7 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
   void _ensureDigestCompatible(CodegenSessionResponseDto snapshot) {
     final String local =
         widget.args?.confirmedCanonicalDigest?.trim() ??
+        _resolvedArgs?.confirmedCanonicalDigest?.trim() ??
         _session?.canonicalDigest?.trim() ??
         '';
     final String remote = snapshot.canonicalDigest?.trim() ?? '';
@@ -393,7 +594,14 @@ class _AiConfirmPageState extends ConsumerState<AiConfirmPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _hasInputData
+        child: _resolvingInput
+            ? const _ResolvingConfirmInput()
+            : _resolveError != null
+            ? _ResolveConfirmInputError(
+                error: _resolveError.toString(),
+                onRetry: _resolveInputData,
+              )
+            : _hasInputData
             ? Column(
                 children: <Widget>[
                   // 滚动区 + sticky 渐变操作区叠放（对齐设计稿 `position:absolute`）。

@@ -58,6 +58,19 @@ class LiveStrategy {
   /// 权益曲线原始采样点。
   final List<double> spark;
 
+  /// 后端发布快照 ID。部署页用它识别「这个 AI 策略是否已经部署」，避免
+  /// 重复发起 deploy。
+  final String? publishedSnapshotId;
+
+  /// 首次部署/开始运行时间。成功页展示启动时间。
+  final DateTime? deployedAt;
+
+  /// 部署使用的交易所账户展示名。
+  final String? deployAccountName;
+
+  /// 当前部署执行杠杆。
+  final double? deploymentLeverage;
+
   const LiveStrategy({
     required this.id,
     required this.name,
@@ -77,6 +90,10 @@ class LiveStrategy {
     required this.winRate,
     required this.spark,
     this.statusNote,
+    this.publishedSnapshotId,
+    this.deployedAt,
+    this.deployAccountName,
+    this.deploymentLeverage,
   });
 
   /// 是否处于活跃态（参与聚合统计）。stopped 不计入。
@@ -116,6 +133,10 @@ class LiveStrategy {
       trades: trades,
       winRate: winRate,
       spark: spark,
+      publishedSnapshotId: publishedSnapshotId,
+      deployedAt: deployedAt,
+      deployAccountName: deployAccountName,
+      deploymentLeverage: deploymentLeverage,
     );
   }
 }
@@ -238,5 +259,6 @@ class LiveStrategySummary {
   int get activeCount => runningCount + warningCount + pausedCount;
 
   /// 总收益率（基于本金）。本金为 0 时返回 0 避免除零。
-  double get totalPct => totalCapital == 0 ? 0 : (totalPnl / totalCapital) * 100;
+  double get totalPct =>
+      totalCapital == 0 ? 0 : (totalPnl / totalCapital) * 100;
 }

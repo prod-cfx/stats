@@ -1,22 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:backend_api_contracts/backend_api_contracts.dart';
+import 'package:quantify_mobile/data/models/ai_chat_models.dart';
 import 'package:quantify_mobile/data/models/ai_strategy_context.dart';
+import 'package:quantify_mobile/data/providers/repository_providers.dart';
+import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/ai/ai_script_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:riverpod/misc.dart' show Override;
 
 /// #1892 验收：「策略脚本」独立步骤屏，覆盖 生成中 → 就绪 两态。
 Future<void> _pump(
   WidgetTester tester, {
   Map<String, String>? params,
   AiPublishedStrategyContext? strategyContext,
+  AiChatRepository? aiChatRepository,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   await tester.pumpWidget(
     ProviderScope(
+      overrides: <Override>[
+        if (aiChatRepository != null)
+          aiChatRepositoryProvider.overrideWithValue(aiChatRepository),
+      ],
       child: MaterialApp(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -29,6 +39,65 @@ Future<void> _pump(
     ),
   );
   await tester.pump();
+}
+
+class _ScriptPageRepo implements AiChatRepository {
+  const _ScriptPageRepo({
+    this.sessions = const <AiSession>[],
+    this.error,
+    this.delay = Duration.zero,
+  });
+
+  final List<AiSession> sessions;
+  final Object? error;
+  final Duration delay;
+
+  @override
+  Future<List<AiSession>> listSessions() async {
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
+    final Object? error = this.error;
+    if (error != null) throw error;
+    return sessions;
+  }
+
+  @override
+  Future<AiSession> createSession({String? title}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> deleteSession(String sessionId) => throw UnimplementedError();
+
+  @override
+  Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> getCodegenSession(String sessionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<CodegenSessionResponseDto> confirmStrategy(
+    String sessionId, {
+    required String message,
+    String? confirmedCanonicalDigest,
+  }) => throw UnimplementedError();
+
+  @override
+  Stream<ChatTurn> watchSession(String sessionId) => const Stream.empty();
+
+  @override
+  Future<BacktestSummary?> latestBacktest(String sessionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AiSession?> markDeployed(
+    String sessionId,
+    String publishedSnapshotId, {
+    String? strategyName,
+    String? exchangeAccountId,
+    String? exchangeAccountName,
+    Map<String, Object?>? deploymentExecutionConfig,
+  }) => throw UnimplementedError();
 }
 
 void main() {
@@ -61,12 +130,72 @@ void main() {
   });
 
   testWidgets('无策略数据直达脚本页时显示空态', (WidgetTester tester) async {
-    await _pump(tester);
+    await _pump(
+      tester,
+      aiChatRepository: const _ScriptPageRepo(delay: Duration(milliseconds: 1)),
+    );
+
+    expect(find.byKey(const Key('ai-script-resolving-title')), findsOneWidget);
+    expect(find.byKey(const Key('ai-script-empty')), findsNothing);
+
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('ai-script-empty')), findsOneWidget);
     expect(find.text('暂无策略逻辑图，请先在 AI 对话中生成策略。'), findsOneWidget);
     expect(find.byKey(const Key('ai-script-generating')), findsNothing);
     expect(find.byKey(const Key('ai-script-next-cta')), findsNothing);
+  });
+
+  testWidgets('无 route extra 时先检查会话，找到已发布逻辑图后直接显示内容', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      aiChatRepository: _ScriptPageRepo(
+        delay: const Duration(milliseconds: 1),
+        sessions: <AiSession>[
+          AiSession(
+            id: 'session-1',
+            title: 'BTC 策略',
+            category: '趋势',
+            updatedAt: DateTime(2026),
+            messages: <ChatTurn>[
+              ChatTurn(
+                id: 'ready-1',
+                role: 'assistant',
+                content: '脚本已生成',
+                timestamp: DateTime(2026),
+                kind: ChatTurnKind.scriptReady,
+                strategyContext: publishedContext,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    expect(find.byKey(const Key('ai-script-resolving-title')), findsOneWidget);
+    expect(find.byKey(const Key('ai-script-empty')), findsNothing);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ai-script-ready-badge')), findsOneWidget);
+    expect(find.byKey(const Key('ai-script-empty')), findsNothing);
+  });
+
+  testWidgets('逻辑图状态检查失败时显示重试，不显示空态', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      aiChatRepository: _ScriptPageRepo(error: StateError('network down')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('ai-script-resolve-error-title')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ai-script-resolve-retry')), findsOneWidget);
+    expect(find.byKey(const Key('ai-script-empty')), findsNothing);
   });
 
   testWidgets('脚本页不渲染旧五步流程条和返回前序步骤文案（#2437）', (WidgetTester tester) async {

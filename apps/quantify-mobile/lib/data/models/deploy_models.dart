@@ -1,5 +1,5 @@
 /// AI 对话「一键部署」相关模型。
-enum DeployStep { confirm, deploying, success }
+enum DeployStep { resolving, confirm, deploying, success }
 
 /// 一键部署必须由调用方传入的真实上下文。
 class DeploymentContext {

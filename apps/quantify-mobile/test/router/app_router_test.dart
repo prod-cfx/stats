@@ -522,11 +522,10 @@ void main() {
 
     expect(find.byType(AiConfirmPage), findsOneWidget);
     expect(find.text('逻辑图'), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-empty')), findsOneWidget);
-    expect(find.text('暂无策略逻辑图，请先在 AI 对话中生成策略。'), findsOneWidget);
-    expect(find.byKey(const Key('ai-confirm-hero')), findsNothing);
-    expect(find.byKey(const Key('ai-confirm-rule-0')), findsNothing);
-    expect(find.byKey(const Key('ai-confirm-next-cta')), findsNothing);
+    expect(find.byKey(const Key('ai-confirm-empty')), findsNothing);
+    expect(find.byKey(const Key('ai-confirm-hero')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-rule-0')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
   });
 
   testWidgets('/ai/confirm 接收 extra 参数并渲染到策略逻辑区', (WidgetTester tester) async {

@@ -122,10 +122,11 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   static const int _defaultPerTradePct = 20;
   static const int _defaultMaxDailyLossPct = 10;
 
-  DeployStep _step = DeployStep.confirm;
+  DeployStep _step = DeployStep.resolving;
   _DeployTarget? _deployingTarget;
   DeploymentResult? _result;
   Object? _deployError;
+  Object? _resolveError;
   String? _selectedAccountId;
 
   // #1772 资金配置状态。
@@ -147,6 +148,12 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   void didUpdateWidget(covariant QzDeploySheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.deploymentContext != widget.deploymentContext) {
+      setState(() {
+        _resolveError = null;
+        _deployError = null;
+        _result = null;
+        _step = DeployStep.resolving;
+      });
       unawaited(_restoreExistingDeployment());
     }
   }
@@ -166,15 +173,29 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           ? await _findDeploymentResultFromLiveStrategy(deploymentContext)
           : _deploymentResultFromSession(deployed, deploymentContext);
       if (!mounted || widget.deploymentContext != deploymentContext) return;
-      if (result == null) return;
       setState(() {
         _deployError = null;
+        _resolveError = null;
         _result = result;
-        _step = DeployStep.success;
+        _step = result == null ? DeployStep.confirm : DeployStep.success;
       });
-    } catch (_) {
-      // Existing-deploy reconciliation is best effort; normal deploy flow remains.
+    } catch (e) {
+      if (!mounted || widget.deploymentContext != deploymentContext) return;
+      setState(() {
+        _resolveError = e;
+        _step = DeployStep.resolving;
+      });
     }
+  }
+
+  void _retryResolveDeployment() {
+    setState(() {
+      _resolveError = null;
+      _deployError = null;
+      _result = null;
+      _step = DeployStep.resolving;
+    });
+    unawaited(_restoreExistingDeployment());
   }
 
   AiSession? _findDeployedSession(
@@ -203,11 +224,28 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     );
     final List<LiveStrategy> strategies = await repository.listStrategies();
     for (final LiveStrategy strategy in strategies) {
-      if (strategy.name.trim() != snapshotId) continue;
       if (strategy.status == LiveStrategyStatus.stopped) continue;
-      return _deploymentResultFromLiveStrategy(strategy, context);
+      if (_matchesPublishedSnapshot(strategy, snapshotId)) {
+        return _deploymentResultFromLiveStrategy(strategy, context);
+      }
+      try {
+        final LiveStrategy detail = await repository.getStrategy(strategy.id);
+        if (detail.status == LiveStrategyStatus.stopped) continue;
+        if (_matchesPublishedSnapshot(detail, snapshotId)) {
+          return _deploymentResultFromLiveStrategy(detail, context);
+        }
+      } catch (_) {
+        // A list row can disappear before detail fetch. Ignore and keep scanning.
+      }
     }
     return null;
+  }
+
+  bool _matchesPublishedSnapshot(LiveStrategy strategy, String snapshotId) {
+    final String strategySnapshotId =
+        strategy.publishedSnapshotId?.trim() ?? '';
+    if (strategySnapshotId.isNotEmpty) return strategySnapshotId == snapshotId;
+    return strategy.name.trim() == snapshotId;
   }
 
   DeploymentResult _deploymentResultFromSession(
@@ -232,23 +270,35 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     DeploymentContext context,
   ) {
     final DateTime now = DateTime.now();
+    final double amount = strategy.capital > 0
+        ? strategy.capital
+        : context.amount;
+    final double? leverage = strategy.deploymentLeverage;
     return DeploymentResult(
       exchange: strategy.exchange.isNotEmpty
           ? strategy.exchange
           : (context.exchange ?? ''),
       instanceId: strategy.id,
-      deployedAt: now,
+      deployedAt: strategy.deployedAt ?? now,
       strategyId: strategy.id,
       symbol: context.symbol ?? strategy.pair,
-      amount: context.amount,
-      leverage: context.leverage == null ? null : '${context.leverage}x · 全仓',
-      startedAt: now,
+      amount: amount,
+      leverage: leverage == null
+          ? (context.leverage == null ? null : '${context.leverage}x · 全仓')
+          : '${_formatLeverage(leverage)}x · 全仓',
+      startedAt: strategy.deployedAt ?? now,
     );
+  }
+
+  String _formatLeverage(double value) {
+    if (value == value.roundToDouble()) return value.toInt().toString();
+    return value.toStringAsFixed(2);
   }
 
   /// 预检查通过「确认部署」→ 部署中。
   /// 实际部署结果在分步动画跑完后由 `_onDeployingDone` 回填。
   void _confirmDeploy(_DeployTarget target) {
+    if (_step != DeployStep.confirm) return;
     if (!target.authorized) return;
     setState(() {
       _deployingTarget = target;
@@ -389,14 +439,33 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final String title = switch (_step) {
+      DeployStep.resolving => '检查部署状态',
       DeployStep.confirm => l10n.deploySheetTitlePreflight,
       DeployStep.deploying => l10n.deploySheetTitleDeploying,
       DeployStep.success => l10n.deploySheetTitleDone,
     };
-    final AsyncValue<List<ExchangeApiKey>> keys = ref.watch(apiKeysProvider);
     if (widget.deploymentContext == null) {
       return _DeployContextError(showHeader: widget.showHeader);
     }
+
+    if (_step == DeployStep.resolving) {
+      return _DeploySheetFrame(
+        showHeader: widget.showHeader,
+        title: title,
+        step: _step,
+        scheme: c,
+        l10n: l10n,
+        child: _ResolvingPane(
+          error: _resolveError,
+          onRetry: _retryResolveDeployment,
+          onBack: widget.showHeader
+              ? () => Navigator.of(context).maybePop()
+              : () => context.go('/ai'),
+        ),
+      );
+    }
+
+    final AsyncValue<List<ExchangeApiKey>> keys = ref.watch(apiKeysProvider);
     return keys.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: QzSpacing.lg),
@@ -412,46 +481,13 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       data: (List<ExchangeApiKey> list) {
         final _DeployTarget target = _targetFromKeys(list);
         final Widget body = _buildBody(c, l10n, target);
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            QzSpacing.lg,
-            0,
-            QzSpacing.lg,
-            widget.showHeader ? QzSpacing.lg : 0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: widget.showHeader
-                ? MainAxisSize.min
-                : MainAxisSize.max,
-            children: <Widget>[
-              if (widget.showHeader) ...<Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    _StepIndicator(step: _step, scheme: c, l10n: l10n),
-                  ],
-                ),
-                const SizedBox(height: QzSpacing.md),
-              ],
-              if (widget.showHeader)
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SingleChildScrollView(child: body),
-                )
-              else
-                Expanded(child: body),
-            ],
-          ),
+        return _DeploySheetFrame(
+          showHeader: widget.showHeader,
+          title: title,
+          step: _step,
+          scheme: c,
+          l10n: l10n,
+          child: body,
         );
       },
     );
@@ -502,7 +538,156 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
           onViewLive: _viewLiveStrategy,
           stickyActions: !widget.showHeader,
         );
+      case DeployStep.resolving:
+        return _ResolvingPane(
+          error: _resolveError,
+          onRetry: _retryResolveDeployment,
+          onBack: widget.showHeader
+              ? () => Navigator.of(context).maybePop()
+              : () => context.go('/ai'),
+        );
     }
+  }
+}
+
+class _DeploySheetFrame extends StatelessWidget {
+  const _DeploySheetFrame({
+    required this.showHeader,
+    required this.title,
+    required this.step,
+    required this.scheme,
+    required this.l10n,
+    required this.child,
+  });
+
+  final bool showHeader;
+  final String title;
+  final DeployStep step;
+  final QzColorScheme scheme;
+  final AppLocalizations l10n;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        QzSpacing.lg,
+        0,
+        QzSpacing.lg,
+        showHeader ? QzSpacing.lg : 0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: showHeader ? MainAxisSize.min : MainAxisSize.max,
+        children: <Widget>[
+          if (showHeader) ...<Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: scheme.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                _StepIndicator(step: step, scheme: scheme, l10n: l10n),
+              ],
+            ),
+            const SizedBox(height: QzSpacing.md),
+          ],
+          if (showHeader)
+            Flexible(
+              fit: FlexFit.loose,
+              child: SingleChildScrollView(child: child),
+            )
+          else
+            Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResolvingPane extends StatelessWidget {
+  const _ResolvingPane({
+    required this.error,
+    required this.onRetry,
+    required this.onBack,
+  });
+
+  final Object? error;
+  final VoidCallback onRetry;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final bool failed = error != null;
+    return Padding(
+      key: const Key('deploy-resolving'),
+      padding: const EdgeInsets.symmetric(vertical: QzSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Center(
+            child: failed
+                ? Icon(Icons.error_outline, size: 44, color: c.statusDanger)
+                : CircularProgressIndicator(color: c.accent),
+          ),
+          const SizedBox(height: QzSpacing.md),
+          Text(
+            failed ? '部署状态检查失败' : '正在检查部署状态',
+            key: const Key('deploy-resolving-title'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: c.text,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            failed ? '无法确认当前策略是否已部署，请重试后再继续。' : '正在确认是否已有实盘实例，避免重复提交。',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: c.textDim, fontSize: 13, height: 1.5),
+          ),
+          if (failed) ...<Widget>[
+            const SizedBox(height: QzSpacing.md),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.statusDanger, fontSize: 12),
+            ),
+            const SizedBox(height: QzSpacing.lg),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: QzButton(
+                    key: const Key('deploy-resolve-back'),
+                    label: '返回对话',
+                    variant: QzButtonVariant.ghost,
+                    onPressed: onBack,
+                  ),
+                ),
+                const SizedBox(width: QzSpacing.sm),
+                Expanded(
+                  child: QzButton(
+                    key: const Key('deploy-resolve-retry'),
+                    label: '重试',
+                    variant: QzButtonVariant.accent,
+                    onPressed: onRetry,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -562,6 +747,7 @@ class _StepIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final int current = switch (step) {
+      DeployStep.resolving => 1,
       DeployStep.confirm => 1,
       DeployStep.deploying => 2,
       DeployStep.success => 3,

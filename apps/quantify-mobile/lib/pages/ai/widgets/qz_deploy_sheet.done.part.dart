@@ -14,6 +14,12 @@ class _DonePane extends StatelessWidget {
   final VoidCallback onViewLive;
   final bool stickyActions;
 
+  void _showComingSoon(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -115,7 +121,7 @@ class _DonePane extends StatelessWidget {
         title: l10n.deployDoneNextNotifyTitle,
         sub: l10n.deployDoneNextNotifySub,
         scheme: c,
-        onTap: onFinish,
+        onTap: () => _showComingSoon(context, '价格通知功能即将上线'),
       ),
       _NextStepRow(
         stepKey: const Key('deploy-next-tune'),
@@ -123,7 +129,7 @@ class _DonePane extends StatelessWidget {
         title: l10n.deployDoneNextTuneTitle,
         sub: l10n.deployDoneNextTuneSub,
         scheme: c,
-        onTap: onFinish,
+        onTap: () => _showComingSoon(context, 'AI 调优功能即将上线'),
       ),
     ];
     final Widget action = QzButton(

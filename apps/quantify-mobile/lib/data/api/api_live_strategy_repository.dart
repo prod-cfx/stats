@@ -30,8 +30,11 @@ Object? _pickMetric(Map<String, dynamic> m, List<String> keys) {
 }
 
 String _marketLabel(Map<String, dynamic> m) {
+  final Map<String, dynamic> snapshot = asMap(m['snapshot']);
+  final Map<String, dynamic> strategyConfig = asMap(snapshot['strategyConfig']);
   final String raw = asString(
-    _pickMetric(m, <String>['marketType', 'market', 'contractType']),
+    pick(strategyConfig, <String>['marketType']) ??
+        _pickMetric(m, <String>['marketType', 'market', 'contractType']),
   ).trim();
   switch (raw.toLowerCase()) {
     case 'spot':
@@ -46,6 +49,17 @@ String _marketLabel(Map<String, dynamic> m) {
     default:
       return raw;
   }
+}
+
+DateTime? _dateTimeOrNull(Object? raw) {
+  final String text = asString(raw).trim();
+  if (text.isEmpty) return null;
+  return DateTime.tryParse(text);
+}
+
+double? _positiveDoubleOrNull(Object? raw) {
+  final double value = asDouble(raw);
+  return value > 0 ? value : null;
 }
 
 List<double> _spark(Map<String, dynamic> m) {
@@ -80,6 +94,18 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
 
   LiveStrategy _parse(Map<String, dynamic> m) {
     final String exchange = asString(pick(m, <String>['exchange']));
+    final Map<String, dynamic> snapshot = asMap(m['snapshot']);
+    final Map<String, dynamic> deployment = asMap(m['deployment']);
+    final Map<String, dynamic> deploymentExecutionCurrent = asMap(
+      snapshot['deploymentExecutionCurrent'],
+    );
+    final Map<String, dynamic> deploymentExecutionBaseline = asMap(
+      snapshot['deploymentExecutionBaseline'],
+    );
+    final Map<String, dynamic> deploymentExecutionConfig = asMap(
+      deployment['executionConfig'],
+    );
+    final Map<String, dynamic> accountOverview = asMap(m['accountOverview']);
     return LiveStrategy(
       id: asString(pick(m, <String>['id'])),
       name: asString(pick(m, <String>['name'])),
@@ -98,11 +124,35 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
       totalPnl: asDouble(
         pick(m, <String>['totalPnl']) ?? _pickMetric(m, <String>['totalPnl']),
       ),
-      capital: asDouble(_pickMetric(m, <String>['capital', 'totalCapital'])),
+      capital: asDouble(
+        pick(accountOverview, <String>[
+              'initialBalance',
+              'totalEquity',
+              'executionCapital',
+            ]) ??
+            _pickMetric(m, <String>['capital', 'totalCapital']),
+      ),
       trades: asInt(_pickMetric(m, <String>['trades', 'tradeCount'])),
       winRate: asDouble(_pickMetric(m, <String>['winRate', 'winRatePct'])),
       spark: _spark(m),
       statusNote: null,
+      publishedSnapshotId: asStringOrNull(
+        pick(snapshot, <String>['publishedSnapshotId']) ??
+            pick(m, <String>['publishedSnapshotId']),
+      ),
+      deployedAt: _dateTimeOrNull(
+        pick(snapshot, <String>['deployAt']) ??
+            pick(m, <String>['deployAt', 'startedAt']),
+      ),
+      deployAccountName: asStringOrNull(
+        pick(deployment, <String>['exchangeAccountName']) ??
+            pick(snapshot, <String>['deployAccountName']),
+      ),
+      deploymentLeverage: _positiveDoubleOrNull(
+        pick(deploymentExecutionConfig, <String>['leverage']) ??
+            pick(deploymentExecutionCurrent, <String>['leverage']) ??
+            pick(deploymentExecutionBaseline, <String>['leverage']),
+      ),
     );
   }
 

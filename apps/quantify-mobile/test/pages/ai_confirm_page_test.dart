@@ -31,17 +31,24 @@ const Map<String, String> _defaultConfirmParams = <String, String>{
 Future<void> _pump(
   WidgetTester tester, {
   Map<String, String>? params = _defaultConfirmParams,
+  AiChatRepository? aiChatRepository,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildQzThemeData(
-        const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+    ProviderScope(
+      overrides: <Override>[
+        if (aiChatRepository != null)
+          aiChatRepositoryProvider.overrideWithValue(aiChatRepository),
+      ],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(
+          const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+        ),
+        home: AiConfirmPage(params: params),
       ),
-      home: AiConfirmPage(params: params),
     ),
   );
   await tester.pump();
@@ -99,6 +106,8 @@ class _FakeAiChatRepository implements AiChatRepository {
   final List<CodegenSessionResponseDto> _confirmResponses;
   final List<CodegenSessionResponseDto> _getResponses;
   final List<Object> _confirmErrors;
+  Object? listSessionsError;
+  Duration listSessionsDelay = Duration.zero;
   final List<AiSession> sessions = <AiSession>[
     AiSession(
       id: 'chat-session-1',
@@ -143,7 +152,14 @@ class _FakeAiChatRepository implements AiChatRepository {
   }
 
   @override
-  Future<List<AiSession>> listSessions() async => sessions;
+  Future<List<AiSession>> listSessions() async {
+    if (listSessionsDelay > Duration.zero) {
+      await Future<void>.delayed(listSessionsDelay);
+    }
+    final Object? error = listSessionsError;
+    if (error != null) throw error;
+    return sessions;
+  }
 
   @override
   Future<AiSession> createSession({String? title}) async {
@@ -185,11 +201,80 @@ class _FakeAiChatRepository implements AiChatRepository {
 
 void main() {
   testWidgets('无策略数据直达逻辑图页时显示空态', (WidgetTester tester) async {
-    await _pump(tester, params: null);
+    final _FakeAiChatRepository repo = _FakeAiChatRepository()
+      ..sessions.clear()
+      ..listSessionsDelay = const Duration(milliseconds: 1);
+    await _pump(tester, params: null, aiChatRepository: repo);
+
+    expect(find.byKey(const Key('ai-confirm-resolving-title')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-empty')), findsNothing);
+
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('ai-confirm-empty')), findsOneWidget);
     expect(find.text('暂无策略逻辑图，请先在 AI 对话中生成策略。'), findsOneWidget);
     expect(find.byKey(const Key('ai-confirm-next-cta')), findsNothing);
+  });
+
+  testWidgets('无 route extra 时先检查会话，找到 params 后显示逻辑图', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository()
+      ..sessions.clear()
+      ..listSessionsDelay = const Duration(milliseconds: 1);
+    repo.sessions.add(
+      AiSession(
+        id: 'chat-session-1',
+        title: 'BTC 趋势 · 双均线',
+        category: '趋势跟踪',
+        updatedAt: DateTime(2026, 6, 12),
+        llmCodegenSessionId: 'session-1',
+        pendingCanonicalDigest: 'sha256:canonical-1',
+        messages: <ChatTurn>[
+          ChatTurn(
+            id: 'params-1',
+            role: 'assistant',
+            content: '参数已生成',
+            timestamp: DateTime(2026, 6, 12),
+            kind: ChatTurnKind.params,
+            params: const <String, String>{
+              'category': '均线突破',
+              'symbol': 'BTC/USDT',
+              'fast_ma': '7',
+              'slow_ma': '30',
+            },
+            codegenSessionId: 'session-1',
+            confirmedCanonicalDigest: 'sha256:canonical-1',
+          ),
+        ],
+      ),
+    );
+
+    await _pump(tester, params: null, aiChatRepository: repo);
+
+    expect(find.byKey(const Key('ai-confirm-resolving-title')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-empty')), findsNothing);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ai-confirm-hero')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-empty')), findsNothing);
+    expect(find.byKey(const Key('ai-confirm-next-cta')), findsOneWidget);
+    expect(repo.getCalls, <String>['session-1']);
+  });
+
+  testWidgets('逻辑图状态检查失败时显示重试，不显示空态', (WidgetTester tester) async {
+    final _FakeAiChatRepository repo = _FakeAiChatRepository()
+      ..listSessionsError = StateError('network down');
+    await _pump(tester, params: null, aiChatRepository: repo);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('ai-confirm-resolve-error-title')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ai-confirm-resolve-retry')), findsOneWidget);
+    expect(find.byKey(const Key('ai-confirm-empty')), findsNothing);
   });
 
   testWidgets('确认策略 fallback market chip 默认合约 5x（#2066）', (

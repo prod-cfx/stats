@@ -148,15 +148,20 @@ class _FakeAiChatRepo implements AiChatRepository {
 }
 
 class _FakeLiveStrategyRepo implements LiveStrategyRepository {
-  const _FakeLiveStrategyRepo([this.strategies = const <LiveStrategy>[]]);
+  const _FakeLiveStrategyRepo([
+    this.strategies = const <LiveStrategy>[],
+    this.details = const <String, LiveStrategy>{},
+  ]);
 
   final List<LiveStrategy> strategies;
+  final Map<String, LiveStrategy> details;
 
   @override
   Future<List<LiveStrategy>> listStrategies() async => strategies;
 
   @override
   Future<LiveStrategy> getStrategy(String id) async =>
+      details[id] ??
       strategies.firstWhere((LiveStrategy strategy) => strategy.id == id);
 
   @override
@@ -218,7 +223,8 @@ AiSession _deployedSession() => AiSession(
 
 LiveStrategy _liveStrategyFromSnapshot({
   String id = 'live-from-snapshot-1',
-  String name = 'snap-real-2327',
+  String name = '交易标的是 ETH-USDT-S',
+  String? publishedSnapshotId = 'snap-real-2327',
   LiveStrategyStatus status = LiveStrategyStatus.running,
 }) => LiveStrategy(
   id: id,
@@ -238,6 +244,10 @@ LiveStrategy _liveStrategyFromSnapshot({
   trades: 0,
   winRate: 0,
   spark: const <double>[],
+  publishedSnapshotId: publishedSnapshotId,
+  deployedAt: DateTime.utc(2026, 6, 15, 17, 39),
+  deployAccountName: '主账户',
+  deploymentLeverage: 5,
 );
 
 Future<DeploymentResult?> _pumpSheet(
@@ -246,6 +256,7 @@ Future<DeploymentResult?> _pumpSheet(
   AiChatRepository? aiRepo,
   LiveStrategyRepository liveRepo = const _FakeLiveStrategyRepo(),
   DeploymentContext? context = _context,
+  bool settleInitialResolve = true,
 }) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   DeploymentResult? captured;
@@ -286,14 +297,42 @@ Future<DeploymentResult?> _pumpSheet(
   );
   await tester.tap(find.byKey(const Key('open')));
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 320));
-  await tester.pump();
+  if (settleInitialResolve) {
+    await tester.pump(const Duration(milliseconds: 320));
+    await tester.pump();
+  }
   // 测试本身通过 finder/动作驱动状态机并断言可见 UI；sheet 的 Future 在
   // 用例结束时才完成，captured 仅作为存在性占位，调用方无需读取。
   return captured;
 }
 
 void main() {
+  testWidgets('QzDeploySheet: 首帧先检查部署状态，不闪部署前检查按钮', (
+    WidgetTester tester,
+  ) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+
+    await _pumpSheet(tester, repo: repo, settleInitialResolve: false);
+
+    expect(find.byKey(const Key('deploy-resolving')), findsOneWidget);
+    expect(find.text('正在检查部署状态'), findsOneWidget);
+    expect(find.byKey(const Key('deploy-preflight-confirm')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 320));
+    await tester.pump();
+
+    expect(find.text('部署前检查'), findsWidgets);
+    expect(find.byKey(const Key('deploy-preflight-confirm')), findsOneWidget);
+  });
+
   testWidgets(
     'QzDeploySheet: 主流程为 confirm → deploying → success，确认页含可切换账户（#2064/#2065）',
     (WidgetTester tester) async {
@@ -325,7 +364,7 @@ void main() {
       );
       await _pumpSheet(tester, repo: repo, aiRepo: aiRepo);
 
-      // 新版主流程首屏即 confirm；旧选所 / 授权 / 资金配置不在主流程。
+      // 状态检查完成后进入 confirm；旧选所 / 授权 / 资金配置不在主流程。
       expect(find.text('部署前检查'), findsWidgets);
       expect(find.text('选择交易所'), findsNothing);
       expect(find.text('授权部署'), findsNothing);
@@ -396,6 +435,38 @@ void main() {
       expect(find.byKey(const Key('deploy-finish')), findsOneWidget);
     },
   );
+
+  testWidgets('QzDeploySheet: 部署成功页未上线入口点击显示提示', (WidgetTester tester) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+
+    await _pumpSheet(tester, repo: repo);
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2200));
+    await tester.pump();
+
+    expect(find.text('部署成功'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('deploy-next-notify')));
+    await tester.pump();
+    expect(find.text('价格通知功能即将上线'), findsOneWidget);
+    expect(find.text('部署成功'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('deploy-next-tune')));
+    await tester.pump();
+    expect(find.text('AI 调优功能即将上线'), findsOneWidget);
+    expect(find.text('部署成功'), findsWidgets);
+  });
 
   testWidgets('QzDeploySheet: 无已绑定账户时 confirm 预检查失败并提供去绑定 API 入口（#2064）', (
     WidgetTester tester,
@@ -484,14 +555,22 @@ void main() {
         messages: const <ChatTurn>[],
         llmCodegenSessionId: 'codegen-real-2327',
       );
+      final _FakeAiChatRepo aiRepo = _FakeAiChatRepo(
+        sessions: <AiSession>[conversation],
+      );
+      final LiveStrategy listRow = _liveStrategyFromSnapshot(
+        publishedSnapshotId: null,
+      );
+      final LiveStrategy detail = _liveStrategyFromSnapshot();
 
       await _pumpSheet(
         tester,
         repo: repo,
-        aiRepo: _FakeAiChatRepo(sessions: <AiSession>[conversation]),
-        liveRepo: _FakeLiveStrategyRepo(<LiveStrategy>[
-          _liveStrategyFromSnapshot(),
-        ]),
+        aiRepo: aiRepo,
+        liveRepo: _FakeLiveStrategyRepo(
+          <LiveStrategy>[listRow],
+          <String, LiveStrategy>{listRow.id: detail},
+        ),
       );
 
       await tester.pump();
@@ -501,7 +580,9 @@ void main() {
       expect(find.byKey(const Key('deploy-done-detail')), findsOneWidget);
       expect(find.byKey(const Key('deploy-preflight-confirm')), findsNothing);
       expect(find.text('live-from-snapshot-1'), findsWidgets);
+      expect(find.text('5x · 全仓'), findsOneWidget);
       expect(find.text('已部署运行'), findsOneWidget);
+      expect(aiRepo.deployCalls, isEmpty);
       expect(
         tester
             .widget<QzButton>(find.byKey(const Key('deploy-finish')))
@@ -687,6 +768,9 @@ void main() {
           aiChatRepositoryProvider.overrideWithValue(
             _FakeAiChatRepo(session: _deployedSession()),
           ),
+          liveStrategyRepositoryProvider.overrideWithValue(
+            const _FakeLiveStrategyRepo(),
+          ),
         ],
         child: MaterialApp.router(
           locale: const Locale('zh'),
@@ -758,6 +842,9 @@ void main() {
           apiKeyRepositoryProvider.overrideWithValue(repo),
           aiChatRepositoryProvider.overrideWithValue(
             _FakeAiChatRepo(session: _deployedSession()),
+          ),
+          liveStrategyRepositoryProvider.overrideWithValue(
+            const _FakeLiveStrategyRepo(),
           ),
         ],
         child: MaterialApp.router(
