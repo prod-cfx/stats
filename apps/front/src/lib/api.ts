@@ -1,7 +1,4 @@
-import type { schemas } from '@ai/api-contracts'
 import type { StrategyInstanceStatus } from '@ai/shared'
-import type { ZodTypeAny } from 'zod'
-import { validateId } from './api-client'
 export {
   continueLlmCodegenSession,
   deleteAccountAiQuantStrategy,
@@ -15,19 +12,8 @@ export {
   performAccountAiQuantStrategyAction,
   recoverAiQuantEditConversation,
   startLlmCodegenSession,
-  updateAccountAiQuantStrategyLeverage,
   updateAiQuantConversationBacktestDraft,
 } from './api-ai-quant-domain'
-export {
-  fetchProfile,
-  getTelegramLoginConfigRequest,
-  login,
-  registerAccount,
-  requestPasswordReset,
-  sendVerificationCode,
-  type TelegramLoginConfigResponse,
-  verifyPasswordReset,
-} from './api-auth-domain'
 export {
   deleteUserExchangeAccount,
   fetchUserExchangeAccountStatuses,
@@ -38,39 +24,24 @@ export {
   type AggregatedOrderbookLevel,
   type AggregatedOrderbookMarket,
   type AggregatedOrderbookQueryType,
-  type AggregatedOrderbookResponse,
-  type AggregatedOrderbookVenueDetail,
   type AggregatedVolumeApiItem,
-  type AggregatedVolumeApiResponse,
   type CryptoStockQuoteLatest,
   type ExchangeLiquidationResponse,
   type ExchangeLongShortRatioApiItem,
   type ExchangeLongShortTimeRange,
   fetchAggregatedLiquidationSummary,
   fetchAggregatedOpenInterest,
-  type FetchAggregatedOpenInterestQuery,
   fetchAggregatedOrderbook,
   fetchAggregatedOrderbookMarkets,
-  type FetchAggregatedOrderbookParams,
   fetchAggregatedVolume,
-  type FetchAggregatedVolumeQuery,
   fetchCryptoStockQuotesLatest,
   fetchExchangeLiquidation,
   fetchExchangeLongShortRatio,
-  type FetchExchangeLongShortRatioQuery,
-  fetchHistoricalPositions,
   fetchKlineData,
-  type FetchKlineDataParams,
   fetchLongShortRatio,
   fetchMarketDataCatalogItems,
-  fetchOpenPositions,
   fetchPredictionMarkets,
-  type FetchPredictionMarketsParams,
-  fetchTicker,
-  type KlineBar,
   type OpenInterestApiItem,
-  type PositionResponse,
-  type PositionsQueryParams,
   type PredictionMarketCardResponse,
   type TickerData,
 } from './api-market-domain'
@@ -81,74 +52,36 @@ export {
   fetchStrategyPlazaTemplates,
   runStrategyPlazaTemplate,
   startStrategyPlazaEditSession,
-  type StrategyPlazaEditSessionResponse,
   type StrategyPlazaRunResult,
   type StrategyPlazaTemplate,
 } from './api-strategy-plaza-domain'
 export {
-  fetchRealtimeWhaleAlerts,
-  type FetchRealtimeWhaleAlertsParams,
   fetchTraderDiscoverTags,
-  type FetchTraderDiscoverTagsQuery,
   fetchTraderFullData,
-  type FetchTraderFullDataQuery,
-  fetchTraderOpenOrders,
-  type FetchTraderOpenOrdersQuery,
   fetchTraderPositions,
-  type FetchTraderPositionsQuery,
   fetchTraderSnapshot,
-  type FetchTraderSnapshotQuery,
-  fetchUserFills,
-  type FetchUserFillsQuery,
-  fetchUserPortfolio,
-  type FetchUserPortfolioQuery,
   fetchWhaleAddressPerformance,
-  type FetchWhaleAddressPerformanceQuery,
   fetchWhaleHoldings,
-  type FetchWhaleHoldingsQuery,
   fetchWhaleTrackingDiscover,
   fetchWhaleTradesRealtime,
-  type FetchWhaleTradesRealtimeParams,
-  type RealtimeWhaleAlertItem,
   type TraderDiscoverTagsResponse,
   type TraderOpenOrdersResponse,
   type TraderPositionsResponse,
   type TraderSnapshotResponse,
   type WhaleAddressPerformanceResponse,
   type WhaleDiscoverResponse,
-  type WhaleDiscoverTraderAiTag,
   type WhaleHoldingApiItem,
-  type WhaleTradeDto,
 } from './api-whale-domain'
 export {
-  BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
-  BACKTEST_REQUEST_TIMEOUT_MS,
-  type BacktestCapabilities,
-  type BacktestJob,
-  type BacktestJobPhase,
-  type BacktestJobResult,
-  type BacktestSymbolSupportCheckInput,
-  type BacktestSymbolSupportCheckPayload,
-  createBacktestJob,
-  type CreateBacktestJobPayload,
-  fetchBacktestCapabilities,
-  type FetchBacktestCapabilitiesOptions,
-  getBacktestJob,
-  getBacktestJobResult,
   postBacktestSymbolSupportCheck,
 } from './backtesting-api'
 
 // Re-export types for external use
 export type {
-  TraderFullDataResponse,
   UserFillsResponse,
   UserPortfolioResponse,
 } from './hyperliquid-api'
 
-type Infer<T extends ZodTypeAny> = T['_output']
-
-export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeConfigDto>
-export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeConfigResponseDto>
 export type UserExchangeId = 'binance' | 'okx' | 'hyperliquid'
 
 export interface UserExchangeAccountStatus {
@@ -184,15 +117,15 @@ export interface PaginatedResponse<T> {
 export type AccountAiQuantStrategyApiState = Extract<StrategyInstanceStatus, 'running' | 'stopped' | 'draft'>
 export type AccountAiQuantStrategyAction = 'run' | 'stop' | 'liquidate_and_stop'
 
-export interface AccountAiQuantStrategyMetrics {
+interface AccountAiQuantStrategyMetrics {
   returnPct: number | null
   maxDrawdownPct: number | null
   winRatePct: number | null
   tradeCount: number | null
 }
 
-export type AccountAiQuantParamSchema = Record<string, unknown>
-export type AccountAiQuantParamValues = Record<string, unknown>
+type AccountAiQuantParamSchema = Record<string, unknown>
+type AccountAiQuantParamValues = Record<string, unknown>
 
 export interface AccountAiQuantLeverageRange {
   min: number
@@ -251,13 +184,13 @@ export interface AccountAiQuantSnapshotCompatibilityMetadata {
   invalidBinding?: boolean | null
 }
 
-export interface AiQuantBacktestRangeConfig {
+interface AiQuantBacktestRangeConfig {
   preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
   startAt?: string
   endAt?: string
 }
 
-export interface AiQuantBacktestExecutionConfig {
+interface AiQuantBacktestExecutionConfig {
   initialCash: number
   leverage: number | null
   slippageBps: number
@@ -308,19 +241,19 @@ export interface AccountAiQuantStrategyListItem {
   hasActiveConversation?: boolean
 }
 
-export interface AccountAiQuantStrategyEquityPoint {
+interface AccountAiQuantStrategyEquityPoint {
   ts: string
   value: number
 }
 
-export interface AccountAiQuantStrategyTimelineEvent {
+interface AccountAiQuantStrategyTimelineEvent {
   at: string
   eventType: 'system' | 'trade'
   event: string
   note?: string | null
 }
 
-export interface AccountAiQuantRuntimeSemanticSummary {
+interface AccountAiQuantRuntimeSemanticSummary {
   serviceStatusLabel: string
   positionStatusLabel: string
   cycleStatusLabel: string
@@ -344,7 +277,7 @@ export interface AccountAiQuantRuntimeSemanticSummary {
   }
 }
 
-export interface AccountAiQuantStrategySnapshot {
+interface AccountAiQuantStrategySnapshot {
   exchange: string | null
   symbol: string | null
   timeframe: string | null
@@ -441,30 +374,6 @@ export interface AccountAiQuantUpdateLeveragePayload {
   leverage: number
 }
 
-// NOTE: StrategyInstanceSignalPublicResponseDto does not exist in contracts
-// Using a generic type until the DTO is added
-export type TradingSignalResponse = Record<string, unknown>
-
-// NOTE: All LLM strategy and subscription controller methods do not exist in current backend
-// These functions are stubs that will be implemented when the backend controllers are added
-
-export interface LlmStrategyInstanceSignalsQuery {
-  page?: number
-  limit?: number
-}
-
-export interface UserLlmStrategyInstanceResponse {
-  id: string
-  name: string
-  description?: string | null
-  strategyId: string
-  strategyName?: string | null
-  strategyDescription?: string | null
-  llmModel: string
-  createdAt?: string | null
-  isSubscribed?: boolean
-}
-
 export interface LlmCodegenSessionResponse {
   id: string
   conversationId?: string | null
@@ -498,7 +407,7 @@ export interface LlmCodegenSessionResponse {
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }
 
-export interface LlmUnsupportedFallback {
+interface LlmUnsupportedFallback {
   status?: string
   unsupportedAtoms?: Array<Record<string, unknown>>
   recommendedStrategy?: Record<string, unknown> | null
@@ -565,7 +474,7 @@ export interface RecoverAiQuantEditConversationPayload {
   locale?: 'zh' | 'en'
 }
 
-export interface LlmClarificationGateItem {
+interface LlmClarificationGateItem {
   key: string
   field: string
   reason: string
@@ -583,7 +492,7 @@ export interface LlmClarificationGate {
   pendingItems?: LlmClarificationGateItem[]
 }
 
-export interface LlmPublicationGateMismatch {
+interface LlmPublicationGateMismatch {
   field: string
   expected: string
   actual: string
@@ -595,20 +504,20 @@ export interface LlmPublicationGate {
   blockingMismatches: LlmPublicationGateMismatch[]
 }
 
-export interface LlmSemanticGraphNode {
+interface LlmSemanticGraphNode {
   id: string
   phase: 'entry' | 'exit' | 'risk'
   kind: string
   params: Record<string, unknown>
 }
 
-export interface LlmSemanticGraphAction {
+interface LlmSemanticGraphAction {
   id: string
   kind: string
   sizePct: number
 }
 
-export interface LlmSemanticGraphRisk {
+interface LlmSemanticGraphRisk {
   id: string
   kind: string
   valuePct: number
@@ -626,7 +535,7 @@ export interface LlmSemanticGraph {
   risk: LlmSemanticGraphRisk[]
 }
 
-export interface LlmSemanticGraphValidationError {
+interface LlmSemanticGraphValidationError {
   code: string
   message: string
   nodeId?: string
@@ -654,93 +563,4 @@ export interface ContinueLlmCodegenSessionPayload {
   model?: string
   temperature?: number
   maxTokens?: number
-}
-
-export async function fetchLlmStrategyInstances(query?: {
-  page?: number
-  limit?: number
-  llmModel?: string
-  strategyId?: string
-}): Promise<PaginatedResponse<UserLlmStrategyInstanceResponse>> {
-  return {
-    total: 0,
-    page: query?.page ?? 1,
-    limit: query?.limit ?? 20,
-    items: [],
-  }
-}
-
-export async function fetchLlmStrategyInstanceDetail(
-  id: string,
-): Promise<UserLlmStrategyInstanceResponse | null> {
-  validateId(id, 'llm strategy instance ID')
-  return null
-}
-
-export async function fetchLlmStrategyInstanceSignals(
-  id: string,
-  query: LlmStrategyInstanceSignalsQuery = {},
-): Promise<PaginatedResponse<Record<string, unknown>>> {
-  validateId(id, 'llm strategy instance ID')
-  return {
-    total: 0,
-    page: query.page ?? 1,
-    limit: query.limit ?? 20,
-    items: [],
-  }
-}
-
-export interface CreateLlmSubscriptionPayload {
-  llmStrategyInstanceId: string
-  customParams?: Record<string, unknown>
-  exchangeAccountId?: string
-}
-
-export interface LlmSubscriptionResponse {
-  id: string
-  llmStrategyInstanceId: string
-  status: 'active' | 'paused' | 'cancelled'
-  createdAt: string
-}
-
-export async function createLlmSubscription(
-  _payload: CreateLlmSubscriptionPayload,
-): Promise<LlmSubscriptionResponse | null> {
-  return null
-}
-
-export async function fetchMyLlmSubscriptions(query?: {
-  page?: number
-  limit?: number
-  status?: 'active' | 'paused' | 'cancelled'
-}): Promise<PaginatedResponse<LlmSubscriptionResponse>> {
-  return {
-    total: 0,
-    page: query?.page ?? 1,
-    limit: query?.limit ?? 20,
-    items: [],
-  }
-}
-
-export async function fetchLlmSubscriptionDetail(
-  subscriptionId: string,
-): Promise<LlmSubscriptionResponse | null> {
-  validateId(subscriptionId, 'llm subscription ID')
-  return null
-}
-
-export async function updateLlmSubscription(
-  subscriptionId: string,
-  _payload: {
-    status?: 'active' | 'paused' | 'cancelled'
-    customParams?: Record<string, unknown> | null
-    exchangeAccountId?: string | null
-  },
-): Promise<LlmSubscriptionResponse | null> {
-  validateId(subscriptionId, 'llm subscription ID')
-  return null
-}
-
-export async function cancelLlmSubscription(subscriptionId: string): Promise<void> {
-  validateId(subscriptionId, 'llm subscription ID')
 }
