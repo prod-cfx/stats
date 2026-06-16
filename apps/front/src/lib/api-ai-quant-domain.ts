@@ -329,7 +329,6 @@ export async function deployAccountAiQuantStrategy(
       method: 'POST',
       headers: buildAccountAiQuantHeaders(payload.userId.trim()),
       body: JSON.stringify({
-        userId: payload.userId.trim(),
         name: payload.name.trim(),
         deployRequestId: payload.deployRequestId.trim(),
         publishedSnapshotId: payload.publishedSnapshotId.trim(),
