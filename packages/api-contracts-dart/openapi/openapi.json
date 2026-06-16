@@ -241,6 +241,32 @@
         ]
       }
     },
+    "/users/me": {
+      "get": {
+        "operationId": "UserController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/auth/telegram/login-config": {
       "get": {
         "operationId": "AuthController_getTelegramLoginConfig",
@@ -1170,32 +1196,6 @@
         "summary": "更新内测码状态",
         "tags": [
           "admin-beta-codes"
-        ]
-      }
-    },
-    "/users/me": {
-      "get": {
-        "operationId": "UserController_me",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserProfileResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "tags": [
-          "users"
         ]
       }
     },
@@ -2348,7 +2348,49 @@
     "/llm-strategy-instances": {
       "get": {
         "operationId": "LlmStrategyInstancesController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量（最大 100）",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "llmModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "strategyId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -2423,6 +2465,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量（最大 100）",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -2471,7 +2538,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Function"
+                "$ref": "#/components/schemas/LlmSubscriptionCreateRequestDto"
               }
             }
           }
@@ -2500,7 +2567,46 @@
       },
       "get": {
         "operationId": "LlmStrategySubscriptionsController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量（最大 100）",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "cancelled"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -2590,7 +2696,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Function"
+                "$ref": "#/components/schemas/LlmSubscriptionUpdateRequestDto"
               }
             }
           }
@@ -2741,8 +2847,11 @@
             "name": "limit",
             "required": false,
             "in": "query",
+            "description": "返回信号数量上限",
             "schema": {
-              "type": "string"
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
             }
           }
         ],
@@ -3312,12 +3421,15 @@
         "operationId": "AdminUserController_list[0]",
         "parameters": [
           {
-            "name": "keyword",
+            "name": "page",
             "required": false,
             "in": "query",
-            "description": "按用户名模糊搜索",
+            "description": "页码（从 1 开始）",
             "schema": {
-              "type": "string"
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
             }
           },
           {
@@ -3326,18 +3438,20 @@
             "in": "query",
             "description": "每页数量",
             "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
               "example": 20,
               "type": "number"
             }
           },
           {
-            "name": "page",
+            "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "页码（从 1 开始）",
+            "description": "按用户名模糊搜索",
             "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "string"
             }
           }
         ],
@@ -3418,12 +3532,15 @@
         "operationId": "AdminUserController_list[1]",
         "parameters": [
           {
-            "name": "keyword",
+            "name": "page",
             "required": false,
             "in": "query",
-            "description": "按用户名模糊搜索",
+            "description": "页码（从 1 开始）",
             "schema": {
-              "type": "string"
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
             }
           },
           {
@@ -3432,18 +3549,20 @@
             "in": "query",
             "description": "每页数量",
             "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
               "example": 20,
               "type": "number"
             }
           },
           {
-            "name": "page",
+            "name": "keyword",
             "required": false,
             "in": "query",
-            "description": "页码（从 1 开始）",
+            "description": "按用户名模糊搜索",
             "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "string"
             }
           }
         ],
@@ -3738,12 +3857,28 @@
         "operationId": "AdminRoleController_list[0]",
         "parameters": [
           {
-            "name": "code",
+            "name": "page",
             "required": false,
             "in": "query",
-            "description": "按角色编码模糊搜索",
+            "description": "页码（从 1 开始）",
             "schema": {
-              "type": "string"
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
             }
           },
           {
@@ -3756,23 +3891,12 @@
             }
           },
           {
-            "name": "limit",
+            "name": "code",
             "required": false,
             "in": "query",
-            "description": "每页数量",
+            "description": "按角色编码模糊搜索",
             "schema": {
-              "example": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "页码（从 1 开始）",
-            "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "string"
             }
           }
         ],
@@ -3894,12 +4018,28 @@
         "operationId": "AdminRoleController_list[1]",
         "parameters": [
           {
-            "name": "code",
+            "name": "page",
             "required": false,
             "in": "query",
-            "description": "按角色编码模糊搜索",
+            "description": "页码（从 1 开始）",
             "schema": {
-              "type": "string"
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
             }
           },
           {
@@ -3912,23 +4052,12 @@
             }
           },
           {
-            "name": "limit",
+            "name": "code",
             "required": false,
             "in": "query",
-            "description": "每页数量",
+            "description": "按角色编码模糊搜索",
             "schema": {
-              "example": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "页码（从 1 开始）",
-            "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "string"
             }
           }
         ],
@@ -4993,22 +5122,27 @@
             }
           },
           {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "每页数量",
-            "schema": {
-              "example": 20,
-              "type": "number"
-            }
-          },
-          {
             "name": "page",
             "required": false,
             "in": "query",
             "description": "页码（从 1 开始）",
             "schema": {
+              "minimum": 1,
+              "default": 1,
               "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
               "type": "number"
             }
           }
@@ -6345,207 +6479,23 @@
         ]
       }
     },
-    "/whale-alerts/realtime": {
+    "/whale-notification/rules": {
       "get": {
-        "operationId": "WhaleAlertController_getRealtime",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "页码（从 1 开始）",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "example": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "返回记录上限，默认 50，最大 200",
-            "schema": {
-              "minimum": 1,
-              "maximum": 200,
-              "default": 50,
-              "example": 50,
-              "type": "number"
-            }
-          },
-          {
-            "name": "symbol",
-            "required": false,
-            "in": "query",
-            "description": "币种符号，例如 BTC / ETH",
-            "schema": {
-              "example": "BTC",
-              "type": "string"
-            }
-          },
-          {
-            "name": "min_position_value_usd",
-            "required": false,
-            "in": "query",
-            "description": "最小持仓名义价值（USD），默认 1_000",
-            "schema": {
-              "example": 1000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "since",
-            "required": false,
-            "in": "query",
-            "description": "仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时",
-            "schema": {
-              "example": "2025-01-01T00:00:00.000Z",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/BasePaginationResponseDto"
-                    },
-                    {
-                      "properties": {
-                        "items": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/RealtimeWhaleAlertDto"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取 Hyperliquid 鲸鱼持仓预警实时列表",
-        "tags": [
-          "whale-alerts"
-        ]
-      }
-    },
-    "/whale-alerts/trades": {
-      "get": {
-        "operationId": "WhaleAlertController_getWhaleTrades",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "页码（从 1 开始）",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "example": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "返回记录上限，默认 50，最大 200",
-            "schema": {
-              "minimum": 1,
-              "maximum": 200,
-              "default": 50,
-              "example": 50,
-              "type": "number"
-            }
-          },
-          {
-            "name": "symbol",
-            "required": false,
-            "in": "query",
-            "description": "币种符号，例如 BTC / ETH",
-            "schema": {
-              "example": "BTC",
-              "type": "string"
-            }
-          },
-          {
-            "name": "min_trade_value_usd",
-            "required": false,
-            "in": "query",
-            "description": "最小交易价值（USD），默认 1_000",
-            "schema": {
-              "example": 1000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "since",
-            "required": false,
-            "in": "query",
-            "description": "仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时",
-            "schema": {
-              "example": "2025-01-22T00:00:00.000Z",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/BasePaginationResponseDto"
-                    },
-                    {
-                      "properties": {
-                        "items": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/WhaleTradeDto"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取 Hyperliquid 鲸鱼交易实时列表",
-        "tags": [
-          "whale-alerts"
-        ]
-      }
-    },
-    "/whale-alerts/realtime-stream": {
-      "get": {
-        "operationId": "WhaleAlertStreamController_getRealtimeStream",
+        "operationId": "WhaleNotificationRulesController_list",
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WhaleNotificationRuleResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6553,9 +6503,319 @@
             "bearer": []
           }
         ],
-        "summary": "订阅 Hyperliquid 鲸鱼成交实时推送",
+        "summary": "获取当前用户的巨鲸通知规则",
         "tags": [
-          "whale-alerts"
+          "whale-notification"
+        ]
+      },
+      "post": {
+        "operationId": "WhaleNotificationRulesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWhaleNotificationRuleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhaleNotificationRuleResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "创建巨鲸通知规则",
+        "tags": [
+          "whale-notification"
+        ]
+      }
+    },
+    "/whale-notification/rules/{id}": {
+      "put": {
+        "operationId": "WhaleNotificationRulesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWhaleNotificationRuleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhaleNotificationRuleResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "更新巨鲸通知规则",
+        "tags": [
+          "whale-notification"
+        ]
+      },
+      "delete": {
+        "operationId": "WhaleNotificationRulesController_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "example": true
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "删除巨鲸通知规则",
+        "tags": [
+          "whale-notification"
+        ]
+      }
+    },
+    "/whale-notification/notifications": {
+      "get": {
+        "operationId": "WhaleNotificationInboxController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WhaleNotificationInboxResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取当前用户通知收件箱",
+        "tags": [
+          "whale-notification"
+        ]
+      }
+    },
+    "/whale-notification/notifications/{id}/read": {
+      "patch": {
+        "operationId": "WhaleNotificationInboxController_markRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "example": true
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "标记单条通知已读",
+        "tags": [
+          "whale-notification"
+        ]
+      }
+    },
+    "/whale-notification/notifications/read-all": {
+      "post": {
+        "operationId": "WhaleNotificationInboxController_markAllRead",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "example": true
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "标记当前用户全部通知已读",
+        "tags": [
+          "whale-notification"
+        ]
+      }
+    },
+    "/whale-notification/notifications/unread-count": {
+      "get": {
+        "operationId": "WhaleNotificationInboxController_unreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "unread": {
+                          "type": "number",
+                          "example": 3
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取当前用户未读通知数量",
+        "tags": [
+          "whale-notification"
+        ]
+      }
+    },
+    "/whale-notification/metrics": {
+      "get": {
+        "operationId": "WhaleNotificationMetricsController_metrics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Whale 通知流程计数器"
+          }
+        },
+        "summary": "Whale 通知基础指标",
+        "tags": [
+          "WhaleNotification"
         ]
       }
     },
@@ -7678,346 +7938,6 @@
         ]
       }
     },
-    "/whale-notification/rules": {
-      "get": {
-        "operationId": "WhaleNotificationRulesController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WhaleNotificationRuleResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取当前用户的巨鲸通知规则",
-        "tags": [
-          "whale-notification"
-        ]
-      },
-      "post": {
-        "operationId": "WhaleNotificationRulesController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateWhaleNotificationRuleDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WhaleNotificationRuleResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "创建巨鲸通知规则",
-        "tags": [
-          "whale-notification"
-        ]
-      }
-    },
-    "/whale-notification/rules/{id}": {
-      "put": {
-        "operationId": "WhaleNotificationRulesController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateWhaleNotificationRuleDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WhaleNotificationRuleResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "更新巨鲸通知规则",
-        "tags": [
-          "whale-notification"
-        ]
-      },
-      "delete": {
-        "operationId": "WhaleNotificationRulesController_delete",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "type": "boolean",
-                          "example": true
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Success"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "删除巨鲸通知规则",
-        "tags": [
-          "whale-notification"
-        ]
-      }
-    },
-    "/whale-notification/notifications": {
-      "get": {
-        "operationId": "WhaleNotificationInboxController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WhaleNotificationInboxResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取当前用户通知收件箱",
-        "tags": [
-          "whale-notification"
-        ]
-      }
-    },
-    "/whale-notification/notifications/{id}/read": {
-      "patch": {
-        "operationId": "WhaleNotificationInboxController_markRead",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "type": "boolean",
-                          "example": true
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Success"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "标记单条通知已读",
-        "tags": [
-          "whale-notification"
-        ]
-      }
-    },
-    "/whale-notification/notifications/read-all": {
-      "post": {
-        "operationId": "WhaleNotificationInboxController_markAllRead",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "type": "boolean",
-                          "example": true
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Success"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "标记当前用户全部通知已读",
-        "tags": [
-          "whale-notification"
-        ]
-      }
-    },
-    "/whale-notification/notifications/unread-count": {
-      "get": {
-        "operationId": "WhaleNotificationInboxController_unreadCount",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "unread": {
-                          "type": "number",
-                          "example": 3
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Success"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取当前用户未读通知数量",
-        "tags": [
-          "whale-notification"
-        ]
-      }
-    },
-    "/whale-notification/metrics": {
-      "get": {
-        "operationId": "WhaleNotificationMetricsController_metrics",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Whale 通知流程计数器"
-          }
-        },
-        "summary": "Whale 通知基础指标",
-        "tags": [
-          "WhaleNotification"
-        ]
-      }
-    },
     "/aggregated-liquidation/summary": {
       "get": {
         "description": "基于 AggregatedLiquidationHistory 表，对指定币种在 1h/4h/12h/24h 粒度下的最新爆仓数据进行聚合，用于前端顶部 summary 卡片。",
@@ -8722,6 +8642,220 @@
         ]
       }
     },
+    "/whale-alerts/realtime": {
+      "get": {
+        "operationId": "WhaleAlertController_getRealtime",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "返回记录上限，默认 50，最大 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "symbol",
+            "required": false,
+            "in": "query",
+            "description": "币种符号，例如 BTC / ETH",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_position_value_usd",
+            "required": false,
+            "in": "query",
+            "description": "最小持仓名义价值（USD），默认 1_000",
+            "schema": {
+              "example": 1000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "since",
+            "required": false,
+            "in": "query",
+            "description": "仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时",
+            "schema": {
+              "example": "2025-01-01T00:00:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/RealtimeWhaleAlertDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取 Hyperliquid 鲸鱼持仓预警实时列表",
+        "tags": [
+          "whale-alerts"
+        ]
+      }
+    },
+    "/whale-alerts/trades": {
+      "get": {
+        "operationId": "WhaleAlertController_getWhaleTrades",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "返回记录上限，默认 50，最大 200",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "symbol",
+            "required": false,
+            "in": "query",
+            "description": "币种符号，例如 BTC / ETH",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_trade_value_usd",
+            "required": false,
+            "in": "query",
+            "description": "最小交易价值（USD），默认 1_000",
+            "schema": {
+              "example": 1000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "since",
+            "required": false,
+            "in": "query",
+            "description": "仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时",
+            "schema": {
+              "example": "2025-01-22T00:00:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/WhaleTradeDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取 Hyperliquid 鲸鱼交易实时列表",
+        "tags": [
+          "whale-alerts"
+        ]
+      }
+    },
+    "/whale-alerts/realtime-stream": {
+      "get": {
+        "operationId": "WhaleAlertStreamController_getRealtimeStream",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "订阅 Hyperliquid 鲸鱼成交实时推送",
+        "tags": [
+          "whale-alerts"
+        ]
+      }
+    },
     "/whale-holdings": {
       "get": {
         "description": "返回 Hyperliquid 平台上持仓价值超过指定阈值的鲸鱼实时持仓快照，每个用户+币种只有最新状态。",
@@ -9229,11 +9363,63 @@
       "TelegramBotWebhookRequestDto": {
         "type": "object",
         "properties": {
+          "update_id": {
+            "type": "number",
+            "description": "Telegram update id"
+          },
           "message": {
             "type": "object",
             "additionalProperties": true
           },
           "edited_message": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "channel_post": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "edited_channel_post": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "callback_query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "inline_query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "chosen_inline_result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "shipping_query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "pre_checkout_query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "poll": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "poll_answer": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "my_chat_member": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "chat_member": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "chat_join_request": {
             "type": "object",
             "additionalProperties": true
           }
@@ -10601,6 +10787,9 @@
           "conversationId": {
             "type": "string"
           },
+          "sessionId": {
+            "type": "string"
+          },
           "execution": {
             "$ref": "#/components/schemas/BacktestingCreateJobExecutionDto"
           },
@@ -11577,9 +11766,51 @@
           "updatedAt"
         ]
       },
-      "Function": {
+      "LlmSubscriptionCreateRequestDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "llmStrategyInstanceId": {
+            "type": "string",
+            "description": "LLM 策略实例 ID",
+            "example": "llm_inst_01HXYZ"
+          },
+          "customParams": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "exchangeAccountId": {
+            "type": "string",
+            "description": "交易所账户 ID",
+            "example": "exacc_01HXYZ"
+          }
+        },
+        "required": [
+          "llmStrategyInstanceId",
+          "exchangeAccountId"
+        ]
+      },
+      "LlmSubscriptionUpdateRequestDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "cancelled"
+            ]
+          },
+          "customParams": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "exchangeAccountId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       },
       "StrategyPlazaDisplayMetricsResponseDto": {
         "type": "object",
@@ -14265,130 +14496,209 @@
           }
         }
       },
-      "WhaleAlertSide": {
-        "type": "string",
-        "enum": [
-          "Long",
-          "Short"
-        ],
-        "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）"
-      },
-      "RealtimeWhaleAlertDto": {
+      "WhaleNotificationChannelsDto": {
         "type": "object",
         "properties": {
-          "user_address": {
-            "type": "string",
-            "description": "鲸鱼地址（Hyperliquid 用户地址）",
-            "example": "0x481234567890abcdef1234567890abcdef1234af"
+          "web": {
+            "type": "boolean",
+            "example": true
           },
-          "symbol": {
-            "type": "string",
-            "description": "币种符号，例如 BTC / ETH",
-            "example": "BTC"
+          "email": {
+            "type": "boolean",
+            "example": false
           },
-          "position_size": {
-            "type": "number",
-            "description": "持仓大小（正数=多头，负数=空头）",
-            "example": 52.06421
-          },
-          "entry_price": {
-            "type": "number",
-            "description": "入场价格（USD）",
-            "example": 86148.8
-          },
-          "liq_price": {
-            "type": "number",
-            "description": "清算价格（USD）",
-            "example": 75000
-          },
-          "position_value_usd": {
-            "type": "number",
-            "description": "持仓名义价值（USD）",
-            "example": 4473877.57
-          },
-          "position_action": {
-            "type": "number",
-            "description": "持仓操作类型：1 = 开仓, 2 = 平仓",
-            "example": 1
-          },
-          "create_time": {
-            "type": "string",
-            "description": "持仓创建/变动时间（ISO 时间字符串）",
-            "example": "2025-01-01T08:00:00.000Z"
-          },
-          "side": {
-            "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）",
-            "example": "Long",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/WhaleAlertSide"
-              }
-            ]
+          "telegram": {
+            "type": "boolean",
+            "example": true
           }
         },
         "required": [
-          "user_address",
-          "symbol",
-          "position_size",
-          "entry_price",
-          "liq_price",
-          "position_value_usd",
-          "position_action",
-          "create_time",
-          "side"
+          "web",
+          "email",
+          "telegram"
         ]
       },
-      "WhaleTradeDto": {
+      "WhaleNotificationRuleResponseDto": {
         "type": "object",
         "properties": {
-          "user_address": {
+          "id": {
             "type": "string",
-            "description": "鲸鱼地址",
-            "example": "0x481234567890abcdef1234567890abcdef1234af"
+            "description": "通知规则 ID",
+            "example": "rule_01HXYZ"
+          },
+          "type": {
+            "type": "string",
+            "description": "规则类型",
+            "enum": [
+              "ADDRESS",
+              "SYMBOL"
+            ]
+          },
+          "address": {
+            "type": "string"
           },
           "symbol": {
-            "type": "string",
-            "description": "币种符号",
-            "example": "BTC"
+            "type": "string"
           },
-          "side": {
-            "type": "string",
-            "description": "交易方向",
-            "enum": [
-              "Long",
-              "Short"
-            ],
-            "example": "Long"
-          },
-          "trade_size": {
+          "thresholdUsd": {
             "type": "number",
-            "description": "交易数量（绝对值）",
-            "example": 0.5
+            "example": 100000
           },
-          "price": {
-            "type": "number",
-            "description": "交易价格（USD）",
-            "example": 89881.5
+          "note": {
+            "type": "string"
           },
-          "trade_value_usd": {
-            "type": "number",
-            "description": "交易价值（USD）",
-            "example": 44940.75
+          "channels": {
+            "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
           },
-          "trade_time": {
+          "isActive": {
+            "type": "boolean",
+            "description": "规则是否启用",
+            "example": true
+          },
+          "createdAt": {
             "type": "string",
-            "description": "交易时间",
-            "example": "2025-01-22T08:00:00.000Z"
+            "description": "创建时间（ISO 8601）",
+            "example": "2026-06-06T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "更新时间（ISO 8601）",
+            "example": "2026-06-06T09:00:00.000Z"
           }
         },
         "required": [
-          "user_address",
-          "symbol",
-          "side",
-          "trade_size",
-          "price",
-          "trade_value_usd",
-          "trade_time"
+          "id",
+          "type",
+          "thresholdUsd",
+          "channels",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateWhaleNotificationRuleDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "ADDRESS",
+              "SYMBOL"
+            ],
+            "example": "ADDRESS"
+          },
+          "address": {
+            "type": "string",
+            "example": "0x123abc"
+          },
+          "symbol": {
+            "type": "string",
+            "example": "BTC"
+          },
+          "thresholdUsd": {
+            "type": "number",
+            "example": 100000
+          },
+          "note": {
+            "type": "string",
+            "example": "focus this whale"
+          },
+          "channels": {
+            "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
+          }
+        },
+        "required": [
+          "type",
+          "thresholdUsd",
+          "channels"
+        ]
+      },
+      "UpdateWhaleNotificationRuleDto": {
+        "type": "object",
+        "properties": {
+          "thresholdUsd": {
+            "type": "number",
+            "example": 200000
+          },
+          "note": {
+            "type": "string",
+            "example": "updated note"
+          },
+          "channels": {
+            "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": false
+          }
+        }
+      },
+      "WhaleNotificationDeliveryMapDto": {
+        "type": "object",
+        "properties": {
+          "web": {
+            "type": "string",
+            "example": "SENT"
+          },
+          "email": {
+            "type": "string",
+            "example": "SKIPPED"
+          },
+          "telegram": {
+            "type": "string",
+            "example": "SKIPPED"
+          }
+        },
+        "required": [
+          "web",
+          "email",
+          "telegram"
+        ]
+      },
+      "WhaleNotificationInboxResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "站内信 ID",
+            "example": "inbox_01HXYZ"
+          },
+          "title": {
+            "type": "string",
+            "description": "通知标题",
+            "example": "鲸鱼大额转账预警"
+          },
+          "content": {
+            "type": "string",
+            "description": "通知内容",
+            "example": "检测到 1000 BTC 转入交易所"
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "触发该通知的规则 ID",
+            "example": "rule_01HXYZ"
+          },
+          "channels": {
+            "$ref": "#/components/schemas/WhaleNotificationDeliveryMapDto"
+          },
+          "read": {
+            "type": "boolean",
+            "description": "是否已读",
+            "example": false
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间（ISO 8601）",
+            "example": "2026-06-06T08:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "content",
+          "channels",
+          "read",
+          "createdAt"
         ]
       },
       "WhaleDiscoverTraderAiTagDto": {
@@ -15713,211 +16023,6 @@
           "enabled"
         ]
       },
-      "WhaleNotificationChannelsDto": {
-        "type": "object",
-        "properties": {
-          "web": {
-            "type": "boolean",
-            "example": true
-          },
-          "email": {
-            "type": "boolean",
-            "example": false
-          },
-          "telegram": {
-            "type": "boolean",
-            "example": true
-          }
-        },
-        "required": [
-          "web",
-          "email",
-          "telegram"
-        ]
-      },
-      "WhaleNotificationRuleResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "通知规则 ID",
-            "example": "rule_01HXYZ"
-          },
-          "type": {
-            "type": "string",
-            "description": "规则类型",
-            "enum": [
-              "ADDRESS",
-              "SYMBOL"
-            ]
-          },
-          "address": {
-            "type": "string"
-          },
-          "symbol": {
-            "type": "string"
-          },
-          "thresholdUsd": {
-            "type": "number",
-            "example": 100000
-          },
-          "note": {
-            "type": "string"
-          },
-          "channels": {
-            "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
-          },
-          "isActive": {
-            "type": "boolean",
-            "description": "规则是否启用",
-            "example": true
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "创建时间（ISO 8601）",
-            "example": "2026-06-06T08:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "description": "更新时间（ISO 8601）",
-            "example": "2026-06-06T09:00:00.000Z"
-          }
-        },
-        "required": [
-          "id",
-          "type",
-          "thresholdUsd",
-          "channels",
-          "isActive",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateWhaleNotificationRuleDto": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "ADDRESS",
-              "SYMBOL"
-            ],
-            "example": "ADDRESS"
-          },
-          "address": {
-            "type": "string",
-            "example": "0x123abc"
-          },
-          "symbol": {
-            "type": "string",
-            "example": "BTC"
-          },
-          "thresholdUsd": {
-            "type": "number",
-            "example": 100000
-          },
-          "note": {
-            "type": "string",
-            "example": "focus this whale"
-          },
-          "channels": {
-            "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
-          }
-        },
-        "required": [
-          "type",
-          "thresholdUsd",
-          "channels"
-        ]
-      },
-      "UpdateWhaleNotificationRuleDto": {
-        "type": "object",
-        "properties": {
-          "thresholdUsd": {
-            "type": "number",
-            "example": 200000
-          },
-          "note": {
-            "type": "string",
-            "example": "updated note"
-          },
-          "channels": {
-            "$ref": "#/components/schemas/WhaleNotificationChannelsDto"
-          },
-          "isActive": {
-            "type": "boolean",
-            "example": false
-          }
-        }
-      },
-      "WhaleNotificationDeliveryMapDto": {
-        "type": "object",
-        "properties": {
-          "web": {
-            "type": "string",
-            "example": "SENT"
-          },
-          "email": {
-            "type": "string",
-            "example": "SKIPPED"
-          },
-          "telegram": {
-            "type": "string",
-            "example": "SKIPPED"
-          }
-        },
-        "required": [
-          "web",
-          "email",
-          "telegram"
-        ]
-      },
-      "WhaleNotificationInboxResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "站内信 ID",
-            "example": "inbox_01HXYZ"
-          },
-          "title": {
-            "type": "string",
-            "description": "通知标题",
-            "example": "鲸鱼大额转账预警"
-          },
-          "content": {
-            "type": "string",
-            "description": "通知内容",
-            "example": "检测到 1000 BTC 转入交易所"
-          },
-          "ruleId": {
-            "type": "string",
-            "description": "触发该通知的规则 ID",
-            "example": "rule_01HXYZ"
-          },
-          "channels": {
-            "$ref": "#/components/schemas/WhaleNotificationDeliveryMapDto"
-          },
-          "read": {
-            "type": "boolean",
-            "description": "是否已读",
-            "example": false
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "创建时间（ISO 8601）",
-            "example": "2026-06-06T08:00:00.000Z"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "content",
-          "channels",
-          "read",
-          "createdAt"
-        ]
-      },
       "LiquidationSummaryItemDto": {
         "type": "object",
         "properties": {
@@ -16555,6 +16660,132 @@
         "required": [
           "id",
           "title"
+        ]
+      },
+      "WhaleAlertSide": {
+        "type": "string",
+        "enum": [
+          "Long",
+          "Short"
+        ],
+        "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）"
+      },
+      "RealtimeWhaleAlertDto": {
+        "type": "object",
+        "properties": {
+          "user_address": {
+            "type": "string",
+            "description": "鲸鱼地址（Hyperliquid 用户地址）",
+            "example": "0x481234567890abcdef1234567890abcdef1234af"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "币种符号，例如 BTC / ETH",
+            "example": "BTC"
+          },
+          "position_size": {
+            "type": "number",
+            "description": "持仓大小（正数=多头，负数=空头）",
+            "example": 52.06421
+          },
+          "entry_price": {
+            "type": "number",
+            "description": "入场价格（USD）",
+            "example": 86148.8
+          },
+          "liq_price": {
+            "type": "number",
+            "description": "清算价格（USD）",
+            "example": 75000
+          },
+          "position_value_usd": {
+            "type": "number",
+            "description": "持仓名义价值（USD）",
+            "example": 4473877.57
+          },
+          "position_action": {
+            "type": "number",
+            "description": "持仓操作类型：1 = 开仓, 2 = 平仓",
+            "example": 1
+          },
+          "create_time": {
+            "type": "string",
+            "description": "持仓创建/变动时间（ISO 时间字符串）",
+            "example": "2025-01-01T08:00:00.000Z"
+          },
+          "side": {
+            "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）",
+            "example": "Long",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WhaleAlertSide"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user_address",
+          "symbol",
+          "position_size",
+          "entry_price",
+          "liq_price",
+          "position_value_usd",
+          "position_action",
+          "create_time",
+          "side"
+        ]
+      },
+      "WhaleTradeDto": {
+        "type": "object",
+        "properties": {
+          "user_address": {
+            "type": "string",
+            "description": "鲸鱼地址",
+            "example": "0x481234567890abcdef1234567890abcdef1234af"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "币种符号",
+            "example": "BTC"
+          },
+          "side": {
+            "type": "string",
+            "description": "交易方向",
+            "enum": [
+              "Long",
+              "Short"
+            ],
+            "example": "Long"
+          },
+          "trade_size": {
+            "type": "number",
+            "description": "交易数量（绝对值）",
+            "example": 0.5
+          },
+          "price": {
+            "type": "number",
+            "description": "交易价格（USD）",
+            "example": 89881.5
+          },
+          "trade_value_usd": {
+            "type": "number",
+            "description": "交易价值（USD）",
+            "example": 44940.75
+          },
+          "trade_time": {
+            "type": "string",
+            "description": "交易时间",
+            "example": "2025-01-22T08:00:00.000Z"
+          }
+        },
+        "required": [
+          "user_address",
+          "symbol",
+          "side",
+          "trade_size",
+          "price",
+          "trade_value_usd",
+          "trade_time"
         ]
       },
       "WhaleHoldingDto": {

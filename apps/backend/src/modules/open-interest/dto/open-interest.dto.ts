@@ -5,6 +5,9 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  registerDecorator,
+  type ValidationArguments,
+  type ValidationOptions,
 } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
@@ -269,6 +272,25 @@ export class QueryOpenInterestDto extends BasePaginationRequestDto {
   endTime?: string
 }
 
+export class OpenInterestStatsQueryDto {
+  @ApiProperty({ description: '开始时间', example: '2025-12-24T00:00:00Z' })
+  @IsDateString()
+  startTime: string
+
+  @ApiProperty({ description: '结束时间', example: '2025-12-24T23:59:59Z' })
+  @IsDateString()
+  @IsAfterDateString('startTime', { message: 'endTime must be after startTime' })
+  endTime: string
+
+  get startDate(): Date {
+    return new Date(this.startTime)
+  }
+
+  get endDate(): Date {
+    return new Date(this.endTime)
+  }
+}
+
 /**
  * 统计数据响应 DTO
  */
@@ -305,4 +327,31 @@ export class OpenInterestStatsDto {
 
   @ApiProperty({ description: '变化百分比', example: 1.05 })
   changePercent: number
+}
+
+function IsAfterDateString(property: string, validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'isAfterDateString',
+      target: object.constructor,
+      propertyName,
+      constraints: [property],
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const [relatedPropertyName] = args.constraints as [string]
+          const relatedValue = (args.object as Record<string, unknown>)[relatedPropertyName]
+
+          if (typeof value !== 'string' || typeof relatedValue !== 'string') {
+            return false
+          }
+
+          const valueTime = Date.parse(value)
+          const relatedTime = Date.parse(relatedValue)
+
+          return Number.isFinite(valueTime) && Number.isFinite(relatedTime) && valueTime > relatedTime
+        },
+      },
+    })
+  }
 }

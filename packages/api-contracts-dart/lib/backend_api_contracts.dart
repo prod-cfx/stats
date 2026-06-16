@@ -175,7 +175,9 @@ export 'package:backend_api_contracts/src/model/llm_strategy_instance_signal_res
 export 'package:backend_api_contracts/src/model/llm_strategy_instances_controller_list200_response.dart';
 export 'package:backend_api_contracts/src/model/llm_strategy_instances_controller_signals200_response.dart';
 export 'package:backend_api_contracts/src/model/llm_strategy_subscriptions_controller_list200_response.dart';
+export 'package:backend_api_contracts/src/model/llm_subscription_create_request_dto.dart';
 export 'package:backend_api_contracts/src/model/llm_subscription_response_dto.dart';
+export 'package:backend_api_contracts/src/model/llm_subscription_update_request_dto.dart';
 export 'package:backend_api_contracts/src/model/login_request_dto.dart';
 export 'package:backend_api_contracts/src/model/long_short_ratio_point_response_dto.dart';
 export 'package:backend_api_contracts/src/model/market_trade_response_dto.dart';

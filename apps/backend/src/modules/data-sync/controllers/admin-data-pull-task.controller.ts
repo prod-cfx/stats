@@ -21,6 +21,7 @@ import {
   AdminDataPullTaskListQueryDto,
   AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
+  ListDataPullExecutionsQueryDto,
   UpdateAdminDataPullTaskDto,
 } from '../dto/admin-data-pull-task.dto'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -150,10 +151,9 @@ export class AdminDataPullTaskController {
   })
   async listExecutions(
     @Param('id', ParseIntPipe) id: number,
-    @Query('page') page = 1,
-    @Query('limit') limit = 20,
+    @Query() query: ListDataPullExecutionsQueryDto,
   ) {
-    return this.service.listExecutions(id, Number(page) || 1, Number(limit) || 20)
+    return this.service.listExecutions(id, query.page, query.limit)
   }
 
   @Get(':id')
@@ -230,4 +230,3 @@ export class AdminDataPullTaskController {
     return { success: true }
   }
 }
-

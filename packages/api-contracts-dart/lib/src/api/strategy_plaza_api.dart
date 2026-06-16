@@ -457,7 +457,7 @@ class StrategyPlazaApi {
   ///
   /// Parameters:
   /// * [id] 
-  /// * [limit] 
+  /// * [limit] - 返回信号数量上限
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -469,7 +469,7 @@ class StrategyPlazaApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<StrategyPlazaProxyControllerSignals200Response>> strategyPlazaProxyControllerSignals({ 
     required String id,
-    String? limit,
+    num? limit,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -491,7 +491,7 @@ class StrategyPlazaApi {
     );
 
     final _queryParameters = <String, dynamic>{
-      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
     };
 
     final _response = await _dio.request<Object>(

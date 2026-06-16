@@ -553,10 +553,10 @@ class AdminRoleApi {
   /// 
   ///
   /// Parameters:
-  /// * [code] - 按角色编码模糊搜索
-  /// * [name] - 按角色名称模糊搜索
-  /// * [limit] - 每页数量
   /// * [page] - 页码（从 1 开始）
+  /// * [limit] - 每页数量
+  /// * [name] - 按角色名称模糊搜索
+  /// * [code] - 按角色编码模糊搜索
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -567,10 +567,10 @@ class AdminRoleApi {
   /// Returns a [Future] containing a [Response] with a [AdminRoleControllerList0200Response] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<AdminRoleControllerList0200Response>> adminRoleControllerList0({ 
-    String? code,
+    num? page = 1,
+    num? limit = 20,
     String? name,
-    num? limit,
-    num? page,
+    String? code,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -598,10 +598,10 @@ class AdminRoleApi {
     );
 
     final _queryParameters = <String, dynamic>{
-      if (code != null) r'code': encodeQueryParameter(_serializers, code, const FullType(String)),
-      if (name != null) r'name': encodeQueryParameter(_serializers, name, const FullType(String)),
-      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
       if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(num)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
+      if (name != null) r'name': encodeQueryParameter(_serializers, name, const FullType(String)),
+      if (code != null) r'code': encodeQueryParameter(_serializers, code, const FullType(String)),
     };
 
     final _response = await _dio.request<Object>(
@@ -648,10 +648,10 @@ class AdminRoleApi {
   /// 
   ///
   /// Parameters:
-  /// * [code] - 按角色编码模糊搜索
-  /// * [name] - 按角色名称模糊搜索
-  /// * [limit] - 每页数量
   /// * [page] - 页码（从 1 开始）
+  /// * [limit] - 每页数量
+  /// * [name] - 按角色名称模糊搜索
+  /// * [code] - 按角色编码模糊搜索
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -662,10 +662,10 @@ class AdminRoleApi {
   /// Returns a [Future] containing a [Response] with a [AdminRoleControllerList0200Response] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<AdminRoleControllerList0200Response>> adminRoleControllerList1({ 
-    String? code,
+    num? page = 1,
+    num? limit = 20,
     String? name,
-    num? limit,
-    num? page,
+    String? code,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -693,10 +693,10 @@ class AdminRoleApi {
     );
 
     final _queryParameters = <String, dynamic>{
-      if (code != null) r'code': encodeQueryParameter(_serializers, code, const FullType(String)),
-      if (name != null) r'name': encodeQueryParameter(_serializers, name, const FullType(String)),
-      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
       if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(num)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
+      if (name != null) r'name': encodeQueryParameter(_serializers, name, const FullType(String)),
+      if (code != null) r'code': encodeQueryParameter(_serializers, code, const FullType(String)),
     };
 
     final _response = await _dio.request<Object>(

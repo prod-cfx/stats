@@ -10,8 +10,9 @@ import 'package:dio/dio.dart';
 
 import 'package:backend_api_contracts/src/api_util.dart';
 import 'package:backend_api_contracts/src/model/llm_strategy_subscriptions_controller_list200_response.dart';
+import 'package:backend_api_contracts/src/model/llm_subscription_create_request_dto.dart';
 import 'package:backend_api_contracts/src/model/llm_subscription_response_dto.dart';
-import 'package:built_value/json_object.dart';
+import 'package:backend_api_contracts/src/model/llm_subscription_update_request_dto.dart';
 
 class LlmStrategySubscriptionsApi {
 
@@ -22,10 +23,10 @@ class LlmStrategySubscriptionsApi {
   const LlmStrategySubscriptionsApi(this._dio, this._serializers);
 
   /// Create an LLM strategy subscription through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [body] 
+  /// * [llmSubscriptionCreateRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -35,8 +36,8 @@ class LlmStrategySubscriptionsApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmSubscriptionResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmSubscriptionResponseDto>> llmStrategySubscriptionsControllerCreate({ 
-    required JsonObject body,
+  Future<Response<LlmSubscriptionResponseDto>> llmStrategySubscriptionsControllerCreate({
+    required LlmSubscriptionCreateRequestDto llmSubscriptionCreateRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -67,7 +68,8 @@ class LlmStrategySubscriptionsApi {
     dynamic _bodyData;
 
     try {
-      _bodyData = body;
+      const _type = FullType(LlmSubscriptionCreateRequestDto);
+      _bodyData = _serializers.serialize(llmSubscriptionCreateRequestDto, specifiedType: _type);
 
     } catch(error, stackTrace) {
       throw DioException(
@@ -122,10 +124,10 @@ class LlmStrategySubscriptionsApi {
   }
 
   /// Cancel an LLM strategy subscription through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [subscriptionId] 
+  /// * [subscriptionId]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -135,7 +137,7 @@ class LlmStrategySubscriptionsApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> llmStrategySubscriptionsControllerDelete({ 
+  Future<Response<void>> llmStrategySubscriptionsControllerDelete({
     required String subscriptionId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -175,10 +177,10 @@ class LlmStrategySubscriptionsApi {
   }
 
   /// Get an LLM strategy subscription detail through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [subscriptionId] 
+  /// * [subscriptionId]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -188,7 +190,7 @@ class LlmStrategySubscriptionsApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmSubscriptionResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmSubscriptionResponseDto>> llmStrategySubscriptionsControllerDetail({ 
+  Future<Response<LlmSubscriptionResponseDto>> llmStrategySubscriptionsControllerDetail({
     required String subscriptionId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -256,9 +258,12 @@ class LlmStrategySubscriptionsApi {
   }
 
   /// List the authenticated user LLM strategy subscriptions through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
+  /// * [page] - 页码（从 1 开始）
+  /// * [limit] - 每页数量（最大 100）
+  /// * [status]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -268,7 +273,10 @@ class LlmStrategySubscriptionsApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmStrategySubscriptionsControllerList200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmStrategySubscriptionsControllerList200Response>> llmStrategySubscriptionsControllerList({ 
+  Future<Response<LlmStrategySubscriptionsControllerList200Response>> llmStrategySubscriptionsControllerList({
+    num? page = 1,
+    num? limit = 20,
+    String? status,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -295,9 +303,16 @@ class LlmStrategySubscriptionsApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(num)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
+      if (status != null) r'status': encodeQueryParameter(_serializers, status, const FullType(String)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -335,11 +350,11 @@ class LlmStrategySubscriptionsApi {
   }
 
   /// Update an LLM strategy subscription through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [subscriptionId] 
-  /// * [body] 
+  /// * [subscriptionId]
+  /// * [llmSubscriptionUpdateRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -349,9 +364,9 @@ class LlmStrategySubscriptionsApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmSubscriptionResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmSubscriptionResponseDto>> llmStrategySubscriptionsControllerUpdate({ 
+  Future<Response<LlmSubscriptionResponseDto>> llmStrategySubscriptionsControllerUpdate({
     required String subscriptionId,
-    required JsonObject body,
+    required LlmSubscriptionUpdateRequestDto llmSubscriptionUpdateRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -382,7 +397,8 @@ class LlmStrategySubscriptionsApi {
     dynamic _bodyData;
 
     try {
-      _bodyData = body;
+      const _type = FullType(LlmSubscriptionUpdateRequestDto);
+      _bodyData = _serializers.serialize(llmSubscriptionUpdateRequestDto, specifiedType: _type);
 
     } catch(error, stackTrace) {
       throw DioException(

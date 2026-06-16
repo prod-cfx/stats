@@ -604,8 +604,8 @@ class AdminDataPullTasksApi {
   ///
   /// Parameters:
   /// * [id] 
-  /// * [limit] - 每页数量
   /// * [page] - 页码（从 1 开始）
+  /// * [limit] - 每页数量
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -617,8 +617,8 @@ class AdminDataPullTasksApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<AdminDataPullTaskControllerListExecutions200Response>> adminDataPullTaskControllerListExecutions({ 
     required num id,
-    num? limit,
-    num? page,
+    num? page = 1,
+    num? limit = 20,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -646,8 +646,8 @@ class AdminDataPullTasksApi {
     );
 
     final _queryParameters = <String, dynamic>{
-      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
       if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(num)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
     };
 
     final _response = await _dio.request<Object>(

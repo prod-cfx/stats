@@ -20,6 +20,7 @@ import {
   StrategyPlazaTemplateResponseDto,
 } from './dto/strategy-plaza.response.dto'
 import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto'
+import { StrategyPlazaSignalsQueryDto } from './dto/strategy-plaza-signals-query.dto'
 
 @ApiTags('strategy-plaza')
 @ApiExtraModels(
@@ -92,13 +93,9 @@ export class StrategyPlazaProxyController {
   })
   async signals(
     @Param('id') id: string,
-    @Query('limit') limit?: string,
+    @Query() query: StrategyPlazaSignalsQueryDto,
   ): Promise<unknown[]> {
-    const parsedLimit = limit == null ? undefined : Number(limit)
-    return this.service.listStrategyPlazaTemplateSignals(
-      id,
-      Number.isFinite(parsedLimit) ? parsedLimit : undefined,
-    )
+    return this.service.listStrategyPlazaTemplateSignals(id, query.limit)
   }
 
   @Get(':id/equity-curve')

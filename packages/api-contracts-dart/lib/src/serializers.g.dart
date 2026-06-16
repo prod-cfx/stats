@@ -243,8 +243,11 @@ Serializers _$serializers =
           ..add(LlmStrategyInstancesControllerList200Response.serializer)
           ..add(LlmStrategyInstancesControllerSignals200Response.serializer)
           ..add(LlmStrategySubscriptionsControllerList200Response.serializer)
+          ..add(LlmSubscriptionCreateRequestDto.serializer)
           ..add(LlmSubscriptionResponseDto.serializer)
           ..add(LlmSubscriptionResponseDtoStatusEnum.serializer)
+          ..add(LlmSubscriptionUpdateRequestDto.serializer)
+          ..add(LlmSubscriptionUpdateRequestDtoStatusEnum.serializer)
           ..add(LoginRequestDto.serializer)
           ..add(LongShortRatioPointResponseDto.serializer)
           ..add(LongShortRatioPointResponseDtoIntervalEnum.serializer)
@@ -1111,6 +1114,20 @@ Serializers _$serializers =
             () => MapBuilder<String, JsonObject?>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(BuiltMap, const [
                 const FullType(String),
@@ -1277,20 +1294,6 @@ Serializers _$serializers =
             () => MapBuilder<String, JsonObject?>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltMap, const [
-              const FullType(String),
-              const FullType.nullable(JsonObject),
-            ]),
-            () => MapBuilder<String, JsonObject?>(),
-          )
-          ..addBuilderFactory(
-            const FullType(BuiltMap, const [
-              const FullType(String),
-              const FullType.nullable(JsonObject),
-            ]),
-            () => MapBuilder<String, JsonObject?>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(BuiltMap, const [
                 const FullType(String),
@@ -1337,6 +1340,104 @@ Serializers _$serializers =
               ]),
             ]),
             () => ListBuilder<BuiltMap<String, JsonObject?>>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

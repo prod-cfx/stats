@@ -1255,29 +1255,54 @@ const UpdateTradesPairConfigDto = z
   })
   .partial()
   .passthrough()
-const WhaleAlertSide = z.enum(['Long', 'Short'])
-const RealtimeWhaleAlertDto = z
+const WhaleNotificationChannelsDto = z
+  .object({ web: z.boolean(), email: z.boolean(), telegram: z.boolean() })
+  .passthrough()
+const WhaleNotificationRuleResponseDto = z
   .object({
-    user_address: z.string(),
-    symbol: z.string(),
-    position_size: z.number(),
-    entry_price: z.number(),
-    liq_price: z.number(),
-    position_value_usd: z.number(),
-    position_action: z.number(),
-    create_time: z.string(),
-    side: WhaleAlertSide,
+    id: z.string(),
+    type: z.enum(['ADDRESS', 'SYMBOL']),
+    address: z.string().optional(),
+    symbol: z.string().optional(),
+    thresholdUsd: z.number(),
+    note: z.string().optional(),
+    channels: WhaleNotificationChannelsDto,
+    isActive: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
   })
   .passthrough()
-const WhaleTradeDto = z
+const CreateWhaleNotificationRuleDto = z
   .object({
-    user_address: z.string(),
-    symbol: z.string(),
-    side: z.enum(['Long', 'Short']),
-    trade_size: z.number(),
-    price: z.number(),
-    trade_value_usd: z.number(),
-    trade_time: z.string(),
+    type: z.enum(['ADDRESS', 'SYMBOL']),
+    address: z.string().optional(),
+    symbol: z.string().optional(),
+    thresholdUsd: z.number(),
+    note: z.string().optional(),
+    channels: WhaleNotificationChannelsDto,
+  })
+  .passthrough()
+const UpdateWhaleNotificationRuleDto = z
+  .object({
+    thresholdUsd: z.number(),
+    note: z.string(),
+    channels: WhaleNotificationChannelsDto,
+    isActive: z.boolean(),
+  })
+  .partial()
+  .passthrough()
+const WhaleNotificationDeliveryMapDto = z
+  .object({ web: z.string(), email: z.string(), telegram: z.string() })
+  .passthrough()
+const WhaleNotificationInboxResponseDto = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    content: z.string(),
+    ruleId: z.string().optional(),
+    channels: WhaleNotificationDeliveryMapDto,
+    read: z.boolean(),
+    createdAt: z.string(),
   })
   .passthrough()
 const WhaleDiscoverTraderAiTagDto = z
@@ -1537,56 +1562,6 @@ const TickerResponseDto = z
     low24h: z.string().optional(),
   })
   .passthrough()
-const WhaleNotificationChannelsDto = z
-  .object({ web: z.boolean(), email: z.boolean(), telegram: z.boolean() })
-  .passthrough()
-const WhaleNotificationRuleResponseDto = z
-  .object({
-    id: z.string(),
-    type: z.enum(['ADDRESS', 'SYMBOL']),
-    address: z.string().optional(),
-    symbol: z.string().optional(),
-    thresholdUsd: z.number(),
-    note: z.string().optional(),
-    channels: WhaleNotificationChannelsDto,
-    isActive: z.boolean(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough()
-const CreateWhaleNotificationRuleDto = z
-  .object({
-    type: z.enum(['ADDRESS', 'SYMBOL']),
-    address: z.string().optional(),
-    symbol: z.string().optional(),
-    thresholdUsd: z.number(),
-    note: z.string().optional(),
-    channels: WhaleNotificationChannelsDto,
-  })
-  .passthrough()
-const UpdateWhaleNotificationRuleDto = z
-  .object({
-    thresholdUsd: z.number(),
-    note: z.string(),
-    channels: WhaleNotificationChannelsDto,
-    isActive: z.boolean(),
-  })
-  .partial()
-  .passthrough()
-const WhaleNotificationDeliveryMapDto = z
-  .object({ web: z.string(), email: z.string(), telegram: z.string() })
-  .passthrough()
-const WhaleNotificationInboxResponseDto = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    content: z.string(),
-    ruleId: z.string().optional(),
-    channels: WhaleNotificationDeliveryMapDto,
-    read: z.boolean(),
-    createdAt: z.string(),
-  })
-  .passthrough()
 const LiquidationSummaryItemDto = z
   .object({
     timeframe: z.enum(['1h', '4h', '12h', '24h']),
@@ -1707,6 +1682,31 @@ const PredictionMarketCardDto = z
     volumeTotal: z.string().optional(),
     openInterest: z.string().optional(),
     rules: PredictionMarketRulesDto.optional(),
+  })
+  .passthrough()
+const WhaleAlertSide = z.enum(['Long', 'Short'])
+const RealtimeWhaleAlertDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    position_size: z.number(),
+    entry_price: z.number(),
+    liq_price: z.number(),
+    position_value_usd: z.number(),
+    position_action: z.number(),
+    create_time: z.string(),
+    side: WhaleAlertSide,
+  })
+  .passthrough()
+const WhaleTradeDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    side: z.enum(['Long', 'Short']),
+    trade_size: z.number(),
+    price: z.number(),
+    trade_value_usd: z.number(),
+    trade_time: z.string(),
   })
   .passthrough()
 const WhaleHoldingDto = z
@@ -1844,9 +1844,12 @@ export const schemas = {
   TradesPairConfigResponseDto,
   CreateTradesPairConfigDto,
   UpdateTradesPairConfigDto,
-  WhaleAlertSide,
-  RealtimeWhaleAlertDto,
-  WhaleTradeDto,
+  WhaleNotificationChannelsDto,
+  WhaleNotificationRuleResponseDto,
+  CreateWhaleNotificationRuleDto,
+  UpdateWhaleNotificationRuleDto,
+  WhaleNotificationDeliveryMapDto,
+  WhaleNotificationInboxResponseDto,
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
   WhaleDiscoverResponseDto,
@@ -1874,12 +1877,6 @@ export const schemas = {
   AggregatedVolumeRowDto,
   AggregatedVolumeSnapshotResponseDto,
   TickerResponseDto,
-  WhaleNotificationChannelsDto,
-  WhaleNotificationRuleResponseDto,
-  CreateWhaleNotificationRuleDto,
-  UpdateWhaleNotificationRuleDto,
-  WhaleNotificationDeliveryMapDto,
-  WhaleNotificationInboxResponseDto,
   LiquidationSummaryItemDto,
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
@@ -1895,6 +1892,9 @@ export const schemas = {
   PredictionMarketOutcomeDto,
   PredictionMarketRulesDto,
   PredictionMarketCardDto,
+  WhaleAlertSide,
+  RealtimeWhaleAlertDto,
+  WhaleTradeDto,
   WhaleHoldingDto,
 }
 
@@ -2403,14 +2403,14 @@ const endpoints = makeApi([
         schema: z.number(),
       },
       {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
         name: 'page',
         type: 'Query',
-        schema: z.number().optional(),
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -5018,7 +5018,7 @@ const endpoints = makeApi([
       {
         name: 'limit',
         type: 'Query',
-        schema: z.string().optional(),
+        schema: z.number().gte(1).lte(200).optional(),
       },
     ],
     response: z

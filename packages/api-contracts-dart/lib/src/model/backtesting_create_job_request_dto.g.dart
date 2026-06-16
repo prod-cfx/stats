@@ -318,6 +318,8 @@ class _$BacktestingCreateJobRequestDto extends BacktestingCreateJobRequestDto {
   @override
   final String? conversationId;
   @override
+  final String? sessionId;
+  @override
   final BacktestingCreateJobExecutionDto execution;
   @override
   final BacktestingCreateJobStrategyDto strategy;
@@ -342,6 +344,7 @@ class _$BacktestingCreateJobRequestDto extends BacktestingCreateJobRequestDto {
     this.leverage,
     this.allowPartial,
     this.conversationId,
+    this.sessionId,
     required this.execution,
     required this.strategy,
     required this.dataRange,
@@ -369,6 +372,7 @@ class _$BacktestingCreateJobRequestDto extends BacktestingCreateJobRequestDto {
         leverage == other.leverage &&
         allowPartial == other.allowPartial &&
         conversationId == other.conversationId &&
+        sessionId == other.sessionId &&
         execution == other.execution &&
         strategy == other.strategy &&
         dataRange == other.dataRange &&
@@ -387,6 +391,7 @@ class _$BacktestingCreateJobRequestDto extends BacktestingCreateJobRequestDto {
     _$hash = $jc(_$hash, leverage.hashCode);
     _$hash = $jc(_$hash, allowPartial.hashCode);
     _$hash = $jc(_$hash, conversationId.hashCode);
+    _$hash = $jc(_$hash, sessionId.hashCode);
     _$hash = $jc(_$hash, execution.hashCode);
     _$hash = $jc(_$hash, strategy.hashCode);
     _$hash = $jc(_$hash, dataRange.hashCode);
@@ -407,6 +412,7 @@ class _$BacktestingCreateJobRequestDto extends BacktestingCreateJobRequestDto {
           ..add('leverage', leverage)
           ..add('allowPartial', allowPartial)
           ..add('conversationId', conversationId)
+          ..add('sessionId', sessionId)
           ..add('execution', execution)
           ..add('strategy', strategy)
           ..add('dataRange', dataRange)
@@ -463,6 +469,10 @@ class BacktestingCreateJobRequestDtoBuilder
   set conversationId(String? conversationId) =>
       _$this._conversationId = conversationId;
 
+  String? _sessionId;
+  String? get sessionId => _$this._sessionId;
+  set sessionId(String? sessionId) => _$this._sessionId = sessionId;
+
   BacktestingCreateJobExecutionDtoBuilder? _execution;
   BacktestingCreateJobExecutionDtoBuilder get execution =>
       _$this._execution ??= BacktestingCreateJobExecutionDtoBuilder();
@@ -515,6 +525,7 @@ class BacktestingCreateJobRequestDtoBuilder
       _leverage = $v.leverage;
       _allowPartial = $v.allowPartial;
       _conversationId = $v.conversationId;
+      _sessionId = $v.sessionId;
       _execution = $v.execution.toBuilder();
       _strategy = $v.strategy.toBuilder();
       _dataRange = $v.dataRange.toBuilder();
@@ -560,6 +571,7 @@ class BacktestingCreateJobRequestDtoBuilder
             leverage: leverage,
             allowPartial: allowPartial,
             conversationId: conversationId,
+            sessionId: sessionId,
             execution: execution.build(),
             strategy: strategy.build(),
             dataRange: dataRange.build(),

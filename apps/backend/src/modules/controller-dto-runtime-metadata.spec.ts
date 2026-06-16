@@ -6,7 +6,11 @@ import { AdminRoleController } from './admin/controllers/admin-role.controller'
 import { AdminRoleListQueryDto } from './admin/dto/admin-role-list.dto'
 import { AdminUserController } from './admin/controllers/admin-user.controller'
 import { AdminUserListQueryDto } from './admin/dto/admin-user-list.dto'
+import { StrategyPlazaProxyController } from './ai-quant-proxy/strategy-plaza.controller'
+import { StrategyPlazaSignalsQueryDto } from './ai-quant-proxy/dto/strategy-plaza-signals-query.dto'
 import { TelegramBotWebhookRequestDto } from './auth/dto/requests/telegram-bot-webhook.request.dto'
+import { AdminDataPullTaskController } from './data-sync/controllers/admin-data-pull-task.controller'
+import { AdminDataPullTaskListQueryDto, ListDataPullExecutionsQueryDto } from './data-sync/dto/admin-data-pull-task.dto'
 import { LlmStrategyInstancesController } from './ai-quant-proxy/llm-strategy-instances.controller'
 import { LlmStrategyInstanceListQueryDto } from './ai-quant-proxy/dto/llm-strategy-instance-list-query.dto'
 import { LlmStrategyInstanceSignalsQueryDto } from './ai-quant-proxy/dto/llm-strategy-instance-signals-query.dto'
@@ -15,6 +19,8 @@ import { AiQuantConversationBacktestDraftConfigRequestDto } from './ai-quant-pro
 import { LlmSubscriptionCreateRequestDto } from './ai-quant-proxy/dto/llm-subscription-create.request.dto'
 import { LlmSubscriptionListQueryDto } from './ai-quant-proxy/dto/llm-subscription-list-query.dto'
 import { LlmSubscriptionUpdateRequestDto } from './ai-quant-proxy/dto/llm-subscription-update.request.dto'
+import { OpenInterestController } from './open-interest/open-interest.controller'
+import { OpenInterestStatsQueryDto } from './open-interest/dto/open-interest.dto'
 import { CreateOrderbookPairConfigDto } from './orderbook-config/dto/create-orderbook-pair-config.dto'
 import { UpdateOrderbookPairConfigDto } from './orderbook-config/dto/update-orderbook-pair-config.dto'
 
@@ -51,6 +57,24 @@ describe('controller request DTO runtime metadata', () => {
       expectedType: LlmStrategyInstanceSignalsQueryDto,
     },
     {
+      controller: StrategyPlazaProxyController,
+      method: 'signals',
+      paramIndex: 1,
+      expectedType: StrategyPlazaSignalsQueryDto,
+    },
+    {
+      controller: AdminDataPullTaskController,
+      method: 'listExecutions',
+      paramIndex: 1,
+      expectedType: ListDataPullExecutionsQueryDto,
+    },
+    {
+      controller: OpenInterestController,
+      method: 'getStats',
+      paramIndex: 1,
+      expectedType: OpenInterestStatsQueryDto,
+    },
+    {
       controller: AdminUserController,
       method: 'list',
       paramIndex: 0,
@@ -80,6 +104,7 @@ describe('controller request DTO runtime metadata', () => {
     LlmSubscriptionListQueryDto,
     LlmStrategyInstanceListQueryDto,
     LlmStrategyInstanceSignalsQueryDto,
+    ListDataPullExecutionsQueryDto,
     AdminUserListQueryDto,
     AdminRoleListQueryDto,
   ])('%p converts inherited pagination query fields through ValidationPipe', async (metatype) => {
@@ -87,6 +112,31 @@ describe('controller request DTO runtime metadata', () => {
       page: 2,
       limit: 5,
     })
+  })
+
+  it('converts strategy plaza signal limit through ValidationPipe', async () => {
+    await expect(transformQuery(StrategyPlazaSignalsQueryDto, { limit: '5' })).resolves.toMatchObject({
+      limit: 5,
+    })
+  })
+
+  it('converts data pull enabled=false query to boolean false', async () => {
+    await expect(transformQuery(AdminDataPullTaskListQueryDto, { enabled: 'false' })).resolves.toMatchObject({
+      enabled: false,
+    })
+  })
+
+  it.each([
+    [ListDataPullExecutionsQueryDto, { page: '-1', limit: '20' }],
+    [ListDataPullExecutionsQueryDto, { page: '1.5', limit: '20' }],
+    [ListDataPullExecutionsQueryDto, { page: '1', limit: '101' }],
+    [StrategyPlazaSignalsQueryDto, { limit: '-1' }],
+    [StrategyPlazaSignalsQueryDto, { limit: '1.5' }],
+    [StrategyPlazaSignalsQueryDto, { limit: '201' }],
+    [OpenInterestStatsQueryDto, { startTime: 'not-a-date', endTime: '2025-12-24T23:59:59Z' }],
+    [OpenInterestStatsQueryDto, { startTime: '2025-12-25T00:00:00Z', endTime: '2025-12-24T00:00:00Z' }],
+  ] as const)('%p rejects invalid scalar query values through ValidationPipe', async (metatype, value) => {
+    await expect(transformQuery(metatype, value)).rejects.toThrow()
   })
 
   it('rejects invalid subscription create body when runtime DTO metadata is present', async () => {

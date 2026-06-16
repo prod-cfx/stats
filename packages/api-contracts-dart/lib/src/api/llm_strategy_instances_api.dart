@@ -22,10 +22,10 @@ class LlmStrategyInstancesApi {
   const LlmStrategyInstancesApi(this._dio, this._serializers);
 
   /// Get LLM strategy instance detail through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [id] 
+  /// * [id]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -35,7 +35,7 @@ class LlmStrategyInstancesApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmStrategyInstanceResponseDto] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmStrategyInstanceResponseDto>> llmStrategyInstancesControllerDetail({ 
+  Future<Response<LlmStrategyInstanceResponseDto>> llmStrategyInstancesControllerDetail({
     required String id,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -97,9 +97,13 @@ class LlmStrategyInstancesApi {
   }
 
   /// List LLM strategy instances through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
+  /// * [page] - 页码（从 1 开始）
+  /// * [limit] - 每页数量（最大 100）
+  /// * [llmModel]
+  /// * [strategyId]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -109,7 +113,11 @@ class LlmStrategyInstancesApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmStrategyInstancesControllerList200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmStrategyInstancesControllerList200Response>> llmStrategyInstancesControllerList({ 
+  Future<Response<LlmStrategyInstancesControllerList200Response>> llmStrategyInstancesControllerList({
+    num? page = 1,
+    num? limit = 20,
+    String? llmModel,
+    String? strategyId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -130,9 +138,17 @@ class LlmStrategyInstancesApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(num)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
+      if (llmModel != null) r'llmModel': encodeQueryParameter(_serializers, llmModel, const FullType(String)),
+      if (strategyId != null) r'strategyId': encodeQueryParameter(_serializers, strategyId, const FullType(String)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -170,10 +186,12 @@ class LlmStrategyInstancesApi {
   }
 
   /// List LLM strategy instance signals through the backend proxy.
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [id] 
+  /// * [id]
+  /// * [page] - 页码（从 1 开始）
+  /// * [limit] - 每页数量（最大 100）
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -183,8 +201,10 @@ class LlmStrategyInstancesApi {
   ///
   /// Returns a [Future] containing a [Response] with a [LlmStrategyInstancesControllerSignals200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<LlmStrategyInstancesControllerSignals200Response>> llmStrategyInstancesControllerSignals({ 
+  Future<Response<LlmStrategyInstancesControllerSignals200Response>> llmStrategyInstancesControllerSignals({
     required String id,
+    num? page = 1,
+    num? limit = 20,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -211,9 +231,15 @@ class LlmStrategyInstancesApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(num)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(num)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,

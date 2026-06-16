@@ -40,6 +40,7 @@ describe('strategyPlazaProxyController', () => {
     const service = {
       listStrategyPlazaTemplates: jest.fn().mockResolvedValue([templatePayload]),
       getStrategyPlazaTemplateDetail: jest.fn().mockResolvedValue(templatePayload),
+      listStrategyPlazaTemplateSignals: jest.fn().mockResolvedValue([]),
       runStrategyPlazaTemplate: jest.fn().mockResolvedValue({ id: 'strategy-1' }),
       startStrategyPlazaEditSession: jest.fn().mockResolvedValue({
         sessionId: 'session-1',
@@ -101,6 +102,14 @@ describe('strategyPlazaProxyController', () => {
       'ma-cross',
       { runRequestId: 'plaza-run-12345678' },
     )
+  })
+
+  it('passes validated signal limit query to the service', async () => {
+    const { controller, service } = createController()
+
+    await controller.signals('ma-cross', { limit: 25 })
+
+    expect(service.listStrategyPlazaTemplateSignals).toHaveBeenCalledWith('ma-cross', 25)
   })
 
   it('starts edit sessions with backend-controlled user/auth and no body payload', async () => {

@@ -1,7 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { Transform } from 'class-transformer'
 import { IsBoolean, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 import { IsValidMetadata } from '@/common/validation/metadata.validator'
+
+function parseStrictBooleanQuery(value: unknown): unknown {
+  if (value === true || value === false) return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return value
+}
 
 export class AdminDataPullTaskListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '按任务 key 模糊搜索' })
@@ -18,9 +26,14 @@ export class AdminDataPullTaskListQueryDto extends BasePaginationRequestDto {
 
   @ApiPropertyOptional({ description: '是否启用' })
   @IsOptional()
+  @Transform(({ obj, key, value }) => {
+    return parseStrictBooleanQuery((obj as Record<string, unknown>)[key] ?? value)
+  })
   @IsBoolean()
   enabled?: boolean
 }
+
+export class ListDataPullExecutionsQueryDto extends BasePaginationRequestDto {}
 
 /**
  * 单条任务执行记录
@@ -260,5 +273,3 @@ export class AdminDataPullTaskResponseDto {
   @ApiProperty({ description: '任务更新时间', example: '2026-06-06T09:00:00.000Z' })
   updatedAt!: Date
 }
-
-

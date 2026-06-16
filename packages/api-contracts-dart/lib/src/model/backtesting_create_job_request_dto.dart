@@ -18,19 +18,20 @@ part 'backtesting_create_job_request_dto.g.dart';
 /// BacktestingCreateJobRequestDto
 ///
 /// Properties:
-/// * [symbols] 
-/// * [baseTimeframe] 
-/// * [stateTimeframes] 
+/// * [symbols]
+/// * [baseTimeframe]
+/// * [stateTimeframes]
 /// * [initialCash] - 初始资金
-/// * [leverage] 
-/// * [allowPartial] 
-/// * [conversationId] 
-/// * [execution] 
-/// * [strategy] 
-/// * [dataRange] 
-/// * [requestedRangeInput] 
-/// * [bars] 
-/// * [eventStreams] 
+/// * [leverage]
+/// * [allowPartial]
+/// * [conversationId]
+/// * [sessionId]
+/// * [execution]
+/// * [strategy]
+/// * [dataRange]
+/// * [requestedRangeInput]
+/// * [bars]
+/// * [eventStreams]
 @BuiltValue()
 abstract class BacktestingCreateJobRequestDto implements Built<BacktestingCreateJobRequestDto, BacktestingCreateJobRequestDtoBuilder> {
   @BuiltValueField(wireName: r'symbols')
@@ -56,6 +57,9 @@ abstract class BacktestingCreateJobRequestDto implements Built<BacktestingCreate
 
   @BuiltValueField(wireName: r'conversationId')
   String? get conversationId;
+
+  @BuiltValueField(wireName: r'sessionId')
+  String? get sessionId;
 
   @BuiltValueField(wireName: r'execution')
   BacktestingCreateJobExecutionDto get execution;
@@ -136,6 +140,13 @@ class _$BacktestingCreateJobRequestDtoSerializer implements PrimitiveSerializer<
       yield r'conversationId';
       yield serializers.serialize(
         object.conversationId,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.sessionId != null) {
+      yield r'sessionId';
+      yield serializers.serialize(
+        object.sessionId,
         specifiedType: const FullType(String),
       );
     }
@@ -246,6 +257,13 @@ class _$BacktestingCreateJobRequestDtoSerializer implements PrimitiveSerializer<
             specifiedType: const FullType(String),
           ) as String;
           result.conversationId = valueDes;
+          break;
+        case r'sessionId':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.sessionId = valueDes;
           break;
         case r'execution':
           final valueDes = serializers.deserialize(
@@ -387,4 +405,3 @@ class BacktestingCreateJobRequestDtoStateTimeframesEnum extends EnumClass {
   static BuiltSet<BacktestingCreateJobRequestDtoStateTimeframesEnum> get values => _$backtestingCreateJobRequestDtoStateTimeframesEnumValues;
   static BacktestingCreateJobRequestDtoStateTimeframesEnum valueOf(String name) => _$backtestingCreateJobRequestDtoStateTimeframesEnumValueOf(name);
 }
-

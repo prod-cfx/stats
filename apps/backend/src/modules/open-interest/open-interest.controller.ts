@@ -42,6 +42,7 @@ import {
   CreateOpenInterestDto,
   OpenInterestDto,
   OpenInterestStatsDto,
+  OpenInterestStatsQueryDto,
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
 // Nest 注入需要运行时引用 OpenInterestService，保留值导入
@@ -264,26 +265,13 @@ export class OpenInterestController {
   })
   async getStats(
     @Param('symbol') symbol: string,
-    @Query('startTime') startTime: string,
-    @Query('endTime') endTime: string,
+    @Query() query: OpenInterestStatsQueryDto,
   ) {
-    if (!symbol || !startTime || !endTime) {
+    if (!symbol) {
       throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'symbol, startTime, and endTime are required' } })
     }
 
-    // 验证日期格式
-    const start = new Date(startTime)
-    const end = new Date(endTime)
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'invalid date format' } })
-    }
-
-    if (start >= end) {
-      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'startTime must be before endTime' } })
-    }
-
-    const stats = await this.openInterestService.getStats(symbol, start, end)
+    const stats = await this.openInterestService.getStats(symbol, query.startDate, query.endDate)
 
     if (!stats) {
       throw new DomainException('open_interest.not_found', { code: ErrorCode.OPEN_INTEREST_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { symbol } })
