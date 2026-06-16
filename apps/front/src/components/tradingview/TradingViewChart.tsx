@@ -13,6 +13,7 @@ import {
   useId,
   useImperativeHandle,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'react'
@@ -1206,13 +1207,26 @@ export const TradingViewChart = (
     // ---- 清算地图 overlay（Coinglass-style）----
     const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
     const chartAdapterRef = useRef<ChartAdapter | null>(null)
-    const [mainPaneHeight, setMainPaneHeight] = useState<number | null>(null)
+    const [mainPaneHeight, setMainPaneHeight] = useReducer(
+      (_value: number | null, nextValue: number | null) => nextValue,
+      null,
+    )
     const mainPaneHeightRef = useRef<number | null>(null)
     // 清算地图（native drawings）：用 TradingView 的矩形 drawing 来画“右侧柱状热力条”，
     // 这样用户可以通过 TV 自己的对象树(Object Tree)/绘图管理能力进行隐藏/删除。
-    const [liqNativeSupported, setLiqNativeSupported] = useState(false)
-    const [liqNativeActive, setLiqNativeActive] = useState(false) // 已成功绘制过至少一批 native rectangles
-    const [liqHidden, setLiqHidden] = useState(false) // legend 眼睛：隐藏/显示
+    const [liqNativeSupported, setLiqNativeSupported] = useReducer(
+      (_value: boolean, nextValue: boolean) => nextValue,
+      false,
+    )
+    const [liqNativeActive, setLiqNativeActive] = useReducer(
+      (_value: boolean, nextValue: boolean) => nextValue,
+      false,
+    ) // 已成功绘制过至少一批 native rectangles
+    const [liqHidden, setLiqHidden] = useReducer(
+      (_value: boolean, nextValue: boolean | ((prev: boolean) => boolean)) =>
+        typeof nextValue === 'function' ? nextValue(_value) : nextValue,
+      false,
+    ) // legend 眼睛：隐藏/显示
     const liqHiddenRef = useRef(false)
     const liqNativeShapeIdsRef = useRef<string[]>([])
     const liqNativeRemovingRef = useRef(false)
@@ -1234,7 +1248,7 @@ export const TradingViewChart = (
       timestamps: [],
       values: [],
     })
-    const [liqSelected, setLiqSelected] = useState<null | {
+    type LiqSelection = null | {
       locked: boolean
       x: number
       y: number
@@ -1245,7 +1259,14 @@ export const TradingViewChart = (
       dex: number
       cumLong: number
       cumShort: number
-    }>(null)
+    }
+    const [liqSelected, setLiqSelected] = useReducer(
+      (
+        value: LiqSelection,
+        nextValue: LiqSelection | ((prev: LiqSelection) => LiqSelection),
+      ) => (typeof nextValue === 'function' ? nextValue(value) : nextValue),
+      null,
+    )
     const liqLockedRef = useRef(false)
     const liqLockedPriceRef = useRef<number | null>(null)
     interface OpenInterestFallbackFields {
@@ -1347,9 +1368,13 @@ export const TradingViewChart = (
     )
     const liqDataRef = useRef<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
     const liqCurrentPriceRef = useRef<number>(0)
-    const [liqData, setLiqData] = useState<ReturnType<
-      typeof generateLiquidationMapMockData
-    > | null>(null)
+    const [liqData, setLiqData] = useReducer(
+      (
+        _value: ReturnType<typeof generateLiquidationMapMockData> | null,
+        nextValue: ReturnType<typeof generateLiquidationMapMockData> | null,
+      ) => nextValue,
+      null,
+    )
     const showLiqOverlay = activeIndicators.some(x => x.id === 'liquidation-map')
     const showLiqOverlayRef = useRef(showLiqOverlay)
 

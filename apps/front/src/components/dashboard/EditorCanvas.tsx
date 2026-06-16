@@ -4,7 +4,7 @@ import type {DashboardDoc} from '@/features/dashboards/store/dashboard-store';
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
 import {
@@ -32,19 +32,31 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [doc, setDoc] = useState<DashboardDoc | null>(null)
-  const [docLoaded, setDocLoaded] = useState(false)
+  const [docState, dispatchDocState] = useReducer(
+    (
+      state: { doc: DashboardDoc | null; docLoaded: boolean },
+      action: { type: 'loading' } | { type: 'loaded'; doc: DashboardDoc | null },
+    ) => {
+      if (action.type === 'loading') return { ...state, docLoaded: false }
+      return { doc: action.doc, docLoaded: true }
+    },
+    { doc: null, docLoaded: false },
+  )
+  const { doc, docLoaded } = docState
 
-  useEffect(() => {
-    setDocLoaded(false)
-    const refresh = () => {
-      setDoc(
+  const applyDashboardSnapshot = useCallback(() => {
+    dispatchDocState({
+      type: 'loaded',
+      doc:
         dashboardId === DEFAULT_DASHBOARD_ID
           ? ensureDashboard(DEFAULT_DASHBOARD_ID)
           : getDashboard(dashboardId),
-      )
-      setDocLoaded(true)
-    }
+    })
+  }, [dashboardId])
+
+  useEffect(() => {
+    const refresh = () => applyDashboardSnapshot()
+    dispatchDocState({ type: 'loading' })
     refresh()
     window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
     window.addEventListener('storage', refresh)
@@ -52,7 +64,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
       window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
       window.removeEventListener('storage', refresh)
     }
-  }, [dashboardId])
+  }, [applyDashboardSnapshot])
 
   useEffect(() => {
     if (dashboardId === DEFAULT_DASHBOARD_ID) return

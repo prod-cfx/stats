@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useReducer, useRef } from 'react'
 import { resolveTelegramCallbackPayload } from '@/features/auth/telegram-callback-params'
 import { isRetryableTelegramDesktopError } from '@/features/auth/telegram-callback-retry'
 import { useAuth } from '@/hooks/use-auth'
@@ -43,8 +43,12 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
     isAuthenticated,
     isLoading,
   } = useAuth()
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useReducer(
+    (_error: string | null, nextError: string | null) => nextError,
+    null,
+  )
   const handledCallbackKeyRef = useRef<string | null>(null)
+  const showError = useCallback((message: string) => setError(message), [])
 
   useEffect(() => {
     const query = typeof window === 'undefined'
@@ -65,7 +69,7 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
         if (intent === 'bind') {
           if (isLoading) return 'waiting'
           if (!isAuthenticated) {
-            setError('当前未登录 Coinflux，无法绑定 Telegram')
+            showError('当前未登录 Coinflux，无法绑定 Telegram')
             return 'failed'
           }
           await bindTelegramByDesktopIntent(desktopIntentId)
@@ -104,18 +108,18 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
           }
           if (status.status === 'expired') {
             if (stopped) return
-            setError('Telegram 授权已过期，请返回登录页重新发起')
+            showError('Telegram 授权已过期，请返回登录页重新发起')
             return
           }
           if (status.status !== 'pending') {
             if (stopped) return
-            setError('Telegram 授权状态异常，请返回登录页重试')
+            showError('Telegram 授权状态异常，请返回登录页重试')
             return
           }
 
           if (attempts >= maxAttempts) {
             if (stopped) return
-            setError('等待 Telegram 授权超时，请返回登录页重试')
+            showError('等待 Telegram 授权超时，请返回登录页重试')
             return
           }
           window.setTimeout(tick, 2000)
@@ -127,13 +131,13 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
           }
           if (isRetryableTelegramDesktopError(err)) {
             if (attempts >= maxAttempts) {
-              setError('等待 Telegram 授权超时，请返回登录页重试')
+              showError('等待 Telegram 授权超时，请返回登录页重试')
               return
             }
             window.setTimeout(tick, 2000)
             return
           }
-          setError(err instanceof Error ? err.message : 'Telegram 桌面登录失败')
+          showError(err instanceof Error ? err.message : 'Telegram 桌面登录失败')
         }
       }
 
@@ -144,14 +148,14 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
     }
 
     if (!payload.telegramId || !payload.authDate || !payload.hash) {
-      setError('缺少 Telegram 授权参数，请先在 Telegram 中完成登录授权')
+      showError('缺少 Telegram 授权参数，请先在 Telegram 中完成登录授权')
       return
     }
 
     if (intent === 'bind') {
       if (isLoading) return
       if (!isAuthenticated) {
-        setError('当前未登录 Coinflux，无法绑定 Telegram')
+        showError('当前未登录 Coinflux，无法绑定 Telegram')
         return
       }
 
@@ -166,7 +170,7 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
           router.replace(redirect)
         })
         .catch(err => {
-          setError(err instanceof Error ? err.message : 'Telegram 绑定失败')
+          showError(err instanceof Error ? err.message : 'Telegram 绑定失败')
         })
       return
     }
@@ -190,7 +194,7 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
           router.replace(redirect)
           return
         }
-        setError(err instanceof Error ? err.message : 'Telegram 登录失败')
+        showError(err instanceof Error ? err.message : 'Telegram 登录失败')
       })
   }, [
     bindTelegram,
@@ -203,6 +207,7 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
     loginWithTelegramDesktopIntent,
     router,
     searchParams,
+    showError,
   ])
 
   return (

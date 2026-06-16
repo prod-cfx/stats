@@ -255,11 +255,18 @@ export const RightPanel = ({
   ])
 
   const [orderbook, setOrderbook] = useState(() => createDeterministicMock.initialOrderbook)
+  const [orderbookSource, setOrderbookSource] = useState(createDeterministicMock)
   const [trades, setTrades] = useState<
     Array<{ id: number; price: string; amount: string; time: string; type: 'buy' | 'sell' }>
   >([])
   const [lastPrice, setLastPrice] = useState<number | null>(null) // 最新成交价
   const [tickerData, setTickerData] = useState<TickerData | null>(null) // 24h 统计数据
+
+  if (orderbookSource !== createDeterministicMock) {
+    setOrderbookSource(createDeterministicMock)
+    setOrderbook(createDeterministicMock.initialOrderbook)
+    setLoading(false)
+  }
 
   // Close decimal menu when clicking outside
   useEffect(() => {
@@ -273,14 +280,6 @@ export const RightPanel = ({
       return () => document.removeEventListener('mousedown', onDown)
     }
   }, [isDecimalMenuOpen])
-
-  useEffect(() => {
-    // When source / symbol / precision changes, sync deterministic initial data immediately (no blank SSR/CSR)
-    /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
-    setOrderbook(createDeterministicMock.initialOrderbook)
-    setLoading(false)
-    /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
-  }, [createDeterministicMock, locale]) // Re-run when source/format changes
 
   // WebSocket 连接管理 - Trades 实时数据
   useEffect(() => {

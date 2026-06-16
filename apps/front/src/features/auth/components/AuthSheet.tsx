@@ -38,6 +38,7 @@ export function AuthSheet({
 }: AuthSheetProps) {
   const { t } = useTranslation()
   const [betaCode, setBetaCode] = useState('')
+  const [betaCodeOpenState, setBetaCodeOpenState] = useState(open)
   const [betaCodeGateEnabled, setBetaCodeGateEnabled] = useState(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const overlayRef = useRef<HTMLDivElement | null>(null)
@@ -45,11 +46,10 @@ export function AuthSheet({
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const mobileKeyboard = useMobileKeyboardInset({ enabled: open && !fallbackPage })
 
-  useEffect(() => {
-    if (!open) {
-      setBetaCode('')
-    }
-  }, [open])
+  if (betaCodeOpenState !== open) {
+    setBetaCodeOpenState(open)
+    if (!open) setBetaCode('')
+  }
 
   useEffect(() => {
     if (!open) return

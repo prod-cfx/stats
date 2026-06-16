@@ -2,7 +2,7 @@
 
 import type { AiQuantStrategyRecord } from '@/components/account/ai-quant-strategy-store'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer } from 'react'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
 import { shouldSuppressAuthGate } from '@/features/auth/auth-gate-suppression'
@@ -24,8 +24,18 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
   const { session, isLoading } = useAuth()
   const { openAuth } = useAuthSheet()
   const searchParams = useSearchParams()
-  const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(null)
-  const [isDetailLoading, setIsDetailLoading] = useState(true)
+  const [detailState, dispatchDetailState] = useReducer(
+    (
+      _state: { strategy: AiQuantStrategyRecord | null; isDetailLoading: boolean },
+      action:
+        | { type: 'loading' }
+        | { type: 'loaded'; strategy: AiQuantStrategyRecord | null },
+    ) => {
+      if (action.type === 'loading') return { strategy: null, isDetailLoading: true }
+      return { strategy: action.strategy, isDetailLoading: false }
+    },
+    { strategy: null, isDetailLoading: true },
+  )
   const plazaReturnHref = resolvePlazaReturnHref(lng, searchParams?.get('from') ?? null)
   const strategyRedirect = plazaReturnHref
     ? `/${lng}/account/ai-quant/strategy/${id}?from=${encodeURIComponent(plazaReturnHref)}`
@@ -42,19 +52,16 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
   useEffect(() => {
     if (isLoading || !session) return
     let cancelled = false
-    setIsDetailLoading(true)
+    dispatchDetailState({ type: 'loading' })
 
     void fetchAccountAiQuantStrategyDetail(id, session.userId)
       .then(detail => {
         if (cancelled) return
-        setStrategy(mapAccountStrategyDetailToRecord(detail))
+        dispatchDetailState({ type: 'loaded', strategy: mapAccountStrategyDetailToRecord(detail) })
       })
       .catch(() => {
         if (cancelled) return
-        setStrategy(null)
-      })
-      .finally(() => {
-        if (!cancelled) setIsDetailLoading(false)
+        dispatchDetailState({ type: 'loaded', strategy: null })
       })
 
     return () => {
@@ -62,7 +69,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     }
   }, [id, isLoading, session])
 
-  if (isLoading || !session || isDetailLoading) {
+  if (isLoading || !session || detailState.isDetailLoading) {
     return (
       <main className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 lg:p-6">
@@ -92,7 +99,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
   return (
     <AiQuantStrategyDetail
       lng={lng}
-      strategy={strategy}
+      strategy={detailState.strategy}
       backHref={plazaReturnHref ?? undefined}
       backLabelKey={plazaReturnHref ? 'aiQuant.plaza' : undefined}
     />

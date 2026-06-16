@@ -278,6 +278,7 @@ export const WhaleTradingStatsModal = ({
   const [activeTab, setActiveTab] = useState<'asset' | 'position'>('asset')
   const [timeRange, setTimeRange] = useState<'1w' | '1m' | 'all'>('1w')
   const [timeRangeOpen, setTimeRangeOpen] = useState(false)
+  const [timeRangeModalOpen, setTimeRangeModalOpen] = useState(isOpen)
   const timeRangeDays = useMemo(() => {
     switch (timeRange) {
       case '1w':
@@ -487,13 +488,14 @@ export const WhaleTradingStatsModal = ({
     }
   }, [performance, t])
 
-  // Close dropdown on outside click / when modal closes
+  if (timeRangeModalOpen !== isOpen) {
+    setTimeRangeModalOpen(isOpen)
+    if (!isOpen) setTimeRangeOpen(false)
+  }
+
+  // Close dropdown on outside click.
   useEffect(() => {
-    if (!isOpen) {
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
-      setTimeRangeOpen(false)
-      return
-    }
+    if (!isOpen) return
     if (!timeRangeOpen) return
     const onDocPointerDown = () => setTimeRangeOpen(false)
     document.addEventListener('pointerdown', onDocPointerDown)

@@ -44,17 +44,9 @@ const OrderRow = ({
   onSelect: () => void
   variant?: 'default' | 'compact'
 }) => {
-  const [isFlash, setIsFlash] = useState(false)
   const isCompact = variant === 'compact'
   const { theme } = useTheme()
-
-  // Lightweight "tick" effect when data changes (kept subtle, CoinGlass-like)
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
-    setIsFlash(true)
-    const timer = setTimeout(() => setIsFlash(false), 180)
-    return () => clearTimeout(timer)
-  }, [item.price, item.amount])
+  const flashKey = `${item.price}:${item.amount}`
 
   const isAsk = type === 'ask'
   const barColor = isAsk
@@ -89,6 +81,7 @@ const OrderRow = ({
   }), [barColor, item.depthPercent])
   const flashOverlayStyle = useMemo(() => ({
     background: flashTint,
+    animation: 'orderbook-row-flash 180ms ease-out both',
   }), [flashTint])
 
   return (
@@ -118,12 +111,11 @@ const OrderRow = ({
       />
 
       {/* tiny flash on updates */}
-      {isFlash && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={flashOverlayStyle}
-        />
-      )}
+      <div
+        key={flashKey}
+        className="pointer-events-none absolute inset-0"
+        style={flashOverlayStyle}
+      />
 
       <div
         className={`relative z-10 flex w-full items-center ${isCompact ? 'text-[9.5px] leading-3' : 'text-[12px] leading-4'} font-mono`}
@@ -220,6 +212,12 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] select-none">
+      <style jsx global>{`
+        @keyframes orderbook-row-flash {
+          from { opacity: 1; }
+          to { opacity: 0; }
+        }
+      `}</style>
       {/* Table Header */}
       <div
         className={`flex items-center border-b border-[color:var(--cf-border)] px-3 text-[color:var(--cf-muted)] ${isCompact ? 'h-[22px] text-[8.5px]' : 'h-[36px] text-[12px]'} z-10 flex-none bg-[color:var(--cf-bg)] font-semibold`}

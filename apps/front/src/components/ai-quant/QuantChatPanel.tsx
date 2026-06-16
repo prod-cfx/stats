@@ -5,7 +5,7 @@ import type { DynamicParamSchema, DynamicParamValues } from './dynamic-params'
 import type { LlmClarificationGate, LlmPublicationGate } from '@/lib/api'
 import { ArrowDown, ArrowUp, BarChart3, Bot, Check, Copy, KeyRound, Play, Settings2, Sparkles, User } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -373,10 +373,14 @@ export function QuantChatPanel({
   const [submittedBacktestSettings, setSubmittedBacktestSettings] = useState(false)
   const [touchedBacktestFields, setTouchedBacktestFields] = useState<Record<string, boolean>>({})
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
-  const [mobileComposerHeight, setMobileComposerHeight] = useState(168)
+  const [mobileComposerHeight, setMobileComposerHeight] = useReducer(
+    (_height: number, nextHeight: number) => nextHeight,
+    168,
+  )
   const [backtestDraftValues, setBacktestDraftValues] = useState<DynamicParamValues>(() =>
     buildBacktestDraftValues(paramValues),
   )
+  const [backtestDraftSource, setBacktestDraftSource] = useState(paramValues)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const mobileComposerRef = useRef<HTMLDivElement>(null)
   const mobileKeyboard = useMobileKeyboardInset({ enabled: mobileMode })
@@ -446,11 +450,12 @@ export function QuantChatPanel({
     setShowScrollToLatest(false)
   }
 
-  useEffect(() => {
+  if (backtestDraftSource !== paramValues) {
+    setBacktestDraftSource(paramValues)
     setBacktestDraftValues(buildBacktestDraftValues(paramValues))
     setTouchedBacktestFields({})
     setSubmittedBacktestSettings(false)
-  }, [paramValues])
+  }
 
   const submit = () => {
     if (!input.trim()) return

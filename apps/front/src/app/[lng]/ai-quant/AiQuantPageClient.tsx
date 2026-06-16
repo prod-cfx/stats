@@ -10,7 +10,7 @@ import type { AccountAiQuantStrategyDetail, StrategyPlazaTemplate } from '@/lib/
 import { Bot, ChevronLeft, KeyRound, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AiQuantDeletionDialog } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
@@ -252,7 +252,10 @@ export function AiQuantPageClient({
     null,
   )
   const [conversationStorageReady, setConversationStorageReady] = useState(false)
-  const [conversationSyncState, setConversationSyncState] = useState<ConversationSyncState>('idle')
+  const [conversationSyncState, setConversationSyncState] = useReducer(
+    (_state: ConversationSyncState, nextState: ConversationSyncState) => nextState,
+    'idle' as ConversationSyncState,
+  )
   const [deploymentDetail, setDeploymentDetail] = useState<AccountAiQuantStrategyDetail | null>(
     null,
   )
@@ -324,39 +327,64 @@ export function AiQuantPageClient({
     }
   }, [isLoading, plazaLoadFailedMessage, session])
 
-  useEffect(() => {
-    if (!activeConversationId && conversations.length) {
-      setActiveConversationId(conversations[0].id)
-    }
-  }, [activeConversationId, conversations])
+  if (!activeConversationId && conversations.length) {
+    setActiveConversationId(conversations[0].id)
+  }
+
+  const clearDeploymentDetailState = () => {
+    setDeploymentDetail(null)
+    setDeploymentDetailStatus('idle')
+    setDeploymentActionPending(false)
+    setEditGuardOpen(false)
+    setStopDialogOpen(false)
+    setDeploymentGuardErrorMessage(null)
+  }
+
+  const markDeploymentDetailLoading = () => {
+    setDeploymentDetail(null)
+    setDeploymentDetailStatus('loading')
+    setDeploymentGuardErrorMessage(null)
+  }
+
+  const applyDeploymentDetailReady = (detail: AccountAiQuantStrategyDetail) => {
+    setDeploymentDetail(detail)
+    setDeploymentDetailStatus('ready')
+  }
+
+  const applyDeploymentDetailError = (status: DeploymentDetailStatus) => {
+    setDeploymentDetail(null)
+    setDeploymentDetailStatus(status)
+  }
+
+  const applyConversationSyncSnapshot = (
+    nextConversations: ConversationState[],
+    nextActiveConversationId: string,
+    nextSyncState: ConversationSyncState,
+  ) => {
+    setConversations(nextConversations)
+    setActiveConversationId(nextActiveConversationId)
+    setConversationSyncState(nextSyncState)
+    setConversationStorageReady(true)
+  }
 
   useEffect(() => {
     const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
     if (!session?.userId || !publishedStrategyInstanceId) {
-      setDeploymentDetail(null)
-      setDeploymentDetailStatus('idle')
-      setDeploymentActionPending(false)
-      setEditGuardOpen(false)
-      setStopDialogOpen(false)
-      setDeploymentGuardErrorMessage(null)
+      clearDeploymentDetailState()
       return
     }
 
     let cancelled = false
-    setDeploymentDetail(null)
-    setDeploymentDetailStatus('loading')
-    setDeploymentGuardErrorMessage(null)
+    markDeploymentDetailLoading()
 
     void fetchAccountAiQuantStrategyDetail(publishedStrategyInstanceId, session.userId)
       .then(detail => {
         if (cancelled) return
-        setDeploymentDetail(detail)
-        setDeploymentDetailStatus('ready')
+        applyDeploymentDetailReady(detail)
       })
       .catch(error => {
         if (cancelled) return
-        setDeploymentDetail(null)
-        setDeploymentDetailStatus(isAccountStrategyNotFoundError(error) ? 'not_found' : 'error')
+        applyDeploymentDetailError(isAccountStrategyNotFoundError(error) ? 'not_found' : 'error')
       })
 
     return () => {
@@ -384,10 +412,7 @@ export function AiQuantPageClient({
 
             if (matched) {
               clearIntent()
-              setConversations(restored)
-              setActiveConversationId(matched.id)
-              setConversationSyncState('ready')
-              setConversationStorageReady(true)
+              applyConversationSyncSnapshot(restored, matched.id, 'ready')
               return
             }
 
@@ -406,27 +431,18 @@ export function AiQuantPageClient({
               if (isSameStrategyEditIntent(getIntent(INTENT_TTL_MS), intent)) {
                 clearIntent()
               }
-              setConversations([recovered, ...restored])
-              setActiveConversationId(recovered.id)
-              setConversationSyncState('ready')
-              setConversationStorageReady(true)
+              applyConversationSyncSnapshot([recovered, ...restored], recovered.id, 'ready')
               return
             } catch {
               if (cancelled) return
               const fallback = restored.length > 0 ? restored : [createConversation(t)]
-              setConversations(fallback)
-              setActiveConversationId(fallback[0].id)
-              setConversationSyncState('ready')
-              setConversationStorageReady(true)
+              applyConversationSyncSnapshot(fallback, fallback[0].id, 'ready')
               return
             }
           }
 
           const fallback = restored.length > 0 ? restored : [createConversation(t)]
-          setConversations(fallback)
-          setActiveConversationId(fallback[0].id)
-          setConversationSyncState('ready')
-          setConversationStorageReady(true)
+          applyConversationSyncSnapshot(fallback, fallback[0].id, 'ready')
         } catch {
           if (cancelled) return
           const restored = readPersistedConversations({
@@ -435,10 +451,7 @@ export function AiQuantPageClient({
             version: deployVersion,
           }).conversations
           const fallback = restored.length > 0 ? restored : [createConversation(t)]
-          setConversations(fallback)
-          setActiveConversationId(fallback[0].id)
-          setConversationSyncState('error')
-          setConversationStorageReady(true)
+          applyConversationSyncSnapshot(fallback, fallback[0].id, 'error')
         }
       })()
       return () => {
@@ -453,9 +466,7 @@ export function AiQuantPageClient({
       version: deployVersion,
     })
 
-    setConversations(result.conversations)
-    setActiveConversationId(result.conversations[0].id)
-    setConversationSyncState('ready')
+    applyConversationSyncSnapshot(result.conversations, result.conversations[0].id, 'ready')
 
     if (result.shouldPersist) {
       localStorage.setItem(
@@ -463,7 +474,6 @@ export function AiQuantPageClient({
         serializePersistedConversations(result.conversations, deployVersion),
       )
     }
-    setConversationStorageReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployVersion, serverOwnedConversations])
 

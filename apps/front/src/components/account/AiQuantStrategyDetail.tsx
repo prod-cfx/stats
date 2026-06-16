@@ -601,6 +601,7 @@ export function AiQuantStrategyDetail({
   const resolvedBackHref = backHref ?? `/${lng}/account?tab=ai-quant`
   const resolvedBackLabel = t(backLabelKey ?? 'aiQuant.detail.backToList')
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(initialStrategy)
+  const [strategySource, setStrategySource] = useState(initialStrategy)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [runtimeControlFeedback, setRuntimeControlFeedback] = useState<{
     kind: 'success' | 'error'
@@ -609,16 +610,19 @@ export function AiQuantStrategyDetail({
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState<RuntimeAction | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [showFullTimeline, setShowFullTimeline] = useState(false)
+  const [timelineStrategyId, setTimelineStrategyId] = useState(initialStrategy?.id ?? null)
   const [activeInfoTab, setActiveInfoTab] = useState<DetailInfoTab>('trades')
   const [copiedField, setCopiedField] = useState<'strategy' | 'snapshot' | null>(null)
 
-  useEffect(() => {
+  if (strategySource !== initialStrategy) {
+    setStrategySource(initialStrategy)
     setStrategy(initialStrategy)
-  }, [initialStrategy])
+  }
 
-  useEffect(() => {
+  if (timelineStrategyId !== (strategy?.id ?? null)) {
+    setTimelineStrategyId(strategy?.id ?? null)
     setShowFullTimeline(false)
-  }, [strategy?.id])
+  }
 
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])

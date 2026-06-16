@@ -32,19 +32,24 @@ const GROUP_COLORS: Record<string, string> = {
 
 export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalProps) => {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(isOpen);
   const [step, setStep] = useState<Step>('groups')
   const [selectedGroup, setSelectedGroup] = useState<WidgetCatalogGroup | null>(null)
   const [selectedItem, setSelectedItem] = useState<WidgetCatalogItem | null>(null)
+  const [lastOpenState, setLastOpenState] = useState(isOpen)
 
-  useEffect(() => {
+  if (lastOpenState !== isOpen) {
+    setLastOpenState(isOpen)
     if (isOpen) {
-      /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
-      setLoading(true);
+      setLoading(true)
       setStep('groups')
       setSelectedGroup(null)
       setSelectedItem(null)
-      /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen) {
       const timer = setTimeout(() => setLoading(false), 300);
       return () => clearTimeout(timer);
     }

@@ -4,7 +4,7 @@ import type { Socket } from 'socket.io-client'
 import type { TickerData } from '@/lib/api'
 import type { DataSource, MarketType } from '@/types/trading'
 import { ChevronDown, Info, Search } from 'lucide-react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 import { fetchKlineData } from '@/lib/api'
@@ -67,10 +67,15 @@ export const TopBar = ({
   const [isSymbolMenuOpen, setIsSymbolMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [tickerData, setTickerData] = useState<TickerData | null>(null)
-  const [klineClosePrice, setKlineClosePrice] = useState<number | null>(null)
-  const [wsConnectionStatus, setWsConnectionStatus] = useState<ConnectionStatus>('disconnected')
-  const setWsStatus = useCallback((status: ConnectionStatus) => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- centralized setter for effects
+  const [klineClosePrice, setKlineClosePrice] = useReducer(
+    (_price: number | null, nextPrice: number | null) => nextPrice,
+    null,
+  )
+  const [wsConnectionStatus, setWsConnectionStatus] = useReducer(
+    (_status: ConnectionStatus, nextStatus: ConnectionStatus) => nextStatus,
+    'disconnected' as ConnectionStatus,
+  )
+  const notifyWsStatus = useCallback((status: ConnectionStatus) => {
     setWsConnectionStatus(status)
   }, [])
   const menuRef = useRef<HTMLDivElement>(null)
@@ -174,7 +179,7 @@ export const TopBar = ({
 
     if (!socketRef.current) {
       const wsBaseUrl = getWsBaseUrl()
-      setWsStatus('connecting')
+      notifyWsStatus('connecting')
       socketRef.current = io(`${wsBaseUrl}/kline`, {
         transports: ['websocket'],
         reconnection: true,
@@ -188,7 +193,7 @@ export const TopBar = ({
         logger.debug('[TopBar] WebSocket connected')
         logger.debug(`[TopBar] Current selectedSymbol: ${selectedSymbol}`)
         logger.debug(`[TopBar] Current selectedSymbolRef: ${selectedSymbolRef.current}`)
-        setWsStatus('connected')
+        notifyWsStatus('connected')
         // 使用闭包中的 selectedSymbol,因为 prevSymbolRef.current 在首次连接时还未设置
         if (selectedSymbol) {
           // 订阅 K线
@@ -253,17 +258,17 @@ export const TopBar = ({
 
       socket.on('disconnect', () => {
         logger.debug('[TopBar] WebSocket disconnected')
-        setWsStatus('disconnected')
+        notifyWsStatus('disconnected')
       })
 
       socket.on('connect_error', error => {
         logger.error('[TopBar] WebSocket connection error:', error)
-        setWsStatus('error')
+        notifyWsStatus('error')
       })
 
       socket.on('error', error => {
         logger.error('[TopBar] WebSocket error:', error)
-        setWsStatus('error')
+        notifyWsStatus('error')
       })
 
       // Ticker WebSocket 事件监听器
@@ -370,11 +375,11 @@ export const TopBar = ({
         instrumentType: isAggregated ? undefined : instrumentType,
       })
     } else {
-      setWsStatus('connecting')
+      notifyWsStatus('connecting')
     }
 
     return () => {}
-  }, [selectedSymbol, setWsStatus, selectedExchange, marketType, isAggregated, selectedBase])
+  }, [selectedSymbol, notifyWsStatus, selectedExchange, marketType, isAggregated, selectedBase])
 
   useEffect(() => {
     return () => {

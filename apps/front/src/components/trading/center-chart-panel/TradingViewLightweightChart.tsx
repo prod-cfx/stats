@@ -5,7 +5,7 @@ import type { LiquidationMapChartHandle } from '@/components/liquidation-map/Liq
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
 import { AreaSeries, CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
 import dynamic from 'next/dynamic'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { createLightweightChartAdapter } from '@/components/trading/chart-adapter/lightweight-chart-adapter'
@@ -118,10 +118,25 @@ const IndicatorChartPanel = ({
   const seriesRef = useRef<ISeriesApi<any> | null>(null)
   const altSeriesRef = useRef<ISeriesApi<any> | null>(null)
   const dataByTimeRef = useRef<Map<string, any>>(new Map())
-  const [currentValue, setCurrentValue] = useState<string>('')
-  const [currentValueColor, setCurrentValueColor] = useState<string>('')
-  const [liqHeader, setLiqHeader] = useState<null | { longUsd: number; shortUsd: number; totalUsd: number }>(null)
-  const [axisLabels, setAxisLabels] = useState<{ top: string; mid: string; bottom: string }>({ top: '', mid: '', bottom: '' })
+  const [currentValue, setCurrentValue] = useReducer((_value: string, nextValue: string) => nextValue, '')
+  const [currentValueColor, setCurrentValueColor] = useReducer(
+    (_value: string, nextValue: string) => nextValue,
+    '',
+  )
+  const [liqHeader, setLiqHeader] = useReducer(
+    (
+      _value: null | { longUsd: number; shortUsd: number; totalUsd: number },
+      nextValue: null | { longUsd: number; shortUsd: number; totalUsd: number },
+    ) => nextValue,
+    null,
+  )
+  const [axisLabels, setAxisLabels] = useReducer(
+    (
+      _value: { top: string; mid: string; bottom: string },
+      nextValue: { top: string; mid: string; bottom: string },
+    ) => nextValue,
+    { top: '', mid: '', bottom: '' },
+  )
 
   const localFormatAxis = (v: number) => {
     if (priceFormatter)
@@ -256,7 +271,6 @@ const IndicatorChartPanel = ({
     // Set initial value (last point)
     if (data.length > 0) {
       const last = data[data.length - 1]
-      /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
       if (type === 'liquidation') {
         const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
         const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
@@ -271,7 +285,6 @@ const IndicatorChartPanel = ({
         // Prefer explicit data color (for segmented coloring), fallback to series color
         setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
       }
-      /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
     }
 
     // Subscribe to crosshair to update legend value
@@ -390,7 +403,6 @@ const IndicatorChartPanel = ({
       }
        // Update header value
        const last = data[data.length - 1]
-       /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
        if (type === 'liquidation') {
          const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
          const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
@@ -404,7 +416,6 @@ const IndicatorChartPanel = ({
          setCurrentValue(formatter ? formatter(val) : String(val))
          setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
        }
-       /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
        
        if (chartRef.current) {
            chartRef.current.timeScale().fitContent()
@@ -416,7 +427,6 @@ const IndicatorChartPanel = ({
   // Fixed 3-axis labels (top/mid/bottom) based on current data range
   useEffect(() => {
     if (!data || data.length === 0) {
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- initialization pattern
       setAxisLabels({ top: '', mid: '', bottom: '' })
       return
     }
@@ -441,7 +451,6 @@ const IndicatorChartPanel = ({
     }
 
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- initialization pattern
       setAxisLabels({ top: '', mid: '', bottom: '' })
       return
     }
@@ -454,7 +463,6 @@ const IndicatorChartPanel = ({
 
     const mid = min < 0 && max > 0 ? 0 : (min + max) / 2
 
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived state from data
     setAxisLabels({
       top: localFormatAxis(max),
       mid: localFormatAxis(mid),
@@ -662,9 +670,12 @@ export const TradingViewLightweightChart = ({
   const candleDataRef = useRef<CandleBar[]>([])
   const lastCandleRef = useRef<CandleBar | null>(null)
   const [isMounted, setIsMounted] = useState(false);
-  const [ohlc, setOhlc] = useState<any>(null);
-  const [lastCandleClose, setLastCandleClose] = useState<number | null>(null)
-  const [liqSelected, setLiqSelected] = useState<null | {
+  const [ohlc, setOhlc] = useReducer((_value: any, nextValue: any) => nextValue, null);
+  const [lastCandleClose, setLastCandleClose] = useReducer(
+    (_value: number | null, nextValue: number | null) => nextValue,
+    null,
+  )
+  type LiqSelection = null | {
     locked: boolean
     x: number
     y: number
@@ -675,7 +686,14 @@ export const TradingViewLightweightChart = ({
     dex: number
     cumLong: number
     cumShort: number
-  }>(null)
+  }
+  const [liqSelected, setLiqSelected] = useReducer(
+    (
+      value: LiqSelection,
+      nextValue: LiqSelection | ((prev: LiqSelection) => LiqSelection),
+    ) => (typeof nextValue === 'function' ? nextValue(value) : nextValue),
+    null,
+  )
   const liqLockedRef = useRef(false)
   const liqLockedPriceRef = useRef<number | null>(null)
   const lastCandleCloseRef = useRef<number | null>(null)
@@ -692,12 +710,13 @@ export const TradingViewLightweightChart = ({
 
   // New Refs and State for Sub-Charts Sync
   const subChartsRef = useRef<Record<string, IChartApi>>({})
-  const [indicatorData, setIndicatorData] = useState<{
-      ls: any[],
-      oi: any[],
-      vol: any[],
-      liq: any[]
-  }>({ ls: [], oi: [], vol: [], liq: [] })
+  const [indicatorData, setIndicatorData] = useReducer(
+    (
+      _value: { ls: any[]; oi: any[]; vol: any[]; liq: any[] },
+      nextValue: { ls: any[]; oi: any[]; vol: any[]; liq: any[] },
+    ) => nextValue,
+    { ls: [], oi: [], vol: [], liq: [] },
+  )
 
   const registerChart = (id: string, chart: IChartApi) => {
     subChartsRef.current[id] = chart
@@ -961,7 +980,6 @@ export const TradingViewLightweightChart = ({
       if (liqLockedRef.current && liqLockedPriceRef.current != null) {
         const y = chartAdapter?.getPriceToY(liqLockedPriceRef.current)
         if (typeof y === 'number' && Number.isFinite(y)) {
-          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- event-driven update
           setLiqSelected((prev) => (prev ? { ...prev, y } : prev))
         }
       }
@@ -1203,10 +1221,8 @@ export const TradingViewLightweightChart = ({
     candleSeries.setData(candleData as unknown[])
 
     if (lastCandleRef.current) {
-      /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect -- derived state from generated data */
       setOhlc(lastCandleRef.current)
       setLastCandleClose(typeof lastCandleRef.current.close === 'number' ? lastCandleRef.current.close : null)
-      /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
     }
 
     // Generate Mock Data for Indicator Panels (Phase 2)
@@ -1269,7 +1285,6 @@ export const TradingViewLightweightChart = ({
        })
     }
 
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived state from generated data
     setIndicatorData({
         ls: lsData,
         oi: oiData,
