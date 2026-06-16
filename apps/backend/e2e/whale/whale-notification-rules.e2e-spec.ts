@@ -131,7 +131,7 @@ describe('Whale notification rules HTTP (E2E)', () => {
     }).expect(400)
 
     expect(response.body?.status).toBe(400)
-    expect(response.body?.error?.code).toBe('BAD_REQUEST')
+    expect(response.body?.error?.code).toBe('VALIDATION_ERROR')
     expect(response.body?.error?.args?.validationErrors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

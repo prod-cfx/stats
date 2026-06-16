@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { BadRequestException, ValidationPipe } from '@nestjs/common'
+import { ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { SwaggerModule } from '@nestjs/swagger'
 import { loadEnvironment } from '@net/config'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+import { toValidationErrorDetails, ValidationException } from './common/exceptions/validation.exception'
 import { buildValidatedCorsOrigins } from './common/utils/cors-origins'
 import { AppModule } from './modules/app.module'
 import { buildSwaggerDocument } from './swagger/build-swagger-document'
@@ -44,11 +45,7 @@ async function bootstrap() {
         enableImplicitConversion: true,
       },
       exceptionFactory: (errors) => {
-        const errorMessages = errors.map(err => ({
-          property: err.property,
-          constraints: err.constraints,
-        }))
-        return new BadRequestException(errorMessages)
+        return new ValidationException(toValidationErrorDetails(errors))
       },
     }),
   )

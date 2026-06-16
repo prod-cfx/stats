@@ -1,14 +1,19 @@
 import type { INestApplication } from '@nestjs/common'
 import { Body, Controller, Module, Post } from '@nestjs/common'
 import { APP_FILTER } from '@nestjs/core'
+import { ErrorCode } from '@ai/shared'
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter'
 import { EnvModule } from '@/common/modules/env.module'
-import { IsString } from 'class-validator'
+import { IsInt, IsOptional, IsString } from 'class-validator'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 class GlobalValidationProbeDto {
   @IsString()
   name!: string
+
+  @IsOptional()
+  @IsInt()
+  rank?: number
 }
 
 @Controller('validation-probe')
@@ -56,7 +61,7 @@ describe('Global ValidationPipe unknown fields (E2E)', () => {
     expect(response.body).toMatchObject({
       status: 400,
       error: expect.objectContaining({
-        code: expect.any(String),
+        code: ErrorCode.VALIDATION_ERROR,
         args: expect.objectContaining({
           validationErrors: expect.arrayContaining([
             expect.objectContaining({
@@ -71,6 +76,32 @@ describe('Global ValidationPipe unknown fields (E2E)', () => {
     })
     expect(JSON.stringify(response.body)).toContain('unexpectedField')
     expect(JSON.stringify(response.body)).toContain('property unexpectedField should not exist')
+  })
+
+  it('rejects declared DTO body fields with invalid values', async () => {
+    const client = createApiClient(app)
+
+    const response = await client
+      .post('/validation-probe')
+      .send({ name: 'valid-name', rank: 'not-a-number' })
+      .expect(400)
+
+    expect(response.body).toMatchObject({
+      status: 400,
+      error: expect.objectContaining({
+        code: ErrorCode.VALIDATION_ERROR,
+        args: expect.objectContaining({
+          validationErrors: expect.arrayContaining([
+            expect.objectContaining({
+              property: 'rank',
+              constraints: expect.objectContaining({
+                isInt: 'rank must be an integer number',
+              }),
+            }),
+          ]),
+        }),
+      }),
+    })
   })
 
   it('keeps accepting declared DTO body fields', async () => {

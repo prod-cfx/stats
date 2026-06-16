@@ -2,8 +2,9 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule, TestingModuleBuilder } from '@nestjs/testing'
 import type { SuperTest, Test as SupertestTest } from 'supertest'
 import { randomBytes } from 'node:crypto'
-import { BadRequestException, ValidationPipe } from '@nestjs/common'
+import { ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { toValidationErrorDetails, ValidationException } from '@/common/exceptions/validation.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 import { ensureE2eDefaults, ensureE2eEnv } from '../helpers/setup-e2e-env'
 import { supertestRequest } from '../helpers/supertest-compat'
@@ -130,16 +131,13 @@ export async function createTestingApp(
         enableImplicitConversion: true,
       },
       exceptionFactory: (errors) => {
-        const errorMessages = errors.map(err => ({
-          property: err.property,
-          constraints: err.constraints,
-        }))
+        const errorMessages = toValidationErrorDetails(errors)
         // 输出详细的校验错误，便于定位 400 来源
         try {
           console.error('[E2E ValidationErrors]', JSON.stringify(errorMessages))
         }
         catch {}
-        return new BadRequestException(errorMessages)
+        return new ValidationException(errorMessages)
       },
     }),
   )
