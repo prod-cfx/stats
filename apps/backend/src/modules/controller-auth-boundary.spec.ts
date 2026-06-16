@@ -52,6 +52,28 @@ export class RateLimitedController {
       'rate-limited.controller.ts:RateLimitedController.probe',
     ])
   })
+
+  it('does not treat SkipThrottle as an auth boundary', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'controller-auth-boundary-'))
+    fs.writeFileSync(
+      path.join(tempDir, 'skip-throttled.controller.ts'),
+      `
+import { Controller, Get } from '@nestjs/common'
+import { SkipThrottle } from '@nestjs/throttler'
+
+@Controller('probe')
+export class SkipThrottledController {
+  @Get()
+  @SkipThrottle()
+  probe() {}
+}
+`,
+    )
+
+    expect(findControllerAuthBoundaryViolations(tempDir)).toEqual([
+      'skip-throttled.controller.ts:SkipThrottledController.probe',
+    ])
+  })
 })
 
 function findControllerAuthBoundaryViolations(modulesRoot: string): string[] {

@@ -51,6 +51,109 @@
         ]
       }
     },
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "进程存活状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "service": {
+                          "type": "string",
+                          "example": "backend"
+                        },
+                        "status": {
+                          "type": "string",
+                          "example": "ok",
+                          "enum": [
+                            "ok",
+                            "degraded",
+                            "down"
+                          ]
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "example": "2025-11-15T14:00:00.000Z"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "存活检查",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "服务依赖就绪状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "service": {
+                          "type": "string",
+                          "example": "backend"
+                        },
+                        "status": {
+                          "type": "string",
+                          "example": "ok",
+                          "enum": [
+                            "ok",
+                            "degraded",
+                            "down"
+                          ]
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "example": "2025-11-15T14:00:00.000Z"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务依赖未就绪或应用正在停机"
+          }
+        },
+        "summary": "就绪检查",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
     "/admin/settings": {
       "get": {
         "operationId": "AdminSettingsController_getAllSettings",

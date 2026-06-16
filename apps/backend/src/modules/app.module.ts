@@ -1,13 +1,14 @@
 import type { MiddlewareConsumer, NestModule } from '@nestjs/common'
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { ScheduleModule } from '@nestjs/schedule'
 import { WinstonModule } from 'nest-winston'
 import { ClsMiddleware } from 'nestjs-cls'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter'
+import { GlobalRateLimitGuard } from '../common/guards/global-rate-limit.guard'
 import { AfterCommitInterceptor } from '../common/interceptors/after-commit.interceptor'
 import { LoggerInterceptor } from '../common/interceptors/logger.interceptor'
 import { RequestContextInterceptor } from '../common/interceptors/request-context.interceptor'
@@ -15,6 +16,7 @@ import { TransformInterceptor } from '../common/interceptors/transform.intercept
 import { CacheModule } from '../common/modules/cache.module'
 import { ClsConfigModule } from '../common/modules/cls.module'
 import { EnvModule } from '../common/modules/env.module'
+import { RateLimitModule } from '../common/modules/rate-limit.module'
 import { EnvService } from '../common/services/env.service'
 import { allConfigLoaders } from '../config'
 import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.config'
@@ -76,6 +78,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
       inject: [EnvService],
     }),
     CacheModule, // 必须在 WinstonModule 之后,因为 RedisService 依赖 WINSTON_MODULE_NEST_PROVIDER
+    RateLimitModule,
     PrismaModule, // Global 模块，需要在其他模块之前导入
     ScheduleModule.forRoot(),
     // === 业务裁剪说明 ===
@@ -116,6 +119,10 @@ const currentEnv = defaultEnvAccessor.appEnv()
     WhaleHoldingsModule,
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: GlobalRateLimitGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: RequestContextInterceptor,

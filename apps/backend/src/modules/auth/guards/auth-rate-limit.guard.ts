@@ -7,4 +7,9 @@ import { ThrottlerGuard } from '@nestjs/throttler'
  * 默认配置：20 次/分钟/IP
  */
 @Injectable()
-export class AuthRateLimitGuard extends ThrottlerGuard {}
+export class AuthRateLimitGuard extends ThrottlerGuard {
+  override async onModuleInit(): Promise<void> {
+    await super.onModuleInit()
+    this.throttlers = this.throttlers.filter(throttler => throttler.name === 'auth')
+  }
+}

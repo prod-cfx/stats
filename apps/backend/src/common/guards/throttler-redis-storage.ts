@@ -47,7 +47,6 @@ export class ThrottlerRedisStorage implements ThrottlerStorage {
 
     const [[, totalHits], [, timeToExpire]] = results as [[null, number], [null, number]]
 
-    // 如果是第一次访问（TTL 为 -1 或 -2），设置过期时间
     if (timeToExpire === -1 || timeToExpire === -2) {
       await this.client.pexpire(redisKey, ttl)
       return {

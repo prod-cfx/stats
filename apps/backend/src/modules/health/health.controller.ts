@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { SkipThrottle } from '@nestjs/throttler'
 import { Public } from '@/modules/auth/decorators/public.decorator'
 // eslint-disable-next-line ts/consistent-type-imports
 import { HealthService } from './health.service'
@@ -25,6 +26,7 @@ const healthResponseSchema = {
 @ApiTags('Health')
 @Controller('health')
 @Public()
+@SkipThrottle()
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 

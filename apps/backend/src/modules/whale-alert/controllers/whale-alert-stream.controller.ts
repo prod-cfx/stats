@@ -3,6 +3,7 @@ import type { Observable } from 'rxjs'
 import type { WhaleTradeDto } from '../dto/whale-trade.dto'
 import { Controller, Logger, Sse } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
+import { SkipThrottle } from '@nestjs/throttler'
 import { interval, map, merge, mergeMap, switchMap } from 'rxjs'
 import { createHeartbeatStream } from '@/common/utils/sse.utils'
 import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
@@ -19,6 +20,7 @@ export class WhaleAlertStreamController {
   constructor(private readonly whaleAlertService: WhaleAlertService) {}
 
   @Sse('realtime-stream')
+  @SkipThrottle()
   @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '订阅 Hyperliquid 鲸鱼成交实时推送' })
