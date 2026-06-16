@@ -124,7 +124,7 @@ export async function createTestingApp(
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
       enableDebugMessages: true,
       transformOptions: {
         enableImplicitConversion: true,
