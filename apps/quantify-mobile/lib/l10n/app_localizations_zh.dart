@@ -2194,6 +2194,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailReturnAll => '全部收益';
 
   @override
+  String get strategyDetailReturn => '收益';
+
+  @override
   String get strategyDetailMaxDrawdown => '最大回撤';
 
   @override
@@ -2230,7 +2233,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailProfitLossRatio => '盈亏比';
 
   @override
-  String get strategyDetailTradeCount => '交易次数';
+  String get strategyDetailTradeCount => '交易数';
 
   @override
   String get strategyDetailUsers => '使用人数';
@@ -2252,13 +2255,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailRunButton => '运行';
 
   @override
-  String get strategyCardLoadConversation => '载入对话';
+  String get strategyCardLoadConversation => '编辑';
 
   @override
   String get strategyCardRun => '运行';
 
   @override
   String get strategyDetailLoadConversation => '载入到对话';
+
+  @override
+  String get strategyDetailLogicTitle => '策略逻辑';
+
+  @override
+  String get strategyDetailLogicEmpty => '暂无策略逻辑说明。';
+
+  @override
+  String get strategyDetailEvidenceTitle => '回测证据';
+
+  @override
+  String get strategyDetailEvidenceRange => '回测区间';
+
+  @override
+  String get strategyDetailEvidenceDataSource => '数据源';
+
+  @override
+  String get strategyDetailEvidenceGeneratedAt => '生成时间';
+
+  @override
+  String get strategyDetailEvidenceCandles => 'K 线数量';
+
+  @override
+  String get strategyDetailConfidenceTitle => '样本可信度';
+
+  @override
+  String get strategyDetailConfidenceHigh => '高置信';
+
+  @override
+  String get strategyDetailConfidenceMedium => '中置信';
+
+  @override
+  String get strategyDetailConfidenceLow => '低置信';
+
+  @override
+  String get strategyDetailConfidenceUnknown => '置信度待确认';
+
+  @override
+  String get strategyDetailConfidenceReasonEmpty => '暂无置信度说明。';
+
+  @override
+  String get strategyDetailDisclaimerFallback =>
+      '历史回测不代表未来收益。运行前请确认账户、市场环境与风险承受能力。';
 
   @override
   String strategyHomeLoadedToast(String name) {
@@ -2295,7 +2341,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyHomeSortReturn => '收益';
 
   @override
-  String get strategyHomeSortSharpe => 'Sharpe';
+  String get strategyHomeSortSharpe => '交易';
 
   @override
   String get strategyHomeSortLowDrawdown => '低回撤';
@@ -2340,7 +2386,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyBadgePro => 'PRO';
 
   @override
-  String get strategyCardStatSharpe => 'Sharpe';
+  String get strategyCardStatSharpe => '交易';
 
   @override
   String get strategyCardStatDrawdown => '回撤';
@@ -2349,7 +2395,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyCardStatWinRate => '胜率';
 
   @override
-  String get strategyCardStatUsers => '使用';
+  String get strategyCardStatUsers => '置信';
 
   @override
   String get strategyDetailEquityTab7d => '7D';

@@ -17,8 +17,8 @@ import 'strategy_status_badge_view.dart';
 /// 1. 头像(40) + 名 + status badge + 收藏 star
 ///    类型 chip · 币对 · 周期
 /// 2. 收益摘要块：近 {period} + CAGR + sparkline（soft 背景）
-/// 3. 4 格 mini stats：Sharpe / 回撤 / 胜率 / 使用（居中）
-/// 4. 作者头像(18) + 作者名 + 蓝 V + 「载入对话」紫色渐变实心按钮
+/// 3. 4 格 mini stats：交易 / 回撤 / 胜率 / 置信（居中）
+/// 4. 作者头像(18) + 作者名 + 蓝 V + 「编辑」紫色渐变实心按钮
 class StrategyCardTile extends StatelessWidget {
   const StrategyCardTile({
     super.key,
@@ -48,11 +48,22 @@ class StrategyCardTile extends StatelessWidget {
   /// 星标切换回调（#1565）。null 时不渲染按钮（兼容历史）。
   final VoidCallback? onToggleStar;
 
-  String _fmtUsers(int users) {
-    if (users >= 1000) {
-      return '${(users / 1000).toStringAsFixed(1)}k';
+  String _fmtTradeCount(int? count) {
+    if (count == null) return '--';
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
     }
-    return '$users';
+    return '$count';
+  }
+
+  String _confidenceLabel(BuildContext context, String? level) {
+    final bool zh = Localizations.localeOf(context).languageCode == 'zh';
+    return switch (level) {
+      'high' => zh ? '高置信' : 'High confidence',
+      'medium' => zh ? '中置信' : 'Medium confidence',
+      'low' => zh ? '低置信' : 'Low confidence',
+      _ => '--',
+    };
   }
 
   String _categoryLabel(BuildContext context, StrategyCategory category) {
@@ -198,13 +209,13 @@ class StrategyCardTile extends StatelessWidget {
               sparkline: item.sparkline,
             ),
             const SizedBox(height: QzSpacing.md),
-            // 行 3：4 格指标（Sharpe / 回撤 / 胜率 / 使用），居中
+            // 行 3：4 格指标（交易 / 回撤 / 胜率 / 置信），居中
             Row(
               children: <Widget>[
                 Expanded(
                   child: _MiniStat(
                     label: l10n.strategyCardStatSharpe,
-                    value: stats.sharpe.toStringAsFixed(2),
+                    value: _fmtTradeCount(stats.tradeCount),
                   ),
                 ),
                 Expanded(
@@ -223,13 +234,13 @@ class StrategyCardTile extends StatelessWidget {
                 Expanded(
                   child: _MiniStat(
                     label: l10n.strategyCardStatUsers,
-                    value: _fmtUsers(stats.users),
+                    value: _confidenceLabel(context, stats.confidenceLevel),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: QzSpacing.md),
-            // 行 4：作者头像/名/认证 + 载入对话紫色渐变按钮
+            // 行 4：作者头像/名/认证 + 编辑紫色渐变按钮
             Row(
               children: <Widget>[
                 Expanded(

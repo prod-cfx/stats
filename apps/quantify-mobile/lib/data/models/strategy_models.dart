@@ -96,16 +96,20 @@ String deriveStrategySymbol(String pair) {
 class StrategyMarketStats {
   final double cagr;
   final double sharpe;
+  final int? tradeCount;
   final double maxDrawdown; // 负值
   final double winRate; // 0..1
   final int users;
+  final String? confidenceLevel;
 
   const StrategyMarketStats({
     required this.cagr,
     required this.sharpe,
+    this.tradeCount,
     required this.maxDrawdown,
     required this.winRate,
     required this.users,
+    this.confidenceLevel,
   });
 }
 
@@ -143,27 +147,26 @@ class StrategyMarketPage {
 /// equity curve 时间维度（#1565）。
 enum EquityTimeframe { d7, d30, d90, y1 }
 
-/// 策略详情：基础卡片 + 收益指标 + 收益曲线占位序列。
+/// 策略详情：基础卡片 + 收益指标 + 官方样本收益曲线。
 ///
 /// 指标对齐设计稿 `StratDetail`（#1825）：累计收益 [cagr]、夏普、最大回撤、
 /// 胜率、盈亏比 [profitLossRatio]、交易次数 [tradeCount]、使用人数 [users]。
-/// 7d/30d/全部收益率保留供其他消费方使用。所有数值由 fixture 基于
-/// `Random(id.hashCode)` 派生，**确定性**——保证 widget test 多次 pump 同一
-/// id 结果一致。
+/// 7d/30d/全部收益率保留供其他消费方使用。后端未返回的指标保持 null，页面
+/// 展示缺失态，不用本地默认值伪造成真实数据。
 class StrategyDetail {
   final StrategyCard card;
   final double return7d;
   final double return30d;
   final double returnAll;
   final double maxDrawdown;
-  final double sharpe;
+  final double? sharpe;
   final double winRate;
 
   /// 累计收益率（百分数，如 32.4 表示 +32.4%），equity 卡左上大号展示（#1825）。
   final double cagr;
 
-  /// 盈亏比（avg win / avg loss）。后端 StrategyDetail 暂未提供，fixture 派生（#1825）。
-  final double profitLossRatio;
+  /// 盈亏比（avg win / avg loss）。后端缺失时为 null。
+  final double? profitLossRatio;
 
   /// 历史交易次数。后端暂未提供，fixture 派生（#1825）。
   final int tradeCount;
@@ -171,9 +174,25 @@ class StrategyDetail {
   /// 使用人数（订阅者数）。来自 [StrategyCard.subscribers]（#1825）。
   final int users;
 
-  /// 收益曲线占位采样点（0..1 归一化），与 sparkline 等价但更长。
-  /// 真正的 K 线接入留给后续 issue；当前页仅渲染"占位"提示。
+  /// 收益曲线采样点，优先来自官方回测证据。
   final List<double> equityCurve;
+
+  /// 官方策略逻辑说明，来自 strategy-plaza 模板 `logicDescription`。
+  final String logicDescription;
+
+  /// 官方样本回测置信度与原因。
+  final String confidenceLevel;
+  final List<String> confidenceReasons;
+
+  /// 官方样本回测风险提示。
+  final String disclaimer;
+
+  /// 官方样本回测证据。时间为毫秒时间戳，缺失时页面显示 `--`。
+  final int? backtestFromMs;
+  final int? backtestToMs;
+  final String generatedAt;
+  final String dataSourceLabel;
+  final int? candleCount;
 
   /// 策略运行参数。来自 strategy-plaza 模板契约，缺字段时页面显示 `--`。
   final String marketType;
@@ -194,6 +213,15 @@ class StrategyDetail {
     required this.tradeCount,
     required this.users,
     required this.equityCurve,
+    this.logicDescription = '',
+    this.confidenceLevel = '',
+    this.confidenceReasons = const <String>[],
+    this.disclaimer = '',
+    this.backtestFromMs,
+    this.backtestToMs,
+    this.generatedAt = '',
+    this.dataSourceLabel = '',
+    this.candleCount,
     this.marketType = '',
     this.positionPct,
     this.leverage,

@@ -110,6 +110,12 @@ class ApiStrategyRepository implements StrategyRepository {
         : 'spot';
   }
 
+  String _dataSourceLabel(StrategyPlazaTemplateResponseDto dto) {
+    final String exchange = dto.exchange.name.toUpperCase();
+    final String market = _marketType(dto) == 'perp' ? 'swap' : 'spot';
+    return '$exchange $market';
+  }
+
   String _authorization() {
     final String token = _tokenSupplier?.call().trim() ?? '';
     if (token.isEmpty) {
@@ -125,14 +131,19 @@ class ApiStrategyRepository implements StrategyRepository {
 
   StrategyMarketStats _stats(StrategyPlazaTemplateResponseDto dto) {
     final StrategyPlazaDisplayMetricsResponseDto metrics = dto.displayMetrics;
+    final StrategyPlazaOfficialBacktestMetricsResponseDto officialMetrics =
+        dto.officialBacktest.metrics;
     final double drawdown = metrics.maxDrawdownPct?.toDouble() ?? 0;
     final double winRate = metrics.winRatePct?.toDouble() ?? 0;
     return StrategyMarketStats(
       cagr: metrics.returnPct?.toDouble() ?? 0,
       sharpe: metrics.sharpe?.toDouble() ?? 0,
+      tradeCount:
+          officialMetrics.tradeCount?.toInt() ?? metrics.tradeCount?.toInt(),
       maxDrawdown: drawdown > 0 ? -drawdown : drawdown,
       winRate: winRate > 1 ? winRate / 100 : winRate,
       users: metrics.users?.toInt() ?? 0,
+      confidenceLevel: dto.officialBacktest.confidence.level.name,
     );
   }
 
@@ -187,16 +198,27 @@ class ApiStrategyRepository implements StrategyRepository {
       return30d: returnPct,
       returnAll: returnPct,
       maxDrawdown: drawdown > 0 ? -drawdown : drawdown,
-      sharpe: metrics.sharpe?.toDouble() ?? 0,
+      sharpe: metrics.sharpe?.toDouble(),
       winRate: winRate > 1 ? winRate / 100 : winRate,
       cagr: returnPct,
-      profitLossRatio: metrics.profitLossRatio?.toDouble() ?? 0,
+      profitLossRatio: metrics.profitLossRatio?.toDouble(),
       tradeCount:
           officialMetrics.tradeCount?.toInt() ??
           metrics.tradeCount?.toInt() ??
           0,
       users: metrics.users?.toInt() ?? 0,
       equityCurve: _officialEquity(dto),
+      logicDescription: dto.logicDescription,
+      confidenceLevel: dto.officialBacktest.confidence.level.name,
+      confidenceReasons: dto.officialBacktest.confidence.reasons.toList(
+        growable: false,
+      ),
+      disclaimer: dto.officialBacktest.disclaimer,
+      backtestFromMs: dto.officialBacktest.backtestFrom.toInt(),
+      backtestToMs: dto.officialBacktest.backtestTo.toInt(),
+      generatedAt: dto.officialBacktest.generatedAt,
+      dataSourceLabel: _dataSourceLabel(dto),
+      candleCount: dto.officialBacktest.candleCount.toInt(),
       marketType: _marketType(dto),
       positionPct: dto.positionPct.toDouble(),
       leverage: dto.leverage?.toDouble(),
@@ -376,9 +398,11 @@ class ApiStrategyRepository implements StrategyRepository {
       stats: StrategyMarketStats(
         cagr: 0,
         sharpe: 0,
+        tradeCount: null,
         maxDrawdown: 0,
         winRate: 0,
         users: 0,
+        confidenceLevel: null,
       ),
     );
   }

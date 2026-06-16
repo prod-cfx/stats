@@ -4284,6 +4284,12 @@ abstract class AppLocalizations {
   /// **'全部收益'**
   String get strategyDetailReturnAll;
 
+  /// No description provided for @strategyDetailReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'收益'**
+  String get strategyDetailReturn;
+
   /// No description provided for @strategyDetailMaxDrawdown.
   ///
   /// In zh, this message translates to:
@@ -4359,7 +4365,7 @@ abstract class AppLocalizations {
   /// No description provided for @strategyDetailTradeCount.
   ///
   /// In zh, this message translates to:
-  /// **'交易次数'**
+  /// **'交易数'**
   String get strategyDetailTradeCount;
 
   /// No description provided for @strategyDetailUsers.
@@ -4395,7 +4401,7 @@ abstract class AppLocalizations {
   /// No description provided for @strategyCardLoadConversation.
   ///
   /// In zh, this message translates to:
-  /// **'载入对话'**
+  /// **'编辑'**
   String get strategyCardLoadConversation;
 
   /// No description provided for @strategyCardRun.
@@ -4409,6 +4415,90 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'载入到对话'**
   String get strategyDetailLoadConversation;
+
+  /// No description provided for @strategyDetailLogicTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略逻辑'**
+  String get strategyDetailLogicTitle;
+
+  /// No description provided for @strategyDetailLogicEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无策略逻辑说明。'**
+  String get strategyDetailLogicEmpty;
+
+  /// No description provided for @strategyDetailEvidenceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测证据'**
+  String get strategyDetailEvidenceTitle;
+
+  /// No description provided for @strategyDetailEvidenceRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测区间'**
+  String get strategyDetailEvidenceRange;
+
+  /// No description provided for @strategyDetailEvidenceDataSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据源'**
+  String get strategyDetailEvidenceDataSource;
+
+  /// No description provided for @strategyDetailEvidenceGeneratedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成时间'**
+  String get strategyDetailEvidenceGeneratedAt;
+
+  /// No description provided for @strategyDetailEvidenceCandles.
+  ///
+  /// In zh, this message translates to:
+  /// **'K 线数量'**
+  String get strategyDetailEvidenceCandles;
+
+  /// No description provided for @strategyDetailConfidenceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'样本可信度'**
+  String get strategyDetailConfidenceTitle;
+
+  /// No description provided for @strategyDetailConfidenceHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高置信'**
+  String get strategyDetailConfidenceHigh;
+
+  /// No description provided for @strategyDetailConfidenceMedium.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置信'**
+  String get strategyDetailConfidenceMedium;
+
+  /// No description provided for @strategyDetailConfidenceLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'低置信'**
+  String get strategyDetailConfidenceLow;
+
+  /// No description provided for @strategyDetailConfidenceUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'置信度待确认'**
+  String get strategyDetailConfidenceUnknown;
+
+  /// No description provided for @strategyDetailConfidenceReasonEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无置信度说明。'**
+  String get strategyDetailConfidenceReasonEmpty;
+
+  /// No description provided for @strategyDetailDisclaimerFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史回测不代表未来收益。运行前请确认账户、市场环境与风险承受能力。'**
+  String get strategyDetailDisclaimerFallback;
 
   /// No description provided for @strategyHomeLoadedToast.
   ///
@@ -4473,7 +4563,7 @@ abstract class AppLocalizations {
   /// No description provided for @strategyHomeSortSharpe.
   ///
   /// In zh, this message translates to:
-  /// **'Sharpe'**
+  /// **'交易'**
   String get strategyHomeSortSharpe;
 
   /// No description provided for @strategyHomeSortLowDrawdown.
@@ -4551,7 +4641,7 @@ abstract class AppLocalizations {
   /// No description provided for @strategyCardStatSharpe.
   ///
   /// In zh, this message translates to:
-  /// **'Sharpe'**
+  /// **'交易'**
   String get strategyCardStatSharpe;
 
   /// No description provided for @strategyCardStatDrawdown.
@@ -4569,7 +4659,7 @@ abstract class AppLocalizations {
   /// No description provided for @strategyCardStatUsers.
   ///
   /// In zh, this message translates to:
-  /// **'使用'**
+  /// **'置信'**
   String get strategyCardStatUsers;
 
   /// No description provided for @strategyDetailEquityTab7d.

@@ -98,43 +98,12 @@ Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   return (container: container, router: router);
 }
 
-/// 读取「策略参数」区块中 [label] 所在行的值：定位含该 label 的 Row，
-/// 取该 Row 内另一个非 label 的 Text。避免与同名 equity tab（如 30D）冲突。
-String _paramValue(WidgetTester tester, String label) {
-  final Finder row = find.ancestor(
-    of: find.text(label),
-    matching: find.byType(Row),
-  );
-  final Finder values = find.descendant(
-    of: row.first,
-    matching: find.byType(Text),
-  );
-  final Iterable<Text> texts = tester.widgetList<Text>(values);
-  return texts
-          .map((Text t) => t.data)
-          .firstWhere(
-            (String? d) => d != null && d != label,
-            orElse: () => null,
-          ) ??
-      '';
-}
-
-bool _tfSelected(WidgetTester tester, String tfName) {
-  final Text label = tester.widget<Text>(
-    find.descendant(
-      of: find.byKey(Key('strategy-detail-tf-$tfName')),
-      matching: find.byType(Text),
-    ),
-  );
-  return label.style?.fontWeight == FontWeight.w600;
-}
-
 void main() {
-  testWidgets('渲染：6 张指标卡 + 运行 / 分享 / 载入对话 + 策略说明 + equity 真实图，无信号段（#1825）', (
+  testWidgets('渲染：4 张指标卡 + 策略逻辑 + 回测证据 + 样本可信度 + 风险提示，无参数表（#1825）', (
     WidgetTester tester,
   ) async {
     await _pumpDetail(tester);
-    expect(find.byType(StrategyMetricCard), findsNWidgets(6));
+    expect(find.byType(StrategyMetricCard), findsNWidgets(4));
     // 底栏：分享 + 载入对话 + 运行（订阅按钮已移除，#1825）
     expect(find.byKey(const Key('strategy-detail-share-btn')), findsOneWidget);
     expect(
@@ -146,24 +115,42 @@ void main() {
       find.byKey(const Key('strategy-detail-subscribe-btn')),
       findsNothing,
     );
-    // 6 格指标含设计稿新增项；equity 累计收益段含「累计收益」文案
-    expect(find.text('盈亏比'), findsOneWidget);
-    expect(find.text('交易次数'), findsOneWidget);
-    expect(find.text('使用人数'), findsOneWidget);
+    // 概览对齐 front 官方样本回测：收益 / 胜率 / 最大回撤 / 交易数。
+    expect(find.text('收益'), findsOneWidget);
+    expect(find.text('胜率'), findsOneWidget);
+    expect(find.text('最大回撤'), findsOneWidget);
+    expect(find.text('交易数'), findsOneWidget);
+    expect(find.text('SHARPE'), findsNothing);
+    expect(find.text('盈亏比'), findsNothing);
+    expect(find.text('使用人数'), findsNothing);
     expect(find.textContaining('累计收益'), findsOneWidget);
-    // 策略说明段加入；最近信号段移除（#1825）
-    expect(find.text('策略说明'), findsOneWidget);
+    // mobile 精简报告：策略逻辑 + 回测证据 + 样本可信度 + 风险提示；最近信号段移除（#1825）
+    expect(find.text('策略逻辑'), findsOneWidget);
+    expect(find.text('回测证据'), findsOneWidget);
+    expect(find.text('回测区间'), findsOneWidget);
+    expect(find.text('数据源'), findsOneWidget);
+    expect(find.text('生成时间'), findsOneWidget);
+    expect(find.text('K 线数量'), findsOneWidget);
+    expect(find.text('OKX swap'), findsOneWidget);
+    expect(find.text('120'), findsOneWidget);
+    expect(find.text('样本可信度'), findsOneWidget);
+    expect(find.text('高置信'), findsOneWidget);
+    expect(find.textContaining('历史回测不代表未来收益'), findsOneWidget);
+    expect(find.text('交易样本'), findsNothing);
     expect(find.text('近期信号'), findsNothing);
     expect(find.byType(StrategySignalTile), findsNothing);
     // equity 真实图替代占位文字（#1565）
     expect(find.byType(EquityCurveView), findsOneWidget);
     expect(find.text('曲线占位（接入 K 线后可视化）'), findsNothing);
-    // 策略参数区块（用户评价区块已随设计稿移除，#1799）
-    expect(find.text('策略参数'), findsOneWidget);
+    // 参数表和用户评价区块已移除。
+    expect(find.text('策略参数'), findsNothing);
+    expect(find.text('交易品种'), findsNothing);
+    expect(find.text('交易周期'), findsNothing);
+    expect(find.text('杠杆'), findsNothing);
     expect(find.text('用户评价'), findsNothing);
   });
 
-  testWidgets('指标区：单个 bgElev 边框卡承载 3x2 DStat 网格（#2078）', (
+  testWidgets('指标区：单个 bgElev 边框卡承载 2x2 官方样本概览（#2078）', (
     WidgetTester tester,
   ) async {
     await _pumpDetail(tester);
@@ -184,15 +171,15 @@ void main() {
 
     expect(
       find.descendant(of: grid, matching: find.byType(StrategyMetricCard)),
-      findsNWidgets(6),
+      findsNWidgets(4),
     );
     final StrategyMetricCard first = tester.widget<StrategyMetricCard>(
       find
           .descendant(of: grid, matching: find.byType(StrategyMetricCard))
           .first,
     );
-    expect(first.label, 'Sharpe');
-    expect(first.value, isNot('1.84'));
+    expect(first.label, '收益');
+    expect(first.emphasis, QzMetricEmphasis.up);
   });
 
   testWidgets('指标单格：DStat label/value 字号、mono、最大回撤跌色（#2078）', (
@@ -200,9 +187,9 @@ void main() {
   ) async {
     await _pumpDetail(tester);
 
-    final Text sharpeLabel = tester.widget<Text>(find.text('SHARPE'));
-    expect(sharpeLabel.style?.fontSize, 10);
-    expect(sharpeLabel.style?.letterSpacing, 0.4);
+    final Text returnLabel = tester.widget<Text>(find.text('收益'));
+    expect(returnLabel.style?.fontSize, 10);
+    expect(returnLabel.style?.letterSpacing, 0.4);
 
     final StrategyMetricCard drawdownCard = tester.widget<StrategyMetricCard>(
       find
@@ -255,7 +242,7 @@ void main() {
     expect(run.leading, isNotNull);
   });
 
-  testWidgets('equity：曲线高度 120，timeframe tab 保持可点击增强（#2081）', (
+  testWidgets('equity：曲线高度 120，不展示本地 timeframe tab（#2081）', (
     WidgetTester tester,
   ) async {
     await _pumpDetail(tester);
@@ -267,91 +254,10 @@ void main() {
     final SizedBox box = tester.widget<SizedBox>(section);
     expect(box.height, 120);
 
-    expect(_tfSelected(tester, 'd30'), isTrue);
-    await tester.tap(find.byKey(const Key('strategy-detail-tf-d90')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pump();
-    expect(_tfSelected(tester, 'd90'), isTrue);
-  });
-
-  testWidgets('策略参数：非高频策略交易周期取 card.period、杠杆 1× (#1886)', (
-    WidgetTester tester,
-  ) async {
-    // st-grid-btc：category=grid、period=30D
-    await _pumpDetail(tester);
-    expect(_paramValue(tester, '交易品种'), 'BTCUSDT');
-    // 「交易周期」行的值取 card.period（30D，与 equity tab 同名故按行定位）
-    expect(_paramValue(tester, '交易周期'), '30D');
-    expect(_paramValue(tester, '杠杆'), '1×');
-    // 旧硬编码值不应再出现
-    expect(find.text('15m / 1H'), findsNothing);
-    expect(find.text('5×'), findsNothing);
-  });
-
-  testWidgets('策略参数：高频策略杠杆 5×、交易周期取 card.period (#1886)', (
-    WidgetTester tester,
-  ) async {
-    // st-grid-pepe：category=highFreq、period=7D
-    await _pumpDetail(tester, id: 'st-grid-pepe');
-    expect(_paramValue(tester, '杠杆'), '5×');
-    expect(_paramValue(tester, '交易周期'), '7D');
-    expect(find.text('15m / 1H'), findsNothing);
-  });
-
-  testWidgets('equity 时间维度切换：tap 90D tab 不抛异常 (#1565)', (
-    WidgetTester tester,
-  ) async {
-    await _pumpDetail(tester);
-    await tester.tap(find.byKey(const Key('strategy-detail-tf-d90')));
-    await tester.pump();
-    // 等 equity provider mock 120ms 完成
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pump();
-    expect(find.byType(EquityCurveView), findsOneWidget);
-  });
-
-  testWidgets('equity 默认 tab：period=30D 的策略默认选中 d30（#1888）', (
-    WidgetTester tester,
-  ) async {
-    await _pumpDetail(tester, id: 'st-grid-btc');
-    expect(_tfSelected(tester, 'd30'), isTrue);
-    expect(_tfSelected(tester, 'd90'), isFalse);
-  });
-
-  testWidgets('equity 默认 tab：period=90D 的策略默认选中 d90（#1888）', (
-    WidgetTester tester,
-  ) async {
-    await _pumpDetail(tester, id: 'st-dca-sol');
-    expect(_tfSelected(tester, 'd90'), isTrue);
-    expect(_tfSelected(tester, 'd30'), isFalse);
-  });
-
-  testWidgets('equity 默认 tab：period=7D 的策略默认选中 d7（#1888）', (
-    WidgetTester tester,
-  ) async {
-    await _pumpDetail(tester, id: 'st-mom-doge');
-    expect(_tfSelected(tester, 'd7'), isTrue);
-  });
-
-  testWidgets('equity 默认 tab：不可映射 period=14D 回退 d30（#1888）', (
-    WidgetTester tester,
-  ) async {
-    await _pumpDetail(tester, id: 'st-grid-stable');
-    expect(_tfSelected(tester, 'd30'), isTrue);
-  });
-
-  testWidgets('equity 默认 tab：手动切换后不再被 period 覆盖（#1888）', (
-    WidgetTester tester,
-  ) async {
-    await _pumpDetail(tester, id: 'st-dca-sol');
-    // 默认 d90，手动切到 d7 后应保持 d7
-    await tester.tap(find.byKey(const Key('strategy-detail-tf-d7')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pump();
-    expect(_tfSelected(tester, 'd7'), isTrue);
-    expect(_tfSelected(tester, 'd90'), isFalse);
+    expect(find.byKey(const Key('strategy-detail-tf-d7')), findsNothing);
+    expect(find.byKey(const Key('strategy-detail-tf-d30')), findsNothing);
+    expect(find.byKey(const Key('strategy-detail-tf-d90')), findsNothing);
+    expect(find.byKey(const Key('strategy-detail-tf-y1')), findsNothing);
   });
 
   testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘监控 /me/live（#1825）', (
@@ -402,7 +308,7 @@ void main() {
         );
         expect(
           find.byType(StrategyMetricCard),
-          findsNWidgets(6),
+          findsNWidgets(4),
           reason: 'theme bg=$bg accent=$accent',
         );
         c.dispose();

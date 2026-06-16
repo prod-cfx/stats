@@ -56,18 +56,6 @@ class StrategyDetailPage extends ConsumerStatefulWidget {
 }
 
 class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
-  /// 把策略 `period`（如 `7D`/`30D`/`90D`/`1Y`）映射到 [EquityTimeframe]；
-  /// 无法映射（如 `14D`/`15m`）时回退 [EquityTimeframe.d30]。
-  static EquityTimeframe _defaultTimeframe(String period) {
-    return switch (period.trim().toUpperCase()) {
-      '7D' => EquityTimeframe.d7,
-      '30D' => EquityTimeframe.d30,
-      '90D' => EquityTimeframe.d90,
-      '1Y' => EquityTimeframe.y1,
-      _ => EquityTimeframe.d30,
-    };
-  }
-
   /// 点击「载入对话」：toast → 700ms → `/ai?loadStrategy=$id`。
   /// toast 文案在此解析（依赖 l10n），timer/导航请求由 controller 持有。
   Future<void> _onLoadConversation(StrategyDetail d) async {
@@ -119,10 +107,6 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
 
   String _fmtPct(double v, {bool sign = true}) =>
       '${sign && v > 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
-
-  /// 使用人数：≥1000 缩写为 `x.xk`，否则原值（对齐设计稿 DStat users 格式）。
-  String _fmtUsers(int n) =>
-      n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
 
   /// 分享链接 host：使用 RFC 2606 保留 TLD `.invalid` 占位，避免自定义 scheme
   /// 在用户外部分享时变成死链，同时不会误指向真实未注册域名。
@@ -199,8 +183,6 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                       ),
                     ),
                     data: (StrategyDetail d) {
-                      final EquityTimeframe tf =
-                          pageState.tf ?? _defaultTimeframe(d.card.period);
                       return SafeArea(
                         top: false,
                         child: SingleChildScrollView(
@@ -213,54 +195,47 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              // equity 卡：左上大号 +CAGR% +「{period} 累计收益」+ 时间 tab
-                              // （对齐设计稿 StratDetail equity 卡，#1825）。
+                              // equity 卡：左上大号 +CAGR% +「{period} 累计收益」+ 官方样本曲线。
                               _EquityCard(
                                 cagr: d.cagr,
-                                tf: tf,
-                                onChanged: (EquityTimeframe v) => ref
-                                    .read(
-                                      strategyDetailControllerProvider.notifier,
-                                    )
-                                    .setTf(v),
-                                curve: _EquitySection(id: id, tf: tf),
+                                periodLabel: d.card.period.isNotEmpty
+                                    ? d.card.period
+                                    : '—',
+                                curve: _EquitySection(data: d.equityCurve),
                               ),
                               const SizedBox(height: QzSpacing.md),
-                              // 6 格指标：Sharpe / 最大回撤 / 胜率 / 盈亏比 / 交易次数 / 使用人数
-                              // （对齐设计稿 StratDetail stats grid，#1825）。
+                              // 概览对齐 front 官方样本回测：收益 / 胜率 / 最大回撤 / 交易数。
                               _MetricGrid(
                                 cards: <Widget>[
                                   StrategyMetricCard(
-                                    label: 'Sharpe',
-                                    value: d.sharpe.toStringAsFixed(2),
-                                  ),
-                                  StrategyMetricCard(
-                                    label: l10n.strategyDetailMaxDrawdown,
-                                    value: _fmtPct(d.maxDrawdown, sign: false),
-                                    emphasis: QzMetricEmphasis.down,
+                                    label: l10n.strategyDetailReturn,
+                                    value: _fmtPct(d.cagr),
+                                    emphasis: d.cagr >= 0
+                                        ? QzMetricEmphasis.up
+                                        : QzMetricEmphasis.down,
                                   ),
                                   StrategyMetricCard(
                                     label: l10n.strategyDetailWinRate,
                                     value:
-                                        '${(d.winRate * 100).toStringAsFixed(1)}%',
+                                        '${(d.winRate * 100).toStringAsFixed(2)}%',
                                   ),
                                   StrategyMetricCard(
-                                    label: l10n.strategyDetailProfitLossRatio,
-                                    value: d.profitLossRatio.toStringAsFixed(2),
+                                    label: l10n.strategyDetailMaxDrawdown,
+                                    value: _fmtPct(
+                                      d.maxDrawdown.abs(),
+                                      sign: false,
+                                    ),
+                                    emphasis: QzMetricEmphasis.down,
                                   ),
                                   StrategyMetricCard(
                                     label: l10n.strategyDetailTradeCount,
                                     value: '${d.tradeCount}',
                                   ),
-                                  StrategyMetricCard(
-                                    label: l10n.strategyDetailUsers,
-                                    value: _fmtUsers(d.users),
-                                  ),
                                 ],
                               ),
                               const SizedBox(height: QzSpacing.md),
                               Text(
-                                l10n.strategyDetailParamsTitle,
+                                l10n.strategyDetailLogicTitle,
                                 style: TextStyle(
                                   color: c.text,
                                   fontSize: 14,
@@ -268,10 +243,10 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                                 ),
                               ),
                               const SizedBox(height: QzSpacing.sm),
-                              _ParamsSection(detail: d),
+                              _LogicSection(detail: d),
                               const SizedBox(height: QzSpacing.md),
                               Text(
-                                l10n.strategyDetailDescriptionTitle,
+                                l10n.strategyDetailEvidenceTitle,
                                 style: TextStyle(
                                   color: c.text,
                                   fontSize: 14,
@@ -279,7 +254,20 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                                 ),
                               ),
                               const SizedBox(height: QzSpacing.sm),
-                              _DescriptionSection(card: d.card),
+                              _EvidenceSection(detail: d),
+                              const SizedBox(height: QzSpacing.md),
+                              Text(
+                                l10n.strategyDetailConfidenceTitle,
+                                style: TextStyle(
+                                  color: c.text,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: QzSpacing.sm),
+                              _ConfidenceSection(detail: d),
+                              const SizedBox(height: QzSpacing.md),
+                              _DisclaimerSection(detail: d),
                             ],
                           ),
                         ),

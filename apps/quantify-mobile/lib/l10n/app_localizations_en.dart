@@ -2255,6 +2255,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailReturnAll => 'Total Return';
 
   @override
+  String get strategyDetailReturn => 'Return';
+
+  @override
   String get strategyDetailMaxDrawdown => 'Max Drawdown';
 
   @override
@@ -2314,13 +2317,57 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailRunButton => 'Run';
 
   @override
-  String get strategyCardLoadConversation => 'Load chat';
+  String get strategyCardLoadConversation => 'Edit';
 
   @override
   String get strategyCardRun => 'Run';
 
   @override
   String get strategyDetailLoadConversation => 'Load into chat';
+
+  @override
+  String get strategyDetailLogicTitle => 'Strategy Logic';
+
+  @override
+  String get strategyDetailLogicEmpty => 'No strategy logic available.';
+
+  @override
+  String get strategyDetailEvidenceTitle => 'Backtest Evidence';
+
+  @override
+  String get strategyDetailEvidenceRange => 'Backtest Range';
+
+  @override
+  String get strategyDetailEvidenceDataSource => 'Data Source';
+
+  @override
+  String get strategyDetailEvidenceGeneratedAt => 'Generated At';
+
+  @override
+  String get strategyDetailEvidenceCandles => 'Candles';
+
+  @override
+  String get strategyDetailConfidenceTitle => 'Sample Confidence';
+
+  @override
+  String get strategyDetailConfidenceHigh => 'High confidence';
+
+  @override
+  String get strategyDetailConfidenceMedium => 'Medium confidence';
+
+  @override
+  String get strategyDetailConfidenceLow => 'Low confidence';
+
+  @override
+  String get strategyDetailConfidenceUnknown => 'Confidence pending';
+
+  @override
+  String get strategyDetailConfidenceReasonEmpty =>
+      'No confidence notes available.';
+
+  @override
+  String get strategyDetailDisclaimerFallback =>
+      'Historical backtests do not guarantee future returns. Check account, market, and risk conditions before running.';
 
   @override
   String strategyHomeLoadedToast(String name) {
@@ -2357,7 +2404,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyHomeSortReturn => 'Return';
 
   @override
-  String get strategyHomeSortSharpe => 'Sharpe';
+  String get strategyHomeSortSharpe => 'Trades';
 
   @override
   String get strategyHomeSortLowDrawdown => 'Low DD';
@@ -2402,7 +2449,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyBadgePro => 'PRO';
 
   @override
-  String get strategyCardStatSharpe => 'Sharpe';
+  String get strategyCardStatSharpe => 'Trades';
 
   @override
   String get strategyCardStatDrawdown => 'Drawdown';
@@ -2411,7 +2458,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyCardStatWinRate => 'Win rate';
 
   @override
-  String get strategyCardStatUsers => 'Users';
+  String get strategyCardStatUsers => 'Confidence';
 
   @override
   String get strategyDetailEquityTab7d => '7D';

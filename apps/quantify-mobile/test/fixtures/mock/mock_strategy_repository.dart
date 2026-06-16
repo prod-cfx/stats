@@ -37,7 +37,7 @@ class MockStrategyRepository implements StrategyRepository {
     return List<double>.generate(30, (int _) => rng.nextDouble());
   }
 
-  /// 派生 4 格指标：cagr / sharpe / 最大回撤 / 胜率 / 使用人数。
+  /// 派生 4 格指标：cagr / 交易 / 最大回撤 / 胜率 / 置信。
   ///
   /// 与 [getStrategyDetail] 的指标语义保持一致，但范围适配卡片列表更紧凑
   /// 的显示：cagr 跟随 [StrategyCard.pnlPercent] 量级，winRate 用 0..1。
@@ -54,9 +54,11 @@ class MockStrategyRepository implements StrategyRepository {
     return StrategyMarketStats(
       cagr: c.pnlPercent,
       sharpe: sharpe,
+      tradeCount: c.subscribers,
       maxDrawdown: -(mddBase + rng.nextDouble() * mddSpan),
       winRate: winRate,
       users: c.subscribers,
+      confidenceLevel: c.verified ? 'high' : 'medium',
     );
   }
 
@@ -158,6 +160,15 @@ class MockStrategyRepository implements StrategyRepository {
       tradeCount: 80 + rng.nextInt(400),
       users: card.subscribers,
       equityCurve: curve,
+      logicDescription: '${card.description} 使用官方样本回测验证。',
+      confidenceLevel: 'high',
+      confidenceReasons: const <String>['样本回测满足官方基础准入条件。'],
+      disclaimer: '历史回测不代表未来收益。该结果基于固定历史窗口和官方参数。',
+      backtestFromMs: 1717200000000,
+      backtestToMs: 1719800000000,
+      generatedAt: '2026-06-10T00:00:00.000Z',
+      dataSourceLabel: 'OKX swap',
+      candleCount: 120,
     );
   }
 

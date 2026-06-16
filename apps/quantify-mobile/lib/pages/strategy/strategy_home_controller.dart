@@ -113,7 +113,7 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
   }
 
   /// 在当前内存列表上排序，避免 repository 暴露 sortKey。
-  /// hot=users 降；cagr=cagr 降；sharpe=sharpe 降；mddLow=maxDrawdown 升序近 0。
+  /// hot=users 降；cagr=cagr 降；sharpe=tradeCount 降；mddLow=maxDrawdown 升序近 0。
   List<StrategyMarketItem> _applySort(
     List<StrategyMarketItem> items,
     StrategySortKey k,
@@ -123,7 +123,9 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
       return switch (k) {
         StrategySortKey.hot => b.stats.users.compareTo(a.stats.users),
         StrategySortKey.cagr => b.stats.cagr.compareTo(a.stats.cagr),
-        StrategySortKey.sharpe => b.stats.sharpe.compareTo(a.stats.sharpe),
+        StrategySortKey.sharpe => (b.stats.tradeCount ?? -1).compareTo(
+          a.stats.tradeCount ?? -1,
+        ),
         StrategySortKey.mddLow => b.stats.maxDrawdown.compareTo(
           a.stats.maxDrawdown,
         ),

@@ -240,6 +240,9 @@ void main() {
     expect(find.byKey(const Key('strategy-sort-cagr')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sort-sharpe')), findsOneWidget);
     expect(find.byKey(const Key('strategy-sort-mddLow')), findsOneWidget);
+    expect(find.text('交易'), findsWidgets);
+    expect(find.text('置信'), findsWidgets);
+    expect(find.text('编辑'), findsWidgets);
     // 默认 hot 选中：tap cagr 切换不抛
     await tester.tap(find.byKey(const Key('strategy-sort-cagr')));
     await tester.pump();
@@ -464,6 +467,7 @@ void main() {
     expect(applyDecoration, findsOneWidget);
     // 排序选项文案对齐设计稿「按 {label} 排序」（#1888）
     expect(find.text('按 热门 排序'), findsOneWidget);
+    expect(find.text('按 交易 排序'), findsOneWidget);
     expect(find.text('按 低回撤 排序'), findsOneWidget);
 
     // #2128：点排序即时生效——sheet 仍打开时排序行已切到 sharpe（active 箭头）。
@@ -660,7 +664,7 @@ void main() {
     expect(find.text('ai-stub'), findsOneWidget, reason: '700ms 后应跳到 /ai 路由');
   });
 
-  testWidgets('卡片同时存在「载入对话」「运行」双按钮 (#1821 验收)', (WidgetTester tester) async {
+  testWidgets('卡片同时存在「编辑」「运行」双按钮 (#1821 验收)', (WidgetTester tester) async {
     await _pump(tester);
     final StrategyCard first = mockFeaturedStrategies.first;
     expect(

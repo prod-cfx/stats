@@ -127,8 +127,9 @@ class _Header extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final StrategyCard? card = this.card;
     final String symbol = card?.symbol ?? '?';
-    final String? catLabel =
-        card == null ? null : _categoryLabel(context, card.category);
+    final String? catLabel = card == null
+        ? null
+        : _categoryLabel(context, card.category);
     final String pairPeriod = card == null ? '' : _pairPeriod(card);
 
     return Row(
@@ -263,6 +264,8 @@ class _MetricGrid extends StatelessWidget {
   const _MetricGrid({required this.cards});
   final List<Widget> cards;
 
+  static const double _gap = 12;
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -274,14 +277,20 @@ class _MetricGrid extends StatelessWidget {
         borderRadius: BorderRadius.circular(QzRadii.card),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: GridView.count(
-        crossAxisCount: 3,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 2.2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        children: cards,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final int columns = cards.length == 4 ? 2 : 3;
+          final double itemWidth =
+              (constraints.maxWidth - _gap * (columns - 1)) / columns;
+          return Wrap(
+            spacing: _gap,
+            runSpacing: _gap,
+            children: <Widget>[
+              for (final Widget card in cards)
+                SizedBox(width: itemWidth, height: 54, child: card),
+            ],
+          );
+        },
       ),
     );
   }

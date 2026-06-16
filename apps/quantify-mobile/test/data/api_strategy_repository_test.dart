@@ -170,6 +170,8 @@ void main() {
       expect(hero.card.id, 'real-grid');
       expect(hero.card.name, '真实网格策略');
       expect(hero.stats.cagr, 42.5);
+      expect(hero.stats.tradeCount, 35);
+      expect(hero.stats.confidenceLevel, 'high');
       expect(hero.sparkline, <double>[1, 1.03, 1.02, 1.08]);
       expect(detail.card.id, 'real-grid');
       expect(detail.cagr, 43.5);
@@ -179,6 +181,11 @@ void main() {
       expect(detail.tradeCount, 35);
       expect(detail.users, 88);
       expect(detail.equityCurve, <double>[1, 1.14]);
+      expect(detail.backtestFromMs, 1717200000000);
+      expect(detail.backtestToMs, 1719800000000);
+      expect(detail.generatedAt, '2026-06-10T00:00:00.000Z');
+      expect(detail.dataSourceLabel, 'OKX swap');
+      expect(detail.candleCount, 120);
       expect(detail.marketType, 'perp');
       expect(detail.positionPct, 25);
       expect(detail.leverage, 3);

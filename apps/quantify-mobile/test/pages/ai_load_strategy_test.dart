@@ -69,14 +69,14 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('策略卡：右下角存在「载入对话」按钮（验收 1）', (WidgetTester tester) async {
+  testWidgets('策略卡：右下角存在「编辑」按钮（验收 1）', (WidgetTester tester) async {
     await _pump(tester);
     // 至少首屏第一条策略带 load button
     expect(
       find.byKey(const Key('strategy-card-load-chat-st-grid-btc')),
       findsOneWidget,
     );
-    expect(find.text('载入对话'), findsAtLeastNWidgets(1));
+    expect(find.text('编辑'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('策略详情：底部存在「载入到对话」按钮（验收 2）', (WidgetTester tester) async {
