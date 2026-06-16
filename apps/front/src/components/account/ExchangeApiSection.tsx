@@ -8,6 +8,7 @@ import type {
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ClientTimeText } from '@/components/time/ClientTimeText'
 import {
   deleteUserExchangeAccount,
   fetchUserExchangeAccountStatuses,
@@ -376,7 +377,7 @@ export function ExchangeApiSection() {
                           </span>
                           {account.lastValidatedAt && (
                             <span className="text-[color:var(--cf-muted)]">
-                              {t('aiQuant.lastValidatedAt')} {new Date(account.lastValidatedAt).toLocaleString()}
+                              {t('aiQuant.lastValidatedAt')} <ClientTimeText value={account.lastValidatedAt} />
                             </span>
                           )}
                         </div>

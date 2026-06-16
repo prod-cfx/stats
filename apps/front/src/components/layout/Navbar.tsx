@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from '@/components/account/UserAvatar'
+import { ClientTimeText } from '@/components/time/ClientTimeText'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
 import { suppressNextAuthGate } from '@/features/auth/auth-gate-suppression'
@@ -21,6 +22,8 @@ import {
   buildMobileWhaleLinks,
 } from './navbar.nav-data'
 import { ThemeToggle } from './ThemeToggle'
+
+const COPYRIGHT_YEAR = 2026
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'
 
@@ -129,7 +132,11 @@ export const Navbar = () => {
   const accountIdLabel = session
     ? `id:${session.userId.length <= 14 ? session.userId : `${session.userId.slice(0, 5)}...${session.userId.slice(-6)}`}`
     : ''
-  const year = new Date().getFullYear()
+  const [year, setYear] = useState(COPYRIGHT_YEAR)
+
+  useEffect(() => {
+    setYear(new Date().getFullYear())
+  }, [])
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成
@@ -286,6 +293,7 @@ export const Navbar = () => {
   }
 
   const openMobileMenu = () => {
+    setYear(new Date().getFullYear())
     setBellOpen(false)
     setAccountMenuOpen(false)
     setMobileMenuOpen(true)
@@ -590,7 +598,7 @@ export const Navbar = () => {
                         {item.content}
                       </div>
                       <div className="mt-1 text-[10px] text-[color:var(--cf-muted)]">
-                        {new Date(item.createdAt).toLocaleString()}
+                        <ClientTimeText value={item.createdAt} />
                       </div>
                     </button>
                   ))

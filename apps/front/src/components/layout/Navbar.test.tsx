@@ -50,13 +50,14 @@ jest.mock('lucide-react', () => ({
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
+    t: (key: string, options?: { defaultValue?: string, year?: number }) =>
       ({
         'account.logout': '登出',
         'account.settings': '账户设置',
         'common.comingSoonDesc': '即将开放',
         'common.comingSoonTitle': '即将开放',
         'footer.tagline': '专业的加密资产数据聚合终端',
+        'footer.copyrightLine': `© ${options?.year} CoinFlux`,
         'nav.aiQuant': 'AI量化',
         'nav.aggregated_orderbook': '聚合盘口',
         'nav.data': '数据',
@@ -149,6 +150,7 @@ describe('Navbar mobile menu', () => {
     await act(async () => {
       root.unmount()
     })
+    jest.useRealTimers()
     container.remove()
   })
 
@@ -288,5 +290,61 @@ describe('Navbar mobile menu', () => {
     expect(mockLogout).toHaveBeenCalledTimes(1)
     expect(shouldSuppressAuthGate()).toBe(true)
     expect(mockRouterReplace).toHaveBeenCalledWith('/zh')
+  })
+
+  it('uses the current client year in the footer after hydration', async () => {
+    jest.useFakeTimers({ now: new Date('2027-01-02T00:00:00.000Z') })
+
+    await act(async () => {
+      root.render(<Navbar />)
+    })
+
+    const mobileMenuButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.getAttribute('aria-label') === '打开菜单',
+    )
+
+    await act(async () => {
+      mobileMenuButton?.click()
+    })
+
+    expect(container.textContent).toContain('© 2027 CoinFlux')
+  })
+
+  it('refreshes the footer year when opening the mobile menu after year changes', async () => {
+    jest.useFakeTimers({ now: new Date('2026-06-01T00:00:00.000Z') })
+
+    await act(async () => {
+      root.render(<Navbar />)
+    })
+
+    const mobileMenuButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.getAttribute('aria-label') === '打开菜单',
+    )
+
+    await act(async () => {
+      mobileMenuButton?.click()
+    })
+
+    expect(container.textContent).toContain('© 2026 CoinFlux')
+
+    const closeMenuButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.getAttribute('aria-label') === '关闭菜单',
+    )
+
+    await act(async () => {
+      closeMenuButton?.click()
+    })
+
+    jest.setSystemTime(new Date('2027-01-01T00:00:01.000Z'))
+
+    const reopenMenuButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.getAttribute('aria-label') === '打开菜单',
+    )
+
+    await act(async () => {
+      reopenMenuButton?.click()
+    })
+
+    expect(container.textContent).toContain('© 2027 CoinFlux')
   })
 })

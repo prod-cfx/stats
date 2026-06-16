@@ -3,6 +3,7 @@
 import type { WhaleDeliveryStatus, WhaleNotificationInboxItem } from '@/features/whale-notification/types'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { ClientTimeText } from '@/components/time/ClientTimeText'
 
 interface InboxTabProps {
   items: WhaleNotificationInboxItem[]
@@ -57,7 +58,7 @@ export function InboxTab({ items, loading, onRead, onReadAll }: InboxTabProps) {
           <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="break-words !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{item.title}</div>
-              <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{new Date(item.createdAt).toLocaleString()}</div>
+              <div className="mt-1 text-xs text-[color:var(--cf-muted)]"><ClientTimeText value={item.createdAt} /></div>
             </div>
             {!item.read && (
               <button
