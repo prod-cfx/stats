@@ -7,12 +7,13 @@ import type { OrderbookSubscriptionDto } from './dto/orderbook-subscription.dto'
 import type { TickerBroadcastDto } from './dto/ticker-broadcast.dto'
 import type { TickerSubscriptionDto } from './dto/ticker-subscription.dto'
 import type { TradesSubscriptionDto } from './dto/trades-subscription.dto'
+import type { OrderbookSubscriptionInfo } from './services/orderbook-subscription.service'
+import type { TickerSubscriptionInfo } from './services/ticker-subscription.service'
+import type { TradesSubscriptionInfo } from './services/trades-subscription.service'
 import type { MarketTrade } from '@/prisma/prisma.types'
 
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports
-import { JwtService } from '@nestjs/jwt'
 import { Interval } from '@nestjs/schedule'
 import {
   ConnectedSocket,
@@ -35,6 +36,11 @@ import { AggregatedOrderbookService } from '../aggregated-orderbook/aggregated-o
 import { MarketsService } from '../markets/markets.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { KlineAggregatorService } from './kline-aggregator.service'
+import { KlineSubscriptionRegistryService } from './services/kline-subscription-registry.service'
+import { OrderbookSubscriptionService } from './services/orderbook-subscription.service'
+import { SocketAuthService } from './services/socket-auth.service'
+import { TickerSubscriptionService } from './services/ticker-subscription.service'
+import { TradesSubscriptionService } from './services/trades-subscription.service'
 
 // 单个客户端最大订阅数限制
 const MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT = 20
@@ -69,52 +75,6 @@ function isCorsOriginAllowed(origin: string | undefined, callback: (error: Error
   callback(null, origin ? parseAllowedOrigins().includes(origin) : false)
 }
 
-// Trades 订阅信息接口
-interface TradesSubscriptionInfo {
-  timer: NodeJS.Timeout
-  clients: Set<string>
-  roomName: string // Socket.IO room 名称
-  isRunning: boolean // 防止任务堆积的标志
-  params: {
-    exchange: string
-    instrumentType: string
-    symbol: string
-    minValue?: number
-    limit: number
-  }
-}
-
-// Order Book 订阅信息接口
-interface OrderbookSubscriptionInfo {
-  timer: NodeJS.Timeout
-  clients: Set<string>
-  roomName: string // Socket.IO room 名称
-  isRunning: boolean // 防止任务堆积的标志
-  params: {
-    exchange: string
-    instrumentType: string
-    symbol: string
-    isAggregated: boolean
-    depth: number
-  }
-}
-
-// Ticker 订阅信息接口
-interface TickerSubscriptionInfo {
-  timer: NodeJS.Timeout
-  clients: Set<string>
-  roomName: string
-  isRunning: boolean
-  lastKlinePrice: number | null // 最新 K线价格（来自 KlineAggregatorService）
-  klineCallback: (bar: KlineBarDto) => void // K线回调函数
-  params: {
-    exchange: string
-    instrumentType: string
-    symbol: string // 基础币种，例如 'BTC'
-    quoteAsset: string
-  }
-}
-
 type AggregatedOrderbookResult = Awaited<
   ReturnType<AggregatedOrderbookService['getAggregatedOrderbook']>
 >
@@ -144,95 +104,25 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(KlineGateway.name)
 
-  // 客户端订阅管理：clientId -> Set<subscriptionKey>
-  private readonly clientSubscriptions = new Map<string, Set<string>>()
-
-  // 客户端回调函数管理：clientId:subscriptionKey -> callback
-  private readonly clientCallbacks = new Map<string, (bar: KlineBarDto) => void>()
-
-  // Trades 订阅管理：clientId -> Set<tradesSubscriptionKey>
-  private readonly clientTradesSubscriptions = new Map<string, Set<string>>()
-
-  // Trades 定时器管理：tradesSubscriptionKey -> TradesSubscriptionInfo
-  private readonly tradesIntervals = new Map<string, TradesSubscriptionInfo>()
-
-  // Order Book 订阅管理：clientId -> Set<orderbookSubscriptionKey>
-  private readonly clientOrderbookSubscriptions = new Map<string, Set<string>>()
-
-  // Order Book 定时器管理：orderbookSubscriptionKey -> OrderbookSubscriptionInfo
-  private readonly orderbookIntervals = new Map<string, OrderbookSubscriptionInfo>()
-
-  // Ticker 订阅管理：clientId -> Set<tickerSubscriptionKey>
-  private readonly clientTickerSubscriptions = new Map<string, Set<string>>()
-
-  // Ticker 定时器管理：tickerSubscriptionKey -> TickerSubscriptionInfo
-  private readonly tickerIntervals = new Map<string, TickerSubscriptionInfo>()
-
-  // Ticker 数据库查询缓存：symbol -> { data, timestamp }
-  private readonly tickerDbCache = new Map<
-    string,
-    {
-      data: Awaited<ReturnType<MarketsService['getTicker']>>
-      timestamp: number
-    }
-  >()
-
   private readonly TICKER_DB_CACHE_TTL_MS = 1000
 
   constructor(
     private readonly klineAggregatorService: KlineAggregatorService,
-    private readonly jwtService: JwtService,
     private readonly marketsService: MarketsService,
     private readonly cacheService: CacheService,
     private readonly redisService: RedisService,
     private readonly aggregatedOrderbookService: AggregatedOrderbookService,
+    private readonly socketAuthService: SocketAuthService,
+    private readonly klineSubscriptionRegistry: KlineSubscriptionRegistryService,
+    private readonly tradesSubscriptionService: TradesSubscriptionService,
+    private readonly orderbookSubscriptionService: OrderbookSubscriptionService,
+    private readonly tickerSubscriptionService: TickerSubscriptionService,
   ) {}
 
   handleConnection(client: Socket): void {
     this.updateClientActivity(client)
-
-    // 从握手中获取 token (支持 query 和 headers 两种方式)
-    const token =
-      client.handshake.auth?.token ||
-      client.handshake.query?.token ||
-      client.handshake.headers?.authorization?.replace('Bearer ', '')
-
-    // 支持游客模式：没有 token 或 token 无效时，允许连接但标记为游客
-    if (!token) {
-      this.logger.log({
-        message: 'Guest client connected (no token)',
-        clientId: client.id,
-      })
-      client.data.isGuest = true
-      this.clientSubscriptions.set(client.id, new Set())
-      return
-    }
-
-    // 尝试验证 JWT token
-    try {
-      const payload = this.jwtService.verify(token)
-
-      // 将用户信息附加到 socket 对象上,供后续使用
-      client.data.userId = payload.sub || payload.userId
-      client.data.username = payload.username
-      client.data.isGuest = false
-
-      this.logger.log({
-        message: 'Authenticated client connected',
-        clientId: client.id,
-        userId: client.data.userId,
-      })
-      this.clientSubscriptions.set(client.id, new Set())
-    } catch (error) {
-      // Token 无效时，降级为游客模式
-      this.logger.warn({
-        message: 'Invalid token, connecting as guest',
-        clientId: client.id,
-        error: error instanceof Error ? error.message : String(error),
-      })
-      client.data.isGuest = true
-      this.clientSubscriptions.set(client.id, new Set())
-    }
+    this.socketAuthService.authenticate(client)
+    this.klineSubscriptionRegistry.initializeClient(client.id)
   }
 
   handleDisconnect(client: Socket): void {
@@ -242,7 +132,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
 
     // 清理该客户端的所有 K线订阅
-    const subscriptions = this.clientSubscriptions.get(client.id)
+    const subscriptions = this.klineSubscriptionRegistry.clientSubscriptions.get(client.id)
     if (subscriptions) {
       for (const key of subscriptions) {
         // 解析 subscriptionKey: BINANCE:PERPETUAL:BTCUSDT:1m
@@ -250,7 +140,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (parts.length === 4) {
           const [exchange, instrumentType, symbol, interval] = parts
           const callbackKey = `${client.id}:${key}`
-          const callback = this.clientCallbacks.get(callbackKey)
+          const callback = this.klineSubscriptionRegistry.clientCallbacks.get(callbackKey)
           if (callback) {
             this.klineAggregatorService.unsubscribe(
               exchange,
@@ -259,45 +149,45 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
               interval,
               callback,
             )
-            this.clientCallbacks.delete(callbackKey)
+            this.klineSubscriptionRegistry.clientCallbacks.delete(callbackKey)
           }
         }
       }
-      this.clientSubscriptions.delete(client.id)
+      this.klineSubscriptionRegistry.clientSubscriptions.delete(client.id)
     }
 
     // 清理该客户端的所有 Trades 订阅
-    const tradesSubscriptions = this.clientTradesSubscriptions.get(client.id)
+    const tradesSubscriptions = this.tradesSubscriptionService.clientSubscriptions.get(client.id)
     if (tradesSubscriptions) {
       for (const key of tradesSubscriptions) {
         this.removeClientFromTradesSubscription(client.id, key)
       }
-      this.clientTradesSubscriptions.delete(client.id)
+      this.tradesSubscriptionService.clientSubscriptions.delete(client.id)
     }
 
     // 清理该客户端的所有 Order Book 订阅
-    const orderbookSubs = this.clientOrderbookSubscriptions.get(client.id)
+    const orderbookSubs = this.orderbookSubscriptionService.clientSubscriptions.get(client.id)
     if (orderbookSubs) {
       for (const key of orderbookSubs) {
-        const subInfo = this.orderbookIntervals.get(key)
+        const subInfo = this.orderbookSubscriptionService.intervals.get(key)
         if (subInfo) {
           subInfo.clients.delete(client.id)
           if (subInfo.clients.size === 0) {
             clearTimeout(subInfo.timer)
-            this.orderbookIntervals.delete(key)
+            this.orderbookSubscriptionService.intervals.delete(key)
           }
         }
       }
-      this.clientOrderbookSubscriptions.delete(client.id)
+      this.orderbookSubscriptionService.clientSubscriptions.delete(client.id)
     }
 
     // 清理该客户端的所有 Ticker 订阅
-    const tickerSubs = this.clientTickerSubscriptions.get(client.id)
+    const tickerSubs = this.tickerSubscriptionService.clientSubscriptions.get(client.id)
     if (tickerSubs) {
       for (const key of tickerSubs) {
         this.removeClientFromTickerSubscription(client.id, key)
       }
-      this.clientTickerSubscriptions.delete(client.id)
+      this.tickerSubscriptionService.clientSubscriptions.delete(client.id)
     }
   }
 
@@ -325,16 +215,16 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       subscriptionKey,
     })
 
-    const clientSubs = this.clientSubscriptions.get(client.id) ?? new Set<string>()
-    if (!this.clientSubscriptions.has(client.id)) {
-      this.clientSubscriptions.set(client.id, clientSubs)
+    const clientSubs = this.klineSubscriptionRegistry.clientSubscriptions.get(client.id) ?? new Set<string>()
+    if (!this.klineSubscriptionRegistry.clientSubscriptions.has(client.id)) {
+      this.klineSubscriptionRegistry.clientSubscriptions.set(client.id, clientSubs)
     }
 
     const isNewSubscription = !clientSubs.has(subscriptionKey)
-    const tradesSubs = this.clientTradesSubscriptions.get(client.id)?.size ?? 0
+    const totalSubs = this.getTotalSubscriptionsForClient(client.id)
 
     // 检查总订阅数
-    if (isNewSubscription && clientSubs.size + tradesSubs >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
+    if (isNewSubscription && totalSubs >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
       client.emit('error', {
         message: `Maximum total subscriptions (${MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT}) reached`,
         code: 'MAX_SUBSCRIPTIONS_EXCEEDED',
@@ -342,8 +232,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.warn({
         message: 'Client exceeded total subscription limit',
         clientId: client.id,
-        klineSubs: clientSubs.size,
-        tradesSubs,
+        totalSubs,
         limit: MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT,
       })
       return
@@ -379,7 +268,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // 保存回调函数
     const callbackKey = `${client.id}:${subscriptionKey}`
-    const existingCallback = this.clientCallbacks.get(callbackKey)
+    const existingCallback = this.klineSubscriptionRegistry.clientCallbacks.get(callbackKey)
     if (existingCallback) {
       this.logger.warn({
         message: 'Duplicate subscription detected, replacing existing callback',
@@ -399,7 +288,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         existingCallback,
       )
     }
-    this.clientCallbacks.set(callbackKey, callback)
+    this.klineSubscriptionRegistry.clientCallbacks.set(callbackKey, callback)
 
     // 订阅聚合 K线
     this.klineAggregatorService.subscribe(exchange, instrumentType, symbol, interval, callback)
@@ -437,17 +326,17 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
 
     // 移除客户端订阅记录
-    const clientSubs = this.clientSubscriptions.get(client.id)
+    const clientSubs = this.klineSubscriptionRegistry.clientSubscriptions.get(client.id)
     if (clientSubs) {
       clientSubs.delete(subscriptionKey)
     }
 
     // 获取回调函数并取消订阅
     const callbackKey = `${client.id}:${subscriptionKey}`
-    const callback = this.clientCallbacks.get(callbackKey)
+    const callback = this.klineSubscriptionRegistry.clientCallbacks.get(callbackKey)
     if (callback) {
       this.klineAggregatorService.unsubscribe(exchange, instrumentType, symbol, interval, callback)
-      this.clientCallbacks.delete(callbackKey)
+      this.klineSubscriptionRegistry.clientCallbacks.delete(callbackKey)
     }
 
     // 发送取消订阅确认
@@ -483,17 +372,17 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     )
 
     // 任务1: 速率限制 - 检查客户端当前订阅数
-    let clientSubs = this.clientTradesSubscriptions.get(client.id)
+    let clientSubs = this.tradesSubscriptionService.clientSubscriptions.get(client.id)
     if (!clientSubs) {
       clientSubs = new Set()
-      this.clientTradesSubscriptions.set(client.id, clientSubs)
+      this.tradesSubscriptionService.clientSubscriptions.set(client.id, clientSubs)
     }
 
     const isNewSubscription = !clientSubs.has(subscriptionKey)
-    const klineSubs = this.clientSubscriptions.get(client.id)?.size ?? 0
+    const totalSubs = this.getTotalSubscriptionsForClient(client.id)
 
     // 检查总订阅数
-    if (isNewSubscription && klineSubs + clientSubs.size >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
+    if (isNewSubscription && totalSubs >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
       client.emit('error', {
         message: `Maximum total subscriptions (${MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT}) reached`,
         code: 'MAX_SUBSCRIPTIONS_EXCEEDED',
@@ -505,8 +394,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.warn({
         message: 'Client exceeded total subscription limit',
         clientId: client.id,
-        klineSubs,
-        tradesSubs: clientSubs.size,
+        totalSubs,
         limit: MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT,
       })
       return
@@ -547,7 +435,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // 任务2: 共享定时器机制 + Socket.IO room
     const roomName = `trades:${subscriptionKey}`
-    const existingSubscription = this.tradesIntervals.get(subscriptionKey)
+    const existingSubscription = this.tradesSubscriptionService.intervals.get(subscriptionKey)
     if (existingSubscription) {
       // 已存在定时器，将客户端加入 room
       existingSubscription.clients.add(client.id)
@@ -593,7 +481,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       scheduleNext = () => {
         subscriptionInfo.timer = setTimeout(async () => {
           // 检查订阅是否仍然存在
-          if (!this.tradesIntervals.has(subscriptionKey)) {
+          if (!this.tradesSubscriptionService.intervals.has(subscriptionKey)) {
             return
           }
 
@@ -633,14 +521,14 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           } finally {
             subscriptionInfo.isRunning = false
             // 只有订阅仍存在时才调度下一次
-            if (this.tradesIntervals.has(subscriptionKey)) {
+            if (this.tradesSubscriptionService.intervals.has(subscriptionKey)) {
               scheduleNext()
             }
           }
         }, 1000)
       }
 
-      this.tradesIntervals.set(subscriptionKey, subscriptionInfo)
+      this.tradesSubscriptionService.intervals.set(subscriptionKey, subscriptionInfo)
       scheduleNext()
 
       this.logger.log({
@@ -686,7 +574,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
 
     // 移除客户端订阅记录
-    const clientSubs = this.clientTradesSubscriptions.get(client.id)
+    const clientSubs = this.tradesSubscriptionService.clientSubscriptions.get(client.id)
     if (clientSubs) {
       clientSubs.delete(subscriptionKey)
     }
@@ -713,30 +601,48 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const { exchange, instrumentType, symbol, isAggregated = false, depth = 60 } = dto
 
+    // 生成订阅键
+    const subscriptionKey = `${exchange}:${instrumentType}:${symbol}:${isAggregated ? 'agg' : 'single'}:${depth}`
+    const isNewSubscription = !this.orderbookSubscriptionService.clientSubscriptions.get(client.id)?.has(subscriptionKey)
+
+    // 检查总订阅数限制
+    const totalSubs = this.getTotalSubscriptionsForClient(client.id)
+    if (isNewSubscription && totalSubs >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
+      client.emit('error', {
+        message: `Maximum total subscriptions (${MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        code: 'MAX_SUBSCRIPTIONS_EXCEEDED',
+      })
+      this.logger.warn({
+        message: 'Client exceeded total subscription limit',
+        clientId: client.id,
+        totalSubs,
+        limit: MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT,
+      })
+      return
+    }
+
     // 检查订阅数限制
-    const currentSubs = this.clientOrderbookSubscriptions.get(client.id) || new Set()
-    if (currentSubs.size >= MAX_ORDERBOOK_SUBSCRIPTIONS_PER_CLIENT) {
+    const currentSubs = this.orderbookSubscriptionService.clientSubscriptions.get(client.id) || new Set()
+    if (isNewSubscription && currentSubs.size >= MAX_ORDERBOOK_SUBSCRIPTIONS_PER_CLIENT) {
       client.emit('error', {
         message: `Maximum orderbook subscriptions (${MAX_ORDERBOOK_SUBSCRIPTIONS_PER_CLIENT}) reached`,
       })
       return
     }
 
-    // 生成订阅键
-    const subscriptionKey = `${exchange}:${instrumentType}:${symbol}:${isAggregated ? 'agg' : 'single'}:${depth}`
     const roomName = `orderbook:${subscriptionKey}`
 
     // 将客户端加入 Room
     await client.join(roomName)
 
     // 记录客户端订阅
-    if (!this.clientOrderbookSubscriptions.has(client.id)) {
-      this.clientOrderbookSubscriptions.set(client.id, new Set())
+    if (!this.orderbookSubscriptionService.clientSubscriptions.has(client.id)) {
+      this.orderbookSubscriptionService.clientSubscriptions.set(client.id, new Set())
     }
-    this.clientOrderbookSubscriptions.get(client.id)!.add(subscriptionKey)
+    this.orderbookSubscriptionService.clientSubscriptions.get(client.id)!.add(subscriptionKey)
 
     // 检查是否已存在共享订阅
-    let subInfo = this.orderbookIntervals.get(subscriptionKey)
+    let subInfo = this.orderbookSubscriptionService.intervals.get(subscriptionKey)
 
     if (!subInfo) {
       // 创建新的共享订阅 - 使用 setTimeout 链式调用防止任务堆积
@@ -761,7 +667,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         subscriptionInfo.isRunning = true
 
         try {
-          if (!this.orderbookIntervals.has(subscriptionKey)) {
+          if (!this.orderbookSubscriptionService.intervals.has(subscriptionKey)) {
             return
           }
 
@@ -789,7 +695,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
             subscriptionInfo.isRunning = false
           }
         } finally {
-          if (this.orderbookIntervals.has(subscriptionKey)) {
+          if (this.orderbookSubscriptionService.intervals.has(subscriptionKey)) {
             scheduleNext()
           }
         }
@@ -802,7 +708,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }, 1000) // 1 秒推送一次
       }
 
-      this.orderbookIntervals.set(subscriptionKey, subscriptionInfo)
+      this.orderbookSubscriptionService.intervals.set(subscriptionKey, subscriptionInfo)
       subInfo = subscriptionInfo
 
       void runOrderbookBroadcast()
@@ -849,20 +755,20 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     await client.leave(roomName)
 
     // 移除客户端订阅记录
-    const clientSubs = this.clientOrderbookSubscriptions.get(client.id)
+    const clientSubs = this.orderbookSubscriptionService.clientSubscriptions.get(client.id)
     if (clientSubs) {
       clientSubs.delete(subscriptionKey)
     }
 
     // 检查共享订阅
-    const subInfo = this.orderbookIntervals.get(subscriptionKey)
+    const subInfo = this.orderbookSubscriptionService.intervals.get(subscriptionKey)
     if (subInfo) {
       subInfo.clients.delete(client.id)
 
       // 如果没有客户端订阅了，清理定时器
       if (subInfo.clients.size === 0) {
         clearTimeout(subInfo.timer)
-        this.orderbookIntervals.delete(subscriptionKey)
+        this.orderbookSubscriptionService.intervals.delete(subscriptionKey)
         this.logger.log({
           message: 'Cleared orderbook subscription (no clients)',
           subscriptionKey,
@@ -912,10 +818,10 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
 
     // 初始化客户端订阅集合
-    let clientSubs = this.clientTickerSubscriptions.get(client.id)
+    let clientSubs = this.tickerSubscriptionService.clientSubscriptions.get(client.id)
     if (!clientSubs) {
       clientSubs = new Set()
-      this.clientTickerSubscriptions.set(client.id, clientSubs)
+      this.tickerSubscriptionService.clientSubscriptions.set(client.id, clientSubs)
     }
 
     const isNewSubscription = !clientSubs.has(subscriptionKey)
@@ -960,7 +866,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const roomName = `ticker:${subscriptionKey}`
 
     // 检查是否已存在共享订阅
-    const existingSubscription = this.tickerIntervals.get(subscriptionKey)
+    const existingSubscription = this.tickerSubscriptionService.intervals.get(subscriptionKey)
     if (existingSubscription) {
       // 已存在定时器，将客户端加入 room
       existingSubscription.clients.add(client.id)
@@ -984,7 +890,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const klineInterval = '1m'
 
       const klineCallback = (bar: KlineBarDto) => {
-        const subInfo = this.tickerIntervals.get(subscriptionKey)
+        const subInfo = this.tickerSubscriptionService.intervals.get(subscriptionKey)
         if (subInfo) {
           subInfo.lastKlinePrice = bar.close
         }
@@ -1014,7 +920,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const scheduleNext = () => {
         subscriptionInfo.timer = setTimeout(async () => {
           // 检查订阅是否仍然存在
-          if (!this.tickerIntervals.has(subscriptionKey)) {
+          if (!this.tickerSubscriptionService.intervals.has(subscriptionKey)) {
             return
           }
 
@@ -1052,14 +958,14 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           } finally {
             subscriptionInfo.isRunning = false
             // 只有订阅仍存在时才调度下一次
-            if (this.tickerIntervals.has(subscriptionKey)) {
+            if (this.tickerSubscriptionService.intervals.has(subscriptionKey)) {
               scheduleNext()
             }
           }
         }, 1000) // 1秒广播一次
       }
 
-      this.tickerIntervals.set(subscriptionKey, subscriptionInfo)
+      this.tickerSubscriptionService.intervals.set(subscriptionKey, subscriptionInfo)
 
       // 立即广播一次
       try {
@@ -1120,7 +1026,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
 
     // 移除客户端订阅记录
-    const clientSubs = this.clientTickerSubscriptions.get(client.id)
+    const clientSubs = this.tickerSubscriptionService.clientSubscriptions.get(client.id)
     if (clientSubs) {
       clientSubs.delete(subscriptionKey)
     }
@@ -1188,7 +1094,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     exchange?: string,
   ): Promise<Awaited<ReturnType<MarketsService['getTicker']>>> {
     const cacheKey = `${exchange ?? 'ALL'}:${symbol}`
-    const cached = this.tickerDbCache.get(cacheKey)
+    const cached = this.tickerSubscriptionService.dbCache.get(cacheKey)
     const now = Date.now()
 
     if (cached && now - cached.timestamp < this.TICKER_DB_CACHE_TTL_MS) {
@@ -1196,7 +1102,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     const data = await this.marketsService.getTicker(symbol, exchange)
-    this.tickerDbCache.set(cacheKey, { data, timestamp: now })
+    this.tickerSubscriptionService.dbCache.set(cacheKey, { data, timestamp: now })
 
     return data
   }
@@ -1335,7 +1241,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       depth: number
     },
   ): Promise<void> {
-    const subInfo = this.orderbookIntervals.get(subscriptionKey)
+    const subInfo = this.orderbookSubscriptionService.intervals.get(subscriptionKey)
     if (!subInfo) return
 
     const startTime = Date.now()
@@ -1475,7 +1381,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * 从共享订阅中移除客户端
    */
   private removeClientFromTradesSubscription(clientId: string, subscriptionKey: string): void {
-    const subscription = this.tradesIntervals.get(subscriptionKey)
+    const subscription = this.tradesSubscriptionService.intervals.get(subscriptionKey)
     if (subscription) {
       subscription.clients.delete(clientId)
 
@@ -1503,11 +1409,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private cleanupTradesSubscription(subscriptionKey: string): void {
-    const subscription = this.tradesIntervals.get(subscriptionKey)
+    const subscription = this.tradesSubscriptionService.intervals.get(subscriptionKey)
     if (subscription) {
       // 使用 clearTimeout 因为我们改用了 setTimeout 链式调用
       clearTimeout(subscription.timer)
-      this.tradesIntervals.delete(subscriptionKey)
+      this.tradesSubscriptionService.intervals.delete(subscriptionKey)
 
       this.logger.log({
         message: 'Cleaned up trades subscription timer',
@@ -1517,11 +1423,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private cleanupOrderbookSubscription(subscriptionKey: string): void {
-    const subscription = this.orderbookIntervals.get(subscriptionKey)
+    const subscription = this.orderbookSubscriptionService.intervals.get(subscriptionKey)
     if (subscription) {
       // 使用 clearTimeout 因为我们改用了 setTimeout 链式调用
       clearTimeout(subscription.timer)
-      this.orderbookIntervals.delete(subscriptionKey)
+      this.orderbookSubscriptionService.intervals.delete(subscriptionKey)
 
       this.logger.log({
         message: 'Cleaned up orderbook subscription timer',
@@ -1556,9 +1462,9 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
             message: 'Skipping stale disconnect (socket has active subscriptions/rooms)',
             clientId: socket.id,
             rooms: this.getBusinessRoomCount(socket),
-            klineSubs: this.clientSubscriptions.get(socket.id)?.size ?? 0,
-            tradesSubs: this.clientTradesSubscriptions.get(socket.id)?.size ?? 0,
-            orderbookSubs: this.clientOrderbookSubscriptions.get(socket.id)?.size ?? 0,
+            klineSubs: this.klineSubscriptionRegistry.clientSubscriptions.get(socket.id)?.size ?? 0,
+            tradesSubs: this.tradesSubscriptionService.clientSubscriptions.get(socket.id)?.size ?? 0,
+            orderbookSubs: this.orderbookSubscriptionService.clientSubscriptions.get(socket.id)?.size ?? 0,
           })
           return
         }
@@ -1711,15 +1617,15 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private getTotalSubscriptionsForClient(clientId: string): number {
-    const klineSubs = this.clientSubscriptions.get(clientId)?.size ?? 0
-    const tradesSubs = this.clientTradesSubscriptions.get(clientId)?.size ?? 0
-    const orderbookSubs = this.clientOrderbookSubscriptions.get(clientId)?.size ?? 0
-    const tickerSubs = this.clientTickerSubscriptions.get(clientId)?.size ?? 0
+    const klineSubs = this.klineSubscriptionRegistry.clientSubscriptions.get(clientId)?.size ?? 0
+    const tradesSubs = this.tradesSubscriptionService.clientSubscriptions.get(clientId)?.size ?? 0
+    const orderbookSubs = this.orderbookSubscriptionService.clientSubscriptions.get(clientId)?.size ?? 0
+    const tickerSubs = this.tickerSubscriptionService.clientSubscriptions.get(clientId)?.size ?? 0
     return klineSubs + tradesSubs + orderbookSubs + tickerSubs
   }
 
   private removeClientFromTickerSubscription(clientId: string, subscriptionKey: string): void {
-    const subscription = this.tickerIntervals.get(subscriptionKey)
+    const subscription = this.tickerSubscriptionService.intervals.get(subscriptionKey)
     if (subscription) {
       subscription.clients.delete(clientId)
 
@@ -1746,7 +1652,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private cleanupTickerSubscription(subscriptionKey: string): void {
-    const subscription = this.tickerIntervals.get(subscriptionKey)
+    const subscription = this.tickerSubscriptionService.intervals.get(subscriptionKey)
     if (subscription) {
       // 清理定时器
       clearTimeout(subscription.timer)
@@ -1764,7 +1670,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         subscription.klineCallback,
       )
 
-      this.tickerIntervals.delete(subscriptionKey)
+      this.tickerSubscriptionService.intervals.delete(subscriptionKey)
 
       this.logger.log({
         message: 'Cleaned up ticker subscription',
@@ -1774,16 +1680,16 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private hasAnyActiveSubscriptions(clientId: string): boolean {
-    const klineSubs = this.clientSubscriptions.get(clientId)
+    const klineSubs = this.klineSubscriptionRegistry.clientSubscriptions.get(clientId)
     if (klineSubs && klineSubs.size > 0) return true
 
-    const tradesSubs = this.clientTradesSubscriptions.get(clientId)
+    const tradesSubs = this.tradesSubscriptionService.clientSubscriptions.get(clientId)
     if (tradesSubs && tradesSubs.size > 0) return true
 
-    const orderbookSubs = this.clientOrderbookSubscriptions.get(clientId)
+    const orderbookSubs = this.orderbookSubscriptionService.clientSubscriptions.get(clientId)
     if (orderbookSubs && orderbookSubs.size > 0) return true
 
-    const tickerSubs = this.clientTickerSubscriptions.get(clientId)
+    const tickerSubs = this.tickerSubscriptionService.clientSubscriptions.get(clientId)
     if (tickerSubs && tickerSubs.size > 0) return true
 
     return false

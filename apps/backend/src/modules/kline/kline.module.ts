@@ -9,10 +9,26 @@ import { KlineController } from './kline.controller'
 import { KlineGateway } from './kline.gateway'
 import { KlineService } from './kline.service'
 import { KlineRepository } from './repositories/kline.repository'
+import { KlineSubscriptionRegistryService } from './services/kline-subscription-registry.service'
+import { OrderbookSubscriptionService } from './services/orderbook-subscription.service'
+import { SocketAuthService } from './services/socket-auth.service'
+import { TickerSubscriptionService } from './services/ticker-subscription.service'
+import { TradesSubscriptionService } from './services/trades-subscription.service'
 
 @Module({
   imports: [AuthModule, AggregatedOrderbookModule, RedisModule, MarketsModule],
   controllers: [KlineController],
-  providers: [KlineRepository, KlineService, KlineGateway, BinanceWsService, KlineAggregatorService],
+  providers: [
+    KlineRepository,
+    KlineService,
+    KlineGateway,
+    BinanceWsService,
+    KlineAggregatorService,
+    SocketAuthService,
+    KlineSubscriptionRegistryService,
+    TradesSubscriptionService,
+    OrderbookSubscriptionService,
+    TickerSubscriptionService,
+  ],
 })
 export class KlineModule {}
