@@ -139,6 +139,7 @@ describe('Navbar mobile menu', () => {
     mockSession = null
     mockUsePathname = () => '/zh/aggregated-orderbook'
     mockUseSearchParams = () => new URLSearchParams('tab=depth')
+    window.history.replaceState({}, '', '/zh/aggregated-orderbook?tab=depth')
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)

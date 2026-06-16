@@ -1,4 +1,10 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
+
+export const metadata: Metadata = {
+  title: 'Page not found | CoinFlux',
+  description: 'The requested CoinFlux page could not be found.',
+}
 
 export default function Page404() {
   return (

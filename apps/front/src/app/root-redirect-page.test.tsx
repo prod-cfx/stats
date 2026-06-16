@@ -1,31 +1,32 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
-import { renderToStaticMarkup } from 'react-dom/server.node'
 import RootPage from './(redirect)/page'
 
 const mockCookies = jest.fn()
+const mockRedirect = jest.fn((url: string) => {
+  throw new Error(`NEXT_REDIRECT:${url}`)
+})
 
 jest.mock('next/headers', () => ({
   cookies: () => mockCookies(),
 }))
 
-jest.mock('./(redirect)/RootRedirectClient', () => ({
-  RootRedirectClient: ({ preferredLng }: { preferredLng: 'zh' | 'en' }) => (
-    <div data-preferred-lng={preferredLng} />
-  ),
+jest.mock('next/navigation', () => ({
+  redirect: (url: string) => mockRedirect(url),
 }))
 
 describe('RootPage', () => {
   beforeEach(() => {
     mockCookies.mockReset()
+    mockRedirect.mockClear()
   })
 
-  it('defaults the entry route client boundary to English even when a stale Chinese locale cookie exists', async () => {
+  it('redirects the entry route to English on the server even when a stale Chinese locale cookie exists', async () => {
     mockCookies.mockResolvedValueOnce({
       get: jest.fn(() => ({ value: 'zh' })),
     })
 
-    const html = renderToStaticMarkup(RootPage())
+    expect(() => RootPage()).toThrow('NEXT_REDIRECT:/en')
 
-    expect(html).toContain('data-preferred-lng="en"')
+    expect(mockRedirect).toHaveBeenCalledWith('/en')
   })
 })

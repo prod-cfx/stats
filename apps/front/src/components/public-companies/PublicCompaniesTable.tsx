@@ -3,6 +3,7 @@
 import type { CryptoStockQuoteLatest } from '@/lib/api'
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Info, Search } from 'lucide-react'
+import Image from 'next/image'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LoadingState } from '@/components/ui/loading'
@@ -625,10 +626,13 @@ export const PublicCompaniesTable = () => {
                     <td className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-[88px] md:px-4">
                       <div className="flex items-center justify-start gap-1 md:gap-3">
                         <div className="h-5 w-5 flex-none md:h-6 md:w-6">
-                          <img
+                          <Image
                             src={row.assetLogo}
                             alt={row.asset}
+                            width={24}
+                            height={24}
                             className="h-full w-full rounded-full object-contain"
+                            unoptimized
                           />
                         </div>
                         <span className="min-w-0 truncate font-medium text-[color:var(--cf-text-strong)] md:min-w-[50px]">
@@ -639,10 +643,13 @@ export const PublicCompaniesTable = () => {
                     <td className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-auto md:px-4">
                       <div className="flex min-w-0 items-center justify-start gap-2 md:gap-3">
                         <div className="h-6 w-6 flex-none overflow-hidden rounded-full bg-white p-0.5 md:h-8 md:w-8 md:p-1">
-                          <img
+                          <Image
                             src={row.logo}
                             alt={row.name}
+                            width={32}
+                            height={32}
                             className="h-full w-full object-contain"
+                            unoptimized
                           />
                         </div>
                         <div className="flex min-w-0 flex-col">
@@ -722,7 +729,9 @@ export const PublicCompaniesTable = () => {
         <div className="space-y-4">
           <div className="flex items-start gap-3 border-b border-[color:var(--cf-border)] pb-4">
             <div className="h-9 w-9 flex-none rounded-lg bg-white p-1.5">
-              <img src={selectedCompany?.logo} className="h-full w-full object-contain" alt="" />
+              {selectedCompany?.logo && (
+                <Image src={selectedCompany.logo} className="h-full w-full object-contain" alt="" width={36} height={36} unoptimized />
+              )}
             </div>
             <div className="min-w-0">
               <h3 className="break-words !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">

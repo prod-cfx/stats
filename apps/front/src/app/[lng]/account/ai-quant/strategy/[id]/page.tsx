@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { StrategyDetailPageClient } from './StrategyDetailPageClient'
@@ -13,9 +14,10 @@ export default async function AccountAiQuantStrategyDetailPage({
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
-      <StrategyDetailPageClient lng={lng} id={resolved.id} />
+      <Suspense fallback={<main className="flex flex-1 items-center justify-center text-[color:var(--cf-muted)]">Loading...</main>}>
+        <StrategyDetailPageClient lng={lng} id={resolved.id} />
+      </Suspense>
       <Footer />
     </div>
   )
 }
-

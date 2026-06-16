@@ -35,9 +35,9 @@ describe('issue #627 js micro-optimizations', () => {
 
   it('keeps redirect entrypoints free of effect-scoped dynamic regular expressions', () => {
     const rootRedirectPage = readFrontSource('app/(redirect)/page.tsx')
-    const rootRedirectClient = readFrontSource('app/(redirect)/RootRedirectClient.tsx')
 
     expect(rootRedirectPage).not.toContain('new RegExp(')
-    expect(rootRedirectClient).not.toContain('new RegExp(')
+    expect(rootRedirectPage).toContain("from 'next/navigation'")
+    expect(rootRedirectPage).toMatch(/redirect\(`\/\$\{preferredLng\}`\)/)
   })
 })

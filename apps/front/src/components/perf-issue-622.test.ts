@@ -56,7 +56,6 @@ describe('issue #622 page-level RSC boundaries', () => {
       ['app/[lng]/account/page.tsx', 'AccountPageClient'],
       ['app/[lng]/auth/login/page.tsx', 'LoginPageClient'],
       ['app/[lng]/auth/telegram/callback/page.tsx', 'TelegramCallbackPageClient'],
-      ['app/(redirect)/page.tsx', 'RootRedirectClient'],
     ] as const
 
     for (const [file, clientBoundary] of pageToClientBoundary) {
@@ -69,13 +68,23 @@ describe('issue #622 page-level RSC boundaries', () => {
     }
   })
 
+  it('keeps the root redirect entrypoint server-only', () => {
+    const source = readFrontSource('app/(redirect)/page.tsx')
+
+    expect(source).not.toContain("'use client'")
+    expect(source).not.toContain('useRouter(')
+    expect(source).not.toContain('useParams(')
+    expect(source).not.toContain('useSearchParams(')
+    expect(source).toContain("from 'next/navigation'")
+    expect(source).toMatch(/redirect\(`\/\$\{preferredLng\}`\)/)
+  })
+
   it('keeps extracted client boundaries colocated and explicitly client-only', () => {
     const clientBoundaryFiles = [
       'app/[lng]/MarketPageClient.tsx',
       'app/[lng]/account/AccountPageClient.tsx',
       'app/[lng]/auth/login/LoginPageClient.tsx',
       'app/[lng]/auth/telegram/callback/TelegramCallbackPageClient.tsx',
-      'app/(redirect)/RootRedirectClient.tsx',
     ] as const
 
     for (const file of clientBoundaryFiles) {

@@ -1,4 +1,10 @@
+import type { Metadata } from 'next'
 import { TradingViewChart } from '@/components/tradingview/TradingViewChart'
+
+export const metadata: Metadata = {
+  title: 'TradingView Test | CoinFlux',
+  description: 'Internal TradingView chart integration test page.',
+}
 
 export default function TvTestPage() {
   // 注意：这是纯测试页面，不接入现有生产页面结构（例如 [lng] 路由与业务布局）。
@@ -9,4 +15,3 @@ export default function TvTestPage() {
     </div>
   )
 }
-

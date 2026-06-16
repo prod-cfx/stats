@@ -2,7 +2,7 @@
 
 import { Bell, Bot, ChevronDown, ChevronRight, FileText, Github, LogIn, LogOut, Menu, Search, Send, Settings, X } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from '@/components/account/UserAvatar'
@@ -36,7 +36,6 @@ interface SearchEntry {
 
 export const Navbar = () => {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const router = useRouter()
   const { t } = useTranslation()
   const { info } = useToast()
@@ -70,11 +69,11 @@ export const Navbar = () => {
   // 辅助函数：为路径添加语言前缀
   const withLng = useCallback((path: string) => `/${currentLng}${path}`, [currentLng])
 
-  const currentRedirect = useMemo(() => {
+  const getCurrentRedirect = useCallback(() => {
     const path = pathname || `/${currentLng}`
-    const query = searchParams?.toString()
-    return query ? `${path}?${query}` : path
-  }, [currentLng, pathname, searchParams])
+    const query = typeof window === 'undefined' ? '' : window.location.search
+    return query ? `${path}${query}` : path
+  }, [currentLng, pathname])
 
   const handleLogout = useCallback(() => {
     suppressNextAuthGate()
@@ -295,8 +294,8 @@ export const Navbar = () => {
   const openLoginSheet = useCallback(() => {
     setMobileMenuOpen(false)
     setAccountMenuOpen(false)
-    openAuth({ lng: currentLng, redirect: currentRedirect })
-  }, [currentLng, currentRedirect, openAuth])
+    openAuth({ lng: currentLng, redirect: getCurrentRedirect() })
+  }, [currentLng, getCurrentRedirect, openAuth])
 
   const handleMobileFooterSocialClick = () => {
     info(
