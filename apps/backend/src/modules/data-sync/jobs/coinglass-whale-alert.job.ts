@@ -1,13 +1,11 @@
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface WhaleAlertCursor {
   /**
@@ -69,7 +67,7 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
@@ -120,8 +118,6 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
       }
     }
 
-    const client = this.txHost.tx
-
     // 将返回的数据点转换为带毫秒时间戳的格式
     const pointsWithTimestamps = json.data.map(point => {
       // Coinglass API 返回的时间戳应该已经是毫秒，但为了保险起见做个检查
@@ -151,11 +147,7 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
         source: 'COINGLASS',
       }))
 
-      const result = await client.hyperliquidWhaleAlert.createMany({
-        data: rows,
-        skipDuplicates: true,
-      })
-      insertedCount = result.count
+      insertedCount = await this.marketDataRepository.createHyperliquidWhaleAlertsMany(rows)
     }
 
     // 计算最新的时间戳

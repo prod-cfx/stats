@@ -1,14 +1,12 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobMetaSchema, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 /**
  * 任务配置参数（存放在 data_pull_tasks.meta 中，创建后不变）
@@ -115,7 +113,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   async run(ctx: DataPullJobContext<AggregatedLiquidationMeta>): Promise<JobRunResult> {
@@ -188,8 +186,6 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
       }
     }
 
-    const client = this.txHost.tx
-
     // 将返回的时间戳转换为毫秒，并以字符串形式存储 Decimal 字段
 
     const pointsWithTimestamps = json.data.map(point => {
@@ -216,11 +212,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
         shortLiquidationUsd: point.aggregated_short_liquidation_usd.toString(),
       }))
 
-      const result = await client.aggregatedLiquidationHistory.createMany({
-        data: rows,
-        skipDuplicates: true,
-      })
-      insertedCount = result.count
+      insertedCount = await this.marketDataRepository.createAggregatedLiquidationHistoryMany(rows)
     }
 
     const latestTimestampCandidates: number[] = []
@@ -426,4 +418,3 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
     return value
   }
 }
-

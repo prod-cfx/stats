@@ -1,13 +1,11 @@
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface CoinsPriceChangeCursor {
   /**
@@ -50,7 +48,7 @@ export class CoinglassCoinsPriceChangeJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   /**
@@ -122,7 +120,6 @@ export class CoinglassCoinsPriceChangeJob implements DataPullJob {
       }
     }
 
-    const client = this.txHost.tx
     const now = new Date()
 
     // 过滤无效数据点（必需字段校验）
@@ -138,47 +135,14 @@ export class CoinglassCoinsPriceChangeJob implements DataPullJob {
       return true
     })
 
-    // 批量 upsert（限制并发数为 10 以避免连接池耗尽）
-    let upsertedCount = 0
-    let failedCount = 0
-    const batchSize = 10
-    for (let i = 0; i < validDataPoints.length; i += batchSize) {
-      const batch = validDataPoints.slice(i, i + batchSize)
-      const results = await Promise.allSettled(
-        batch.map(async (point) => {
-          const dataMapping = this.mapDataPoint(point, now)
-          await client.coinsPriceChange.upsert({
-            where: {
-              symbol_source: {
-                symbol: point.symbol.toUpperCase(),
-                source: 'COINGLASS',
-              },
-            },
-            update: {
-              ...dataMapping,
-              updatedAt: now,
-            },
-            create: {
-              symbol: point.symbol.toUpperCase(),
-              source: 'COINGLASS',
-              ...dataMapping,
-            },
-          })
-          return point
-        }),
-      )
-
-      for (let j = 0; j < results.length; j++) {
-        const result = results[j]
-        if (result.status === 'fulfilled') {
-          upsertedCount += 1
-        } else {
-          failedCount += 1
-          const failedPoint = batch[j]
-          this.logger.warn(`Failed to upsert coins-price-change record: ${result.reason}`)
-          this.logger.warn(`Failed data point: ${JSON.stringify(failedPoint)}`)
-        }
-      }
+    const upsertResult = await this.marketDataRepository.upsertCoinsPriceChanges(
+      validDataPoints.map(point => ({ symbol: point.symbol, data: this.mapDataPoint(point, now) })),
+      now,
+    )
+    const { upsertedCount, failedCount } = upsertResult
+    for (const failure of upsertResult.failures) {
+      this.logger.warn(`Failed to upsert coins-price-change record: ${failure.reason}`)
+      this.logger.warn(`Failed data point: ${JSON.stringify(failure.point)}`)
     }
 
     if (failedCount > 0) {

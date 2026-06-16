@@ -11,6 +11,6 @@ import { OpenInterestService } from './open-interest.service'
   imports: [AuthModule],
   controllers: [OpenInterestController],
   providers: [OpenInterestService, OpenInterestRepository],
-  exports: [OpenInterestService],
+  exports: [OpenInterestService, OpenInterestRepository],
 })
 export class OpenInterestModule {}

@@ -1,15 +1,13 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface LongShortRatioCursor {
   /**
@@ -76,7 +74,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
@@ -141,8 +139,6 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       }
     }
 
-    const client = this.txHost.tx
-
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     const pointsWithTimestamps = json.data.map(point => {
@@ -181,11 +177,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
         source: 'COINGLASS',
       }))
 
-      const result = await client.longShortRatio.createMany({
-        data: rows,
-        skipDuplicates: true,
-      })
-      insertedCount = result.count
+      insertedCount = await this.marketDataRepository.createLongShortRatioMany(rows)
     }
 
     const latestTimestampCandidates: number[] = []

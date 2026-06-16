@@ -19,16 +19,12 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const txHost = {
-      tx: {
-        futuresPriceHistory: {
-          findFirst: async () => null,
-          createMany: async () => ({ count: 0 }),
-        },
-      },
+    const marketDataRepository = {
+      findEarliestFuturesPriceHistory: jest.fn().mockResolvedValue(null),
+      createFuturesPriceHistoryMany: async () => 0,
     }
 
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any)
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, marketDataRepository as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
@@ -62,6 +58,13 @@ describe('coinglassFuturesPriceHistoryJob', () => {
     expect(Number.isFinite(Number(startTime))).toBe(true)
     // ms timestamp should be 13 digits for current era
     expect(startTime!.length).toBeGreaterThanOrEqual(13)
+    expect(marketDataRepository.findEarliestFuturesPriceHistory).toHaveBeenCalledWith({
+      symbol: 'BTCUSDT',
+      exchangeCode: 'BINANCE',
+      contractType: 'PERPETUAL',
+      interval: 'm15',
+      source: 'COINGLASS',
+    })
   })
 
   it('treats contractType=null as spot and does not send contractType param', async () => {
@@ -72,16 +75,12 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const txHost = {
-      tx: {
-        futuresPriceHistory: {
-          findFirst: async () => null,
-          createMany: async () => ({ count: 0 }),
-        },
-      },
+    const marketDataRepository = {
+      findEarliestFuturesPriceHistory: async () => null,
+      createFuturesPriceHistoryMany: async () => 0,
     }
 
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any)
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, marketDataRepository as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
@@ -118,16 +117,12 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const txHost = {
-      tx: {
-        futuresPriceHistory: {
-          findFirst: async () => null,
-          createMany: async () => ({ count: 0 }),
-        },
-      },
+    const marketDataRepository = {
+      findEarliestFuturesPriceHistory: async () => null,
+      createFuturesPriceHistoryMany: async () => 0,
     }
 
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any)
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, marketDataRepository as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {

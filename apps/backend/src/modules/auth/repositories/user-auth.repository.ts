@@ -18,6 +18,13 @@ export class UserAuthRepository {
     return this.txHost.tx.user.findUnique({ where: { id } })
   }
 
+  async findUserTokenVersion(id: string): Promise<{ tokenVersion: number } | null> {
+    return this.txHost.tx.user.findUnique({
+      where: { id },
+      select: { tokenVersion: true },
+    })
+  }
+
   async findUserByIdOrThrow(id: string): Promise<User> {
     return this.txHost.tx.user.findUniqueOrThrow({ where: { id } })
   }

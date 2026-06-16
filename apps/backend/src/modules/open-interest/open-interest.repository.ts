@@ -71,6 +71,14 @@ export class OpenInterestRepository {
     })
   }
 
+  async createOhlcHistoryMany(rows: Prisma.OpenInterestOhlcHistoryCreateManyInput[]): Promise<number> {
+    const result = await this.txHost.tx.openInterestOhlcHistory.createMany({
+      data: rows,
+      skipDuplicates: true,
+    })
+    return result.count
+  }
+
   /**
    * 获取某币种最新时间戳下所有交易所（含 "All" 汇总）的持仓量行。
    * 用于聚合盘口页 OI 表的快照消费。

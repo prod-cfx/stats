@@ -1,13 +1,11 @@
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface WhalePositionCursor {
   /**
@@ -69,7 +67,7 @@ export class CoinglassWhalePositionJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   async run(_ctx: DataPullJobContext): Promise<JobRunResult> {
@@ -172,19 +170,10 @@ export class CoinglassWhalePositionJob implements DataPullJob {
         source: 'COINGLASS' as const,
       }
 
-      await this.txHost.tx.hyperliquidWhalePosition.upsert({
-        where: {
-          userAddress_symbol: {
-            userAddress: point.user,
-            symbol: point.symbol,
-          },
-        },
-        update: commonData,
-        create: {
-          userAddress: point.user,
-          symbol: point.symbol,
-          ...commonData,
-        },
+      await this.marketDataRepository.upsertHyperliquidWhalePosition({
+        userAddress: point.user,
+        symbol: point.symbol,
+        data: commonData,
       })
       upsertedCount++
     }

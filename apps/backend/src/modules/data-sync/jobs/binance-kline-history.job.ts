@@ -168,6 +168,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
         exchangeCode: 'BINANCE',
         contractType: cursor.marketType === 'PERPETUAL' ? 'PERPETUAL' : null,
         interval: prismaInterval,
+        source: 'BINANCE',
       })
 
       if (earliestRecord) {

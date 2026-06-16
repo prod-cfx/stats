@@ -51,6 +51,39 @@ export interface FuturesPriceHistoryCreateManyData {
   source: string
 }
 
+export interface CoinsPriceChangeUpsertData {
+  currentPrice: string
+  priceChangePercent5m: string | null
+  priceChangePercent15m: string | null
+  priceChangePercent30m: string | null
+  priceChangePercent1h: string | null
+  priceChangePercent4h: string | null
+  priceChangePercent12h: string | null
+  priceChangePercent24h: string | null
+  priceAmplitudePercent5m: string | null
+  priceAmplitudePercent15m: string | null
+  priceAmplitudePercent30m: string | null
+  priceAmplitudePercent1h: string | null
+  priceAmplitudePercent4h: string | null
+  priceAmplitudePercent12h: string | null
+  priceAmplitudePercent24h: string | null
+  dataTimestamp: Date
+}
+
+export interface CoinsPriceChangeUpsertInput {
+  symbol: string
+  data: CoinsPriceChangeUpsertData
+}
+
+export interface CoinsPriceChangeUpsertResult {
+  upsertedCount: number
+  failedCount: number
+  failures: Array<{
+    point: CoinsPriceChangeUpsertInput
+    reason: unknown
+  }>
+}
+
 @Injectable()
 export class DataSyncMarketDataRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
@@ -110,6 +143,7 @@ export class DataSyncMarketDataRepository {
     exchangeCode: string
     contractType: string | null
     interval: string
+    source: string
   }): Promise<{ timestamp: Date } | null> {
     return this.txHost.tx.futuresPriceHistory.findFirst({
       where: params as Prisma.FuturesPriceHistoryWhereInput,
@@ -125,6 +159,132 @@ export class DataSyncMarketDataRepository {
       data: rows as Prisma.FuturesPriceHistoryCreateManyInput[],
       skipDuplicates: true,
     })
+    return result.count
+  }
+
+  async findFuturesPriceHistoryTimestamps(params: {
+    symbol: string
+    exchangeCode: string
+    contractType: string | null
+    interval: string
+    from: Date
+    to: Date
+    cursor?: Date
+    take: number
+  }): Promise<Array<{ timestamp: Date }>> {
+    return this.txHost.tx.futuresPriceHistory.findMany({
+      where: {
+        symbol: params.symbol,
+        exchangeCode: params.exchangeCode,
+        contractType: params.contractType,
+        interval: params.interval as never,
+        source: 'COINGLASS',
+        timestamp: params.cursor
+          ? { gt: params.cursor, lte: params.to }
+          : { gte: params.from, lte: params.to },
+      },
+      orderBy: { timestamp: 'asc' },
+      take: params.take,
+      select: { timestamp: true },
+    })
+  }
+
+  async createLongShortRatioMany(rows: Prisma.LongShortRatioCreateManyInput[]): Promise<number> {
+    const result = await this.txHost.tx.longShortRatio.createMany({ data: rows, skipDuplicates: true })
+    return result.count
+  }
+
+  async createHyperliquidWhaleAlertsMany(rows: Prisma.HyperliquidWhaleAlertCreateManyInput[]): Promise<number> {
+    const result = await this.txHost.tx.hyperliquidWhaleAlert.createMany({ data: rows, skipDuplicates: true })
+    return result.count
+  }
+
+  async upsertHyperliquidWhalePosition(params: {
+    userAddress: string
+    symbol: string
+    data: Prisma.HyperliquidWhalePositionUncheckedUpdateInput
+  }): Promise<void> {
+    await this.txHost.tx.hyperliquidWhalePosition.upsert({
+      where: {
+        userAddress_symbol: {
+          userAddress: params.userAddress,
+          symbol: params.symbol,
+        },
+      },
+      update: params.data,
+      create: {
+        userAddress: params.userAddress,
+        symbol: params.symbol,
+        ...params.data,
+      } as Prisma.HyperliquidWhalePositionUncheckedCreateInput,
+    })
+  }
+
+  async createHyperliquidUserFundingMany(rows: Prisma.HyperliquidUserFundingCreateManyInput[]): Promise<number> {
+    const result = await this.txHost.tx.hyperliquidUserFunding.createMany({ data: rows, skipDuplicates: true })
+    return result.count
+  }
+
+  async createHyperliquidUserFillsMany(rows: Prisma.HyperliquidUserFillCreateManyInput[]): Promise<number> {
+    const result = await this.txHost.tx.hyperliquidUserFill.createMany({ data: rows, skipDuplicates: true })
+    return result.count
+  }
+
+  async createHyperliquidUserOrdersMany(rows: Prisma.HyperliquidUserOrderCreateManyInput[]): Promise<number> {
+    const result = await this.txHost.tx.hyperliquidUserOrder.createMany({ data: rows, skipDuplicates: true })
+    return result.count
+  }
+
+  async upsertCoinsPriceChanges(
+    points: CoinsPriceChangeUpsertInput[],
+    now: Date,
+    batchSize = 10,
+  ): Promise<CoinsPriceChangeUpsertResult> {
+    let upsertedCount = 0
+    const failures: CoinsPriceChangeUpsertResult['failures'] = []
+
+    for (let i = 0; i < points.length; i += batchSize) {
+      const batch = points.slice(i, i + batchSize)
+      const results = await Promise.allSettled(
+        batch.map(async (point) => {
+          await this.txHost.tx.coinsPriceChange.upsert({
+            where: {
+              symbol_source: {
+                symbol: point.symbol.toUpperCase(),
+                source: 'COINGLASS',
+              },
+            },
+            update: {
+              ...point.data,
+              updatedAt: now,
+            },
+            create: {
+              symbol: point.symbol.toUpperCase(),
+              source: 'COINGLASS',
+              ...point.data,
+            },
+          })
+          return point
+        }),
+      )
+
+      for (let j = 0; j < results.length; j += 1) {
+        const result = results[j]
+        if (result.status === 'fulfilled') {
+          upsertedCount += 1
+        } else {
+          failures.push({ point: batch[j], reason: result.reason })
+        }
+      }
+    }
+
+    return { upsertedCount, failedCount: failures.length, failures }
+  }
+
+  async createAggregatedLiquidationHistoryMany(
+    rows: Prisma.AggregatedLiquidationHistoryCreateManyInput[],
+  ): Promise<number> {
+    const result = await this.txHost.tx.aggregatedLiquidationHistory.createMany({ data: rows, skipDuplicates: true })
     return result.count
   }
 

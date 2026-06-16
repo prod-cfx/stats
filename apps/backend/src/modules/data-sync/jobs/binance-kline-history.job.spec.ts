@@ -50,6 +50,7 @@ describe('BinanceKlineHistoryJob', () => {
       exchangeCode: 'BINANCE',
       contractType: 'PERPETUAL',
       interval: 'm5',
+      source: 'BINANCE',
     })
     expect(repository.createFuturesPriceHistoryMany).toHaveBeenCalledWith([
       expect.objectContaining({

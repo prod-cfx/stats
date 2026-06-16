@@ -1,9 +1,6 @@
 import type { CoinglassContractType, MarketTimeframe } from '@ai/shared'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode, toCoinglassSymbol } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -11,6 +8,7 @@ import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { INTERVAL_MS } from '@/modules/kline/utils/kline-time.utils'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface FuturesPriceCursor {
   /**
@@ -112,7 +110,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   ] as const satisfies readonly MarketTimeframe[]
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
@@ -155,21 +153,16 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       typeof cursor.backfillCompletedAt === 'number' &&
       Date.now() - cursor.backfillCompletedAt < this.BACKFILL_RECHECK_WINDOW_MS
 
-    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     if (!shouldSkipBackfillCheck) {
       // 检查数据库中最早的记录，如果存在历史数据缺口则优先回填
-      const earliestRecord = await dbClient.futuresPriceHistory.findFirst({
-        where: {
-          symbol: cursor.symbol,
-          exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-          interval: prismaInterval,
-          source: 'COINGLASS',
-          contractType,
-        },
-        orderBy: { timestamp: 'asc' },
-        select: { timestamp: true },
+      const earliestRecord = await this.marketDataRepository.findEarliestFuturesPriceHistory({
+        symbol: cursor.symbol,
+        exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
+        contractType,
+        interval: prismaInterval,
+        source: 'COINGLASS',
       })
 
       if (earliestRecord) {
@@ -290,8 +283,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       }
     }
 
-    const client = this.txHost.tx
-
     const pointsWithTimestamps = json.data.map(point => {
       const timestampMs = point.time >= 1_000_000_000_000 ? point.time : point.time * 1000
       return {
@@ -322,11 +313,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
 
       for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
         const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-        const result = await client.futuresPriceHistory.createMany({
-          data: batch,
-          skipDuplicates: true,
-        })
-        insertedCount += result.count
+        insertedCount += await this.marketDataRepository.createFuturesPriceHistoryMany(batch)
       }
     }
 
@@ -496,8 +483,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   ): Promise<JobRunResult> {
     const isSpot = cursor.contractType === null
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
-    const dbClient = this.txHost.tx
-
     const baseUrl = new URL(endpoint)
     baseUrl.searchParams.set('symbol', this.getApiSymbol(cursor))
     baseUrl.searchParams.set('interval', cursor.interval)
@@ -565,11 +550,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
 
       for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
         const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-        const result = await dbClient.futuresPriceHistory.createMany({
-          data: batch,
-          skipDuplicates: true,
-        })
-        totalInserted += result.count
+        totalInserted += await this.marketDataRepository.createFuturesPriceHistoryMany(batch)
       }
 
       const oldestFetched = Math.min(...filteredPoints.map(p => p.timestampMs))
@@ -654,7 +635,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       return []
     }
 
-    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     // 使用分块查询避免大数据量场景下的内存爆炸
@@ -665,20 +645,15 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     let hasMoreData = true
 
     while (hasMoreData) {
-      const records = await dbClient.futuresPriceHistory.findMany({
-        where: {
-          symbol,
-          exchangeCode,
-          contractType,
-          interval: prismaInterval,
-          source: 'COINGLASS',
-          timestamp: cursor
-            ? { gt: cursor, lte: new Date(toMs) }
-            : { gte: new Date(fromMs), lte: new Date(toMs) },
-        },
-        orderBy: { timestamp: 'asc' },
+      const records = await this.marketDataRepository.findFuturesPriceHistoryTimestamps({
+        symbol,
+        exchangeCode,
+        contractType,
+        interval: prismaInterval,
+        from: new Date(fromMs),
+        to: new Date(toMs),
+        cursor,
         take: CHUNK_SIZE,
-        select: { timestamp: true },
       })
 
       if (records.length === 0) {
@@ -737,8 +712,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
     const interval = cursor.interval ?? this.defaultInterval
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
-    const dbClient = this.txHost.tx
-
     let totalInserted = 0
 
     for (const gap of gaps) {
@@ -807,11 +780,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
 
           for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
             const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-            const result = await dbClient.futuresPriceHistory.createMany({
-              data: batch,
-              skipDuplicates: true,
-            })
-            gapInserted += result.count
+            gapInserted += await this.marketDataRepository.createFuturesPriceHistoryMany(batch)
           }
 
           // 计算下一轮起始时间：取本次返回数据的最大时间戳 + 1ms

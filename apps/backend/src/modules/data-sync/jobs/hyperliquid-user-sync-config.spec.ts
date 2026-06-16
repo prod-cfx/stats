@@ -6,7 +6,7 @@ import { HyperliquidUserFundingSyncJob } from './hyperliquid-user-funding-sync.j
 import { HyperliquidUserOrdersSyncJob } from './hyperliquid-user-orders-sync.job'
 
 describe('hyperliquid user sync job config validation', () => {
-  const txHost = { tx: {} }
+  const marketDataRepository = {}
   const hyperliquidApi = {}
   type JobClass = typeof HyperliquidUserFillsSyncJob
 
@@ -16,11 +16,11 @@ describe('hyperliquid user sync job config validation', () => {
     ['funding', HyperliquidUserFundingSyncJob],
   ])('returns bad request for %s template task without userAddress', async (_name, JobClass) => {
     const ctor = JobClass as JobClass
-    const [txHostArg, hyperliquidApiArg] = [
-      txHost,
+    const [marketDataRepositoryArg, hyperliquidApiArg] = [
+      marketDataRepository,
       hyperliquidApi,
     ] as unknown as ConstructorParameters<JobClass>
-    const job = new ctor(txHostArg, hyperliquidApiArg)
+    const job = new ctor(marketDataRepositoryArg, hyperliquidApiArg)
 
     let error: unknown
     try {
@@ -43,12 +43,8 @@ describe('hyperliquid user sync job config validation', () => {
   })
 
   it('maps nested historical order payloads returned by Hyperliquid', async () => {
-    const txHost = {
-      tx: {
-        hyperliquidUserOrder: {
-          createMany: jest.fn().mockResolvedValue({ count: 1 }),
-        },
-      },
+    const marketDataRepository = {
+      createHyperliquidUserOrdersMany: jest.fn().mockResolvedValue(1),
     }
     const hyperliquidApi = {
       getHistoricalOrders: jest.fn().mockResolvedValue([{ status: 'filled', order: {
@@ -63,7 +59,7 @@ describe('hyperliquid user sync job config validation', () => {
         reduceOnly: false,
       } }]),
     }
-    const job = new HyperliquidUserOrdersSyncJob(txHost as never, hyperliquidApi as never)
+    const job = new HyperliquidUserOrdersSyncJob(marketDataRepository as never, hyperliquidApi as never)
 
     const result = await job.run({
       taskId: 1,
@@ -74,23 +70,19 @@ describe('hyperliquid user sync job config validation', () => {
     })
 
     expect(result.fetchedCount).toBe(1)
-    expect(txHost.tx.hyperliquidUserOrder.createMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: [expect.objectContaining({
+    expect(marketDataRepository.createHyperliquidUserOrdersMany).toHaveBeenCalledWith([
+      expect.objectContaining({
         coin: 'ETH',
         orderId: BigInt(403960385339),
         status: 'filled',
         timestamp: new Date(1777496848915),
-      })],
-    }))
+      }),
+    ])
   })
 
   it('maps nested funding delta payloads returned by Hyperliquid', async () => {
-    const txHost = {
-      tx: {
-        hyperliquidUserFunding: {
-          createMany: jest.fn().mockResolvedValue({ count: 1 }),
-        },
-      },
+    const marketDataRepository = {
+      createHyperliquidUserFundingMany: jest.fn().mockResolvedValue(1),
     }
     const hyperliquidApi = {
       getUserFunding: jest.fn().mockResolvedValue([{ time: 1779966000027, delta: {
@@ -101,7 +93,7 @@ describe('hyperliquid user sync job config validation', () => {
         fundingRate: '-0.0000049837',
       } }]),
     }
-    const job = new HyperliquidUserFundingSyncJob(txHost as never, hyperliquidApi as never)
+    const job = new HyperliquidUserFundingSyncJob(marketDataRepository as never, hyperliquidApi as never)
 
     const result = await job.run({
       taskId: 1,
@@ -112,24 +104,20 @@ describe('hyperliquid user sync job config validation', () => {
     })
 
     expect(result.fetchedCount).toBe(1)
-    expect(txHost.tx.hyperliquidUserFunding.createMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: [expect.objectContaining({
+    expect(marketDataRepository.createHyperliquidUserFundingMany).toHaveBeenCalledWith([
+      expect.objectContaining({
         coin: 'ETH',
         fundingRate: '-0.0000049837',
         szi: '40000.5788',
         usdc: '396.768427',
         time: new Date(1779966000027),
-      })],
-    }))
+      }),
+    ])
   })
 
   it('defaults missing fill liquidation flags to false', async () => {
-    const txHost = {
-      tx: {
-        hyperliquidUserFill: {
-          createMany: jest.fn().mockResolvedValue({ count: 1 }),
-        },
-      },
+    const marketDataRepository = {
+      createHyperliquidUserFillsMany: jest.fn().mockResolvedValue(1),
     }
     const hyperliquidApi = {
       getUserFillsByTime: jest.fn().mockResolvedValue([{
@@ -148,7 +136,7 @@ describe('hyperliquid user sync job config validation', () => {
         tid: 1001962798821134,
       }]),
     }
-    const job = new HyperliquidUserFillsSyncJob(txHost as never, hyperliquidApi as never)
+    const job = new HyperliquidUserFillsSyncJob(marketDataRepository as never, hyperliquidApi as never)
 
     const result = await job.run({
       taskId: 1,
@@ -159,13 +147,13 @@ describe('hyperliquid user sync job config validation', () => {
     })
 
     expect(result.fetchedCount).toBe(1)
-    expect(txHost.tx.hyperliquidUserFill.createMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: [expect.objectContaining({
+    expect(marketDataRepository.createHyperliquidUserFillsMany).toHaveBeenCalledWith([
+      expect.objectContaining({
         coin: 'ETH',
         liquidation: false,
         orderId: BigInt(454811980657),
         tradeId: BigInt(1001962798821134),
-      })],
-    }))
+      }),
+    ])
   })
 })

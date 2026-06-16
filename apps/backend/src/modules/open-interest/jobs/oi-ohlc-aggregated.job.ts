@@ -1,5 +1,4 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {
   DataPullJob,
   DataPullJobContext,
@@ -7,13 +6,12 @@ import type {
   JobRunResult,
 } from '../../data-sync/contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { OpenInterestRepository } from '../open-interest.repository'
 
 interface OiOhlcAggregatedMeta {
   symbol: string
@@ -79,7 +77,7 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly openInterestRepository: OpenInterestRepository,
   ) {}
 
   async run(ctx: DataPullJobContext<OiOhlcAggregatedMeta>): Promise<JobRunResult> {
@@ -146,7 +144,6 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
       }
     }
 
-    const client = this.txHost.tx
     const prismaInterval = mapTimeframe(interval)
 
     const pointsWithTimestamps = json.data.map(point => ({
@@ -162,7 +159,7 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
     if (incrementalPoints.length > 0) {
       const rows = incrementalPoints.map(point => ({
         symbol,
-        interval: prismaInterval,
+        interval: prismaInterval as never,
         timestamp: new Date(point.timestampMs),
         open: point.o.toString(),
         high: point.h.toString(),
@@ -170,11 +167,7 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
         close: point.c.toString(),
       }))
 
-      const result = await client.openInterestOhlcHistory.createMany({
-        data: rows,
-        skipDuplicates: true,
-      })
-      insertedCount = result.count
+      insertedCount = await this.openInterestRepository.createOhlcHistoryMany(rows)
     }
 
     // API 数据按时间升序排列，直接取最后一条的时间戳

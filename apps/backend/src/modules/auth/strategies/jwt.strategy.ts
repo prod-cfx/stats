@@ -1,16 +1,15 @@
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { JwtPayload } from '../interfaces/jwt-payload.interface'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
 
 import { ErrorCode, PrincipalType } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { RoleAssignmentRepository } from '../repositories/role-assignment.repository'
+import { UserAuthRepository } from '../repositories/user-auth.repository'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -18,7 +17,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly userAuthRepository: UserAuthRepository,
+    private readonly roleAssignmentRepository: RoleAssignmentRepository,
   ) {
     const secret = configService.get<string>('jwt.secret')
     if (!secret) {
@@ -55,10 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // 验证 tokenVersion（仅对 USER 类型，ADMIN 暂不校验）
     if (principalType === PrincipalType.USER && payload.tokenVersion !== undefined) {
-      const user = await this.txHost.tx.user.findUnique({
-        where: { id: payload.sub },
-        select: { tokenVersion: true },
-      })
+      const user = await this.userAuthRepository.findUserTokenVersion(payload.sub)
 
       if (!user) {
         this.logger.warn(`JWT 验证失败：用户 ${payload.sub} 不存在`)
@@ -81,13 +78,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // 验证角色分配
-    const hasAssignment = await this.txHost.tx.roleAssignment.findFirst({
-      where: {
-        principalId: payload.sub,
-        principalType,
-      },
-      select: { id: true },
-    })
+    const hasAssignment = await this.roleAssignmentRepository.hasAssignment(payload.sub, principalType)
 
     if (!hasAssignment) {
       this.logger.warn(

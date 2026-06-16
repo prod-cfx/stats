@@ -1,12 +1,10 @@
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
-import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { HyperliquidApiService } from '@/modules/whale-tracking/services/hyperliquid-api.service'
+import { DataSyncMarketDataRepository } from '../repositories/data-sync-market-data.repository'
 
 interface UserOrdersCursor {
   /**
@@ -48,7 +46,7 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
   private readonly logger = new Logger(HyperliquidUserOrdersSyncJob.name)
 
   constructor(
-    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly marketDataRepository: DataSyncMarketDataRepository,
     private readonly hyperliquidApi: HyperliquidApiService,
   ) {}
 
@@ -106,8 +104,6 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
       }
     }
 
-    const client = this.txHost.tx
-
     // 转换数据并写入数据库
     const rows = incrementalOrders.map(order => ({
       userAddress: cursor.userAddress,
@@ -127,12 +123,7 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
       source: 'HYPERLIQUID',
     }))
 
-    const result = await client.hyperliquidUserOrder.createMany({
-      data: rows,
-      skipDuplicates: true, // 幂等性：基于唯一约束 (userAddress, orderId)
-    })
-
-    const insertedCount = result.count
+    const insertedCount = await this.marketDataRepository.createHyperliquidUserOrdersMany(rows)
 
     // 更新 cursor
     const newCursor: UserOrdersCursor = {
