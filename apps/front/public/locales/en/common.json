@@ -961,6 +961,8 @@
     "priceLabel": "Price (USDT)",
     "bestPrice": "Best",
     "amountLabel": "Amount (BTC)",
+    "percentSlider": "Order size percent",
+    "setPercent": "Set order size to {{percent}}%",
     "available": "Available",
     "maxLong": "Max Long",
     "maxShort": "Max Short",
@@ -1723,6 +1725,7 @@
       "hot": "Hot",
       "community": "Community",
       "publishedAgo": "Published {{days}} days ago",
+      "openDashboard": "Open dashboard",
       "saveToMyDashboards": "Save to My Dashboards",
       "defaultDescription": "A curated dashboard with real-time on-chain trading metrics, liquidity analysis, and whale tracking—built to help traders spot signals faster."
     },

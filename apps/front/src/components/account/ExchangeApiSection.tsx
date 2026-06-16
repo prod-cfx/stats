@@ -425,14 +425,21 @@ export function ExchangeApiSection() {
       </div>
 
       {configExchangeId && configAccount && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4" onClick={() => closeConfigDialog(configExchangeId)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4">
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            tabIndex={-1}
+            className="absolute inset-0"
+            onClick={() => closeConfigDialog(configExchangeId)}
+          />
           <div
-            className="max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
+            className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
             role="dialog"
             aria-modal="true"
-            onClick={event => event.stopPropagation()}
+            aria-labelledby="exchange-api-config-title"
           >
-            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t(getTitleKey(configExchangeId))}</h3>
+            <h3 id="exchange-api-config-title" className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t(getTitleKey(configExchangeId))}</h3>
             <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
               {configAccount.isBound ? t('aiQuant.editApiConfig') : t('aiQuant.saveApiConfig')}
             </p>
@@ -440,6 +447,7 @@ export function ExchangeApiSection() {
               <input
                 value={forms[configExchangeId].name}
                 onChange={event => setFormValue(configExchangeId, 'name', event.target.value)}
+                aria-label={t('aiQuant.accountName')}
                 placeholder={t('aiQuant.accountName')}
                 className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
               />
@@ -463,6 +471,7 @@ export function ExchangeApiSection() {
                   <input
                     value={forms[configExchangeId].apiKey}
                     onChange={event => setFormValue(configExchangeId, 'apiKey', event.target.value)}
+                    aria-label={t('aiQuant.apiKey')}
                     placeholder={t('aiQuant.apiKey')}
                     className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
@@ -471,6 +480,7 @@ export function ExchangeApiSection() {
                     type="password"
                     autoComplete="off"
                     onChange={event => setFormValue(configExchangeId, 'apiSecret', event.target.value)}
+                    aria-label={t('aiQuant.secretKey')}
                     placeholder={t('aiQuant.secretKey')}
                     className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
@@ -482,6 +492,7 @@ export function ExchangeApiSection() {
                   type="password"
                   autoComplete="off"
                   onChange={event => setFormValue(configExchangeId, 'passphrase', event.target.value)}
+                  aria-label={t('aiQuant.passphrase')}
                   placeholder={t('aiQuant.passphrase')}
                   className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                 />
@@ -491,6 +502,7 @@ export function ExchangeApiSection() {
                   <input
                     value={forms[configExchangeId].mainWalletAddress}
                     onChange={event => setFormValue(configExchangeId, 'mainWalletAddress', event.target.value)}
+                    aria-label={t('aiQuant.walletAddress')}
                     placeholder={t('aiQuant.walletAddress')}
                     className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
@@ -499,6 +511,7 @@ export function ExchangeApiSection() {
                     type="password"
                     autoComplete="off"
                     onChange={event => setFormValue(configExchangeId, 'agentPrivateKey', event.target.value)}
+                    aria-label={t('aiQuant.agentPrivateKey')}
                     placeholder={t('aiQuant.agentPrivateKey')}
                     className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
@@ -534,14 +547,21 @@ export function ExchangeApiSection() {
       )}
 
       {deleteExchangeId && deleteAccount && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4" onClick={() => setDeleteExchangeId(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4">
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            tabIndex={-1}
+            className="absolute inset-0"
+            onClick={() => setDeleteExchangeId(null)}
+          />
           <div
-            className="w-full max-w-[380px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
+            className="relative z-10 w-full max-w-[380px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
             role="dialog"
             aria-modal="true"
-            onClick={event => event.stopPropagation()}
+            aria-labelledby="exchange-api-delete-title"
           >
-            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.unbindApiConfig')}</h3>
+            <h3 id="exchange-api-delete-title" className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.unbindApiConfig')}</h3>
             <p className="mt-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
               {t(getTitleKey(deleteExchangeId))} / {deleteAccount.name ?? deleteAccount.maskedCredential ?? '-'}
             </p>

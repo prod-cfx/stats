@@ -139,7 +139,7 @@ export const TraderCard = ({
   }, [])
 
   const content = variant === 'recommended' ? (
-    <div className="gradient-border-hover group flex h-full cursor-pointer flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5" onClick={() => onShowStats?.(address)}>
+    <div className="gradient-border-hover group flex h-full flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5">
       <div className="flex justify-between items-start gap-3">
         <div className="flex min-w-0 items-center gap-3 overflow-visible md:gap-4">
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full !text-sm !font-semibold !leading-[22px] md:h-11 md:w-11" style={avatarStyle}>
@@ -159,7 +159,7 @@ export const TraderCard = ({
                 {address}
                 <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
               </div>
-              <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
+              <button type="button" aria-label={tr('common.copy', '复制地址', 'Copy address')} className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
                 {hasCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
@@ -168,6 +168,7 @@ export const TraderCard = ({
         </div>
         <button 
           type="button"
+          aria-label={tr('whaleTracking.discover.actions.showStats', '查看交易统计', 'Show trading stats')}
           className="ml-2 flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           onClick={(e) => {
             e.stopPropagation();
@@ -200,7 +201,7 @@ export const TraderCard = ({
       </div>
     </div>
   ) : (
-    <div className="gradient-border-hover group flex h-full cursor-pointer flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5" onClick={() => onShowStats?.(address)}>
+    <div className="gradient-border-hover group flex h-full flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5">
       <div className="flex justify-between items-start gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2 relative group/address">
           <Link 
@@ -215,13 +216,14 @@ export const TraderCard = ({
             {address}
             <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
           </div>
-          <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
+          <button type="button" aria-label={tr('common.copy', '复制地址', 'Copy address')} className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
             {hasCopied ? <Check className="w-4.5 h-4.5 text-green-500" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
           {handle && <span className="min-w-0 break-all !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:ml-2">{handle}</span>}
         </div>
         <button 
           type="button"
+          aria-label={tr('whaleTracking.discover.actions.showStats', '查看交易统计', 'Show trading stats')}
           className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           onClick={(e) => {
             e.stopPropagation();

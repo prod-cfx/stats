@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -25,6 +25,7 @@ export const Modal = ({
   loading = false,
 }: ModalProps) => {
   const { t } = useTranslation();
+  const titleId = useId();
   const handleEsc = useCallback(
     (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -52,21 +53,28 @@ export const Modal = ({
   return createPortal(
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
+      <button
+        type="button"
+        aria-label={t('common.close')}
+        tabIndex={-1}
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" 
         onClick={onClose}
-      />
+      />      
       
       {/* Content */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={`relative z-10 flex min-h-0 max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] ${width} flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl animate-in zoom-in-95 fade-in duration-200`}
       >
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--cf-border)] px-6 py-4">
-          <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{title}</h3>
+          <h3 id={titleId} className="text-lg font-bold text-[color:var(--cf-text-strong)]">{title}</h3>
           <button 
             type="button"
             onClick={onClose}
+            aria-label={t('common.close')}
             className="p-1 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors rounded-lg hover:bg-[color:var(--cf-surface-hover)]"
           >
             <X className="w-5 h-5" />

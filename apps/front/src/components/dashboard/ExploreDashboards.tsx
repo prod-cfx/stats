@@ -101,6 +101,7 @@ export const ExploreDashboards = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e] group-focus-within:text-primary transition-colors" />
           <input 
             type="text" 
+            aria-label={t('dashboard.explore.searchPlaceholder')}
             placeholder={t('dashboard.explore.searchPlaceholder')} 
             className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-primary focus:bg-[#0d1117] transition-all placeholder:text-[#8b949e]"
           />
@@ -114,9 +115,15 @@ export const ExploreDashboards = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {featuredDashboards.map((card, idx) => (
-            <div key={idx} onClick={() => handleCardClick(card)} className="cursor-pointer h-full">
+            <button
+              key={idx}
+              type="button"
+              aria-label={`${t('dashboard.explore.openDashboard')}: ${card.title}`}
+              onClick={() => handleCardClick(card)}
+              className="h-full cursor-pointer text-left"
+            >
               <DashboardCard {...card} />
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -128,9 +135,15 @@ export const ExploreDashboards = () => {
           <SectionTitle>{t('dashboard.explore.hot')}</SectionTitle>
           <div className="flex flex-col gap-4">
             {hotDashboards.map((item, idx) => (
-              <div key={idx} onClick={() => handleCardClick(item)} className="cursor-pointer">
+              <button
+                key={idx}
+                type="button"
+                aria-label={`${t('dashboard.explore.openDashboard')}: ${item.title}`}
+                onClick={() => handleCardClick(item)}
+                className="cursor-pointer text-left"
+              >
                 <DashboardListItem {...item} />
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -140,9 +153,15 @@ export const ExploreDashboards = () => {
           <SectionTitle>{t('dashboard.explore.community')}</SectionTitle>
           <div className="flex flex-col gap-4">
             {communityDashboards.map((item, idx) => (
-              <div key={idx} onClick={() => handleCardClick(item)} className="cursor-pointer">
+              <button
+                key={idx}
+                type="button"
+                aria-label={`${t('dashboard.explore.openDashboard')}: ${item.title}`}
+                onClick={() => handleCardClick(item)}
+                className="cursor-pointer text-left"
+              >
                 <DashboardListItem {...item} />
-              </div>
+              </button>
             ))}
           </div>
         </div>

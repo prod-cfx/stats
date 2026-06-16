@@ -961,6 +961,8 @@
     "priceLabel": "价格 (USDT)",
     "bestPrice": "最优价",
     "amountLabel": "数量 (BTC)",
+    "percentSlider": "仓位百分比",
+    "setPercent": "设置仓位为 {{percent}}%",
     "available": "可用",
     "maxLong": "可开多",
     "maxShort": "可开空",
@@ -1726,6 +1728,7 @@
       "hot": "热门看板",
       "community": "社区看板",
       "publishedAgo": "发布于 {{days}} 天前",
+      "openDashboard": "打开看板",
       "saveToMyDashboards": "保存到我的看板",
       "defaultDescription": "这是一个精选的数据看板，聚合了实时的链上交易指标、资产流动性分析以及巨鲸动向追踪。通过可视化的图表和深度的数据表格，帮助交易者快速捕捉市场信号。"
     },

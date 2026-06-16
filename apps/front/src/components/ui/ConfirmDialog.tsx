@@ -1,7 +1,7 @@
 'use client'
 
 import { AlertTriangle } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface ConfirmDialogProps {
@@ -28,6 +28,8 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const [mounted, setMounted] = useState(false)
+  const titleId = useId()
+  const descriptionId = useId()
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- hydrate on mount only
@@ -55,7 +57,11 @@ export function ConfirmDialog({
   return createPortal(
     <>
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
+        aria-label={cancelText}
+        disabled={disabled}
+        tabIndex={-1}
         className="animate-in fade-in fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm duration-200"
         onClick={disabled ? undefined : onCancel}
       />
@@ -63,8 +69,11 @@ export function ConfirmDialog({
       {/* Dialog */}
       <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
           className="animate-in zoom-in-95 fade-in pointer-events-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[380px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl duration-200 sm:p-5"
-          onClick={e => e.stopPropagation()}
         >
           {/* Icon */}
           <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10">
@@ -73,8 +82,8 @@ export function ConfirmDialog({
 
           {/* Content */}
           <div className="mb-5 space-y-2">
-            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
-            <p className="!text-sm !font-normal !leading-[22px] whitespace-pre-line text-[color:var(--cf-muted)]">
+            <h3 id={titleId} className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
+            <p id={descriptionId} className="!text-sm !font-normal !leading-[22px] whitespace-pre-line text-[color:var(--cf-muted)]">
               {description}
             </p>
           </div>

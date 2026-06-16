@@ -64,14 +64,26 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
 
       {/* Margin Mode & Leverage */}
       <div className="flex gap-2 mb-4 flex-none">
-        <div className="flex-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[color:var(--cf-surface-hover)] transition-colors">
+        <button
+          type="button"
+          aria-label={t('tradePanel.marginCross')}
+          aria-disabled="true"
+          disabled
+          className="flex flex-1 cursor-not-allowed items-center justify-between rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] px-3 py-1.5 opacity-80"
+        >
           <span className="text-xs">{t('tradePanel.marginCross')}</span>
           <span className="text-[10px] text-[color:var(--cf-muted)]">▼</span>
-        </div>
-        <div className="flex-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[color:var(--cf-surface-hover)] transition-colors">
+        </button>
+        <button
+          type="button"
+          aria-label={t('tradePanel.leverage')}
+          aria-disabled="true"
+          disabled
+          className="flex flex-1 cursor-not-allowed items-center justify-between rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] px-3 py-1.5 opacity-80"
+        >
           <span className="text-xs font-bold">{leverage}x</span>
           <span className="text-[10px] text-[color:var(--cf-muted)]">▼</span>
-        </div>
+        </button>
       </div>
 
       {/* Order Type Tabs */}
@@ -102,23 +114,25 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
       {/* Inputs */}
       <div className="space-y-4 mb-6 flex-none">
         <div>
-          <label className="text-xs text-[color:var(--cf-muted)] mb-1.5 block">{t('tradePanel.priceLabel')}</label>
+          <label htmlFor="trade-panel-price" className="text-xs text-[color:var(--cf-muted)] mb-1.5 block">{t('tradePanel.priceLabel')}</label>
           <div className="relative">
             <input
+              id="trade-panel-price"
               type="text"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               className="w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-right text-base transition-colors focus:border-orange-400 focus:outline-none md:text-sm"
             />
-            <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[color:var(--cf-surface-hover)] px-1.5 py-0.5 rounded text-[color:var(--cf-text)] hover:opacity-90 transition-colors">
+            <button type="button" aria-label={t('tradePanel.bestPrice')} className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[color:var(--cf-surface-hover)] px-1.5 py-0.5 rounded text-[color:var(--cf-text)] hover:opacity-90 transition-colors">
               {t('tradePanel.bestPrice')}
             </button>
           </div>
         </div>
 
         <div>
-          <label className="text-xs text-[color:var(--cf-muted)] mb-1.5 block">{t('tradePanel.amountLabel')}</label>
+          <label htmlFor="trade-panel-amount" className="text-xs text-[color:var(--cf-muted)] mb-1.5 block">{t('tradePanel.amountLabel')}</label>
           <input
+            id="trade-panel-amount"
             type="text"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -130,23 +144,30 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
 
       {/* Slider */}
       <div className="mb-6 px-1 flex-none">
+        <label htmlFor="trade-panel-percent" className="sr-only">
+          {t('tradePanel.percentSlider')}
+        </label>
         <input
+          id="trade-panel-percent"
           type="range"
           min="0"
           max="100"
+          aria-label={t('tradePanel.percentSlider')}
           value={percent}
           onChange={(e) => setPercent(Number.parseInt(e.target.value, 10))}
           className="w-full h-1 bg-[color:var(--cf-border)] rounded-lg appearance-none cursor-pointer accent-orange-400 mb-3"
         />
         <div className="flex justify-between text-[10px] text-[color:var(--cf-muted)]">
           {percents.map((p) => (
-            <span
+            <button
               key={p}
+              type="button"
+              aria-label={t('tradePanel.setPercent', { percent: p })}
               onClick={() => setPercent(p)}
               className={`cursor-pointer transition-colors ${percent >= p ? 'text-orange-400 font-bold' : 'hover:text-[color:var(--cf-text)]'}`}
             >
               {p}%
-            </span>
+            </button>
           ))}
         </div>
       </div>
