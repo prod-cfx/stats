@@ -9,8 +9,8 @@ import {
   IsString,
   Max,
   Min,
-  ValidateNested,
 } from 'class-validator'
+import { IsValidMetadata } from '@/common/validation/metadata.validator'
 
 export class UpdateOrderbookPairConfigDto {
   @ApiPropertyOptional({ description: '是否启用拉取' })
@@ -62,8 +62,7 @@ export class UpdateOrderbookPairConfigDto {
   })
   @IsOptional()
   @IsObject()
-  @ValidateNested()
-  @Type(() => Object)
+  @IsValidMetadata({ maxDepth: 5, maxSizeBytes: 10240 })
   metadata?: Record<string, any> | null
 
   @ApiPropertyOptional({ description: '备注说明', nullable: true })
@@ -71,4 +70,3 @@ export class UpdateOrderbookPairConfigDto {
   @IsOptional()
   description?: string | null
 }
-

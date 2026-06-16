@@ -12,8 +12,8 @@ import {
   Matches,
   Max,
   Min,
-  ValidateNested,
 } from 'class-validator'
+import { IsValidMetadata } from '@/common/validation/metadata.validator'
 
 export class CreateOrderbookPairConfigDto {
   @ApiProperty({ 
@@ -105,8 +105,7 @@ export class CreateOrderbookPairConfigDto {
   })
   @IsOptional()
   @IsObject()
-  @ValidateNested()
-  @Type(() => Object)
+  @IsValidMetadata({ maxDepth: 5, maxSizeBytes: 10240 })
   metadata?: Record<string, any>
 
   @ApiPropertyOptional({ description: '备注说明' })
@@ -114,4 +113,3 @@ export class CreateOrderbookPairConfigDto {
   @IsOptional()
   description?: string
 }
-

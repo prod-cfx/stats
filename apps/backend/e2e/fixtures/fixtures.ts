@@ -133,7 +133,6 @@ export async function createTestingApp(
         const errorMessages = errors.map(err => ({
           property: err.property,
           constraints: err.constraints,
-          value: err.value,
         }))
         // 输出详细的校验错误，便于定位 400 来源
         try {

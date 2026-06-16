@@ -114,4 +114,34 @@ describe('Whale notification rules HTTP (E2E)', () => {
       },
     }).expect(400)
   })
+
+  it('rejects unknown fields with the unified validation error shape', async () => {
+    const client = createAuthApiClient(app, 'e2e-token')
+
+    const response = await client.post('whale-notification/rules').send({
+      type: 'ADDRESS',
+      address: '0x456def',
+      thresholdUsd: 100000,
+      unexpectedField: 'silently dropped before forbidNonWhitelisted',
+      channels: {
+        web: true,
+        email: false,
+        telegram: false,
+      },
+    }).expect(400)
+
+    expect(response.body?.status).toBe(400)
+    expect(response.body?.error?.code).toBe('BAD_REQUEST')
+    expect(response.body?.error?.args?.validationErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: 'unexpectedField',
+          constraints: expect.objectContaining({
+            whitelistValidation: expect.stringContaining('should not exist'),
+          }),
+        }),
+      ]),
+    )
+    expect(response.body.error.args.validationErrors[0]).not.toHaveProperty('value')
+  })
 })

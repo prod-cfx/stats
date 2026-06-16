@@ -6,13 +6,17 @@ import { AdminRoleController } from './admin/controllers/admin-role.controller'
 import { AdminRoleListQueryDto } from './admin/dto/admin-role-list.dto'
 import { AdminUserController } from './admin/controllers/admin-user.controller'
 import { AdminUserListQueryDto } from './admin/dto/admin-user-list.dto'
+import { TelegramBotWebhookRequestDto } from './auth/dto/requests/telegram-bot-webhook.request.dto'
 import { LlmStrategyInstancesController } from './ai-quant-proxy/llm-strategy-instances.controller'
 import { LlmStrategyInstanceListQueryDto } from './ai-quant-proxy/dto/llm-strategy-instance-list-query.dto'
 import { LlmStrategyInstanceSignalsQueryDto } from './ai-quant-proxy/dto/llm-strategy-instance-signals-query.dto'
 import { LlmStrategySubscriptionsController } from './ai-quant-proxy/llm-strategy-subscriptions.controller'
+import { AiQuantConversationBacktestDraftConfigRequestDto } from './ai-quant-proxy/dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { LlmSubscriptionCreateRequestDto } from './ai-quant-proxy/dto/llm-subscription-create.request.dto'
 import { LlmSubscriptionListQueryDto } from './ai-quant-proxy/dto/llm-subscription-list-query.dto'
 import { LlmSubscriptionUpdateRequestDto } from './ai-quant-proxy/dto/llm-subscription-update.request.dto'
+import { CreateOrderbookPairConfigDto } from './orderbook-config/dto/create-orderbook-pair-config.dto'
+import { UpdateOrderbookPairConfigDto } from './orderbook-config/dto/update-orderbook-pair-config.dto'
 
 describe('controller request DTO runtime metadata', () => {
   const cases = [
@@ -91,11 +95,85 @@ describe('controller request DTO runtime metadata', () => {
       exchangeAccountId: '',
     })).rejects.toThrow()
   })
+
+  it.each([
+    [CreateOrderbookPairConfigDto, {
+      pairId: 'BTCUSDT.BINANCE.SPOT',
+      venue: 'BINANCE',
+      symbol: 'BTCUSDT',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+      venueType: 'CEX',
+      instrumentType: 'SPOT',
+      metadata: { apiEndpoint: 'https://api.example.com', rateLimit: 100 },
+    }],
+    [UpdateOrderbookPairConfigDto, {
+      metadata: { apiEndpoint: 'https://api.example.com', rateLimit: 100 },
+    }],
+  ] as const)('%p accepts dynamic metadata keys under global forbidNonWhitelisted', async (metatype, value) => {
+    await expect(transformStrictBody(metatype, value)).resolves.toMatchObject({
+      metadata: { apiEndpoint: 'https://api.example.com', rateLimit: 100 },
+    })
+  })
+
+  it('keeps the AI Quant backtest draft config body under global forbidNonWhitelisted', async () => {
+    await expect(transformStrictBody(AiQuantConversationBacktestDraftConfigRequestDto, {
+      backtestDraftConfig: {
+        range: { preset: '7D' },
+        execution: {
+          initialCash: 10000,
+          leverage: null,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+      },
+    })).resolves.toMatchObject({
+      backtestDraftConfig: {
+        range: { preset: '7D' },
+      },
+    })
+  })
+
+  it.each([
+    { backtestDraftConfig: null },
+    { backtestDraftConfig: 'invalid' },
+    { backtestDraftConfig: 123 },
+    { backtestDraftConfig: [] },
+  ])('rejects non-object AI Quant backtest draft config under global forbidNonWhitelisted', async (value) => {
+    await expect(transformStrictBody(AiQuantConversationBacktestDraftConfigRequestDto, value)).rejects.toThrow()
+  })
+
+  it('keeps standard Telegram webhook update fields under global forbidNonWhitelisted', async () => {
+    await expect(transformStrictBody(TelegramBotWebhookRequestDto, {
+      update_id: 123456,
+      callback_query: {
+        id: 'callback-id',
+        data: 'ignored-by-current-handler',
+      },
+    })).resolves.toMatchObject({
+      update_id: 123456,
+      callback_query: {
+        id: 'callback-id',
+      },
+    })
+  })
+
 })
 
 type DtoConstructor = new () => object
 
 const validationPipe = new ValidationPipe({
+  transform: true,
+  transformOptions: {
+    enableImplicitConversion: true,
+  },
+})
+
+const strictValidationPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
   transform: true,
   transformOptions: {
     enableImplicitConversion: true,
@@ -112,6 +190,14 @@ function transformQuery(metatype: DtoConstructor, value: Record<string, unknown>
 
 function transformBody(metatype: DtoConstructor, value: Record<string, unknown>) {
   return validationPipe.transform(value, {
+    type: 'body',
+    metatype,
+    data: '',
+  } satisfies ArgumentMetadata)
+}
+
+function transformStrictBody(metatype: DtoConstructor, value: Record<string, unknown>) {
+  return strictValidationPipe.transform(value, {
     type: 'body',
     metatype,
     data: '',

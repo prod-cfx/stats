@@ -47,7 +47,6 @@ async function bootstrap() {
         const errorMessages = errors.map(err => ({
           property: err.property,
           constraints: err.constraints,
-          value: err.value,
         }))
         return new BadRequestException(errorMessages)
       },
