@@ -2,7 +2,7 @@
 
 import type {HyperliquidHistoricalOrderEntry} from '@/lib/hyperliquid-api';
 import { ArrowUpDown, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
-import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 
 import { useTranslation } from 'react-i18next'
 import { getRelativeTimeParams } from '@/lib/formatters'
@@ -24,6 +24,89 @@ const SearchIcon = Search as unknown as AnyComponent
 const XIcon = X as unknown as AnyComponent
 
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'delegation'
+type SortOrder = 'asc' | 'desc' | null
+
+interface TableViewState {
+  activeTab: TabType
+  sortField: string | null
+  sortOrder: SortOrder
+  assetFilter: string
+  isFilterOpen: boolean
+}
+
+type TableViewAction =
+  | { type: 'selectTab'; tab: TabType }
+  | { type: 'toggleSort'; field: string }
+  | { type: 'setAssetFilter'; value: string }
+  | { type: 'clearAssetFilter' }
+  | { type: 'selectAssetFilter'; value: string }
+  | { type: 'toggleAssetFilter' }
+
+const INITIAL_TABLE_VIEW_STATE: TableViewState = {
+  activeTab: 'perpetual',
+  sortField: null,
+  sortOrder: null,
+  assetFilter: '',
+  isFilterOpen: false,
+}
+
+function tableViewReducer(state: TableViewState, action: TableViewAction): TableViewState {
+  switch (action.type) {
+    case 'selectTab':
+      return { ...state, activeTab: action.tab, sortField: null, sortOrder: null }
+    case 'toggleSort': {
+      if (state.sortField !== action.field) {
+        return { ...state, sortField: action.field, sortOrder: 'desc' }
+      }
+      if (state.sortOrder === 'desc') return { ...state, sortOrder: 'asc' }
+      if (state.sortOrder === 'asc') return { ...state, sortField: null, sortOrder: null }
+      return { ...state, sortOrder: 'desc' }
+    }
+    case 'setAssetFilter':
+      return { ...state, assetFilter: action.value }
+    case 'clearAssetFilter':
+      return { ...state, assetFilter: '' }
+    case 'selectAssetFilter':
+      return { ...state, assetFilter: action.value, isFilterOpen: false }
+    case 'toggleAssetFilter':
+      return { ...state, isFilterOpen: !state.isFilterOpen }
+  }
+}
+
+function cleanSortableNumeric(value: unknown) {
+  if (typeof value !== 'string') return value
+  const matches = value.replace(/,/g, '').match(/-?[\d.]+/)
+  return matches ? Number.parseFloat(matches[0]) : 0
+}
+
+function toSortableValue(value: unknown): string | number {
+  if (typeof value === 'number' || typeof value === 'string') return value
+  return String(value ?? '')
+}
+
+export function compareProfileSortableValues(
+  sortableA: string | number,
+  sortableB: string | number,
+  sortOrder: Exclude<SortOrder, null>,
+) {
+  if (sortableA === sortableB) return 0
+
+  return sortOrder === 'desc'
+    ? Number(sortableB > sortableA) || -1
+    : Number(sortableA > sortableB) || -1
+}
+
+function parseZhDateTime(value: string) {
+  if (!value) return 0
+  return new Date(value.replace('年', '-').replace('月', '-').replace('日', '')).getTime()
+}
+
+function parseDurationMinutes(value: string) {
+  if (!value) return 0
+  const hours = value.match(/(\d+)小时/)
+  const minutes = value.match(/(\d+)分/)
+  return (hours ? Number.parseInt(hours[1]) * 60 : 0) + (minutes ? Number.parseInt(minutes[1]) : 0)
+}
 
 // 后端 API 数据类型
 interface PerpPositionDto {
@@ -161,6 +244,103 @@ interface RecentTrade {
 
 type TradesState = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
+interface RecentTradesState {
+  status: TradesState
+  trades: RecentTrade[]
+  error: string | null
+}
+
+type RecentTradesAction =
+  | { type: 'loading' }
+  | { type: 'empty' }
+  | { type: 'success'; trades: RecentTrade[] }
+  | { type: 'error'; message: string }
+  | { type: 'retry' }
+
+const INITIAL_RECENT_TRADES_STATE: RecentTradesState = {
+  status: 'idle',
+  trades: [],
+  error: null,
+}
+
+function recentTradesReducer(
+  state: RecentTradesState,
+  action: RecentTradesAction,
+): RecentTradesState {
+  switch (action.type) {
+    case 'loading':
+      return { ...state, status: 'loading', error: null }
+    case 'empty':
+      return { status: 'empty', trades: [], error: null }
+    case 'success':
+      return { status: 'success', trades: action.trades, error: null }
+    case 'error':
+      return { status: 'error', trades: [], error: action.message }
+    case 'retry':
+      return { ...state, status: 'idle' }
+  }
+}
+
+interface HistoryOrdersState {
+  orders: HistoryOrder[] | null
+  walletAddress: string | null
+  visibleCount: number
+  isLoading: boolean
+  error: Error | null
+}
+
+type HistoryOrdersAction =
+  | { type: 'loading' }
+  | { type: 'success'; orders: HistoryOrder[]; renderStep: number; walletAddress: string }
+  | { type: 'error'; error: Error }
+  | { type: 'showMore'; nextVisibleCount: number }
+  | { type: 'reset'; renderStep: number }
+
+export function createHistoryOrdersState(renderStep: number): HistoryOrdersState {
+  return {
+    orders: null,
+    walletAddress: null,
+    visibleCount: renderStep,
+    isLoading: false,
+    error: null,
+  }
+}
+
+export function shouldReuseHistoryOrders(state: HistoryOrdersState, walletAddress: string) {
+  return state.walletAddress === walletAddress && state.orders !== null && state.error === null
+}
+
+export function getCurrentWalletHistoryOrders(
+  state: HistoryOrdersState,
+  walletAddress: string,
+): HistoryOrder[] | null {
+  return state.walletAddress === walletAddress ? state.orders : null
+}
+
+export function historyOrdersReducer(
+  state: HistoryOrdersState,
+  action: HistoryOrdersAction,
+): HistoryOrdersState {
+  switch (action.type) {
+    case 'loading':
+      return { ...state, isLoading: true, error: null }
+    case 'success':
+      return {
+        orders: action.orders,
+        walletAddress: action.walletAddress,
+        visibleCount: action.renderStep,
+        isLoading: false,
+        error: null,
+      }
+    case 'error':
+      return { ...state, orders: [], isLoading: false, error: action.error }
+    case 'showMore':
+      return { ...state, visibleCount: action.nextVisibleCount }
+    case 'reset':
+      return createHistoryOrdersState(action.renderStep)
+  }
+}
+
 interface HistoryOrder {
   time: string
   timestamp: number
@@ -174,12 +354,14 @@ interface HistoryOrder {
   id: string
 }
 
-export const ProfileDataTabs = ({
+export const ProfileDataTabs = (props: ProfileDataTabsProps) => useProfileDataTabsRender(props)
+
+function useProfileDataTabsRender({
   spotPositions,
   perpPositions,
   openOrders,
   traderAddress,
-}: ProfileDataTabsProps) => {
+}: ProfileDataTabsProps) {
   const { t } = useTranslation()
 
   const walletAddress = traderAddress
@@ -402,17 +584,22 @@ export const ProfileDataTabs = ({
     return 'openLongAdd'
   }
 
-  const [activeTab, setActiveTab] = useState<TabType>('perpetual')
-  const [sortField, setSortField] = useState<string | null>(null)
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null)
-  const [assetFilter, setAssetFilter] = useState('')
-  const [isFilterOpen, setIsAssetFilterOpen] = useState(false)
+  const [{ activeTab, sortField, sortOrder, assetFilter, isFilterOpen }, dispatchTableView] =
+    useReducer(tableViewReducer, INITIAL_TABLE_VIEW_STATE)
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set())
 
-  const [historyOrdersAll, setHistoryOrdersAll] = useState<HistoryOrder[] | null>(null)
-  const [historyVisibleCount, setHistoryVisibleCount] = useState(HISTORY_RENDER_STEP)
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
-  const [historyError, setHistoryError] = useState<Error | null>(null)
+  const [historyOrdersState, dispatchHistoryOrders] = useReducer(
+    historyOrdersReducer,
+    HISTORY_RENDER_STEP,
+    createHistoryOrdersState,
+  )
+  const {
+    walletAddress: historyOrdersWalletAddress,
+    visibleCount: historyVisibleCount,
+    isLoading: isHistoryLoading,
+    error: historyError,
+  } = historyOrdersState
+  const historyOrdersAll = getCurrentWalletHistoryOrders(historyOrdersState, walletAddress)
   const lastHistoryFetchAtRef = useRef<number>(0)
   const assetFilterInputRef = useRef<HTMLInputElement | null>(null)
   const mobileHistorySentinelRef = useRef<HTMLDivElement | null>(null)
@@ -422,47 +609,53 @@ export const ProfileDataTabs = ({
     if (isHistoryLoading) return
 
     const now = Date.now()
-    if (historyOrdersAll && now - lastHistoryFetchAtRef.current < HISTORY_MIN_REFETCH_MS) return
+    if (
+      shouldReuseHistoryOrders(historyOrdersState, walletAddress) &&
+      now - lastHistoryFetchAtRef.current < HISTORY_MIN_REFETCH_MS
+    ) {
+      return
+    }
 
-    setIsHistoryLoading(true)
-    setHistoryError(null)
+    dispatchHistoryOrders({ type: 'loading' })
 
     try {
       const res = await fetchTraderHistoricalOrdersFromHyperliquid(walletAddress)
       const mapped = mapHistoricalOrdersToHistoryOrders(res.orders)
-      setHistoryOrdersAll(mapped)
-      setHistoryVisibleCount(HISTORY_RENDER_STEP)
+      dispatchHistoryOrders({ type: 'success', orders: mapped, renderStep: HISTORY_RENDER_STEP, walletAddress })
       lastHistoryFetchAtRef.current = now
     } catch (err) {
       const e = err instanceof Error ? err : new Error('Failed to load history orders')
-      setHistoryError(e)
-      setHistoryOrdersAll([])
-    } finally {
-      setIsHistoryLoading(false)
+      dispatchHistoryOrders({ type: 'error', error: e })
     }
-  }, [walletAddress, historyOrdersAll, isHistoryLoading])
+  }, [walletAddress, historyOrdersState, isHistoryLoading])
+
+  useEffect(() => {
+    if (historyOrdersWalletAddress === null || historyOrdersWalletAddress === walletAddress) return
+    lastHistoryFetchAtRef.current = 0
+    dispatchHistoryOrders({ type: 'reset', renderStep: HISTORY_RENDER_STEP })
+  }, [historyOrdersWalletAddress, walletAddress])
 
   useEffect(() => {
     if (activeTab !== 'delegation') return
-    if (historyOrdersAll !== null) return
+    if (shouldReuseHistoryOrders(historyOrdersState, walletAddress)) return
     void loadHistoryOrders()
-  }, [activeTab, historyOrdersAll, loadHistoryOrders])
-  const [tradesState, setTradesState] = useState<TradesState>('idle')
-  const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([])
-  const [tradesError, setTradesError] = useState<string | null>(null)
+  }, [activeTab, historyOrdersState, loadHistoryOrders, walletAddress])
+  const [recentTradesState, dispatchRecentTrades] = useReducer(
+    recentTradesReducer,
+    INITIAL_RECENT_TRADES_STATE,
+  )
+  const { status: tradesState, trades: recentTrades, error: tradesError } = recentTradesState
 
   const loadRecentTrades = async () => {
     if (tradesState === 'loading') return
-    setTradesState('loading')
-    setTradesError(null)
+    dispatchRecentTrades({ type: 'loading' })
 
     try {
       const res = await fetchUserFillsFromHyperliquid(traderAddress, { aggregateByTime: true })
       const fills = res.fills
 
       if (!fills.length) {
-        setRecentTrades([])
-        setTradesState('empty')
+        dispatchRecentTrades({ type: 'empty' })
         return
       }
 
@@ -493,12 +686,12 @@ export const ProfileDataTabs = ({
         }
       })
 
-      setRecentTrades(mapped)
-      setTradesState('success')
+      dispatchRecentTrades({ type: 'success', trades: mapped })
     } catch {
-      setRecentTrades([])
-      setTradesError(t('whaleTracking.profile.recentTrades.loadFailed'))
-      setTradesState('error')
+      dispatchRecentTrades({
+        type: 'error',
+        message: t('whaleTracking.profile.recentTrades.loadFailed'),
+      })
     }
   }
 
@@ -569,18 +762,7 @@ export const ProfileDataTabs = ({
     { id: 'delegation', label: t('whaleTracking.profile.tabs.delegation') },
   ]
 
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      if (sortOrder === 'desc') setSortOrder('asc')
-      else if (sortOrder === 'asc') {
-        setSortField(null)
-        setSortOrder(null)
-      } else setSortOrder('desc')
-    } else {
-      setSortField(field)
-      setSortOrder('desc')
-    }
-  }
+  const handleSort = (field: string) => dispatchTableView({ type: 'toggleSort', field })
 
   const renderSortIcon = (field: string) => {
     if (sortField !== field)
@@ -607,43 +789,31 @@ export const ProfileDataTabs = ({
       )
     }
     if (currentSortField && currentSortOrder) {
-      data.sort((a: any, b: any) => {
-        let valA = a[currentSortField]
-        let valB = b[currentSortField]
+      data.sort((a, b) => {
+        const sortKey = currentSortField as keyof T
+        let valA: unknown = a[sortKey]
+        let valB: unknown = b[sortKey]
 
         if (valA === undefined || valB === undefined) return 0
 
-        const cleanNumeric = (val: any) => {
-          if (typeof val !== 'string') return val
-          const matches = val.replace(/,/g, '').match(/-?[\d.]+/)
-          return matches ? Number.parseFloat(matches[0]) : 0
-        }
-
         if (currentSortField === 'time' || currentSortField === 'endTime') {
-          const parseDate = (d: string) => {
-            if (!d) return 0
-            return new Date(d.replace('年', '-').replace('月', '-').replace('日', '')).getTime()
-          }
-          const dateA = parseDate(valA)
-          const dateB = parseDate(valB)
+          const dateA = typeof valA === 'string' ? parseZhDateTime(valA) : 0
+          const dateB = typeof valB === 'string' ? parseZhDateTime(valB) : 0
           return currentSortOrder === 'desc' ? dateB - dateA : dateA - dateB
         }
 
         if (currentSortField === 'duration') {
-          const getMinutes = (d: string) => {
-            if (!d) return 0
-            const h = d.match(/(\d+)小时/)
-            const m = d.match(/(\d+)分/)
-            return (h ? Number.parseInt(h[1]) * 60 : 0) + (m ? Number.parseInt(m[1]) : 0)
-          }
-          valA = getMinutes(valA)
-          valB = getMinutes(valB)
+          valA = typeof valA === 'string' ? parseDurationMinutes(valA) : 0
+          valB = typeof valB === 'string' ? parseDurationMinutes(valB) : 0
         } else {
-          valA = cleanNumeric(valA)
-          valB = cleanNumeric(valB)
+          valA = toSortableValue(cleanSortableNumeric(valA))
+          valB = toSortableValue(cleanSortableNumeric(valB))
         }
 
-        return currentSortOrder === 'desc' ? (valB > valA ? 1 : -1) : valA > valB ? 1 : -1
+        const sortableA = toSortableValue(valA)
+        const sortableB = toSortableValue(valB)
+
+        return compareProfileSortableValues(sortableA, sortableB, currentSortOrder)
       })
     }
     return data
@@ -700,16 +870,20 @@ export const ProfileDataTabs = ({
       entries => {
         const hit = entries.some(e => e.isIntersecting)
         if (!hit) return
-        setHistoryVisibleCount(c =>
-          Math.min(c + HISTORY_RENDER_STEP, allHistoryOrdersFiltered.length),
-        )
+        dispatchHistoryOrders({
+          type: 'showMore',
+          nextVisibleCount: Math.min(
+            historyVisibleCount + HISTORY_RENDER_STEP,
+            allHistoryOrdersFiltered.length,
+          ),
+        })
       },
       { root: null, rootMargin: '200px', threshold: 0 },
     )
 
     sentinelEls.forEach(el => observer.observe(el))
     return () => observer.disconnect()
-  }, [allHistoryOrdersFiltered.length, canLoadMoreHistory])
+  }, [allHistoryOrdersFiltered.length, canLoadMoreHistory, historyVisibleCount])
 
   const renderSideBadge = (side: string) => {
     const isLong = side === 'Long' || side === 'Buy'
@@ -736,9 +910,7 @@ export const ProfileDataTabs = ({
             key={tab.id}
             type="button"
             onClick={() => {
-              setActiveTab(tab.id as TabType)
-              setSortField(null)
-              setSortOrder(null)
+              dispatchTableView({ type: 'selectTab', tab: tab.id as TabType })
             }}
             className={`group relative flex-shrink-0 px-4 py-4 text-sm font-bold transition-all md:px-6 ${
               activeTab === tab.id
@@ -769,7 +941,7 @@ export const ProfileDataTabs = ({
               type="button"
               className="ml-2 underline"
               onClick={() => {
-                setTradesState('idle')
+                dispatchRecentTrades({ type: 'retry' })
                 void loadRecentTrades()
               }}
             >
@@ -908,7 +1080,7 @@ export const ProfileDataTabs = ({
                     type="button"
                     onClick={e => {
                       e.stopPropagation()
-                      setIsAssetFilterOpen(!isFilterOpen)
+                      dispatchTableView({ type: 'toggleAssetFilter' })
                     }}
                     className="group flex items-center gap-1.5 transition-colors hover:text-[color:var(--cf-text-strong)]"
                   >
@@ -924,14 +1096,16 @@ export const ProfileDataTabs = ({
                           ref={assetFilterInputRef}
                           type="text"
                           value={assetFilter}
-                          onChange={e => setAssetFilter(e.target.value)}
+                          onChange={e =>
+                            dispatchTableView({ type: 'setAssetFilter', value: e.target.value })
+                          }
                           placeholder={t('whaleTracking.profile.assetFilter.placeholder')}
                           className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-8 py-1.5 text-base text-[color:var(--cf-text-strong)] focus:outline-none md:text-xs"
                         />
                         {assetFilter && (
                           <button
                             type="button"
-                            onClick={() => setAssetFilter('')}
+                            onClick={() => dispatchTableView({ type: 'clearAssetFilter' })}
                             className="absolute top-1/2 right-2 -translate-y-1/2"
                           >
                             <XIcon className="h-3 w-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]" />
@@ -950,8 +1124,7 @@ export const ProfileDataTabs = ({
                             key={asset}
                             type="button"
                             onClick={() => {
-                              setAssetFilter(asset)
-                              setIsAssetFilterOpen(false)
+                              dispatchTableView({ type: 'selectAssetFilter', value: asset })
                             }}
                             className="w-full rounded px-2 py-1.5 text-left text-xs text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                           >
@@ -1240,7 +1413,7 @@ export const ProfileDataTabs = ({
                     type="button"
                     className="ml-2 underline"
                     onClick={() => {
-                      setTradesState('idle')
+                      dispatchRecentTrades({ type: 'retry' })
                       void loadRecentTrades()
                     }}
                   >

@@ -1,6 +1,5 @@
 'use client'
 
-/* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
 /* eslint-disable react-web-api/no-leaked-event-listener */
 
 import type { MutableRefObject, Ref } from 'react'
@@ -295,6 +294,50 @@ export interface TradingViewChartRef {
     id: 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data',
   ) => void
   removeAllStudies: () => void
+}
+
+interface ChartLifecycleState {
+  isReady: boolean
+  isChartReady: boolean
+  error: string | null
+  currentInterval: string
+}
+
+type ChartLifecycleAction =
+  | { type: 'reset'; interval: string }
+  | { type: 'widgetReady' }
+  | { type: 'chartReady' }
+  | { type: 'intervalChanged'; interval: string }
+  | { type: 'failed'; message: string }
+  | { type: 'disposed' }
+
+function createChartLifecycleState(interval: string): ChartLifecycleState {
+  return {
+    isReady: false,
+    isChartReady: false,
+    error: null,
+    currentInterval: interval,
+  }
+}
+
+function chartLifecycleReducer(
+  state: ChartLifecycleState,
+  action: ChartLifecycleAction,
+): ChartLifecycleState {
+  switch (action.type) {
+    case 'reset':
+      return createChartLifecycleState(action.interval)
+    case 'widgetReady':
+      return { ...state, isReady: true }
+    case 'chartReady':
+      return { ...state, isChartReady: true }
+    case 'intervalChanged':
+      return { ...state, currentInterval: action.interval }
+    case 'failed':
+      return { ...state, error: action.message }
+    case 'disposed':
+      return { ...state, isChartReady: false }
+  }
 }
 
 type CustomIndicatorId =
@@ -1194,11 +1237,13 @@ export const TradingViewChart = (
 ) => {
     const { t, i18n } = useTranslation()
     const widgetRef = useRef<TradingViewWidget | null>(null)
-    const [isReady, setIsReady] = useState(false)
-    const [isChartReady, setIsChartReady] = useState(false)
+    const [chartLifecycle, dispatchChartLifecycle] = useReducer(
+      chartLifecycleReducer,
+      interval,
+      createChartLifecycleState,
+    )
+    const { isReady, isChartReady, error, currentInterval } = chartLifecycle
     const chartReadyRef = useRef(false)
-    const [error, setError] = useState<string | null>(null)
-    const [currentInterval, setCurrentInterval] = useState(interval)
 
     // 用 useId() 生成 SSR/CSR 稳定的唯一 id，避免 hydration mismatch
     const reactId = useId()
@@ -1422,7 +1467,7 @@ export const TradingViewChart = (
 
     // Sync currentInterval with interval prop (for external control)
     useEffect(() => {
-      setCurrentInterval(() => interval)
+      dispatchChartLifecycle({ type: 'intervalChanged', interval })
     }, [interval])
 
     const { dataRef: lsDataRef, sortedTimestampsRef: lsSortedTimestampsRef } =
@@ -1790,9 +1835,7 @@ export const TradingViewChart = (
         if (cancelled) return
 
         try {
-          setError(null)
-          setIsReady(false)
-          setIsChartReady(false)
+          dispatchChartLifecycle({ type: 'reset', interval })
           chartReadyRef.current = false
 
           await loadTradingViewScript()
@@ -1903,7 +1946,7 @@ export const TradingViewChart = (
           }
 
           widgetRef.current = widget
-          setIsReady(true)
+          dispatchChartLifecycle({ type: 'widgetReady' })
 
           // Chart must be ready before calling activeChart()/chart() on some versions, or it can crash.
           try {
@@ -1911,7 +1954,7 @@ export const TradingViewChart = (
               if (cancelled) return
               if (chartReadyRef.current) return
               chartReadyRef.current = true
-              setIsChartReady(true)
+              dispatchChartLifecycle({ type: 'chartReady' })
             }
 
             widget.onChartReady(() => markReady())
@@ -1933,7 +1976,7 @@ export const TradingViewChart = (
                   const intervalChanged = (chart as any).onIntervalChanged()
                   if (intervalChanged && typeof (intervalChanged as any).subscribe === 'function') {
                     ;(intervalChanged as any).subscribe(null, (newInterval: string) => {
-                      setCurrentInterval(newInterval)
+                      dispatchChartLifecycle({ type: 'intervalChanged', interval: newInterval })
                       callbacksRef.current.onIntervalChanged?.(newInterval)
                     })
                   }
@@ -2077,7 +2120,7 @@ export const TradingViewChart = (
           }
         } catch (e) {
           const message = (e as Error)?.message || 'Unknown error'
-          setError(message)
+          dispatchChartLifecycle({ type: 'failed', message })
         }
       }
 
@@ -2102,7 +2145,7 @@ export const TradingViewChart = (
         widgetRef.current?.remove?.()
         widgetRef.current = null
         chartReadyRef.current = false
-        setIsChartReady(false)
+        dispatchChartLifecycle({ type: 'disposed' })
       }
     }, [
       closeMenu,

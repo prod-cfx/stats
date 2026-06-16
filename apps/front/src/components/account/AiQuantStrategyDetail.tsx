@@ -7,7 +7,7 @@ import type {
 } from './ai-quant-strategy-store'
 import { Check, Copy, Play } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { setIntent } from '@/components/ai-quant/intent-storage'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
@@ -31,6 +31,104 @@ const TIMELINE_PREVIEW_LIMIT = 3
 type RuntimeAction = 'run' | 'stop' | 'liquidate_and_stop'
 type DetailTranslation = (key: string, options?: Record<string, unknown>) => string
 type DetailInfoTab = 'trades' | 'rules' | 'config' | 'backtest' | 'timeline' | 'diagnostics'
+interface RuntimeControlFeedback {
+  kind: 'success' | 'error'
+  message: string
+}
+
+interface RuntimeControlState {
+  feedback: RuntimeControlFeedback | null
+  pendingAction: RuntimeAction | null
+  stopDialogOpen: boolean
+}
+
+interface DetailUiState {
+  hoverIndex: number | null
+  showFullTimeline: boolean
+  timelineStrategyId: string | null
+  activeInfoTab: DetailInfoTab
+  copiedField: 'strategy' | 'snapshot' | null
+}
+
+type DetailUiEvent =
+  | { type: 'setHoverIndex'; index: number | null }
+  | { type: 'resetTimeline'; strategyId: string | null }
+  | { type: 'toggleTimeline' }
+  | { type: 'setActiveInfoTab'; tab: DetailInfoTab }
+  | { type: 'setCopiedField'; field: 'strategy' | 'snapshot' | null }
+  | { type: 'clearCopiedField'; field: 'strategy' | 'snapshot' }
+
+function createDetailUiState(strategyId: string | null): DetailUiState {
+  return {
+    hoverIndex: null,
+    showFullTimeline: false,
+    timelineStrategyId: strategyId,
+    activeInfoTab: 'trades',
+    copiedField: null,
+  }
+}
+
+function detailUiReducer(state: DetailUiState, event: DetailUiEvent): DetailUiState {
+  switch (event.type) {
+    case 'setHoverIndex':
+      return { ...state, hoverIndex: event.index }
+    case 'resetTimeline':
+      return { ...state, timelineStrategyId: event.strategyId, showFullTimeline: false }
+    case 'toggleTimeline':
+      return { ...state, showFullTimeline: !state.showFullTimeline }
+    case 'setActiveInfoTab':
+      return { ...state, activeInfoTab: event.tab }
+    case 'setCopiedField':
+      return { ...state, copiedField: event.field }
+    case 'clearCopiedField':
+      return {
+        ...state,
+        copiedField: state.copiedField === event.field ? null : state.copiedField,
+      }
+  }
+}
+
+type RuntimeControlEvent =
+  | { type: 'start'; action: RuntimeAction }
+  | { type: 'actionSuccess'; action: RuntimeAction; message: string }
+  | { type: 'stopDialogReady' }
+  | { type: 'actionError'; message: string }
+  | { type: 'finish' }
+  | { type: 'cancelStopDialog' }
+
+const INITIAL_RUNTIME_CONTROL_STATE: RuntimeControlState = {
+  feedback: null,
+  pendingAction: null,
+  stopDialogOpen: false,
+}
+
+function runtimeControlReducer(
+  state: RuntimeControlState,
+  event: RuntimeControlEvent,
+): RuntimeControlState {
+  switch (event.type) {
+    case 'start':
+      return { ...state, feedback: null, pendingAction: event.action }
+    case 'actionSuccess':
+      return {
+        feedback: { kind: 'success', message: event.message },
+        pendingAction: null,
+        stopDialogOpen: false,
+      }
+    case 'stopDialogReady':
+      return { ...state, pendingAction: null, stopDialogOpen: true }
+    case 'actionError':
+      return { ...state, feedback: { kind: 'error', message: event.message } }
+    case 'finish':
+      return { ...state, pendingAction: null }
+    case 'cancelStopDialog':
+      return {
+        ...state,
+        feedback: state.feedback?.kind === 'error' ? null : state.feedback,
+        stopDialogOpen: false,
+      }
+  }
+}
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -602,17 +700,16 @@ export function AiQuantStrategyDetail({
   const resolvedBackLabel = t(backLabelKey ?? 'aiQuant.detail.backToList')
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(initialStrategy)
   const [strategySource, setStrategySource] = useState(initialStrategy)
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [runtimeControlFeedback, setRuntimeControlFeedback] = useState<{
-    kind: 'success' | 'error'
-    message: string
-  } | null>(null)
-  const [pendingRuntimeAction, setPendingRuntimeAction] = useState<RuntimeAction | null>(null)
-  const [stopDialogOpen, setStopDialogOpen] = useState(false)
-  const [showFullTimeline, setShowFullTimeline] = useState(false)
-  const [timelineStrategyId, setTimelineStrategyId] = useState(initialStrategy?.id ?? null)
-  const [activeInfoTab, setActiveInfoTab] = useState<DetailInfoTab>('trades')
-  const [copiedField, setCopiedField] = useState<'strategy' | 'snapshot' | null>(null)
+  const [runtimeControl, dispatchRuntimeControl] = useReducer(
+    runtimeControlReducer,
+    INITIAL_RUNTIME_CONTROL_STATE,
+  )
+  const [detailUi, dispatchDetailUi] = useReducer(
+    detailUiReducer,
+    initialStrategy?.id ?? null,
+    createDetailUiState,
+  )
+  const { hoverIndex, showFullTimeline, timelineStrategyId, activeInfoTab, copiedField } = detailUi
 
   if (strategySource !== initialStrategy) {
     setStrategySource(initialStrategy)
@@ -620,8 +717,7 @@ export function AiQuantStrategyDetail({
   }
 
   if (timelineStrategyId !== (strategy?.id ?? null)) {
-    setTimelineStrategyId(strategy?.id ?? null)
-    setShowFullTimeline(false)
+    dispatchDetailUi({ type: 'resetTimeline', strategyId: strategy?.id ?? null })
   }
 
   const series = strategy?.equitySeries ?? []
@@ -707,7 +803,7 @@ export function AiQuantStrategyDetail({
   const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders || hasUnknownOpenOrders
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const exposureSummary = isSpotMarket ? formatSpotHolding(strategy, t) : `${openPositionsCount}`
-  const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
+  const runtimeActionDisabled = !session?.userId || runtimeControl.pendingAction !== null
   const semanticHeadline = semanticSummary
     ? formatRuntimeSemanticHeadline(semanticSummary, strategy.status, t)
     : null
@@ -733,8 +829,8 @@ export function AiQuantStrategyDetail({
   ) => {
     if (!value || !navigator.clipboard?.writeText) return
     await navigator.clipboard.writeText(value)
-    setCopiedField(field)
-    window.setTimeout(() => setCopiedField(current => (current === field ? null : current)), 1500)
+    dispatchDetailUi({ type: 'setCopiedField', field })
+    window.setTimeout(() => dispatchDetailUi({ type: 'clearCopiedField', field }), 1500)
   }
   const timelineItems = showFullTimeline
     ? strategy.timeline
@@ -761,10 +857,9 @@ export function AiQuantStrategyDetail({
     detailInfoTabs.find(([tab]) => tab === activeInfoTab)?.[1] ?? t('aiQuant.detail.latestTrades')
 
   const handleRuntimeAction = async (action: RuntimeAction) => {
-    if (!session?.userId || pendingRuntimeAction || !strategy) return
+    if (!session?.userId || runtimeControl.pendingAction || !strategy) return
 
-    setPendingRuntimeAction(action)
-    setRuntimeControlFeedback(null)
+    dispatchRuntimeControl({ type: 'start', action })
 
     try {
       const detail = await performAccountAiQuantStrategyAction(strategy.id, {
@@ -772,9 +867,9 @@ export function AiQuantStrategyDetail({
         action,
       })
       setStrategy(mapAccountStrategyDetailToRecord(detail))
-      setStopDialogOpen(false)
-      setRuntimeControlFeedback({
-        kind: 'success',
+      dispatchRuntimeControl({
+        type: 'actionSuccess',
+        action,
         message:
           action === 'run'
             ? t('aiQuant.detail.runSuccess')
@@ -783,32 +878,29 @@ export function AiQuantStrategyDetail({
               : t('aiQuant.detail.stopSuccess'),
       })
     } catch (error) {
-      setRuntimeControlFeedback({
-        kind: 'error',
+      dispatchRuntimeControl({
+        type: 'actionError',
         message: resolveRuntimeControlErrorMessage(action, error, t, lng),
       })
-    } finally {
-      setPendingRuntimeAction(null)
+      dispatchRuntimeControl({ type: 'finish' })
     }
   }
 
   const openStopDialogWithLatestDetail = async () => {
-    if (!session?.userId || pendingRuntimeAction || !strategy) return
+    if (!session?.userId || runtimeControl.pendingAction || !strategy) return
 
-    setPendingRuntimeAction('stop')
-    setRuntimeControlFeedback(null)
+    dispatchRuntimeControl({ type: 'start', action: 'stop' })
 
     try {
       const detail = await fetchAccountAiQuantStrategyDetail(strategy.id, session.userId)
       setStrategy(mapAccountStrategyDetailToRecord(detail))
-      setStopDialogOpen(true)
+      dispatchRuntimeControl({ type: 'stopDialogReady' })
     } catch (error) {
-      setRuntimeControlFeedback({
-        kind: 'error',
+      dispatchRuntimeControl({
+        type: 'actionError',
         message: resolveRuntimeControlErrorMessage('stop', error, t, lng),
       })
-    } finally {
-      setPendingRuntimeAction(null)
+      dispatchRuntimeControl({ type: 'finish' })
     }
   }
 
@@ -1077,24 +1169,24 @@ export function AiQuantStrategyDetail({
                   </div>
                 </div>
               </div>
-              {runtimeControlFeedback && (
+              {runtimeControl.feedback && (
                 <p
                   className={`mt-4 text-sm leading-[22px] ${
-                    runtimeControlFeedback.kind === 'error' ? 'text-rose-300' : 'text-emerald-300'
+                    runtimeControl.feedback.kind === 'error' ? 'text-rose-300' : 'text-emerald-300'
                   }`}
                 >
-                  {runtimeControlFeedback.message}
+                  {runtimeControl.feedback.message}
                 </p>
               )}
             </section>
           )}
 
           <StopRunningStrategyDialog
-            open={stopDialogOpen}
+            open={runtimeControl.stopDialogOpen}
             strategy={strategy}
-            pending={pendingRuntimeAction !== null}
+            pending={runtimeControl.pendingAction !== null}
             errorMessage={
-              runtimeControlFeedback?.kind === 'error' ? runtimeControlFeedback.message : null
+              runtimeControl.feedback?.kind === 'error' ? runtimeControl.feedback.message : null
             }
             onStopOnly={() => {
               void handleRuntimeAction('stop')
@@ -1103,11 +1195,8 @@ export function AiQuantStrategyDetail({
               void handleRuntimeAction('liquidate_and_stop')
             }}
             onCancel={() => {
-              if (pendingRuntimeAction) return
-              setStopDialogOpen(false)
-              if (runtimeControlFeedback?.kind === 'error') {
-                setRuntimeControlFeedback(null)
-              }
+              if (runtimeControl.pendingAction) return
+              dispatchRuntimeControl({ type: 'cancelStopDialog' })
             }}
           />
 
@@ -1157,9 +1246,9 @@ export function AiQuantStrategyDetail({
                     0,
                     Math.min(series.length - 1, Math.round(ratio * (series.length - 1))),
                   )
-                  setHoverIndex(idx)
+                  dispatchDetailUi({ type: 'setHoverIndex', index: idx })
                 }}
-                onMouseLeave={() => setHoverIndex(null)}
+                onMouseLeave={() => dispatchDetailUi({ type: 'setHoverIndex', index: null })}
               >
                 <defs>
                   <linearGradient id="equityLine" x1="0" x2="0" y1="0" y2="1">
@@ -1249,7 +1338,7 @@ export function AiQuantStrategyDetail({
                     type="button"
                     role="tab"
                     aria-selected={activeInfoTab === tab}
-                    onClick={() => setActiveInfoTab(tab)}
+                    onClick={() => dispatchDetailUi({ type: 'setActiveInfoTab', tab })}
                     className={`rounded-full border px-3.5 py-1.5 text-xs leading-5 !font-semibold whitespace-nowrap transition ${activeInfoTab === tab ? activeInfoTabClass : idleInfoTabClass}`}
                   >
                     {label}
@@ -1561,7 +1650,7 @@ export function AiQuantStrategyDetail({
                   {hasMoreTimelineItems && (
                     <button
                       type="button"
-                      onClick={() => setShowFullTimeline(curr => !curr)}
+                      onClick={() => dispatchDetailUi({ type: 'toggleTimeline' })}
                       className="inline-flex items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-white/[0.02] px-3.5 py-1.5 text-xs leading-5 !font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
                     >
                       {showFullTimeline
@@ -1882,15 +1971,15 @@ export function AiQuantStrategyDetail({
                   </Link>
                 )}
               </div>
-              {runtimeControlFeedback && (
+              {runtimeControl.feedback && (
                 <p
                   className={`mt-4 text-sm leading-[22px] ${
-                    runtimeControlFeedback.kind === 'error'
+                    runtimeControl.feedback.kind === 'error'
                       ? 'text-rose-500 dark:text-rose-400'
                       : 'text-emerald-600 dark:text-emerald-400'
                   }`}
                 >
-                  {runtimeControlFeedback.message}
+                  {runtimeControl.feedback.message}
                 </p>
               )}
             </article>

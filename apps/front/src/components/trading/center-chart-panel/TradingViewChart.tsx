@@ -29,6 +29,29 @@ interface TradingViewChartProps {
   onOpenDataIndicator?: () => void
 }
 
+function mapIntervalToResolution(value: string): string {
+  switch (value) {
+    case '1m':
+      return '1'
+    case '5m':
+      return '5'
+    case '15m':
+      return '15'
+    case '1h':
+      return '60'
+    case '4h':
+      return '240'
+    case '1d':
+      return '1D'
+    // 当前页面包含 1s，但 Charting Library 的 mock datafeed 不支持秒级；先回退到 1m
+    case '1s':
+      return '1'
+    default:
+      // 如果上层已经传入 TradingView resolution，则直接透传
+      return value
+  }
+}
+
 /**
  * Stable wrapper for the trading chart.
  * TODO: Replace Lightweight Charts with TradingView Charting Library once license is approved.
@@ -36,31 +59,6 @@ interface TradingViewChartProps {
 export function TradingViewChart(props: TradingViewChartProps) {
   const { t } = useTranslation()
   const { theme } = useTheme()
-
-  // 将页面的 interval（如 15m/1h）映射到 TradingView resolution（如 15/60）
-  const mapIntervalToResolution = (value: string): string => {
-    switch (value) {
-      case '1m':
-        return '1'
-      case '5m':
-        return '5'
-      case '15m':
-        return '15'
-      case '1h':
-        return '60'
-      case '4h':
-        return '240'
-      case '1d':
-        return '1D'
-      // 当前页面包含 1s，但 Charting Library 的 mock datafeed 不支持秒级；先回退到 1m
-      case '1s':
-        return '1'
-      default:
-        // 如果上层已经传入 TradingView resolution，则直接透传
-        return value
-    }
-  }
-
   const resolution = mapIntervalToResolution(props.interval)
 
   return (
