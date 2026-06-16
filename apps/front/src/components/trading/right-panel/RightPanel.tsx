@@ -283,6 +283,8 @@ export const RightPanel = ({
 
   // WebSocket 连接管理 - Trades 实时数据
   useEffect(() => {
+    setLoading(true)
+
     const wsBaseUrl = getWsBaseUrl()
     // 获取 token（从 localStorage）
     const token = localStorage.getItem(AUTH_TOKEN_KEY) || ''
@@ -296,8 +298,7 @@ export const RightPanel = ({
       auth: { token },
     })
 
-    // 监听连接事件
-    socket.on('connect', () => {
+    const handleConnect = () => {
       logger.debug('[RightPanel] Socket.IO connected, subscribing to trades')
 
       const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE'
@@ -330,21 +331,18 @@ export const RightPanel = ({
         instrumentType: isAggregated ? undefined : instrumentType,
       })
       logger.debug(`[RightPanel] Subscribed to ticker: ${selectedBase}`)
-    })
+    }
 
-    // 监听订阅确认
-    socket.on('tradesSubscribed', (data: TradesSubscribedData) => {
+    const handleTradesSubscribed = (data: TradesSubscribedData) => {
       logger.debug('[RightPanel] Trades subscribed:', data)
-    })
+    }
 
-    // 监听 Order Book 订阅确认
-    socket.on('orderbookSubscribed', (data: OrderbookSubscribedData) => {
+    const handleOrderbookSubscribed = (data: OrderbookSubscribedData) => {
       logger.debug('[RightPanel] Orderbook subscribed:', data)
       setLoading(false)
-    })
+    }
 
-    // 监听实时 trades 数据
-    socket.on('trades', (data: TradesEventData) => {
+    const handleTrades = (data: TradesEventData) => {
       const { trades: receivedTrades } = data
 
       if (receivedTrades && Array.isArray(receivedTrades)) {
@@ -371,10 +369,9 @@ export const RightPanel = ({
           }
         }
       }
-    })
+    }
 
-    // 监听实时 orderbook 数据
-    socket.on('orderbook', (data: OrderbookEventData) => {
+    const handleOrderbook = (data: OrderbookEventData) => {
       logger.debug('[RightPanel] Orderbook data received:', {
         exchange: data.exchange,
         instrumentType: data.instrumentType,
@@ -443,93 +440,92 @@ export const RightPanel = ({
       } else {
         logger.warn('[RightPanel] Orderbook data is empty or invalid, keeping mock data')
       }
-    })
+    }
 
-    // 监听取消订阅确认
-    socket.on('tradesUnsubscribed', (data: TradesUnsubscribedData) => {
+    const handleTradesUnsubscribed = (data: TradesUnsubscribedData) => {
       logger.debug('[RightPanel] Trades unsubscribed:', data)
-    })
+    }
 
-    // 监听 Order Book 取消订阅确认
-    socket.on('orderbookUnsubscribed', (data: OrderbookUnsubscribedData) => {
+    const handleOrderbookUnsubscribed = (data: OrderbookUnsubscribedData) => {
       logger.debug('[RightPanel] Orderbook unsubscribed:', data)
-    })
+    }
 
-    // Ticker WebSocket 事件监听器
-    socket.on(
-      'tickerSubscribed',
-      (data: {
-        exchange: string
-        instrumentType: string
-        symbol: string
-        subscriptionKey: string
-      }) => {
-        logger.debug('[RightPanel] Ticker subscribed:', data)
-      },
-    )
+    const handleTickerSubscribed = (data: {
+      exchange: string
+      instrumentType: string
+      symbol: string
+      subscriptionKey: string
+    }) => {
+      logger.debug('[RightPanel] Ticker subscribed:', data)
+    }
 
-    socket.on(
-      'ticker',
-      (data: {
-        symbol: string
-        currentPrice: number | null
-        indexPrice: number | null
-        fundingRate: number | null
-        priceChangePercent24h: number | null
-        volumeUsd: number | null
-        openInterestUsd: number | null
-        high24h: number | null
-        low24h: number | null
-        timestamp: number
-      }) => {
-        logger.debug('[RightPanel] Received ticker data:', data)
+    const handleTicker = (data: {
+      symbol: string
+      currentPrice: number | null
+      indexPrice: number | null
+      fundingRate: number | null
+      priceChangePercent24h: number | null
+      volumeUsd: number | null
+      openInterestUsd: number | null
+      high24h: number | null
+      low24h: number | null
+      timestamp: number
+    }) => {
+      logger.debug('[RightPanel] Received ticker data:', data)
 
-        const currentBase = extractBaseSymbol(symbol)
+      const currentBase = extractBaseSymbol(symbol)
 
-        // 验证 symbol 是否匹配当前订阅
-        if (data.symbol !== currentBase) {
-          logger.debug(`[RightPanel] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
-          return
-        }
+      // 验证 symbol 是否匹配当前订阅
+      if (data.symbol !== currentBase) {
+        logger.debug(`[RightPanel] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
+        return
+      }
 
-        // 更新 tickerData
-        setTickerData({
-          symbol: data.symbol,
-          currentPrice: data.currentPrice?.toString() ?? '0',
-          indexPrice: data.indexPrice?.toString() ?? undefined,
-          fundingRate: data.fundingRate?.toString() ?? undefined,
-          priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
-          volumeUsd: data.volumeUsd?.toString() ?? '0',
-          openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
-          high24h: data.high24h?.toString() ?? undefined,
-          low24h: data.low24h?.toString() ?? undefined,
-        })
-      },
-    )
+      // 更新 tickerData
+      setTickerData({
+        symbol: data.symbol,
+        currentPrice: data.currentPrice?.toString() ?? '0',
+        indexPrice: data.indexPrice?.toString() ?? undefined,
+        fundingRate: data.fundingRate?.toString() ?? undefined,
+        priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
+        volumeUsd: data.volumeUsd?.toString() ?? '0',
+        openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+        high24h: data.high24h?.toString() ?? undefined,
+        low24h: data.low24h?.toString() ?? undefined,
+      })
+    }
 
-    socket.on(
-      'tickerUnsubscribed',
-      (data: {
-        exchange: string
-        instrumentType: string
-        symbol: string
-        subscriptionKey: string
-      }) => {
-        logger.debug('[RightPanel] Ticker unsubscribed:', data)
-      },
-    )
+    const handleTickerUnsubscribed = (data: {
+      exchange: string
+      instrumentType: string
+      symbol: string
+      subscriptionKey: string
+    }) => {
+      logger.debug('[RightPanel] Ticker unsubscribed:', data)
+    }
 
-    // 监听连接错误
-    socket.on('connect_error', error => {
+    const handleConnectError = (error: Error) => {
       logger.error('[RightPanel] Socket.IO connection error:', error)
       setLoading(true)
-    })
+    }
 
-    // 监听断开连接
-    socket.on('disconnect', reason => {
+    const handleDisconnect = (reason: Socket.DisconnectReason) => {
       logger.warn('[RightPanel] Socket.IO disconnected:', reason)
       setLoading(true)
-    })
+    }
+
+    socket.on('connect', handleConnect)
+    socket.on('tradesSubscribed', handleTradesSubscribed)
+    socket.on('orderbookSubscribed', handleOrderbookSubscribed)
+    socket.on('trades', handleTrades)
+    socket.on('orderbook', handleOrderbook)
+    socket.on('tradesUnsubscribed', handleTradesUnsubscribed)
+    socket.on('orderbookUnsubscribed', handleOrderbookUnsubscribed)
+    socket.on('tickerSubscribed', handleTickerSubscribed)
+    socket.on('ticker', handleTicker)
+    socket.on('tickerUnsubscribed', handleTickerUnsubscribed)
+    socket.on('connect_error', handleConnectError)
+    socket.on('disconnect', handleDisconnect)
 
     return () => {
       const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE'
@@ -562,7 +558,18 @@ export const RightPanel = ({
       })
       logger.debug(`[RightPanel] Unsubscribed from ticker: ${selectedBase}`)
 
-      // 断开连接
+      socket.off('connect', handleConnect)
+      socket.off('tradesSubscribed', handleTradesSubscribed)
+      socket.off('orderbookSubscribed', handleOrderbookSubscribed)
+      socket.off('trades', handleTrades)
+      socket.off('orderbook', handleOrderbook)
+      socket.off('tradesUnsubscribed', handleTradesUnsubscribed)
+      socket.off('orderbookUnsubscribed', handleOrderbookUnsubscribed)
+      socket.off('tickerSubscribed', handleTickerSubscribed)
+      socket.off('ticker', handleTicker)
+      socket.off('tickerUnsubscribed', handleTickerUnsubscribed)
+      socket.off('connect_error', handleConnectError)
+      socket.off('disconnect', handleDisconnect)
       socket.disconnect()
     }
   }, [symbol, selectedExchange, marketType, isAggregated, tradeTab, fractionDigits]) // 依赖项：symbol/exchange/marketType/tab 变化时重新订阅
