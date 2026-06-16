@@ -112,7 +112,7 @@ describe('DeployDialog', () => {
     const panel = overlay?.firstElementChild
     const actions = container.querySelector('[data-testid="deploy-dialog-actions"]')
 
-    expect(overlay?.className).toContain('py-4')
+    expect(overlay?.className).toContain('p-4')
     expect(panel?.className).toContain('max-h-[calc(100dvh-2rem)]')
     expect(panel?.className).toContain('overflow-y-auto')
     expect(actions?.className).toContain('grid')

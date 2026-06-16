@@ -11,7 +11,7 @@ const ReactEChartsCore = dynamic(
   },
   {
     ssr: false,
-    loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+    loading: () => <div className="size-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
   },
 ) as React.ComponentType<EChartsReactProps>
 

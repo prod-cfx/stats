@@ -67,7 +67,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   if (isHyperliquid) {
     return (
       <div className={`flex items-center justify-center overflow-hidden rounded-full ${className}`} style={{ width: size, height: size }}>
-        <Image src="/images/exchanges/hyperliquid.png" alt="Hyperliquid" width={size} height={size} className="h-full w-full object-cover" unoptimized />
+        <Image src="/images/exchanges/hyperliquid.png" alt="Hyperliquid" width={size} height={size} className="size-full object-cover" unoptimized />
       </div>
     );
   }
@@ -76,7 +76,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
     const finalUrl = logoUrl || 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png';
     return (
       <div className={`flex items-center justify-center overflow-hidden ${className}`} style={{ width: size, height: size }}>
-        <Image src={finalUrl} alt="KuCoin" width={size} height={size} className="w-full h-full object-cover rounded-full" unoptimized />
+        <Image src={finalUrl} alt="KuCoin" width={size} height={size} className="size-full object-cover rounded-full" unoptimized />
       </div>
     );
   }
@@ -86,7 +86,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   if (logoUrl) {
     return (
       <div className={`rounded bg-[#21262d] border border-[#30363d] flex items-center justify-center overflow-hidden ${className}`} style={{ width: size, height: size }}>
-        <Image src={logoUrl} alt={name || 'exchange'} width={size} height={size} className="w-full h-full object-contain p-0.5" unoptimized />
+        <Image src={logoUrl} alt={name || 'exchange'} width={size} height={size} className="size-full object-contain p-0.5" unoptimized />
       </div>
     );
   }

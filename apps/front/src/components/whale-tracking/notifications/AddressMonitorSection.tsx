@@ -190,7 +190,7 @@ export function AddressMonitorSection({
                         onClick={() => handleCopy(address)}
                         className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
                       >
-                        <Copy className="h-4 w-4" />
+                        <Copy className="size-4" />
                       </button>
                     </div>
                     {rule.note && <div className="mt-1 break-words !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{rule.note}</div>}
@@ -203,7 +203,7 @@ export function AddressMonitorSection({
                       className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
                       title={t('whaleTracking.notifications.actions.tradingStats')}
                     >
-                      <TrendingUp className="h-4 w-4" />
+                      <TrendingUp className="size-4" />
                     </button>
                     <button
                       data-testid="address-monitor-mobile-disable-telegram"
@@ -217,7 +217,7 @@ export function AddressMonitorSection({
                       className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)] disabled:cursor-not-allowed disabled:opacity-40"
                       title={t('whaleTracking.notifications.actions.disableTelegram')}
                     >
-                      <BellOff className="h-4 w-4" />
+                      <BellOff className="size-4" />
                     </button>
                     <button
                       data-testid="address-monitor-mobile-edit"
@@ -226,7 +226,7 @@ export function AddressMonitorSection({
                       className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
                       title={t('whaleTracking.notifications.actions.edit')}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="size-4" />
                     </button>
                     <button
                       data-testid="address-monitor-mobile-delete"
@@ -235,7 +235,7 @@ export function AddressMonitorSection({
                       className="rounded-lg border border-[color:var(--cf-border)] p-2 text-rose-400"
                       title={t('whaleTracking.notifications.actions.removeMonitor')}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="size-4" />
                     </button>
                   </div>
                 </div>
@@ -312,7 +312,7 @@ export function AddressMonitorSection({
                           onClick={() => handleCopy(address)}
                           className="rounded p-1 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                         >
-                          <Copy className="h-3.5 w-3.5" />
+                          <Copy className="size-3.5" />
                         </button>
                         {rule.note && (
                           <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{rule.note}</span>
@@ -344,7 +344,7 @@ export function AddressMonitorSection({
                           className="rounded-lg border border-[color:var(--cf-border)] p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                           title={t('whaleTracking.notifications.actions.tradingStats')}
                         >
-                          <TrendingUp className="h-4 w-4" />
+                          <TrendingUp className="size-4" />
                         </button>
                         <button
                           type="button"
@@ -357,7 +357,7 @@ export function AddressMonitorSection({
                           className="rounded-lg border border-[color:var(--cf-border)] p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
                           title={t('whaleTracking.notifications.actions.disableTelegram')}
                         >
-                          <BellOff className="h-4 w-4" />
+                          <BellOff className="size-4" />
                         </button>
                         <button
                           type="button"
@@ -365,7 +365,7 @@ export function AddressMonitorSection({
                           className="rounded-lg border border-[color:var(--cf-border)] p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                           title={t('whaleTracking.notifications.actions.edit')}
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="size-4" />
                         </button>
                         <button
                           type="button"
@@ -373,7 +373,7 @@ export function AddressMonitorSection({
                           className="rounded-lg border border-[color:var(--cf-border)] p-1.5 text-rose-400 hover:bg-rose-500/10"
                           title={t('whaleTracking.notifications.actions.removeMonitor')}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="size-4" />
                         </button>
                       </div>
                     </td>

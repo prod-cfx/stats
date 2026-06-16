@@ -809,10 +809,10 @@ const colors = useMemo(
         className ??
         (mode === 'full'
           ? 'relative w-full h-[600px] bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg p-2'
-          : 'relative w-full h-full')
+          : 'relative size-full')
       }
     >
-      <div ref={chartRef} className="w-full h-full" />
+      <div ref={chartRef} className="size-full" />
     </div>
   );
 };

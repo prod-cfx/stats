@@ -37,7 +37,7 @@ describe('mobile data pages layout contracts', () => {
     expect(longShortClient).toContain('overflow-x-auto')
     expect(longShortClient).toContain('min-w-0')
     expect(aggregatedPage).toContain('p-4 md:px-6 md:py-5')
-    expect(aggregatedClient).toContain('px-0 py-0')
+    expect(aggregatedClient).toContain('p-0')
     expect(aggregatedClient).toContain('aria-hidden="true"')
     expect(aggregatedClient).toContain('min-h-[560px] md:min-h-[750px]')
     expect(aggregatedOI).toContain('aria-hidden="true"')

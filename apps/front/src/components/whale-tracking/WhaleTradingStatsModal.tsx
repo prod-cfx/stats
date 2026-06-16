@@ -85,8 +85,8 @@ const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) =
     <div className="hover:border-primary/50 group flex h-full flex-col gap-4 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 transition-all">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">
-            <Image src={icon} alt={asset} width={24} height={24} className="h-full w-full object-contain" unoptimized />
+          <div className="flex size-6 flex-shrink-0 items-center justify-center">
+            <Image src={icon} alt={asset} width={24} height={24} className="size-full object-contain" unoptimized />
           </div>
           <span className="text-body truncate font-bold text-[color:var(--cf-text-strong)]">
             {asset}
@@ -136,8 +136,8 @@ const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: Performance
     <div className="hover:border-primary/50 flex h-full flex-col gap-4 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 transition-all">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-6 w-6 items-center justify-center">
-            <Image src={icon} alt={asset} width={24} height={24} className="h-full w-full object-contain" unoptimized />
+          <div className="flex size-6 items-center justify-center">
+            <Image src={icon} alt={asset} width={24} height={24} className="size-full object-contain" unoptimized />
           </div>
           <span className="text-body font-bold text-[color:var(--cf-text-strong)]">{asset}</span>
         </div>
@@ -190,8 +190,8 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
     <div className="hover:border-primary/50 flex h-full flex-col gap-4 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 transition-all">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-6 w-6 items-center justify-center">
-            <Image src={icon} alt={asset} width={24} height={24} className="h-full w-full object-contain" unoptimized />
+          <div className="flex size-6 items-center justify-center">
+            <Image src={icon} alt={asset} width={24} height={24} className="size-full object-contain" unoptimized />
           </div>
           <span className="text-body font-bold text-[color:var(--cf-text-strong)]">{asset}</span>
           <span
@@ -562,7 +562,7 @@ export const WhaleTradingStatsModal = ({
         {/* Header Extra Info */}
         <div className="-mt-4 mb-0 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2">
-            <div className="h-5 w-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
+            <div className="size-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
             <span className="text-base font-semibold text-[color:var(--cf-text-strong)]">
               {formatAddress(address)}
             </span>
@@ -578,7 +578,7 @@ export const WhaleTradingStatsModal = ({
             >
               {t(`whaleTracking.modal.timeRange.${timeRange}`)}
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${timeRangeOpen ? 'rotate-180' : ''}`}
+                className={`size-4 transition-transform ${timeRangeOpen ? 'rotate-180' : ''}`}
               />
             </button>
             {timeRangeOpen && (
@@ -631,7 +631,7 @@ export const WhaleTradingStatsModal = ({
               {t('whaleTracking.modal.tradeCount')}
             </span>
 
-            <div className="absolute top-1/2 right-4 h-[80px] w-[80px] -translate-y-1/2">
+            <div className="absolute top-1/2 right-4 size-[80px] -translate-y-1/2">
               <LazyReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
             </div>
 
@@ -668,14 +668,14 @@ export const WhaleTradingStatsModal = ({
             <button
               type="button"
               onClick={() => setActiveTab('asset')}
-              className={`-mb-[2px] border-b-2 px-4 py-4 text-base font-bold transition-all ${activeTab === 'asset' ? 'border-primary text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+              className={`-mb-[2px] border-b-2 p-4 text-base font-bold transition-all ${activeTab === 'asset' ? 'border-primary text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
             >
               {t('whaleTracking.modal.byAsset')}
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('position')}
-              className={`-mb-[2px] border-b-2 px-4 py-4 text-base font-bold transition-all ${activeTab === 'position' ? 'border-primary text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+              className={`-mb-[2px] border-b-2 p-4 text-base font-bold transition-all ${activeTab === 'position' ? 'border-primary text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
             >
               {t('whaleTracking.modal.byPosition')}
             </button>

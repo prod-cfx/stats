@@ -329,7 +329,7 @@ function StarIcon({ filled }: { filled: boolean }) {
   return (
     <svg
       aria-hidden="true"
-      className="h-[18px] w-[18px]"
+      className="size-[18px]"
       fill={filled ? 'currentColor' : 'none'}
       viewBox="0 0 24 24"
     >
@@ -380,7 +380,7 @@ function StrategyActionButtons({
         className={`scard-btn inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border-0 ${LOGIC_CONFIRMATION_GRADIENT_CLASS} px-3 text-xs leading-5 font-semibold whitespace-nowrap text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
         style={{ backgroundImage: LOGIC_CONFIRMATION_GRADIENT_STYLE }}
       >
-        <Play className="h-3.5 w-3.5 fill-current" />
+        <Play className="size-3.5 fill-current" />
         {isRunning
           ? t('aiQuant.strategyPlazaCard.running', { defaultValue: '运行中' })
           : t('aiQuant.run')}
@@ -396,9 +396,9 @@ function StrategyActionButtons({
         className="scard-btn inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-xs leading-5 font-semibold whitespace-nowrap text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-wait disabled:opacity-70"
       >
         {isEditing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <Loader2 className="size-3.5 animate-spin" />
         ) : (
-          <Edit3 className="h-3.5 w-3.5" />
+          <Edit3 className="size-3.5" />
         )}
         {isEditing
           ? t('aiQuant.strategyPlazaCard.processing', { defaultValue: '处理中' })
@@ -488,7 +488,7 @@ export function StrategyPlaza({
               key={item}
               className="rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4"
             >
-              <div className="h-10 w-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
+              <div className="size-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
               <div className="mt-4 h-4 w-2/3 animate-pulse rounded bg-[color:var(--cf-bg)]" />
               <div className="mt-3 h-16 w-full animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
               <div className="mt-4 grid grid-cols-4 gap-2">
@@ -535,13 +535,13 @@ export function StrategyPlaza({
         <div className="splaza-rail-wrap">
           <div className="splaza-rail-head mb-3 flex items-center gap-3">
             <h2 className="m-0 flex items-center gap-2 !text-[17px] !leading-6 !font-bold text-[color:var(--cf-text-strong)]">
-              <Activity className="h-[18px] w-[18px] text-amber-500" />
+              <Activity className="size-[18px] text-amber-500" />
               热门策略
             </h2>
             <div className="ml-auto hidden gap-2 sm:flex">
               <button
                 aria-label="上一组"
-                className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                className="flex size-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 type="button"
                 onClick={() => railRef.current?.scrollBy?.({ left: -340, behavior: 'smooth' })}
               >
@@ -549,7 +549,7 @@ export function StrategyPlaza({
               </button>
               <button
                 aria-label="下一组"
-                className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                className="flex size-[34px] items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 type="button"
                 onClick={() => railRef.current?.scrollBy?.({ left: 340, behavior: 'smooth' })}
               >
@@ -582,7 +582,7 @@ export function StrategyPlaza({
                   <div className="relative z-[2]">
                     <div className="mt-1 flex items-center gap-2.5">
                       <span
-                        className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-sm font-bold shadow-md"
+                        className="flex size-[38px] shrink-0 items-center justify-center rounded-[11px] text-sm font-bold shadow-md"
                         style={{ background: item.tone }}
                       >
                         {item.symbolLabel}
@@ -728,7 +728,7 @@ export function StrategyPlaza({
       >
         {pageCards.length === 0 ? (
           <div className="splaza-empty col-span-full py-16 text-center text-[color:var(--cf-muted)]">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
               <StarIcon filled={false} />
             </div>
             <div className="mb-1.5 text-base font-semibold text-[color:var(--cf-text-strong)]">
@@ -760,7 +760,7 @@ export function StrategyPlaza({
               >
                 <div className="scard-head mb-3.5 flex items-start gap-3">
                   <span
-                    className="scard-av flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] text-[15px] font-bold text-white"
+                    className="scard-av flex size-11 shrink-0 items-center justify-center rounded-[13px] text-[15px] font-bold text-white"
                     style={{ background: item.tone }}
                   >
                     {item.symbolLabel}
@@ -795,7 +795,7 @@ export function StrategyPlaza({
                   </div>
                   <button
                     type="button"
-                    className={`scard-star flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] ${starred ? 'text-amber-600' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-bg)]'}`}
+                    className={`scard-star flex size-[30px] shrink-0 items-center justify-center rounded-[9px] ${starred ? 'text-amber-600' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-bg)]'}`}
                     title={starred ? '取消收藏' : '收藏'}
                     onClick={event => {
                       event.stopPropagation()
@@ -881,7 +881,7 @@ export function StrategyPlaza({
                 >
                   <div className="scard-author flex min-w-0 flex-1 items-center gap-1.5">
                     <span
-                      className="a-av flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                      className="a-av flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
                       style={{ background: item.authorTone }}
                     >
                       {item.author.slice(0, 1)}

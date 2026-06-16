@@ -180,7 +180,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           onClick={onBack}
           className="mb-6 flex items-center gap-2 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
           <span className="text-sm">{t('widget.config.back')}</span>
         </button>
 

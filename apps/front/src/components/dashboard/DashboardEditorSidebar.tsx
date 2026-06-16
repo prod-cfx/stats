@@ -314,7 +314,7 @@ export const DashboardEditorSidebar = ({
               className="group flex w-full items-center justify-between"
             >
                 <div className="flex min-w-0 items-center gap-3">
-                <Layout className="h-4 w-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
+                <Layout className="size-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
                 <span className="text-sm font-semibold text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]">
                   {t('dashboard.sidebar.myDashboards')}
                 </span>
@@ -325,7 +325,7 @@ export const DashboardEditorSidebar = ({
                 )}
               </div>
               <ChevronDown
-                className={`h-3 w-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${showMyDashboards ? '' : '-rotate-90'}`}
+                className={`size-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${showMyDashboards ? '' : '-rotate-90'}`}
               />
             </button>
 
@@ -370,7 +370,7 @@ export const DashboardEditorSidebar = ({
               className="group flex w-full items-center justify-between"
             >
                 <div className="flex min-w-0 items-center gap-3">
-                <Bookmark className="h-4 w-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
+                <Bookmark className="size-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
                 <span className="text-sm font-semibold text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]">
                   {t('dashboard.sidebar.savedDashboards')}
                 </span>
@@ -381,7 +381,7 @@ export const DashboardEditorSidebar = ({
                 )}
               </div>
               <ChevronDown
-                className={`h-3 w-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${showSavedDashboards ? '' : '-rotate-90'}`}
+                className={`size-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${showSavedDashboards ? '' : '-rotate-90'}`}
               />
             </button>
 
@@ -432,7 +432,7 @@ export const DashboardEditorSidebar = ({
             onClick={handleCreateDashboard}
             className="from-primary to-secondary shadow-primary/20 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r py-3 font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.98]"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             <span className="text-sm">{t('dashboard.actions.create')}</span>
           </button>
 
@@ -452,21 +452,21 @@ export const DashboardEditorSidebar = ({
               >
                 {publishStatus === 'publishing' ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                     <span className="text-sm tracking-wider uppercase">
                       {t('dashboard.editor.actions.saving')}
                     </span>
                   </>
                 ) : publishStatus === 'success' ? (
                   <>
-                    <Check className="h-4 w-4" />
+                    <Check className="size-4" />
                     <span className="text-sm tracking-wider uppercase">
                       {t('dashboard.editor.validation.publishSuccess')}
                     </span>
                   </>
                 ) : (
                   <>
-                    <Send className="h-4 w-4" />
+                    <Send className="size-4" />
                     <span className="text-sm tracking-wider uppercase">
                       {t('dashboard.actions.publish')}
                     </span>
@@ -496,14 +496,14 @@ export const DashboardEditorSidebar = ({
               >
                 {deleteStatus === 'deleting' ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                     <span className="text-sm tracking-wider uppercase">
                       {t('dashboard.editor.actions.deleting')}...
                     </span>
                   </>
                 ) : (
                   <>
-                    <Trash2 className="h-4 w-4 transition-transform group-hover:scale-110" />
+                    <Trash2 className="size-4 transition-transform group-hover:scale-110" />
                     <span className="text-sm tracking-wider uppercase">
                       {t('dashboard.actions.delete')}
                     </span>

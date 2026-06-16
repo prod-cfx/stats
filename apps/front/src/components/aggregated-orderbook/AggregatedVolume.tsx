@@ -102,7 +102,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
             className={`flex items-center gap-2 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md ${isCompact ? 'px-2 py-1' : 'px-3 py-1.5'} !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] hover:border-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text)]`}
           >
             <span>{symbol}</span>
-            <ChevronDown className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`${isCompact ? 'size-3' : 'size-4'} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
           
           <AnimatePresence>
@@ -126,7 +126,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                     }`}
                   >
                     <span>{t}</span>
-                    {symbol === t && <Check className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-white`} />}
+                    {symbol === t && <Check className={`${isCompact ? 'size-3' : 'size-3.5'} text-white`} />}
                   </button>
                 ))}
               </motion.div>
@@ -182,14 +182,14 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                     <div className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] border-b border-[color:var(--cf-border)]/60 pb-1.5">{displayName(item.name)}</div>
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full ring-2 ring-[color:var(--cf-border)]/50" style={{ backgroundColor: item.color }} />
+                        <div className="size-2.5 rounded-full ring-2 ring-[color:var(--cf-border)]/50" style={{ backgroundColor: item.color }} />
                         <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{t('aggregatedOrderbook.volume.contractTurnover')}</span>
                       </div>
                       <span className="font-mono !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] tracking-normal">{item.amount}</span>
                     </div>
                   </div>
                   {/* Arrow */}
-                  <div className="absolute -bottom-1.5 left-1/4 -translate-x-1/2 w-3 h-3 bg-[color:var(--cf-surface)] border-r border-b border-[color:var(--cf-border)] rotate-45" />
+                  <div className="absolute -bottom-1.5 left-1/4 -translate-x-1/2 size-3 bg-[color:var(--cf-surface)] border-r border-b border-[color:var(--cf-border)] rotate-45" />
                 </motion.div>
               )}
             </AnimatePresence>

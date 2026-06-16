@@ -139,14 +139,14 @@ export function DashboardClient() {
                 alt={resolvedName}
                 fill
                 sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
+                className="size-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
                 unoptimized
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             </div>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--cf-surface-2)]">
-              <Grid3x3 className="h-16 w-16 text-[color:var(--cf-border)] transition-colors group-hover:text-[color:var(--cf-muted)]" />
+              <Grid3x3 className="size-16 text-[color:var(--cf-border)] transition-colors group-hover:text-[color:var(--cf-muted)]" />
             </div>
           )}
 
@@ -172,11 +172,11 @@ export function DashboardClient() {
         <div className="absolute top-3 right-3 z-20" data-testid="dashboard-card-actions">
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/80 text-[color:var(--cf-muted)] backdrop-blur-sm transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+            className="flex size-9 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/80 text-[color:var(--cf-muted)] backdrop-blur-sm transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             onClick={() => setOpenMenuId(v => (v === dash.id ? null : dash.id))}
             aria-label={tr('dashboard.actions.openActions', `${resolvedName} 操作`, `${resolvedName} actions`)}
           >
-            <MoreHorizontal className="h-4 w-4" />
+            <MoreHorizontal className="size-4" />
           </button>
           {openMenuId === dash.id && (
             <div className="absolute right-0 mt-2 w-44 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
@@ -189,7 +189,7 @@ export function DashboardClient() {
                   setRenameValue(dash.name || '')
                 }}
               >
-                <Pencil className="h-4 w-4 text-[color:var(--cf-muted)]" />
+                <Pencil className="size-4 text-[color:var(--cf-muted)]" />
                 {tr('common.rename', '重命名', 'Rename')}
               </button>
               <button
@@ -200,7 +200,7 @@ export function DashboardClient() {
                   setDeleteTarget(dash)
                 }}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
                 {t('dashboard.actions.delete') || '删除'}
               </button>
             </div>
@@ -234,7 +234,7 @@ export function DashboardClient() {
                   }`}
                 >
                   <Icon
-                    className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-[color:var(--cf-muted)]'}`}
+                    className={`size-4 ${isActive ? 'text-primary' : 'text-[color:var(--cf-muted)]'}`}
                   />
                   <span>{tab.label}</span>
                   {isActive && (
@@ -251,7 +251,7 @@ export function DashboardClient() {
                 {activeTab === 'my' &&
                   (displayDashboards.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[color:var(--cf-border)] py-20 text-[color:var(--cf-muted)]">
-                      <Layout className="h-12 w-12" />
+                      <Layout className="size-12" />
                       <p className="text-lg font-medium">{t('dashboard.empty.my')}</p>
                       <button
                         type="button"
@@ -270,7 +270,7 @@ export function DashboardClient() {
                 {activeTab === 'saved' &&
                   (displayDashboards.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[color:var(--cf-border)] py-20 text-[color:var(--cf-muted)]">
-                      <Bookmark className="h-12 w-12" />
+                      <Bookmark className="size-12" />
                       <p className="text-lg font-medium">{t('dashboard.empty.saved')}</p>
                       <button
                         type="button"

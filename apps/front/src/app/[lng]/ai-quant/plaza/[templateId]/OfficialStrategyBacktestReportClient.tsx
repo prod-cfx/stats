@@ -84,7 +84,7 @@ export function OfficialStrategyBacktestReportClient({
     return (
       <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-5 px-4 py-8 md:px-8">
         <Link href={`/${lng}/ai-quant/plaza`} className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)]">
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
           返回策略广场
         </Link>
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm leading-[22px] text-red-500">
@@ -97,11 +97,11 @@ export function OfficialStrategyBacktestReportClient({
   return (
     <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-5 px-4 py-8 md:px-8">
       <Link href={`/${lng}/ai-quant/plaza`} className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]">
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="size-4" />
         返回策略广场
       </Link>
 
-      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-5 shadow-sm">
+      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <div className="mb-2 inline-flex rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-600">

@@ -12,9 +12,9 @@ import { useTranslation } from 'react-i18next'
  */
 export function Spinner({ size = 'md', className = '' }: { size?: 'sm' | 'md' | 'lg'; className?: string }) {
   const sizeClasses = {
-    sm: 'h-4 w-4',
-    md: 'h-8 w-8',
-    lg: 'h-12 w-12',
+    sm: 'size-4',
+    md: 'size-8',
+    lg: 'size-12',
   }
 
   return (
@@ -73,8 +73,8 @@ function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => vo
   const resolvedMessage = message ?? t('common.loadFailed')
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center animate-in fade-in duration-300">
-      <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
-        <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
+        <svg className="size-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
@@ -158,8 +158,8 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-300">
       {icon || (
-        <div className="w-16 h-16 rounded-full bg-[#21262d] flex items-center justify-center mb-6">
-          <svg className="w-8 h-8 text-[#8b949e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="size-16 rounded-full bg-[#21262d] flex items-center justify-center mb-6">
+          <svg className="size-8 text-[#8b949e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
         </div>

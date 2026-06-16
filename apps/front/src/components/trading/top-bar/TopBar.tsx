@@ -515,7 +515,7 @@ export const TopBar = ({
         {wsConnectionStatus === 'error' && (
           <div className="order-3 ml-auto md:absolute md:top-0 md:right-0 md:order-none md:mt-2 md:mr-2">
             <div className="flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-500">
-              <span className="h-2 w-2 rounded-full bg-red-500" />
+              <span className="size-2 rounded-full bg-red-500" />
               <span>实时数据连接失败</span>
             </div>
           </div>
@@ -524,7 +524,7 @@ export const TopBar = ({
         {wsConnectionStatus === 'connecting' && (
           <div className="order-3 ml-auto md:absolute md:top-0 md:right-0 md:order-none md:mt-2 md:mr-2">
             <div className="flex items-center gap-1 rounded bg-yellow-500/10 px-2 py-1 text-xs text-yellow-500">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+              <span className="size-2 animate-pulse rounded-full bg-yellow-500" />
               <span>连接中...</span>
             </div>
           </div>
@@ -537,7 +537,7 @@ export const TopBar = ({
             onClick={() => setIsSymbolMenuOpen(!isSymbolMenuOpen)}
           >
             <div
-              className={`${isCompact ? 'h-5 w-5 text-[9px]' : 'h-6 w-6 text-[10px]'} flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary !font-semibold text-white`}
+              className={`${isCompact ? 'size-5 text-[9px]' : 'size-6 text-[10px]'} flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary !font-semibold text-white`}
             >
               ₿
             </div>
@@ -551,7 +551,7 @@ export const TopBar = ({
                 })}
               </span>
               <ChevronDownIcon
-                className={`${isCompact ? 'h-3 w-3' : 'h-4 w-4'} text-[color:var(--cf-muted)] transition-transform group-hover:text-[color:var(--cf-text)] ${isSymbolMenuOpen ? 'rotate-180' : ''}`}
+                className={`${isCompact ? 'size-3' : 'size-4'} text-[color:var(--cf-muted)] transition-transform group-hover:text-[color:var(--cf-text)] ${isSymbolMenuOpen ? 'rotate-180' : ''}`}
               />
             </div>
           </button>
@@ -585,7 +585,7 @@ export const TopBar = ({
               >
                 <div className="focus-within:from-primary focus-within:to-secondary rounded-lg bg-[color:var(--cf-border)] p-[1px] transition-colors focus-within:bg-gradient-to-r">
                   <div className="relative rounded-lg bg-[color:var(--cf-bg)]">
-                    <SearchIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[color:var(--cf-muted)]" />
+                    <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[color:var(--cf-muted)]" />
                     <input
                       type="text"
                       placeholder={t('chart.modal.search')}
@@ -700,7 +700,7 @@ export const TopBar = ({
               <span className="whitespace-nowrap text-[color:var(--cf-muted)]">
                 {t('trade.funding_rate')}
               </span>
-              <InfoIcon className="h-3 w-3 text-[color:var(--cf-muted)]" />
+              <InfoIcon className="size-3 text-[color:var(--cf-muted)]" />
             </div>
             <span className="whitespace-nowrap text-orange-400">{formatPct(fundingRatePct)}</span>
           </div>

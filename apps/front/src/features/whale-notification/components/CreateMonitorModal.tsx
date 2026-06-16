@@ -215,7 +215,7 @@ export function CreateMonitorModal({
           </div>
           <div className="space-y-2">
             <label className="flex items-center justify-between rounded-lg bg-[color:var(--cf-surface)] px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-[color:var(--cf-text-strong)]"><Bell className="h-4 w-4" />{t('whaleTracking.notifications.channels.web')}</span>
+              <span className="flex items-center gap-2 text-sm text-[color:var(--cf-text-strong)]"><Bell className="size-4" />{t('whaleTracking.notifications.channels.web')}</span>
               <input
                 type="checkbox"
                 checked={channels.web}
@@ -223,7 +223,7 @@ export function CreateMonitorModal({
               />
             </label>
             <label className="flex items-center justify-between rounded-lg bg-[color:var(--cf-surface)] px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-[color:var(--cf-text-strong)]"><Mail className="h-4 w-4" />{t('whaleTracking.notifications.channels.email')}</span>
+              <span className="flex items-center gap-2 text-sm text-[color:var(--cf-text-strong)]"><Mail className="size-4" />{t('whaleTracking.notifications.channels.email')}</span>
               <input
                 type="checkbox"
                 checked={channels.email}
@@ -231,7 +231,7 @@ export function CreateMonitorModal({
               />
             </label>
             <label className="flex items-center justify-between rounded-lg bg-[color:var(--cf-surface)] px-3 py-2">
-              <span className={`flex items-center gap-2 text-sm ${canUseTelegram ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-muted)]'}`}><Send className="h-4 w-4" />{t('whaleTracking.notifications.channels.telegram')}</span>
+              <span className={`flex items-center gap-2 text-sm ${canUseTelegram ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-muted)]'}`}><Send className="size-4" />{t('whaleTracking.notifications.channels.telegram')}</span>
               <input
                 type="checkbox"
                 checked={channels.telegram}

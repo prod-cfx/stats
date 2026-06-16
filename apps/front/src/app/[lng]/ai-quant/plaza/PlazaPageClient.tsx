@@ -60,8 +60,8 @@ function GuestPlazaChatEntry({
       className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-sm"
     >
       <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm">
-          <Sparkles className="h-4 w-4" />
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm">
+          <Sparkles className="size-4" />
         </div>
         <div className="min-w-0">
           <h2 className="!text-base !leading-6 !font-semibold text-[color:var(--cf-text-strong)]">
@@ -100,9 +100,9 @@ function GuestPlazaChatEntry({
             onClick={submitDraft}
             title={t('aiQuant.send')}
             aria-label={t('aiQuant.send')}
-            className="bg-primary hover:bg-primary/90 flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm transition-colors"
+            className="bg-primary hover:bg-primary/90 flex size-8 items-center justify-center rounded-full text-white shadow-sm transition-colors"
           >
-            <ArrowUp className="h-4 w-4" />
+            <ArrowUp className="size-4" />
           </button>
         </div>
       </div>
@@ -275,7 +275,7 @@ export function AiQuantPlazaPageClient() {
         href={returnHref}
         className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="size-4" />
         <span>{t('aiQuant.plazaPage.back')}</span>
       </Link>
 
@@ -311,10 +311,10 @@ export function AiQuantPlazaPageClient() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4"
           role="dialog"
         >
-          <div className="w-full max-w-[420px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-4 shadow-2xl shadow-slate-950/20 sm:px-5">
+          <div className="w-full max-w-[420px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl shadow-slate-950/20 sm:px-5">
             <div className="flex gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
-                <Check className="h-4 w-4" />
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
+                <Check className="size-4" />
               </div>
               <div>
                 <h2 className="!text-[15px] !leading-[22px] !font-semibold text-[color:var(--cf-text-strong)]">
@@ -328,7 +328,7 @@ export function AiQuantPlazaPageClient() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] px-3 py-3">
+            <div className="mt-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-3">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="truncate text-sm leading-[22px] !font-semibold text-[color:var(--cf-text-strong)]">

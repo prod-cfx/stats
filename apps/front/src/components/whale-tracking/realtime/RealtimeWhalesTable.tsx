@@ -280,13 +280,13 @@ export const RealtimeWhalesTable = () => {
   const renderSortIcon = () => {
     if (!sortOrder) {
       return (
-        <ArrowUpDown className="ml-1 h-4 w-4 flex-shrink-0 text-[#8b949e] opacity-30 transition-opacity group-hover:opacity-100" />
+        <ArrowUpDown className="ml-1 size-4 flex-shrink-0 text-[#8b949e] opacity-30 transition-opacity group-hover:opacity-100" />
       )
     }
     return sortOrder === 'desc' ? (
-      <ChevronDown className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
+      <ChevronDown className="text-primary ml-1 size-4 flex-shrink-0" />
     ) : (
-      <ChevronUp className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
+      <ChevronUp className="text-primary ml-1 size-4 flex-shrink-0" />
     )
   }
 
@@ -327,7 +327,7 @@ export const RealtimeWhalesTable = () => {
             }`}
           >
             <RefreshCw
-              className={`h-3 w-3 md:h-3.5 md:w-3.5 ${!isPaused ? 'animate-spin' : ''}`}
+              className={`size-3 md:h-3.5 md:w-3.5 ${!isPaused ? 'animate-spin' : ''}`}
               style={{ animationDuration: '3s' }}
             />
             <span>
@@ -389,7 +389,7 @@ export const RealtimeWhalesTable = () => {
                       handleCopy(tx.address)
                     }}
                   >
-                    {copiedAddress === tx.address ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {copiedAddress === tx.address ? <Check className="size-4" /> : <Copy className="size-4" />}
                   </button>
                   <button
                     data-testid="realtime-mobile-stats"
@@ -400,7 +400,7 @@ export const RealtimeWhalesTable = () => {
                       handleShowStats(tx.address)
                     }}
                   >
-                    <TrendingUp className="h-4 w-4" />
+                    <TrendingUp className="size-4" />
                   </button>
                 </div>
               </div>
@@ -437,25 +437,25 @@ export const RealtimeWhalesTable = () => {
           <table className="w-full min-w-[1160px] border-collapse">
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/50 text-[color:var(--cf-muted)]">
-                <th className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/95 px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/95 p-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.address')}
                 </th>
-                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="p-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.asset')}
                 </th>
-                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="p-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.direction')}
                 </th>
-                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="p-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.holdings.table.leverage')}
                 </th>
-                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="p-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.positionValue')}
                 </th>
-                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="p-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.entryPrice')}
                 </th>
-                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 whitespace-nowrap md:px-4">
+                <th className="p-3 text-left !text-xs !font-semibold !leading-5 whitespace-nowrap md:px-4">
                   <button
                     type="button"
                     className="group flex cursor-pointer items-center select-none"
@@ -465,10 +465,10 @@ export const RealtimeWhalesTable = () => {
                     {renderSortIcon()}
                   </button>
                 </th>
-                <th className="px-3 py-3 text-right !text-xs !font-semibold !leading-5 md:px-4">
+                <th className="p-3 text-right !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.time')}
                 </th>
-                <th className="w-12 px-3 py-3 text-center md:w-16 md:px-4">
+                <th className="w-12 p-3 text-center md:w-16 md:px-4">
                   {t('whaleTracking.realtime.table.actions')}
                 </th>
               </tr>
@@ -480,7 +480,7 @@ export const RealtimeWhalesTable = () => {
                   className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]/50"
                   onClick={() => handleShowStats(tx.address)}
                 >
-                  <td className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)]/50 md:px-4">
+                  <td className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 group-hover:bg-[color:var(--cf-surface-hover)]/50 md:px-4">
                     <div className="flex flex-col gap-1.5">
                       <div className="group/address relative z-20 flex items-center gap-2">
                         <button
@@ -507,9 +507,9 @@ export const RealtimeWhalesTable = () => {
                           }}
                         >
                           {copiedAddress === tx.address ? (
-                            <Check className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                            <Check className="size-3 md:h-3.5 md:w-3.5" />
                           ) : (
-                            <Copy className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                            <Copy className="size-3 md:h-3.5 md:w-3.5" />
                           )}
                         </button>
                       </div>
@@ -521,7 +521,7 @@ export const RealtimeWhalesTable = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 md:px-4">
+                  <td className="p-3 md:px-4">
                     <div className="flex flex-col gap-0.5">
                       <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                         {tx.asset}
@@ -533,7 +533,7 @@ export const RealtimeWhalesTable = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 md:px-4">
+                  <td className="p-3 md:px-4">
                     <span
                       className={`inline-flex rounded-md border px-2 py-1 !text-xs !font-semibold !leading-5 ${tx.side === 'Long' ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}
                     >
@@ -542,10 +542,10 @@ export const RealtimeWhalesTable = () => {
                         : t('whaleTracking.side.short')}
                     </span>
                   </td>
-                  <td className="px-3 py-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] md:px-4">
+                  <td className="p-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] md:px-4">
                     {tx.leverage}
                   </td>
-                  <td className="px-3 py-3 md:px-4">
+                  <td className="p-3 md:px-4">
                     <div className="flex flex-col gap-0.5">
                       <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                         {tx.positionValueUSD}
@@ -555,25 +555,25 @@ export const RealtimeWhalesTable = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 font-mono !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)] md:px-4">
+                  <td className="p-3 font-mono !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)] md:px-4">
                     {tx.entryPrice}
                   </td>
-                  <td className="px-3 py-3 !text-sm !font-semibold !leading-[22px] text-[#4ade80] md:px-4">
+                  <td className="p-3 !text-sm !font-semibold !leading-[22px] text-[#4ade80] md:px-4">
                     {tx.winRate}
                   </td>
-                  <td className="px-3 py-3 text-right !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:px-4">
+                  <td className="p-3 text-right !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:px-4">
                     {formatRelativeTime(tx.timestamp)}
                   </td>
-                  <td className="px-3 py-3 text-center md:px-4">
+                  <td className="p-3 text-center md:px-4">
                     <button
                       type="button"
-                      className="hover:border-primary/50 hover:bg-primary/5 mx-auto flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] shadow-sm transition-colors hover:text-[color:var(--cf-text-strong)]"
+                      className="hover:border-primary/50 hover:bg-primary/5 mx-auto flex size-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] shadow-sm transition-colors hover:text-[color:var(--cf-text-strong)]"
                       onClick={e => {
                         e.stopPropagation()
                         handleShowStats(tx.address)
                       }}
                     >
-                      <TrendingUp className="h-4 w-4 md:h-5 md:w-5" />
+                      <TrendingUp className="size-4 md:h-5 md:w-5" />
                     </button>
                   </td>
                 </tr>

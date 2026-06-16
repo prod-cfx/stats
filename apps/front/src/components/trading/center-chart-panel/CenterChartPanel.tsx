@@ -177,7 +177,7 @@ export const CenterChartPanel = ({
                 onClick={() => setIsIndicatorModalOpen(false)}
                 className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]"
               >
-                <X className="h-5 w-5" />
+                <X className="size-5" />
               </button>
             </div>
 
@@ -188,7 +188,7 @@ export const CenterChartPanel = ({
                 <div className="flex items-center gap-2">
                   <div className="focus-within:from-primary focus-within:to-secondary relative min-w-0 flex-1 rounded-lg bg-[color:var(--cf-border)] p-[1px] transition-colors focus-within:bg-gradient-to-r">
                     <div className="relative rounded-lg bg-[color:var(--cf-bg)]">
-                      <Search className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
+                      <Search className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
                       <input
                         type="text"
                         placeholder={t('chart.modal.search')}
@@ -214,7 +214,7 @@ export const CenterChartPanel = ({
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <Star
-                          className={`h-3.5 w-3.5 ${ind.starred ? 'fill-yellow-500 text-yellow-500' : 'text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)]'}`}
+                          className={`size-3.5 ${ind.starred ? 'fill-yellow-500 text-yellow-500' : 'text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)]'}`}
                         />
                         <span
                           className={`truncate !text-xs !font-semibold !leading-5 ${ind.isActive ? 'text-white' : 'text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)]'}`}

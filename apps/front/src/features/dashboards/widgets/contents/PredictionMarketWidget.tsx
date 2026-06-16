@@ -23,7 +23,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'btc-2025-price',
     title: 'What price will Bitcoin hit in 2025?',
-    icon: <Bitcoin className="w-full h-full text-white" />,
+    icon: <Bitcoin className="size-full text-white" />,
     iconBgColor: 'bg-orange-500',
     options: [
       { label: '↑ 1,000,000', probability: '86%' },
@@ -35,7 +35,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'lighter-fdv',
     title: 'Lighter market cap (FDV) one day after launch?',
-    icon: <Rocket className="w-full h-full text-white" />,
+    icon: <Rocket className="size-full text-white" />,
     iconBgColor: 'bg-primary',
     options: [
       { label: '>$1B', probability: '86%' },
@@ -46,7 +46,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'eth-2025-price',
     title: 'What price will Ethereum hit in 2025?',
-    icon: <Coins className="w-full h-full text-white" />,
+    icon: <Coins className="size-full text-white" />,
     iconBgColor: 'bg-secondary',
     options: [
       { label: '$17,000', probability: '16%' },
@@ -58,7 +58,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'lighter-airdrop-day',
     title: 'What day will the Lighter airdrop be?',
-    icon: <Shield className="w-full h-full text-white" />,
+    icon: <Shield className="size-full text-white" />,
     iconBgColor: 'bg-indigo-600',
     options: [
       { label: 'December 22', probability: '26%' },
@@ -69,7 +69,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'btc-above-dec23',
     title: 'Bitcoin above __ on December 23?',
-    icon: <Bitcoin className="w-full h-full text-white" />,
+    icon: <Bitcoin className="size-full text-white" />,
     iconBgColor: 'bg-orange-500',
     options: [
       { label: '78,000', probability: '100%' },
@@ -81,7 +81,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'satoshi-move-2025',
     title: 'Will Satoshi move any Bitcoin in 2025?',
-    icon: <Globe className="w-full h-full text-white" />,
+    icon: <Globe className="size-full text-white" />,
     iconBgColor: 'bg-slate-600',
     probability: '<1%',
     volume: '$21m',
@@ -89,7 +89,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'mstr-sell-by',
     title: 'MicroStrategy sells any Bitcoin by __?',
-    icon: <Landmark className="w-full h-full text-white" />,
+    icon: <Landmark className="size-full text-white" />,
     iconBgColor: 'bg-primary',
     options: [
       { label: 'December 31, 2025', probability: '86%' },
@@ -100,7 +100,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'eth-2026-price',
     title: 'What price will Ethereum hit in 2026?',
-    icon: <Coins className="w-full h-full text-white" />,
+    icon: <Coins className="size-full text-white" />,
     iconBgColor: 'bg-secondary',
     options: [
       { label: '$100,000', probability: '86%' },
@@ -112,7 +112,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'trump-mention-btc',
     title: 'Trump to mention "Bitcoin" in Inauguration Speech?',
-    icon: <Globe className="w-full h-full text-white" />,
+    icon: <Globe className="size-full text-white" />,
     iconBgColor: 'bg-blue-600',
     options: [
       { label: 'Yes', probability: '64%' },
@@ -124,7 +124,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'sol-flip-eth',
     title: 'Solana to flip Ethereum in Market Cap by June?',
-    icon: <Coins className="w-full h-full text-white" />,
+    icon: <Coins className="size-full text-white" />,
     iconBgColor: 'bg-purple-600',
     options: [
       { label: 'Yes', probability: '12%' },
@@ -135,7 +135,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'next-legal-tender',
     title: 'Next country to adopt Bitcoin as legal tender?',
-    icon: <Landmark className="w-full h-full text-white" />,
+    icon: <Landmark className="size-full text-white" />,
     iconBgColor: 'bg-green-600',
     options: [
       { label: 'Paraguay', probability: '25%' },
@@ -146,7 +146,7 @@ const initialPredictions: PredictionItem[] = [
   {
     id: 'spacex-doge',
     title: 'SpaceX to accept DOGE for Moon Mission?',
-    icon: <Rocket className="w-full h-full text-white" />,
+    icon: <Rocket className="size-full text-white" />,
     iconBgColor: 'bg-orange-400',
     options: [
       { label: 'Yes', probability: '42%' },
@@ -164,7 +164,7 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
 
   // Adaptive styles
   const cardPadding = isSmall ? 'p-3' : isLarge ? 'p-5' : 'p-4'
-  const iconBoxSize = isSmall ? 'w-6 h-6' : isLarge ? 'w-10 h-10' : 'w-8 h-8'
+  const iconBoxSize = isSmall ? 'size-6' : isLarge ? 'size-10' : 'size-8'
   const titleSize = isSmall ? 'text-xs' : isLarge ? 'text-base' : 'text-sm'
   const optionTextSize = isSmall ? 'text-[10px]' : isLarge ? 'text-sm' : 'text-xs'
   const footerTextSize = isSmall ? 'text-[9px]' : 'text-xs'
@@ -220,7 +220,7 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
               <div className="flex items-center gap-2">
                 {p.status === 'LIVE' && (
                   <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#f87171] animate-pulse" />
+                    <span className="size-1.5 rounded-full bg-[#f87171] animate-pulse" />
                     <span className={`text-[#f87171] ${footerTextSize} font-bold tracking-wider`}>LIVE</span>
                   </div>
                 )}
@@ -229,7 +229,7 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
                 )}
               </div>
               <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors">
-                <MoreHorizontal className={`w-4 h-4`} />
+                <MoreHorizontal className={`size-4`} />
               </button>
             </div>
           </div>

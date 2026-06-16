@@ -91,7 +91,7 @@ export function RightPanelView({
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2">
             <span className="!text-[15px] !font-semibold !leading-[22px]">{displaySymbol}</span>
-            <Copy className="h-3 w-3 cursor-pointer text-[color:var(--cf-muted)]" />
+            <Copy className="size-3 cursor-pointer text-[color:var(--cf-muted)]" />
           </div>
           <div className="flex items-center gap-1 text-xs">
             <span className="from-primary to-secondary bg-gradient-to-br bg-clip-text !text-xs !font-semibold !leading-5 text-transparent">
@@ -139,9 +139,9 @@ export function RightPanelView({
         <div className="flex-none">
           <div className="relative flex items-center justify-between px-2 py-1.5 text-[color:var(--cf-muted)]">
             <div className="flex items-center gap-3">
-              <RotateCcw className="h-3.5 w-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-              <AlignJustify className="h-3.5 w-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-              <ArrowDownUp className="h-3.5 w-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
+              <RotateCcw className="size-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
+              <AlignJustify className="size-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
+              <ArrowDownUp className="size-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
             </div>
             <div className="flex items-center gap-2" ref={decimalMenuRef}>
               <button
@@ -150,7 +150,7 @@ export function RightPanelView({
                 className="flex items-center gap-1 text-[10px] whitespace-nowrap hover:text-[color:var(--cf-text)]"
               >
                 <span>{precisionLabel}</span>
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="size-3" />
               </button>
 
               {isDecimalMenuOpen && (
@@ -255,7 +255,7 @@ export function RightPanelView({
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <ArrowDownUp className="h-3.5 w-3.5 cursor-pointer text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]" />
+            <ArrowDownUp className="size-3.5 cursor-pointer text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]" />
           </div>
         </div>
 

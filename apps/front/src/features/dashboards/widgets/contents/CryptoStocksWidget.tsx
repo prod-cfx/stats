@@ -118,9 +118,9 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
   const headerSize = isSmall ? 'text-[9px]' : isLarge ? 'text-[11px]' : 'text-[10px]'
   const paddingY = isSmall ? 'py-1.5' : isLarge ? 'py-3' : 'py-2'
   const paddingX = isSmall ? 'px-2' : isLarge ? 'px-4' : 'px-3'
-  const iconSize = isSmall ? 'w-4 h-4' : isLarge ? 'w-6 h-6' : 'w-5 h-5'
-  const logoSize = isSmall ? 'w-5 h-5' : isLarge ? 'w-8 h-8' : 'w-6 h-6'
-  const sortIconSize = isSmall ? 'w-2 h-2' : 'w-3 h-3'
+  const iconSize = isSmall ? 'size-4' : isLarge ? 'size-6' : 'size-5'
+  const logoSize = isSmall ? 'size-5' : isLarge ? 'size-8' : 'size-6'
+  const sortIconSize = isSmall ? 'size-2' : 'size-3'
 
   const rows = useMemo(() => initialCompanyData, [])
 
@@ -168,7 +168,7 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
                           alt={row.name}
                           width={32}
                           height={32}
-                          className="h-full w-full object-contain"
+                          className="size-full object-contain"
                           unoptimized
                         />
                       </div>

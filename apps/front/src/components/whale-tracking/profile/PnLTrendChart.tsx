@@ -175,5 +175,5 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
     };
   }, [data, theme]);
 
-  return <div ref={chartRef} className="w-full h-full" />;
+  return <div ref={chartRef} className="size-full" />;
 };

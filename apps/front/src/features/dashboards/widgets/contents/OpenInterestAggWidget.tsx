@@ -8,7 +8,7 @@ export function OpenInterestAggWidget(props: { config: Record<string, any> }) {
   // Config can be used here later if we want to drive the symbol/view from the widget settings
   // For now, we reuse the self-contained component as requested.
   return (
-    <div className="h-full w-full overflow-hidden flex flex-col">
+    <div className="size-full overflow-hidden flex flex-col">
       <div className="flex-1 min-h-0 flex flex-col">
         <AggregatedOI variant="compact" />
       </div>

@@ -135,7 +135,7 @@ export const DashboardSidebar = ({
             className="group flex w-full items-center justify-between"
           >
             <div className="flex items-center gap-3">
-              <Layout className="h-4 w-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
+              <Layout className="size-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
               <span className="text-sm font-semibold text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]">
                 {t('dashboard.sidebar.myDashboards')}
               </span>
@@ -146,7 +146,7 @@ export const DashboardSidebar = ({
               )}
             </div>
             <ChevronDown
-              className={`h-3 w-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${
+              className={`size-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${
                 showMyDashboards ? '' : '-rotate-90'
               }`}
             />
@@ -164,12 +164,12 @@ export const DashboardSidebar = ({
                     className="flex flex-1 items-center gap-2 truncate rounded px-3 py-2 text-left text-xs text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                   >
                     {dash.thumbnail ? (
-                      <div className="relative h-4 w-4 flex-shrink-0 overflow-hidden rounded">
-                        <Image src={dash.thumbnail} alt="" fill sizes="16px" className="h-full w-full object-cover" unoptimized />
+                      <div className="relative size-4 flex-shrink-0 overflow-hidden rounded">
+                        <Image src={dash.thumbnail} alt="" fill sizes="16px" className="size-full object-cover" unoptimized />
                       </div>
                     ) : (
-                      <div className="bg-primary/10 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded">
-                        <Grid3x3 className="text-primary h-2.5 w-2.5" />
+                      <div className="bg-primary/10 flex size-4 flex-shrink-0 items-center justify-center rounded">
+                        <Grid3x3 className="text-primary size-2.5" />
                       </div>
                     )}
                     {resolveDashboardName(dash.name)}
@@ -178,14 +178,14 @@ export const DashboardSidebar = ({
                   <div ref={openMenuId === dash.id ? menuContainerRef : undefined} className="relative pr-2">
                     <button
                       type="button"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[color:var(--cf-muted)] opacity-0 transition-colors group-hover:opacity-100 hover:border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
+                      className="flex size-7 items-center justify-center rounded-lg border border-transparent text-[color:var(--cf-muted)] opacity-0 transition-colors group-hover:opacity-100 hover:border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
                       aria-label="dashboard-actions"
                       onClick={e => {
                         e.stopPropagation()
                         setOpenMenuId(v => (v === dash.id ? null : dash.id))
                       }}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      <MoreHorizontal className="size-4" />
                     </button>
                     {openMenuId === dash.id && (
                       <div
@@ -200,7 +200,7 @@ export const DashboardSidebar = ({
                             setRenameValue(dash.name || '')
                           }}
                         >
-                          <Pencil className="h-4 w-4 text-[color:var(--cf-muted)]" />
+                          <Pencil className="size-4 text-[color:var(--cf-muted)]" />
                           {tr('common.rename', '重命名', 'Rename')}
                         </button>
                         <button
@@ -211,7 +211,7 @@ export const DashboardSidebar = ({
                             setDeleteTarget(dash)
                           }}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="size-4" />
                           {t('dashboard.actions.delete') || '删除'}
                         </button>
                       </div>
@@ -231,7 +231,7 @@ export const DashboardSidebar = ({
             className="group flex w-full items-center justify-between"
           >
             <div className="flex items-center gap-3">
-              <Bookmark className="h-4 w-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
+              <Bookmark className="size-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
               <span className="text-sm font-semibold text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]">
                 {t('dashboard.sidebar.savedDashboards')}
               </span>
@@ -242,7 +242,7 @@ export const DashboardSidebar = ({
               )}
             </div>
             <ChevronDown
-              className={`h-3 w-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${
+              className={`size-3 text-[color:var(--cf-muted)] transition-all group-hover:text-[color:var(--cf-text-strong)] ${
                 showSavedDashboards ? '' : '-rotate-90'
               }`}
             />
@@ -261,12 +261,12 @@ export const DashboardSidebar = ({
                     className="flex flex-1 items-center gap-2 truncate rounded px-3 py-2 text-left text-xs text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                   >
                     {dash.thumbnail ? (
-                      <div className="relative h-4 w-4 flex-shrink-0 overflow-hidden rounded">
-                        <Image src={dash.thumbnail} alt="" fill sizes="16px" className="h-full w-full object-cover" unoptimized />
+                      <div className="relative size-4 flex-shrink-0 overflow-hidden rounded">
+                        <Image src={dash.thumbnail} alt="" fill sizes="16px" className="size-full object-cover" unoptimized />
                       </div>
                     ) : (
-                      <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-[color:var(--cf-surface-2)]">
-                        <Grid3x3 className="h-2.5 w-2.5 text-[color:var(--cf-muted)]" />
+                      <div className="flex size-4 flex-shrink-0 items-center justify-center rounded bg-[color:var(--cf-surface-2)]">
+                        <Grid3x3 className="size-2.5 text-[color:var(--cf-muted)]" />
                       </div>
                     )}
                     {resolveDashboardName(dash.name)}
@@ -275,14 +275,14 @@ export const DashboardSidebar = ({
                   <div ref={openMenuId === dash.id ? menuContainerRef : undefined} className="relative pr-2">
                     <button
                       type="button"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[color:var(--cf-muted)] opacity-0 transition-colors group-hover:opacity-100 hover:border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
+                      className="flex size-7 items-center justify-center rounded-lg border border-transparent text-[color:var(--cf-muted)] opacity-0 transition-colors group-hover:opacity-100 hover:border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
                       aria-label="dashboard-actions"
                       onClick={e => {
                         e.stopPropagation()
                         setOpenMenuId(v => (v === dash.id ? null : dash.id))
                       }}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      <MoreHorizontal className="size-4" />
                     </button>
                     {openMenuId === dash.id && (
                       <div
@@ -297,7 +297,7 @@ export const DashboardSidebar = ({
                             setRenameValue(dash.name || '')
                           }}
                         >
-                          <Pencil className="h-4 w-4 text-[color:var(--cf-muted)]" />
+                          <Pencil className="size-4 text-[color:var(--cf-muted)]" />
                           {tr('common.rename', '重命名', 'Rename')}
                         </button>
                         <button
@@ -308,7 +308,7 @@ export const DashboardSidebar = ({
                             setDeleteTarget(dash)
                           }}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="size-4" />
                           {t('dashboard.actions.delete') || '删除'}
                         </button>
                       </div>
@@ -325,7 +325,7 @@ export const DashboardSidebar = ({
           href={`/${lng}/dashboard/editor`}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3b82f6] to-[#8b5cf6] py-3 font-bold !text-white shadow-lg shadow-[#3b82f6]/20 transition-all hover:from-[#2563eb] hover:to-[#7c3aed] active:scale-[0.98]"
         >
-          <Plus className="h-4 w-4 text-white" />
+          <Plus className="size-4 text-white" />
           <span className="text-sm text-white">{t('dashboard.actions.create')}</span>
         </Link>
       </div>

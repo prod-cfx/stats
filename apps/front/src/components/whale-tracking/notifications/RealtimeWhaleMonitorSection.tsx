@@ -149,7 +149,7 @@ export function RealtimeWhaleMonitorSection({
             onClick={() => setIsPaused(prev => !prev)}
             className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-colors ${isPaused ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-text-strong)]' : 'from-primary to-secondary border-transparent bg-gradient-to-r text-white'}`}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isPaused ? '' : 'animate-spin'}`} style={{ animationDuration: '3s' }} />
+            <RefreshCw className={`size-3.5 ${isPaused ? '' : 'animate-spin'}`} style={{ animationDuration: '3s' }} />
             <span>{isPaused ? t('whaleTracking.realtime.paused') : t('whaleTracking.realtime.nextUpdate', { count: countdown })}</span>
           </button>
         </div>
@@ -187,7 +187,7 @@ export function RealtimeWhaleMonitorSection({
                 aria-label={t('whaleTracking.notifications.actions.removeMonitor')}
                 title={t('whaleTracking.notifications.actions.removeMonitor')}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="size-3.5" />
               </button>
             </div>
           ))}
@@ -214,7 +214,7 @@ export function RealtimeWhaleMonitorSection({
                 onClick={() => handleCopy(row.address)}
                 className="shrink-0 rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
               >
-                {copiedAddress === row.address ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copiedAddress === row.address ? <Check className="size-4" /> : <Copy className="size-4" />}
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 !text-xs !font-normal !leading-5">
@@ -276,7 +276,7 @@ export function RealtimeWhaleMonitorSection({
                     className="inline-flex items-center gap-2 font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] hover:text-primary"
                   >
                     <span>{row.address.slice(0, 8)}...{row.address.slice(-3)}</span>
-                    {copiedAddress === row.address ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedAddress === row.address ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                   </button>
                 </td>
                 <td className="px-4 py-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{row.symbol}</td>

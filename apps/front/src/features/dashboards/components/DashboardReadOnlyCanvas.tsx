@@ -119,7 +119,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
     return (
       <div
         data-testid="mobile-readonly-canvas"
-        className="flex h-full w-full min-w-0 flex-col gap-4 overflow-hidden"
+        className="flex size-full min-w-0 flex-col gap-4 overflow-hidden"
       >
         {sortLayoutForMobile(layoutState).map((l) => {
           const w = widgetsById.get(l.i)
@@ -144,7 +144,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
   const marginY = 6
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className="flex size-full flex-col overflow-hidden">
       <div ref={containerRef} className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
         <GridLayout
           layout={layoutState}

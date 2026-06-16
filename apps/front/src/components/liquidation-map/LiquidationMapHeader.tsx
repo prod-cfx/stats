@@ -75,7 +75,7 @@ export const LiquidationMapHeader = ({
               }}
               className="p-2 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] hover:border-[color:var(--cf-border)] transition-all active:scale-95 group shadow-sm"
             >
-              <RefreshCcw className="w-4 h-4 md:w-5 md:h-5 transition-transform" />
+              <RefreshCcw className="size-4 md:w-5 md:h-5 transition-transform" />
             </button>
           </div>
         </div>

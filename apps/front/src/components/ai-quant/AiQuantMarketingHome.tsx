@@ -52,9 +52,9 @@ function ThemeAmbientBackground() {
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-[size:48px_48px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.018)_1px,transparent_1px)]" />
-      <div aria-hidden="true" className="absolute -top-48 left-1/2 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full bg-blue-300/24 blur-[140px] dark:bg-blue-500/14" />
-      <div aria-hidden="true" className="absolute top-1/4 -left-52 h-[34rem] w-[34rem] rounded-full bg-violet-300/22 blur-[130px] dark:bg-violet-500/12" />
-      <div aria-hidden="true" className="absolute -right-48 bottom-0 h-[32rem] w-[32rem] rounded-full bg-cyan-300/18 blur-[130px] dark:bg-cyan-500/10" />
+      <div aria-hidden="true" className="absolute -top-48 left-1/2 size-[38rem] -translate-x-1/2 rounded-full bg-blue-300/24 blur-[140px] dark:bg-blue-500/14" />
+      <div aria-hidden="true" className="absolute top-1/4 -left-52 size-[34rem] rounded-full bg-violet-300/22 blur-[130px] dark:bg-violet-500/12" />
+      <div aria-hidden="true" className="absolute -right-48 bottom-0 size-[32rem] rounded-full bg-cyan-300/18 blur-[130px] dark:bg-cyan-500/10" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.78),transparent_46%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.055),transparent_50%)]" />
     </div>
   )
@@ -77,7 +77,7 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
         className="relative z-10 mx-auto flex max-w-5xl flex-col items-center text-center"
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-white/65 px-4 py-1.5 text-[11px] font-bold tracking-[0.22em] text-primary uppercase shadow-[0_10px_30px_rgba(100,108,255,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]">
-          <Sparkles className="h-3 w-3" />
+          <Sparkles className="size-3" />
           {t('aiQuant.homepage.hero.eyebrow')}
         </div>
         <div aria-hidden="true" className="h-10 shrink-0 md:h-11" />
@@ -102,9 +102,9 @@ function HeroGradientWash() {
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
       <div className="absolute inset-[-12%] bg-[radial-gradient(circle_at_27%_38%,rgba(37,99,235,0.42),transparent_30%),radial-gradient(circle_at_52%_44%,rgba(79,70,229,0.30),transparent_29%),radial-gradient(circle_at_73%_58%,rgba(168,85,247,0.30),transparent_30%),radial-gradient(circle_at_82%_66%,rgba(217,70,239,0.22),transparent_26%)] blur-[70px] dark:bg-[radial-gradient(circle_at_27%_38%,rgba(29,78,216,0.40),transparent_31%),radial-gradient(circle_at_52%_44%,rgba(79,70,229,0.30),transparent_30%),radial-gradient(circle_at_73%_58%,rgba(124,58,237,0.28),transparent_30%),radial-gradient(circle_at_82%_66%,rgba(192,38,211,0.24),transparent_27%)]" />
       <div className="absolute top-[54%] left-[30%] h-28 w-[58rem] -rotate-6 bg-[linear-gradient(90deg,transparent_0%,rgba(59,130,246,0.18)_42%,rgba(217,70,239,0.20)_68%,transparent_100%)] blur-[30px] dark:bg-[linear-gradient(90deg,transparent_0%,rgba(59,130,246,0.2)_42%,rgba(217,70,239,0.22)_68%,transparent_100%)]" />
-      <div className="absolute top-[-12%] left-[18%] h-[34rem] w-[34rem] rounded-full bg-blue-300/26 blur-[130px] dark:bg-[#1d58ff]/24" />
-      <div className="absolute top-[12%] right-[14%] h-[34rem] w-[34rem] rounded-full bg-violet-300/26 blur-[142px] dark:bg-[#7b2dff]/26" />
-      <div className="absolute top-[34%] left-1/2 h-[25rem] w-[25rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[115px] dark:bg-primary/18" />
+      <div className="absolute top-[-12%] left-[18%] size-[34rem] rounded-full bg-blue-300/26 blur-[130px] dark:bg-[#1d58ff]/24" />
+      <div className="absolute top-[12%] right-[14%] size-[34rem] rounded-full bg-violet-300/26 blur-[142px] dark:bg-[#7b2dff]/26" />
+      <div className="absolute top-[34%] left-1/2 size-[25rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[115px] dark:bg-primary/18" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(248,250,252,0.12)_38%,rgba(246,248,252,0.74)_100%)] dark:bg-[radial-gradient(ellipse_at_center,rgba(2,3,5,0.02)_0%,rgba(2,3,5,0.1)_45%,rgba(2,3,5,0.72)_100%)]" />
     </div>
   )
@@ -162,22 +162,22 @@ function HeroParticles() {
       <motion.div
         animate={shouldReduceMotion ? { opacity: 0.5, y: 0 } : { opacity: [0.2, 0.75, 0.2], y: [0, -10, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-[26%] left-[18%] h-1.5 w-1.5 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.75)]"
+        className="absolute top-[26%] left-[18%] size-1.5 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.75)]"
       />
       <motion.div
         animate={shouldReduceMotion ? { opacity: 0.44, y: 0 } : { opacity: [0.15, 0.65, 0.15], y: [0, 12, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-        className="absolute top-[34%] right-[20%] h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.7)]"
+        className="absolute top-[34%] right-[20%] size-2 rounded-full bg-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.7)]"
       />
       <motion.div
         animate={shouldReduceMotion ? { opacity: 0.38, y: 0 } : { opacity: [0.18, 0.58, 0.18], y: [0, -8, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
-        className="absolute bottom-[25%] left-[25%] h-1 w-1 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.7)]"
+        className="absolute bottom-[25%] left-[25%] size-1 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.7)]"
       />
       <motion.div
         animate={shouldReduceMotion ? { opacity: 0.32, y: 0 } : { opacity: [0.12, 0.5, 0.12], y: [0, 9, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}
-        className="absolute right-[28%] bottom-[19%] h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_18px_rgba(100,108,255,0.72)]"
+        className="absolute right-[28%] bottom-[19%] size-1.5 rounded-full bg-primary shadow-[0_0_18px_rgba(100,108,255,0.72)]"
       />
     </div>
   )
@@ -192,7 +192,7 @@ function PrimaryCta({ href, className = '', label }: { href: string, className?:
       className={`group inline-flex min-h-[52px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3474ff] to-[#8a55ff] px-8 py-3 text-[15px] font-bold !text-white shadow-[0_14px_40px_rgba(79,70,229,0.35)] transition duration-200 hover:shadow-[0_18px_54px_rgba(79,70,229,0.48)] active:translate-y-0 ${shouldReduceMotion ? '' : 'hover:-translate-y-0.5'} ${className}`}
     >
       {label}
-      <ArrowRight className={`h-4 w-4 transition-transform ${shouldReduceMotion ? '' : 'group-hover:translate-x-1'}`} />
+      <ArrowRight className={`size-4 transition-transform ${shouldReduceMotion ? '' : 'group-hover:translate-x-1'}`} />
     </Link>
   )
 }
@@ -335,8 +335,8 @@ function ConversationStrategyVisual() {
     <div className="mx-auto w-full max-w-[592px]">
       <div className="rounded-xl border border-slate-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#050607]/92 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-7">
         <div className="flex items-start gap-4">
-          <div className="mt-2 flex h-4 w-4 shrink-0 items-center justify-center text-slate-500 dark:text-white/70">
-            <CircleDot className="h-3.5 w-3.5" />
+          <div className="mt-2 flex size-4 shrink-0 items-center justify-center text-slate-500 dark:text-white/70">
+            <CircleDot className="size-3.5" />
           </div>
           <div className="rounded-xl border border-slate-200/75 bg-slate-100 px-5 py-4 text-[14px] leading-relaxed text-slate-700 shadow-sm dark:border-[#1b2940] dark:bg-[#101827] dark:text-[#b9c3d4]">
             {t('aiQuant.homepage.visual.assistant')}
@@ -346,8 +346,8 @@ function ConversationStrategyVisual() {
           <div className="max-w-[82%] rounded-xl border border-slate-400/80 bg-transparent px-5 py-3 text-[14px] leading-relaxed text-slate-900 dark:border-white/80 dark:text-white">
             {t('aiQuant.homepage.visual.userPrompt')}
           </div>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-300 text-slate-600 dark:bg-[#344154] dark:text-white">
-            <UserRound className="h-4 w-4" />
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-300 text-slate-600 dark:bg-[#344154] dark:text-white">
+            <UserRound className="size-4" />
           </div>
         </div>
       </div>
@@ -355,13 +355,13 @@ function ConversationStrategyVisual() {
       <div className="mt-4 rounded-xl border border-slate-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#060708]/94 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 text-[12px] font-bold tracking-[0.12em] text-primary">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
-              <Sparkles className="h-3.5 w-3.5 fill-current" />
+            <span className="flex size-5 items-center justify-center rounded-full bg-primary/10">
+              <Sparkles className="size-3.5 fill-current" />
             </span>
             {t('aiQuant.homepage.visual.parsedStrategy')}
           </div>
           <div className="flex items-center gap-1.5 text-[12px] font-bold text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+            <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
             Processing
           </div>
         </div>
@@ -375,8 +375,8 @@ function ConversationStrategyVisual() {
               transition={shouldReduceMotion ? undefined : { duration: 0.45, ease: 'easeOut', delay: index * 0.08 }}
               className="flex items-center gap-3 rounded-xl border border-slate-200/75 bg-slate-50/90 px-3.5 py-3 dark:border-white/[0.07] dark:bg-[#0c1119]"
             >
-              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${rule.iconClass}`}>
-                <rule.icon className="h-[18px] w-[18px]" />
+              <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${rule.iconClass}`}>
+                <rule.icon className="size-[18px]" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] leading-none text-slate-500 dark:text-[#6f7a8c]">
@@ -424,8 +424,8 @@ function BacktestResultVisual() {
         <div className="!text-[15px] !leading-none font-black tracking-normal text-slate-900 dark:text-white/90">
           {t('aiQuant.backtestResult')}
         </div>
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/25 bg-primary/12 text-primary shadow-[0_0_18px_rgba(59,130,246,0.12)]">
-          <LineChart className="h-4 w-4" />
+        <div className="flex size-8 items-center justify-center rounded-lg border border-primary/25 bg-primary/12 text-primary shadow-[0_0_18px_rgba(59,130,246,0.12)]">
+          <LineChart className="size-4" />
         </div>
       </div>
 
@@ -557,7 +557,7 @@ function DeployOrbitVisual() {
             className="absolute right-4 top-9 h-[74px] w-[76px] rounded-xl border border-emerald-300/42 bg-gradient-to-br from-emerald-100/58 via-cyan-100/42 to-white/20 shadow-[0_18px_48px_rgba(20,184,166,0.10)] dark:border-emerald-300/34 dark:from-emerald-400/18 dark:via-cyan-400/12 dark:to-transparent dark:shadow-[0_18px_48px_rgba(20,184,166,0.14)]"
           />
           <div className="absolute left-1/2 top-[42px] z-10 flex h-[78px] w-[84px] -translate-x-1/2 items-center justify-center rounded-2xl border border-slate-300/70 bg-gradient-to-br from-white/92 via-violet-50/92 to-slate-100/90 shadow-[0_24px_70px_rgba(100,108,255,0.20)] backdrop-blur-xl dark:border-white/46 dark:from-purple-400/34 dark:via-[#342344]/86 dark:to-[#111525]/88 dark:shadow-[0_24px_70px_rgba(100,108,255,0.28)]">
-            <div className="absolute left-4 top-4 h-2.5 w-2.5 rounded-full bg-slate-400/40 dark:bg-white/26" />
+            <div className="absolute left-4 top-4 size-2.5 rounded-full bg-slate-400/40 dark:bg-white/26" />
             <div className="space-y-2">
               <div className="h-2.5 w-10 rounded-full bg-violet-500/58 shadow-[0_0_18px_rgba(139,92,246,0.28)] dark:bg-violet-300/80 dark:shadow-[0_0_18px_rgba(196,181,253,0.45)]" />
               <div className="h-2.5 w-10 rounded-full bg-violet-500/54 shadow-[0_0_18px_rgba(139,92,246,0.22)] dark:bg-violet-300/78 dark:shadow-[0_0_18px_rgba(196,181,253,0.38)]" />
@@ -566,9 +566,9 @@ function DeployOrbitVisual() {
           <motion.div
             animate={shouldReduceMotion ? undefined : { rotate: 360 }}
             transition={shouldReduceMotion ? undefined : { duration: 5.2, repeat: Infinity, ease: 'linear' }}
-            className="absolute right-0 top-[36px] z-20 flex h-[58px] w-[58px] items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-50/92 text-cyan-600 shadow-[0_14px_46px_rgba(34,211,238,0.16)] dark:border-cyan-300/22 dark:bg-[#08283a]/88 dark:text-cyan-300 dark:shadow-[0_14px_46px_rgba(34,211,238,0.22)]"
+            className="absolute right-0 top-[36px] z-20 flex size-[58px] items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-50/92 text-cyan-600 shadow-[0_14px_46px_rgba(34,211,238,0.16)] dark:border-cyan-300/22 dark:bg-[#08283a]/88 dark:text-cyan-300 dark:shadow-[0_14px_46px_rgba(34,211,238,0.22)]"
           >
-            <RefreshCw className="h-6 w-6" />
+            <RefreshCw className="size-6" />
           </motion.div>
           <div className="absolute -bottom-4 left-1/2 z-30 -translate-x-1/2 text-[15px] font-black tracking-normal text-slate-950 drop-shadow-[0_4px_14px_rgba(255,255,255,0.72)] dark:text-white dark:drop-shadow-[0_4px_14px_rgba(0,0,0,0.72)]">
             DEPLOY
@@ -654,8 +654,8 @@ function StrategyPlazaVisual() {
           className={`absolute rounded-xl border border-slate-200/80 bg-white/64 p-4 opacity-[0.70] shadow-[0_22px_70px_rgba(15,23,42,0.10)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#151a26]/42 dark:opacity-[0.58] dark:shadow-[0_22px_70px_rgba(0,0,0,0.22)] ${card.className}`}
         >
           <div className="flex min-h-[84px] items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/16 text-primary">
-              <card.icon className="h-4 w-4" />
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/16 text-primary">
+              <card.icon className="size-4" />
             </div>
             <div className="min-w-0">
               {card.title && <div className="truncate text-[12px] font-black text-slate-700/48 dark:text-white/38">{card.title}</div>}
@@ -677,7 +677,7 @@ function StrategyPlazaVisual() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4">
               <div className="mt-2 text-primary">
-                <TrendingUp className="h-5 w-5" />
+                <TrendingUp className="size-5" />
               </div>
               <div>
                 <div className="text-[16px] font-black leading-none text-slate-950/78 dark:text-white/82">
@@ -688,8 +688,8 @@ function StrategyPlazaVisual() {
                 </div>
               </div>
             </div>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-300/80 bg-white/74 text-primary dark:border-white/72 dark:bg-white/[0.025]">
-              <Star className="h-4 w-4 fill-current" />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-300/80 bg-white/74 text-primary dark:border-white/72 dark:bg-white/[0.025]">
+              <Star className="size-4 fill-current" />
             </div>
           </div>
 

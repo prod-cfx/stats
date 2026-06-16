@@ -228,7 +228,7 @@ export function AiQuantDeletionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center px-4 py-4">
+    <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
       <button
         type="button"
         tabIndex={-1}

@@ -9,7 +9,7 @@ export default function DashboardPage() {
       <Navbar />
 
       <main className="flex-1 overflow-y-auto no-scrollbar p-4 md:p-8">
-        <Suspense fallback={<div className="flex items-center justify-center py-12"><div className="text-[color:var(--cf-muted)]">Loading...</div></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center py-12"><div className="text-[color:var(--cf-muted)]">Loading…</div></div>}>
           <DashboardClient />
         </Suspense>
         <div className="mt-20">

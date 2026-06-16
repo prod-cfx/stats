@@ -13,7 +13,7 @@ export function WidgetShell(props: {
     : 'min-w-0 react-draggable-handle cursor-move select-none'
 
   return (
-    <div className="h-full w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] flex flex-col overflow-hidden">
+    <div className="size-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-[color:var(--cf-border)] flex-shrink-0">
         <div className={handleClassName}>
           <div className="text-xs font-bold text-[color:var(--cf-text-strong)] truncate">{props.title}</div>

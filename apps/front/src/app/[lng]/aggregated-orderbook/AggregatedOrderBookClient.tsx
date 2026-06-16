@@ -12,7 +12,7 @@ export function AggregatedOrderBookClient() {
   const [activeTab, setActiveTab] = useState('aggregated-orderbook')
 
   return (
-    <div className="flex h-full w-full flex-col px-0 py-0">
+    <div className="flex size-full flex-col p-0">
       <div className="relative">
         <div className="flex w-full overflow-x-auto border-b border-[color:var(--cf-border)] no-scrollbar md:w-fit">
         {[
@@ -54,7 +54,7 @@ export function AggregatedOrderBookClient() {
           ) : (
             <div className="flex-1 flex items-center justify-center bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl min-h-[600px]">
               <div className="flex flex-col items-center gap-4 text-[color:var(--cf-muted)]">
-                <LayoutGrid className="w-12 h-12 opacity-20" />
+                <LayoutGrid className="size-12 opacity-20" />
                 <p>{t('common.featureInProgress')}</p>
               </div>
             </div>

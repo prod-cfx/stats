@@ -36,7 +36,7 @@ export const Footer = () => {
         <div className="flex flex-col items-center gap-1.5 md:items-start">
           <Link href={withLng('/')} className="flex flex-col items-center md:items-start no-underline">
             <div className="flex items-center">
-              <CoinfluxMark className="h-7 w-7" />
+              <CoinfluxMark className="size-7" />
               <span className="-ml-1.5 !text-base !font-semibold !leading-6 tracking-tight text-[color:var(--cf-text-strong)]">oinflux</span>
             </div>
           </Link>
@@ -49,33 +49,33 @@ export const Footer = () => {
           <button
             type="button"
             onClick={handleSocialClick}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+            className="flex size-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             aria-label="Telegram"
           >
-            <Send className="h-4 w-4" />
+            <Send className="size-4" />
           </button>
           <button
             type="button"
             onClick={handleSocialClick}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+            className="flex size-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             aria-label="X"
           >
-            <XIcon className="h-4 w-4" />
+            <XIcon className="size-4" />
           </button>
           <button
             type="button"
             onClick={handleSocialClick}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+            className="flex size-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             aria-label="GitHub"
           >
-            <Github className="h-4 w-4" />
+            <Github className="size-4" />
           </button>
           <button
             type="button"
             onClick={handleSocialClick}
             className="flex h-8 items-center gap-1.5 rounded-full px-2.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] no-underline transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           >
-            <FileText className="h-4 w-4" />
+            <FileText className="size-4" />
             {t('nav.docs') || 'Doc'}
           </button>
         </div>

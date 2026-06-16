@@ -205,7 +205,7 @@ describe('AiQuantDeletionDialog', () => {
     const infoRows = container.querySelectorAll('[data-testid="ai-quant-deletion-info-row"]')
     const actions = container.querySelector('[data-testid="ai-quant-deletion-actions"]')
 
-    expect(overlay?.className).toContain('py-4')
+    expect(overlay?.className).toContain('p-4')
     expect(dialog?.className).toContain('max-h-[calc(100dvh-2rem)]')
     expect(dialog?.className).toContain('overflow-y-auto')
     expect(infoRows[0]?.className).toContain('flex-col')

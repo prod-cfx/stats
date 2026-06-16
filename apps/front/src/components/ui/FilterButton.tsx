@@ -130,7 +130,7 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
         style={{ minWidth }}
       >
         <span className={`mr-2 ${isOpen ? 'text-white' : ''}`}>{selectedLabel}</span>
-        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[color:var(--cf-muted)]'}`} />
+        <ChevronDown className={`size-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[color:var(--cf-muted)]'}`} />
       </button>
       {menu}
     </div>

@@ -14,15 +14,15 @@ interface UserAvatarProps {
 }
 
 const sizeClassNames: Record<UserAvatarSize, string> = {
-  sm: 'h-8 w-8',
-  md: 'h-10 w-10',
-  lg: 'h-14 w-14',
+  sm: 'size-8',
+  md: 'size-10',
+  lg: 'size-14',
 }
 
 const identiconClassNames: Record<UserAvatarSize, string> = {
-  sm: 'h-full w-full',
-  md: 'h-full w-full',
-  lg: 'h-full w-full',
+  sm: 'size-full',
+  md: 'size-full',
+  lg: 'size-full',
 }
 
 function hashString(value: string) {
@@ -92,7 +92,7 @@ export function UserAvatar({
           alt={label}
           fill
           sizes={size === 'lg' ? '56px' : size === 'md' ? '40px' : '32px'}
-          className="h-full w-full object-cover"
+          className="size-full object-cover"
           referrerPolicy="no-referrer"
           unoptimized
         />

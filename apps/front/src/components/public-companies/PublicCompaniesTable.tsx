@@ -431,12 +431,12 @@ export const PublicCompaniesTable = () => {
   const renderSortIcon = (field: SortField) => {
     if (sortField !== field)
       return (
-        <ArrowUpDown className="h-3 w-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
+        <ArrowUpDown className="size-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
       )
     return sortDirection === 'desc' ? (
-      <ChevronDown className="text-primary h-3 w-3" />
+      <ChevronDown className="text-primary size-3" />
     ) : (
-      <ChevronUp className="text-primary h-3 w-3" />
+      <ChevronUp className="text-primary size-3" />
     )
   }
 
@@ -490,7 +490,7 @@ export const PublicCompaniesTable = () => {
       <div className="relative w-full md:max-w-sm">
         <div className="group focus-within:from-primary focus-within:to-secondary rounded-lg bg-[color:var(--cf-border)] p-[1px] transition-colors focus-within:bg-gradient-to-r">
           <div className="relative rounded-lg bg-[color:var(--cf-surface)]">
-            <Search className="group-focus-within:text-primary absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[color:var(--cf-muted)] transition-colors" />
+            <Search className="group-focus-within:text-primary absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[color:var(--cf-muted)] transition-colors" />
             <input
               type="text"
               value={searchTerm}
@@ -535,7 +535,7 @@ export const PublicCompaniesTable = () => {
                   <th className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 text-left !font-semibold md:w-[88px] md:px-4">
                     {t('publicCompanies.columns.asset')}
                   </th>
-                  <th className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 text-left !font-semibold md:w-auto md:px-4">
+                  <th className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 text-left !font-semibold md:w-auto md:px-4">
                     {t('publicCompanies.columns.company')}
                   </th>
                   <th className="px-2 py-3 !font-semibold md:px-4">
@@ -626,13 +626,13 @@ export const PublicCompaniesTable = () => {
                   >
                     <td className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-[88px] md:px-4">
                       <div className="flex items-center justify-start gap-1 md:gap-3">
-                        <div className="h-5 w-5 flex-none md:h-6 md:w-6">
+                        <div className="size-5 flex-none md:h-6 md:w-6">
                           <Image
                             src={row.assetLogo}
                             alt={row.asset}
                             width={24}
                             height={24}
-                            className="h-full w-full rounded-full object-contain"
+                            className="size-full rounded-full object-contain"
                             unoptimized
                           />
                         </div>
@@ -641,15 +641,15 @@ export const PublicCompaniesTable = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-auto md:px-4">
+                    <td className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-auto md:px-4">
                       <div className="flex min-w-0 items-center justify-start gap-2 md:gap-3">
-                        <div className="h-6 w-6 flex-none overflow-hidden rounded-full bg-white p-0.5 md:h-8 md:w-8 md:p-1">
+                        <div className="size-6 flex-none overflow-hidden rounded-full bg-white p-0.5 md:h-8 md:w-8 md:p-1">
                           <Image
                             src={row.logo}
                             alt={row.name}
                             width={32}
                             height={32}
-                            className="h-full w-full object-contain"
+                            className="size-full object-contain"
                             unoptimized
                           />
                         </div>
@@ -667,7 +667,7 @@ export const PublicCompaniesTable = () => {
                                 setSelectedCompany(row)
                               }}
                             >
-                              <Info className="h-4 w-4" />
+                              <Info className="size-4" />
                             </button>
                           </div>
                           <span className="truncate !text-[10px] !font-normal !leading-4 text-[color:var(--cf-muted)] uppercase md:!text-xs md:!leading-5">
@@ -729,9 +729,9 @@ export const PublicCompaniesTable = () => {
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3 border-b border-[color:var(--cf-border)] pb-4">
-            <div className="h-9 w-9 flex-none rounded-lg bg-white p-1.5">
+            <div className="size-9 flex-none rounded-lg bg-white p-1.5">
               {selectedCompany?.logo && (
-                <Image src={selectedCompany.logo} className="h-full w-full object-contain" alt="" width={36} height={36} unoptimized />
+                <Image src={selectedCompany.logo} className="size-full object-contain" alt="" width={36} height={36} unoptimized />
               )}
             </div>
             <div className="min-w-0">

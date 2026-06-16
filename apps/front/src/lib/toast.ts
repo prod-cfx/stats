@@ -38,10 +38,10 @@ function createToastElement(type: ToastType, options: ToastOptions): HTMLDivElem
   row.className = 'flex items-start gap-2.5'
 
   const iconWrap = document.createElement('span')
-  iconWrap.className = `mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${typeStyles[type].icon}`
+  iconWrap.className = `mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${typeStyles[type].icon}`
 
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  icon.setAttribute('class', 'h-4 w-4')
+  icon.setAttribute('class', 'size-4')
   icon.setAttribute('fill', 'none')
   icon.setAttribute('stroke', 'currentColor')
   icon.setAttribute('viewBox', '0 0 24 24')
@@ -71,11 +71,11 @@ function createToastElement(type: ToastType, options: ToastOptions): HTMLDivElem
 
   const close = document.createElement('button')
   close.type = 'button'
-  close.className = '-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] toast-close'
+  close.className = '-mr-1 flex size-7 shrink-0 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] toast-close'
   close.setAttribute('aria-label', 'Dismiss notification')
 
   const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  closeIcon.setAttribute('class', 'h-4 w-4')
+  closeIcon.setAttribute('class', 'size-4')
   closeIcon.setAttribute('fill', 'none')
   closeIcon.setAttribute('stroke', 'currentColor')
   closeIcon.setAttribute('viewBox', '0 0 24 24')

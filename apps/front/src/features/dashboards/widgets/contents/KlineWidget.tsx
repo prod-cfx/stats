@@ -27,7 +27,7 @@ export function KlineWidget(props: { config: Record<string, any> }) {
   const symbolForChart = useMemo(() => selectedSymbol || 'BTCUSDT', [selectedSymbol])
 
   return (
-    <div className="h-full w-full max-h-full overflow-hidden flex flex-col bg-[#0d1117] cf-scrollbar-scope">
+    <div className="size-full max-h-full overflow-hidden flex flex-col bg-[#0d1117] cf-scrollbar-scope">
       {/* Full header + symbol dropdown interactions (same as trade page) */}
       <div className="flex-none">
         <TopBar

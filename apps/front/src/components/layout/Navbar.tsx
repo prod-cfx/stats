@@ -395,12 +395,12 @@ export const Navbar = () => {
             className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
             onClick={openMobileMenu}
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="size-5" />
           </button>
 
           <Link href={withLng('/')} className="flex flex-col no-underline">
             <div className="flex items-center">
-              <CoinfluxMark className="h-7 w-7" />
+              <CoinfluxMark className="size-7" />
               <span className="-ml-1.5 !text-base !font-semibold !leading-6 tracking-tight text-[color:var(--cf-text-strong)]">
                 oinflux
               </span>
@@ -436,9 +436,9 @@ export const Navbar = () => {
                   dispatchUi({ type: 'toggle-search' })
                   if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100)
                 }}
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:h-10 md:w-10"
+                className="flex size-8 flex-shrink-0 items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:h-10 md:w-10"
               >
-                <Search className="h-4 w-4 md:h-5 md:w-5" />
+                <Search className="size-4 md:h-5 md:w-5" />
               </button>
 
               <input
@@ -448,7 +448,7 @@ export const Navbar = () => {
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t('nav.search') || 'Search...'}
-                className={`h-full w-full border-none bg-transparent px-2 text-base text-[color:var(--cf-text)] outline-none md:text-sm ${
+                className={`size-full border-none bg-transparent px-2 text-base text-[color:var(--cf-text)] outline-none md:text-sm ${
                   searchOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
                 }`}
               />
@@ -459,7 +459,7 @@ export const Navbar = () => {
                   onClick={() => setSearchQuery('')}
                   className="mr-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="size-3" />
                 </button>
               )}
             </div>
@@ -479,7 +479,7 @@ export const Navbar = () => {
                         }`}
                       >
                         <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${
+                          className={`flex size-8 items-center justify-center rounded-lg text-xs font-bold ${
                             result.type === 'coin'
                               ? 'bg-primary/10 text-primary'
                               : result.type === 'page'
@@ -534,7 +534,7 @@ export const Navbar = () => {
             onClick={() => dispatchUi({ type: 'toggle-bell' })}
             className="relative inline-flex min-h-10 w-10 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)] md:min-h-8 md:w-8"
           >
-            <Bell className="h-4 w-4" />
+            <Bell className="size-4" />
             {unreadCount > 0 && (
               <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
                 {unreadCount > 99 ? '99+' : unreadCount}
@@ -631,7 +631,7 @@ export const Navbar = () => {
               <button
                 type="button"
                 onClick={() => dispatchUi({ type: 'toggle-account-menu' })}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-opacity hover:opacity-90"
+                className="inline-flex size-8 items-center justify-center rounded-full transition-opacity hover:opacity-90"
                 aria-label={t('account.settings')}
               >
                 <UserAvatar
@@ -665,7 +665,7 @@ export const Navbar = () => {
                     onClick={() => dispatchUi({ type: 'close-account-menu' })}
                     className="flex items-center gap-2.5 px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
-                    <Settings className="h-4 w-4 text-[color:var(--cf-muted)]" />
+                    <Settings className="size-4 text-[color:var(--cf-muted)]" />
                     {t('account.settings')}
                   </Link>
                   <Link
@@ -673,7 +673,7 @@ export const Navbar = () => {
                     onClick={() => dispatchUi({ type: 'close-account-menu' })}
                     className="flex items-center gap-2.5 px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
-                    <Bot className="h-4 w-4 text-[color:var(--cf-muted)]" />
+                    <Bot className="size-4 text-[color:var(--cf-muted)]" />
                     {t('nav.aiQuant')}
                   </Link>
                   <button
@@ -681,7 +681,7 @@ export const Navbar = () => {
                     onClick={handleLogout}
                     className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left !text-[13px] !font-semibold !leading-5 text-red-500 transition hover:bg-red-500/10"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut className="size-4" />
                     {t('account.logout', { defaultValue: '登出' })}
                   </button>
                 </div>
@@ -693,7 +693,7 @@ export const Navbar = () => {
               onClick={openLoginSheet}
               className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-secondary px-3 !text-xs !font-semibold !leading-5 whitespace-nowrap !text-white shadow-sm transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:min-h-8"
             >
-              <LogIn className="h-3.5 w-3.5 !text-white" aria-hidden="true" />
+              <LogIn className="size-3.5 !text-white" aria-hidden="true" />
               {t('nav.login')}
             </button>
           ))}

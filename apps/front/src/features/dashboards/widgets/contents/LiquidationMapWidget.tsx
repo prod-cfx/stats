@@ -11,7 +11,7 @@ const LiquidationMapChart = dynamic(
   () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
   {
     ssr: false,
-    loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+    loading: () => <div className="size-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
   },
 )
 
@@ -83,9 +83,9 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
               setTimeout(() => btn?.classList.remove('animate-spin'), 500);
               onRefresh();
             }}
-            className="p-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:border-[color:var(--cf-text-muted)] transition-all active:scale-95 group shadow-sm h-[26px] w-[26px] flex items-center justify-center"
+            className="p-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:border-[color:var(--cf-text-muted)] transition-all active:scale-95 group shadow-sm size-[26px] flex items-center justify-center"
           >
-            <RefreshCcw className="w-3.5 h-3.5 transition-transform" />
+            <RefreshCcw className="size-3.5 transition-transform" />
           </button>
         </div>
       </div>
@@ -101,7 +101,7 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
           data={data}
           currentPrice={currentPrice}
           mode="full"
-          className="w-full h-full max-h-full"
+          className="size-full max-h-full"
         />
       </div>
 

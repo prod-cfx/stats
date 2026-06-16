@@ -76,9 +76,9 @@ export const DiscoverGrid = () => {
 
   const renderSortIcon = (field: Exclude<typeof sortField, null>) => {
     if (sortField !== field) {
-      return <ArrowUpDown className="w-3 h-3 text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100 transition-opacity" />;
+      return <ArrowUpDown className="size-3 text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100 transition-opacity" />;
     }
-    return sortOrder === 'desc' ? <ChevronDown className="h-3 w-3 text-white" /> : <ChevronUp className="h-3 w-3 text-white" />;
+    return sortOrder === 'desc' ? <ChevronDown className="size-3 text-white" /> : <ChevronUp className="size-3 text-white" />;
   };
 
   return (

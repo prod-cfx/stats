@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 const PnLTrendChart = dynamic(() => import('./PnLTrendChart').then(mod => mod.PnLTrendChart), {
   ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+  loading: () => <div className="size-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
 })
 
 interface PnLTrendCardProps {
@@ -99,7 +99,7 @@ export const PnLTrendCard = ({ portfolio }: PnLTrendCardProps) => {
               className={`flex items-center gap-2 px-3 py-1.5 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-text)] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'time' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
               <span>{t(`whaleTracking.profile.pnlTrend.timeRange.${timeRange}`)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'time' ? 'rotate-180 text-white' : ''}`} />
+              <ChevronDown className={`size-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'time' ? 'rotate-180 text-white' : ''}`} />
             </button>
             {dropdownOpen === 'time' && (
               <div className="absolute right-0 mt-2 w-24 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden">
@@ -125,7 +125,7 @@ export const PnLTrendCard = ({ portfolio }: PnLTrendCardProps) => {
               className={`flex items-center gap-2 px-3 py-1.5 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-text)] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'contract' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
               <span>{t(`whaleTracking.profile.pnlTrend.contractType.${contractType}`)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'contract' ? 'rotate-180 text-white' : ''}`} />
+              <ChevronDown className={`size-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'contract' ? 'rotate-180 text-white' : ''}`} />
             </button>
             {dropdownOpen === 'contract' && (
               <div className="absolute right-0 mt-2 w-36 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden">
@@ -151,7 +151,7 @@ export const PnLTrendCard = ({ portfolio }: PnLTrendCardProps) => {
               className={`flex items-center gap-2 px-3 py-1.5 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-text)] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'pnl' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
               <span>{t(`whaleTracking.profile.pnlTrend.pnlType.${pnlType}`)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'pnl' ? 'rotate-180 text-white' : ''}`} />
+              <ChevronDown className={`size-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'pnl' ? 'rotate-180 text-white' : ''}`} />
             </button>
             {dropdownOpen === 'pnl' && (
               <div className="absolute right-0 mt-2 w-28 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden">

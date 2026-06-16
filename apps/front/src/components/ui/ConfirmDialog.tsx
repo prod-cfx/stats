@@ -70,8 +70,8 @@ export function ConfirmDialog({
           className="animate-in zoom-in-95 fade-in pointer-events-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[380px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl duration-200 sm:p-5"
         >
           {/* Icon */}
-          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10">
-            <AlertTriangle className="h-[18px] w-[18px] text-red-500" />
+          <div className="mb-3 flex size-9 items-center justify-center rounded-full bg-red-500/10">
+            <AlertTriangle className="size-[18px] text-red-500" />
           </div>
 
           {/* Content */}

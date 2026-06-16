@@ -122,7 +122,7 @@ const SummaryCard = ({
           </div>
           <div className="grid grid-cols-2 gap-4 md:gap-6">
             <div className="flex items-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-[#fac858]" />
+              <div className="size-1.5 rounded-full bg-[#fac858]" />
               <span className="md:text-caption text-[10px] font-medium text-[color:var(--cf-muted)]">
                 {t('whaleTracking.profile.summary.filledOrders')}
               </span>
@@ -131,7 +131,7 @@ const SummaryCard = ({
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-[#fac858]" />
+              <div className="size-1.5 rounded-full bg-[#fac858]" />
               <span className="md:text-caption text-[10px] font-medium text-[color:var(--cf-muted)]">
                 {t('whaleTracking.profile.summary.closes')}
               </span>
@@ -149,7 +149,7 @@ const SummaryCard = ({
             </div>
             <div className="w-full">{subText}</div>
           </div>
-          <div className="ml-2 h-12 w-12 flex-none md:ml-4 md:h-16 md:w-16">
+          <div className="ml-2 size-12 flex-none md:ml-4 md:h-16 md:w-16">
             <LazyReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
           </div>
         </div>
@@ -240,14 +240,14 @@ export const ProfileSummary = ({ snapshot, fills, portfolio }: ProfileSummaryPro
         subText={
           <div className="flex flex-col gap-1">
             <div className="md:text-caption flex items-center gap-2 text-[10px] text-[color:var(--cf-muted)]">
-              <div className="h-1.5 w-1.5 rounded-full bg-[#5470c6]" />
+              <div className="size-1.5 rounded-full bg-[#5470c6]" />
               <span className="truncate">{t('whaleTracking.profile.summary.perpetual')}</span>
               <span className="ml-auto text-[color:var(--cf-text)]">
                 {formatAmount(perpAccountValue)}
               </span>
             </div>
             <div className="md:text-caption flex items-center gap-2 text-[10px] text-[color:var(--cf-muted)]">
-              <div className="h-1.5 w-1.5 rounded-full bg-[#91cc75]" />
+              <div className="size-1.5 rounded-full bg-[#91cc75]" />
               <span className="truncate">{t('whaleTracking.profile.summary.spot')}</span>
               <span className="ml-auto text-[color:var(--cf-text)]">
                 {formatAmount(spotAccountValue)}
@@ -273,7 +273,7 @@ export const ProfileSummary = ({ snapshot, fills, portfolio }: ProfileSummaryPro
         ]}
         subText={
           <div className="md:text-caption flex items-center gap-2 text-[10px] text-[color:var(--cf-muted)]">
-            <div className="h-1.5 w-1.5 rounded-full bg-[#fac858]" />
+            <div className="size-1.5 rounded-full bg-[#fac858]" />
             <span className="truncate">{t('whaleTracking.profile.summary.withdrawable')}</span>
             <span className="ml-auto text-[color:var(--cf-text)]">
               {availablePercent.toFixed(2)} %
@@ -293,9 +293,9 @@ export const ProfileSummary = ({ snapshot, fills, portfolio }: ProfileSummaryPro
         ]}
         subText={
           <div className="md:text-caption flex items-center gap-2 text-[10px] text-[color:var(--cf-muted)]">
-            <div className="h-1.5 w-1.5 rounded-full bg-[#fac858]" />
+            <div className="size-1.5 rounded-full bg-[#fac858]" />
             <span className="truncate">{t('whaleTracking.profile.summary.leverageRatio')}</span>
-            <Info className="h-2.5 w-2.5 text-[color:var(--cf-muted)] md:h-3 md:w-3" />
+            <Info className="size-2.5 text-[color:var(--cf-muted)] md:h-3 md:w-3" />
             <span className="ml-auto text-[color:var(--cf-text)]">{leverageRatio.toFixed(2)}x</span>
           </div>
         }

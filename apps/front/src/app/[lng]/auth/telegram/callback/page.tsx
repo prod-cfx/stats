@@ -25,7 +25,7 @@ export default async function TelegramCallbackPage({
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
-      <Suspense fallback={<main className="flex flex-1 items-center justify-center text-[color:var(--cf-muted)]">Loading...</main>}>
+      <Suspense fallback={<main className="flex flex-1 items-center justify-center text-[color:var(--cf-muted)]">Loading…</main>}>
         <TelegramCallbackPageClient lng={lng} />
       </Suspense>
       <Footer />

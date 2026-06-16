@@ -96,7 +96,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             onClick={() => setIsModalOpen(true)}
             className="from-primary to-secondary shadow-primary/20 flex min-h-11 items-center gap-2 rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             <span>{t('dashboard.editor.addWidgetTitle')}</span>
           </button>
 
@@ -106,7 +106,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             type="button"
             className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           >
-            <LayoutIcon className="h-3.5 w-3.5" />
+            <LayoutIcon className="size-3.5" />
             <span>{t('dashboard.resetLayout')}</span>
           </button>
         </div>

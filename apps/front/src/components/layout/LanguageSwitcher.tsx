@@ -56,7 +56,7 @@ export function LanguageSwitcher() {
         className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] focus:outline-none focus:ring-2 focus:ring-primary/50 md:min-h-8 md:min-w-8"
         aria-label="Switch Language"
       >
-        <Globe className="h-4 w-4" />
+        <Globe className="size-4" />
       </button>
 
       {isOpen && (
@@ -74,7 +74,7 @@ export function LanguageSwitcher() {
                 }`}
               >
                 <span>{lang.label}</span>
-                {i18n.language === lang.code && <Check className="h-3 w-3" />}
+                {i18n.language === lang.code && <Check className="size-3" />}
               </button>
             ))}
           </div>

@@ -128,10 +128,10 @@ function StrategyConclusionCard({
 
       <div className="relative z-10 flex items-center gap-3">
         <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.shadow}`}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-full ${config.shadow}`}
           style={{ backgroundColor: config.color }}
         >
-          <Icon className="h-4 w-4 text-white" />
+          <Icon className="size-4 text-white" />
         </div>
         <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{summary}</h2>
       </div>
@@ -188,16 +188,16 @@ export function AiAnalysisPanel({ lng, insights }: { lng: string; insights: stri
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[color:var(--cf-primary)]" />
+          <Sparkles className="size-4 text-[color:var(--cf-primary)]" />
           <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
             {lng === 'en' ? 'Report Interpretation' : '报告解读'}
           </h3>
         </div>
         <span
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+          className="inline-flex size-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           aria-hidden="true"
         >
-          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
         </span>
       </button>
 

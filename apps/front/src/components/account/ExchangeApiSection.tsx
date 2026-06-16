@@ -357,13 +357,13 @@ export function ExchangeApiSection() {
                   className="flex min-h-[72px] flex-col gap-3 border-b border-[color:var(--cf-border)] px-5 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between"
                 >
                   <div className="flex min-w-0 items-start gap-3">
-                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
+                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
                       <Image
                         src={`/images/exchanges/${exchangeId}.png`}
                         alt=""
                         width={28}
                         height={28}
-                        className="h-full w-full object-contain"
+                        className="size-full object-contain"
                         unoptimized
                       />
                     </span>
@@ -430,7 +430,7 @@ export function ExchangeApiSection() {
       </div>
 
       {configExchangeId && configAccount && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4">
           <button
             type="button"
             aria-label={t('common.close')}
@@ -467,7 +467,7 @@ export function ExchangeApiSection() {
                       isTestnet: event.target.checked,
                     },
                   }))}
-                  className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
+                  className="size-4 rounded border border-[color:var(--cf-border)]"
                 />
                 {t('aiQuant.useTestnet')}
               </label>
@@ -552,7 +552,7 @@ export function ExchangeApiSection() {
       )}
 
       {deleteExchangeId && deleteAccount && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4">
           <button
             type="button"
             aria-label={t('common.close')}

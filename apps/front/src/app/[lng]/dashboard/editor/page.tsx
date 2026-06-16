@@ -8,7 +8,7 @@ export default function DashboardEditorPage() {
     <div className="flex flex-col h-screen w-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] overflow-hidden">
       <Navbar />
       <main className="flex-1 overflow-y-auto no-scrollbar">
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="text-[color:var(--cf-muted)]">Loading...</div></div>}>
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="text-[color:var(--cf-muted)]">Loading…</div></div>}>
           <DashboardEditorClient />
         </Suspense>
         <div className="mt-20">
@@ -18,4 +18,3 @@ export default function DashboardEditorPage() {
     </div>
   );
 }
-

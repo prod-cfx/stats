@@ -19,10 +19,10 @@ export function ThemeToggle() {
       title={toggleLabel}
     >
       <span className="hidden dark:inline-flex" aria-hidden="true">
-        <Moon className="h-4 w-4 text-[color:var(--cf-muted)]" />
+        <Moon className="size-4 text-[color:var(--cf-muted)]" />
       </span>
       <span className="inline-flex dark:hidden" aria-hidden="true">
-        <Sun className="h-4 w-4 text-[color:var(--cf-muted)]" />
+        <Sun className="size-4 text-[color:var(--cf-muted)]" />
       </span>
     </button>
   )

@@ -40,7 +40,7 @@ export const PredictionCard = ({
       <div className="flex justify-between items-start mb-3">
         <div className="flex min-w-0 gap-3 items-start">
           {icon && (
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBgColor || 'bg-[#374151]'}`}>
+            <div className={`size-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBgColor || 'bg-[#374151]'}`}>
               {icon}
             </div>
           )}
@@ -49,7 +49,7 @@ export const PredictionCard = ({
           </SubTitle>
         </div>
         <button type="button" className="absolute top-4 right-4 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]">
-          <Info className="w-4 h-4" />
+          <Info className="size-4" />
         </button>
       </div>
 
@@ -73,7 +73,7 @@ export const PredictionCard = ({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {(status === 'LIVE' || status === 'OPEN' || status === 'ACTIVE') && (
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#f87171] animate-pulse" />
+              <span className="size-2 rounded-full bg-[#f87171] animate-pulse" />
               <span className="!text-xs !font-semibold !leading-5 tracking-normal text-[#f87171]">LIVE</span>
             </div>
           )}
@@ -82,7 +82,7 @@ export const PredictionCard = ({
           )}
         </div>
         <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors">
-          <MoreHorizontal className="w-4 h-4" />
+          <MoreHorizontal className="size-4" />
         </button>
       </div>
     </div>

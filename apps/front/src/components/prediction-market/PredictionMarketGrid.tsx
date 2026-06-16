@@ -110,7 +110,7 @@ function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMark
   return {
     id: safeId,
     title: item.title,
-    icon: <Icon className="h-5 w-5 text-white" />,
+    icon: <Icon className="size-5 text-white" />,
     iconBgColor,
     options: item.options?.map(opt => ({
       label: opt.label,
@@ -200,7 +200,7 @@ export const PredictionMarketGrid = () => {
         <div className="min-w-0 space-y-4">
           <div className="flex min-w-0 items-start gap-3 border-b border-[color:var(--cf-border)] pb-4">
             <div
-              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${selectedPrediction?.iconBgColor || 'bg-[#374151]'}`}
+              className={`flex size-8 flex-shrink-0 items-center justify-center rounded-lg ${selectedPrediction?.iconBgColor || 'bg-[#374151]'}`}
             >
               {selectedPrediction?.icon}
             </div>

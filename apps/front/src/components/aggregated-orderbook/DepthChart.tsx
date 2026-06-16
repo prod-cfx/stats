@@ -168,7 +168,7 @@ export const DepthChart: React.FC<DepthChartProps & { height?: number | string }
   }, [bids, asks, t]);
 
   return (
-    <div className="w-full h-full" style={{ minHeight: typeof height === 'number' ? `${height}px` : height }}>
+    <div className="size-full" style={{ minHeight: typeof height === 'number' ? `${height}px` : height }}>
       <LazyReactECharts
         option={option} 
         style={{ height: '100%', width: '100%' }}

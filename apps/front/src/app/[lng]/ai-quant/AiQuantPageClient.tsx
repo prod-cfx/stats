@@ -1675,7 +1675,7 @@ export function AiQuantPageClient({
           href={returnHref}
           className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
           <span>{lng === 'en' ? 'Back' : '返回'}</span>
         </Link>
         <div>
@@ -1799,14 +1799,14 @@ export function AiQuantPageClient({
         <Link
           href={returnHref}
           aria-label={lng === 'en' ? 'Back' : '返回'}
-          className="absolute left-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          className="absolute left-4 inline-flex size-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
         </Link>
         <div className="min-w-0 text-center leading-none">
           <div className="flex items-center justify-center gap-1.5">
-            <span className="bg-primary/10 text-primary inline-flex h-6 w-6 items-center justify-center rounded-lg">
-              <Bot className="h-3.5 w-3.5" />
+            <span className="bg-primary/10 text-primary inline-flex size-6 items-center justify-center rounded-lg">
+              <Bot className="size-3.5" />
             </span>
             <span className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">
               {t('aiQuant.chatTitle')}
@@ -1821,9 +1821,9 @@ export function AiQuantPageClient({
           data-testid="mobile-create-conversation-header"
           onClick={() => setMobileConversationSheetOpen(true)}
           aria-label={t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
-          className="text-primary absolute right-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] shadow-sm"
+          className="text-primary absolute right-4 inline-flex size-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] shadow-sm"
         >
-          <MessageSquarePlus className="h-5 w-5" />
+          <MessageSquarePlus className="size-5" />
         </button>
       </section>
 
@@ -1832,7 +1832,7 @@ export function AiQuantPageClient({
           href={returnHref}
           className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
           <span>{lng === 'en' ? 'Back' : '返回'}</span>
         </Link>
         <div className="flex items-center justify-end gap-2 sm:hidden">
@@ -1841,7 +1841,7 @@ export function AiQuantPageClient({
             data-testid="ai-quant-header-plaza-link"
             className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
             <span>{t('aiQuant.plazaShort')}</span>
           </Link>
           <Link
@@ -1849,7 +1849,7 @@ export function AiQuantPageClient({
             data-testid="ai-quant-header-api-link"
             className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            <KeyRound className="h-4 w-4" />
+            <KeyRound className="size-4" />
             <span>{t('aiQuant.configApiShort')}</span>
           </Link>
         </div>
@@ -1869,7 +1869,7 @@ export function AiQuantPageClient({
             href={`/${lng}/ai-quant/plaza`}
             className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
             <span className="sm:hidden">{t('aiQuant.plazaShort')}</span>
             <span className="hidden sm:inline">{t('aiQuant.plaza')}</span>
           </Link>
@@ -1877,7 +1877,7 @@ export function AiQuantPageClient({
             href={`/${lng}/account?tab=settings#exchange-api`}
             className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs leading-5 font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            <KeyRound className="h-4 w-4" />
+            <KeyRound className="size-4" />
             <span className="sm:hidden">{t('aiQuant.configApiShort')}</span>
             <span className="hidden sm:inline">{t('aiQuant.configApi')}</span>
           </Link>
@@ -2121,10 +2121,10 @@ export function AiQuantPageClient({
               <button
                 type="button"
                 onClick={() => setMobilePanelSheetOpen(false)}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 aria-label={t('common.close', { defaultValue: 'Close' })}
               >
-                <X className="h-4 w-4" />
+                <X className="size-4" />
               </button>
             </div>
             <div className="max-h-[calc(82dvh-4.75rem)] overflow-y-auto">

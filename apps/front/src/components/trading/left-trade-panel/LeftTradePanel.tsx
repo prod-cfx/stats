@@ -39,7 +39,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
   const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }), [locale])
 
   return (
-    <div className="w-full h-full bg-[color:var(--cf-surface)] flex flex-col p-4 text-[color:var(--cf-text)] overflow-y-auto no-scrollbar">
+    <div className="size-full bg-[color:var(--cf-surface)] flex flex-col p-4 text-[color:var(--cf-text)] overflow-y-auto no-scrollbar">
       {/* Open/Close Tabs */}
       <div className="flex bg-[color:var(--cf-surface-2)] rounded-md p-1 mb-4 flex-none">
         <button

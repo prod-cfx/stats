@@ -368,7 +368,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     <tr>
                       <td colSpan={8} className="py-10">
                         <div className="flex flex-col items-center justify-center text-[color:var(--cf-muted)]">
-                          <FileSearch className="w-10 h-10 opacity-50" />
+                          <FileSearch className="size-10 opacity-50" />
                           <span className="text-xs mt-2">{t('bottomPanel.noData')}</span>
                         </div>
                       </td>
@@ -475,7 +475,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     <tr>
                       <td colSpan={5} className="py-10">
                         <div className="flex flex-col items-center justify-center text-[color:var(--cf-muted)]">
-                          <FileSearch className="w-10 h-10 opacity-50" />
+                          <FileSearch className="size-10 opacity-50" />
                           <span className="text-xs mt-2">{t('bottomPanel.noData')}</span>
                         </div>
                       </td>
@@ -504,7 +504,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
         return (
           <div className="flex-1 flex flex-col items-center justify-center text-[color:var(--cf-muted)] min-h-[150px]">
             <div className="flex flex-col items-center gap-2 opacity-50">
-              <FileSearch className="w-10 h-10" />
+              <FileSearch className="size-10" />
               <span className="text-xs">{t('bottomPanel.noData')}</span>
             </div>
           </div>

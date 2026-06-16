@@ -124,10 +124,10 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                     className="group min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 text-left transition-all hover:border-primary/50 hover:bg-[color:var(--cf-surface-hover)] md:p-6"
                   >
                     <div 
-                      className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+                      className="size-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
                       style={{ backgroundColor: `${color}15`, color }}
                     >
-                      <Icon className="w-6 h-6" />
+                      <Icon className="size-6" />
                     </div>
                     
                     <h3 className="mb-2 break-words text-base font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary md:text-lg">

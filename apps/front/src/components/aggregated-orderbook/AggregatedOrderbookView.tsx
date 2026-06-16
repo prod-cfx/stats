@@ -15,7 +15,7 @@ const DepthChart = dynamic(
   () => import('@/components/aggregated-orderbook/DepthChart').then(mod => mod.DepthChart),
   {
     ssr: false,
-    loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+    loading: () => <div className="size-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
   },
 )
 
@@ -417,13 +417,13 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         className={`${isCompact ? 'h-8 min-w-24 pl-3 pr-8' : 'h-9 min-w-32 pl-3.5 pr-9'} relative rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-left !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] shadow-sm outline-none transition-colors hover:border-[color:var(--cf-muted)] focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60`}
                       >
                         {symbol}
-                        <ChevronDown className={`${isCompact ? 'right-2 h-3.5 w-3.5' : 'right-2.5 h-4 w-4'} pointer-events-none absolute top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)]`} />
+                        <ChevronDown className={`${isCompact ? 'right-2 size-3.5' : 'right-2.5 size-4'} pointer-events-none absolute top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)]`} />
                       </button>
 
                       {isSymbolMenuOpen && (
                         <div className={`${isCompact ? 'w-40' : 'w-48'} absolute left-0 top-full z-30 mt-2 overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-1.5 shadow-sm animate-in fade-in zoom-in-95 duration-150`}>
                           <div className="relative mb-1">
-                            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
+                            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
                             <input
                               value={symbolSearch}
                               onChange={event => setSymbolSearch(event.target.value)}
@@ -440,7 +440,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                                 className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[color:var(--cf-surface-hover)] ${market.base === symbol ? 'text-[color:var(--cf-text-strong)] !font-semibold' : 'text-[color:var(--cf-muted)] !font-normal'}`}
                               >
                                 <span className="!text-xs !leading-5">{market.base}</span>
-                                {market.base === symbol && <Check className="h-3.5 w-3.5 text-primary" />}
+                                {market.base === symbol && <Check className="size-3.5 text-primary" />}
                               </button>
                             ))}
                           </div>
@@ -484,7 +484,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           <button
                             type="button"
                             onClick={() => setDisplayMode('both')}
-                            className={`${isCompact ? 'h-6 w-6' : 'h-7 w-7'} relative flex items-center justify-center rounded-md transition-colors ${displayMode === 'both' ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-sm' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'}`}
+                            className={`${isCompact ? 'size-6' : 'size-7'} relative flex items-center justify-center rounded-md transition-colors ${displayMode === 'both' ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-sm' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                             aria-label={t('aggregatedOrderbook.displayMode.both', { defaultValue: 'Both sides' })}
                           >
                             <div className="relative z-10">
@@ -494,7 +494,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           <button
                             type="button"
                             onClick={() => setDisplayMode('bids')}
-                            className={`${isCompact ? 'h-6 w-6' : 'h-7 w-7'} relative flex items-center justify-center rounded-md transition-colors ${displayMode === 'bids' ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-sm' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'}`}
+                            className={`${isCompact ? 'size-6' : 'size-7'} relative flex items-center justify-center rounded-md transition-colors ${displayMode === 'bids' ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-sm' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                             aria-label={t('aggregatedOrderbook.displayMode.bids', { defaultValue: 'Bids only' })}
                           >
                             <div className="relative z-10">
@@ -504,7 +504,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           <button
                             type="button"
                             onClick={() => setDisplayMode('asks')}
-                            className={`${isCompact ? 'h-6 w-6' : 'h-7 w-7'} relative flex items-center justify-center rounded-md transition-colors ${displayMode === 'asks' ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-sm' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'}`}
+                            className={`${isCompact ? 'size-6' : 'size-7'} relative flex items-center justify-center rounded-md transition-colors ${displayMode === 'asks' ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-sm' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                             aria-label={t('aggregatedOrderbook.displayMode.asks', { defaultValue: 'Asks only' })}
                           >
                             <div className="relative z-10">
@@ -526,11 +526,11 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           <button
                             type="button"
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                            className={`${isCompact ? 'h-6 w-6' : 'h-8 w-8'} flex items-center justify-center rounded-lg transition-colors ${isSettingsOpen
+                            className={`${isCompact ? 'size-6' : 'size-8'} flex items-center justify-center rounded-lg transition-colors ${isSettingsOpen
                               ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-sm'
                               : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                           >
-                            <Settings className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
+                            <Settings className={isCompact ? 'size-3' : 'size-4'} />
                           </button>
 
                           {isSettingsOpen && (
@@ -544,11 +544,11 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                                   className="w-full flex items-center gap-2 px-2 py-1 rounded-md transition-colors hover:bg-[color:var(--cf-surface-hover)] group text-left"
                                 >
                                   <div
-                                    className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${selectedExchanges.includes(ex)
+                                    className={`size-3 rounded border flex items-center justify-center transition-all ${selectedExchanges.includes(ex)
                                       ? 'bg-primary border-primary'
                                       : 'border-[color:var(--cf-border)] group-hover:border-[color:var(--cf-muted)]'}`}
                                   >
-                                    {selectedExchanges.includes(ex) && <Check className="w-2 h-2 text-white" />}
+                                    {selectedExchanges.includes(ex) && <Check className="size-2 text-white" />}
                                   </div>
                                   <ExchangeLogo name={ex} size={isCompact ? 12 : 14} className="shrink-0" />
                                   <span
@@ -581,7 +581,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                       <div className={`!font-semibold text-[color:var(--cf-text-strong)] tracking-normal ${isCompact ? '!text-[11px] !leading-4' : '!text-[15px] !leading-[22px]'}`}>{t('aggregatedOrderbook.sections.orderDepth')}</div>
                       {!isCompact && (
                         <div className="flex items-center gap-2 text-yellow-500 cursor-help hover:opacity-80 transition-opacity">
-                          <Info className="w-4 h-4 hidden sm:block" />
+                          <Info className="size-4 hidden sm:block" />
                           <span className="!text-xs !font-semibold !leading-5">{t('aggregatedOrderbook.sections.liquidityHeatmap')}</span>
                         </div>
                       )}
@@ -594,11 +594,11 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         <div className="flex items-center justify-between mt-3 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] flex-none">
                           <div className="flex items-center gap-8">
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-green-500/50 rounded-sm" />
+                              <div className="size-3 bg-green-500/50 rounded-sm" />
                               <span>{t('aggregatedOrderbook.legend.bids')}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-red-500/50 rounded-sm" />
+                              <div className="size-3 bg-red-500/50 rounded-sm" />
                               <span>{t('aggregatedOrderbook.legend.asks')}</span>
                             </div>
                           </div>

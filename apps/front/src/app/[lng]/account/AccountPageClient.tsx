@@ -167,9 +167,9 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                         ? t('account.hideEmail', { defaultValue: '隐藏邮箱' })
                         : t('account.showEmail', { defaultValue: '显示完整邮箱' })}
                       onClick={() => setShowAccountEmail(previous => !previous)}
-                      className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors duration-150 hover:border-primary/40 hover:bg-[color:var(--cf-surface-hover)] hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors duration-150 hover:border-primary/40 hover:bg-[color:var(--cf-surface-hover)] hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     >
-                      {showAccountEmail ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showAccountEmail ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                     </button>
                   )}
                 </div>
@@ -184,7 +184,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                     }}
                     className="rounded-md p-1 transition hover:bg-[color:var(--cf-surface-hover)] hover:text-violet-500"
                   >
-                    <Copy className="h-4 w-4" />
+                    <Copy className="size-4" />
                   </button>
                 </div>
               </div>
@@ -199,7 +199,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
               }}
               className="inline-flex w-fit self-end items-center gap-2 rounded-full border border-[color:var(--cf-border)] px-4 py-2 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 md:self-auto"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="size-4" />
               {t('account.logout')}
             </button>
           </section>
@@ -209,8 +209,8 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
             <div className="overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
               <div className="flex min-h-[72px] flex-col gap-3 border-b border-[color:var(--cf-border)] px-5 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)]">
-                    <Mail className="h-4 w-4" />
+                  <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)]">
+                    <Mail className="size-4" />
                   </span>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t('account.loginMethods')}</p>
@@ -259,8 +259,8 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
 
               <div className="flex min-h-[72px] flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-sky-500">
-                    <Send className="h-4 w-4" />
+                  <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-sky-500">
+                    <Send className="size-4" />
                   </span>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t('account.telegramLogin')}</p>

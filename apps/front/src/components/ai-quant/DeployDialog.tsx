@@ -97,7 +97,7 @@ export function DeployDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-4">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div
         role="dialog"
         aria-modal="true"
@@ -171,7 +171,7 @@ export function DeployDialog({
         </div>
 
         {marketType === 'perp' && leverageOptions.length > 0 && (
-          <div className="mt-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] px-3 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
+          <div className="mt-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
             <p className="!font-semibold text-[color:var(--cf-text-strong)]">{isEn ? 'Allowed Leverage Range' : '允许杠杆范围'}</p>
             <p className="mt-1">{leverageRangeLabel}</p>
             {deploymentBaseline && (
@@ -210,7 +210,7 @@ export function DeployDialog({
             aria-busy={deploySubmitting}
             className="from-primary to-secondary inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {deploySubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {deploySubmitting && <Loader2 className="size-4 animate-spin" />}
             {deploySubmitting ? submittingLabel : confirmLabel}
           </button>
           <button

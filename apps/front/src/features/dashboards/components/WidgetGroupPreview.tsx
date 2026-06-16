@@ -61,7 +61,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
         onClick={onBack}
         className="flex items-center gap-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="size-4" />
         <span className="text-sm">{t('widget.config.back')}</span>
       </button>
 
@@ -95,7 +95,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
             <div className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg h-32 flex items-center justify-center relative overflow-hidden">
               {/* Simplified visual preview based on type */}
               {item.type.includes('kline') && (
-                <div className="w-full h-full flex items-end justify-around px-4 pb-4">
+                <div className="size-full flex items-end justify-around px-4 pb-4">
                   {klinePreviewBars.map(bar => (
                     <div
                       key={bar.key}
@@ -109,7 +109,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 <div className="w-full p-4 space-y-2">
                   {['yes', 'no', 'other'].map(item => (
                     <div key={item} className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-primary/60" />
+                      <div className="size-2 rounded-full bg-primary/60" />
                       <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-8 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                     </div>
@@ -120,7 +120,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 <div className="w-full p-4 space-y-1.5">
                   {['asset', 'company', 'holding', 'change'].map(item => (
                     <div key={item} className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded bg-primary/20" />
+                      <div className="size-4 rounded bg-primary/20" />
                       <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-10 h-2 bg-primary/40 rounded" />
                     </div>
@@ -159,7 +159,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 </div>
               )}
               {item.type.includes('liquidation.map') && (
-                <div className="w-full h-full p-4">
+                <div className="size-full p-4">
                   <div className="h-full flex items-end justify-around">
                     {liquidationHeatPreviewBars.map(bar => (
                       <div
@@ -172,7 +172,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 </div>
               )}
               {(item.type.includes('open_interest') || item.type.includes('volume')) && (
-                <div className="w-full h-full p-4 flex items-end justify-around">
+                <div className="size-full p-4 flex items-end justify-around">
                   {volumePreviewBars.map(bar => (
                     <div
                       key={bar.key}
@@ -186,7 +186,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 <div className="w-full p-4 space-y-1.5">
                   {['one', 'two', 'three', 'four'].map(item => (
                     <div key={item} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500/40" />
+                      <div className="size-3 rounded-full bg-red-500/40" />
                       <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-12 h-2 bg-red-500/30 rounded" />
                     </div>

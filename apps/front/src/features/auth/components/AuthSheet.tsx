@@ -182,10 +182,10 @@ export function AuthSheet({
           type="button"
           data-testid="auth-sheet-close"
           onClick={() => onOpenChange(false)}
-          className="-mr-2 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          className="-mr-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           aria-label={t('common.close', { defaultValue: 'Close' })}
         >
-          <X className="h-5 w-5" />
+          <X className="size-5" />
         </button>
       </div>
 

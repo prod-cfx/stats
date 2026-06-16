@@ -46,7 +46,7 @@ const SummaryCard = ({
   <div className="mb-5 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-sm">
     <div className="flex flex-col items-center gap-4 lg:flex-row lg:gap-6">
       <div className="flex w-full min-w-[140px] items-center gap-3 md:min-w-[180px] lg:w-auto">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-yellow-500/20 bg-yellow-500/10">
+        <div className="flex size-9 flex-shrink-0 items-center justify-center rounded-full border border-yellow-500/20 bg-yellow-500/10">
           <span className="text-base font-semibold text-yellow-500">₿</span>
         </div>
         <div className="flex flex-col">
@@ -206,7 +206,7 @@ export function LongShortRatioClient() {
               }, 500)
             }}
           >
-            <RefreshCw className="w-3.5 h-3.5 refresh-icon" />
+            <RefreshCw className="size-3.5 refresh-icon" />
           </button>
         </div>
       </div>

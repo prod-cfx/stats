@@ -34,7 +34,7 @@ export function NavbarMobileMenu({
     <div className="animate-in slide-in-from-top-10 fixed inset-0 z-[60] flex flex-col bg-[color:var(--cf-bg)] duration-200 md:hidden">
       <div className="flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] px-4">
         <div className="flex items-center">
-          <CoinfluxMark className="h-7 w-7" />
+          <CoinfluxMark className="size-7" />
           <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)]">
             oinflux
           </span>
@@ -45,7 +45,7 @@ export function NavbarMobileMenu({
           onClick={onClose}
           className="p-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
         >
-          <X className="h-6 w-6" />
+          <X className="size-6" />
         </button>
       </div>
 
@@ -67,7 +67,7 @@ export function NavbarMobileMenu({
                 >
                   {link.name}
                   <ChevronDown
-                    className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    className={`size-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                   />
                 </button>
 
@@ -104,7 +104,7 @@ export function NavbarMobileMenu({
               className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)]"
             >
               <span>{link.name}</span>
-              <ChevronRight className="h-5 w-5 text-[color:var(--cf-muted)]" />
+              <ChevronRight className="size-5 text-[color:var(--cf-muted)]" />
             </Link>
           )
         })}
@@ -115,7 +115,7 @@ export function NavbarMobileMenu({
             onClick={onOpenLogin}
             className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-primary to-secondary px-4 py-3 text-base font-semibold !text-white shadow-sm transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
-            <LogIn className="h-4 w-4 !text-white" aria-hidden="true" />
+            <LogIn className="size-4 !text-white" aria-hidden="true" />
             {t('nav.login')}
           </button>
         )}
@@ -123,7 +123,7 @@ export function NavbarMobileMenu({
         <div className="mt-auto border-t border-[color:var(--cf-border)]/70 pt-6">
           <div className="flex flex-col items-center gap-3">
             <Link href={withLng('/')} onClick={onClose} className="flex items-center no-underline">
-              <CoinfluxMark className="h-7 w-7" />
+              <CoinfluxMark className="size-7" />
               <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)]">
                 oinflux
               </span>
@@ -135,26 +135,26 @@ export function NavbarMobileMenu({
               <button
                 type="button"
                 onClick={onFooterSocialClick}
-                className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+                className="flex size-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                 aria-label="Telegram"
               >
-                <Send className="h-5 w-5" />
+                <Send className="size-5" />
               </button>
               <button
                 type="button"
                 onClick={onFooterSocialClick}
-                className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+                className="flex size-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                 aria-label="X"
               >
-                <X className="h-5 w-5" />
+                <X className="size-5" />
               </button>
               <button
                 type="button"
                 onClick={onFooterSocialClick}
-                className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+                className="flex size-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                 aria-label="GitHub"
               >
-                <Github className="h-5 w-5" />
+                <Github className="size-5" />
               </button>
               <button
                 type="button"
@@ -164,7 +164,7 @@ export function NavbarMobileMenu({
                 }}
                 className="flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-[color:var(--cf-muted)] no-underline transition-colors hover:text-[color:var(--cf-text-strong)]"
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="size-4" />
                 {t('nav.docs', { defaultValue: '文档' })}
               </button>
             </div>

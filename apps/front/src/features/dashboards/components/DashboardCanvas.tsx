@@ -238,7 +238,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   const marginY = 6
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className="flex size-full flex-col overflow-hidden">
       <DashboardHeader dashboard={doc} onRefresh={() => setDoc(getDashboard(props.dashboardId)!)} />
 
       <div className="mb-6 flex items-center gap-4">
@@ -247,7 +247,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
           onClick={() => setIsModalOpen(true)}
           className="from-primary to-secondary shadow-primary/20 rounded bg-gradient-to-r px-4 py-2 text-sm font-medium text-white shadow-lg transition-all active:scale-95"
         >
-          <Plus className="mr-1 inline h-4 w-4" />
+          <Plus className="mr-1 inline size-4" />
           {t('dashboard.addWidget')}
         </button>
         <button
@@ -255,7 +255,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
           onClick={handleResetLayout}
           className="rounded border border-[color:var(--cf-border)] px-4 py-2 text-sm text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
         >
-          <LayoutIcon className="mr-1 inline h-4 w-4" />
+          <LayoutIcon className="mr-1 inline size-4" />
           {t('dashboard.resetLayout')}
         </button>
       </div>

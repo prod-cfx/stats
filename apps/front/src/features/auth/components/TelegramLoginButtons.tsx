@@ -120,7 +120,7 @@ export function TelegramLoginButtons({
           }}
           className={webButtonClassName}
         >
-          <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+          <Send className="size-4 text-violet-500 dark:text-violet-400" />
           {webButtonText}
         </button>
 
@@ -156,9 +156,9 @@ export function TelegramLoginButtons({
             className={desktopButtonClassName}
           >
             {variant === 'compact' ? (
-              <Check className="h-4 w-4 rounded-full bg-emerald-500/10 p-0.5 text-emerald-500" />
+              <Check className="size-4 rounded-full bg-emerald-500/10 p-0.5 text-emerald-500" />
             ) : (
-              <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+              <Send className="size-4 text-violet-500 dark:text-violet-400" />
             )}
             {desktopButtonText}
           </button>

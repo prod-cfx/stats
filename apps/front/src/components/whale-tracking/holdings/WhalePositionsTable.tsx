@@ -50,14 +50,14 @@ const SortIndicator = ({
 }) => {
   if (sortField !== field) {
     return (
-      <ArrowUpDown className="ml-1 h-4 w-4 flex-shrink-0 text-[#8b949e] opacity-30 transition-opacity group-hover:opacity-100" />
+      <ArrowUpDown className="ml-1 size-4 flex-shrink-0 text-[#8b949e] opacity-30 transition-opacity group-hover:opacity-100" />
     )
   }
 
   return sortOrder === 'desc' ? (
-    <ChevronDown className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
+    <ChevronDown className="text-primary ml-1 size-4 flex-shrink-0" />
   ) : (
-    <ChevronUp className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
+    <ChevronUp className="text-primary ml-1 size-4 flex-shrink-0" />
   )
 }
 
@@ -359,7 +359,7 @@ export const WhalePositionsTable = () => {
                           handleCopy(pos.address)
                         }}
                       >
-                        {copiedAddress === pos.address ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedAddress === pos.address ? <Check className="size-4" /> : <Copy className="size-4" />}
                       </button>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -383,7 +383,7 @@ export const WhalePositionsTable = () => {
                       handleShowStats(pos.address)
                     }}
                   >
-                    <TrendingUp className="h-4 w-4" />
+                    <TrendingUp className="size-4" />
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 !text-xs !font-normal !leading-5">
@@ -517,9 +517,9 @@ export const WhalePositionsTable = () => {
                             }}
                           >
                             {copiedAddress === pos.address ? (
-                              <Check className="h-3.5 w-3.5" />
+                              <Check className="size-3.5" />
                             ) : (
-                              <Copy className="h-3.5 w-3.5" />
+                              <Copy className="size-3.5" />
                             )}
                           </button>
                         </div>
@@ -596,13 +596,13 @@ export const WhalePositionsTable = () => {
                     <td className="px-4 py-3 text-center">
                       <button
                         type="button"
-                        className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                        className="mx-auto flex size-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                         onClick={e => {
                           e.stopPropagation()
                           handleShowStats(pos.address)
                         }}
                       >
-                        <TrendingUp className="h-4 w-4" />
+                        <TrendingUp className="size-4" />
                       </button>
                     </td>
                   </tr>

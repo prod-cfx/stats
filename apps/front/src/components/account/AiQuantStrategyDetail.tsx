@@ -921,7 +921,7 @@ export function AiQuantStrategyDetail({
         <section className="min-w-0 space-y-4">
           <section className="relative overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
             <div
-              className="pointer-events-none absolute -top-24 right-[-88px] h-64 w-64 rounded-full bg-emerald-500/10"
+              className="pointer-events-none absolute -top-24 right-[-88px] size-64 rounded-full bg-emerald-500/10"
               aria-hidden="true"
             />
             <div className="flex flex-col gap-3 border-b border-[color:var(--cf-border)] px-5 py-4">
@@ -931,7 +931,7 @@ export function AiQuantStrategyDetail({
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 !text-xs font-semibold ${STATUS_CLASS[strategy.status]}`}
                     >
-                      <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
+                      <span className="size-2 rounded-full bg-current" aria-hidden="true" />
                       {semanticHeadline ?? t(`aiQuant.status.${strategy.status}`)}
                     </span>
                   </div>
@@ -956,15 +956,15 @@ export function AiQuantStrategyDetail({
                       </span>
                       <button
                         type="button"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                        className="inline-flex size-5 items-center justify-center rounded text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                         aria-label="复制策略实例 ID"
                         title="复制策略实例 ID"
                         onClick={() => void copyIdentifier('strategy', strategy.id)}
                       >
                         {copiedField === 'strategy' ? (
-                          <Check className="h-3 w-3" aria-hidden="true" />
+                          <Check className="size-3" aria-hidden="true" />
                         ) : (
-                          <Copy className="h-3 w-3" aria-hidden="true" />
+                          <Copy className="size-3" aria-hidden="true" />
                         )}
                       </button>
                     </span>
@@ -978,7 +978,7 @@ export function AiQuantStrategyDetail({
                       </span>
                       <button
                         type="button"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex size-5 items-center justify-center rounded text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label="复制发布快照 ID"
                         title="复制发布快照 ID"
                         disabled={!strategy.publishedSnapshotId}
@@ -987,9 +987,9 @@ export function AiQuantStrategyDetail({
                         }
                       >
                         {copiedField === 'snapshot' ? (
-                          <Check className="h-3 w-3" aria-hidden="true" />
+                          <Check className="size-3" aria-hidden="true" />
                         ) : (
-                          <Copy className="h-3 w-3" aria-hidden="true" />
+                          <Copy className="size-3" aria-hidden="true" />
                         )}
                       </button>
                     </span>
@@ -1145,7 +1145,7 @@ export function AiQuantStrategyDetail({
                         disabled={runtimeActionDisabled}
                         className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-1.5 text-xs leading-5 !font-semibold whitespace-nowrap text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
                       >
-                        <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                        <Play className="size-4 fill-current" aria-hidden="true" />
                         {t('aiQuant.detail.run')}
                       </button>
                     )}
@@ -1290,11 +1290,11 @@ export function AiQuantStrategyDetail({
               {series.length > 1 && (
                 <>
                   <span
-                    className="absolute top-[48%] left-[41%] h-3 w-3 rounded-full border-2 border-[color:var(--cf-surface)] bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.22)]"
+                    className="absolute top-[48%] left-[41%] size-3 rounded-full border-2 border-[color:var(--cf-surface)] bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.22)]"
                     title={t('aiQuant.detail.latestEntry')}
                   />
                   <span
-                    className="bg-primary absolute top-[28%] right-[8%] h-3 w-3 rounded-full border-2 border-[color:var(--cf-surface)] shadow-[0_0_0_3px_rgba(99,91,255,0.22)]"
+                    className="bg-primary absolute top-[28%] right-[8%] size-3 rounded-full border-2 border-[color:var(--cf-surface)] shadow-[0_0_0_3px_rgba(99,91,255,0.22)]"
                     title={t('aiQuant.detail.currentPosition')}
                   />
                 </>
@@ -1903,7 +1903,7 @@ export function AiQuantStrategyDetail({
               </p>
               <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4">
                 <p className="inline-flex items-center gap-2 text-sm !font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
+                  <span className="size-2 rounded-full bg-current" aria-hidden="true" />
                   {strategy.status === 'running'
                     ? t('aiQuant.detail.runtimeOnline')
                     : t('aiQuant.detail.runtimeOffline')}
@@ -1950,7 +1950,7 @@ export function AiQuantStrategyDetail({
                     disabled={runtimeActionDisabled}
                     className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs leading-5 !font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
                   >
-                    <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                    <Play className="size-4 fill-current" aria-hidden="true" />
                     {t('aiQuant.detail.run')}
                   </button>
                 )}
@@ -2120,7 +2120,7 @@ export function AiQuantStrategyDetail({
               disabled={runtimeActionDisabled}
               className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs leading-5 !font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
             >
-              <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+              <Play className="size-4 fill-current" aria-hidden="true" />
               {t('aiQuant.detail.run')}
             </button>
           )}

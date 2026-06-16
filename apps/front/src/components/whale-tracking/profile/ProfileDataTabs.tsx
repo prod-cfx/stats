@@ -769,12 +769,12 @@ function useProfileDataTabsRender({
   const renderSortIcon = (field: string) => {
     if (sortField !== field)
       return (
-        <ArrowUpDownIcon className="h-3 w-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
+        <ArrowUpDownIcon className="size-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
       )
     return sortOrder === 'desc' ? (
-      <ChevronDownIcon className="text-primary h-3 w-3" />
+      <ChevronDownIcon className="text-primary size-3" />
     ) : (
-      <ChevronUpIcon className="text-primary h-3 w-3" />
+      <ChevronUpIcon className="text-primary size-3" />
     )
   }
 
@@ -914,7 +914,7 @@ function useProfileDataTabsRender({
             onClick={() => {
               dispatchTableView({ type: 'selectTab', tab: tab.id as TabType })
             }}
-            className={`group relative flex-shrink-0 px-4 py-4 text-sm font-bold transition-all md:px-6 ${
+            className={`group relative flex-shrink-0 p-4 text-sm font-bold transition-all md:px-6 ${
               activeTab === tab.id
                 ? 'text-[color:var(--cf-text-strong)]'
                 : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -996,7 +996,7 @@ function useProfileDataTabsRender({
                 <button type="button" className="w-full text-left" onClick={() => toggleOrderExpansion(orderKey)}>
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{order.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(order.timestamp)}</div></div>
-                    <div className="flex items-center gap-2">{renderSideBadge(order.side)}<ChevronDownIcon className={`h-4 w-4 text-[color:var(--cf-muted)] ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`} /></div>
+                    <div className="flex items-center gap-2">{renderSideBadge(order.side)}<ChevronDownIcon className={`size-4 text-[color:var(--cf-muted)] ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`} /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.value')}</div><div className="font-semibold text-[color:var(--cf-text-strong)]">{order.value}</div></div>
@@ -1093,7 +1093,7 @@ function useProfileDataTabsRender({
                       className="absolute left-0 z-30 mt-2 w-48 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-2 shadow-2xl"
                     >
                       <div className="relative mb-2">
-                        <SearchIcon className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
+                        <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
                         <input
                           ref={assetFilterInputRef}
                           type="text"
@@ -1110,7 +1110,7 @@ function useProfileDataTabsRender({
                             onClick={() => dispatchTableView({ type: 'clearAssetFilter' })}
                             className="absolute top-1/2 right-2 -translate-y-1/2"
                           >
-                            <XIcon className="h-3 w-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]" />
+                            <XIcon className="size-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]" />
                           </button>
                         )}
                       </div>
@@ -1571,7 +1571,7 @@ function useProfileDataTabsRender({
                           type="button"
                           className={`text-[color:var(--cf-muted)] transition-all hover:text-[color:var(--cf-text-strong)] ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`}
                         >
-                          <ChevronDownIcon className="h-4 w-4" />
+                          <ChevronDownIcon className="size-4" />
                         </button>
                       </td>
                     </tr>
@@ -1645,7 +1645,7 @@ function useProfileDataTabsRender({
                       type="button"
                       className="text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      <svg className="inline-block h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="inline-block size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -1716,8 +1716,8 @@ function useProfileDataTabsRender({
                     <td className="px-6 py-4 text-right">
                       {order.status === 'filled' ? (
                         <div className="flex items-center justify-end gap-1.5 text-green-500 dark:text-green-400">
-                          <div className="flex h-4 w-4 items-center justify-center rounded-full border border-green-500 dark:border-green-400">
-                            <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor">
+                          <div className="flex size-4 items-center justify-center rounded-full border border-green-500 dark:border-green-400">
+                            <svg className="size-2.5" viewBox="0 0 10 10" fill="currentColor">
                               <path d="M3.5 6.5l-2-2L1 5l2.5 2.5L9 2l-.5-.5L3.5 6.5z" />
                             </svg>
                           </div>
@@ -1725,7 +1725,7 @@ function useProfileDataTabsRender({
                       ) : order.status === 'cancelled' ? (
                         <div className="flex items-center justify-end gap-1.5 text-[color:var(--cf-muted)]">
                           <svg
-                            className="h-4 w-4"
+                            className="size-4"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"

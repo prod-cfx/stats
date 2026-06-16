@@ -272,7 +272,7 @@ describe('StopRunningStrategyDialog', () => {
     const actions = container.querySelector('[data-testid="stop-dialog-actions"]')
     const detailRows = container.querySelectorAll('[data-testid="stop-dialog-detail-row"]')
 
-    expect(overlay?.className).toContain('py-4')
+    expect(overlay?.className).toContain('p-4')
     expect(panel?.className).toContain('max-h-[calc(100dvh-2rem)]')
     expect(panel?.className).toContain('overflow-y-auto')
     expect(actions?.className).toContain('grid')

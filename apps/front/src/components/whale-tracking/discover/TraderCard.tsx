@@ -142,7 +142,7 @@ export const TraderCard = ({
     <div className="gradient-border-hover group flex h-full flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5">
       <div className="flex justify-between items-start gap-3">
         <div className="flex min-w-0 items-center gap-3 overflow-visible md:gap-4">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full !text-sm !font-semibold !leading-[22px] md:h-11 md:w-11" style={avatarStyle}>
+          <div className="flex size-10 flex-shrink-0 items-center justify-center rounded-full !text-sm !font-semibold !leading-[22px] md:h-11 md:w-11" style={avatarStyle}>
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
@@ -160,7 +160,7 @@ export const TraderCard = ({
                 <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
               </div>
               <button type="button" aria-label={tr('common.copy', '复制地址', 'Copy address')} className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
-                {hasCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                {hasCopied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
               </button>
             </div>
             {tag && <span className="text-[color:var(--cf-muted)] text-caption font-medium uppercase truncate">{tag}</span>}
@@ -169,13 +169,13 @@ export const TraderCard = ({
         <button 
           type="button"
           aria-label={tr('whaleTracking.discover.actions.showStats', '查看交易统计', 'Show trading stats')}
-          className="ml-2 flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+          className="ml-2 flex size-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
           }}
         >
-          <TrendingUp className="w-5 h-5" />
+          <TrendingUp className="size-5" />
         </button>
       </div>
 
@@ -217,20 +217,20 @@ export const TraderCard = ({
             <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
           </div>
           <button type="button" aria-label={tr('common.copy', '复制地址', 'Copy address')} className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
-            {hasCopied ? <Check className="w-4.5 h-4.5 text-green-500" /> : <Copy className="w-4.5 h-4.5" />}
+            {hasCopied ? <Check className="size-4.5 text-green-500" /> : <Copy className="size-4.5" />}
           </button>
           {handle && <span className="min-w-0 break-all !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:ml-2">{handle}</span>}
         </div>
         <button 
           type="button"
           aria-label={tr('whaleTracking.discover.actions.showStats', '查看交易统计', 'Show trading stats')}
-          className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+          className="flex size-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
           }}
         >
-          <TrendingUp className="w-5 h-5" />
+          <TrendingUp className="size-5" />
         </button>
       </div>
 
@@ -267,7 +267,7 @@ export const TraderCard = ({
                   className={`flex cursor-help items-center gap-1 rounded-md px-2.5 py-1 !text-xs !font-semibold !leading-5 ${styles.colorClass} ${styles.bgClass}`}
                 >
                   {resolveAiTagLabel(tag.key)}
-                  <Info className="w-3 h-3 opacity-50" />
+                  <Info className="size-3 opacity-50" />
                 </span>
                 {/* Simple CSS Tooltip */}
                 <div className="invisible pointer-events-none absolute bottom-full left-0 z-20 mb-2 max-w-[220px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-[10px] text-[color:var(--cf-text)] whitespace-normal opacity-0 shadow-sm transition-opacity group-hover/tag:visible group-hover/tag:opacity-100 md:left-1/2 md:max-w-none md:-translate-x-1/2 md:whitespace-nowrap">

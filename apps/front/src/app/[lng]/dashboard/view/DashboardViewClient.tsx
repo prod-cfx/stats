@@ -43,7 +43,7 @@ export function DashboardViewClient() {
   if (!dashboardId) {
     return (
       <main className="flex min-h-0 flex-1">
-        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-8">
           <div className="mx-auto w-full max-w-[1440px]">
             <div className="text-[#8b949e]">{t('dashboard.view.missingId')}</div>
           </div>
@@ -56,7 +56,7 @@ export function DashboardViewClient() {
     return (
       <main className="flex min-h-0 flex-1 flex-col md:flex-row">
         <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
-        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8" />
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-8" />
       </main>
     )
   }
@@ -65,13 +65,13 @@ export function DashboardViewClient() {
     return (
       <main className="flex min-h-0 flex-1 flex-col md:flex-row">
         <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
-        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-8">
           <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
             <Link
               href={`/${lng}/dashboard/`}
               className="flex w-fit items-center gap-2 text-sm text-[#8b949e] transition-colors hover:text-white"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="size-4" />
               <span>{t('dashboard.view.backToList')}</span>
             </Link>
             <div className="py-20 text-center text-[#8b949e]">{t('dashboard.view.notFound')}</div>
@@ -85,20 +85,20 @@ export function DashboardViewClient() {
     <main className="flex min-h-0 flex-1 flex-col md:flex-row">
       <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
 
-      <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
+      <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-8">
         <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
           <Link
             href={`/${lng}/dashboard/`}
             className="flex w-fit items-center gap-2 text-sm text-[#8b949e] transition-colors hover:text-white"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             <span>{t('dashboard.view.backToList')}</span>
           </Link>
 
           <div className="flex min-w-0 items-center gap-4">
             {dashboard.thumbnail ? (
-              <div className="border-primary/30 relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border">
-                <Image src={dashboard.thumbnail} alt="" fill sizes="56px" className="h-full w-full object-cover" unoptimized />
+              <div className="border-primary/30 relative size-14 flex-shrink-0 overflow-hidden rounded-lg border">
+                <Image src={dashboard.thumbnail} alt="" fill sizes="56px" className="size-full object-cover" unoptimized />
               </div>
             ) : null}
             <div className="min-w-0">

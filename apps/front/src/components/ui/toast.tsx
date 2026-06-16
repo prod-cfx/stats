@@ -113,8 +113,8 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     >
       <div className={`absolute inset-y-2 left-0 w-0.5 rounded-full ${style.accentClassName}`} />
       <div className="flex items-start gap-2.5">
-        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${style.iconClassName}`}>
-          <Icon className="h-4 w-4" />
+        <span className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${style.iconClassName}`}>
+          <Icon className="size-4" />
         </span>
 
         <div className="min-w-0 flex-1">
@@ -128,9 +128,9 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           type="button"
           aria-label="Dismiss notification"
           onClick={() => onRemove(toast.id)}
-          className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </button>
       </div>
     </div>

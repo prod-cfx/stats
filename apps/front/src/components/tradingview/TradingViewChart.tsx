@@ -3395,8 +3395,8 @@ export const TradingViewChart = (
     }, [liqData])
 
     return (
-      <div className="relative h-full w-full">
-        <div ref={containerRef} id={containerId} className="h-full w-full" />
+      <div className="relative size-full">
+        <div ref={containerRef} id={containerId} className="size-full" />
 
         {/* 清算地图 overlay（右侧堆叠条/累积曲线，对齐价格轴） */}
         {/* Fallback：
@@ -3476,7 +3476,7 @@ export const TradingViewChart = (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2 w-2 rounded-sm"
+                      className="inline-block size-2 rounded-sm"
                       style={{ backgroundColor: '#36b8c9' }}
                     />
                     <span>Bybit</span>
@@ -3488,7 +3488,7 @@ export const TradingViewChart = (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2 w-2 rounded-sm"
+                      className="inline-block size-2 rounded-sm"
                       style={{ backgroundColor: '#f7d05e' }}
                     />
                     <span>OKX</span>
@@ -3498,7 +3498,7 @@ export const TradingViewChart = (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2 w-2 rounded-sm"
+                      className="inline-block size-2 rounded-sm"
                       style={{ backgroundColor: '#f08024' }}
                     />
                     <span>Binance</span>
@@ -3510,7 +3510,7 @@ export const TradingViewChart = (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2 w-2 rounded-sm"
+                      className="inline-block size-2 rounded-sm"
                       style={{ backgroundColor: '#bf5af2' }}
                     />
                     <span>DEX</span>
@@ -3523,7 +3523,7 @@ export const TradingViewChart = (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2 w-2 rounded-sm"
+                      className="inline-block size-2 rounded-sm"
                       style={{ backgroundColor: '#ef4444' }}
                     />
                     <span>{t('chart.indicators.cumulativeLong')}</span>
@@ -3535,7 +3535,7 @@ export const TradingViewChart = (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2 w-2 rounded-sm"
+                      className="inline-block size-2 rounded-sm"
                       style={{ backgroundColor: '#22c55e' }}
                     />
                     <span>{t('chart.indicators.cumulativeShort')}</span>
@@ -3551,7 +3551,7 @@ export const TradingViewChart = (
 
         {!isReady && !error && (
           <div className="text-muted-foreground absolute inset-0 flex items-center justify-center text-sm">
-            Loading chart...
+            Loading chart…
           </div>
         )}
 

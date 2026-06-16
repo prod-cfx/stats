@@ -105,7 +105,7 @@ describe('AuthSheet', () => {
     expect(panel?.className).toContain('md:rounded-lg')
     expect(panel?.className).toContain('bg-[color:var(--cf-surface)]')
     expect(panel?.className).not.toContain('bg-white')
-    expect(close?.className).toContain('h-10')
+    expect(close?.className).toContain('size-10')
     expect(telegram?.getAttribute('data-redirect')).toBe('/zh/ai-quant')
   })
 

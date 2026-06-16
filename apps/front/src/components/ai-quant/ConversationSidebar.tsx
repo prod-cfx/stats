@@ -126,11 +126,11 @@ function ConversationListItem({
             </span>
             {active && (
               <span
-                className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-violet-600 dark:text-violet-300"
+                className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-violet-600 dark:text-violet-300"
                 aria-label={t('aiQuant.current')}
                 title={t('aiQuant.current')}
               >
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="size-4" />
               </span>
             )}
           </span>
@@ -144,10 +144,10 @@ function ConversationListItem({
           onClick={() => {
             onBeginRename(item)
           }}
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+          className={`inline-flex size-7 items-center justify-center rounded-full border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
           aria-label={t('common.rename', { defaultValue: 'Rename' })}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil className="size-3.5" />
         </button>
         <button
           type="button"
@@ -155,10 +155,10 @@ function ConversationListItem({
           onClick={() => {
             onDelete(item.id)
           }}
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-red-400' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400'}`}
+          className={`inline-flex size-7 items-center justify-center rounded-full border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-red-400' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400'}`}
           aria-label={t('common.delete', { defaultValue: 'Delete' })}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="size-3.5" />
         </button>
       </div>
     </div>
@@ -257,7 +257,7 @@ export function ConversationSidebar({
                 {getMobileSummary(t, items)}
               </span>
             </span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-[color:var(--cf-muted)]" />
+            <ChevronDown className="size-4 shrink-0 text-[color:var(--cf-muted)]" />
           </button>
         )}
 
@@ -291,10 +291,10 @@ export function ConversationSidebar({
                   type="button"
                   ref={mobileCloseButtonRef}
                   onClick={() => setMobileSheetOpen(false)}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] shadow-sm hover:text-[color:var(--cf-text-strong)]"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] shadow-sm hover:text-[color:var(--cf-text-strong)]"
                   aria-label={t('common.close', { defaultValue: 'Close' })}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="size-4" />
                 </button>
               </div>
 

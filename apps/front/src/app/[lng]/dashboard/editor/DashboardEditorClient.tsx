@@ -25,14 +25,14 @@ export function DashboardEditorClient() {
       <DashboardEditorSidebar dashboardId={dashboardId} />
 
       {/* Content Area */}
-      <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
+      <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-8">
         <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
           {/* Back Button */}
           <Link
             href={`/${lng}/dashboard/?tab=saved`}
             className="flex w-fit items-center gap-2 text-sm text-[#8b949e] transition-colors hover:text-white"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             <span>{t('dashboard.editor.backToList')}</span>
           </Link>
 

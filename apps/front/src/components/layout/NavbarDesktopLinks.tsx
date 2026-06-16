@@ -32,7 +32,7 @@ export function NavbarDesktopLinks({ links, pathname, aiQuantHref, homeHref }: N
                 }`}
               >
                 {link.name}
-                <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
+                <ChevronDown className="size-3.5 transition-transform group-hover:rotate-180" />
                 {isActive && (
                   <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-[2px] bg-gradient-to-r" />
                 )}

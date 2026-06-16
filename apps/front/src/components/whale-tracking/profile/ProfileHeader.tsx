@@ -65,13 +65,13 @@ export const ProfileHeader = ({
     <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
       <div className="flex flex-col gap-3">
         <div className="flex min-w-0 items-center gap-3 md:gap-4">
-          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]">
+          <div className="flex size-10 items-center justify-center overflow-hidden rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]">
             <Image
               src={`https://api.dicebear.com/7.x/identicon/svg?seed=${address}`}
               alt="avatar"
               width={40}
               height={40}
-              className="h-full w-full"
+              className="size-full"
               unoptimized
             />
           </div>
@@ -93,9 +93,9 @@ export const ProfileHeader = ({
               title={t('whaleTracking.profile.header.copyAddress')}
             >
               {isCopied ? (
-                <Check className="h-4 w-4 md:h-4.5 md:w-4.5" />
+                <Check className="size-4 md:h-4.5 md:w-4.5" />
               ) : (
-                <Copy className="h-4 w-4 md:h-4.5 md:w-4.5" />
+                <Copy className="size-4 md:h-4.5 md:w-4.5" />
               )}
             </button>
           </div>
@@ -140,7 +140,7 @@ export const ProfileHeader = ({
           className={`md:text-label hover:from-primary hover:to-secondary group flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-xs font-medium text-[color:var(--cf-text)] transition-all hover:border-transparent hover:bg-gradient-to-r active:scale-95 disabled:opacity-50 disabled:active:scale-100 md:w-auto ${isRefreshing ? 'from-primary to-secondary border-transparent bg-gradient-to-r' : ''}`}
         >
           <RefreshCw
-            className={`h-4 w-4 text-[color:var(--cf-muted)] transition-all group-hover:text-white md:h-4.5 md:w-4.5 ${isRefreshing ? 'animate-spin text-white' : ''}`}
+            className={`size-4 text-[color:var(--cf-muted)] transition-all group-hover:text-white md:h-4.5 md:w-4.5 ${isRefreshing ? 'animate-spin text-white' : ''}`}
           />
           <span
             className={`md:text-body text-sm font-bold text-[color:var(--cf-text-strong)] transition-colors`}

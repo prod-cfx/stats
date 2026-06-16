@@ -174,13 +174,13 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       <div className="flex min-w-0 items-center gap-3">
         {/* Thumbnail Preview */}
         {dashboard.thumbnail && (
-          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[color:var(--cf-border)]">
+          <div className="relative size-12 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[color:var(--cf-border)]">
             <NextImage
               src={dashboard.thumbnail}
               alt="Dashboard thumbnail"
               fill
               sizes="48px"
-              className="h-full w-full object-cover"
+              className="size-full object-cover"
               unoptimized
             />
           </div>
@@ -216,7 +216,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           className="p-2 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
           title={t('dashboard.editor.actions.editTitle')}
         >
-          <Edit2 className="h-4 w-4" />
+          <Edit2 className="size-4" />
         </button>
       </div>
 
@@ -252,22 +252,22 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           >
             {uploadStatus === 'uploading' ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
                 {t('dashboard.editor.actions.uploading')}
               </>
             ) : uploadStatus === 'success' ? (
               <>
-                <Check className="h-4 w-4" />
+                <Check className="size-4" />
                 {t('dashboard.editor.actions.uploadSuccess')}
               </>
             ) : uploadStatus === 'error' ? (
               <>
-                <X className="h-4 w-4" />
+                <X className="size-4" />
                 {t('dashboard.editor.actions.uploadFail')}
               </>
             ) : (
               <>
-                <Image className="h-4 w-4" />
+                <Image className="size-4" />
                 {dashboard.thumbnail
                   ? t('dashboard.editor.actions.changeThumbnail')
                   : t('dashboard.editor.actions.selectThumbnail')}
@@ -323,22 +323,22 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
             >
               {savePublishStatus === 'saving' ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                   {t('dashboard.editor.actions.saving')}
                 </>
               ) : savePublishStatus === 'success' ? (
                 <>
-                  <Check className="h-4 w-4" />
+                  <Check className="size-4" />
                   {t('dashboard.editor.actions.saved')}
                 </>
               ) : savePublishStatus === 'error' ? (
                 <>
-                  <X className="h-4 w-4" />
+                  <X className="size-4" />
                   {t('dashboard.editor.validation.saveFail')}
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4" />
+                  <Save className="size-4" />
                   {canSave
                     ? t('dashboard.editor.actions.save')
                     : t('dashboard.editor.actions.saved')}
