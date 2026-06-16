@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PolymarketClobClient } from '@/clients/polymarket/clob-client'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
+import { PolymarketIngestionService } from '@/modules/polymarket/polymarket-ingestion.service'
 
 interface OrderbookCursor {
   offset: number
@@ -34,7 +34,7 @@ export class PolymarketOrderbookJob implements DataPullJob<PolymarketTaskMeta> {
 
   constructor(
     private readonly clobClient: PolymarketClobClient,
-    private readonly repo: PolymarketRepository,
+    private readonly ingestion: PolymarketIngestionService,
     private readonly configService: ConfigService,
   ) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
@@ -49,7 +49,7 @@ export class PolymarketOrderbookJob implements DataPullJob<PolymarketTaskMeta> {
 
     const category = this.resolveCategory(ctx.meta)
 
-    const targets = await this.repo.listOutcomeTokens({
+    const targets = await this.ingestion.listOutcomeTokens({
       category: category ?? null,
       limit: this.batchSize,
       offset: cursor.offset,
@@ -116,7 +116,7 @@ export class PolymarketOrderbookJob implements DataPullJob<PolymarketTaskMeta> {
       
       try {
         const snapshot = await this.clobClient.fetchOrderbook({ tokenId })
-        await this.repo.saveOrderbookSnapshot({
+        await this.ingestion.saveOrderbookSnapshot({
           marketDbId: target.marketDbId,
           outcomeDbId: target.outcomeDbId,
           marketExternalId: target.marketExternalId,

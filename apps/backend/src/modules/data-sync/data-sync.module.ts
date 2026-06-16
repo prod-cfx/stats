@@ -7,7 +7,7 @@ import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidat
 import { MarketsModule } from '@/modules/markets/markets.module'
 import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
-import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
+import { PolymarketModule } from '@/modules/polymarket/polymarket.module'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { TradesConfigModule } from '@/modules/trades-config/trades-config.module'
 import { WhaleAlertIngestionModule } from '@/modules/whale-alert/whale-alert-ingestion.module'
@@ -50,6 +50,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     WhaleAlertIngestionModule,
     WhaleTrackingModule,
     MarketsModule,
+    PolymarketModule,
   ],
   controllers: [AdminDataPullTaskController],
   providers: [
@@ -61,7 +62,6 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     ...DATA_PULL_JOB_PROVIDERS,
     PolymarketGammaClient,
     PolymarketClobClient,
-    PolymarketRepository,
     GoogleTranslateClient,
     // 统一编排 & Cron
     DataSyncOrchestrator,

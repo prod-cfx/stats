@@ -7,7 +7,7 @@ describe('polymarket markets job', () => {
       listMarkets: jest.fn(),
     }
 
-    const repo = {
+    const ingestion = {
       upsertMarketWithOutcomes: jest.fn().mockResolvedValue(undefined),
       findMarketsForTranslation: jest.fn().mockResolvedValue([]),
     }
@@ -29,7 +29,7 @@ describe('polymarket markets job', () => {
 
     const job = new PolymarketMarketsJob(
       gammaClient as any,
-      repo as any,
+      ingestion as any,
       configService as any,
       translateClient as any,
     )
@@ -37,7 +37,7 @@ describe('polymarket markets job', () => {
     return {
       job,
       gammaClient,
-      repo,
+      ingestion,
     }
   }
 
@@ -64,7 +64,7 @@ describe('polymarket markets job', () => {
   }
 
   it('does not skip market when meta.category=crypto but gamma category is null', async () => {
-    const { job, gammaClient, repo } = createJob()
+    const { job, gammaClient, ingestion } = createJob()
     gammaClient.listMarkets.mockResolvedValueOnce({
       markets: [createMarket({ category: null })],
       nextCursor: null,
@@ -82,7 +82,7 @@ describe('polymarket markets job', () => {
     })
 
     expect(result.fetchedCount).toBe(1)
-    expect(repo.upsertMarketWithOutcomes).toHaveBeenCalledTimes(1)
+    expect(ingestion.upsertMarketWithOutcomes).toHaveBeenCalledTimes(1)
     expect(gammaClient.listMarkets).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'crypto',
@@ -92,7 +92,7 @@ describe('polymarket markets job', () => {
   })
 
   it('skips market when gamma category explicitly mismatches meta.category', async () => {
-    const { job, gammaClient, repo } = createJob()
+    const { job, gammaClient, ingestion } = createJob()
     gammaClient.listMarkets.mockResolvedValueOnce({
       markets: [createMarket({ category: 'sports' })],
       nextCursor: null,
@@ -109,11 +109,11 @@ describe('polymarket markets job', () => {
     })
 
     expect(result.fetchedCount).toBe(0)
-    expect(repo.upsertMarketWithOutcomes).not.toHaveBeenCalled()
+    expect(ingestion.upsertMarketWithOutcomes).not.toHaveBeenCalled()
   })
 
   it('skips null-category market when content is clearly non-crypto', async () => {
-    const { job, gammaClient, repo } = createJob()
+    const { job, gammaClient, ingestion } = createJob()
     gammaClient.listMarkets.mockResolvedValueOnce({
       markets: [
         createMarket({
@@ -142,7 +142,7 @@ describe('polymarket markets job', () => {
     })
 
     expect(result.fetchedCount).toBe(0)
-    expect(repo.upsertMarketWithOutcomes).not.toHaveBeenCalled()
+    expect(ingestion.upsertMarketWithOutcomes).not.toHaveBeenCalled()
   })
 
   it('resets cursor when filter changes to avoid stale offset pages', async () => {

@@ -13,7 +13,7 @@ import { GoogleTranslateClient } from '@/clients/google-translate/google-transla
 // eslint-disable-next-line ts/consistent-type-imports
 import { PolymarketGammaClient } from '@/clients/polymarket/gamma-client'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
+import { PolymarketIngestionService } from '@/modules/polymarket/polymarket-ingestion.service'
 
 interface MarketTranslations {
   questionZh: string | null
@@ -66,7 +66,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
   constructor(
     private readonly gammaClient: PolymarketGammaClient,
-    private readonly repo: PolymarketRepository,
+    private readonly ingestion: PolymarketIngestionService,
     private readonly configService: ConfigService,
     private readonly translateClient: GoogleTranslateClient,
   ) {
@@ -401,7 +401,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       .map(outcome => this.mapOutcome(outcome, outcomeTranslations))
       .filter((value): value is NonNullable<typeof value> => Boolean(value))
 
-    await this.repo.upsertMarketWithOutcomes(marketInput, outcomeInputs)
+    await this.ingestion.upsertMarketWithOutcomes(marketInput, outcomeInputs)
 
     return { skipped: false }
   }
@@ -417,7 +417,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
     if (cfg?.translation?.enabled === false) return result
 
-    const existingMarkets = await this.repo.findMarketsForTranslation(
+    const existingMarkets = await this.ingestion.findMarketsForTranslation(
       markets.map(market => market.id),
     )
     const existingByMarketId = new Map(existingMarkets.map(market => [market.marketId, market]))
