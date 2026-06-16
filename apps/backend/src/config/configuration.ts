@@ -7,7 +7,7 @@ import { DomainException } from '../common/exceptions/domain.exception'
 import { polymarketConfig } from './polymarket.config'
 
 const env = defaultEnvAccessor
-const THIRTY_DAYS_IN_SECONDS = 30 * 24 * 60 * 60
+const THIRTY_MINUTES_IN_SECONDS = 30 * 60
 
 export const appConfig = registerAs('app', () => ({
   appEnv: env.appEnv() || 'development',
@@ -39,6 +39,9 @@ export const jwtConfig = registerAs('jwt', () => {
       args: { reason: 'JWT_SECRET is required' },
     })
   }
+  const accessExpiresIn = env.str('JWT_ACCESS_EXPIRES_IN', env.str('JWT_EXPIRES_IN', '30m')) ?? '30m'
+  const refreshExpiresIn = env.str('JWT_REFRESH_EXPIRES_IN', '7d') ?? '7d'
+
   return {
     secret: (() => {
       if (secret) return secret
@@ -46,8 +49,10 @@ export const jwtConfig = registerAs('jwt', () => {
       console.warn('JWT_SECRET is not set. Using a default secret for development only.')
       return 'dev_only_secret'
     })(),
-    expiresIn: env.str('JWT_EXPIRES_IN', '30d'),
-    accessExpiration: env.int('JWT_ACCESS_EXPIRATION', THIRTY_DAYS_IN_SECONDS),
+    expiresIn: accessExpiresIn,
+    accessExpiresIn,
+    refreshExpiresIn,
+    accessExpiration: env.int('JWT_ACCESS_EXPIRATION', THIRTY_MINUTES_IN_SECONDS),
   }
 })
 

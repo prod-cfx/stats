@@ -10,13 +10,21 @@ class _$AuthResponseDto extends AuthResponseDto {
   @override
   final String accessToken;
   @override
+  final String? refreshToken;
+  @override
+  final String? expiresIn;
+  @override
   final UserProfileResponseDto user;
 
   factory _$AuthResponseDto([void Function(AuthResponseDtoBuilder)? updates]) =>
       (AuthResponseDtoBuilder()..update(updates))._build();
 
-  _$AuthResponseDto._({required this.accessToken, required this.user})
-    : super._();
+  _$AuthResponseDto._({
+    required this.accessToken,
+    this.refreshToken,
+    this.expiresIn,
+    required this.user,
+  }) : super._();
   @override
   AuthResponseDto rebuild(void Function(AuthResponseDtoBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -29,6 +37,8 @@ class _$AuthResponseDto extends AuthResponseDto {
     if (identical(other, this)) return true;
     return other is AuthResponseDto &&
         accessToken == other.accessToken &&
+        refreshToken == other.refreshToken &&
+        expiresIn == other.expiresIn &&
         user == other.user;
   }
 
@@ -36,6 +46,8 @@ class _$AuthResponseDto extends AuthResponseDto {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, accessToken.hashCode);
+    _$hash = $jc(_$hash, refreshToken.hashCode);
+    _$hash = $jc(_$hash, expiresIn.hashCode);
     _$hash = $jc(_$hash, user.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -45,6 +57,8 @@ class _$AuthResponseDto extends AuthResponseDto {
   String toString() {
     return (newBuiltValueToStringHelper(r'AuthResponseDto')
           ..add('accessToken', accessToken)
+          ..add('refreshToken', refreshToken)
+          ..add('expiresIn', expiresIn)
           ..add('user', user))
         .toString();
   }
@@ -57,6 +71,14 @@ class AuthResponseDtoBuilder
   String? _accessToken;
   String? get accessToken => _$this._accessToken;
   set accessToken(String? accessToken) => _$this._accessToken = accessToken;
+
+  String? _refreshToken;
+  String? get refreshToken => _$this._refreshToken;
+  set refreshToken(String? refreshToken) => _$this._refreshToken = refreshToken;
+
+  String? _expiresIn;
+  String? get expiresIn => _$this._expiresIn;
+  set expiresIn(String? expiresIn) => _$this._expiresIn = expiresIn;
 
   UserProfileResponseDtoBuilder? _user;
   UserProfileResponseDtoBuilder get user =>
@@ -71,6 +93,8 @@ class AuthResponseDtoBuilder
     final $v = _$v;
     if ($v != null) {
       _accessToken = $v.accessToken;
+      _refreshToken = $v.refreshToken;
+      _expiresIn = $v.expiresIn;
       _user = $v.user.toBuilder();
       _$v = null;
     }
@@ -101,6 +125,8 @@ class AuthResponseDtoBuilder
               r'AuthResponseDto',
               'accessToken',
             ),
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
             user: user.build(),
           );
     } catch (_) {

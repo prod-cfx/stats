@@ -17,6 +17,7 @@ import type { BindTelegramRequestDto } from '../dto/requests/bind-telegram.reque
 import type { CreateTelegramDesktopIntentRequestDto } from '../dto/requests/create-telegram-desktop-intent.request.dto'
 import type { TelegramBotWebhookRequestDto } from '../dto/requests/telegram-bot-webhook.request.dto'
 import type { TelegramDesktopExchangeRequestDto } from '../dto/requests/telegram-desktop-exchange.request.dto'
+import type { JwtSignOptions } from '@nestjs/jwt'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { ErrorCode, PrincipalType, UserCredentialType, VerificationCodePurpose } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
@@ -48,7 +49,6 @@ const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 /* eslint-enable no-redeclare, ts/no-redeclare */
 
 const PASSWORD_SALT_ROUNDS = 10
-const DEFAULT_TOKEN_EXPIRES_SECONDS = 30 * 24 * 60 * 60 // 30 天
 const TELEGRAM_CREDENTIAL_PREFIX = 'telegram:'
 const TELEGRAM_PLACEHOLDER_DOMAIN = 'telegram.local'
 const TELEGRAM_AUTH_MAX_AGE_SECONDS = 5 * 60
@@ -70,10 +70,18 @@ interface TelegramDesktopIntentPayload {
   photoUrl?: string
 }
 
+interface UserJwtPayload {
+  sub: string
+  email: string | null
+  roles: string[]
+  principalType: 'user'
+  tokenVersion: number
+  tokenType: 'access' | 'refresh'
+}
+
 @Injectable()
 export class UserAuthService {
   private readonly logger = new Logger(UserAuthService.name)
-  private readonly tokenExpiresInSeconds: number
 
   constructor(
     private readonly userAuthRepository: UserAuthRepository,
@@ -82,11 +90,7 @@ export class UserAuthService {
     @Inject(CacheService) private readonly cacheService: CacheService,
     private readonly betaCodeService: BetaCodeService,
     private readonly verificationCodeService: VerificationCodeService,
-  ) {
-    this.tokenExpiresInSeconds = this.resolveExpiresInSeconds(
-      this.configService.get<string | number>('jwt.expiresIn'),
-    )
-  }
+  ) {}
 
   async register(dto: RegisterRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
@@ -142,6 +146,38 @@ export class UserAuthService {
         status: HttpStatus.FORBIDDEN,
       })
     }
+    return this.buildAuthResponse(user, roles)
+  }
+
+  async refresh(refreshToken: string): Promise<AuthResponseDto> {
+    let payload: Partial<UserJwtPayload>
+    try {
+      payload = await this.jwtService.verifyAsync<Partial<UserJwtPayload>>(refreshToken)
+    } catch {
+      throw this.buildInvalidRefreshTokenException()
+    }
+
+    if (!payload?.sub || payload.principalType !== 'user' || payload.tokenType !== 'refresh') {
+      throw this.buildInvalidRefreshTokenException()
+    }
+
+    const user = await this.userAuthRepository.findUserById(payload.sub)
+    if (!user) {
+      throw this.buildInvalidRefreshTokenException()
+    }
+
+    if (payload.tokenVersion !== user.tokenVersion) {
+      throw this.buildInvalidRefreshTokenException()
+    }
+
+    const roles = await this.getUserRoles(user.id)
+    if (roles.length === 0) {
+      throw new DomainException('User has no roles assigned', {
+        code: ErrorCode.AUTH_FORBIDDEN,
+        status: HttpStatus.FORBIDDEN,
+      })
+    }
+
     return this.buildAuthResponse(user, roles)
   }
 
@@ -585,14 +621,23 @@ export class UserAuthService {
   }
 
   private async buildAuthResponse(user: User, roles: string[]): Promise<AuthResponseDto> {
-    const payload = {
+    const basePayload = {
       sub: user.id,
       email: user.email,
       roles,
       principalType: 'user' as const,
       tokenVersion: user.tokenVersion, // 用于密码重置后使旧 token 失效
     }
-    const accessToken = await this.jwtService.signAsync(payload)
+    const accessExpiresIn = this.resolveAccessTokenExpiresIn()
+    const refreshExpiresIn = this.resolveRefreshTokenExpiresIn()
+    const accessToken = await this.jwtService.signAsync(
+      { ...basePayload, tokenType: 'access' as const },
+      { expiresIn: accessExpiresIn as JwtSignOptions['expiresIn'] },
+    )
+    const refreshToken = await this.jwtService.signAsync(
+      { ...basePayload, tokenType: 'refresh' as const },
+      { expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'] },
+    )
     const profile: UserProfileResponseDto = {
       id: user.id,
       email: user.email,
@@ -606,8 +651,25 @@ export class UserAuthService {
     }
     return {
       accessToken,
+      refreshToken,
+      expiresIn: accessExpiresIn,
       user: profile,
     }
+  }
+
+  private resolveAccessTokenExpiresIn(): string {
+    return this.configService.get<string>('jwt.accessExpiresIn') ?? '30m'
+  }
+
+  private resolveRefreshTokenExpiresIn(): string {
+    return this.configService.get<string>('jwt.refreshExpiresIn') ?? '7d'
+  }
+
+  private buildInvalidRefreshTokenException(): DomainException {
+    return new DomainException('Invalid refresh token', {
+      code: ErrorCode.AUTH_UNAUTHORIZED,
+      status: HttpStatus.UNAUTHORIZED,
+    })
   }
 
   private normalizeEmail(email: string): string {
@@ -873,27 +935,6 @@ export class UserAuthService {
       emailVerifiedAt: null,
       isGuest: true,
     })
-  }
-
-  private resolveExpiresInSeconds(value?: string | number | null): number {
-    if (!value) return DEFAULT_TOKEN_EXPIRES_SECONDS
-    if (typeof value === 'number') return value
-    const match = /^(\d+)([smhd])?$/.exec(value.trim())
-    if (!match) return DEFAULT_TOKEN_EXPIRES_SECONDS
-    const amount = Number(match[1])
-    const unit = match[2] ?? 's'
-    switch (unit) {
-      case 's':
-        return amount
-      case 'm':
-        return amount * 60
-      case 'h':
-        return amount * 60 * 60
-      case 'd':
-        return amount * 24 * 60 * 60
-      default:
-        return DEFAULT_TOKEN_EXPIRES_SECONDS
-    }
   }
 
 }

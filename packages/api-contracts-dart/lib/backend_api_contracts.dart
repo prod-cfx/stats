@@ -204,6 +204,7 @@ export 'package:backend_api_contracts/src/model/prediction_market_card_dto.dart'
 export 'package:backend_api_contracts/src/model/prediction_market_outcome_dto.dart';
 export 'package:backend_api_contracts/src/model/prediction_market_rules_dto.dart';
 export 'package:backend_api_contracts/src/model/realtime_whale_alert_dto.dart';
+export 'package:backend_api_contracts/src/model/refresh_token_request_dto.dart';
 export 'package:backend_api_contracts/src/model/register_request_dto.dart';
 export 'package:backend_api_contracts/src/model/resend_verification_request_dto.dart';
 export 'package:backend_api_contracts/src/model/send_email_login_code_request_dto.dart';

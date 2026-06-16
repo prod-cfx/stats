@@ -83,7 +83,12 @@ const TelegramDesktopExchangeRequestDto = z
   .object({ intentId: z.string(), betaCode: z.string().optional() })
   .passthrough()
 const AuthResponseDto = z
-  .object({ accessToken: z.string(), user: UserProfileResponseDto })
+  .object({
+    accessToken: z.string(),
+    refreshToken: z.string().optional(),
+    expiresIn: z.string().optional(),
+    user: UserProfileResponseDto,
+  })
   .passthrough()
 const TelegramBotWebhookRequestDto = z
   .object({
@@ -135,6 +140,7 @@ const RegisterRequestDto = z
   })
   .passthrough()
 const LoginRequestDto = z.object({ email: z.string(), password: z.string() }).passthrough()
+const RefreshTokenRequestDto = z.object({ refreshToken: z.string() }).passthrough()
 const PasswordResetRequestDto = z.object({ email: z.string() }).passthrough()
 const VerifyPasswordResetRequestDto = z
   .object({ email: z.string(), code: z.string(), newPassword: z.string().min(6) })
@@ -1562,6 +1568,25 @@ const TickerResponseDto = z
     low24h: z.string().optional(),
   })
   .passthrough()
+const PredictionMarketOutcomeDto = z
+  .object({ label: z.string(), probability: z.string() })
+  .passthrough()
+const PredictionMarketRulesDto = z
+  .object({ paragraphs: z.array(z.string()), createdAt: z.string().optional() })
+  .passthrough()
+const PredictionMarketCardDto = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    options: z.array(PredictionMarketOutcomeDto).optional(),
+    probability: z.string().optional(),
+    status: z.string().optional(),
+    volume24h: z.string().optional(),
+    volumeTotal: z.string().optional(),
+    openInterest: z.string().optional(),
+    rules: PredictionMarketRulesDto.optional(),
+  })
+  .passthrough()
 const LiquidationSummaryItemDto = z
   .object({
     timeframe: z.enum(['1h', '4h', '12h', '24h']),
@@ -1665,25 +1690,6 @@ const UpdateExchangeConfigDto = z
   })
   .partial()
   .passthrough()
-const PredictionMarketOutcomeDto = z
-  .object({ label: z.string(), probability: z.string() })
-  .passthrough()
-const PredictionMarketRulesDto = z
-  .object({ paragraphs: z.array(z.string()), createdAt: z.string().optional() })
-  .passthrough()
-const PredictionMarketCardDto = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    options: z.array(PredictionMarketOutcomeDto).optional(),
-    probability: z.string().optional(),
-    status: z.string().optional(),
-    volume24h: z.string().optional(),
-    volumeTotal: z.string().optional(),
-    openInterest: z.string().optional(),
-    rules: PredictionMarketRulesDto.optional(),
-  })
-  .passthrough()
 const WhaleAlertSide = z.enum(['Long', 'Short'])
 const RealtimeWhaleAlertDto = z
   .object({
@@ -1744,6 +1750,7 @@ export const schemas = {
   TelegramExchangeRequestDto,
   RegisterRequestDto,
   LoginRequestDto,
+  RefreshTokenRequestDto,
   PasswordResetRequestDto,
   VerifyPasswordResetRequestDto,
   VerifyEmailRequestDto,
@@ -1877,6 +1884,9 @@ export const schemas = {
   AggregatedVolumeRowDto,
   AggregatedVolumeSnapshotResponseDto,
   TickerResponseDto,
+  PredictionMarketOutcomeDto,
+  PredictionMarketRulesDto,
+  PredictionMarketCardDto,
   LiquidationSummaryItemDto,
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
@@ -1889,9 +1899,6 @@ export const schemas = {
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
-  PredictionMarketOutcomeDto,
-  PredictionMarketRulesDto,
-  PredictionMarketCardDto,
   WhaleAlertSide,
   RealtimeWhaleAlertDto,
   WhaleTradeDto,
@@ -3690,6 +3697,20 @@ const endpoints = makeApi([
       },
     ],
     response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/auth/refresh',
+    alias: 'AuthController_refresh',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ refreshToken: z.string() }).passthrough(),
+      },
+    ],
+    response: z.object({ data: AuthResponseDto, message: z.string().optional() }).passthrough(),
   },
   {
     method: 'post',

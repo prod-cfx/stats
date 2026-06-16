@@ -285,6 +285,7 @@ Serializers _$serializers =
           ..add(PredictionMarketOutcomeDto.serializer)
           ..add(PredictionMarketRulesDto.serializer)
           ..add(RealtimeWhaleAlertDto.serializer)
+          ..add(RefreshTokenRequestDto.serializer)
           ..add(RegisterRequestDto.serializer)
           ..add(ResendVerificationRequestDto.serializer)
           ..add(SendEmailLoginCodeRequestDto.serializer)

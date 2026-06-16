@@ -858,6 +858,50 @@
         ]
       }
     },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "用户会话刷新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AuthResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "刷新用户会话",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/password-reset": {
       "post": {
         "operationId": "AuthController_requestPasswordReset",
@@ -7938,6 +7982,90 @@
         ]
       }
     },
+    "/polymarket/markets": {
+      "get": {
+        "operationId": "PolymarketController_listMarkets",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量（最大 100）",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "市场分类（如 crypto）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "onlyActive",
+            "required": false,
+            "in": "query",
+            "description": "是否只返回活跃市场",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "locale",
+            "required": false,
+            "in": "query",
+            "description": "语言（如 zh、zh-CN），不传时返回英文",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PredictionMarketCardDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取 Polymarket 预测市场列表",
+        "tags": [
+          "polymarket"
+        ]
+      }
+    },
     "/aggregated-liquidation/summary": {
       "get": {
         "description": "基于 AggregatedLiquidationHistory 表，对指定币种在 1h/4h/12h/24h 粒度下的最新爆仓数据进行聚合，用于前端顶部 summary 卡片。",
@@ -8558,90 +8686,6 @@
         ]
       }
     },
-    "/polymarket/markets": {
-      "get": {
-        "operationId": "PolymarketController_listMarkets",
-        "parameters": [
-          {
-            "name": "page",
-            "required": false,
-            "in": "query",
-            "description": "页码（从 1 开始）",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "example": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "每页数量（最大 100）",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "example": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "category",
-            "required": false,
-            "in": "query",
-            "description": "市场分类（如 crypto）",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "onlyActive",
-            "required": false,
-            "in": "query",
-            "description": "是否只返回活跃市场",
-            "schema": {
-              "default": true,
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "locale",
-            "required": false,
-            "in": "query",
-            "description": "语言（如 zh、zh-CN），不传时返回英文",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PredictionMarketCardDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取 Polymarket 预测市场列表",
-        "tags": [
-          "polymarket"
-        ]
-      }
-    },
     "/whale-alerts/realtime": {
       "get": {
         "operationId": "WhaleAlertController_getRealtime",
@@ -9224,6 +9268,14 @@
             "description": "访问令牌",
             "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
           },
+          "refreshToken": {
+            "type": "string",
+            "description": "刷新令牌"
+          },
+          "expiresIn": {
+            "type": "string",
+            "description": "访问令牌过期时间（字符串，例如 30m）"
+          },
           "user": {
             "description": "用户信息",
             "allOf": [
@@ -9236,6 +9288,18 @@
         "required": [
           "accessToken",
           "user"
+        ]
+      },
+      "RefreshTokenRequestDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "description": "刷新令牌"
+          }
+        },
+        "required": [
+          "refreshToken"
         ]
       },
       "TelegramWebAuthorizeUrlResponseDto": {
@@ -16023,6 +16087,88 @@
           "enabled"
         ]
       },
+      "PredictionMarketOutcomeDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Outcome 标签（用于前端显示）"
+          },
+          "probability": {
+            "type": "string",
+            "description": "概率字符串，例如 0.86 或 86"
+          }
+        },
+        "required": [
+          "label",
+          "probability"
+        ]
+      },
+      "PredictionMarketRulesDto": {
+        "type": "object",
+        "properties": {
+          "paragraphs": {
+            "description": "规则文案段落",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "规则创建或更新时间（ISO 字符串）"
+          }
+        },
+        "required": [
+          "paragraphs"
+        ]
+      },
+      "PredictionMarketCardDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "市场外部 ID（marketId）"
+          },
+          "title": {
+            "type": "string",
+            "description": "市场标题，优先使用 question，其次 eventTitle"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PredictionMarketOutcomeDto"
+            }
+          },
+          "probability": {
+            "type": "string",
+            "description": "单一概率（某些只有总概率的市场）"
+          },
+          "status": {
+            "type": "string",
+            "description": "市场状态，如 LIVE/RESOLVED 等"
+          },
+          "volume24h": {
+            "type": "string",
+            "description": "24 小时成交额（字符串）"
+          },
+          "volumeTotal": {
+            "type": "string",
+            "description": "总成交额（字符串）"
+          },
+          "openInterest": {
+            "type": "string",
+            "description": "未平仓量（字符串）"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/PredictionMarketRulesDto"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
       "LiquidationSummaryItemDto": {
         "type": "object",
         "properties": {
@@ -16579,88 +16725,6 @@
             "nullable": true
           }
         }
-      },
-      "PredictionMarketOutcomeDto": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "type": "string",
-            "description": "Outcome 标签（用于前端显示）"
-          },
-          "probability": {
-            "type": "string",
-            "description": "概率字符串，例如 0.86 或 86"
-          }
-        },
-        "required": [
-          "label",
-          "probability"
-        ]
-      },
-      "PredictionMarketRulesDto": {
-        "type": "object",
-        "properties": {
-          "paragraphs": {
-            "description": "规则文案段落",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "规则创建或更新时间（ISO 字符串）"
-          }
-        },
-        "required": [
-          "paragraphs"
-        ]
-      },
-      "PredictionMarketCardDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "市场外部 ID（marketId）"
-          },
-          "title": {
-            "type": "string",
-            "description": "市场标题，优先使用 question，其次 eventTitle"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PredictionMarketOutcomeDto"
-            }
-          },
-          "probability": {
-            "type": "string",
-            "description": "单一概率（某些只有总概率的市场）"
-          },
-          "status": {
-            "type": "string",
-            "description": "市场状态，如 LIVE/RESOLVED 等"
-          },
-          "volume24h": {
-            "type": "string",
-            "description": "24 小时成交额（字符串）"
-          },
-          "volumeTotal": {
-            "type": "string",
-            "description": "总成交额（字符串）"
-          },
-          "openInterest": {
-            "type": "string",
-            "description": "未平仓量（字符串）"
-          },
-          "rules": {
-            "$ref": "#/components/schemas/PredictionMarketRulesDto"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ]
       },
       "WhaleAlertSide": {
         "type": "string",

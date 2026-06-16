@@ -20,6 +20,7 @@ import 'package:backend_api_contracts/src/model/bind_telegram_request_dto.dart';
 import 'package:backend_api_contracts/src/model/create_telegram_desktop_intent_request_dto.dart';
 import 'package:backend_api_contracts/src/model/login_request_dto.dart';
 import 'package:backend_api_contracts/src/model/password_reset_request_dto.dart';
+import 'package:backend_api_contracts/src/model/refresh_token_request_dto.dart';
 import 'package:backend_api_contracts/src/model/register_request_dto.dart';
 import 'package:backend_api_contracts/src/model/resend_verification_request_dto.dart';
 import 'package:backend_api_contracts/src/model/send_email_login_code_request_dto.dart';
@@ -40,10 +41,10 @@ class AuthApi {
   const AuthApi(this._dio, this._serializers);
 
   /// 绑定邮箱登录方式
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [bindEmailRequestDto] 
+  /// * [bindEmailRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -53,7 +54,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindEmail({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindEmail({
     required BindEmailRequestDto bindEmailRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -135,10 +136,10 @@ class AuthApi {
   }
 
   /// 绑定 Telegram 登录方式
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [bindTelegramRequestDto] 
+  /// * [bindTelegramRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -148,7 +149,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindTelegram({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindTelegram({
     required BindTelegramRequestDto bindTelegramRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -230,10 +231,10 @@ class AuthApi {
   }
 
   /// 消费 Telegram 桌面端登录意图并绑定 Telegram
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [telegramDesktopExchangeRequestDto] 
+  /// * [telegramDesktopExchangeRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -243,7 +244,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindTelegramByDesktopIntent({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerBindTelegramByDesktopIntent({
     required TelegramDesktopExchangeRequestDto telegramDesktopExchangeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -325,10 +326,10 @@ class AuthApi {
   }
 
   /// 创建 Telegram 桌面端登录意图
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [createTelegramDesktopIntentRequestDto] 
+  /// * [createTelegramDesktopIntentRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -338,7 +339,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerCreateTelegramDesktopIntent200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerCreateTelegramDesktopIntent200Response>> authControllerCreateTelegramDesktopIntent({ 
+  Future<Response<AuthControllerCreateTelegramDesktopIntent200Response>> authControllerCreateTelegramDesktopIntent({
     required CreateTelegramDesktopIntentRequestDto createTelegramDesktopIntentRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -420,10 +421,10 @@ class AuthApi {
   }
 
   /// 查询 Telegram 桌面端登录意图状态
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [intentId] 
+  /// * [intentId]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -433,7 +434,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramDesktopIntentStatus200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerGetTelegramDesktopIntentStatus200Response>> authControllerGetTelegramDesktopIntentStatus({ 
+  Future<Response<AuthControllerGetTelegramDesktopIntentStatus200Response>> authControllerGetTelegramDesktopIntentStatus({
     required String intentId,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -495,7 +496,7 @@ class AuthApi {
   }
 
   /// 获取 Telegram 登录配置
-  /// 
+  ///
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -507,7 +508,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramLoginConfig200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerGetTelegramLoginConfig200Response>> authControllerGetTelegramLoginConfig({ 
+  Future<Response<AuthControllerGetTelegramLoginConfig200Response>> authControllerGetTelegramLoginConfig({
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -568,12 +569,12 @@ class AuthApi {
   }
 
   /// 获取 Telegram 网页授权地址
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [intent] 
-  /// * [lng] 
-  /// * [redirect] 
+  /// * [intent]
+  /// * [lng]
+  /// * [redirect]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -583,7 +584,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerGetTelegramWebAuthorizeUrl200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerGetTelegramWebAuthorizeUrl200Response>> authControllerGetTelegramWebAuthorizeUrl({ 
+  Future<Response<AuthControllerGetTelegramWebAuthorizeUrl200Response>> authControllerGetTelegramWebAuthorizeUrl({
     required String intent,
     required String lng,
     required String redirect,
@@ -654,11 +655,11 @@ class AuthApi {
   }
 
   /// Telegram Bot Webhook 回调
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [xTelegramBotApiSecretToken] 
-  /// * [telegramBotWebhookRequestDto] 
+  /// * [xTelegramBotApiSecretToken]
+  /// * [telegramBotWebhookRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -668,7 +669,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerHandleTelegramBotWebhook200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerHandleTelegramBotWebhook200Response>> authControllerHandleTelegramBotWebhook({ 
+  Future<Response<AuthControllerHandleTelegramBotWebhook200Response>> authControllerHandleTelegramBotWebhook({
     required String xTelegramBotApiSecretToken,
     required TelegramBotWebhookRequestDto telegramBotWebhookRequestDto,
     CancelToken? cancelToken,
@@ -752,10 +753,10 @@ class AuthApi {
   }
 
   /// 用户登录
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [loginRequestDto] 
+  /// * [loginRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -765,7 +766,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerLogin({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerLogin({
     required LoginRequestDto loginRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -847,7 +848,7 @@ class AuthApi {
   }
 
   /// 游客登录换取会话
-  /// 
+  ///
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -859,7 +860,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerLoginGuest({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerLoginGuest({
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -919,11 +920,11 @@ class AuthApi {
     );
   }
 
-  /// 用户注册
-  /// 
+  /// 刷新用户会话
+  ///
   ///
   /// Parameters:
-  /// * [registerRequestDto] 
+  /// * [refreshTokenRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -933,7 +934,102 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerRegister({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerRefresh({
+    required RefreshTokenRequestDto refreshTokenRequestDto,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/auth/refresh';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(RefreshTokenRequestDto);
+      _bodyData = _serializers.serialize(refreshTokenRequestDto, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    AuthControllerTelegramDesktopExchange200Response? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AuthControllerTelegramDesktopExchange200Response),
+      ) as AuthControllerTelegramDesktopExchange200Response;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AuthControllerTelegramDesktopExchange200Response>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// 用户注册
+  ///
+  ///
+  /// Parameters:
+  /// * [registerRequestDto]
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerRegister({
     required RegisterRequestDto registerRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1015,10 +1111,10 @@ class AuthApi {
   }
 
   /// 申请重置密码
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [passwordResetRequestDto] 
+  /// * [passwordResetRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1028,7 +1124,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerRequestPasswordReset({ 
+  Future<Response<void>> authControllerRequestPasswordReset({
     required PasswordResetRequestDto passwordResetRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1082,10 +1178,10 @@ class AuthApi {
   }
 
   /// 重新发送邮箱验证码
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [resendVerificationRequestDto] 
+  /// * [resendVerificationRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1095,7 +1191,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerResendVerification({ 
+  Future<Response<void>> authControllerResendVerification({
     required ResendVerificationRequestDto resendVerificationRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1149,10 +1245,10 @@ class AuthApi {
   }
 
   /// 发送邮箱登录验证码
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [sendEmailLoginCodeRequestDto] 
+  /// * [sendEmailLoginCodeRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1162,7 +1258,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerSendEmailLoginCode({ 
+  Future<Response<void>> authControllerSendEmailLoginCode({
     required SendEmailLoginCodeRequestDto sendEmailLoginCodeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1216,10 +1312,10 @@ class AuthApi {
   }
 
   /// 发送验证码（注册/密码重置）
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [sendVerificationCodeRequestDto] 
+  /// * [sendVerificationCodeRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1229,7 +1325,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerSendVerificationCode({ 
+  Future<Response<void>> authControllerSendVerificationCode({
     required SendVerificationCodeRequestDto sendVerificationCodeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1283,10 +1379,10 @@ class AuthApi {
   }
 
   /// 消费 Telegram 桌面端登录意图并登录
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [telegramDesktopExchangeRequestDto] 
+  /// * [telegramDesktopExchangeRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1296,7 +1392,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerTelegramDesktopExchange({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerTelegramDesktopExchange({
     required TelegramDesktopExchangeRequestDto telegramDesktopExchangeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1378,10 +1474,10 @@ class AuthApi {
   }
 
   /// Telegram 登录换取会话
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [telegramExchangeRequestDto] 
+  /// * [telegramExchangeRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1391,7 +1487,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerTelegramExchange({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerTelegramExchange({
     required TelegramExchangeRequestDto telegramExchangeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1473,10 +1569,10 @@ class AuthApi {
   }
 
   /// 验证邮箱验证码
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [verifyEmailRequestDto] 
+  /// * [verifyEmailRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1486,7 +1582,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerVerifyEmail({ 
+  Future<Response<void>> authControllerVerifyEmail({
     required VerifyEmailRequestDto verifyEmailRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1540,10 +1636,10 @@ class AuthApi {
   }
 
   /// 验证邮箱登录验证码（自动注册或登录）
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [verifyEmailLoginCodeRequestDto] 
+  /// * [verifyEmailLoginCodeRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1553,7 +1649,7 @@ class AuthApi {
   ///
   /// Returns a [Future] containing a [Response] with a [AuthControllerTelegramDesktopExchange200Response] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerVerifyEmailLoginCode({ 
+  Future<Response<AuthControllerTelegramDesktopExchange200Response>> authControllerVerifyEmailLoginCode({
     required VerifyEmailLoginCodeRequestDto verifyEmailLoginCodeRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1635,10 +1731,10 @@ class AuthApi {
   }
 
   /// 验证重置密码验证码并更新密码
-  /// 
+  ///
   ///
   /// Parameters:
-  /// * [verifyPasswordResetRequestDto] 
+  /// * [verifyPasswordResetRequestDto]
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1648,7 +1744,7 @@ class AuthApi {
   ///
   /// Returns a [Future]
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<void>> authControllerVerifyPasswordReset({ 
+  Future<Response<void>> authControllerVerifyPasswordReset({
     required VerifyPasswordResetRequestDto verifyPasswordResetRequestDto,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,

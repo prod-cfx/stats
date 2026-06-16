@@ -13,12 +13,22 @@ part 'auth_response_dto.g.dart';
 ///
 /// Properties:
 /// * [accessToken] - 访问令牌
+/// * [refreshToken] - 刷新令牌
+/// * [expiresIn] - 访问令牌过期时间（字符串，例如 30m）
 /// * [user] - 用户信息
 @BuiltValue()
 abstract class AuthResponseDto implements Built<AuthResponseDto, AuthResponseDtoBuilder> {
   /// 访问令牌
   @BuiltValueField(wireName: r'accessToken')
   String get accessToken;
+
+  /// 刷新令牌
+  @BuiltValueField(wireName: r'refreshToken')
+  String? get refreshToken;
+
+  /// 访问令牌过期时间（字符串，例如 30m）
+  @BuiltValueField(wireName: r'expiresIn')
+  String? get expiresIn;
 
   /// 用户信息
   @BuiltValueField(wireName: r'user')
@@ -52,6 +62,20 @@ class _$AuthResponseDtoSerializer implements PrimitiveSerializer<AuthResponseDto
       object.accessToken,
       specifiedType: const FullType(String),
     );
+    if (object.refreshToken != null) {
+      yield r'refreshToken';
+      yield serializers.serialize(
+        object.refreshToken,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.expiresIn != null) {
+      yield r'expiresIn';
+      yield serializers.serialize(
+        object.expiresIn,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'user';
     yield serializers.serialize(
       object.user,
@@ -86,6 +110,20 @@ class _$AuthResponseDtoSerializer implements PrimitiveSerializer<AuthResponseDto
             specifiedType: const FullType(String),
           ) as String;
           result.accessToken = valueDes;
+          break;
+        case r'refreshToken':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.refreshToken = valueDes;
+          break;
+        case r'expiresIn':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.expiresIn = valueDes;
           break;
         case r'user':
           final valueDes = serializers.deserialize(
@@ -122,4 +160,3 @@ class _$AuthResponseDtoSerializer implements PrimitiveSerializer<AuthResponseDto
     return result.build();
   }
 }
-

@@ -3,9 +3,9 @@ export interface JwtPayload {
   email?: string | null
   roles?: string[]
   principalType?: 'user' | 'admin'
+  tokenType?: 'access' | 'refresh'
   tokenVersion?: number // 用于密码重置后使旧 token 失效
   iat?: number
   exp?: number
 }
-
 

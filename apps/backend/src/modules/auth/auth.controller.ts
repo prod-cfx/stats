@@ -5,6 +5,7 @@ import { LoginRequestDto } from './dto/requests/login.request.dto'
 import { PasswordResetRequestDto } from './dto/requests/password-reset.request.dto'
 import { RegisterRequestDto } from './dto/requests/register.request.dto'
 import { ResendVerificationRequestDto } from './dto/requests/resend-verification.request.dto'
+import { RefreshTokenRequestDto } from './dto/requests/refresh-token.request.dto'
 import { BindEmailRequestDto } from './dto/requests/bind-email.request.dto'
 import { CreateTelegramDesktopIntentRequestDto } from './dto/requests/create-telegram-desktop-intent.request.dto'
 import { BindTelegramRequestDto } from './dto/requests/bind-telegram.request.dto'
@@ -42,6 +43,7 @@ import { ApiBody, ApiExtraModels, ApiOkResponse, ApiOperation, ApiResponse, ApiT
 @ApiExtraModels(
   BaseResponseDto,
   AuthResponseDto,
+  RefreshTokenRequestDto,
   TelegramWebAuthorizeUrlResponseDto,
   TelegramDesktopIntentResponseDto,
   TelegramDesktopIntentStatusResponseDto,
@@ -291,6 +293,21 @@ export class AuthController {
   })
   async login(@Body() dto: LoginRequestDto): Promise<AuthResponseDto> {
     return this.userAuthService.login(dto)
+  }
+
+  @Post('refresh')
+  @Public()
+  @UseGuards(AuthRateLimitGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '刷新用户会话' })
+  @ApiBody({ type: RefreshTokenRequestDto })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '用户会话刷新成功',
+    schema: buildBaseResponseSchema(AuthResponseDto),
+  })
+  async refresh(@Body() dto: RefreshTokenRequestDto): Promise<AuthResponseDto> {
+    return this.userAuthService.refresh(dto.refreshToken)
   }
 
   @Post('password-reset')

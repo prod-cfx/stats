@@ -44,6 +44,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       })
     }
 
+    if (payload.tokenType === 'refresh') {
+      throw new DomainException('Refresh token cannot be used as access token', {
+        code: ErrorCode.AUTH_UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
     const principalType: PrincipalType = payload.principalType === 'admin' ? PrincipalType.ADMIN : PrincipalType.USER
 
     // 验证 tokenVersion（仅对 USER 类型，ADMIN 暂不校验）

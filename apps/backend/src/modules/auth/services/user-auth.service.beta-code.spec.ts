@@ -6,6 +6,7 @@ import { PrincipalType, UserCredentialType } from '@ai/shared'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
+import { compare } from 'bcrypt'
 import { CacheService } from '@/common/services/cache.service'
 import { EnvService } from '@/common/services/env.service'
 import { MailService } from '@/common/services/mail.service'
@@ -31,6 +32,7 @@ type AuthRepositoryMock = Pick<
   | 'findRoleByCode'
   | 'findUserByEmail'
   | 'findUserCredential'
+  | 'findUserById'
   | 'findVerificationCode'
   | 'updateUser'
 >
@@ -40,6 +42,7 @@ interface TestContext {
   repository: AuthRepositoryMock
   betaCodeService: jest.Mocked<Pick<BetaCodeService, 'consumeForNewUser' | 'isGateEnabled'>>
   cacheService: jest.Mocked<Pick<CacheService, 'del' | 'get'>>
+  jwtService: jest.Mocked<Pick<JwtService, 'signAsync' | 'verifyAsync'>>
 }
 
 const BOT_TOKEN = '123456:test-token'
@@ -55,6 +58,7 @@ describe('UserAuthService beta code creation flows', () => {
       findRoleByCode: jest.fn().mockResolvedValue({ id: 'role-user' }),
       findUserByEmail: jest.fn(),
       findUserCredential: jest.fn(),
+      findUserById: jest.fn(),
       findVerificationCode: jest.fn().mockResolvedValue({
         id: 'verification-code-1',
         expiresAt: new Date(Date.now() + 60_000),
@@ -69,6 +73,10 @@ describe('UserAuthService beta code creation flows', () => {
       del: jest.fn().mockResolvedValue(undefined),
       get: jest.fn(),
     }
+    const jwtService = {
+      signAsync: jest.fn(async payload => payload.tokenType === 'refresh' ? 'refresh-token' : 'access-token'),
+      verifyAsync: jest.fn(),
+    }
 
     const module = await Test.createTestingModule({
       providers: [
@@ -76,14 +84,16 @@ describe('UserAuthService beta code creation flows', () => {
         { provide: UserAuthRepository, useValue: repository },
         {
           provide: JwtService,
-          useValue: { signAsync: jest.fn().mockResolvedValue('access-token') } satisfies Partial<JwtService>,
+          useValue: jwtService satisfies Partial<JwtService>,
         },
         {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string, fallback?: unknown) => {
               if (key === 'TELEGRAM_BOT_TOKEN') return BOT_TOKEN
-              if (key === 'jwt.expiresIn') return fallback ?? '30d'
+              if (key === 'jwt.accessExpiresIn') return '30m'
+              if (key === 'jwt.refreshExpiresIn') return '7d'
+              if (key === 'jwt.expiresIn') return fallback ?? '30m'
               return fallback
             }),
           } as unknown as ConfigService,
@@ -102,8 +112,78 @@ describe('UserAuthService beta code creation flows', () => {
       repository,
       betaCodeService,
       cacheService,
+      jwtService,
     }
   }
+
+  it('returns access and refresh tokens with configured access expiry when password login succeeds', async () => {
+    const { service, repository, jwtService } = await createContext()
+    const user = createUser({ id: 'user-login', email: 'login@example.com', tokenVersion: 3 })
+    repository.findUserByEmail.mockResolvedValue(user)
+    ;(compare as jest.Mock).mockResolvedValue(true)
+
+    const result = await service.login({ email: 'login@example.com', password: 'password123' })
+
+    expect(result).toEqual(expect.objectContaining({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresIn: '30m',
+      user: expect.objectContaining({ id: 'user-login', email: 'login@example.com' }),
+    }))
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'user-login',
+        principalType: 'user',
+        tokenType: 'access',
+        tokenVersion: 3,
+      }),
+      { expiresIn: '30m' },
+    )
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'user-login',
+        principalType: 'user',
+        tokenType: 'refresh',
+        tokenVersion: 3,
+      }),
+      { expiresIn: '7d' },
+    )
+  })
+
+  it('rotates tokens when a valid user refresh token is presented', async () => {
+    const { service, repository, jwtService } = await createContext()
+    const user = createUser({ id: 'user-refresh', email: 'refresh@example.com', tokenVersion: 2 })
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'user-refresh',
+      principalType: 'user',
+      tokenType: 'refresh',
+      tokenVersion: 2,
+    })
+    repository.findUserById.mockResolvedValue(user)
+
+    const result = await service.refresh('refresh-token')
+
+    expect(jwtService.verifyAsync).toHaveBeenCalledWith('refresh-token')
+    expect(result).toEqual(expect.objectContaining({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresIn: '30m',
+      user: expect.objectContaining({ id: 'user-refresh' }),
+    }))
+  })
+
+  it('rejects access tokens at the user refresh boundary', async () => {
+    const { service, jwtService } = await createContext()
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'user-access',
+      principalType: 'user',
+      tokenType: 'access',
+    })
+
+    await expect(service.refresh('access-token')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'AUTH_UNAUTHORIZED' }),
+    })
+  })
 
   it('consumes beta code when email OTP creates a new user', async () => {
     const { service, repository, betaCodeService } = await createContext()

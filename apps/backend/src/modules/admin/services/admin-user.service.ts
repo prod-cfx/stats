@@ -112,19 +112,17 @@ export class AdminUserService {
     }
 
     const accessTokenExpiresIn =
-      this.configService.get<string>('jwt.expiresIn') ??
-      this.configService.get<string>('JWT_EXPIRES_IN') ??
+      this.configService.get<string>('jwt.accessExpiresIn') ??
       '30m'
 
     const refreshTokenExpiresIn =
       this.configService.get<string>('jwt.refreshExpiresIn') ??
-      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ??
-      '30d'
+      '7d'
 
     const accessToken = await this.jwtService.signAsync(
       { ...basePayload, tokenType: 'access' },
       {
-      expiresIn: accessTokenExpiresIn as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
+        expiresIn: accessTokenExpiresIn as import('@nestjs/jwt').JwtSignOptions['expiresIn'],
       },
     )
 
@@ -272,14 +270,12 @@ export class AdminUserService {
     }
 
     const accessTokenExpiresIn =
-      this.configService.get<string>('jwt.expiresIn') ??
-      this.configService.get<string>('JWT_EXPIRES_IN') ??
+      this.configService.get<string>('jwt.accessExpiresIn') ??
       '30m'
 
     const refreshTokenExpiresIn =
       this.configService.get<string>('jwt.refreshExpiresIn') ??
-      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ??
-      '30d'
+      '7d'
 
     const accessToken = await this.jwtService.signAsync(
       { ...basePayload, tokenType: 'access' },

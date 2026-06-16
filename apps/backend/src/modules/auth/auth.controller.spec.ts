@@ -14,5 +14,25 @@ describe('authController after-commit metadata', () => {
     expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.login)).toBeUndefined()
     expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.loginGuest)).toBeUndefined()
     expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.register)).toBeUndefined()
+    expect(Reflect.getMetadata(NEEDS_AFTER_COMMIT_METADATA_KEY, AuthController.prototype.refresh)).toBeUndefined()
+  })
+})
+
+describe('AuthController refresh', () => {
+  it('delegates user refresh tokens to UserAuthService', async () => {
+    const authResult = {
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token-new',
+      expiresIn: '30m',
+      user: { id: 'user-1' },
+    }
+    const service = {
+      refresh: jest.fn().mockResolvedValue(authResult),
+    }
+    const controller = new AuthController(service as never)
+
+    await expect(controller.refresh({ refreshToken: 'refresh-token' })).resolves.toBe(authResult)
+
+    expect(service.refresh).toHaveBeenCalledWith('refresh-token')
   })
 })
