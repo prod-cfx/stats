@@ -31,9 +31,9 @@ export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardC
         <SubTitle className="line-clamp-2 min-h-[56px]">{title}</SubTitle>
 
         <div className="flex flex-wrap gap-2">
-          {tags.map((tag, idx) => (
+          {tags.map(tag => (
             <span
-              key={idx}
+              key={tag}
               className="text-caption rounded border border-[#30363d] bg-[#0d1117] px-2 py-0.5 font-bold tracking-wider text-[#c9d1d9] uppercase"
             >
               {tag}

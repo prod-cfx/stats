@@ -55,8 +55,8 @@ export const PredictionCard = ({
 
       <div className="flex-1 space-y-2.5 mb-4">
         {options ? (
-          options.map((option, idx) => (
-            <div key={idx} className="flex min-w-0 items-center justify-between gap-3">
+          options.map(option => (
+            <div key={option.label} className="flex min-w-0 items-center justify-between gap-3">
               <span className="min-w-0 truncate !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">{option.label}</span>
               <span className="flex-none !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{option.probability}</span>
             </div>

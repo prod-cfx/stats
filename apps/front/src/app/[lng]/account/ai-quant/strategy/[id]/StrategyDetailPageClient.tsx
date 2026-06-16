@@ -82,8 +82,8 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
             <div className="h-10 max-w-xl rounded-xl bg-[color:var(--cf-surface-2)]" />
             <div className="h-5 max-w-3xl rounded-lg bg-[color:var(--cf-surface-2)]" />
             <div className="grid gap-3 md:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <div key={idx} className="h-24 rounded-xl bg-[color:var(--cf-bg)]" />
+              {['summary', 'risk', 'runtime', 'version'].map(item => (
+                <div key={item} className="h-24 rounded-xl bg-[color:var(--cf-bg)]" />
               ))}
             </div>
           </div>

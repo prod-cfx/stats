@@ -20,9 +20,9 @@ const MockupComparison = () => {
             </div>
             
             <div className="grid grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="p-4 border border-gray-800 rounded-xl bg-[#111]">
-                  <div className="text-purple-500 font-bold mb-2">0{i}</div>
+              {['idea', 'backtest', 'deploy', 'monitor'].map((step, i) => (
+                <div key={step} className="p-4 border border-gray-800 rounded-xl bg-[#111]">
+                  <div className="text-purple-500 font-bold mb-2">0{i + 1}</div>
                   <div className="font-bold text-sm">流程步骤名称</div>
                   <div className="text-xs text-gray-500 mt-1">这里是步骤的描述文案...</div>
                 </div>
@@ -49,9 +49,9 @@ const MockupComparison = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-6">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="p-6 border border-white/5 rounded-[1.5rem] bg-white/[0.03] hover:bg-white/[0.06] transition-all hover:-translate-y-1 group cursor-default">
-                  <div className="text-xs font-black text-purple-500/50 group-hover:text-purple-500 transition-colors mb-4 tracking-tighter">STEP 0{i}</div>
+              {['idea', 'backtest', 'deploy', 'monitor'].map((step, i) => (
+                <div key={step} className="p-6 border border-white/5 rounded-[1.5rem] bg-white/[0.03] hover:bg-white/[0.06] transition-all hover:-translate-y-1 group cursor-default">
+                  <div className="text-xs font-black text-purple-500/50 group-hover:text-purple-500 transition-colors mb-4 tracking-tighter">STEP 0{i + 1}</div>
                   <div className="font-bold text-lg mb-2">流程步骤名称</div>
                   <div className="text-sm text-gray-500 leading-relaxed">这里是步骤的描述文案，采用更舒适的行高和字重。</div>
                 </div>
@@ -66,7 +66,7 @@ const MockupComparison = () => {
               </div>
               <div className="h-24 bg-white/5 rounded-lg mb-3 flex items-end p-2 gap-1">
                 {[40, 70, 45, 90, 65, 80, 50].map((h, i) => (
-                  <div key={i} style={{height: `${h}%`}} className="flex-1 bg-gradient-to-t from-cyan-500/20 to-cyan-400 rounded-t-sm"></div>
+                  <div key={`roi-bar-${i + 1}-${h}`} style={{height: `${h}%`}} className="flex-1 bg-gradient-to-t from-cyan-500/20 to-cyan-400 rounded-t-sm"></div>
                 ))}
               </div>
               <div className="text-xs font-bold text-green-400">+18.4% ROI</div>

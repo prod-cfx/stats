@@ -86,9 +86,9 @@ export const DiscoverGrid = () => {
       {/* Recommended Section */}
       <LoadingState isLoading={loading} error={!!error} onRetry={reload}>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-5">
-          {data?.recommended.map((trader, index) => (
+          {data?.recommended.map(trader => (
             <TraderCard 
-              key={`rec-${index}`} 
+              key={`rec-${trader.address}`}
               {...trader} 
               onShowStats={handleShowStats}
             />
@@ -130,9 +130,9 @@ export const DiscoverGrid = () => {
         isEmpty={!loading && !error && sortedDetails.length === 0}
       >
         <div className="grid grid-cols-1 gap-4 pb-5 md:grid-cols-2 md:gap-5 lg:grid-cols-3">
-          {sortedDetails.map((trader, index) => (
+          {sortedDetails.map(trader => (
             <TraderCard 
-              key={`det-${index}`} 
+              key={`det-${trader.address}`}
               {...trader} 
               onShowStats={handleShowStats}
             />

@@ -201,8 +201,8 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
             {/* Options */}
             <div className="flex-1 space-y-2 mb-3">
               {p.options ? (
-                p.options.map((option, idx) => (
-                  <div key={idx} className={`flex justify-between items-center ${optionTextSize}`}>
+                p.options.map(option => (
+                  <div key={option.label} className={`flex justify-between items-center ${optionTextSize}`}>
                     <span className="text-[color:var(--cf-text)]">{option.label}</span>
                     <span className="text-[color:var(--cf-text-strong)] font-medium">{option.probability}</span>
                   </div>

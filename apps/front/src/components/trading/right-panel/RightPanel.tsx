@@ -779,9 +779,9 @@ export const RightPanel = ({
 
         <div className="flex flex-col">
           <div ref={sellsRef} className="cf-scrollbar h-[160px] md:h-[200px] overflow-y-auto pr-1">
-            {orderbook.sells.map((s, i) => (
+            {orderbook.sells.map(s => (
               <OrderbookRow
-                key={`sell-${i}`}
+                key={`sell-${s.price}-${s.amount}-${s.total}`}
                 price={s.price}
                 amount={s.amount}
                 total={s.total}
@@ -818,9 +818,9 @@ export const RightPanel = ({
           </div>
 
           <div className="cf-scrollbar h-[160px] md:h-[200px] overflow-y-auto pr-1">
-            {orderbook.buys.map((b, i) => (
+            {orderbook.buys.map(b => (
               <OrderbookRow
-                key={`buy-${i}`}
+                key={`buy-${b.price}-${b.amount}-${b.total}`}
                 price={b.price}
                 amount={b.amount}
                 total={b.total}

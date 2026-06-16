@@ -301,7 +301,7 @@ export const ExchangeLiquidationTable = ({
               <tbody className="divide-y divide-[color:var(--cf-border)]">
                 {tableData.map((row, index) => (
                   <tr
-                    key={index}
+                    key={row.exchange}
                     className={`cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
                       row.isTotal ? 'bg-[color:var(--cf-surface-2)]/70' : ''
                     }`}
@@ -403,13 +403,13 @@ export const ExchangeLiquidationTable = ({
             <p className="text-sm font-bold text-[color:var(--cf-text)]">
               {t('liquidationData.modal.recent')}
             </p>
-            {[1, 2, 3].map(i => (
+            {['a4c9f1', '7b2d8e', 'c13a90'].map(wallet => (
               <div
-                key={i}
+                key={wallet}
                 className="flex items-center justify-between rounded-lg border border-[color:var(--cf-border)]/40 bg-[color:var(--cf-surface-2)]/50 p-3 text-sm"
               >
                 <span className="text-[color:var(--cf-text)]">
-                  0x{Math.random().toString(16).substring(2, 8)}...
+                  0x{wallet}...
                 </span>
                 <span className="text-red-400">
                   -{currencyFormatter.format(4.2e5)} ({t('liquidationData.summary.short')})

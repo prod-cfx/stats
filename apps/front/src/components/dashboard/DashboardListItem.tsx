@@ -39,9 +39,9 @@ export const DashboardListItem = ({
             {t('dashboard.saves', { count: saves })}
           </span>
           {tags &&
-            tags.map((tag, idx) => (
+            tags.map(tag => (
               <span
-                key={idx}
+                key={tag}
                 className="text-caption rounded border border-[#30363d] bg-[#0d1117] px-1.5 py-0.5 font-bold text-[#8b949e] uppercase"
               >
                 {tag}

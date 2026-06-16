@@ -1728,6 +1728,72 @@ export function AiQuantPageClient({
     setRightPanelTab(tab)
     setMobilePanelSheetOpen(true)
   }
+  const renameConversation = (id: string, title: string) => {
+    setConversations(prev =>
+      prev.map(conv => (conv.id === id ? { ...conv, title, updatedAt: Date.now() } : conv)),
+    )
+  }
+  const confirmBacktestParams = (nextDraftValues: Record<string, unknown>) => {
+    invalidateActiveConversationBacktestRecovery()
+    updateActiveConversation(curr => {
+      const requestedValues = { ...curr.paramValues, ...nextDraftValues }
+      const normalizedDraftConfig = buildBacktestDraftConfigFromValues(requestedValues)
+      const nextValues = normalizedDraftConfig
+        ? applyBacktestDraftConfigToValues({
+            currentValues: requestedValues,
+            backtestDraftConfig: normalizedDraftConfig,
+          })
+        : requestedValues
+      return {
+        ...curr,
+        paramValues: nextValues,
+        params: normalizeParamsFromValues(nextValues, curr.params),
+        backtestDraftConfig: normalizedDraftConfig,
+        backtestResult: null,
+        backtestExecutionState: 'idle',
+        backtestExecutionConfigExplicit: hasExplicitBacktestExecutionOverrides(nextValues),
+        updatedAt: Date.now(),
+      }
+    })
+    persistConversationBacktestDraft(activeConversation.id, {
+      ...activeConversation.paramValues,
+      ...nextDraftValues,
+    })
+  }
+  const confirmDeploy = async () => {
+    if (deploySubmitting) {
+      return
+    }
+    if (!activeConversation.backtestResult || !session?.userId) return
+    const deployedDetail = await confirmAiQuantDeploy({
+      activeConversation,
+      apiConfigHref,
+      deployRequestId,
+      selectedDeployAccountId,
+      selectedDeployExchange: activePublishedDeployTruth?.exchange ?? selectedDeployExchange,
+      selectedDeployMarketType: activePublishedDeployTruth?.marketType ?? null,
+      selectedDeployLeverage,
+      sessionUserId: session.userId,
+      setDeployOpen,
+      setDeployRequestId,
+      setDeploySubmitting,
+      setExchangeAccounts,
+      setSelectedDeployAccountId,
+      t,
+      updateActiveConversation,
+      push: router.push,
+    })
+    if (!deployedDetail) {
+      return
+    }
+    setDeploymentDetail(deployedDetail)
+    setDeploymentDetailStatus('ready')
+    updateActiveConversation(curr => ({
+      ...curr,
+      publishedStrategyInstanceId: deployedDetail.id,
+      updatedAt: Date.now(),
+    }))
+  }
 
   return (
     <main className="mx-auto flex w-full flex-1 flex-col bg-[color:var(--cf-bg)] md:max-w-[1120px] md:gap-6 md:bg-transparent md:px-8 md:py-8">
@@ -1841,11 +1907,7 @@ export function AiQuantPageClient({
           onMobileSheetOpenChange={setMobileConversationSheetOpen}
           onCreate={createNewConversation}
           onSwitch={setActiveConversationId}
-          onRename={(id, title) => {
-            setConversations(prev =>
-              prev.map(conv => (conv.id === id ? { ...conv, title, updatedAt: Date.now() } : conv)),
-            )
-          }}
+          onRename={renameConversation}
           onDelete={id => {
             void requestDeleteConversation(id)
           }}
@@ -1866,34 +1928,7 @@ export function AiQuantPageClient({
             compactMode={compactMode}
             onClarificationAnswer={onClarificationAnswer}
             onParamChange={onParamChange}
-            onConfirmBacktestParams={nextDraftValues => {
-              invalidateActiveConversationBacktestRecovery()
-              updateActiveConversation(curr => {
-                const requestedValues = { ...curr.paramValues, ...nextDraftValues }
-                const normalizedDraftConfig = buildBacktestDraftConfigFromValues(requestedValues)
-                const nextValues = normalizedDraftConfig
-                  ? applyBacktestDraftConfigToValues({
-                      currentValues: requestedValues,
-                      backtestDraftConfig: normalizedDraftConfig,
-                    })
-                  : requestedValues
-                return {
-                  ...curr,
-                  paramValues: nextValues,
-                  params: normalizeParamsFromValues(nextValues, curr.params),
-                  backtestDraftConfig: normalizedDraftConfig,
-                  backtestResult: null,
-                  backtestExecutionState: 'idle',
-                  backtestExecutionConfigExplicit:
-                    hasExplicitBacktestExecutionOverrides(nextValues),
-                  updatedAt: Date.now(),
-                }
-              })
-              persistConversationBacktestDraft(activeConversation.id, {
-                ...activeConversation.paramValues,
-                ...nextDraftValues,
-              })
-            }}
+            onConfirmBacktestParams={confirmBacktestParams}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
             canRunBacktest={canRunBacktest}
@@ -2316,40 +2351,7 @@ export function AiQuantPageClient({
         mode={deploymentState === 'stopped' ? 'redeploy' : 'deploy'}
         driftReasons={[]}
         onSelectAccount={setSelectedDeployAccountId}
-        onConfirmDeploy={async () => {
-          if (deploySubmitting) {
-            return
-          }
-          if (!activeConversation.backtestResult || !session?.userId) return
-          const deployedDetail = await confirmAiQuantDeploy({
-            activeConversation,
-            apiConfigHref,
-            deployRequestId,
-            selectedDeployAccountId,
-            selectedDeployExchange: activePublishedDeployTruth?.exchange ?? selectedDeployExchange,
-            selectedDeployMarketType: activePublishedDeployTruth?.marketType ?? null,
-            selectedDeployLeverage,
-            sessionUserId: session.userId,
-            setDeployOpen,
-            setDeployRequestId,
-            setDeploySubmitting,
-            setExchangeAccounts,
-            setSelectedDeployAccountId,
-            t,
-            updateActiveConversation,
-            push: router.push,
-          })
-          if (!deployedDetail) {
-            return
-          }
-          setDeploymentDetail(deployedDetail)
-          setDeploymentDetailStatus('ready')
-          updateActiveConversation(curr => ({
-            ...curr,
-            publishedStrategyInstanceId: deployedDetail.id,
-            updatedAt: Date.now(),
-          }))
-        }}
+        onConfirmDeploy={confirmDeploy}
         lng={lng}
       />
     </main>

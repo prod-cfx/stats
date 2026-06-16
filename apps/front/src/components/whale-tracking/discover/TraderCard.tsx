@@ -259,10 +259,10 @@ export const TraderCard = ({
       {aiTags && (
         <div className="flex items-center gap-3 flex-wrap">
           <span className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">{t('whaleTracking.discover.labels.aiTags')}:</span>
-          {aiTags.map((tag, i) => {
+          {aiTags.map(tag => {
             const styles = TAG_STYLES[tag.key] || { colorClass: 'text-[color:var(--cf-text-strong)]', bgClass: 'bg-[color:var(--cf-surface-2)]' };
             return (
-              <div key={i} className="relative group/tag">
+              <div key={tag.key} className="relative group/tag">
                 <span 
                   className={`flex cursor-help items-center gap-1 rounded-md px-2.5 py-1 !text-xs !font-semibold !leading-5 ${styles.colorClass} ${styles.bgClass}`}
                 >

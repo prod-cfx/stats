@@ -57,7 +57,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 <div className="w-full h-full flex items-end justify-around px-4 pb-4">
                   {[40, 60, 45, 70, 55, 80, 65, 50].map((h, i) => (
                     <div
-                      key={i}
+                      key={`kline-${i + 1}-${h}`}
                       className="w-1.5 bg-gradient-to-t from-primary/60 to-primary/20 rounded-t"
                       style={{ height: `${h}%` }}
                     />
@@ -66,8 +66,8 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               )}
               {item.type.includes('prediction') && (
                 <div className="w-full p-4 space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center gap-2">
+                  {['yes', 'no', 'other'].map(item => (
+                    <div key={item} className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-primary/60" />
                       <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-8 h-2 bg-[color:var(--cf-surface-2)] rounded" />
@@ -77,8 +77,8 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               )}
               {item.type.includes('stocks') && (
                 <div className="w-full p-4 space-y-1.5">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="flex items-center gap-2">
+                  {['asset', 'company', 'holding', 'change'].map(item => (
+                    <div key={item} className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded bg-primary/20" />
                       <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-10 h-2 bg-primary/40 rounded" />
@@ -93,8 +93,8 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                     <div className="flex-1 h-1.5 bg-red-500/40 rounded" />
                   </div>
                   <div className="space-y-1.5">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex gap-2">
+                    {['top', 'mid', 'bottom'].map(item => (
+                      <div key={item} className="flex gap-2">
                         <div className="w-12 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                         <div className="flex-1 h-2 bg-green-500/20 rounded" />
                         <div className="flex-1 h-2 bg-red-500/20 rounded" />
@@ -106,13 +106,13 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               {item.type.includes('orderbook') && (
                 <div className="w-full p-4 flex gap-2">
                   <div className="flex-1 space-y-1">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-2 bg-green-500/30 rounded" style={{ width: `${100 - i * 15}%` }} />
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={`bid-${i}`} className="h-2 bg-green-500/30 rounded" style={{ width: `${100 - i * 15}%` }} />
                     ))}
                   </div>
                   <div className="flex-1 space-y-1">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-2 bg-red-500/30 rounded ml-auto" style={{ width: `${100 - i * 15}%` }} />
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={`ask-${i}`} className="h-2 bg-red-500/30 rounded ml-auto" style={{ width: `${100 - i * 15}%` }} />
                     ))}
                   </div>
                 </div>
@@ -122,7 +122,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                   <div className="h-full flex items-end justify-around">
                     {[30, 50, 70, 90, 60, 40, 55, 75, 45].map((h, i) => (
                       <div
-                        key={i}
+                        key={`heat-${i + 1}-${h}`}
                         className={`w-1 rounded-t ${i < 4 ? 'bg-red-500/40' : 'bg-green-500/40'}`}
                         style={{ height: `${h}%` }}
                       />
@@ -134,7 +134,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                 <div className="w-full h-full p-4 flex items-end justify-around">
                   {[40, 55, 48, 62, 70, 58, 75, 65].map((h, i) => (
                     <div
-                      key={i}
+                      key={`volume-${i + 1}-${h}`}
                       className="w-2 bg-primary/40 rounded-t"
                       style={{ height: `${h}%` }}
                     />
@@ -143,8 +143,8 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
               )}
               {item.type.includes('liquidation.feed') && (
                 <div className="w-full p-4 space-y-1.5">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="flex items-center gap-2">
+                  {['one', 'two', 'three', 'four'].map(item => (
+                    <div key={item} className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-red-500/40" />
                       <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-12 h-2 bg-red-500/30 rounded" />

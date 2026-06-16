@@ -253,8 +253,8 @@ export function RiskCard({ title, data }: { title: string; data: { label: string
     <div className="flex h-full flex-col rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm">
       <h3 className="mb-4 !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
       <div className="flex flex-1 flex-col justify-center space-y-3">
-        {data.map((item, idx) => (
-          <div key={idx} className="flex items-center justify-between gap-4 !text-sm !font-normal !leading-[22px]">
+        {data.map(item => (
+          <div key={`${item.label}-${item.value}`} className="flex items-center justify-between gap-4 !text-sm !font-normal !leading-[22px]">
             <span className="text-[color:var(--cf-muted)]">{item.label}</span>
             <span className="text-right !font-semibold text-[color:var(--cf-text-strong)]">{item.value}</span>
           </div>

@@ -115,9 +115,9 @@ export const ExploreDashboards = () => {
           <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-primary pb-4 -mb-[1px]">{t('dashboard.explore.featured')}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {featuredDashboards.map((card, idx) => (
+          {featuredDashboards.map(card => (
             <button
-              key={idx}
+              key={card.title}
               type="button"
               aria-label={`${t('dashboard.explore.openDashboard')}: ${card.title}`}
               onClick={() => handleCardClick(card)}
@@ -135,9 +135,9 @@ export const ExploreDashboards = () => {
         <div className="space-y-6">
           <SectionTitle>{t('dashboard.explore.hot')}</SectionTitle>
           <div className="flex flex-col gap-4">
-            {hotDashboards.map((item, idx) => (
+            {hotDashboards.map(item => (
               <button
-                key={idx}
+                key={item.title}
                 type="button"
                 aria-label={`${t('dashboard.explore.openDashboard')}: ${item.title}`}
                 onClick={() => handleCardClick(item)}
@@ -153,9 +153,9 @@ export const ExploreDashboards = () => {
         <div className="space-y-6">
           <SectionTitle>{t('dashboard.explore.community')}</SectionTitle>
           <div className="flex flex-col gap-4">
-            {communityDashboards.map((item, idx) => (
+            {communityDashboards.map(item => (
               <button
-                key={idx}
+                key={item.title}
                 type="button"
                 aria-label={`${t('dashboard.explore.openDashboard')}: ${item.title}`}
                 onClick={() => handleCardClick(item)}

@@ -235,7 +235,7 @@ export function AiQuantStrategyPrimarySummary({
   return (
     <>
       {entries.map((entry, idx) => (
-        <div key={`${keyPrefix}-param-${idx}`} className="contents">
+        <div key={`${keyPrefix}-param-${entry}`} className="contents">
           {idx > 0 && <span>/</span>}
           <span>{entry}</span>
         </div>

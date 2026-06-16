@@ -827,8 +827,8 @@ export const ProfileDataTabs = ({
                 </button>
                 {expandedOrders.has(orderKey) && (
                   <div className="mt-3 space-y-2 border-t border-[color:var(--cf-border)] pt-3">
-                    {order.details.map((detail, dIdx) => (
-                      <div key={detail.id || dIdx} className="rounded-lg bg-[color:var(--cf-surface)] p-2 text-xs">
+                    {order.details.map(detail => (
+                      <div key={detail.id || `${detail.timestamp}-${detail.type}-${detail.value}`} className="rounded-lg bg-[color:var(--cf-surface)] p-2 text-xs">
                         <div className="flex justify-between gap-2"><span className="text-[color:var(--cf-muted)]">{translateOrderType(detail.type)}</span><span className="text-[color:var(--cf-text-strong)]">{detail.value}</span></div>
                         <div className="mt-1 break-all text-[color:var(--cf-muted)]">{detail.id} · {detail.amount} · {detail.price}</div>
                       </div>
@@ -1250,8 +1250,8 @@ export const ProfileDataTabs = ({
                 </td>
               </tr>
             ) : activeTab === 'spot' ? (
-              filteredSpotData.map((pos, idx) => (
-                <tr key={idx} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+              filteredSpotData.map(pos => (
+                <tr key={pos.asset} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
@@ -1281,8 +1281,8 @@ export const ProfileDataTabs = ({
                 </tr>
               ))
             ) : activeTab === 'perpetual' ? (
-              filteredPerpData.map((pos, idx) => (
-                <tr key={idx} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+              filteredPerpData.map(pos => (
+                <tr key={`${pos.asset}-${pos.side}-${pos.marginType}`} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className="px-6 py-4">
                     <div className="flex items-center">
                       <div className="flex flex-col">
@@ -1396,9 +1396,9 @@ export const ProfileDataTabs = ({
                       </td>
                     </tr>
                     {expandedOrders.has(orderKey) &&
-                      order.details.map((detail, dIdx) => (
+                      order.details.map(detail => (
                         <tr
-                          key={detail.id || dIdx}
+                          key={detail.id || `${detail.timestamp}-${detail.type}-${detail.value}`}
                           className="bg-[color:var(--cf-bg)]/30 text-[color:var(--cf-muted)]"
                         >
                           <td className="px-6 py-3 pl-12 text-xs">{formatRelativeTime(detail.timestamp)}</td>
@@ -1427,8 +1427,8 @@ export const ProfileDataTabs = ({
                 )
               })
             ) : activeTab === 'trades' ? (
-              filteredRecentTrades.map((trade, idx) => (
-                <tr key={idx} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+              filteredRecentTrades.map(trade => (
+                <tr key={`${trade.timestamp}-${trade.asset}-${trade.action}-${trade.value}`} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
                     {formatRelativeTime(trade.timestamp)}
                   </td>
@@ -1504,8 +1504,8 @@ export const ProfileDataTabs = ({
                   </td>
                 </tr>
               ) : (
-                filteredHistoryOrders.map((order, idx) => (
-                  <tr key={idx} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+                filteredHistoryOrders.map(order => (
+                  <tr key={order.id} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                     <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
                       {formatRelativeTime(order.timestamp)}
                     </td>

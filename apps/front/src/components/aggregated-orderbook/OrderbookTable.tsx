@@ -121,8 +121,8 @@ const OrderRow = ({
         className={`relative z-10 flex w-full items-center ${isCompact ? 'text-[9.5px] leading-3' : 'text-[12px] leading-4'} font-mono`}
       >
         <div className={`${isCompact ? 'w-[15%]' : 'w-[22%]'} flex items-center gap-0 opacity-70`}>
-          {item.exchanges.slice(0, 2).map((ex, idx) => (
-            <ExchangeLogo key={idx} name={ex} size={isCompact ? 8 : 13} />
+          {item.exchanges.slice(0, 2).map(ex => (
+            <ExchangeLogo key={ex} name={ex} size={isCompact ? 8 : 13} />
           ))}
         </div>
         <span
@@ -212,7 +212,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] select-none">
-      <style jsx global>{`
+      <style>{`
         @keyframes orderbook-row-flash {
           from { opacity: 1; }
           to { opacity: 0; }

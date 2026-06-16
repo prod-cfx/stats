@@ -59,8 +59,8 @@ const StatCard = ({
       </div>
     </div>
     <div className="space-y-1">
-      {subStats.map((stat, idx) => (
-        <div key={idx} className="text-caption flex items-center justify-between">
+      {subStats.map(stat => (
+        <div key={stat.label} className="text-caption flex items-center justify-between">
           <span className="font-medium text-[color:var(--cf-muted)]">{stat.label}</span>
           <span className={`font-semibold ${stat.color}`}>{stat.value}</span>
         </div>
@@ -70,6 +70,7 @@ const StatCard = ({
 )
 
 interface TradeCardProps {
+  keyId: string
   asset: string
   side: 'Long' | 'Short'
   time: string
@@ -173,6 +174,7 @@ const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: Performance
 }
 
 interface PositionCardProps {
+  keyId: string
   asset: string
   side: 'Long' | 'Short'
   time: string
@@ -441,6 +443,7 @@ export const WhaleTradingStatsModal = ({
       .sort((a, b) => b.positionValueUsd - a.positionValueUsd)
       .slice(0, 10)
       .map(tr => ({
+        keyId: `trade-${tr._index}-${tr.symbol}-${tr.side}-${tr.createTime}`,
         asset: tr.symbol,
         side: tr.side === 'LONG' ? 'Long' : 'Short',
         time: formatRelativeTime(tr.createTime),
@@ -465,6 +468,7 @@ export const WhaleTradingStatsModal = ({
     })
 
     const positionPerformance: PositionCardProps[] = indexedTrades.slice(0, 12).map(tr => ({
+      keyId: `position-${tr._index}-${tr.symbol}-${tr.side}-${tr.createTime}`,
       asset: tr.symbol,
       side: tr.side === 'LONG' ? 'Long' : 'Short',
       time: formatRelativeTime(tr.createTime),
@@ -652,8 +656,8 @@ export const WhaleTradingStatsModal = ({
         <div className="flex flex-col gap-4">
           <SectionTitle className="text-lg">{t('whaleTracking.modal.topTrades')}</SectionTitle>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-5">
-            {currentTopTrades.map((trade, idx) => (
-              <TradeCard key={idx} {...trade} />
+            {currentTopTrades.map(trade => (
+              <TradeCard key={trade.keyId} {...trade} />
             ))}
           </div>
         </div>
@@ -679,8 +683,10 @@ export const WhaleTradingStatsModal = ({
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3 lg:grid-cols-4">
             {activeTab === 'asset'
-              ? currentAssetPerformance.map((item, idx) => <PerformanceCard key={idx} {...item} />)
-              : currentPositionPerformance.map((item, idx) => <PositionCard key={idx} {...item} />)}
+              ? currentAssetPerformance.map(item => <PerformanceCard key={item.asset} {...item} />)
+              : currentPositionPerformance.map(item => (
+                  <PositionCard key={item.keyId} {...item} />
+                ))}
           </div>
         </div>
       </div>

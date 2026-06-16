@@ -218,7 +218,7 @@ export const PredictionMarketGrid = () => {
             </h4>
             <div className="min-w-0 px-1 !text-sm !font-normal !leading-[22px] break-words text-[color:var(--cf-text)]">
               {(selectedPrediction?.rules?.paragraphs || []).map((p, idx) => (
-                <React.Fragment key={idx}>
+                <React.Fragment key={`rule-${idx + 1}-${p}`}>
                   <p>{formatRuleText(p)}</p>
                   {idx !== (selectedPrediction?.rules?.paragraphs?.length ?? 0) - 1 && (
                     <div className="h-5" />

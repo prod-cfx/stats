@@ -1,5 +1,6 @@
 'use client'
 
+import type { ChangeEvent } from 'react'
 import type { StrategyPlazaTemplate } from '@/lib/api'
 import { Activity, Edit3, Loader2, Play } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
@@ -473,6 +474,10 @@ export function StrategyPlaza({
   const favoriteCount = cards.filter(item => favorites[item.template.id]).length
 
   const resetPage = () => setPage(1)
+  const handleSearchInput = (event: ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.currentTarget.value)
+    resetPage()
+  }
 
   if (loading) {
     return (
@@ -687,10 +692,8 @@ export function StrategyPlaza({
               aria-label="搜索策略 · 币对 · 作者"
               placeholder="搜索策略 · 币对 · 作者"
               value={query}
-              onInput={event => {
-                setQuery(event.currentTarget.value)
-                resetPage()
-              }}
+              onChange={() => {}}
+              onInput={handleSearchInput}
               className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[color:var(--cf-text)] outline-none"
             />
           </label>

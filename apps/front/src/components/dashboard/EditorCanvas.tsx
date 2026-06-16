@@ -128,7 +128,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
         dashboardId={dashboardId}
       />
 
-      <style jsx global>{`
+      <style>{`
         .bg-grid-pattern {
           background-image: radial-gradient(var(--cf-border) 1px, transparent 1px);
           background-size: 20px 20px;

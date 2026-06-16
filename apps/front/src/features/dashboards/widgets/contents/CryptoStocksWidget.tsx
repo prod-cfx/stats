@@ -145,8 +145,8 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
               </tr>
             </thead>
             <tbody className={`text-[color:var(--cf-text-strong)] ${textSize} divide-y divide-[color:var(--cf-border)]`}>
-              {rows.map((row, index) => (
-                <tr key={index} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+              {rows.map(row => (
+                <tr key={`${row.ticker}-${row.asset}`} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className={`${paddingX} ${paddingY}`}>
                     <div className="flex items-center gap-2">
                       <Image

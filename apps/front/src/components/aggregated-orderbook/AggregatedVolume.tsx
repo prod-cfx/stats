@@ -137,9 +137,9 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
 
       {/* Rows List */}
       <div className={`flex-1 min-h-0 overflow-auto cf-scrollbar pr-1 flex flex-col ${isCompact ? 'gap-2' : 'gap-4'} relative`}>
-        {items.map((item, idx) => (
+        {items.map(item => (
           <div 
-            key={idx} 
+            key={item.name}
             className={`flex items-center ${isCompact ? 'gap-2' : 'gap-4'} group cursor-pointer relative`}
             onMouseEnter={() => setHoveredItem(item)}
             onMouseLeave={() => setHoveredItem(null)}
