@@ -1,5 +1,7 @@
+import type { Metadata } from 'next'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { getPageMetadata } from '@/lib/page-metadata'
 import { OfficialStrategyBacktestReportClient } from './OfficialStrategyBacktestReportClient'
 
 interface OfficialStrategyBacktestReportPageProps {
@@ -7,6 +9,13 @@ interface OfficialStrategyBacktestReportPageProps {
     lng: string
     templateId: string
   }>
+}
+
+export async function generateMetadata({
+  params,
+}: OfficialStrategyBacktestReportPageProps): Promise<Metadata> {
+  const { lng, templateId } = await params
+  return getPageMetadata('ai-quant/plaza/template', lng, `/ai-quant/plaza/${templateId}`)
 }
 
 export default async function OfficialStrategyBacktestReportPage({

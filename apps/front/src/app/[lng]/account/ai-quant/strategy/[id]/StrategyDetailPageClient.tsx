@@ -2,13 +2,14 @@
 
 import type { AiQuantStrategyRecord } from '@/components/account/ai-quant-strategy-store'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useReducer } from 'react'
+import { useEffect, useMemo, useReducer } from 'react'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
 import { shouldSuppressAuthGate } from '@/features/auth/auth-gate-suppression'
 import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchAccountAiQuantStrategyDetail } from '@/lib/api'
+import { createSearchParamReader } from '@/lib/search-params'
 
 interface StrategyDetailPageClientProps {
   lng: 'zh' | 'en'
@@ -23,7 +24,10 @@ function resolvePlazaReturnHref(lng: 'zh' | 'en', value: string | null) {
 export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientProps) {
   const { session, isLoading } = useAuth()
   const { openAuth } = useAuthSheet()
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
+  const { get } = useMemo(() => createSearchParamReader(searchParams), [searchParams])
   const [detailState, dispatchDetailState] = useReducer(
     (
       _state: { strategy: AiQuantStrategyRecord | null; isDetailLoading: boolean },
@@ -36,7 +40,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     },
     { strategy: null, isDetailLoading: true },
   )
-  const plazaReturnHref = resolvePlazaReturnHref(lng, searchParams?.get('from') ?? null)
+  const plazaReturnHref = resolvePlazaReturnHref(lng, get('from'))
   const strategyRedirect = plazaReturnHref
     ? `/${lng}/account/ai-quant/strategy/${id}?from=${encodeURIComponent(plazaReturnHref)}`
     : `/${lng}/account/ai-quant/strategy/${id}`

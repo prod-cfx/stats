@@ -6,10 +6,18 @@ type PageMetadataKey =
   | 'home'
   | 'ai-quant'
   | 'ai-quant/plaza'
+  | 'ai-quant/plaza/template'
+  | 'ai-quant/backtest'
+  | 'auth/login'
+  | 'auth/telegram/callback'
   | 'market'
   | 'trade'
+  | 'long-short-ratio'
   | 'whale-tracking/discover'
+  | 'whale-tracking/holdings'
+  | 'whale-tracking/notifications'
   | 'whale-tracking/profile'
+  | 'whale-tracking/realtime'
   | 'aggregated-orderbook'
   | 'liquidation-data'
   | 'liquidation-map'
@@ -65,6 +73,51 @@ const PAGE_METADATA_DEFINITIONS: Record<PageMetadataKey, PageMetadataDefinition>
       description: 'Browse, filter, and reuse community quant strategy templates and live strategies.',
     },
   },
+  'ai-quant/plaza/template': {
+    pathname: '/ai-quant/plaza',
+    zh: {
+      title: '官方策略回测报告',
+      description: '查看策略广场官方模板的历史回测表现、风险指标与交易明细。',
+    },
+    en: {
+      title: 'Official Strategy Backtest Report',
+      description:
+        'Review historical backtest performance, risk metrics, and trades for an official strategy template.',
+    },
+  },
+  'ai-quant/backtest': {
+    pathname: '/ai-quant/backtest',
+    zh: {
+      title: 'AI 量化回测报告',
+      description: '查看 AI 量化策略回测结果、收益曲线、风险指标与交易明细。',
+    },
+    en: {
+      title: 'AI Quant Backtest Report',
+      description: 'Review AI quant backtest results, equity curves, risk metrics, and trade details.',
+    },
+  },
+  'auth/login': {
+    pathname: '/auth/login',
+    zh: {
+      title: '登录 Coinflux',
+      description: '登录 Coinflux，管理交易看板、AI 量化策略与鲸鱼追踪通知。',
+    },
+    en: {
+      title: 'Sign in to Coinflux',
+      description: 'Sign in to manage trading dashboards, AI quant strategies, and whale alerts.',
+    },
+  },
+  'auth/telegram/callback': {
+    pathname: '/auth/telegram/callback',
+    zh: {
+      title: 'Telegram 授权回调',
+      description: '完成 Telegram 登录或绑定后返回 Coinflux。',
+    },
+    en: {
+      title: 'Telegram Authorization Callback',
+      description: 'Return to Coinflux after completing Telegram sign-in or binding.',
+    },
+  },
   market: {
     pathname: '/market',
     zh: {
@@ -88,6 +141,17 @@ const PAGE_METADATA_DEFINITIONS: Record<PageMetadataKey, PageMetadataDefinition>
         'Track spot and perpetual markets, funding, open interest, and orderbook depth in real time.',
     },
   },
+  'long-short-ratio': {
+    pathname: '/long-short-ratio',
+    zh: {
+      title: '多空比与市场情绪分析',
+      description: '跟踪主要加密资产多空持仓比例与市场情绪变化。',
+    },
+    en: {
+      title: 'Long-Short Ratio & Market Sentiment',
+      description: 'Track long-short positioning ratios and market sentiment across major crypto assets.',
+    },
+  },
   'whale-tracking/discover': {
     pathname: '/whale-tracking/discover',
     zh: {
@@ -108,6 +172,39 @@ const PAGE_METADATA_DEFINITIONS: Record<PageMetadataKey, PageMetadataDefinition>
     en: {
       title: 'Whale Wallet Profile & Performance',
       description: 'Inspect whale wallet positions, trade history, win rate, and performance.',
+    },
+  },
+  'whale-tracking/holdings': {
+    pathname: '/whale-tracking/holdings',
+    zh: {
+      title: '鲸鱼持仓排行与组合分析',
+      description: '查看鲸鱼钱包持仓、资产分布与组合变化。',
+    },
+    en: {
+      title: 'Whale Holdings Rankings & Portfolio Analysis',
+      description: 'Review whale wallet holdings, asset allocation, and portfolio changes.',
+    },
+  },
+  'whale-tracking/notifications': {
+    pathname: '/whale-tracking/notifications',
+    zh: {
+      title: '鲸鱼通知与监控规则',
+      description: '管理鲸鱼地址提醒、通知偏好与实时监控规则。',
+    },
+    en: {
+      title: 'Whale Alerts & Monitoring Rules',
+      description: 'Manage whale wallet alerts, notification preferences, and live monitoring rules.',
+    },
+  },
+  'whale-tracking/realtime': {
+    pathname: '/whale-tracking/realtime',
+    zh: {
+      title: '实时鲸鱼交易追踪',
+      description: '实时查看大额链上交易、鲸鱼转账与市场异动。',
+    },
+    en: {
+      title: 'Real-Time Whale Trade Tracking',
+      description: 'Monitor large on-chain trades, whale transfers, and market-moving activity in real time.',
     },
   },
   'aggregated-orderbook': {
@@ -175,12 +272,16 @@ function buildAbsolutePageUrl(locale: AppLocale, pathname: `/${string}`) {
   return `${SITE_URL}/${locale}${pathname}`
 }
 
-export function getPageMetadata(pageKey: PageMetadataKey, locale?: string): Metadata {
+export function getPageMetadata(
+  pageKey: PageMetadataKey,
+  locale?: string,
+  pathnameOverride?: `/${string}`,
+): Metadata {
   const resolvedLocale = getRequestLocale(locale)
   const definition = PAGE_METADATA_DEFINITIONS[pageKey]
   const content = definition[resolvedLocale]
   const title = buildTitle(content.title)
-  const url = buildAbsolutePageUrl(resolvedLocale, definition.pathname)
+  const url = buildAbsolutePageUrl(resolvedLocale, pathnameOverride ?? definition.pathname)
 
   return {
     title,

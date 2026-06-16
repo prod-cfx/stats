@@ -18,6 +18,7 @@ import {
   getSavedDashboards,
   updateDashboardMeta,
 } from '@/features/dashboards/store/dashboard-store'
+import { createSearchParamReader } from '@/lib/search-params'
 import { toast } from '@/lib/toast'
 
 type TabType = 'explore' | 'my' | 'saved'
@@ -27,8 +28,11 @@ export function DashboardClient() {
   const router = useRouter()
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
-  const urlTabRaw = (searchParams?.get('tab') as TabType) || 'my'
+  const { get } = useMemo(() => createSearchParamReader(searchParams), [searchParams])
+  const urlTabRaw = (get('tab') as TabType) || 'my'
   // 暂时隐藏「探索看板」，避免早期内容稀缺时干扰体验
   const urlTab: TabType = urlTabRaw === 'explore' ? 'my' : urlTabRaw
   const [activeTab, setActiveTab] = useState<TabType>(urlTab)

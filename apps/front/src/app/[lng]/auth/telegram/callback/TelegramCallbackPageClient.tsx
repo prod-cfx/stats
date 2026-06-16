@@ -33,6 +33,8 @@ function removeSessionStorage(key: string) {
 
 export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientProps) {
   const router = useRouter()
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
   const {
     loginWithTelegramCallback,

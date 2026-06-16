@@ -1,7 +1,18 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { getPageMetadata } from '@/lib/page-metadata'
 import { LoginPageClient } from './LoginPageClient'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}): Promise<Metadata> {
+  const resolved = await Promise.resolve(params)
+  return getPageMetadata('auth/login', resolved.lng)
+}
 
 export default async function LoginPage({
   params,

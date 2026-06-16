@@ -5,18 +5,22 @@ import { ArrowLeft } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardEditorSidebar } from '@/components/dashboard/DashboardEditorSidebar'
 import { DashboardReadOnlyCanvas } from '@/features/dashboards/components/DashboardReadOnlyCanvas'
 import { DASHBOARD_UPDATED_EVENT, getDashboard } from '@/features/dashboards/store/dashboard-store'
+import { createSearchParamReader } from '@/lib/search-params'
 
 export function DashboardViewClient() {
   const { t } = useTranslation()
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
-  const dashboardId = searchParams?.get('id') || ''
+  const { get } = useMemo(() => createSearchParamReader(searchParams), [searchParams])
+  const dashboardId = get('id') || ''
   const [dashboard, setDashboard] = useState<DashboardDoc | null>(null)
   const [dashboardLoaded, setDashboardLoaded] = useState(false)
 

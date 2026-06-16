@@ -1,10 +1,11 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { normalizeAuthRedirectOrFallback } from '@/features/auth/auth-redirect'
 import { AuthSheet } from '@/features/auth/components/AuthSheet'
 import { useAuth } from '@/hooks/use-auth'
+import { createSearchParamReader } from '@/lib/search-params'
 
 interface LoginPageClientProps {
   lng: 'zh' | 'en'
@@ -12,10 +13,13 @@ interface LoginPageClientProps {
 
 export function LoginPageClient({ lng }: LoginPageClientProps) {
   const router = useRouter()
+  // React Doctor: page.tsx already wraps this client component in Suspense.
+  // react-doctor-disable-next-line react-doctor/nextjs-no-use-search-params-without-suspense
   const searchParams = useSearchParams()
+  const { get } = useMemo(() => createSearchParamReader(searchParams), [searchParams])
   const { isAuthenticated } = useAuth()
   const accountRedirect = `/${lng}/account`
-  const redirect = normalizeAuthRedirectOrFallback(searchParams?.get('redirect'), lng, accountRedirect)
+  const redirect = normalizeAuthRedirectOrFallback(get('redirect'), lng, accountRedirect)
   const closeFallbackPage = () => {
     router.replace(`/${lng}`)
   }
