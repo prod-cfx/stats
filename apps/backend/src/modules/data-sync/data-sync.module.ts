@@ -27,6 +27,7 @@ import { DataSyncMarketDataRepository } from './repositories/data-sync-market-da
 import { HyperliquidDexPerpetualTradesWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-trades-ws.adapter'
 import { HyperliquidTradesWsConfig } from './services/adapters/hyperliquid/hyperliquid-trades-ws.config'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
+import { DataPullTaskRunnerService } from './services/data-pull-task-runner.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
 
@@ -64,6 +65,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     GoogleTranslateClient,
     // 统一编排 & Cron
     DataSyncOrchestrator,
+    DataPullTaskRunnerService,
     DataSyncCronService,
     // 管理后台：数据拉取任务 CRUD
     AdminDataPullTaskService,

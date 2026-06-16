@@ -1,4 +1,4 @@
-import type { DataPullJob, DataPullJobContext, JobMetaSchema } from '../contracts/data-pull-job'
+import type { DataPullJob, JobMetaSchema } from '../contracts/data-pull-job'
 import type {
   AdminDataPullExecutionResponseDto,
   AdminDataPullTaskListQueryDto,
@@ -20,6 +20,7 @@ import {
   toAdminDataPullTaskResponseDto,
 } from './admin-data-pull-task.mapper'
 import { DataPullJobRegistryResolver } from './data-pull-job-registry.resolver'
+import { DataPullTaskRunnerService } from './data-pull-task-runner.service'
 
 @Injectable()
 export class AdminDataPullTaskService {
@@ -30,6 +31,7 @@ export class AdminDataPullTaskService {
     private readonly taskRepo: DataPullTaskRepository,
     @Inject(DATA_PULL_JOB_REGISTRY)
     jobs: DataPullJob[],
+    private readonly runner: DataPullTaskRunnerService,
     @Inject(DataPullExecutionRepository)
     private readonly execRepo: DataPullExecutionRepository,
   ) {
@@ -82,45 +84,7 @@ export class AdminDataPullTaskService {
       })
     }
 
-    // 记录一次新的执行历史
-    const exec = await this.execRepo.createStart(task.id, now)
-
-    try {
-      const ctx: DataPullJobContext<Record<string, unknown>> = {
-        taskId: task.id,
-        key: task.key,
-        cursor: task.cursor ?? null,
-        meta: (task.meta ?? null) as Record<string, unknown> | null,
-        now,
-      }
-
-      const result = await job.run(ctx)
-      const finished = new Date()
-
-      await this.execRepo.markSuccess(exec.id, finished, result)
-      await this.taskRepo.markSuccess(
-        task.id,
-        finished,
-        result.newCursor ?? task.cursor ?? null,
-        result.meta,
-      )
-
-      return toAdminDataPullExecutionResponseDto({
-        ...exec,
-        status: 'SUCCESS',
-        fetchedCount: result.fetchedCount,
-        finishedAt: finished,
-        errorMessage: null,
-        meta: result.meta ?? null,
-      })
-    } catch (error) {
-      const finished = new Date()
-      await this.execRepo.markFailed(exec.id, finished, error)
-      await this.taskRepo.markFailed(task.id, finished, error)
-
-      // 直接抛出原始错误，HTTP 层会返回 500 / 4xx
-      throw error
-    }
+    return this.runner.runClaimedTask(task, job, now)
   }
 
   /**

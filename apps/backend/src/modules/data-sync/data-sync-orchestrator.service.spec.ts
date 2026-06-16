@@ -4,6 +4,7 @@ import type { DataPullTask, DataPullTaskRepository } from './repositories/data-p
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
+import { DataPullTaskRunnerService } from './services/data-pull-task-runner.service'
 
 type TxEventsMock = {
   withAfterCommit: jest.Mock<Promise<unknown>, [() => Promise<unknown>]>
@@ -59,15 +60,18 @@ function createHarness(jobOverrides: Partial<DataPullJob> = {}) {
   const OrchestratorWithTx = DataSyncOrchestrator as unknown as new (
     jobs: DataPullJob[],
     taskRepo: DataPullTaskRepository,
-    execRepo: DataPullExecutionRepository,
-    txEvents: TxEventsMock,
+    runner: DataPullTaskRunnerService,
   ) => DataSyncOrchestrator
+  const runner = new DataPullTaskRunnerService(
+    taskRepo as unknown as DataPullTaskRepository,
+    execRepo as unknown as DataPullExecutionRepository,
+    txEvents as never,
+  )
 
   const service = new OrchestratorWithTx(
     [job],
     taskRepo as unknown as DataPullTaskRepository,
-    execRepo as unknown as DataPullExecutionRepository,
-    txEvents,
+    runner,
   )
 
   return { service, task, job, taskRepo, execRepo, txEvents }

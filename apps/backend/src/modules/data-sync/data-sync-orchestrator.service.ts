@@ -1,15 +1,11 @@
-import type { DataPullJob, DataPullJobContext } from './contracts/data-pull-job'
+import type { DataPullJob } from './contracts/data-pull-job'
 import type { DataPullTask } from './repositories/data-pull-task.repository'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
 // eslint-disable-next-line ts/consistent-type-imports
-import { TransactionEventsService } from '@/common/services/transaction-events.service'
-// 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
-// eslint-disable-next-line ts/consistent-type-imports
-import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
-// eslint-disable-next-line ts/consistent-type-imports
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 import { DataPullJobRegistryResolver } from './services/data-pull-job-registry.resolver'
+import { DataPullTaskRunnerService } from './services/data-pull-task-runner.service'
 
 @Injectable()
 export class DataSyncOrchestrator {
@@ -20,8 +16,7 @@ export class DataSyncOrchestrator {
     @Inject(DATA_PULL_JOB_REGISTRY)
     jobs: DataPullJob[],
     private readonly taskRepo: DataPullTaskRepository,
-    private readonly execRepo: DataPullExecutionRepository,
-    private readonly txEvents: TransactionEventsService,
+    private readonly runner: DataPullTaskRunnerService,
   ) {
     this.registryResolver = new DataPullJobRegistryResolver(jobs)
   }
@@ -56,41 +51,17 @@ export class DataSyncOrchestrator {
   }
 
   private async runSingleTask(task: DataPullTask, job: DataPullJob, now: Date): Promise<void> {
-    const start = new Date()
-    const exec = await this.execRepo.createStart(task.id, start)
-
     try {
-      const ctx: DataPullJobContext<Record<string, unknown>> = {
-        taskId: task.id,
-        key: task.key,
-        cursor: task.cursor ?? null,
-        meta: (task.meta ?? null) as Record<string, unknown> | null,
-        now,
-      }
-
       this.logger.log(
-        `Running data-pull task key=${job.key}, cursor=${ctx.cursor ?? 'null'}`,
+        `Running data-pull task key=${job.key}, cursor=${task.cursor ?? 'null'}`,
       )
 
-      const result = await this.txEvents.withAfterCommit(() => job.run(ctx))
-
-      const finished = new Date()
-      await this.execRepo.markSuccess(exec.id, finished, result)
-      await this.taskRepo.markSuccess(
-        task.id,
-        finished,
-        result.newCursor ?? task.cursor,
-        result.meta,
-      )
+      const execution = await this.runner.runClaimedTask(task, job, now)
 
       this.logger.log(
-        `Data-pull task key=${job.key} success, fetched=${result.fetchedCount}, cursor=${result.newCursor ?? task.cursor}`,
+        `Data-pull task key=${job.key} success, fetched=${execution.fetchedCount}, cursor=${execution.cursor}`,
       )
     } catch (error) {
-      const finished = new Date()
-      await this.execRepo.markFailed(exec.id, finished, error)
-      await this.taskRepo.markFailed(task.id, finished, error)
-
       this.logger.error(
         `Data-pull task key=${job.key} failed: ${error instanceof Error ? error.message : String(error)}`,
       )

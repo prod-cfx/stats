@@ -1,5 +1,10 @@
 import type { DataPullJob } from '../contracts/data-pull-job'
 import { AdminDataPullTaskService } from './admin-data-pull-task.service'
+import { DataPullTaskRunnerService } from './data-pull-task-runner.service'
+
+type TxEventsMock = {
+  withAfterCommit: jest.Mock<Promise<unknown>, [() => Promise<unknown>]>
+}
 
 function createJob(key: string, overrides: Partial<DataPullJob> = {}): DataPullJob {
   return {
@@ -56,9 +61,17 @@ function createService() {
     createJob('coinglass-aggregated-liquidation'),
     createJob('coinglass-heatmap'),
   ]
+  const txEvents: TxEventsMock = {
+    withAfterCommit: jest.fn(async fn => fn()),
+  }
+  const runner = new DataPullTaskRunnerService(
+    taskRepo as never,
+    execRepo as never,
+    txEvents as never,
+  )
 
-  const service = new AdminDataPullTaskService(taskRepo as never, jobs, execRepo as never)
-  return { service, taskRepo, execRepo, jobs }
+  const service = new AdminDataPullTaskService(taskRepo as never, jobs, runner, execRepo as never)
+  return { service, taskRepo, execRepo, jobs, txEvents }
 }
 
 describe('adminDataPullTaskService', () => {
@@ -89,7 +102,7 @@ describe('adminDataPullTaskService', () => {
   })
 
   it('runs triggerOnce and maps success execution dto', async () => {
-    const { service, taskRepo, execRepo, jobs } = createService()
+    const { service, taskRepo, execRepo, jobs, txEvents } = createService()
     const task = createTask()
     taskRepo.findById.mockResolvedValue(task)
     taskRepo.tryMarkRunningOnce.mockResolvedValue(true)
@@ -108,6 +121,7 @@ describe('adminDataPullTaskService', () => {
     }))
     expect(taskRepo.markSuccess).toHaveBeenCalled()
     expect(execRepo.markSuccess).toHaveBeenCalled()
+    expect(txEvents.withAfterCommit).toHaveBeenCalledTimes(1)
   })
 
   it('rejects interrupt when task is not running', async () => {
