@@ -72,4 +72,24 @@ describe('dashboardSidebar', () => {
     expect(host.textContent).toContain('dashboard.sidebar.myDashboards')
     expect(host.textContent).toContain('Published board')
   })
+
+  it('closes an open dashboard menu when pointer moves outside the menu', async () => {
+    await act(async () => {
+      root.render(<DashboardSidebar activeTab="my" />)
+    })
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[aria-label="dashboard-actions"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(host.textContent).toContain('重命名')
+
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    })
+
+    expect(host.textContent).not.toContain('重命名')
+  })
 })

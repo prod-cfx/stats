@@ -14,7 +14,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
@@ -66,6 +66,8 @@ export const DashboardSidebar = ({
   const [renameTarget, setRenameTarget] = useState<DashboardDoc | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DashboardDoc | null>(null)
+  const menuContainerRef = useRef<HTMLDivElement | null>(null)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     const refresh = () => {
@@ -80,6 +82,33 @@ export const DashboardSidebar = ({
       window.removeEventListener('storage', refresh)
     }
   }, [])
+
+  useEffect(() => {
+    if (!renameTarget) return
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
+  }, [renameTarget])
+
+  useEffect(() => {
+    if (!openMenuId) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuContainerRef.current?.contains(target)) return
+      setOpenMenuId(null)
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenuId(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openMenuId])
 
   const handleDashboardClick = (dashboardId: string, isPublished: boolean) => {
     if (onDashboardClick) {
@@ -96,7 +125,6 @@ export const DashboardSidebar = ({
   return (
     <aside
       className="flex w-64 flex-none flex-col gap-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6"
-      onClick={() => setOpenMenuId(null)}
     >
       <div className="space-y-8">
         {/* My Dashboards Section */}
@@ -147,7 +175,7 @@ export const DashboardSidebar = ({
                     {resolveDashboardName(dash.name)}
                   </button>
 
-                  <div className="relative pr-2">
+                  <div ref={openMenuId === dash.id ? menuContainerRef : undefined} className="relative pr-2">
                     <button
                       type="button"
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[color:var(--cf-muted)] opacity-0 transition-colors group-hover:opacity-100 hover:border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
@@ -162,7 +190,6 @@ export const DashboardSidebar = ({
                     {openMenuId === dash.id && (
                       <div
                         className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl"
-                        onClick={e => e.stopPropagation()}
                       >
                         <button
                           type="button"
@@ -245,7 +272,7 @@ export const DashboardSidebar = ({
                     {resolveDashboardName(dash.name)}
                   </button>
 
-                  <div className="relative pr-2">
+                  <div ref={openMenuId === dash.id ? menuContainerRef : undefined} className="relative pr-2">
                     <button
                       type="button"
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[color:var(--cf-muted)] opacity-0 transition-colors group-hover:opacity-100 hover:border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
@@ -260,7 +287,6 @@ export const DashboardSidebar = ({
                     {openMenuId === dash.id && (
                       <div
                         className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl"
-                        onClick={e => e.stopPropagation()}
                       >
                         <button
                           type="button"
@@ -357,11 +383,11 @@ export const DashboardSidebar = ({
             {t('dashboard.editor.actions.editTitle') || '标题'}
           </label>
           <input
+            ref={renameInputRef}
             value={renameValue}
             onChange={e => setRenameValue(e.target.value)}
             className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-[color:var(--cf-text-strong)] focus:outline-none"
             placeholder={t('dashboard.sidebar.untitled')}
-            autoFocus
           />
         </div>
       </Modal>

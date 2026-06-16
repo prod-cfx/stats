@@ -268,11 +268,15 @@ export function ConversationSidebar({
             role="dialog"
             aria-modal="true"
             aria-labelledby={mobileSheetTitleId}
-            onClick={() => setMobileSheetOpen(false)}
           >
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              aria-label={t('common.close', { defaultValue: 'Close' })}
+              onClick={() => setMobileSheetOpen(false)}
+            />
             <div
-              className="cf-side-drawer-panel h-full w-[86vw] max-w-[360px] overflow-hidden rounded-r-[28px] px-5 py-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]"
-              onClick={event => event.stopPropagation()}
+              className="cf-side-drawer-panel relative z-10 h-full w-[86vw] max-w-[360px] overflow-hidden rounded-r-[28px] px-5 py-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]"
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">

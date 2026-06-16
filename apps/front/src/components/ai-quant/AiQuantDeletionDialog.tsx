@@ -228,17 +228,21 @@ export function AiQuantDeletionDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4 py-4"
-      onClick={handleBackdropClick}
-    >
+    <div className="fixed inset-0 z-[95] flex items-center justify-center px-4 py-4">
+      <button
+        type="button"
+        tabIndex={-1}
+        className="absolute inset-0 cursor-default bg-black/50"
+        aria-label={t('aiQuant.deleteDialog.cancel')}
+        onClick={handleBackdropClick}
+        disabled={pending || confirmInFlightRef.current}
+      />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-quant-deletion-dialog-title"
         ref={dialogRef}
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
-        onClick={event => event.stopPropagation()}
+        className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
       >
         <h3
           id="ai-quant-deletion-dialog-title"

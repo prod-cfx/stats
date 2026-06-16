@@ -27,7 +27,7 @@ jest.mock('@/features/auth/components/EmailOtpForm', () => ({
   }) => (
     <div>
       <input disabled data-testid="beta-code-proxy" value={betaCode ?? ''} onChange={event => onBetaCodeChange?.(event.target.value)} />
-      <div data-testid="set-beta-code" onClick={() => onBetaCodeChange?.('beta-42')} />
+      <button type="button" tabIndex={-1} data-testid="set-beta-code" onClick={() => onBetaCodeChange?.('beta-42')} />
       <button type="button" data-testid="email-success" onClick={onSuccess}>
         email-form
       </button>

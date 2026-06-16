@@ -239,9 +239,9 @@ describe('AiQuantDeletionDialog', () => {
     const onClose = jest.fn()
     await render({ onClose })
 
-    const backdrop = container.firstChild as HTMLElement
+    const backdrop = container.querySelector<HTMLButtonElement>('button[aria-label="取消"]')
     await act(async () => {
-      backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      backdrop?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
     expect(onClose).toHaveBeenCalled()

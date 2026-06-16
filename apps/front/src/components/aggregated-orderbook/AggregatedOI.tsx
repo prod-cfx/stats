@@ -362,6 +362,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const compactSearchInputRef = useRef<HTMLInputElement | null>(null)
 
   const [data, setData] = useState<OIData[]>([])
   const [loading, setLoading] = useState(true)
@@ -562,6 +563,11 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (!isCompact || !isDropdownOpen) return
+    compactSearchInputRef.current?.focus()
+  }, [isCompact, isDropdownOpen])
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       if (sortDirection === 'desc') {
@@ -661,28 +667,29 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                   {isCompact && (
                     <div className="border-b border-[color:var(--cf-border)] p-2">
                       <input
+                        ref={compactSearchInputRef}
                         type="text"
                         placeholder={t('common.search')}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text-strong)] focus:outline-none md:!text-xs md:!leading-5"
-                        autoFocus
                       />
                     </div>
                   )}
                   <div className="cf-scrollbar max-h-40 overflow-y-auto">
                     {(searchQuery ? filteredSymbols : symbols).map(s => (
-                      <div
+                      <button
+                        type="button"
                         key={s}
                         onClick={() => {
                           setActiveSymbol(s)
                           setSearchQuery('')
                           setIsDropdownOpen(false)
                         }}
-                        className={`px-3 ${isCompact ? 'py-1.5' : 'py-2'} cursor-pointer !text-xs !leading-5 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${activeSymbol === s ? 'bg-gradient-to-r from-primary to-secondary !font-semibold text-white' : '!font-normal text-[color:var(--cf-text-strong)]'}`}
+                        className={`block w-full px-3 text-left ${isCompact ? 'py-1.5' : 'py-2'} cursor-pointer !text-xs !leading-5 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${activeSymbol === s ? 'bg-gradient-to-r from-primary to-secondary !font-semibold text-white' : '!font-normal text-[color:var(--cf-text-strong)]'}`}
                       >
                         {s}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

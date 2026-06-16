@@ -346,8 +346,16 @@ export const RealtimeWhalesTable = () => {
           {displayedTransactions.map(tx => (
             <article
               key={`${tx.address}-${tx.asset}-${tx.side}-${tx.timestamp}-mobile`}
+              role="button"
+              tabIndex={0}
               className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
               onClick={() => handleShowStats(tx.address)}
+              onKeyDown={event => {
+                if (event.target !== event.currentTarget) return
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                handleShowStats(tx.address)
+              }}
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">

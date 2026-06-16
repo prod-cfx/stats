@@ -4,7 +4,7 @@ import type { DashboardDoc } from '../store/dashboard-store'
 import { Check, Edit2, Image, Loader2, Save, X } from 'lucide-react'
 import NextImage from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { deleteDashboard, updateDashboardMeta, upsertDashboard } from '../store/dashboard-store'
@@ -32,9 +32,16 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [savePublishStatus, setSavePublishStatus] = useState<SavePublishStatus>('idle')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
   const lastSavedStateRef = useRef(JSON.stringify(dashboard))
   const displayedTitleValue = isEditingTitle ? titleValue : dashboard.name
   const hasUnsavedChanges = JSON.stringify(dashboard) !== lastSavedStateRef.current
+
+  useEffect(() => {
+    if (!isEditingTitle) return
+    titleInputRef.current?.focus()
+    titleInputRef.current?.select()
+  }, [isEditingTitle])
 
   const handleSaveTitle = () => {
     updateDashboardMeta(dashboard.id, { name: titleValue })
@@ -181,6 +188,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
 
         {isEditingTitle ? (
           <input
+            ref={titleInputRef}
             type="text"
             value={displayedTitleValue}
             onChange={e => setTitleValue(e.target.value)}
@@ -192,7 +200,6 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
                 setIsEditingTitle(false)
               }
             }}
-            autoFocus
             className="min-w-0 border-b border-[color:var(--cf-border)] bg-transparent px-2 text-2xl font-bold text-[color:var(--cf-text-strong)] focus:outline-none md:text-4xl"
           />
         ) : (

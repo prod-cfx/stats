@@ -59,6 +59,16 @@ function formatRuleText(text: string): string {
   return text.replace(ISO_DATE_REGEX, match => formatDateTimeFull(match))
 }
 
+function isFromNestedInteractiveElement(
+  event: React.MouseEvent<HTMLDivElement> | React.KeyboardEvent<HTMLDivElement>,
+): boolean {
+  const target = event.target
+  if (!(target instanceof Element)) return false
+
+  const interactive = target.closest('button,a,input,select,textarea,[role="button"],[role="link"]')
+  return interactive !== null && interactive !== event.currentTarget
+}
+
 function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMarketItem {
   const seed = [
     nonEmptyString((item as any).id),
@@ -126,6 +136,13 @@ export const PredictionMarketGrid = () => {
     setTimeout(() => setModalLoading(false), 1000)
   }
 
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, prediction: PredictionMarketItem) => {
+    if (isFromNestedInteractiveElement(event)) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleCardClick(prediction)
+  }
+
   return (
     <div className="space-y-4">
       <div className="relative min-h-[400px]">
@@ -133,9 +150,15 @@ export const PredictionMarketGrid = () => {
           <div className="animate-in fade-in grid grid-cols-1 gap-3 pb-8 duration-300 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {predictions?.map(prediction => (
               <div
+                role="button"
+                tabIndex={0}
                 key={prediction.id}
-                onClick={() => handleCardClick(prediction)}
-                className="cursor-pointer"
+                onClick={event => {
+                  if (isFromNestedInteractiveElement(event)) return
+                  handleCardClick(prediction)
+                }}
+                onKeyDown={event => handleCardKeyDown(event, prediction)}
+                className="block cursor-pointer text-left"
               >
                 <PredictionCard {...prediction} />
               </div>

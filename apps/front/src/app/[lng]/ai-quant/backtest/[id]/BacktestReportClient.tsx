@@ -180,9 +180,11 @@ export function AiAnalysisPanel({ lng, insights }: { lng: string; insights: stri
 
   return (
     <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 transition-colors duration-200">
-      <div
-        className="flex cursor-pointer items-center justify-between"
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
       >
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[color:var(--cf-primary)]" />
@@ -190,14 +192,13 @@ export function AiAnalysisPanel({ lng, insights }: { lng: string; insights: stri
             {lng === 'en' ? 'Report Interpretation' : '报告解读'}
           </h3>
         </div>
-        <button
-          type="button"
+        <span
           className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
-          aria-label={expanded ? (lng === 'en' ? 'Collapse' : '收起') : lng === 'en' ? 'Expand' : '展开'}
+          aria-hidden="true"
         >
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-      </div>
+        </span>
+      </button>
 
       {expanded && (
         <ul className="mt-4 list-disc space-y-3 pl-5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">

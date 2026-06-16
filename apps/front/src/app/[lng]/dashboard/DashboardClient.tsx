@@ -4,7 +4,7 @@ import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { Bookmark, Grid3x3, Layout, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -39,6 +39,7 @@ export function DashboardClient() {
   const [renameTarget, setRenameTarget] = useState<DashboardDoc | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DashboardDoc | null>(null)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const tabs = [
     { id: 'my', label: t('dashboard.tabs.my'), icon: Layout },
@@ -81,6 +82,12 @@ export function DashboardClient() {
     // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived from URL
     setActiveTab(urlTab)
   }, [urlTab])
+
+  useEffect(() => {
+    if (!renameTarget) return
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
+  }, [renameTarget])
 
   // Transition loading: 600-1000ms
   const handleTabChange = (tab: TabType) => {
@@ -332,11 +339,11 @@ export function DashboardClient() {
               </label>
               <input
                 id="dashboard-rename-title"
+                ref={renameInputRef}
                 value={renameValue}
                 onChange={e => setRenameValue(e.target.value)}
                 className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-[color:var(--cf-text-strong)] focus:outline-none"
                 placeholder={t('dashboard.sidebar.untitled')}
-                autoFocus
               />
             </div>
           </Modal>

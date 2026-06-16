@@ -76,10 +76,11 @@ export function StopRunningStrategyDialog({
   const exposureValue = isSpotMarket ? formatSpotHolding(strategy, t) : String(openPositionsCount)
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-4">
       <div
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
-        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
       >
         <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
         <p className="mt-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
@@ -177,6 +178,13 @@ export function StopRunningStrategyDialog({
           </button>
         </div>
       </div>
+      <button
+        type="button"
+        tabIndex={-1}
+        className="absolute inset-0 cursor-default bg-black/50"
+        aria-label={t('aiQuant.stopDialog.cancel')}
+        onClick={onCancel}
+      />
     </div>
   )
 }

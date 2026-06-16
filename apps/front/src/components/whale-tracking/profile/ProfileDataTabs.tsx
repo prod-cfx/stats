@@ -414,6 +414,7 @@ export const ProfileDataTabs = ({
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<Error | null>(null)
   const lastHistoryFetchAtRef = useRef<number>(0)
+  const assetFilterInputRef = useRef<HTMLInputElement | null>(null)
   const mobileHistorySentinelRef = useRef<HTMLDivElement | null>(null)
   const desktopHistorySentinelRef = useRef<HTMLDivElement | null>(null)
 
@@ -683,6 +684,11 @@ export const ProfileDataTabs = ({
     historyVisibleCount < allHistoryOrdersFiltered.length
 
   useEffect(() => {
+    if (!isFilterOpen) return
+    assetFilterInputRef.current?.focus()
+  }, [isFilterOpen])
+
+  useEffect(() => {
     if (!canLoadMoreHistory) return
     const sentinelEls = [
       mobileHistorySentinelRef.current,
@@ -911,13 +917,12 @@ export const ProfileDataTabs = ({
                   {isFilterOpen && (
                     <div
                       className="absolute left-0 z-30 mt-2 w-48 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-2 shadow-2xl"
-                      onClick={e => e.stopPropagation()}
                     >
                       <div className="relative mb-2">
                         <SearchIcon className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--cf-muted)]" />
                         <input
+                          ref={assetFilterInputRef}
                           type="text"
-                          autoFocus
                           value={assetFilter}
                           onChange={e => setAssetFilter(e.target.value)}
                           placeholder={t('whaleTracking.profile.assetFilter.placeholder')}

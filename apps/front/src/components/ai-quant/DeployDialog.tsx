@@ -97,10 +97,11 @@ export function DeployDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4 py-4" onClick={handleDialogClose}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-4">
       <div
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
-        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
       >
         <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
         <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{description}</p>
@@ -222,6 +223,14 @@ export function DeployDialog({
           </button>
         </div>
       </div>
+      <button
+        type="button"
+        tabIndex={-1}
+        className="absolute inset-0 cursor-default bg-black/40"
+        aria-label={t('common.close')}
+        onClick={handleDialogClose}
+        disabled={deploySubmitting}
+      />
     </div>
   )
 }

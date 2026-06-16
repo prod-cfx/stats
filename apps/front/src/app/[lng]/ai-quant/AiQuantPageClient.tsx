@@ -2085,11 +2085,15 @@ export function AiQuantPageClient({
               ? t('aiQuant.strategyConfirmation', { defaultValue: '策略确认' })
               : t('aiQuant.backtestResult')
           }
-          onClick={() => setMobilePanelSheetOpen(false)}
         >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label={t('common.close', { defaultValue: 'Close' })}
+            onClick={() => setMobilePanelSheetOpen(false)}
+          />
           <div
-            className="cf-ios-sheet-panel max-h-[82dvh] w-full overflow-hidden p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
-            onClick={event => event.stopPropagation()}
+            className="cf-ios-sheet-panel relative z-10 max-h-[82dvh] w-full overflow-hidden p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
           >
             <div className="mb-2 flex items-start gap-2">
               <div className="grid flex-1 grid-cols-2 gap-2">
