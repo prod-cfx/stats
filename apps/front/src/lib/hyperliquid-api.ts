@@ -53,6 +53,7 @@ export interface UserFill {
   size: number
   side: 'BUY' | 'SELL'
   time: number
+  tid: number
   direction: 'Open Long' | 'Close Long' | 'Open Short' | 'Close Short'
   startPosition: number
   closedPnl: number
@@ -1071,6 +1072,7 @@ export async function fetchUserFillsFromHyperliquid(
         size: safeParseFloat(fill.sz),
         side: fill.side === 'A' ? 'BUY' : 'SELL',
         time: fill.time,
+        tid: fill.tid,
         direction,
         startPosition: safeParseFloat(fill.startPosition),
         closedPnl: safeParseFloat(fill.closedPnl),
@@ -1222,6 +1224,7 @@ export async function fetchTraderFullData(
         size: safeParseFloat(fill.sz),
         side: fill.side === 'A' ? 'BUY' : 'SELL',
         time: fill.time,
+        tid: fill.tid,
         direction,
         startPosition: safeParseFloat(fill.startPosition),
         closedPnl: safeParseFloat(fill.closedPnl),

@@ -4,6 +4,7 @@ import type { UserFillsResponse } from '@/lib/api'
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getRelativeTimeParams } from '@/lib/formatters'
+import { makeCompletedTradeFillId, makeCompletedTradeKey } from './completed-trade-key'
 
 const SortIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -60,6 +61,7 @@ const ChevronUpIcon = (props: React.SVGProps<SVGSVGElement>) => (
 )
 
 interface CompletedTrade {
+  fillId: string
   fillTime: number
   endTime: string
   asset: string
@@ -73,6 +75,48 @@ interface CompletedTrade {
 
 interface CompletedTradesTableProps {
   fillsData: UserFillsResponse | null
+}
+
+const formatDuration = (durationMs: number) => {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return '-'
+  const totalMinutes = Math.floor(durationMs / 60_000)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${hours}h ${minutes}m`
+}
+
+const SideBadge = ({ label, side }: { label: string; side: string }) => {
+  const isLong = side === 'Long' || side === 'Buy'
+
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${isLong ? 'bg-green-500/20 text-green-500 dark:text-green-400' : 'bg-red-500/20 text-red-500 dark:text-red-400'}`}
+    >
+      {label}
+    </span>
+  )
+}
+
+const SortIndicator = ({
+  currentSortField,
+  currentSortOrder,
+  field,
+}: {
+  currentSortField: string | null
+  currentSortOrder: 'asc' | 'desc' | null
+  field: string
+}) => {
+  if (currentSortField !== field) {
+    return (
+      <SortIcon className="h-3 w-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
+    )
+  }
+
+  return currentSortOrder === 'desc' ? (
+    <ChevronDownIcon className="text-primary h-3 w-3" />
+  ) : (
+    <ChevronUpIcon className="text-primary h-3 w-3" />
+  )
 }
 
 export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) => {
@@ -92,18 +136,10 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
     [t],
   )
 
-  const formatDuration = (durationMs: number) => {
-    if (!Number.isFinite(durationMs) || durationMs < 0) return '-'
-    const totalMinutes = Math.floor(durationMs / 60_000)
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    return `${hours}h ${minutes}m`
-  }
-
-  const convertFillsToCompletedTrades = (data: UserFillsResponse | null): CompletedTrade[] => {
+  const convertFillsToCompletedTrades = useCallback((data: UserFillsResponse | null): CompletedTrade[] => {
     if (!data || !data.fills || data.fills.length === 0) return []
 
-    const makeFillId = (fill: UserFillsResponse['fills'][number]) => `${fill.hash}:${fill.time}`
+    const makeFillId = makeCompletedTradeFillId
 
     // Duration: closeTime - lastOpenTime for same coin + side
     const lastOpenTimeByKey = new Map<string, number>()
@@ -148,6 +184,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
         const fee = `${fill.fee.toFixed(4)} ${fill.feeToken}`
 
         return {
+          fillId: makeFillId(fill),
           fillTime: fill.time,
           endTime,
           asset: fill.coin,
@@ -159,12 +196,12 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
           fee,
         }
       })
-  }
+  }, [])
 
   const sortedCompletedTrades = useMemo(() => {
     const trades = convertFillsToCompletedTrades(fillsData)
     return trades.sort((a, b) => b.fillTime - a.fillTime)
-  }, [fillsData])
+  }, [convertFillsToCompletedTrades, fillsData])
 
   const paginatedCompletedTrades = useMemo(() => {
     const endIndex = (historyPage + 1) * HISTORY_PAGE_SIZE
@@ -181,46 +218,22 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
     return t('whaleTracking.time.duration', { hours: hh, minutes: mm })
   }
 
-  const renderSideBadge = (side: string) => {
-    const isLong = side === 'Long' || side === 'Buy'
-    return (
-      <span
-        className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${isLong ? 'bg-green-500/20 text-green-500 dark:text-green-400' : 'bg-red-500/20 text-red-500 dark:text-red-400'}`}
-      >
-        {side === 'Long' || side === 'Buy'
-          ? t('whaleTracking.side.longAbbr')
-          : t('whaleTracking.side.shortAbbr')}
-      </span>
-    )
-  }
-
-  const renderSortIcon = (
-    field: string,
-    currentSortField: string | null,
-    currentSortOrder: 'asc' | 'desc' | null,
-  ) => {
-    if (currentSortField !== field)
-      return (
-        <SortIcon className="h-3 w-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
-      )
-    return currentSortOrder === 'desc' ? (
-      <ChevronDownIcon className="text-primary h-3 w-3" />
-    ) : (
-      <ChevronUpIcon className="text-primary h-3 w-3" />
-    )
-  }
+  const getSideLabel = (side: string) =>
+    side === 'Long' || side === 'Buy'
+      ? t('whaleTracking.side.longAbbr')
+      : t('whaleTracking.side.shortAbbr')
 
   return (
     <>
       <div className="space-y-3 p-3 md:hidden">
-        {paginatedCompletedTrades.map((trade, idx) => (
-          <article key={`${trade.fillTime}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+        {paginatedCompletedTrades.map(trade => (
+          <article key={`${makeCompletedTradeKey(trade)}:mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{trade.asset}</div>
                 <div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(trade.fillTime)}</div>
               </div>
-              {renderSideBadge(trade.side)}
+              <SideBadge label={getSideLabel(trade.side)} side={trade.side} />
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.duration')}</div><div className="text-[color:var(--cf-text-strong)]">{formatDurationLabel(trade.duration)}</div></div>
@@ -259,7 +272,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               className="group flex items-center gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
             >
               <span>{t('whaleTracking.profile.columns.endTime')}</span>
-              {renderSortIcon('endTime', null, null)}
+              <SortIndicator currentSortField={null} currentSortOrder={null} field="endTime" />
             </button>
           </th>
           <th className="min-w-[150px] px-6 py-4 text-left">
@@ -274,7 +287,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
             >
               <span>{t('whaleTracking.profile.columns.duration')}</span>
-              {renderSortIcon('duration', null, null)}
+              <SortIndicator currentSortField={null} currentSortOrder={null} field="duration" />
             </button>
           </th>
           <th className="px-6 py-4 text-right">
@@ -283,7 +296,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
             >
               <span>{t('whaleTracking.profile.columns.netPnl')}</span>
-              {renderSortIcon('netPnl', null, null)}
+              <SortIndicator currentSortField={null} currentSortOrder={null} field="netPnl" />
             </button>
           </th>
           <th className="px-6 py-4 text-right">
@@ -292,7 +305,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
             >
               <span>{t('whaleTracking.profile.columns.size')}</span>
-              {renderSortIcon('size', null, null)}
+              <SortIndicator currentSortField={null} currentSortOrder={null} field="size" />
             </button>
           </th>
           <th className="px-6 py-4 text-right">
@@ -301,7 +314,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
             >
               <span>{t('whaleTracking.profile.columns.exitPrice')}</span>
-              {renderSortIcon('exitPrice', null, null)}
+              <SortIndicator currentSortField={null} currentSortOrder={null} field="exitPrice" />
             </button>
           </th>
           <th className="px-6 py-4 text-right">
@@ -310,22 +323,21 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
             >
               <span>{t('whaleTracking.profile.columns.fee')}</span>
-              {renderSortIcon('fee', null, null)}
+              <SortIndicator currentSortField={null} currentSortOrder={null} field="fee" />
             </button>
           </th>
         </tr>
       </thead>
       <tbody className="divide-y divide-[color:var(--cf-border)]">
-        {[
-          ...paginatedCompletedTrades.map((trade, idx) => (
-            <tr key={idx} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
+        {paginatedCompletedTrades.map(trade => (
+            <tr key={makeCompletedTradeKey(trade)} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
               <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
                 {formatRelativeTime(trade.fillTime)}
               </td>
               <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
                 {trade.asset}
               </td>
-              <td className="px-6 py-4">{renderSideBadge(trade.side)}</td>
+              <td className="px-6 py-4"><SideBadge label={getSideLabel(trade.side)} side={trade.side} /></td>
               <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)] uppercase">
                 {formatDurationLabel(trade.duration)}
               </td>
@@ -350,8 +362,8 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
                 {trade.fee}
               </td>
             </tr>
-          )),
-          paginatedCompletedTrades.length === 0 ? (
+          ))}
+          {paginatedCompletedTrades.length === 0 ? (
             <tr key="empty">
               <td colSpan={8} className="px-6 py-12 text-center">
                 <div className="flex flex-col items-center gap-4">
@@ -364,8 +376,8 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
                 </div>
               </td>
             </tr>
-          ) : null,
-          paginatedCompletedTrades.length > 0 &&
+          ) : null}
+          {paginatedCompletedTrades.length > 0 &&
           (historyPage + 1) * HISTORY_PAGE_SIZE < sortedCompletedTrades.length ? (
             <tr key="load-more">
               <td colSpan={8} className="px-6 py-4">
@@ -380,8 +392,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
                 </div>
               </td>
             </tr>
-          ) : null,
-        ]}
+          ) : null}
       </tbody>
         </table>
       </div>

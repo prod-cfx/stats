@@ -33,6 +33,75 @@ type SortField =
   | null
 type SortDirection = 'asc' | 'desc' | null
 
+const formatSignedPct = (val: number) => `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+
+const SortIndicator = ({
+  field,
+  sortDirection,
+  sortField,
+}: {
+  field: SortField
+  sortDirection: SortDirection
+  sortField: SortField
+}) => {
+  if (sortField !== field) {
+    return (
+      <ArrowUpDown className="h-3 w-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
+    )
+  }
+
+  return sortDirection === 'desc' ? (
+    <ChevronDown className="text-primary h-3 w-3" />
+  ) : (
+    <ChevronUp className="text-primary h-3 w-3" />
+  )
+}
+
+const SignedPercentCell = ({ value }: { value: number }) => {
+  const isPositive = value > 0
+  const isNegative = value < 0
+
+  return (
+    <span
+      className={
+        isPositive
+          ? 'text-green-400'
+          : isNegative
+            ? 'text-red-400'
+            : 'text-[color:var(--cf-text-strong)]'
+      }
+    >
+      {formatSignedPct(value)}
+    </span>
+  )
+}
+
+const OpenInterestErrorState = ({
+  error,
+  needsAuth,
+  onRetry,
+  retryLabel,
+}: {
+  error: string
+  needsAuth: boolean
+  onRetry: () => void
+  retryLabel: string
+}) => (
+  <div className="flex flex-col items-center justify-center gap-3 py-10">
+    <AlertCircle className={`h-8 w-8 ${needsAuth ? 'text-yellow-500' : 'text-red-500'}`} />
+    <p className="text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{error}</p>
+    {!needsAuth && (
+      <button
+        type="button"
+        onClick={onRetry}
+        className="bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 rounded-md px-3 py-1.5 !text-xs !font-semibold !leading-5 transition-opacity"
+      >
+        {retryLabel}
+      </button>
+    )}
+  </div>
+)
+
 const MOCK_EXCHANGES = [
   'Binance',
   'OKX',
@@ -472,7 +541,6 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
     return totalRow ? [totalRow, ...exchangeRows] : exchangeRows
   }, [sortField, sortDirection, data])
 
-  const formatSignedPct = (val: number) => `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
   const formatRatio = (val: number) => `${val.toFixed(2)}%`
   const formatAssetAmount = (val: number) => `${numberCompact.format(val)} ${activeSymbol}`
 
@@ -505,52 +573,6 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
       setSortDirection('desc')
     }
   }
-
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field)
-      return (
-        <ArrowUpDown className="h-3 w-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
-      )
-    return sortDirection === 'desc' ? (
-      <ChevronDown className="text-primary h-3 w-3" />
-    ) : (
-      <ChevronUp className="text-primary h-3 w-3" />
-    )
-  }
-
-  const renderValueWithColor = (val: number) => {
-    const isPositive = val > 0
-    const isNegative = val < 0
-    return (
-      <span
-        className={
-          isPositive
-            ? 'text-green-400'
-            : isNegative
-              ? 'text-red-400'
-              : 'text-[color:var(--cf-text-strong)]'
-        }
-      >
-        {formatSignedPct(val)}
-      </span>
-    )
-  }
-
-  const renderError = () => (
-    <div className="flex flex-col items-center justify-center gap-3 py-10">
-      <AlertCircle className={`h-8 w-8 ${needsAuth ? 'text-yellow-500' : 'text-red-500'}`} />
-      <p className="text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{error}</p>
-      {!needsAuth && (
-        <button
-          type="button"
-          onClick={() => loadData(activeSymbol)}
-          className="bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 rounded-md px-3 py-1.5 !text-xs !font-semibold !leading-5 transition-opacity"
-        >
-          {t('common.retry')}
-        </button>
-      )}
-    </div>
-  )
 
   return (
     <div className={`flex h-full flex-col ${isCompact ? 'gap-2' : 'gap-4'}`}>
@@ -674,7 +696,14 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         )}
 
         {/* Error State */}
-        {!loading && error && renderError()}
+        {!loading && error && (
+          <OpenInterestErrorState
+            error={error}
+            needsAuth={needsAuth}
+            onRetry={() => loadData(activeSymbol)}
+            retryLabel={t('common.retry')}
+          />
+        )}
 
         {/* Empty State */}
         {!loading && !error && data.length === 0 && (
@@ -720,7 +749,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                         : t('aggregatedOrderbook.openInterest.table.oiBtc', {
                             symbol: activeSymbol,
                           })}{' '}
-                      {renderSortIcon('oiAsset')}
+                      <SortIndicator field="oiAsset" sortDirection={sortDirection} sortField={sortField} />
                     </button>
                   </th>
                   <th
@@ -731,7 +760,8 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       onClick={() => handleSort('oiUsd')}
                       className="group flex w-full items-center justify-end gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      {t('aggregatedOrderbook.openInterest.table.oiUsd')} {renderSortIcon('oiUsd')}
+                      {t('aggregatedOrderbook.openInterest.table.oiUsd')}{' '}
+                      <SortIndicator field="oiUsd" sortDirection={sortDirection} sortField={sortField} />
                     </button>
                   </th>
                   <th
@@ -743,7 +773,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       className="group flex w-full items-center justify-end gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
                       {t('aggregatedOrderbook.openInterest.table.ratio')}{' '}
-                      {renderSortIcon('ratioPct')}
+                      <SortIndicator field="ratioPct" sortDirection={sortDirection} sortField={sortField} />
                     </button>
                   </th>
                   <th
@@ -755,7 +785,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       className="group flex w-full items-center justify-end gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
                       {t('aggregatedOrderbook.openInterest.table.change1h')}{' '}
-                      {renderSortIcon('change1hPct')}
+                      <SortIndicator field="change1hPct" sortDirection={sortDirection} sortField={sortField} />
                     </button>
                   </th>
                   <th
@@ -767,7 +797,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       className="group flex w-full items-center justify-end gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
                       {t('aggregatedOrderbook.openInterest.table.change4h')}{' '}
-                      {renderSortIcon('change4hPct')}
+                      <SortIndicator field="change4hPct" sortDirection={sortDirection} sortField={sortField} />
                     </button>
                   </th>
                   <th
@@ -779,7 +809,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       className="group flex w-full items-center justify-end gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
                       {t('aggregatedOrderbook.openInterest.table.change24h')}{' '}
-                      {renderSortIcon('change24hPct')}
+                      <SortIndicator field="change24hPct" sortDirection={sortDirection} sortField={sortField} />
                     </button>
                   </th>
                   <th
@@ -840,17 +870,17 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     <td
                       className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden text-right !font-normal sm:table-cell`}
                     >
-                      {renderValueWithColor(row.change1hPct)}
+                      <SignedPercentCell value={row.change1hPct} />
                     </td>
                     <td
                       className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden text-right !font-normal sm:table-cell`}
                     >
-                      {renderValueWithColor(row.change4hPct)}
+                      <SignedPercentCell value={row.change4hPct} />
                     </td>
                     <td
                       className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} text-right !font-normal`}
                     >
-                      {renderValueWithColor(row.change24hPct)}
+                      <SignedPercentCell value={row.change24hPct} />
                     </td>
                     <td
                       className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden text-center text-[color:var(--cf-muted)] md:table-cell`}

@@ -62,8 +62,8 @@ const IndicatorPanelHeader = ({
     </span>
     {Array.isArray(valueParts) && valueParts.length > 0 ? (
       <span className="text-[10px] font-roboto font-normal leading-4 tracking-tight whitespace-pre">
-        {valueParts.map((p, idx) => (
-          <span key={idx} style={{ color: p.color || '#c9d1d9' }}>
+        {valueParts.map(p => (
+          <span key={`${p.text}:${p.color ?? '#c9d1d9'}`} style={{ color: p.color || '#c9d1d9' }}>
             {p.text}
           </span>
         ))}
@@ -1414,10 +1414,10 @@ export const TradingViewLightweightChart = ({
         {/* Floating Toolbar (standalone only). In dashboard, keep the chart clean & compact. */}
         {!isDashboard && (
           <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] p-1 rounded">
-            {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
+            {['+', '-', '✎', '⌗', '○', 'T'].map(tool => (
               <button
                 type="button"
-                key={i}
+                key={tool}
                 className="w-7 h-7 flex items-center justify-center text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] rounded transition-colors"
               >
                 {tool}

@@ -15,6 +15,7 @@ import { formatNumber } from '@/lib/formatters'
 import { formatSignedAbsoluteChange, formatSignedPercentChange } from './change-formatters'
 import { isPublicCompaniesColumnVisible } from './column-visibility'
 import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
+import { makePublicCompanyRowKey } from './public-company-row-key'
 
 interface CompanyData {
   asset: string
@@ -617,9 +618,9 @@ export const PublicCompaniesTable = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--cf-border)] !text-xs !font-normal !leading-5">
-                {sortedData.map((row, index) => (
+                {sortedData.map(row => (
                   <tr
-                    key={index}
+                    key={makePublicCompanyRowKey(row)}
                     className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     onClick={() => setSelectedCompany(row)}
                   >
@@ -760,7 +761,7 @@ export const PublicCompaniesTable = () => {
             </p>
             <div className="min-w-0 px-1 !text-sm !font-normal !leading-[22px] break-words text-[color:var(--cf-text)]">
               {selectedCompanyInfoParagraphs.map((p, idx) => (
-                <React.Fragment key={idx}>
+                <React.Fragment key={p}>
                   <p>{p}</p>
                   {idx !== selectedCompanyInfoParagraphs.length - 1 && <div className="h-4" />}
                 </React.Fragment>

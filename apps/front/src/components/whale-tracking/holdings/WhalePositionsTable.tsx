@@ -12,6 +12,7 @@ import { LoadingState } from '@/components/ui/loading'
 import { BodyText, PageTitle } from '@/components/ui/Typography'
 import { useAsync } from '@/hooks/use-async'
 import { fetchWhaleHoldings } from '@/lib/api'
+import { makeWhalePositionKey } from './whale-position-key'
 
 const WhaleTradingStatsModal = dynamic(
   () => import('../WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
@@ -36,6 +37,30 @@ interface WhalePosition {
   remark: string
 }
 
+type SortField = 'positionValue' | 'pnl' | 'margin' | 'createdTime'
+
+const SortIndicator = ({
+  field,
+  sortField,
+  sortOrder,
+}: {
+  field: SortField
+  sortField: SortField | null
+  sortOrder: 'desc' | 'asc' | null
+}) => {
+  if (sortField !== field) {
+    return (
+      <ArrowUpDown className="ml-1 h-4 w-4 flex-shrink-0 text-[#8b949e] opacity-30 transition-opacity group-hover:opacity-100" />
+    )
+  }
+
+  return sortOrder === 'desc' ? (
+    <ChevronDown className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
+  ) : (
+    <ChevronUp className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
+  )
+}
+
 export const WhalePositionsTable = () => {
   const { t } = useTranslation()
   const params = useParams()
@@ -46,9 +71,7 @@ export const WhalePositionsTable = () => {
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'BTC' | 'ETH' | 'SOL'>('ALL')
   const [sideFilter, setSideFilter] = useState<'ALL' | 'Long' | 'Short'>('ALL')
   const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL')
-  const [sortField, setSortField] = useState<
-    'positionValue' | 'pnl' | 'margin' | 'createdTime' | null
-  >('positionValue')
+  const [sortField, setSortField] = useState<SortField | null>('positionValue')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc')
 
 
@@ -223,7 +246,7 @@ export const WhalePositionsTable = () => {
     return mapped
   }, [rawHoldings, assetFilter, sideFilter, pnlFilter, sortField, sortOrder])
 
-  const handleSort = (field: Exclude<typeof sortField, null>) => {
+  const handleSort = (field: SortField) => {
     if (sortField === field) {
       if (sortOrder === 'desc') {
         setSortOrder('asc')
@@ -237,19 +260,6 @@ export const WhalePositionsTable = () => {
       setSortField(field)
       setSortOrder('desc')
     }
-  }
-
-  const renderSortIcon = (field: Exclude<typeof sortField, null>) => {
-    if (sortField !== field) {
-      return (
-        <ArrowUpDown className="ml-1 h-4 w-4 flex-shrink-0 text-[#8b949e] opacity-30 transition-opacity group-hover:opacity-100" />
-      )
-    }
-    return sortOrder === 'desc' ? (
-      <ChevronDown className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
-    ) : (
-      <ChevronUp className="text-primary ml-1 h-4 w-4 flex-shrink-0" />
-    )
   }
 
   const handleShowStats = (address: string) => {
@@ -316,9 +326,9 @@ export const WhalePositionsTable = () => {
           onRetry={execute}
         >
           <div className="space-y-3 p-3 md:hidden">
-            {sortedPositions.map((pos, idx) => (
+            {sortedPositions.map(pos => (
               <article
-                key={`${idx}-${pos.address}-mobile`}
+                key={`${makeWhalePositionKey(pos)}:mobile`}
                 className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
                 onClick={() => handleShowStats(pos.address)}
               >
@@ -345,9 +355,9 @@ export const WhalePositionsTable = () => {
                       </button>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {pos.tags.map((tag, tIdx) => (
+                      {pos.tags.map(tag => (
                         <span
-                          key={tIdx}
+                          key={tag.key}
                           className="rounded px-1.5 py-0.5 text-[10px] font-semibold leading-4"
                           style={{ color: tag.color, backgroundColor: tag.bg }}
                         >
@@ -428,7 +438,7 @@ export const WhalePositionsTable = () => {
                   >
                     <div className="flex items-center">
                       {t('whaleTracking.holdings.table.positionValue')}
-                      {renderSortIcon('positionValue')}
+                      <SortIndicator field="positionValue" sortField={sortField} sortOrder={sortOrder} />
                     </div>
                   </th>
                   {/* PnL 列当前仅展示占位符，不提供排序交互以避免“空操作”体验 */}
@@ -441,7 +451,7 @@ export const WhalePositionsTable = () => {
                   >
                     <div className="flex items-center">
                       {t('whaleTracking.holdings.table.margin')}
-                      {renderSortIcon('margin')}
+                      <SortIndicator field="margin" sortField={sortField} sortOrder={sortOrder} />
                     </div>
                   </th>
                   <th className="px-4 py-3 text-left">
@@ -456,7 +466,7 @@ export const WhalePositionsTable = () => {
                   >
                     <div className="flex items-center">
                       {t('whaleTracking.holdings.table.createdTime')}
-                      {renderSortIcon('createdTime')}
+                      <SortIndicator field="createdTime" sortField={sortField} sortOrder={sortOrder} />
                     </div>
                   </th>
                   <th className="px-4 py-3 text-left">
@@ -468,9 +478,9 @@ export const WhalePositionsTable = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--cf-border)]">
-                {sortedPositions.map((pos, idx) => (
+                {sortedPositions.map(pos => (
                   <tr
-                    key={idx}
+                    key={makeWhalePositionKey(pos)}
                     className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     onClick={() => handleShowStats(pos.address)}
                   >
@@ -506,9 +516,9 @@ export const WhalePositionsTable = () => {
                           </button>
                         </div>
                         <div className="flex gap-1">
-                          {pos.tags.map((tag, tIdx) => (
+                          {pos.tags.map(tag => (
                             <span
-                              key={tIdx}
+                              key={tag.key}
                               className="rounded px-1.5 py-0.5 !text-xs !font-semibold !leading-5"
                               style={{ color: tag.color, backgroundColor: tag.bg }}
                             >
