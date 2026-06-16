@@ -1,7 +1,7 @@
 import { postBacktestSymbolSupportCheck } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
-export type BacktestSymbolSupportStatus = 'supported' | 'refreshed_then_supported' | 'not_supported'
+type BacktestSymbolSupportStatus = 'supported' | 'refreshed_then_supported' | 'not_supported'
 
 export interface BacktestSymbolSupportResult {
   status: BacktestSymbolSupportStatus

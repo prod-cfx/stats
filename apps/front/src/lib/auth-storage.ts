@@ -104,11 +104,3 @@ export function getToken(): string | null {
   }
   return normalizedSessionToken || null
 }
-
-/**
- * 获取当前用户身份 ID
- */
-export function getCurrentUserId(): string | null {
-  const session = loadStoredSession()
-  return session?.userId ?? null
-}

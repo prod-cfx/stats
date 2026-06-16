@@ -3,7 +3,6 @@ import type {
   AccountAiQuantStrategyAction,
   AccountAiQuantStrategyDetail,
   AccountAiQuantStrategyListItem,
-  AccountAiQuantUpdateLeveragePayload,
   AiQuantBacktestDraftConfig,
   AiQuantConversationResponse,
   ContinueLlmCodegenSessionPayload,
@@ -342,32 +341,6 @@ export async function deployAccountAiQuantStrategy(
       json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail; message?: string },
     )
   }, 'DEPLOY_ACCOUNT_AI_QUANT_STRATEGY')
-}
-
-export async function updateAccountAiQuantStrategyLeverage(
-  strategyId: string,
-  payload: AccountAiQuantUpdateLeveragePayload,
-): Promise<AccountAiQuantStrategyDetail> {
-  return apiCall(async () => {
-    validateId(strategyId, 'strategy ID')
-    if (!payload.userId?.trim()) throw new ApiError('userId is required', 'INVALID_INPUT')
-    if (!Number.isFinite(payload.leverage) || payload.leverage <= 0) {
-      throw new ApiError('leverage is required', 'INVALID_INPUT')
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/execution/leverage`,
-      {
-        method: 'POST',
-        headers: buildAccountAiQuantHeaders(payload.userId.trim()),
-        body: JSON.stringify({ userId: payload.userId.trim(), leverage: payload.leverage }),
-      },
-    )
-    const json = await parseAccountAiQuantJson(response, '更新策略杠杆失败')
-    return unwrapResponse<AccountAiQuantStrategyDetail>(
-      json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail; message?: string },
-    )
-  }, 'UPDATE_ACCOUNT_AI_QUANT_STRATEGY_LEVERAGE')
 }
 
 export async function startLlmCodegenSession(

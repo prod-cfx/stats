@@ -87,8 +87,6 @@ import {
 import { confirmAiQuantDeploy, createDeployRequestId } from './ai-quant-page-deploy'
 
 export {
-  buildCodegenReplyContent,
-  resolvePublishedStrategyInstanceId,
 } from './ai-quant-page-codegen'
 export type { QuantParams } from './ai-quant-page-conversation'
 

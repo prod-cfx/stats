@@ -1,4 +1,4 @@
-export type AiQuantErrorStage = 'capability' | 'codegen' | 'backtest' | 'deploy' | 'unknown'
+type AiQuantErrorStage = 'capability' | 'codegen' | 'backtest' | 'deploy' | 'unknown'
 
 export interface AiQuantErrorMeta {
   message?: string

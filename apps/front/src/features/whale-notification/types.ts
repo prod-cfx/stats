@@ -23,7 +23,7 @@ export interface WhaleNotificationRule {
 
 export type WhaleDeliveryStatus = 'SENT' | 'FAILED' | 'SKIPPED' | 'PENDING'
 
-export interface WhaleNotificationDeliveryMap {
+interface WhaleNotificationDeliveryMap {
   web: WhaleDeliveryStatus
   email: WhaleDeliveryStatus
   telegram: WhaleDeliveryStatus

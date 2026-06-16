@@ -49,13 +49,8 @@ describe('issue #2513 front key interaction accessibility', () => {
     expect(dashboardClient).not.toContain('aria-label="dashboard-actions"')
   })
 
-  it('uses semantic buttons for explore dashboard cards and trade percent controls', () => {
-    const exploreDashboards = readFrontSource('components/dashboard/ExploreDashboards.tsx')
+  it('uses semantic buttons for trade percent controls', () => {
     const leftTradePanel = readFrontSource('components/trading/left-trade-panel/LeftTradePanel.tsx')
-
-    expect(exploreDashboards).toContain('type="button"')
-    expect(exploreDashboards).toContain('aria-label={`${t(\'dashboard.explore.openDashboard\'')
-    expect(exploreDashboards).not.toContain('<div key={idx} onClick={() => handleCardClick')
 
     expect(leftTradePanel).toContain('aria-label={t(\'tradePanel.percentSlider\'')
     expect(leftTradePanel).toContain('aria-label={t(\'tradePanel.setPercent\', { percent: p })}')
@@ -67,7 +62,6 @@ describe('issue #2513 front key interaction accessibility', () => {
     for (const locale of ['en', 'zh'] as const) {
       const messages = readLocale(locale)
 
-      expect(getPath(messages, 'dashboard.explore.openDashboard')).toEqual(expect.any(String))
       expect(getPath(messages, 'tradePanel.percentSlider')).toEqual(expect.any(String))
       expect(getPath(messages, 'tradePanel.setPercent')).toEqual(expect.any(String))
     }

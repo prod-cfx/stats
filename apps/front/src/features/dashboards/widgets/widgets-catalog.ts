@@ -11,7 +11,7 @@ export type WidgetType =
   | "liquidation.map"
   | "liquidation.feed";
 
-export type WidgetGroupId = "market" | "derivatives" | "liquidation";
+type WidgetGroupId = "market" | "derivatives" | "liquidation";
 
 export interface WidgetCatalogItem {
   type: WidgetType;

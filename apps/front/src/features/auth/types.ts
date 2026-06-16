@@ -1,6 +1,6 @@
 export type AuthLoginMethod = 'email' | 'telegram'
 
-export interface TelegramAuthInfo {
+interface TelegramAuthInfo {
   id: string
   username?: string | null
   isLinked: boolean

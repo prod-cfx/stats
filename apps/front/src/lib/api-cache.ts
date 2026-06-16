@@ -64,64 +64,6 @@ export async function cachedRequest<T>(
 }
 
 /**
- * 手动清除缓存
- * 
- * @param key - 要清除的缓存键，不传则清除所有缓存
- */
-export function clearCache(key?: string): void {
-  if (key) {
-    dataCache.delete(key)
-    pendingRequests.delete(key)
-  } else {
-    dataCache.clear()
-    pendingRequests.clear()
-  }
-}
-
-/**
- * 使缓存失效（标记为过期）
- * 
- * @param pattern - 缓存键的匹配模式（正则表达式或字符串前缀）
- */
-export function invalidateCache(pattern: string | RegExp): void {
-  const isRegex = pattern instanceof RegExp
-  const keys = Array.from(dataCache.keys())
-  
-  for (const key of keys) {
-    const matches = isRegex 
-      ? pattern.test(key)
-      : key.startsWith(pattern)
-    
-    if (matches) {
-      dataCache.delete(key)
-    }
-  }
-}
-
-/**
- * 生成缓存键的工具函数
- */
-export const CacheKeys = {
-  strategyInstance: (id: string) => `strategy-instance:${id}`,
-  strategyList: (params?: Record<string, any>) => 
-    `strategy-list:${JSON.stringify(params || {})}`,
-  strategyInstanceSignals: (id: string, params?: Record<string, any>) =>
-    `strategy-instance-signals:${id}:${JSON.stringify(params || {})}`,
-  llmStrategyInstance: (id: string) => `llm-strategy-instance:${id}`,
-  llmStrategyList: (params?: Record<string, any>) =>
-    `llm-strategy-list:${JSON.stringify(params || {})}`,
-  llmStrategyInstanceSignals: (id: string, params?: Record<string, any>) =>
-    `llm-strategy-instance-signals:${id}:${JSON.stringify(params || {})}`,
-  subscription: (id: string) => `subscription:${id}`,
-  subscriptionList: (params?: Record<string, any>) => 
-    `subscription-list:${JSON.stringify(params || {})}`,
-  llmSubscription: (id: string) => `llm-subscription:${id}`,
-  llmSubscriptionList: (params?: Record<string, any>) =>
-    `llm-subscription-list:${JSON.stringify(params || {})}`,
-  exchangeAccounts: () => 'exchange-accounts',
-} as const
-
-/**
  * 缓存配置
  */
 export const CacheTTL = {

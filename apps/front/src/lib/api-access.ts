@@ -1,6 +1,6 @@
 import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
 
-import { API_BASE_URL, client, unwrapApiResponse, validateId } from './api-client'
+import { API_BASE_URL, client, validateId } from './api-client'
 import { getToken } from './auth-storage'
 import { ApiError, AuthenticationError, logError } from './errors'
 
@@ -169,6 +169,5 @@ export {
   ApiError,
   AuthenticationError,
   client,
-  unwrapApiResponse,
   validateId,
 }

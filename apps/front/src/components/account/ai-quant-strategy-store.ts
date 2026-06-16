@@ -1,6 +1,6 @@
 export type AiQuantStrategyViewState = 'running' | 'stopped' | 'draft'
 
-export interface StrategyMetricSnapshot {
+interface StrategyMetricSnapshot {
   returnPct: number
   maxDrawdownPct: number
   winRatePct: number
@@ -12,13 +12,13 @@ export interface StrategyEquityPoint {
   value: number
 }
 
-export interface StrategyTimelineEvent {
+interface StrategyTimelineEvent {
   at: string
   event: string
   note?: string
 }
 
-export interface StrategyRuntimeExecutionState {
+interface StrategyRuntimeExecutionState {
   executionSemanticKey: string
   status: string
   failureFamily: 'binding' | 'activation' | 'execution' | 'persistence' | null
@@ -32,10 +32,10 @@ export interface StrategyRuntimeExecutionState {
 }
 
 export type AiQuantMarketType = 'spot' | 'perp' | 'futures' | 'swap' | 'unknown'
-export type AiQuantPositionState = 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
-export type AiQuantCycleState = 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
+type AiQuantPositionState = 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
+type AiQuantCycleState = 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
 
-export interface AiQuantRuntimeSemanticSummary {
+interface AiQuantRuntimeSemanticSummary {
   serviceStatusLabel: string
   positionStatusLabel: string
   cycleStatusLabel: string
@@ -376,88 +376,6 @@ export function getStrategyById(id: string) {
   return ensureStrategyStore().find(item => item.id === id) ?? null
 }
 
-export function upsertStrategyDeployment(input: {
-  id: string
-  name: string
-  exchange: 'binance' | 'okx' | 'hyperliquid'
-  symbol: string
-  timeframe: string
-  positionPct: number
-  accountId: string
-  accountName: string
-  metrics: StrategyMetricSnapshot
-}) {
-  const now = new Date().toISOString()
-  const existing = ensureStrategyStore()
-  const target = existing.find(item => item.id === input.id)
-  const next: AiQuantStrategyRecord[] = target
-    ? existing.map(item => (item.id === input.id
-      ? (() => {
-          const dynamicParams = normalizeDynamicParams(item)
-          return {
-          ...item,
-          name: input.name,
-          exchange: input.exchange,
-          symbol: input.symbol,
-          timeframe: input.timeframe,
-          positionPct: input.positionPct,
-          initialCapital: item.initialCapital || 10000,
-          metrics: input.metrics,
-          ...dynamicParams,
-          status: 'running',
-          deploy: {
-            exchange: input.exchange,
-            accountId: input.accountId,
-            accountName: input.accountName,
-            at: now,
-            status: 'running',
-          },
-          timeline: [
-            ...item.timeline,
-            { at: now.replace('T', ' ').slice(0, 16), event: '一键部署', note: `${input.exchange.toUpperCase()} / ${input.accountName}` },
-            { at: now.replace('T', ' ').slice(0, 16), event: '开始运行' },
-          ],
-          updatedAt: now,
-          }
-        })()
-      : item))
-    : [
-        {
-          id: input.id,
-          name: input.name,
-          status: 'running',
-          exchange: input.exchange,
-          symbol: input.symbol,
-          timeframe: input.timeframe,
-          positionPct: input.positionPct,
-          initialCapital: 10000,
-          metrics: input.metrics,
-          equitySeries: makeEquity(Date.now() % 10),
-          timeline: [
-            { at: now.replace('T', ' ').slice(0, 16), event: '创建策略' },
-            { at: now.replace('T', ' ').slice(0, 16), event: '回测完成（模拟部署模式）', note: `最大回撤 ${input.metrics.maxDrawdownPct}%` },
-            { at: now.replace('T', ' ').slice(0, 16), event: '一键部署', note: `${input.exchange.toUpperCase()} / ${input.accountName}` },
-            { at: now.replace('T', ' ').slice(0, 16), event: '开始运行' },
-          ],
-          deploy: {
-            exchange: input.exchange,
-            accountId: input.accountId,
-            accountName: input.accountName,
-            at: now,
-            status: 'running',
-          },
-          paramSchema: null,
-          paramValues: null,
-          schemaVersion: null,
-          supportsDynamicParams: false,
-          updatedAt: now,
-        },
-        ...existing,
-      ]
-
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-}
-
 export function updateStrategyStatus(id: string, status: AiQuantStrategyViewState) {
   const now = new Date().toISOString()
   const existing = ensureStrategyStore()
@@ -478,13 +396,6 @@ export function updateStrategyStatus(id: string, status: AiQuantStrategyViewStat
     }
   })
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  return next
-}
-
-export function deleteStrategyById(id: string) {
-  const existing = ensureStrategyStore()
-  const next = existing.filter(item => item.id !== id)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   return next
 }

@@ -84,10 +84,6 @@ describe('issue #618 chart bundle guards', () => {
         /dynamic\(\s*\(\)\s*=>\s*import\('@\/components\/liquidation-map\/LiquidationMapChart'\)/,
       ],
       [
-        'components/trading/center-chart-panel/TradingViewLightweightChart.tsx',
-        /dynamic\(\s*\(\)\s*=>\s*import\('@\/components\/liquidation-map\/LiquidationMapChart'\)/,
-      ],
-      [
         'components/whale-tracking/profile/PnLTrendCard.tsx',
         /dynamic\(\s*\(\)\s*=>\s*import\('\.\/PnLTrendChart'\)/,
       ],

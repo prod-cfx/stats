@@ -251,7 +251,7 @@ function loadTradingViewScript(): Promise<void> {
   })
 }
 
-export interface TradingViewChartProps {
+interface TradingViewChartProps {
   symbol?: string
   /**
    * TradingView resolution:

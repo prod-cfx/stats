@@ -132,10 +132,6 @@ jest.mock('@/components/ai-quant/intent-storage', () => ({
   setIntent: (...args: Parameters<typeof mockSetIntent>) => mockSetIntent(...args),
 }))
 
-jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
-  GuestAiQuantLanding: () => <div data-testid="guest-landing" />,
-}))
-
 jest.mock('@/components/ai-quant/StrategyPlaza', () => ({
   StrategyPlaza: (props: typeof plazaProps) => {
     plazaProps = props

@@ -1,8 +1,8 @@
 import type { QuantSizing } from '@/app/[lng]/ai-quant/semantic-sizing'
 
-export type LogicNodeJoin = 'AND' | 'OR'
+type LogicNodeJoin = 'AND' | 'OR'
 
-export interface LogicConditionNode {
+interface LogicConditionNode {
   id: string
   subject: string
   operator: string
@@ -10,7 +10,7 @@ export interface LogicConditionNode {
   join?: LogicNodeJoin
 }
 
-export interface LogicActionNode {
+interface LogicActionNode {
   id: string
   action: 'BUY' | 'SELL' | 'CLOSE'
   target: string

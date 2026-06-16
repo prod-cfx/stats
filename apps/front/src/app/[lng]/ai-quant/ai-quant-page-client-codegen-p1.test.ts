@@ -72,10 +72,6 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
   DeployDialog: () => null,
 }))
 
-jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
-  GuestAiQuantLanding: () => null,
-}))
-
 jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
   LogicGraphPreview: () => null,
 }))

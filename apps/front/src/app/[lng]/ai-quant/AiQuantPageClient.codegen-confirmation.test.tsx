@@ -139,10 +139,6 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
   DeployDialog: () => null,
 }))
 
-jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
-  GuestAiQuantLanding: () => <div data-testid="guest" />,
-}))
-
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   BacktestSummaryCard: ({
     onDeploy,

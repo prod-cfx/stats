@@ -25,7 +25,7 @@ export interface BacktestSymbolSupportCheckPayload {
   args?: Record<string, unknown>
 }
 
-export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
+type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
 
 export interface CreateBacktestJobPayload {
   symbols: string[]

@@ -4,7 +4,7 @@ import { Info, MoreHorizontal } from 'lucide-react';
 import React from 'react';
 import { SubTitle } from '@/components/ui/Typography';
 
-export interface PredictionOption {
+interface PredictionOption {
   label: string;
   probability: string;
 }

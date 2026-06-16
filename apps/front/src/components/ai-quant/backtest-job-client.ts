@@ -8,7 +8,6 @@ export {
 
 export type {
   BacktestJob,
-  BacktestJobPhase,
   BacktestJobResult,
   CreateBacktestJobPayload,
 } from '@/lib/backtesting-api'

@@ -2,7 +2,7 @@ import type { BacktestReportMetrics, OpenPositionRecord, TradeRecord } from './b
 
 export type BacktestMarketType = 'spot' | 'perp'
 
-export interface SummaryMetricCardModel {
+interface SummaryMetricCardModel {
   key: string
   title: string
   value: string

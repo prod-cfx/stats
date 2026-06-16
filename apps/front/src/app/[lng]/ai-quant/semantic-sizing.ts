@@ -1,4 +1,4 @@
-export type QuantSizingMode = 'RATIO' | 'QUOTE' | 'QTY' | 'INVALID'
+type QuantSizingMode = 'RATIO' | 'QUOTE' | 'QTY' | 'INVALID'
 
 export type QuantSizing =
   | { mode: 'RATIO', value: number }

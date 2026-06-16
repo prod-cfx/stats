@@ -63,18 +63,6 @@ export const VOLUME_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: 
   S: { w: 6, h: 3, label: 'S' },
 }
 
-export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
-  const entries = Object.entries(UNIT_SIZE_PRESETS) as Array<[UnitSize, { w: number; h: number }]>
-
-  let best: { size: UnitSize; w: number; h: number; score: number } | null = null
-  for (const [size, p] of entries) {
-    const score = Math.abs(p.w - w) + Math.abs(p.h - h)
-    if (!best || score < best.score) best = { size, w: p.w, h: p.h, score }
-  }
-  // Should never be null, but keep safe fallback.
-  return best ? { w: best.w, h: best.h, size: best.size } : { w: UNIT_SIZE_PRESETS.M.w, h: UNIT_SIZE_PRESETS.M.h, size: 'M' }
-}
-
 export function snapToPresetForWidgetType(
   widgetType: string | undefined,
   w: number,

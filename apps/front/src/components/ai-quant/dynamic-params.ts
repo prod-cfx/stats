@@ -1,7 +1,7 @@
 export type DynamicParamSchema = Record<string, unknown>
 export type DynamicParamValues = Record<string, unknown>
 
-export interface DynamicParamFieldOption {
+interface DynamicParamFieldOption {
   value: string
   label: string
 }

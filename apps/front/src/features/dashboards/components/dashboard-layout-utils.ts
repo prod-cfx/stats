@@ -1,7 +1,7 @@
 import type { GridLayoutItem } from '../store/dashboard-store'
 import { useEffect, useState } from 'react'
 
-export const DASHBOARD_MOBILE_BREAKPOINT = 768
+const DASHBOARD_MOBILE_BREAKPOINT = 768
 
 export function useDashboardMobileLayout() {
   const [isMobile, setIsMobile] = useState(() =>

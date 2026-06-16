@@ -34,8 +34,8 @@ import {
   resolveBacktestRangeInput,
 } from './ai-quant-page-conversation'
 
-export const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
-export const BACKTEST_JOB_TIMEOUT_MS = 180_000
+const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
+const BACKTEST_JOB_TIMEOUT_MS = 180_000
 
 type BacktestEventStreams = NonNullable<CreateBacktestJobPayload['eventStreams']>
 

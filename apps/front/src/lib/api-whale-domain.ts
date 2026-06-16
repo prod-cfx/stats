@@ -23,7 +23,6 @@ import {
 import { hashStringToSeed, mulberry32 } from './api-mock'
 import {
   fetchTraderFullData as fetchTraderFullDataFromHyperliquid,
-  fetchTraderOpenOrdersFromHyperliquid,
   fetchUserFillsFromHyperliquid,
   fetchUserPortfolioFromHyperliquid,
 } from './hyperliquid-api'
@@ -43,11 +42,9 @@ export type WhaleHoldingApiItem = Infer<typeof schemas.WhaleHoldingDto>
 export type WhaleAddressPerformanceResponse = Infer<typeof schemas.WhaleAddressPerformanceResponseDto>
 export type TraderDiscoverTagsResponse = Infer<typeof schemas.TraderDiscoverTagsResponseDto>
 export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
-export type WhaleDiscoverTraderAiTag = Infer<typeof schemas.WhaleDiscoverTraderAiTagDto>
 export type TraderSnapshotResponse = Infer<typeof schemas.TraderSnapshotResponseDto>
 export type TraderPositionsResponse = Infer<typeof schemas.TraderPositionsResponseDto>
 export type TraderOpenOrdersResponse = Infer<typeof schemas.TraderOpenOrdersResponseDto>
-export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
 export type WhaleTradeDto = Infer<typeof schemas.WhaleTradeDto>
 
 export interface FetchWhaleHoldingsQuery {
@@ -75,32 +72,11 @@ export interface FetchTraderPositionsQuery {
   skipCache?: boolean
 }
 
-export interface FetchTraderOpenOrdersQuery {
-  coin?: string
-  skipCache?: boolean
-}
-
-export interface FetchRealtimeWhaleAlertsParams {
-  symbol?: string
-  minPositionValueUsd?: number
-  limit?: number
-  since?: string
-}
-
 export interface FetchWhaleTradesRealtimeParams {
   symbol?: string
   minTradeValueUsd?: number
   limit?: number
   since?: string
-}
-
-export interface FetchUserPortfolioQuery {
-  skipCache?: boolean
-}
-
-export interface FetchUserFillsQuery {
-  aggregateByTime?: boolean
-  skipCache?: boolean
 }
 
 export interface FetchTraderFullDataQuery {
@@ -501,146 +477,6 @@ export async function fetchTraderPositions(
   }
 }
 
-export async function fetchTraderOpenOrders(
-  address: string,
-  query: FetchTraderOpenOrdersQuery = {},
-): Promise<TraderOpenOrdersResponse> {
-  try {
-    return await apiCall(async () => {
-      const { coin, skipCache = false } = query
-      const searchParams = new URLSearchParams()
-      if (coin) searchParams.set('coin', coin)
-      if (skipCache) searchParams.set('skipCache', 'true')
-      const queryString = searchParams.toString()
-      const fallbackUrl =
-        queryString.length > 0
-          ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/open-orders?${queryString}`
-          : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/open-orders`
-
-      return cachedRequest(
-        `trader-open-orders:${address}:${coin ?? 'all'}:${skipCache ? 'skip' : 'cache'}`,
-        () =>
-          safeApiCall(
-            () => fetchTraderOpenOrdersFromHyperliquid(address, { coin }),
-            {
-              url: fallbackUrl,
-              options: {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json', ...optionalAuthHeaders() },
-              },
-              validateResponse: data =>
-                unwrapResponse<TraderOpenOrdersResponse>(
-                  data as TraderOpenOrdersResponse | BaseResponse<TraderOpenOrdersResponse>,
-                ),
-            },
-          ),
-        CacheTTL.SHORT,
-      )
-    }, 'FETCH_TRADER_OPEN_ORDERS')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    const coinFilter = query.coin
-    const rand = mulberry32(hashStringToSeed(`trader-open-orders:${address}:${coinFilter ?? 'all'}`))
-    const symbols = (coinFilter ? [coinFilter] : ['BTC', 'ETH', 'SOL']).map(coin => `${coin}-PERP`)
-    const now = Date.now()
-
-    return {
-      orders: Array.from({ length: Math.min(symbols.length * 2, 8) }).map((_, idx) => {
-        const symbol = symbols[idx % symbols.length]
-        const side = rand() > 0.5 ? 'BUY' : 'SELL'
-        const basePrice = symbol.startsWith('BTC') ? 65_000 : symbol.startsWith('ETH') ? 3_200 : 130
-        const price = basePrice * (0.94 + rand() * 0.12)
-        const size = 0.05 + rand() * 3
-        return {
-          orderId: `mock-order-${idx}`,
-          symbol,
-          side,
-          price,
-          size,
-          status: 'OPEN',
-          createdAt: new Date(now - idx * 5 * 60_000).toISOString(),
-        }
-      }),
-    } satisfies TraderOpenOrdersResponse
-  }
-}
-
-export async function fetchRealtimeWhaleAlerts(
-  params: FetchRealtimeWhaleAlertsParams = {},
-): Promise<RealtimeWhaleAlertItem[]> {
-  try {
-    return await apiCall(async () => {
-      const queries: Record<string, unknown> = {}
-      if (params.symbol) queries.symbol = params.symbol
-      if (typeof params.minPositionValueUsd === 'number') queries.min_position_value_usd = params.minPositionValueUsd
-      if (typeof params.limit === 'number') queries.limit = params.limit
-      if (params.since) queries.since = params.since
-
-      const searchParams = new URLSearchParams()
-      if (params.symbol) searchParams.set('symbol', params.symbol)
-      if (typeof params.minPositionValueUsd === 'number') searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
-      if (typeof params.limit === 'number') searchParams.set('limit', String(params.limit))
-      if (params.since) searchParams.set('since', params.since)
-      const queryString = searchParams.toString()
-      const fallbackUrl = queryString.length > 0
-        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
-        : `${API_BASE_URL}/whale-alerts/realtime`
-
-      return safeApiCall<RealtimeWhaleAlertItem[]>(
-        async () =>
-          unwrapPaginatedItems<RealtimeWhaleAlertItem>(
-            await client.WhaleAlertController_getRealtime({
-              headers: optionalAuthHeaders(),
-              queries,
-            }),
-          ),
-        {
-          url: fallbackUrl,
-          options: {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json', ...optionalAuthHeaders() },
-          },
-          validateResponse: data =>
-            unwrapPaginatedItems(
-              data as PaginatedItemsResponse<RealtimeWhaleAlertItem> | BaseResponse<PaginatedItemsResponse<RealtimeWhaleAlertItem>>,
-            ),
-        },
-      )
-    }, 'FETCH_REALTIME_WHALE_ALERTS')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    const symbol = params.symbol || 'BTC'
-    const limit = params.limit ?? 50
-    const rand = mulberry32(hashStringToSeed(`whale-realtime:${symbol}:${params.minPositionValueUsd ?? ''}`))
-    const sides = ['Long', 'Short'] as const
-    const now = Date.now()
-
-    const makeAddress = (idx: number) => {
-      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
-      return `0x${a}${idx.toString(16).padStart(4, '0')}`
-    }
-
-    return Array.from({ length: Math.min(limit, 80) }).map((_, idx) => {
-      const side = sides[Math.floor(rand() * sides.length)]
-      const basePrice = symbol === 'BTC' ? 65_000 : symbol === 'ETH' ? 3_200 : 120
-      const entryPrice = basePrice * (0.92 + rand() * 0.16)
-      const positionValueUsd = Math.floor((params.minPositionValueUsd ?? 1_000_000) * (1 + rand() * 12))
-      const positionSize = (positionValueUsd / entryPrice) * (side === 'Short' ? -1 : 1)
-      const minutesAgo = Math.floor(rand() * 60)
-      return {
-        user_address: makeAddress(idx),
-        symbol,
-        side,
-        position_action: rand() > 0.5 ? 1 : 2,
-        position_value_usd: String(positionValueUsd),
-        position_size: Number(positionSize.toFixed(6)),
-        entry_price: String(entryPrice.toFixed(2)),
-        create_time: new Date(now - minutesAgo * 60_000).toISOString(),
-      } satisfies RealtimeWhaleAlertItem
-    })
-  }
-}
-
 export async function fetchWhaleTradesRealtime(
   params: FetchWhaleTradesRealtimeParams = {},
 ): Promise<WhaleTradeDto[]> {
@@ -714,67 +550,6 @@ export async function fetchWhaleTradesRealtime(
         trade_time: new Date(now - minutesAgo * 60_000).toISOString(),
       } as WhaleTradeDto
     })
-  }
-}
-
-export async function fetchUserPortfolio(
-  address: string,
-  query: FetchUserPortfolioQuery = {},
-): Promise<UserPortfolioResponse> {
-  try {
-    return await apiCall(async () => {
-      if (query.skipCache) {
-        return fetchUserPortfolioFromHyperliquid(address)
-      }
-
-      return cachedRequest(
-        `user-portfolio:${address}`,
-        () => fetchUserPortfolioFromHyperliquid(address),
-        CacheTTL.LONG,
-      )
-    }, 'FETCH_USER_PORTFOLIO')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    const rand = mulberry32(hashStringToSeed(`portfolio:${address}`))
-    const now = Date.now()
-    const points = 100
-    const step = 3600 * 1000
-    const history = Array.from({ length: points }).map((_, i) => {
-      const time = now - (points - i) * step
-      const value = 1000000 + Math.sin(i / 10) * 200000 + rand() * 50000
-      return { time, value }
-    })
-    return {
-      address,
-      history,
-      currentValue: history[points - 1].value,
-      pnl24h: 12500,
-      pnlPercent24h: 1.25,
-    } satisfies UserPortfolioResponse
-  }
-}
-
-export async function fetchUserFills(
-  address: string,
-  query: FetchUserFillsQuery = {},
-): Promise<UserFillsResponse> {
-  try {
-    return await apiCall(async () => {
-      const { aggregateByTime = false, skipCache = false } = query
-      if (skipCache) {
-        return fetchUserFillsFromHyperliquid(address, { aggregateByTime })
-      }
-
-      const cacheKey = `user-fills:${address}:${aggregateByTime ? 'agg' : 'raw'}`
-      return cachedRequest(
-        cacheKey,
-        () => fetchUserFillsFromHyperliquid(address, { aggregateByTime }),
-        CacheTTL.MEDIUM,
-      )
-    }, 'FETCH_USER_FILLS')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    return { fills: [] } satisfies UserFillsResponse
   }
 }
 

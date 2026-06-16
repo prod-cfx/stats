@@ -50,10 +50,6 @@ jest.mock('@/components/ai-quant/ConversationSidebar', () => ({
   ConversationSidebar: () => <div data-testid="sidebar" />,
 }))
 
-jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
-  GuestAiQuantLanding: () => <div data-testid="guest" />,
-}))
-
 jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
   LogicGraphPreview: () => null,
 }))

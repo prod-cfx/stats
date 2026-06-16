@@ -14,7 +14,7 @@ export interface GridLayoutItem {
   h: number
 }
 
-export type DashboardWidgetConfigValue = string | number | boolean | null | DashboardWidgetConfigValue[] | {
+type DashboardWidgetConfigValue = string | number | boolean | null | DashboardWidgetConfigValue[] | {
   [key: string]: DashboardWidgetConfigValue
 }
 
@@ -62,7 +62,7 @@ export function getDashboard(id: string): DashboardDoc | null {
   return all[id] ?? null
 }
 
-export function getAllDashboards(): DashboardDoc[] {
+function getAllDashboards(): DashboardDoc[] {
   const all = readAll()
   // `draft` is an internal editor placeholder; it should not appear in any user-facing lists/counts.
   return Object.values(all)
@@ -119,10 +119,6 @@ export function createNewDashboard(): DashboardDoc {
 
 export function publishDashboard(id: string) {
   updateDashboard(id, (doc) => ({ ...doc, isPublished: true }))
-}
-
-export function unpublishDashboard(id: string) {
-  updateDashboard(id, (doc) => ({ ...doc, isPublished: false }))
 }
 
 export function updateDashboardMeta(

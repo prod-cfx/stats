@@ -21,35 +21,6 @@ export class AuthenticationError extends ApiError {
   }
 }
 
-export class ValidationError extends ApiError {
-  constructor(message: string, details?: unknown) {
-    super(message, 'VALIDATION_ERROR', 400, details)
-    this.name = 'ValidationError'
-  }
-}
-
-/**
- * Type guard to check if error is an ApiError
- */
-export function isApiError(error: unknown): error is ApiError {
-  return error instanceof ApiError
-}
-
-/**
- * Extract user-friendly error message
- */
-export function getErrorMessage(error: unknown): string {
-  if (isApiError(error)) {
-    return error.message
-  }
-  
-  if (error instanceof Error) {
-    return error.message
-  }
-  
-  return '发生未知错误，请稍后重试'
-}
-
 /**
  * Log error to monitoring service (placeholder)
  */

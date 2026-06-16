@@ -21,8 +21,8 @@ import { logger } from './logger'
 type Infer<T extends ZodTypeAny> = T['_output']
 
 // 复用后端 DTO 类型定义
-export type TraderSnapshotResponse = Infer<typeof schemas.TraderSnapshotResponseDto>
-export type TraderPositionsResponse = Infer<typeof schemas.TraderPositionsResponseDto>
+type TraderSnapshotResponse = Infer<typeof schemas.TraderSnapshotResponseDto>
+type TraderPositionsResponse = Infer<typeof schemas.TraderPositionsResponseDto>
 export type TraderOpenOrdersResponse = Infer<typeof schemas.TraderOpenOrdersResponseDto>
 
 // 前端专用的历史数据响应类型
@@ -37,7 +37,7 @@ export interface UserPortfolioResponse {
   perpAllTime: PortfolioPeriodData
 }
 
-export interface PortfolioPeriodData {
+interface PortfolioPeriodData {
   accountValueHistory: Array<{ timestamp: number; value: number }>
   pnlHistory: Array<{ timestamp: number; value: number }>
   volume: number
@@ -47,7 +47,7 @@ export interface UserFillsResponse {
   fills: UserFill[]
 }
 
-export interface UserFill {
+interface UserFill {
   coin: string
   price: number
   size: number
@@ -205,7 +205,7 @@ interface HyperliquidUserFill {
  *
  * Docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#retrieve-a-users-historical-orders
  */
-export interface HyperliquidHistoricalOrder {
+interface HyperliquidHistoricalOrder {
   coin: string
   side: 'A' | 'B'
   limitPx: string
@@ -224,7 +224,7 @@ export interface HyperliquidHistoricalOrder {
   cloid?: string | null
 }
 
-export type HyperliquidHistoricalOrderStatus =
+type HyperliquidHistoricalOrderStatus =
   | 'open'
   | 'filled'
   | 'canceled'
@@ -262,27 +262,6 @@ type HyperliquidPortfolioResponse = Array<
 // ============================================================================
 // 常量定义
 // ============================================================================
-
-/**
- * 空的永续合约数据（用于 spot-only 查询）
- */
-const EMPTY_PERP_DATA: HyperliquidClearinghouseStateResponse = {
-  marginSummary: {
-    accountValue: '0',
-    totalMarginUsed: '0',
-    totalNtlPos: '0',
-  },
-  withdrawable: '0',
-  assetPositions: [],
-  time: 0,
-}
-
-/**
- * 空的现货数据（用于 perp-only 查询）
- */
-const EMPTY_SPOT_DATA: HyperliquidSpotClearinghouseStateResponse = {
-  balances: [],
-}
 
 /**
  * 有效的投资组合周期（用于 portfolio 数据转换）
@@ -825,122 +804,6 @@ function transformToTraderOpenOrders(orders: HyperliquidOpenOrder[]): TraderOpen
  * @param address - 用户地址（42 字符十六进制格式）
  * @returns 账户快照数据（兼容后端 DTO 格式）
  */
-export async function fetchTraderSnapshotFromHyperliquid(
-  address: string,
-): Promise<TraderSnapshotResponse> {
-  if (!isValidEthereumAddress(address)) {
-    throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
-  }
-
-  try {
-    const [perpCashData, perpXyzData, spotData, spotMeta, priceData] = await Promise.all([
-      postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-        type: 'clearinghouseState',
-        user: address,
-      }),
-      postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-        type: 'clearinghouseState',
-        user: address,
-        dex: 'xyz',
-      }),
-      postHyperliquidInfo<HyperliquidSpotClearinghouseStateResponse>({
-        type: 'spotClearinghouseState',
-        user: address,
-      }),
-      getCachedSpotMeta(),
-      getCachedAllMids(),
-    ])
-
-    return transformToTraderSnapshot(perpCashData, perpXyzData, spotData, spotMeta, priceData)
-  } catch (error) {
-    logError('FETCH_TRADER_SNAPSHOT_FROM_HYPERLIQUID', error, { address })
-    throw error
-  }
-}
-
-/**
- * 从 Hyperliquid 获取交易者持仓详情
- *
- * @param address - 用户地址（42 字符十六进制格式）
- * @param options - 查询选项
- * @param options.type - 查询类型（perp/spot/all）
- * @returns 持仓详情数据（兼容后端 DTO 格式）
- */
-export async function fetchTraderPositionsFromHyperliquid(
-  address: string,
-  options: { type?: 'perp' | 'spot' | 'all' } = {},
-): Promise<TraderPositionsResponse> {
-  if (!isValidEthereumAddress(address)) {
-    throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
-  }
-
-  const { type = 'all' } = options
-
-  try {
-    // 根据查询类型直接调用对应的 API，避免复杂的动态数组逻辑
-    if (type === 'all') {
-      const [perpCashData, perpXyzData, spotData, spotMeta, priceData] = await Promise.all([
-        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-          type: 'clearinghouseState',
-          user: address,
-        }),
-        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-          type: 'clearinghouseState',
-          user: address,
-          dex: 'xyz',
-        }),
-        postHyperliquidInfo<HyperliquidSpotClearinghouseStateResponse>({
-          type: 'spotClearinghouseState',
-          user: address,
-        }),
-        getCachedSpotMeta(),
-        getCachedAllMids(),
-      ])
-
-      const mergedPerpData: HyperliquidClearinghouseStateResponse = {
-        ...perpCashData,
-        assetPositions: [...perpCashData.assetPositions, ...perpXyzData.assetPositions],
-      }
-
-      return transformToTraderPositions(mergedPerpData, spotData, spotMeta, priceData, type)
-    } else if (type === 'perp') {
-      const [perpCashData, perpXyzData] = await Promise.all([
-        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-          type: 'clearinghouseState',
-          user: address,
-        }),
-        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-          type: 'clearinghouseState',
-          user: address,
-          dex: 'xyz',
-        }),
-      ])
-
-      const mergedPerpData: HyperliquidClearinghouseStateResponse = {
-        ...perpCashData,
-        assetPositions: [...perpCashData.assetPositions, ...perpXyzData.assetPositions],
-      }
-      // perp-only 查询不需要价格数据
-      const emptySpotMeta: HyperliquidSpotMetaResponse = { universe: [], tokens: [] }
-      return transformToTraderPositions(mergedPerpData, EMPTY_SPOT_DATA, emptySpotMeta, {}, type)
-    } else {
-      // type === 'spot'
-      const [spotData, spotMeta, priceData] = await Promise.all([
-        postHyperliquidInfo<HyperliquidSpotClearinghouseStateResponse>({
-          type: 'spotClearinghouseState',
-          user: address,
-        }),
-        getCachedSpotMeta(),
-        getCachedAllMids(),
-      ])
-      return transformToTraderPositions(EMPTY_PERP_DATA, spotData, spotMeta, priceData, type)
-    }
-  } catch (error) {
-    logError('FETCH_TRADER_POSITIONS_FROM_HYPERLIQUID', error, { address, type })
-    throw error
-  }
-}
-
 /**
  * 从 Hyperliquid 获取交易者挂单列表
  *

@@ -117,7 +117,7 @@ export const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
 export const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
 export const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 export const AI_QUANT_PERSISTED_SCHEMA_VERSION = 2
-export const STALE_CONVERSATION_RECOVERY_MESSAGE_KEY = 'aiQuant.messages.staleConversationRecovered'
+const STALE_CONVERSATION_RECOVERY_MESSAGE_KEY = 'aiQuant.messages.staleConversationRecovered'
 
 function normalizeBacktestDiagnosticReason(value: unknown): BacktestResult['diagnosticReason'] | undefined {
   if (
@@ -213,11 +213,6 @@ export function findConversationForEditIntent(
 
   return null
 }
-
-export type ConversationIntegrityIssue =
-  | 'clarification_blocked'
-  | 'digest_mismatch'
-  | 'publication_mismatch'
 
 export function normalizeClarificationGate(input: unknown): LlmClarificationGate | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -373,7 +368,7 @@ export const BACKTEST_EXECUTION_PARAM_KEYS = [
   'backtestAllowPartial',
 ] as const
 export const BACKTEST_EXECUTION_PARAM_KEY_SET = new Set<string>(BACKTEST_EXECUTION_PARAM_KEYS)
-export type BacktestExecutionPriceSource = 'open' | 'close' | 'mid'
+type BacktestExecutionPriceSource = 'open' | 'close' | 'mid'
 
 export interface ResolvedBacktestExecutionConfig {
   initialCash: number
@@ -385,7 +380,7 @@ export interface ResolvedBacktestExecutionConfig {
   allowPartialValid: boolean
 }
 
-export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
+const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
   backtestInitialCash: 10000,
   backtestLeverage: 1,
   backtestSlippageBps: 10,
@@ -667,7 +662,7 @@ function normalizeSnapshotCompatibilityMetadata(
   }
 }
 
-export function normalizePublishedSnapshotParamValues(
+function normalizePublishedSnapshotParamValues(
   value: unknown,
 ): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -1045,7 +1040,7 @@ export function buildParamSchemaWithCapabilities(
   }
 }
 
-export function normalizePublishedScriptCode(scriptCode: unknown): string | null {
+function normalizePublishedScriptCode(scriptCode: unknown): string | null {
   if (typeof scriptCode !== 'string') {
     return null
   }
@@ -1053,7 +1048,7 @@ export function normalizePublishedScriptCode(scriptCode: unknown): string | null
   return normalized.length > 0 ? normalized : null
 }
 
-export function normalizePublishedSnapshotId(snapshotId: unknown): string | null {
+function normalizePublishedSnapshotId(snapshotId: unknown): string | null {
   if (typeof snapshotId !== 'string') {
     return null
   }
@@ -1118,7 +1113,7 @@ function normalizeLastBacktestRef(
   }
 }
 
-export function normalizeBacktestDraftConfig(
+function normalizeBacktestDraftConfig(
   value: unknown,
 ): AiQuantBacktestDraftConfig | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -1541,38 +1536,6 @@ function hasPublicationMismatch(conversation: ConversationState): boolean {
   return conversation.publishedScriptGraphVersion !== conversation.logicGraph.version
 }
 
-function hasDigestMismatch(conversation: ConversationState): boolean {
-  if (conversation.clarificationGate?.blocked) {
-    return false
-  }
-  const digestFromSpec = readCanonicalDigest(conversation.codegenSpecDesc)
-  return Boolean(
-    digestFromSpec
-      && conversation.pendingCanonicalDigest
-      && digestFromSpec !== conversation.pendingCanonicalDigest,
-  )
-}
-
-export function collectConversationIntegrityIssues(
-  conversation: ConversationState,
-): ConversationIntegrityIssue[] {
-  const issues: ConversationIntegrityIssue[] = []
-  if (hasClarificationBlockedConflict(conversation)) {
-    issues.push('clarification_blocked')
-  }
-  if (hasPublicationMismatch(conversation)) {
-    issues.push('publication_mismatch')
-  }
-  if (hasDigestMismatch(conversation)) {
-    issues.push('digest_mismatch')
-  }
-  return issues
-}
-
-export function hasConversationIntegrityIssues(conversation: ConversationState): boolean {
-  return collectConversationIntegrityIssues(conversation).length > 0
-}
-
 function normalizeBlockedClarificationState(conversation: ConversationState): ConversationState {
   if (!hasClarificationBlockedConflict(conversation)) {
     return conversation
@@ -1623,7 +1586,7 @@ function normalizeDigestState(conversation: ConversationState): ConversationStat
   }
 }
 
-export function normalizeHydratedConversationState(
+function normalizeHydratedConversationState(
   conversation: ConversationState,
 ): ConversationState {
   const normalizedClarification = normalizeBlockedClarificationState(conversation)
@@ -1631,7 +1594,7 @@ export function normalizeHydratedConversationState(
   return normalizeDigestState(normalizedPublication)
 }
 
-export function extractLatestScriptCode(messages: QuantMessage[]): string {
+function extractLatestScriptCode(messages: QuantMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i]
     if (message.role !== 'assistant') continue
@@ -1643,7 +1606,7 @@ export function extractLatestScriptCode(messages: QuantMessage[]): string {
   return ''
 }
 
-export function resolveHydratedPublishedScriptCode(item: Partial<ConversationState>): string | null {
+function resolveHydratedPublishedScriptCode(item: Partial<ConversationState>): string | null {
   const explicitScriptCode = normalizePublishedScriptCode(item.publishedScriptCode)
   if (explicitScriptCode) {
     return explicitScriptCode
@@ -1700,7 +1663,7 @@ export function invalidateConversationPublication(
   }
 }
 
-export function normalizeHydratedBacktestExecutionState(
+function normalizeHydratedBacktestExecutionState(
   state: ConversationState['backtestExecutionState'] | undefined,
 ): ConversationState['backtestExecutionState'] {
   if (!state || TRANSIENT_BACKTEST_STATES.has(state)) {
@@ -2313,7 +2276,7 @@ function hadPersistedCodegenArtifacts(item: Partial<ConversationState>): boolean
   )
 }
 
-export function shouldResetIrrecoverableHydratedConversation(
+function shouldResetIrrecoverableHydratedConversation(
   item: Partial<ConversationState>,
   conversation: ConversationState,
 ): boolean {

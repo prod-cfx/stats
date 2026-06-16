@@ -1,4 +1,4 @@
-export type MarketDataCatalogItemKind = 'chartSeries' | 'chartOverlay' | 'dashboardWidget' | 'nav'
+type MarketDataCatalogItemKind = 'chartSeries' | 'chartOverlay' | 'dashboardWidget' | 'nav'
 
 export interface MarketDataCatalogItem {
   id: string

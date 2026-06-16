@@ -17,7 +17,7 @@ import { fetchKlineData } from '@/lib/api'
 import { getWsBaseUrl } from '@/lib/ws'
 import { logger } from '@/utils/logger'
 
-export type TvResolution = '1' | '5' | '15' | '60' | '240' | '1D'
+type TvResolution = '1' | '5' | '15' | '60' | '240' | '1D'
 
 export interface TvBar {
   time: number // 毫秒时间戳

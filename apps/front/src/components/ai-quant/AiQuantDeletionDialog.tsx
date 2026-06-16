@@ -345,5 +345,3 @@ export function AiQuantDeletionDialog({
     </div>
   )
 }
-
-export default AiQuantDeletionDialog

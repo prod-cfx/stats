@@ -38,11 +38,3 @@ export const BodyText = ({ children, className = '' }: TypographyProps) => {
     </p>
   );
 };
-
-export const CaptionText = ({ children, className = '' }: TypographyProps) => {
-  return (
-    <small className={`!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] ${className}`}>
-      {children}
-    </small>
-  );
-};

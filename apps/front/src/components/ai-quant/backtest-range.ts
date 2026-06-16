@@ -1,6 +1,6 @@
 import type { MarketTimeframe } from '@ai/shared'
 
-export type BacktestRangePreset = '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+type BacktestRangePreset = '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
 
 export interface BacktestRangeInput {
   preset: BacktestRangePreset
@@ -13,7 +13,7 @@ export interface BacktestRangeResolved {
   endAt: string
 }
 
-export type BacktestRangeValidationReason = 'missing_range' | 'start_after_end' | 'range_too_large'
+type BacktestRangeValidationReason = 'missing_range' | 'start_after_end' | 'range_too_large'
 
 export type BacktestRangeValidationResult =
   | { ok: true }

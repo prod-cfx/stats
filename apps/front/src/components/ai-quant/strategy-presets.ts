@@ -1,13 +1,13 @@
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
 
-export interface StrategyPreset {
+interface StrategyPreset {
   id: string
   name: string
   desc: string
   params: Partial<QuantParams>
 }
 
-export const STRATEGY_PRESETS: StrategyPreset[] = [
+const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'momentum-steady',
     name: '价格动量（稳健）',

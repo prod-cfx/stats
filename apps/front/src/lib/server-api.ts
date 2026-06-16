@@ -32,12 +32,12 @@ export interface BacktestJobResultSummary {
   openPnl?: number
 }
 
-export interface BacktestJobResultEquityPoint {
+interface BacktestJobResultEquityPoint {
   ts: number
   equity: number
 }
 
-export interface BacktestJobResultTradeRecord {
+interface BacktestJobResultTradeRecord {
   id: string
   symbol: string
   side: 'LONG' | 'SHORT'
@@ -57,7 +57,7 @@ export interface BacktestJobResultTradeRecord {
   reasonCloseDisplay?: string
 }
 
-export interface BacktestJobResultOpenPositionRecord {
+interface BacktestJobResultOpenPositionRecord {
   symbol: string
   qty: number
   avgEntryPrice: number
@@ -138,31 +138,6 @@ export async function fetchLlmStrategyInstancesServer(
           page: params.page,
           limit: params.limit,
         },
-      }),
-    authHeaders,
-  )
-}
-
-/**
- * 在服务端获取 LLM 策略实例详情
- * 支持匿名访问，登录用户会看到 isSubscribed 状态
- *
- * 注意：如果 token 失效（401/403），会自动降级为匿名请求重试
- * 这确保公开页面不会因为残留的过期 cookie 而无法访问
- */
-export async function fetchLlmStrategyInstanceDetailServer(
-  id: string,
-): Promise<UserLlmStrategyInstanceResponse> {
-  const authHeaders = await getServerAuthHeaders()
-  return callPublicServerApi<UserLlmStrategyInstanceResponse>(
-    () =>
-      typedServerClient.LlmStrategyInstancesController_detail({
-        headers: authHeaders,
-        params: { id },
-      }),
-    () =>
-      typedServerClient.LlmStrategyInstancesController_detail({
-        params: { id },
       }),
     authHeaders,
   )

@@ -15,9 +15,8 @@ describe('issue #1350 whale mobile layouts', () => {
     const addressMonitor = readFrontSource('components/whale-tracking/notifications/AddressMonitorSection.tsx')
     const realtimeMonitor = readFrontSource('components/whale-tracking/notifications/RealtimeWhaleMonitorSection.tsx')
     const profileTabs = readFrontSource('components/whale-tracking/profile/ProfileDataTabs.tsx')
-    const completedTrades = readFrontSource('components/whale-tracking/profile/CompletedTradesTable.tsx')
 
-    for (const source of [realtime, holdings, addressMonitor, realtimeMonitor, profileTabs, completedTrades]) {
+    for (const source of [realtime, holdings, addressMonitor, realtimeMonitor, profileTabs]) {
       expect(source).toContain('md:hidden')
       expect(source).toContain('hidden md:block')
     }

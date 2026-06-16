@@ -1,4 +1,4 @@
-export type MockBaseAsset =
+type MockBaseAsset =
   | 'BTC'
   | 'ETH'
   | 'SOL'
@@ -45,15 +45,6 @@ export function getMockTickSize(price: number): number {
   if (price >= 100) return 0.01;
   if (price >= 1) return 0.0001;
   return 0.00001;
-}
-
-export function getMockVolatility(price: number): number {
-  // Roughly scale: larger assets swing more in absolute terms
-  if (price >= 10000) return 80;
-  if (price >= 1000) return 8;
-  if (price >= 100) return 0.8;
-  if (price >= 1) return 0.02;
-  return 0.005;
 }
 
 

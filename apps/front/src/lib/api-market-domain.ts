@@ -23,7 +23,6 @@ import {
   API_BASE_URL,
   client,
   safeApiCall,
-  validateId,
 } from './api-client'
 import { hashStringToSeed, mulberry32 } from './api-mock'
 import {
@@ -40,7 +39,7 @@ interface BaseResponse<T> {
   message?: string
 }
 
-export interface PaginatedResponse<T> {
+interface PaginatedResponse<T> {
   total: number
   page: number
   limit: number
@@ -80,7 +79,7 @@ interface LongShortRatioPoint {
   source: string
 }
 
-export interface LiquidationSummaryItem {
+interface LiquidationSummaryItem {
   timeframe: '1h' | '4h' | '12h' | '24h'
   totalUsd: number
   longUsd: number
@@ -92,7 +91,7 @@ export interface AggregatedLiquidationSummary {
   items: LiquidationSummaryItem[]
 }
 
-export interface ExchangeLiquidationRow {
+interface ExchangeLiquidationRow {
   exchange: string
   symbol: string
   timeframe: '1h' | '4h' | '12h' | '24h'
@@ -119,7 +118,7 @@ export interface FetchPredictionMarketsParams {
 
 export type AggregatedOrderbookQueryType = MarketType
 
-export interface AggregatedOrderbookVenueDetail {
+interface AggregatedOrderbookVenueDetail {
   venueId: string
   size: number
 }
@@ -164,20 +163,6 @@ export interface FetchAggregatedOpenInterestQuery {
   symbol: string
   exchange?: string
   limit?: number
-}
-
-export interface FetchUserPortfolioQuery {
-  skipCache?: boolean
-}
-
-export interface FetchUserFillsQuery {
-  aggregateByTime?: boolean
-  skipCache?: boolean
-}
-
-export interface FetchTraderFullDataQuery {
-  aggregateByTime?: boolean
-  skipCache?: boolean
 }
 
 export interface FetchKlineDataParams {
@@ -231,25 +216,6 @@ export interface AggregatedVolumeApiItem {
 }
 
 export interface AggregatedVolumeApiResponse extends PaginatedResponse<AggregatedVolumeApiItem> {}
-
-export interface PositionsQueryParams {
-  page?: number
-  limit?: number
-  accountId?: string
-  symbol?: string
-  positionSide?: 'LONG' | 'SHORT'
-}
-
-export interface PositionResponse {
-  id: string
-  symbol: string
-  side: 'Long' | 'Short'
-  size: number
-  entryPrice: number
-  currentPrice?: number
-  pnl?: number
-  createdAt: string
-}
 
 export async function fetchLongShortRatio(
   query: LongShortRatioQuery,
@@ -468,28 +434,6 @@ export async function fetchCryptoStockQuotesLatest(params?: {
   }
 }
 
-export async function fetchOpenPositions(
-  params: PositionsQueryParams = {},
-): Promise<PaginatedResponse<PositionResponse>> {
-  return {
-    total: 0,
-    page: params.page ?? 1,
-    limit: params.limit ?? 20,
-    items: [],
-  }
-}
-
-export async function fetchHistoricalPositions(
-  params: PositionsQueryParams = {},
-): Promise<PaginatedResponse<PositionResponse>> {
-  return {
-    total: 0,
-    page: params.page ?? 1,
-    limit: params.limit ?? 20,
-    items: [],
-  }
-}
-
 export async function fetchPredictionMarkets(
   params: FetchPredictionMarketsParams = {},
 ): Promise<PredictionMarketCardResponse[]> {
@@ -649,23 +593,6 @@ export async function fetchKlineData(params: FetchKlineDataParams): Promise<Klin
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
     return []
-  }
-}
-
-export async function fetchTicker(symbol: string, exchange?: string): Promise<TickerData | null> {
-  try {
-    return await apiCall(async () => {
-      const response = await client.MarketsController_getTicker({
-        queries: {
-          symbol,
-          ...(exchange ? { exchange } : {}),
-        },
-      })
-      return unwrapResponse(response) as TickerData | null
-    }, 'FETCH_TICKER')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    return null
   }
 }
 

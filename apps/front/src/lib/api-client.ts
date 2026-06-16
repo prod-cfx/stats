@@ -193,21 +193,6 @@ async function performFetch<T>(fallbackConfig: {
 }
 
 /**
- * 构建带缓存的fetch选项（用于Next.js）
- */
-export function buildCachedFetchOptions(
-  cacheTime: number = 60,
-  tags?: string[]
-): RequestInit {
-  return {
-    next: {
-      revalidate: cacheTime, // 缓存时间（秒）
-      tags: tags || [], // 缓存标签，用于按需重新验证
-    },
-  }
-}
-
-/**
  * 从响应中解包数据
  * 处理 { data: T } 和直接返回 T 两种格式
  */

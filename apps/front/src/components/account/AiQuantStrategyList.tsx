@@ -20,7 +20,7 @@ import {
 import { mapAccountStrategyDetailToRecord, mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamRows } from './dynamic-param-summary'
 
-export const STRATEGY_LIST_FETCH_LIMIT = 100
+const STRATEGY_LIST_FETCH_LIMIT = 100
 
 export type StrategyFilterTabKey = 'all' | 'running' | 'stopped' | 'history'
 

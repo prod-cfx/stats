@@ -1,4 +1,4 @@
-export function formatBacktestDate(input?: string | null): string {
+function formatBacktestDate(input?: string | null): string {
   if (!input) return '-'
   const date = new Date(input)
   if (Number.isNaN(date.getTime())) return '-'

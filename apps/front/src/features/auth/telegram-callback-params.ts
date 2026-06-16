@@ -1,5 +1,5 @@
-export type TelegramCallbackSource = 'web' | 'desktop' | 'webapp'
-export type TelegramCallbackIntent = 'login' | 'bind'
+type TelegramCallbackSource = 'web' | 'desktop' | 'webapp'
+type TelegramCallbackIntent = 'login' | 'bind'
 
 interface QueryLike {
   get: (key: string) => string | null

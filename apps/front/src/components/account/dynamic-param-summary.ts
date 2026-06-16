@@ -65,15 +65,3 @@ export function buildDynamicParamRows(
 
   return rows
 }
-
-export function buildDynamicParamSummary(
-  paramSchema: Record<string, unknown> | null,
-  paramValues: Record<string, unknown> | null,
-  limit = 3,
-): string[] {
-  if (limit <= 0) return []
-
-  return buildDynamicParamRows(paramSchema, paramValues)
-    .slice(0, limit)
-    .map(item => `${item.label}: ${item.value}`)
-}

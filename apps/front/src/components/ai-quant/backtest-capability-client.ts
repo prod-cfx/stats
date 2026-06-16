@@ -5,5 +5,4 @@ export {
 
 export type {
   BacktestCapabilities,
-  FetchBacktestCapabilitiesOptions,
 } from '@/lib/backtesting-api'

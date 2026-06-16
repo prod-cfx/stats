@@ -1,4 +1,4 @@
-export type QuantEditSessionSource = 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
+type QuantEditSessionSource = 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
 
 export type QuantReturnIntent =
   | { type: 'run', strategyId: string, ts?: number }

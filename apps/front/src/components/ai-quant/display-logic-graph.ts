@@ -12,11 +12,11 @@ interface DisplayBaseItem {
   text: string
 }
 
-export interface DisplayConditionItem extends DisplayBaseItem {
+interface DisplayConditionItem extends DisplayBaseItem {
   kind: 'condition'
 }
 
-export interface DisplayActionItem extends DisplayBaseItem {
+interface DisplayActionItem extends DisplayBaseItem {
   kind: 'action'
 }
 

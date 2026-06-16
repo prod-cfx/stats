@@ -46,28 +46,6 @@ export function Spinner({ size = 'md', className = '' }: { size?: 'sm' | 'md' | 
 /**
  * Full page loading overlay
  */
-export function LoadingOverlay({ message }: { message?: string }) {
-  const { t } = useTranslation()
-  const resolvedMessage = message ?? t('common.loading')
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="rounded-lg bg-[#0f1219] border border-gray-800 p-8 shadow-2xl">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" className="text-[#396bff]" />
-          <p className="text-sm text-gray-300">{resolvedMessage}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Inline loading state for buttons
- */
-export function ButtonSpinner() {
-  return <Spinner size="sm" className="mr-2" />
-}
-
 /**
  * Skeleton loader for content placeholders
  */
@@ -87,53 +65,10 @@ export function Skeleton({ className = '', width = '100%', height = '20px' }: {
 /**
  * Strategy card skeleton loader
  */
-export function StrategyCardSkeleton() {
-  return (
-    <div className="rounded-xl border border-gray-800 bg-[#0a0d14] p-6">
-      <div className="flex items-start gap-4">
-        <Skeleton width={48} height={48} className="rounded-lg" />
-        <div className="flex-1 space-y-3">
-          <Skeleton width="60%" height={24} />
-          <Skeleton width="40%" height={16} />
-          <div className="flex gap-2 mt-4">
-            <Skeleton width={80} height={24} className="rounded-full" />
-            <Skeleton width={80} height={24} className="rounded-full" />
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Skeleton width="50%" height={12} />
-          <Skeleton width="70%" height={20} />
-        </div>
-        <div className="space-y-2">
-          <Skeleton width="50%" height={12} />
-          <Skeleton width="70%" height={20} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Table row skeleton loader
- */
-export function TableRowSkeleton({ columns = 5 }: { columns?: number }) {
-  return (
-    <tr className="border-b border-gray-800">
-      {Array.from({ length: columns }).map((_, i) => (
-        <td key={`column-${i + 1}`} className="px-4 py-4">
-          <Skeleton height={16} />
-        </td>
-      ))}
-    </tr>
-  )
-}
-
 /**
  * Error state component with retry
  */
-export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
+function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
   const { t } = useTranslation()
   const resolvedMessage = message ?? t('common.loadFailed')
   return (
