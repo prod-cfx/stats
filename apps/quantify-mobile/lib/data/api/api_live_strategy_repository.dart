@@ -134,6 +134,9 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
       ),
       trades: asInt(_pickMetric(m, <String>['trades', 'tradeCount'])),
       winRate: asDouble(_pickMetric(m, <String>['winRate', 'winRatePct'])),
+      maxDrawdown: asDouble(
+        _pickMetric(m, <String>['maxDrawdown', 'maxDrawdownPct']),
+      ),
       spark: _spark(m),
       statusNote: null,
       publishedSnapshotId: asStringOrNull(
@@ -144,6 +147,7 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
         pick(snapshot, <String>['deployAt']) ??
             pick(m, <String>['deployAt', 'startedAt']),
       ),
+      viewOnlyAt: _dateTimeOrNull(pick(m, <String>['viewOnlyAt'])),
       deployAccountName: asStringOrNull(
         pick(deployment, <String>['exchangeAccountName']) ??
             pick(snapshot, <String>['deployAccountName']),
@@ -188,6 +192,12 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
       pausedCount: asInt(pick(m, <String>['pausedCount'])),
       stoppedCount: asInt(pick(m, <String>['stoppedCount'])),
       winRate: asDouble(pick(m, <String>['winRate'])),
+      averageReturnPct: asDouble(
+        pick(m, <String>['averageReturnPct', 'avgReturnPct']),
+      ),
+      averageWinRatePct: asDouble(
+        pick(m, <String>['averageWinRatePct', 'avgWinRatePct']),
+      ),
     );
   }
 
@@ -274,13 +284,14 @@ class ApiLiveStrategyRepository implements LiveStrategyRepository {
   }
 
   @override
-  Future<LiveStrategy> pause(String id) async {
-    return _parse(_unwrap(await _service.performAction(id, 'pause')));
+  Future<LiveStrategy> pause(String id, {bool liquidate = false}) async {
+    final String action = liquidate ? 'liquidate_and_stop' : 'stop';
+    return _parse(_unwrap(await _service.performAction(id, action)));
   }
 
   @override
   Future<LiveStrategy> resume(String id) async {
-    return _parse(_unwrap(await _service.performAction(id, 'resume')));
+    return _parse(_unwrap(await _service.performAction(id, 'run')));
   }
 
   @override

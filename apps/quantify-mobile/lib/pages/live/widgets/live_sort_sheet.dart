@@ -107,10 +107,10 @@ class _LiveSortSheetState extends State<LiveSortSheet> {
         return l10n.liveFilterAll;
       case LiveSortStatus.running:
         return l10n.liveFilterRunning;
-      case LiveSortStatus.paused:
-        return l10n.liveFilterPaused;
       case LiveSortStatus.stopped:
         return l10n.liveFilterStopped;
+      case LiveSortStatus.history:
+        return l10n.liveFilterHistory;
     }
   }
 

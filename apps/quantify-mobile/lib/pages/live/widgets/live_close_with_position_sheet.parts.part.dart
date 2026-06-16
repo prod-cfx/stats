@@ -316,42 +316,6 @@ class _MarketEffect extends StatelessWidget {
   }
 }
 
-class _NaturalEffect extends StatelessWidget {
-  const _NaturalEffect({required this.position});
-  final LiveStrategyPosition position;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(
-          color: c.textDim,
-          fontSize: 11,
-          height: 1.55,
-          fontFamily: QzFont.mono,
-          fontFamilyFallback: QzFont.monoFallback,
-        ),
-        children: <InlineSpan>[
-          const TextSpan(text: '距止损 '),
-          TextSpan(
-            text: '${position.stopPct.toStringAsFixed(1)}%',
-            style: TextStyle(
-              color: c.statusDanger,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const TextSpan(text: '   距止盈 '),
-          TextSpan(
-            text: '+${position.tpPct.toStringAsFixed(1)}%',
-            style: TextStyle(color: c.marketUp, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _KeepEffect extends StatelessWidget {
   const _KeepEffect({required this.text});
   final String text;

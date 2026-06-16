@@ -212,7 +212,7 @@ marketFavoritesProvider =
 
 /// 实盘策略有状态 store（#1773）。
 ///
-/// 单一可变真源：初始 seed 自 repository，暂停/恢复/删除等操作先乐观更新，
+/// 单一可变真源：初始 seed 自 repository，停止/恢复/删除等操作先乐观更新，
 /// 再调用 repository 写后端。失败回滚；成功后刷新列表和详情派生。
 class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
   @override
@@ -220,18 +220,20 @@ class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
     return ref.watch(liveStrategyRepositoryProvider).listStrategies();
   }
 
-  /// 暂停：running / warning -> paused，附「等待恢复」状态注。
-  Future<void> pause(String id) async {
+  /// 停止：running / warning -> stopped，附「等待恢复」状态注。
+  Future<void> pause(String id, {bool liquidate = false}) async {
     final List<LiveStrategy>? previous = state.value;
     _mutateLocal(
       id,
       (LiveStrategy s) => s.copyWith(
-        status: LiveStrategyStatus.paused,
-        statusNote: '已暂停 · 等待恢复',
+        status: LiveStrategyStatus.stopped,
+        statusNote: '已停止 · 等待恢复',
       ),
     );
     try {
-      await ref.read(liveStrategyRepositoryProvider).pause(id);
+      await ref
+          .read(liveStrategyRepositoryProvider)
+          .pause(id, liquidate: liquidate);
       await _refreshAfterAction(id);
     } catch (_) {
       _restore(previous);
@@ -333,7 +335,7 @@ final FutureProvider<List<LiveStrategy>> liveStrategiesProvider =
     });
 
 /// 实盘策略聚合摘要（#1752）。列表页顶部卡 watch。从 store 当前列表重算
-/// （排除 stopped），口径与设计稿 `active` 统计一致。
+/// （排除 stopped/history），口径与设计稿 `active` 统计一致。
 final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
     FutureProvider<LiveStrategySummary>((Ref ref) async {
       final List<LiveStrategy> all = await ref.watch(
@@ -345,6 +347,8 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
       double cap = 0;
       double today = 0;
       double total = 0;
+      double returnPctTotal = 0;
+      double winRateTotal = 0;
       int running = 0;
       int warning = 0;
       int paused = 0;
@@ -354,6 +358,8 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
         cap += s.capital;
         today += s.todayPnl;
         total += s.totalPnl;
+        returnPctTotal += s.totalPct;
+        winRateTotal += s.winRate;
         winRateWeighted += s.winRate * s.trades;
         tradesTotal += s.trades;
         switch (s.status) {
@@ -368,7 +374,12 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
         }
       }
       final int stopped = all
-          .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
+          .where(
+            (LiveStrategy s) =>
+                !s.isHistory &&
+                (s.status == LiveStrategyStatus.stopped ||
+                    s.status == LiveStrategyStatus.paused),
+          )
           .length;
       return LiveStrategySummary(
         totalAssets: cap + total,
@@ -380,6 +391,8 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
         pausedCount: paused,
         stoppedCount: stopped,
         winRate: tradesTotal == 0 ? 0 : winRateWeighted / tradesTotal,
+        averageReturnPct: active.isEmpty ? 0 : returnPctTotal / active.length,
+        averageWinRatePct: active.isEmpty ? 0 : winRateTotal / active.length,
       );
     });
 
@@ -392,8 +405,8 @@ final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
       return all.firstWhere((LiveStrategy s) => s.id == id);
     });
 
-/// 单个实盘策略持仓（#1752）。null 表示无持仓（已暂停/停止）。
-/// 从 store 取最新 status 判断 mayHavePosition，确保暂停后持仓即时消失。
+/// 单个实盘策略持仓（#1752）。null 表示无持仓（已停止）。
+/// 从 store 取最新 status 判断 mayHavePosition，确保停止后持仓即时消失。
 final FutureProviderFamily<LiveStrategyPosition?, String>
 liveStrategyPositionProvider =
     FutureProvider.family<LiveStrategyPosition?, String>((

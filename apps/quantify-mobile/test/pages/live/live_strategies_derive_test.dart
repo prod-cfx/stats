@@ -10,6 +10,7 @@ LiveStrategy _strat({
   String id = '1',
   LiveStrategyStatus status = LiveStrategyStatus.running,
   double totalPnl = 0,
+  DateTime? viewOnlyAt,
 }) {
   return LiveStrategy(
     id: id,
@@ -29,6 +30,7 @@ LiveStrategy _strat({
     trades: 0,
     winRate: 0,
     spark: const <double>[],
+    viewOnlyAt: viewOnlyAt,
   );
 }
 
@@ -36,55 +38,72 @@ void main() {
   final List<LiveStrategy> sample = <LiveStrategy>[
     _strat(id: 'r1', status: LiveStrategyStatus.running, totalPnl: 1),
     _strat(id: 'r2', status: LiveStrategyStatus.running, totalPnl: 3),
-    _strat(id: 'p1', status: LiveStrategyStatus.paused),
+    _strat(id: 's1', status: LiveStrategyStatus.stopped),
+    _strat(
+      id: 'h1',
+      status: LiveStrategyStatus.stopped,
+      viewOnlyAt: DateTime(2026, 6, 1),
+    ),
     _strat(id: 's1', status: LiveStrategyStatus.stopped),
     _strat(id: 'w1', status: LiveStrategyStatus.warning),
   ];
 
   group('liveMatchesFilter', () {
-    test('all 排除 stopped', () {
+    test('all 排除 history', () {
       expect(
-        liveMatchesFilter(_strat(status: LiveStrategyStatus.stopped),
-            LiveFilter.all),
+        liveMatchesFilter(
+          _strat(
+            status: LiveStrategyStatus.stopped,
+            viewOnlyAt: DateTime(2026, 6, 1),
+          ),
+          LiveFilter.all,
+        ),
         isFalse,
       );
       expect(
-        liveMatchesFilter(_strat(status: LiveStrategyStatus.warning),
-            LiveFilter.all),
+        liveMatchesFilter(
+          _strat(status: LiveStrategyStatus.warning),
+          LiveFilter.all,
+        ),
         isTrue,
       );
     });
 
-    test('精确状态匹配', () {
+    test('状态匹配', () {
       expect(
         liveMatchesFilter(
-            _strat(status: LiveStrategyStatus.paused), LiveFilter.paused),
+          _strat(status: LiveStrategyStatus.stopped),
+          LiveFilter.stopped,
+        ),
         isTrue,
       );
       expect(
         liveMatchesFilter(
-            _strat(status: LiveStrategyStatus.running), LiveFilter.paused),
+          _strat(status: LiveStrategyStatus.running),
+          LiveFilter.stopped,
+        ),
         isFalse,
       );
     });
   });
 
   group('liveStatusCounts', () {
-    test('各状态精确计数；all 排除 stopped', () {
+    test('各状态精确计数；all 排除 history', () {
       final counts = liveStatusCounts(sample);
       expect(counts.running, 2);
-      expect(counts.paused, 1);
-      expect(counts.stopped, 1);
-      // all = running + paused + warning（排除 stopped）= 4
-      expect(counts.all, 4);
+      expect(counts.stopped, 2);
+      expect(counts.history, 1);
+      // all = running + stopped + warning（排除 history）= 5
+      expect(counts.all, 5);
     });
   });
 
   group('liveFilterPillCount', () {
-    test('all 显示总数（含 stopped），其余精确状态', () {
+    test('all 不含 history，其余按 front tab 口径', () {
       expect(liveFilterPillCount(sample, LiveFilter.all), 5);
       expect(liveFilterPillCount(sample, LiveFilter.running), 2);
-      expect(liveFilterPillCount(sample, LiveFilter.stopped), 1);
+      expect(liveFilterPillCount(sample, LiveFilter.stopped), 2);
+      expect(liveFilterPillCount(sample, LiveFilter.history), 1);
     });
   });
 
@@ -99,12 +118,11 @@ void main() {
       expect(out.map((LiveStrategy s) => s.id).toList(), <String>['r2', 'r1']);
     });
 
-    test('默认 filter=all 排除 stopped，sortDir.none 保持原序', () {
+    test('默认 filter=all 排除 history，sortDir.none 保持原序', () {
       const state = LiveStrategiesState();
       final out = liveVisibleStrategies(sample, state);
-      expect(out.any((LiveStrategy s) => s.status == LiveStrategyStatus.stopped),
-          isFalse);
-      expect(out.length, 4);
+      expect(out.any((LiveStrategy s) => s.isHistory), isFalse);
+      expect(out.length, 5);
     });
   });
 }

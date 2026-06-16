@@ -11,7 +11,7 @@ import 'live_status_style.dart';
 /// 实盘策略列表卡（#1752 / #1975）。
 ///
 /// 对齐设计稿 `LsStratCard`（jsx:985-1067）：交易所 glyph + 名称 + 状态 badge
-/// + 元信息行 + 今日/累计盈亏 + 微型权益曲线（perf 行右侧）+ 底部 footer
+/// + 元信息行 + 总收益/交易次数 + 微型权益曲线（perf 行右侧）+ 底部 footer
 /// （分割线 + 浅灰底，左侧 meta `ID · 运行N · 笔数 · 胜率%`，右侧 暂停/开启 +
 /// 更多按钮）。
 ///
@@ -73,7 +73,6 @@ class _ClickableBody extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final LiveStatusStyle st = liveStatusStyle(strategy.status, c, l10n);
     final bool totalUp = strategy.totalPct >= 0;
-    final bool todayUp = strategy.todayPct >= 0;
 
     final Widget body = Padding(
       padding: EdgeInsets.zero,
@@ -123,24 +122,21 @@ class _ClickableBody extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 Expanded(
-                  child: _PnlCell(
-                    label: _shortLabel(context, zh: '今日', en: 'Today'),
-                    pnl: strategy.todayPnl,
-                    pct: strategy.todayPct,
-                    amountDecimals: 2,
-                    color: strategy.todayPct == 0
+                  child: _MetricCell(
+                    label: _shortLabel(context, zh: '总收益', en: 'Total Return'),
+                    value: _formatSignedPct(strategy.totalPct),
+                    detail: _formatSignedUsd(strategy.totalPnl, decimals: 2),
+                    color: strategy.totalPct == 0
                         ? c.textMid
-                        : (todayUp ? c.marketUp : c.marketDown),
+                        : (totalUp ? c.marketUp : c.marketDown),
                   ),
                 ),
                 const SizedBox(width: QzSpacing.md),
                 Expanded(
-                  child: _PnlCell(
-                    label: _shortLabel(context, zh: '累计', en: 'Total'),
-                    pnl: strategy.totalPnl,
-                    pct: strategy.totalPct,
-                    amountDecimals: 0,
-                    color: totalUp ? c.marketUp : c.marketDown,
+                  child: _MetricCell(
+                    label: _shortLabel(context, zh: '交易次数', en: 'Trades'),
+                    value: strategy.trades.toString(),
+                    color: c.text,
                   ),
                 ),
                 const SizedBox(width: QzSpacing.md),
@@ -160,6 +156,14 @@ class _ClickableBody extends StatelessWidget {
       child: InkWell(onTap: onTap, child: body),
     );
   }
+}
+
+String _formatSignedPct(double value) {
+  return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%';
+}
+
+String _formatSignedUsd(double value, {required int decimals}) {
+  return '${value >= 0 ? '+' : ''}\$${value.abs().toStringAsFixed(decimals)}';
 }
 
 String _shortLabel(
@@ -264,6 +268,7 @@ class _Footer extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
 
     final bool stopped = strategy.status == LiveStrategyStatus.stopped;
+    final bool isHistory = strategy.isHistory;
     final bool canStart =
         strategy.status == LiveStrategyStatus.paused ||
         strategy.status == LiveStrategyStatus.warning;
@@ -293,14 +298,16 @@ class _Footer extends StatelessWidget {
         children: <Widget>[
           Expanded(child: _FooterMeta(parts: metaParts)),
           const SizedBox(width: QzSpacing.sm),
-          _ActionBtn(
-            key: const Key('live-card-toggle'),
-            icon: toggleIcon,
-            color: ok ? c.statusOk : c.textMid,
-            tooltip: toggleTooltip,
-            onTap: onToggle,
-          ),
-          const SizedBox(width: QzSpacing.xs),
+          if (!isHistory) ...<Widget>[
+            _ActionBtn(
+              key: const Key('live-card-toggle'),
+              icon: toggleIcon,
+              color: ok ? c.statusOk : c.textMid,
+              tooltip: toggleTooltip,
+              onTap: onToggle,
+            ),
+            const SizedBox(width: QzSpacing.xs),
+          ],
           _ActionBtn(
             key: const Key('live-card-menu'),
             icon: Icons.more_horiz_rounded,
@@ -441,33 +448,28 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _PnlCell extends StatelessWidget {
-  const _PnlCell({
+class _MetricCell extends StatelessWidget {
+  const _MetricCell({
     required this.label,
-    required this.pnl,
-    required this.pct,
-    required this.amountDecimals,
+    required this.value,
     required this.color,
+    this.detail,
   });
   final String label;
-  final double pnl;
-  final double pct;
-  final int amountDecimals;
+  final String value;
   final Color color;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final String pctStr = '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%';
-    final String pnlStr =
-        '${pnl >= 0 ? '+' : ''}\$${pnl.abs().toStringAsFixed(amountDecimals)}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(label, style: TextStyle(color: c.textDim, fontSize: 10)),
         const SizedBox(height: 3),
         Text(
-          pctStr,
+          value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -478,18 +480,20 @@ class _PnlCell extends StatelessWidget {
             fontFamilyFallback: QzFont.monoFallback,
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          pnlStr,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: c.textDim,
-            fontSize: 10,
-            fontFamily: QzFont.mono,
-            fontFamilyFallback: QzFont.monoFallback,
+        if (detail != null) ...<Widget>[
+          const SizedBox(height: 2),
+          Text(
+            detail!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 10,
+              fontFamily: QzFont.mono,
+              fontFamilyFallback: QzFont.monoFallback,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

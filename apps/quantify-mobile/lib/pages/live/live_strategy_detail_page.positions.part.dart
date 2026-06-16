@@ -433,10 +433,10 @@ class _ParamsTab extends ConsumerWidget {
   }
 }
 
-/// 底部 sticky 主操作（#1773）。开启/暂停/恢复/删除走 mock 状态转换。
+/// 底部 sticky 主操作（#1773）。开启/停止/恢复/删除走 mock 状态转换。
 ///
-/// - 主按钮：running → 暂停（有持仓先弹处理对话框）；paused/warning → 开启。
-/// - 删除按钮：running → 先弹「需暂停」守卫；其余 → 删除确认（软删/永久）。
+/// - 主按钮：running → 停止（有持仓先弹处理对话框）；paused/warning → 开启。
+/// - 删除按钮：running → 先弹「需停止」守卫；其余 → 删除确认（软删/永久）。
 class _StickyAction extends ConsumerWidget {
   const _StickyAction({required this.strategy});
   final LiveStrategy strategy;
@@ -445,9 +445,11 @@ class _StickyAction extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    if (strategy.isHistory) return const SizedBox.shrink();
     final LiveStrategyStatus status = strategy.status;
     final bool stopped = status == LiveStrategyStatus.stopped;
     final bool canStart =
+        stopped ||
         status == LiveStrategyStatus.paused ||
         status == LiveStrategyStatus.warning;
     final String primary = canStart
@@ -481,27 +483,25 @@ class _StickyAction extends ConsumerWidget {
                 side: BorderSide(color: c.statusDanger.withValues(alpha: 0.4)),
               ),
               child: Text(
-                stopped
+                strategy.isHistory
                     ? l10n.liveActionDeletePermanent
                     : l10n.liveActionDelete,
               ),
             ),
           ),
-          if (!stopped) ...<Widget>[
-            const SizedBox(width: QzSpacing.sm),
-            Expanded(
-              flex: 2,
-              child: FilledButton(
-                key: const Key('live-primary-action'),
-                onPressed: () => _onPrimary(context, ref),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
-                  backgroundColor: c.accent,
-                ),
-                child: Text(primary),
+          const SizedBox(width: QzSpacing.sm),
+          Expanded(
+            flex: 2,
+            child: FilledButton(
+              key: const Key('live-primary-action'),
+              onPressed: () => _onPrimary(context, ref),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+                backgroundColor: c.accent,
               ),
+              child: Text(primary),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -514,9 +514,8 @@ class _StickyAction extends ConsumerWidget {
     switch (strategy.status) {
       case LiveStrategyStatus.paused:
       case LiveStrategyStatus.warning:
-        await store.resume(strategy.id);
       case LiveStrategyStatus.stopped:
-        return;
+        await store.resume(strategy.id);
       case LiveStrategyStatus.running:
         await _pauseRunning(context, ref, store);
     }
@@ -531,17 +530,13 @@ class _StickyAction extends ConsumerWidget {
       liveStrategyPositionProvider(strategy.id).future,
     );
     if (!context.mounted) return;
-    if (position == null) {
-      await store.pause(strategy.id);
-      return;
-    }
     final LivePauseMode? mode = await LiveCloseWithPositionSheet.show(
       context,
       strategy: strategy,
       position: position,
     );
     if (mode == null) return;
-    await store.pause(strategy.id);
+    await store.pause(strategy.id, liquidate: mode == LivePauseMode.market);
   }
 
   Future<void> _onDelete(BuildContext context, WidgetRef ref) async {
@@ -557,7 +552,7 @@ class _StickyAction extends ConsumerWidget {
       await _pauseRunning(context, ref, store);
       return;
     }
-    final bool stopped = strategy.status == LiveStrategyStatus.stopped;
+    final bool stopped = strategy.isHistory;
     final bool? permanent = await LiveDeleteSheet.show(
       context,
       name: strategy.name,

@@ -6294,6 +6294,18 @@ abstract class AppLocalizations {
   /// **'投入本金'**
   String get liveListCapital;
 
+  /// No description provided for @liveListAverageReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'平均收益'**
+  String get liveListAverageReturn;
+
+  /// No description provided for @liveListAverageWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'平均胜率'**
+  String get liveListAverageWinRate;
+
   /// No description provided for @liveFilterAll.
   ///
   /// In zh, this message translates to:
@@ -6309,7 +6321,7 @@ abstract class AppLocalizations {
   /// No description provided for @liveFilterPaused.
   ///
   /// In zh, this message translates to:
-  /// **'已暂停'**
+  /// **'已停止'**
   String get liveFilterPaused;
 
   /// No description provided for @liveFilterStopped.
@@ -6317,6 +6329,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已停止'**
   String get liveFilterStopped;
+
+  /// No description provided for @liveFilterHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史记录'**
+  String get liveFilterHistory;
 
   /// No description provided for @liveStoppedRetentionHint.
   ///
@@ -6363,7 +6381,7 @@ abstract class AppLocalizations {
   /// No description provided for @liveStatusPaused.
   ///
   /// In zh, this message translates to:
-  /// **'已暂停'**
+  /// **'已停止'**
   String get liveStatusPaused;
 
   /// No description provided for @liveStatusWarning.
@@ -6387,7 +6405,7 @@ abstract class AppLocalizations {
   /// No description provided for @liveDetailTotalPnl.
   ///
   /// In zh, this message translates to:
-  /// **'累计盈亏'**
+  /// **'总收益额'**
   String get liveDetailTotalPnl;
 
   /// No description provided for @liveTabOverview.
@@ -6419,6 +6437,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'今日盈亏'**
   String get liveStatToday;
+
+  /// No description provided for @liveStatMaxDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'最大回撤'**
+  String get liveStatMaxDrawdown;
 
   /// No description provided for @liveStatTodayPct.
   ///
@@ -6477,13 +6501,13 @@ abstract class AppLocalizations {
   /// No description provided for @liveAiObservationWarning.
   ///
   /// In zh, this message translates to:
-  /// **'近 3 笔交易连续止损，日内已亏损接近设定上限。建议暂停或在对话中调整止损阈值。'**
+  /// **'近 3 笔交易连续止损，日内已亏损接近设定上限。建议停止或在对话中调整止损阈值。'**
   String get liveAiObservationWarning;
 
   /// No description provided for @liveAiObservationPaused.
   ///
   /// In zh, this message translates to:
-  /// **'当前已暂停，持仓已平。开启后会等待下一个开仓信号触发。'**
+  /// **'当前已停止，持仓已平。开启后会等待下一个开仓信号触发。'**
   String get liveAiObservationPaused;
 
   /// No description provided for @liveAiObservationRunning.
@@ -6543,7 +6567,7 @@ abstract class AppLocalizations {
   /// No description provided for @livePositionEmptyTitle.
   ///
   /// In zh, this message translates to:
-  /// **'策略已暂停'**
+  /// **'策略已停止'**
   String get livePositionEmptyTitle;
 
   /// No description provided for @livePositionEmptyHint.
@@ -6615,7 +6639,7 @@ abstract class AppLocalizations {
   /// No description provided for @liveActionPause.
   ///
   /// In zh, this message translates to:
-  /// **'暂停策略'**
+  /// **'停止策略'**
   String get liveActionPause;
 
   /// No description provided for @liveActionResume.
@@ -6735,19 +6759,19 @@ abstract class AppLocalizations {
   /// No description provided for @livePauseSheetTitle.
   ///
   /// In zh, this message translates to:
-  /// **'暂停策略'**
+  /// **'停止策略'**
   String get livePauseSheetTitle;
 
   /// No description provided for @livePauseSheetSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'「{name}」当前有 1 笔持仓，请选择如何处理后再暂停。'**
+  /// **'「{name}」当前有 1 笔持仓，请选择如何处理后再停止。'**
   String livePauseSheetSubtitle(String name);
 
   /// No description provided for @livePauseModeMarketLabel.
   ///
   /// In zh, this message translates to:
-  /// **'市价平仓后暂停'**
+  /// **'市价平仓后停止'**
   String get livePauseModeMarketLabel;
 
   /// No description provided for @livePauseModeMarketTag.
@@ -6759,7 +6783,7 @@ abstract class AppLocalizations {
   /// No description provided for @livePauseModeMarketDesc.
   ///
   /// In zh, this message translates to:
-  /// **'立即按市价单平掉持仓，实现当前盈亏后暂停策略。'**
+  /// **'立即按市价单平掉持仓，实现当前盈亏后停止策略。'**
   String get livePauseModeMarketDesc;
 
   /// No description provided for @livePauseModeMarketEffect.
@@ -6777,7 +6801,7 @@ abstract class AppLocalizations {
   /// No description provided for @livePauseModeNaturalDesc.
   ///
   /// In zh, this message translates to:
-  /// **'保持运行直到触发止损或止盈，然后自动暂停。'**
+  /// **'保持运行直到触发止损或止盈，然后自动停止。'**
   String get livePauseModeNaturalDesc;
 
   /// No description provided for @livePauseModeNaturalEffect.
@@ -6789,7 +6813,7 @@ abstract class AppLocalizations {
   /// No description provided for @livePauseModeKeepLabel.
   ///
   /// In zh, this message translates to:
-  /// **'保留持仓，仅暂停策略'**
+  /// **'保留持仓，仅停止策略'**
   String get livePauseModeKeepLabel;
 
   /// No description provided for @livePauseModeKeepDesc.
@@ -6801,19 +6825,19 @@ abstract class AppLocalizations {
   /// No description provided for @livePauseModeKeepEffect.
   ///
   /// In zh, this message translates to:
-  /// **'⚠ 暂停期间 止损 / 止盈 / 加减仓 等自动指令将不生效'**
+  /// **'⚠ 停止期间 止损 / 止盈 / 加减仓 等自动指令将不生效'**
   String get livePauseModeKeepEffect;
 
   /// No description provided for @livePauseResumeNote.
   ///
   /// In zh, this message translates to:
-  /// **'暂停后策略保留全部参数和历史，随时可在「已暂停」中一键恢复。'**
+  /// **'停止后策略保留全部参数和历史，随时可在「已停止」中一键恢复。'**
   String get livePauseResumeNote;
 
   /// No description provided for @livePausePrimaryMarket.
   ///
   /// In zh, this message translates to:
-  /// **'市价平仓并暂停'**
+  /// **'市价平仓并停止'**
   String get livePausePrimaryMarket;
 
   /// No description provided for @livePausePrimaryNatural.
@@ -6825,7 +6849,7 @@ abstract class AppLocalizations {
   /// No description provided for @livePausePrimaryKeep.
   ///
   /// In zh, this message translates to:
-  /// **'暂停策略 · 保留持仓'**
+  /// **'停止策略 · 保留持仓'**
   String get livePausePrimaryKeep;
 
   /// No description provided for @livePausePositionHolding.
@@ -6921,19 +6945,19 @@ abstract class AppLocalizations {
   /// No description provided for @liveNeedPauseTitle.
   ///
   /// In zh, this message translates to:
-  /// **'需要先暂停策略'**
+  /// **'需要先停止策略'**
   String get liveNeedPauseTitle;
 
   /// No description provided for @liveNeedPauseBody.
   ///
   /// In zh, this message translates to:
-  /// **'「{name}」当前仍在运行，为避免误删持仓和正在进行的交易，请先暂停策略后再删除。'**
+  /// **'「{name}」当前仍在运行，为避免误删持仓和正在进行的交易，请先停止策略后再删除。'**
   String liveNeedPauseBody(String name);
 
   /// No description provided for @liveNeedPausePrimary.
   ///
   /// In zh, this message translates to:
-  /// **'去暂停策略'**
+  /// **'去停止策略'**
   String get liveNeedPausePrimary;
 
   /// No description provided for @liveCardRunFor.

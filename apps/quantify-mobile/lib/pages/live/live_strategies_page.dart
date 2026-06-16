@@ -39,8 +39,12 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     final LiveStrategiesState st = ref.read(liveStrategiesControllerProvider);
     final LiveSortStatusCounts counts = strategies.maybeWhen(
       data: liveStatusCounts,
-      orElse: () =>
-          const LiveSortStatusCounts(all: 0, running: 0, paused: 0, stopped: 0),
+      orElse: () => const LiveSortStatusCounts(
+        all: 0,
+        running: 0,
+        stopped: 0,
+        history: 0,
+      ),
     );
     final LiveSortSelection? result = await LiveSortSheet.show(
       context,
@@ -65,10 +69,10 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
         return LiveSortStatus.all;
       case LiveFilter.running:
         return LiveSortStatus.running;
-      case LiveFilter.paused:
-        return LiveSortStatus.paused;
       case LiveFilter.stopped:
         return LiveSortStatus.stopped;
+      case LiveFilter.history:
+        return LiveSortStatus.history;
     }
   }
 
@@ -78,10 +82,10 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
         return LiveFilter.all;
       case LiveSortStatus.running:
         return LiveFilter.running;
-      case LiveSortStatus.paused:
-        return LiveFilter.paused;
       case LiveSortStatus.stopped:
         return LiveFilter.stopped;
+      case LiveSortStatus.history:
+        return LiveFilter.history;
     }
   }
 
@@ -103,17 +107,13 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
       liveStrategyPositionProvider(s.id).future,
     );
     if (!mounted) return;
-    if (position == null) {
-      await store.pause(s.id);
-      return;
-    }
     final LivePauseMode? mode = await LiveCloseWithPositionSheet.show(
       context,
       strategy: s,
       position: position,
     );
     if (mode == null) return;
-    await store.pause(s.id);
+    await store.pause(s.id, liquidate: mode == LivePauseMode.market);
   }
 
   Future<void> _onAskDelete(LiveStrategy s) async {
@@ -129,7 +129,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
       await _pauseRunning(s, store);
       return;
     }
-    final bool stopped = s.status == LiveStrategyStatus.stopped;
+    final bool stopped = s.isHistory;
     final bool? permanent = await LiveDeleteSheet.show(
       context,
       name: s.name,
@@ -345,13 +345,13 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool up = summary.totalPnl >= 0;
+    final bool up = summary.averageReturnPct >= 0;
     return QzCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            l10n.liveListTotalAssets,
+            l10n.liveListAverageReturn,
             style: TextStyle(color: c.textDim, fontSize: 11),
           ),
           const SizedBox(height: 4),
@@ -360,7 +360,7 @@ class _SummaryCard extends StatelessWidget {
             children: <Widget>[
               Flexible(
                 child: Text(
-                  '\$${summary.totalAssets.toStringAsFixed(2)}',
+                  _pct(summary.averageReturnPct, signed: true),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -375,7 +375,7 @@ class _SummaryCard extends StatelessWidget {
               const SizedBox(width: QzSpacing.sm),
               QzChip(
                 label:
-                    '${up ? '+' : ''}${summary.totalPct.toStringAsFixed(2)}%',
+                    '${l10n.liveListAverageWinRate} ${_pct(summary.averageWinRatePct)}',
                 tone: up ? QzChipTone.ok : QzChipTone.danger,
               ),
             ],
@@ -385,22 +385,22 @@ class _SummaryCard extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: _AggStat(
-                  label: l10n.liveListTodayPnl,
-                  value: _money(summary.todayPnl),
-                  color: summary.todayPnl >= 0 ? c.marketUp : c.marketDown,
+                  label: l10n.liveStatusRunning,
+                  value: summary.runningCount.toString(),
+                  color: summary.runningCount > 0 ? c.marketUp : c.text,
                 ),
               ),
               Expanded(
                 child: _AggStat(
-                  label: l10n.liveListTotalPnl,
-                  value: _money(summary.totalPnl),
-                  color: up ? c.marketUp : c.marketDown,
+                  label: l10n.liveStatusStopped,
+                  value: summary.stoppedCount.toString(),
+                  color: c.text,
                 ),
               ),
               Expanded(
                 child: _AggStat(
-                  label: l10n.liveListCapital,
-                  value: '\$${summary.totalCapital.toStringAsFixed(0)}',
+                  label: l10n.liveListAverageWinRate,
+                  value: _pct(summary.averageWinRatePct),
                   color: c.text,
                 ),
               ),
@@ -411,8 +411,14 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 
-  static String _money(double v) =>
-      '${v >= 0 ? '+\$' : '-\$'}${v.abs().toStringAsFixed(2)}';
+  static String _pct(double value, {bool signed = false}) {
+    final double normalized = value.isFinite ? value : 0;
+    final bool whole = normalized == normalized.roundToDouble();
+    final String body = whole
+        ? normalized.toStringAsFixed(0)
+        : normalized.toStringAsFixed(1);
+    return '${signed && normalized > 0 ? '+' : ''}$body%';
+  }
 }
 
 class _AggStat extends StatelessWidget {
@@ -467,8 +473,8 @@ class _FilterPills extends StatelessWidget {
     final List<(LiveFilter, String)> items = <(LiveFilter, String)>[
       (LiveFilter.all, l10n.liveFilterAll),
       (LiveFilter.running, l10n.liveFilterRunning),
-      (LiveFilter.paused, l10n.liveFilterPaused),
       (LiveFilter.stopped, l10n.liveFilterStopped),
+      (LiveFilter.history, l10n.liveFilterHistory),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,

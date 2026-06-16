@@ -2,10 +2,10 @@ import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 
 /// 实盘策略 mock fixtures（#1752）。
 ///
-/// 5 条覆盖全部 4 种状态（running×2 / warning / paused / stopped），
+/// 5 条覆盖全部 4 个筛选 tab（running×2 / warning / stopped / history），
 /// 数值照搬设计稿 `design/project/mobile/m-screens-livestrats.jsx` `LIVE_STRATS`，
 /// 便于与原型肉眼比对，并保证 widget test 确定性。
-const List<LiveStrategy> mockLiveStrategies = <LiveStrategy>[
+final List<LiveStrategy> mockLiveStrategies = <LiveStrategy>[
   LiveStrategy(
     id: 'QF-AY7K2P',
     name: 'BTC 趋势 · 双均线',
@@ -23,6 +23,7 @@ const List<LiveStrategy> mockLiveStrategies = <LiveStrategy>[
     capital: 10000,
     trades: 47,
     winRate: 55.3,
+    maxDrawdown: 12.4,
     spark: <double>[
       100,
       102,
@@ -135,8 +136,8 @@ const List<LiveStrategy> mockLiveStrategies = <LiveStrategy>[
     exchange: 'Binance',
     exchangeGlyph: 'B',
     market: '现货',
-    status: LiveStrategyStatus.paused,
-    statusNote: '已暂停 · 等待恢复',
+    status: LiveStrategyStatus.stopped,
+    statusNote: '已停止 · 等待恢复',
     runFor: '21 天',
     todayPct: 0,
     todayPnl: 0,
@@ -178,6 +179,7 @@ const List<LiveStrategy> mockLiveStrategies = <LiveStrategy>[
     market: '合约 3x',
     status: LiveStrategyStatus.stopped,
     statusNote: '已停止 · 28 天后永久删除',
+    viewOnlyAt: DateTime(2026, 6, 1),
     runFor: '11 天',
     todayPct: 0,
     todayPnl: 0,

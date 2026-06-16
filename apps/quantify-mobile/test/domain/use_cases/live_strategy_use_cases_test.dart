@@ -35,9 +35,14 @@ LiveStrategy _strat({
 void main() {
   group('sortStrategies', () {
     test('空输入返回空', () {
-      expect(sortStrategies(const <LiveStrategy>[], LiveSortMetric.todayPnl,
-              LiveSortDirection.desc),
-          isEmpty);
+      expect(
+        sortStrategies(
+          const <LiveStrategy>[],
+          LiveSortMetric.todayPnl,
+          LiveSortDirection.desc,
+        ),
+        isEmpty,
+      );
     });
 
     test('metric=null 原序副本', () {
@@ -49,8 +54,11 @@ void main() {
 
     test('dir=none 原序副本', () {
       final list = <LiveStrategy>[_strat(id: 'a'), _strat(id: 'b')];
-      final out =
-          sortStrategies(list, LiveSortMetric.todayPnl, LiveSortDirection.none);
+      final out = sortStrategies(
+        list,
+        LiveSortMetric.todayPnl,
+        LiveSortDirection.none,
+      );
       expect(out.map((e) => e.id).toList(), <String>['a', 'b']);
     });
 
@@ -60,8 +68,11 @@ void main() {
         _strat(id: 'b', totalPnl: 3),
         _strat(id: 'c', totalPnl: 2),
       ];
-      final out =
-          sortStrategies(list, LiveSortMetric.totalPnl, LiveSortDirection.desc);
+      final out = sortStrategies(
+        list,
+        LiveSortMetric.totalPnl,
+        LiveSortDirection.desc,
+      );
       expect(out.map((e) => e.id).toList(), <String>['b', 'c', 'a']);
     });
 
@@ -70,8 +81,11 @@ void main() {
         _strat(id: 'a', capital: 30),
         _strat(id: 'b', capital: 10),
       ];
-      final out =
-          sortStrategies(list, LiveSortMetric.capital, LiveSortDirection.asc);
+      final out = sortStrategies(
+        list,
+        LiveSortMetric.capital,
+        LiveSortDirection.asc,
+      );
       expect(out.map((e) => e.id).toList(), <String>['b', 'a']);
     });
 
@@ -80,8 +94,11 @@ void main() {
         _strat(id: 'a', winRate: 40),
         _strat(id: 'b', winRate: 80),
       ];
-      final out =
-          sortStrategies(list, LiveSortMetric.winRate, LiveSortDirection.desc);
+      final out = sortStrategies(
+        list,
+        LiveSortMetric.winRate,
+        LiveSortDirection.desc,
+      );
       expect(out.map((e) => e.id).toList(), <String>['b', 'a']);
     });
 
@@ -92,7 +109,10 @@ void main() {
         _strat(id: 'c', runFor: '无效'),
       ];
       final out = sortStrategies(
-          list, LiveSortMetric.runForDays, LiveSortDirection.desc);
+        list,
+        LiveSortMetric.runForDays,
+        LiveSortDirection.desc,
+      );
       expect(out.map((e) => e.id).toList(), <String>['b', 'a', 'c']);
     });
 
@@ -125,14 +145,13 @@ void main() {
       );
     }
 
-    test('仅保留计数 > 0 项，按 running→warning→paused→stopped 顺序', () {
+    test('仅保留计数 > 0 项，按 running→warning→stopped 顺序并合并旧 paused', () {
       final out = liveStatusBreakdown(
         summary(running: 2, warning: 0, paused: 3, stopped: 1),
       );
       expect(out, <(LiveStrategyStatus, int)>[
         (LiveStrategyStatus.running, 2),
-        (LiveStrategyStatus.paused, 3),
-        (LiveStrategyStatus.stopped, 1),
+        (LiveStrategyStatus.stopped, 4),
       ]);
     });
 

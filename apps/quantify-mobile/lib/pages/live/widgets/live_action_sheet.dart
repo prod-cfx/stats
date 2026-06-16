@@ -32,6 +32,7 @@ class LiveActionSheet extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final EdgeInsets safe = MediaQuery.viewPaddingOf(context);
     final bool stopped = strategy.status == LiveStrategyStatus.stopped;
+    final bool isHistory = strategy.isHistory;
     final bool canStart =
         strategy.status == LiveStrategyStatus.paused ||
         strategy.status == LiveStrategyStatus.warning;
@@ -79,30 +80,30 @@ class LiveActionSheet extends StatelessWidget {
                   onTap: () =>
                       Navigator.of(context).pop(LiveActionSheetResult.view),
                 ),
-                _ActionRow(
-                  key: const Key('live-action-toggle'),
-                  icon: stopped || canStart
-                      ? Icons.play_arrow_rounded
-                      : Icons.pause_rounded,
-                  label: stopped
-                      ? l10n.liveActionResume
-                      : (canStart
-                            ? l10n.liveActionStart
-                            : l10n.liveActionPause),
-                  color: stopped || canStart ? c.statusOk : c.text,
-                  onTap: () =>
-                      Navigator.of(context).pop(LiveActionSheetResult.toggle),
-                ),
-                _ActionRow(
-                  key: const Key('live-action-delete'),
-                  icon: Icons.delete_outline_rounded,
-                  label: stopped
-                      ? l10n.liveActionDeletePermanent
-                      : l10n.liveDeletePrimarySoft,
-                  color: c.statusDanger,
-                  onTap: () =>
-                      Navigator.of(context).pop(LiveActionSheetResult.delete),
-                ),
+                if (!isHistory) ...<Widget>[
+                  _ActionRow(
+                    key: const Key('live-action-toggle'),
+                    icon: stopped || canStart
+                        ? Icons.play_arrow_rounded
+                        : Icons.pause_rounded,
+                    label: stopped
+                        ? l10n.liveActionResume
+                        : (canStart
+                              ? l10n.liveActionStart
+                              : l10n.liveActionPause),
+                    color: stopped || canStart ? c.statusOk : c.text,
+                    onTap: () =>
+                        Navigator.of(context).pop(LiveActionSheetResult.toggle),
+                  ),
+                  _ActionRow(
+                    key: const Key('live-action-delete'),
+                    icon: Icons.delete_outline_rounded,
+                    label: l10n.liveDeletePrimarySoft,
+                    color: c.statusDanger,
+                    onTap: () =>
+                        Navigator.of(context).pop(LiveActionSheetResult.delete),
+                  ),
+                ],
               ],
             ),
           ),

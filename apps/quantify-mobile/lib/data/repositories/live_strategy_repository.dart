@@ -24,8 +24,9 @@ abstract class LiveStrategyRepository {
   /// 策略参数列表。
   Future<List<LiveStrategyParam>> listParams(String id);
 
-  /// 暂停策略实例；失败由实现抛出，调用方负责回滚乐观状态。
-  Future<LiveStrategy> pause(String id);
+  /// 停止策略实例；[liquidate] 为 true 时先市价平仓再停止。
+  /// 失败由实现抛出，调用方负责回滚乐观状态。
+  Future<LiveStrategy> pause(String id, {bool liquidate = false});
 
   /// 恢复策略实例；失败由实现抛出，调用方负责回滚乐观状态。
   Future<LiveStrategy> resume(String id);

@@ -3294,16 +3294,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveListCapital => 'Capital';
 
   @override
+  String get liveListAverageReturn => 'Average Return';
+
+  @override
+  String get liveListAverageWinRate => 'Average Win Rate';
+
+  @override
   String get liveFilterAll => 'All';
 
   @override
   String get liveFilterRunning => 'Running';
 
   @override
-  String get liveFilterPaused => 'Paused';
+  String get liveFilterPaused => 'Stopped';
 
   @override
   String get liveFilterStopped => 'Stopped';
+
+  @override
+  String get liveFilterHistory => 'History';
 
   @override
   String get liveStoppedRetentionHint =>
@@ -3329,7 +3338,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveStatusRunning => 'Running';
 
   @override
-  String get liveStatusPaused => 'Paused';
+  String get liveStatusPaused => 'Stopped';
 
   @override
   String get liveStatusWarning => 'Attention';
@@ -3341,7 +3350,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveDetailTitle => 'Strategy Detail';
 
   @override
-  String get liveDetailTotalPnl => 'Total PnL';
+  String get liveDetailTotalPnl => 'Total Return Amount';
 
   @override
   String get liveTabOverview => 'Overview';
@@ -3357,6 +3366,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveStatToday => 'Today PnL';
+
+  @override
+  String get liveStatMaxDrawdown => 'Max Drawdown';
 
   @override
   String get liveStatTodayPct => 'Today %';
@@ -3387,11 +3399,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveAiObservationWarning =>
-      'The last 3 trades hit stop-loss consecutively; today\'s loss is near the set limit. Consider pausing or adjusting the stop-loss in chat.';
+      'The last 3 trades hit stop-loss consecutively; today\'s loss is near the set limit. Consider stopping or adjusting the stop-loss in chat.';
 
   @override
   String get liveAiObservationPaused =>
-      'Currently paused with position closed. It will wait for the next entry signal once resumed.';
+      'Currently stopped with position closed. It will wait for the next entry signal once resumed.';
 
   @override
   String get liveAiObservationRunning =>
@@ -3422,7 +3434,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveArchiveComingSoon => 'Coming soon';
 
   @override
-  String get livePositionEmptyTitle => 'Strategy paused';
+  String get livePositionEmptyTitle => 'Strategy stopped';
 
   @override
   String get livePositionEmptyHint =>
@@ -3459,7 +3471,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveActionStart => 'Start';
 
   @override
-  String get liveActionPause => 'Pause';
+  String get liveActionPause => 'Stop strategy';
 
   @override
   String get liveActionResume => 'Resume';
@@ -3521,22 +3533,22 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get livePauseSheetTitle => 'Pause strategy';
+  String get livePauseSheetTitle => 'Stop strategy';
 
   @override
   String livePauseSheetSubtitle(String name) {
-    return '\"$name\" has 1 open position. Choose how to handle it before pausing.';
+    return '\"$name\" has 1 open position. Choose how to handle it before stopping.';
   }
 
   @override
-  String get livePauseModeMarketLabel => 'Close at market, then pause';
+  String get livePauseModeMarketLabel => 'Close at market, then stop';
 
   @override
   String get livePauseModeMarketTag => 'Recommended';
 
   @override
   String get livePauseModeMarketDesc =>
-      'Close the position at market immediately, realize current P&L, then pause.';
+      'Close the position at market immediately, realize current P&L, then stop.';
 
   @override
   String livePauseModeMarketEffect(String pnl) {
@@ -3548,7 +3560,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get livePauseModeNaturalDesc =>
-      'Keep running until stop-loss or take-profit triggers, then pause automatically.';
+      'Keep running until stop-loss or take-profit triggers, then stop automatically.';
 
   @override
   String livePauseModeNaturalEffect(String stop, String tp) {
@@ -3556,7 +3568,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get livePauseModeKeepLabel => 'Keep position, pause strategy only';
+  String get livePauseModeKeepLabel => 'Keep position, stop strategy only';
 
   @override
   String get livePauseModeKeepDesc =>
@@ -3564,20 +3576,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get livePauseModeKeepEffect =>
-      '⚠ While paused, automatic stop-loss / take-profit / sizing will not apply';
+      '⚠ While stopped, automatic stop-loss / take-profit / sizing will not apply';
 
   @override
   String get livePauseResumeNote =>
-      'Pausing keeps all params and history; resume anytime from \"Paused\".';
+      'Stopping keeps all params and history; resume anytime from \"Stopped\".';
 
   @override
-  String get livePausePrimaryMarket => 'Close & pause';
+  String get livePausePrimaryMarket => 'Close & stop';
 
   @override
   String get livePausePrimaryNatural => 'Keep running · wait to close';
 
   @override
-  String get livePausePrimaryKeep => 'Pause · keep position';
+  String get livePausePrimaryKeep => 'Stop · keep position';
 
   @override
   String get livePausePositionHolding => '1 position';
@@ -3633,15 +3645,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveDeletePrimaryPermanent => 'Delete permanently';
 
   @override
-  String get liveNeedPauseTitle => 'Pause the strategy first';
+  String get liveNeedPauseTitle => 'Stop the strategy first';
 
   @override
   String liveNeedPauseBody(String name) {
-    return '\"$name\" is still running. To avoid deleting positions and in-flight trades by mistake, pause it before deleting.';
+    return '\"$name\" is still running. To avoid deleting positions and in-flight trades by mistake, stop it before deleting.';
   }
 
   @override
-  String get liveNeedPausePrimary => 'Pause strategy';
+  String get liveNeedPausePrimary => 'Stop strategy';
 
   @override
   String liveCardRunFor(String runFor) {

@@ -3230,16 +3230,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveListCapital => '投入本金';
 
   @override
+  String get liveListAverageReturn => '平均收益';
+
+  @override
+  String get liveListAverageWinRate => '平均胜率';
+
+  @override
   String get liveFilterAll => '全部';
 
   @override
   String get liveFilterRunning => '运行中';
 
   @override
-  String get liveFilterPaused => '已暂停';
+  String get liveFilterPaused => '已停止';
 
   @override
   String get liveFilterStopped => '已停止';
+
+  @override
+  String get liveFilterHistory => '历史记录';
 
   @override
   String get liveStoppedRetentionHint =>
@@ -3264,7 +3273,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveStatusRunning => '运行中';
 
   @override
-  String get liveStatusPaused => '已暂停';
+  String get liveStatusPaused => '已停止';
 
   @override
   String get liveStatusWarning => '需关注';
@@ -3276,7 +3285,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveDetailTitle => '策略详情';
 
   @override
-  String get liveDetailTotalPnl => '累计盈亏';
+  String get liveDetailTotalPnl => '总收益额';
 
   @override
   String get liveTabOverview => '概览';
@@ -3292,6 +3301,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveStatToday => '今日盈亏';
+
+  @override
+  String get liveStatMaxDrawdown => '最大回撤';
 
   @override
   String get liveStatTodayPct => '今日 %';
@@ -3322,10 +3334,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAiObservationWarning =>
-      '近 3 笔交易连续止损，日内已亏损接近设定上限。建议暂停或在对话中调整止损阈值。';
+      '近 3 笔交易连续止损，日内已亏损接近设定上限。建议停止或在对话中调整止损阈值。';
 
   @override
-  String get liveAiObservationPaused => '当前已暂停，持仓已平。开启后会等待下一个开仓信号触发。';
+  String get liveAiObservationPaused => '当前已停止，持仓已平。开启后会等待下一个开仓信号触发。';
 
   @override
   String get liveAiObservationRunning => '策略运行平稳，近 7 天胜率高于回测均值。波动率上升时可考虑降仓位。';
@@ -3355,7 +3367,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveArchiveComingSoon => '即将上线';
 
   @override
-  String get livePositionEmptyTitle => '策略已暂停';
+  String get livePositionEmptyTitle => '策略已停止';
 
   @override
   String get livePositionEmptyHint => '持仓已平，等待开启后接收新信号';
@@ -3391,7 +3403,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveActionStart => '开启策略';
 
   @override
-  String get liveActionPause => '暂停策略';
+  String get liveActionPause => '停止策略';
 
   @override
   String get liveActionResume => '恢复策略';
@@ -3453,21 +3465,21 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get livePauseSheetTitle => '暂停策略';
+  String get livePauseSheetTitle => '停止策略';
 
   @override
   String livePauseSheetSubtitle(String name) {
-    return '「$name」当前有 1 笔持仓，请选择如何处理后再暂停。';
+    return '「$name」当前有 1 笔持仓，请选择如何处理后再停止。';
   }
 
   @override
-  String get livePauseModeMarketLabel => '市价平仓后暂停';
+  String get livePauseModeMarketLabel => '市价平仓后停止';
 
   @override
   String get livePauseModeMarketTag => '推荐';
 
   @override
-  String get livePauseModeMarketDesc => '立即按市价单平掉持仓，实现当前盈亏后暂停策略。';
+  String get livePauseModeMarketDesc => '立即按市价单平掉持仓，实现当前盈亏后停止策略。';
 
   @override
   String livePauseModeMarketEffect(String pnl) {
@@ -3478,7 +3490,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get livePauseModeNaturalLabel => '等待止损/止盈触发';
 
   @override
-  String get livePauseModeNaturalDesc => '保持运行直到触发止损或止盈，然后自动暂停。';
+  String get livePauseModeNaturalDesc => '保持运行直到触发止损或止盈，然后自动停止。';
 
   @override
   String livePauseModeNaturalEffect(String stop, String tp) {
@@ -3486,25 +3498,25 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get livePauseModeKeepLabel => '保留持仓，仅暂停策略';
+  String get livePauseModeKeepLabel => '保留持仓，仅停止策略';
 
   @override
   String get livePauseModeKeepDesc => '策略不再监控，持仓需要你在交易所手动管理，恢复后可继续接管。';
 
   @override
-  String get livePauseModeKeepEffect => '⚠ 暂停期间 止损 / 止盈 / 加减仓 等自动指令将不生效';
+  String get livePauseModeKeepEffect => '⚠ 停止期间 止损 / 止盈 / 加减仓 等自动指令将不生效';
 
   @override
-  String get livePauseResumeNote => '暂停后策略保留全部参数和历史，随时可在「已暂停」中一键恢复。';
+  String get livePauseResumeNote => '停止后策略保留全部参数和历史，随时可在「已停止」中一键恢复。';
 
   @override
-  String get livePausePrimaryMarket => '市价平仓并暂停';
+  String get livePausePrimaryMarket => '市价平仓并停止';
 
   @override
   String get livePausePrimaryNatural => '保持运行 · 等待平仓';
 
   @override
-  String get livePausePrimaryKeep => '暂停策略 · 保留持仓';
+  String get livePausePrimaryKeep => '停止策略 · 保留持仓';
 
   @override
   String get livePausePositionHolding => '1 笔持仓';
@@ -3558,15 +3570,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveDeletePrimaryPermanent => '永久删除';
 
   @override
-  String get liveNeedPauseTitle => '需要先暂停策略';
+  String get liveNeedPauseTitle => '需要先停止策略';
 
   @override
   String liveNeedPauseBody(String name) {
-    return '「$name」当前仍在运行，为避免误删持仓和正在进行的交易，请先暂停策略后再删除。';
+    return '「$name」当前仍在运行，为避免误删持仓和正在进行的交易，请先停止策略后再删除。';
   }
 
   @override
-  String get liveNeedPausePrimary => '去暂停策略';
+  String get liveNeedPausePrimary => '去停止策略';
 
   @override
   String liveCardRunFor(String runFor) {

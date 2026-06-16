@@ -34,6 +34,8 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
     double cap = 0;
     double today = 0;
     double total = 0;
+    double returnPctTotal = 0;
+    double winRateTotal = 0;
     int running = 0;
     int warning = 0;
     int paused = 0;
@@ -43,6 +45,8 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
       cap += s.capital;
       today += s.todayPnl;
       total += s.totalPnl;
+      returnPctTotal += s.totalPct;
+      winRateTotal += s.winRate;
       winRateWeighted += s.winRate * s.trades;
       tradesTotal += s.trades;
       switch (s.status) {
@@ -69,6 +73,8 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
       pausedCount: paused,
       stoppedCount: stopped,
       winRate: tradesTotal == 0 ? 0 : winRateWeighted / tradesTotal,
+      averageReturnPct: active.isEmpty ? 0 : returnPctTotal / active.length,
+      averageWinRatePct: active.isEmpty ? 0 : winRateTotal / active.length,
     );
   }
 
@@ -95,13 +101,13 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
   }
 
   @override
-  Future<LiveStrategy> pause(String id) async {
+  Future<LiveStrategy> pause(String id, {bool liquidate = false}) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     return _replace(
       id,
       (LiveStrategy s) => s.copyWith(
-        status: LiveStrategyStatus.paused,
-        statusNote: '已暂停 · 等待恢复',
+        status: LiveStrategyStatus.stopped,
+        statusNote: '已停止 · 等待恢复',
       ),
     );
   }

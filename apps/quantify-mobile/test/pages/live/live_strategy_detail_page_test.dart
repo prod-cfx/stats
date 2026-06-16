@@ -73,14 +73,19 @@ Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
 }
 
 void main() {
-  testWidgets('概览：展示名称、累计盈亏与指标', (WidgetTester tester) async {
+  testWidgets('概览：展示名称、总收益额与 front 指标', (WidgetTester tester) async {
     await _pump(tester, 'QF-AY7K2P');
     // hero 名称（subtitle 在 top bar）
     expect(find.text('BTC 趋势 · 双均线'), findsWidgets);
-    expect(find.text('累计盈亏'), findsWidgets);
-    // 概览指标格：胜率
+    expect(find.text('总收益额'), findsWidgets);
+    expect(find.text('累计盈亏'), findsNothing);
+    // 概览指标格：最大回撤 / 胜率对齐 front metrics。
+    expect(find.text('最大回撤'), findsOneWidget);
+    expect(find.text('12.40%'), findsOneWidget);
     expect(find.text('胜率'), findsOneWidget);
-    expect(find.text('交易笔数'), findsOneWidget);
+    expect(find.text('55.3%'), findsOneWidget);
+    expect(find.text('今日 %'), findsNothing);
+    expect(find.text('累计 %'), findsNothing);
     // AI 观察存在
     expect(find.textContaining('AI 观察'), findsOneWidget);
     // 策略档案 section
@@ -107,11 +112,11 @@ void main() {
     expect(find.text('止损价'), findsOneWidget);
   });
 
-  testWidgets('暂停策略持仓 tab：展示空态', (WidgetTester tester) async {
+  testWidgets('停止策略持仓 tab：展示空态', (WidgetTester tester) async {
     await _pump(tester, 'QF-2H8N5W');
     await tester.tap(find.text('持仓'));
     await tester.pumpAndSettle();
-    expect(find.text('策略已暂停'), findsOneWidget);
+    expect(find.text('策略已停止'), findsOneWidget);
   });
 
   testWidgets('交易记录 tab：展示历史成交', (WidgetTester tester) async {
@@ -129,42 +134,49 @@ void main() {
     expect(find.text('leverage'), findsOneWidget);
   });
 
-  testWidgets('running 暂停：弹持仓处理对话框，确认后转已暂停', (WidgetTester tester) async {
+  testWidgets('running 停止：弹持仓处理对话框，确认后转已停止', (WidgetTester tester) async {
     await _pump(tester, 'QF-AY7K2P');
-    // 主操作 = 暂停（running）
+    // 主操作 = 停止（running）
     await tester.tap(find.byKey(const Key('live-primary-action')));
     await tester.pumpAndSettle();
     // 持仓处理对话框出现
     expect(find.byKey(const Key('live-pause-confirm')), findsOneWidget);
-    expect(find.text('暂停策略'), findsWidgets);
-    // 确认 → store 转 paused：主按钮变「开启策略」，状态注出现
+    expect(find.text('停止策略'), findsWidgets);
+    expect(find.text('等待止损/止盈触发'), findsNothing);
+    // 确认 → store 转 stopped：状态注出现
     await tester.ensureVisible(find.byKey(const Key('live-pause-confirm')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('live-pause-confirm')));
     await tester.pumpAndSettle();
-    expect(find.text('开启策略'), findsOneWidget);
-    expect(find.textContaining('已暂停'), findsWidgets);
+    expect(find.textContaining('已停止'), findsWidgets);
   });
 
-  testWidgets('paused 策略：主操作恢复 → running', (WidgetTester tester) async {
-    await _pump(tester, 'QF-2H8N5W');
-    // 暂停态主按钮 = 开启策略
-    expect(find.text('开启策略'), findsOneWidget);
+  testWidgets('running 无持仓停止：仍弹停止选择', (WidgetTester tester) async {
+    await _pump(tester, 'QF-9MX31R');
+
     await tester.tap(find.byKey(const Key('live-primary-action')));
     await tester.pumpAndSettle();
-    // 恢复后状态注清空（'已暂停 · 等待恢复' 消失），主按钮变暂停策略
-    expect(find.text('暂停策略'), findsOneWidget);
+
+    expect(find.byKey(const Key('live-pause-confirm')), findsOneWidget);
+    expect(find.text('市价平仓后停止'), findsOneWidget);
+    expect(find.text('保留持仓，仅停止策略'), findsOneWidget);
+    expect(find.text('等待止损/止盈触发'), findsNothing);
   });
 
-  testWidgets('running 删除：先弹需暂停守卫', (WidgetTester tester) async {
+  testWidgets('stopped 策略：删除按钮可用', (WidgetTester tester) async {
+    await _pump(tester, 'QF-2H8N5W');
+    expect(find.byKey(const Key('live-delete-button')), findsOneWidget);
+  });
+
+  testWidgets('running 删除：先弹需停止守卫', (WidgetTester tester) async {
     await _pump(tester, 'QF-AY7K2P');
     await tester.tap(find.byKey(const Key('live-delete-button')));
     await tester.pumpAndSettle();
-    expect(find.text('需要先暂停策略'), findsOneWidget);
+    expect(find.text('需要先停止策略'), findsOneWidget);
     expect(find.byKey(const Key('live-need-pause-confirm')), findsOneWidget);
   });
 
-  testWidgets('paused 删除：软删默认，可展开永久勾选', (WidgetTester tester) async {
+  testWidgets('stopped 删除：软删默认，可展开永久勾选', (WidgetTester tester) async {
     await _pump(tester, 'QF-2H8N5W');
     await tester.tap(find.byKey(const Key('live-delete-button')));
     await tester.pumpAndSettle();
@@ -177,18 +189,10 @@ void main() {
     expect(find.text('永久删除策略？'), findsOneWidget);
   });
 
-  testWidgets('stopped 永久删除：确认后回弹列表', (WidgetTester tester) async {
+  testWidgets('历史记录详情只读：隐藏操作按钮', (WidgetTester tester) async {
     await _pump(tester, 'QF-5J1RT8');
     expect(find.byKey(const Key('live-primary-action')), findsNothing);
-    expect(find.text('恢复策略'), findsNothing);
-    expect(find.text('永久删除'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('live-delete-button')));
-    await tester.pumpAndSettle();
-    // stopped 直接永久删除
-    expect(find.text('永久删除策略？'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('live-delete-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('list-stub')), findsOneWidget);
+    expect(find.byKey(const Key('live-delete-button')), findsNothing);
   });
 
   testWidgets('调优参数：跳 AI 对话并带策略 id', (WidgetTester tester) async {

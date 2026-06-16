@@ -7,7 +7,7 @@ import '../../../theme/tokens.dart';
 
 /// 删除 running 策略前的守卫对话框（#1773）。
 ///
-/// 对齐设计稿 `m-screens-livestrats.jsx:683-761`：提示需先暂停。「去暂停策略」
+/// 对齐设计稿 `m-screens-livestrats.jsx:683-761`：提示需先停止。「去停止策略」
 /// 返回 true（调用方据此打开暂停流程）；取消 / 关闭返回 null。
 class LiveNeedPauseSheet extends StatelessWidget {
   const LiveNeedPauseSheet({super.key, required this.name});

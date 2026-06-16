@@ -1,7 +1,7 @@
 part of 'me_home_page.dart';
 // ignore_for_file: unused_element
 
-/// 多状态明细行：`N 运行中 · N 需关注 · N 已暂停 · N 已停止`，对齐设计稿
+/// 多状态明细行：`N 运行中 · N 需关注 · N 已停止`，对齐设计稿
 /// `m-screens-4.jsx:2556-2589`。计数为 0 的状态不渲染；首项带状态圆点。
 class _LiveStatusBreakdown extends StatelessWidget {
   const _LiveStatusBreakdown({

@@ -275,17 +275,13 @@ class _OverviewTab extends StatelessWidget {
             : (strategy.todayPnl > 0 ? c.marketUp : c.marketDown),
       ),
       (
-        l10n.liveStatTodayPct,
-        '${strategy.todayPct >= 0 ? '+' : ''}${strategy.todayPct.toStringAsFixed(2)}%',
-        strategy.todayPct == 0
-            ? c.text
-            : (strategy.todayPct > 0 ? c.marketUp : c.marketDown),
+        l10n.liveStatMaxDrawdown,
+        '${strategy.maxDrawdown.toStringAsFixed(2)}%',
+        c.text,
       ),
-      (
-        l10n.liveStatTotalPct,
-        '${strategy.totalPct >= 0 ? '+' : ''}${strategy.totalPct.toStringAsFixed(2)}%',
-        strategy.totalPct >= 0 ? c.marketUp : c.marketDown,
-      ),
+      (l10n.liveStatWinRate, '${strategy.winRate.toStringAsFixed(1)}%', c.text),
+      if (strategy.exchange.trim().isNotEmpty)
+        (l10n.liveStatExchange, strategy.exchange, c.text),
       if (strategy.capital > 0)
         (
           l10n.liveStatCapital,
@@ -298,16 +294,8 @@ class _OverviewTab extends StatelessWidget {
           '${strategy.trades} ${l10n.liveStatTradesUnit}'.trim(),
           c.text,
         ),
-      if (strategy.winRate > 0)
-        (
-          l10n.liveStatWinRate,
-          '${strategy.winRate.toStringAsFixed(1)}%',
-          c.text,
-        ),
       if (strategy.runFor.trim().isNotEmpty)
         (l10n.liveStatRunFor, strategy.runFor, c.text),
-      if (strategy.exchange.trim().isNotEmpty)
-        (l10n.liveStatExchange, strategy.exchange, c.text),
     ];
 
     return Column(

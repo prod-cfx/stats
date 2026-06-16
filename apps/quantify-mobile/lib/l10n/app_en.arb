@@ -1223,10 +1223,13 @@
   "liveListTodayPnl": "Today PnL",
   "liveListTotalPnl": "Total PnL",
   "liveListCapital": "Capital",
+  "liveListAverageReturn": "Average Return",
+  "liveListAverageWinRate": "Average Win Rate",
   "liveFilterAll": "All",
   "liveFilterRunning": "Running",
-  "liveFilterPaused": "Paused",
+  "liveFilterPaused": "Stopped",
   "liveFilterStopped": "Stopped",
+  "liveFilterHistory": "History",
   "liveStoppedRetentionHint": "Stopped strategies are kept for 30 days; you can resume or export history anytime. After that they are permanently deleted.",
   "liveEmptyTitle": "No live strategies yet",
   "liveEmptyHint": "Once you generate and deploy a strategy from AI chat, it will appear here with live status and PnL.",
@@ -1234,16 +1237,17 @@
   "liveSortComingSoon": "Filter & sort coming soon",
   "liveLoadError": "Failed to load live strategies",
   "liveStatusRunning": "Running",
-  "liveStatusPaused": "Paused",
+  "liveStatusPaused": "Stopped",
   "liveStatusWarning": "Attention",
   "liveStatusStopped": "Stopped",
   "liveDetailTitle": "Strategy Detail",
-  "liveDetailTotalPnl": "Total PnL",
+  "liveDetailTotalPnl": "Total Return Amount",
   "liveTabOverview": "Overview",
   "liveTabPositions": "Positions",
   "liveTabHistory": "History",
   "liveTabParams": "Params",
   "liveStatToday": "Today PnL",
+  "liveStatMaxDrawdown": "Max Drawdown",
   "liveStatTodayPct": "Today %",
   "liveStatTotalPct": "Total %",
   "liveStatCapital": "Capital",
@@ -1253,8 +1257,8 @@
   "liveStatExchange": "Exchange",
   "liveStatTradesUnit": "",
   "liveAiObservationLabel": "AI Insight",
-  "liveAiObservationWarning": "The last 3 trades hit stop-loss consecutively; today's loss is near the set limit. Consider pausing or adjusting the stop-loss in chat.",
-  "liveAiObservationPaused": "Currently paused with position closed. It will wait for the next entry signal once resumed.",
+  "liveAiObservationWarning": "The last 3 trades hit stop-loss consecutively; today's loss is near the set limit. Consider stopping or adjusting the stop-loss in chat.",
+  "liveAiObservationPaused": "Currently stopped with position closed. It will wait for the next entry signal once resumed.",
   "liveAiObservationRunning": "Running steadily; the 7-day win rate is above the backtest average. Consider reducing size if volatility rises.",
   "liveArchiveSectionTitle": "Strategy Archive",
   "liveArchiveScript": "Strategy Script",
@@ -1264,7 +1268,7 @@
   "liveArchiveDeploy": "Deploy Config",
   "liveArchiveDeploySub": "Capital / position / risk",
   "liveArchiveComingSoon": "Coming soon",
-  "livePositionEmptyTitle": "Strategy paused",
+  "livePositionEmptyTitle": "Strategy stopped",
   "livePositionEmptyHint": "Position closed; waiting for new signals after resume",
   "livePositionEntry": "Entry",
   "livePositionCurrent": "Current",
@@ -1276,7 +1280,7 @@
   "livePositionSideShort": "Short",
   "liveParamsTuneInAi": "Tune params in AI chat",
   "liveActionStart": "Start",
-  "liveActionPause": "Pause",
+  "liveActionPause": "Stop strategy",
   "liveActionResume": "Resume",
   "liveActionDelete": "Delete",
   "liveActionDeletePermanent": "Delete permanently",
@@ -1301,16 +1305,16 @@
       "count": {"type": "int"}
     }
   },
-  "livePauseSheetTitle": "Pause strategy",
-  "livePauseSheetSubtitle": "\"{name}\" has 1 open position. Choose how to handle it before pausing.",
+  "livePauseSheetTitle": "Stop strategy",
+  "livePauseSheetSubtitle": "\"{name}\" has 1 open position. Choose how to handle it before stopping.",
   "@livePauseSheetSubtitle": {
     "placeholders": {
       "name": {"type": "String"}
     }
   },
-  "livePauseModeMarketLabel": "Close at market, then pause",
+  "livePauseModeMarketLabel": "Close at market, then stop",
   "livePauseModeMarketTag": "Recommended",
-  "livePauseModeMarketDesc": "Close the position at market immediately, realize current P&L, then pause.",
+  "livePauseModeMarketDesc": "Close the position at market immediately, realize current P&L, then stop.",
   "livePauseModeMarketEffect": "Estimated realized P&L {pnl}",
   "@livePauseModeMarketEffect": {
     "placeholders": {
@@ -1318,7 +1322,7 @@
     }
   },
   "livePauseModeNaturalLabel": "Wait for stop-loss/take-profit",
-  "livePauseModeNaturalDesc": "Keep running until stop-loss or take-profit triggers, then pause automatically.",
+  "livePauseModeNaturalDesc": "Keep running until stop-loss or take-profit triggers, then stop automatically.",
   "livePauseModeNaturalEffect": "To stop {stop}   To target {tp}",
   "@livePauseModeNaturalEffect": {
     "placeholders": {
@@ -1326,13 +1330,13 @@
       "tp": {"type": "String"}
     }
   },
-  "livePauseModeKeepLabel": "Keep position, pause strategy only",
+  "livePauseModeKeepLabel": "Keep position, stop strategy only",
   "livePauseModeKeepDesc": "The strategy stops monitoring; you manage the position manually on the exchange and can hand it back after resuming.",
-  "livePauseModeKeepEffect": "⚠ While paused, automatic stop-loss / take-profit / sizing will not apply",
-  "livePauseResumeNote": "Pausing keeps all params and history; resume anytime from \"Paused\".",
-  "livePausePrimaryMarket": "Close & pause",
+  "livePauseModeKeepEffect": "⚠ While stopped, automatic stop-loss / take-profit / sizing will not apply",
+  "livePauseResumeNote": "Stopping keeps all params and history; resume anytime from \"Stopped\".",
+  "livePausePrimaryMarket": "Close & stop",
   "livePausePrimaryNatural": "Keep running · wait to close",
-  "livePausePrimaryKeep": "Pause · keep position",
+  "livePausePrimaryKeep": "Stop · keep position",
   "livePausePositionHolding": "1 position",
   "livePausePositionEntry": "Entry",
   "livePausePositionCurrent": "Current",
@@ -1363,14 +1367,14 @@
   "liveDeleteDangerCheckbox": "Also permanently delete strategy history now (irreversible)",
   "liveDeletePrimarySoft": "Delete strategy",
   "liveDeletePrimaryPermanent": "Delete permanently",
-  "liveNeedPauseTitle": "Pause the strategy first",
-  "liveNeedPauseBody": "\"{name}\" is still running. To avoid deleting positions and in-flight trades by mistake, pause it before deleting.",
+  "liveNeedPauseTitle": "Stop the strategy first",
+  "liveNeedPauseBody": "\"{name}\" is still running. To avoid deleting positions and in-flight trades by mistake, stop it before deleting.",
   "@liveNeedPauseBody": {
     "placeholders": {
       "name": {"type": "String"}
     }
   },
-  "liveNeedPausePrimary": "Pause strategy",
+  "liveNeedPausePrimary": "Stop strategy",
   "liveCardRunFor": "Running {runFor}",
   "@liveCardRunFor": {
     "placeholders": {

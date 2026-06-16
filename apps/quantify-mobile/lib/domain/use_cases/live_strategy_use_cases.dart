@@ -7,7 +7,14 @@ library;
 import '../models/live_strategy_models.dart';
 
 /// 实盘策略列表排序指标。
-enum LiveSortMetric { todayPnl, totalPnl, totalPct, winRate, capital, runForDays }
+enum LiveSortMetric {
+  todayPnl,
+  totalPnl,
+  totalPct,
+  winRate,
+  capital,
+  runForDays,
+}
 
 /// 排序方向。[none] = 不排序，保持列表原序。
 enum LiveSortDirection { asc, desc, none }
@@ -58,39 +65,38 @@ List<LiveStrategy> sortStrategies(
 
 /// 实盘策略概览的状态明细（#2192：从 `_LiveStatusBreakdown.build` 上移）。
 ///
-/// 仅保留计数 > 0 的状态项，保持 running → warning → paused → stopped 顺序，
+/// 仅保留计数 > 0 的状态项，保持 running → warning → stopped 顺序，
 /// 供「我的」页 hero 卡状态 chip 渲染。View 仅取用，不在 build 内 `.where`。
 List<(LiveStrategyStatus, int)> liveStatusBreakdown(LiveStrategySummary s) {
   return <(LiveStrategyStatus, int)>[
     (LiveStrategyStatus.running, s.runningCount),
     (LiveStrategyStatus.warning, s.warningCount),
-    (LiveStrategyStatus.paused, s.pausedCount),
-    (LiveStrategyStatus.stopped, s.stoppedCount),
+    (LiveStrategyStatus.stopped, s.pausedCount + s.stoppedCount),
   ].where(((LiveStrategyStatus, int) e) => e.$2 > 0).toList();
 }
 
-/// filter chip 与状态的映射。[LiveFilter.all] = 全部（排除 stopped）。
+/// filter chip 与状态的映射，对齐 front：全部 / 运行中 / 已停止 / 历史记录。
 ///
 /// 原为页面私有 `_LiveFilter`，迁三件套后由 `LiveStrategiesState` 承载，
 /// #2229 随过滤族函数归位 domain。
-enum LiveFilter { all, running, paused, stopped }
+enum LiveFilter { all, running, stopped, history }
 
 /// 排序 sheet 的状态枚举（#2229：随 [LiveSortStatusCounts] 归位 domain）。
-enum LiveSortStatus { all, running, paused, stopped }
+enum LiveSortStatus { all, running, stopped, history }
 
 /// 各状态计数聚合（#2229：从 `live_sort_sheet.dart` 归位 domain）。
 class LiveSortStatusCounts {
   const LiveSortStatusCounts({
     required this.all,
     required this.running,
-    required this.paused,
     required this.stopped,
+    required this.history,
   });
 
   final int all;
   final int running;
-  final int paused;
   final int stopped;
+  final int history;
 
   int countOf(LiveSortStatus status) {
     switch (status) {
@@ -98,26 +104,28 @@ class LiveSortStatusCounts {
         return all;
       case LiveSortStatus.running:
         return running;
-      case LiveSortStatus.paused:
-        return paused;
       case LiveSortStatus.stopped:
         return stopped;
+      case LiveSortStatus.history:
+        return history;
     }
   }
 }
 
 /// [filter] 是否命中策略 [s]（#2192：从 View 上移的纯谓词）。
-/// `all` 语义 = 排除 stopped。
+/// `all` 语义 = 排除历史记录；`history` 语义 = `viewOnlyAt != null`。
 bool liveMatchesFilter(LiveStrategy s, LiveFilter filter) {
   switch (filter) {
     case LiveFilter.all:
-      return s.status != LiveStrategyStatus.stopped;
+      return !s.isHistory;
     case LiveFilter.running:
-      return s.status == LiveStrategyStatus.running;
-    case LiveFilter.paused:
-      return s.status == LiveStrategyStatus.paused;
+      return !s.isHistory && s.status == LiveStrategyStatus.running;
     case LiveFilter.stopped:
-      return s.status == LiveStrategyStatus.stopped;
+      return !s.isHistory &&
+          (s.status == LiveStrategyStatus.stopped ||
+              s.status == LiveStrategyStatus.paused);
+    case LiveFilter.history:
+      return s.isHistory;
   }
 }
 
@@ -128,10 +136,8 @@ int liveFilterCount(List<LiveStrategy> all, LiveFilter filter) {
 
 /// filter pill 标签计数（#2192：从 `_FilterPills` 上移）。
 ///
-/// 注意语义与 [liveFilterCount] 不同：pill 的 `all` 显示**总数**（含 stopped），
-/// 其余状态按精确状态计数。保持迁移前 `_FilterPills._count` 行为不变。
+/// 注意语义与 [liveFilterCount] 保持一致：front 的「全部」不含历史记录。
 int liveFilterPillCount(List<LiveStrategy> all, LiveFilter filter) {
-  if (filter == LiveFilter.all) return all.length;
   return liveFilterCount(all, filter);
 }
 
@@ -140,7 +146,7 @@ LiveSortStatusCounts liveStatusCounts(List<LiveStrategy> all) {
   return LiveSortStatusCounts(
     all: liveFilterCount(all, LiveFilter.all),
     running: liveFilterCount(all, LiveFilter.running),
-    paused: liveFilterCount(all, LiveFilter.paused),
     stopped: liveFilterCount(all, LiveFilter.stopped),
+    history: liveFilterCount(all, LiveFilter.history),
   );
 }

@@ -14,6 +14,7 @@ LiveStrategy _strategy({
   double totalPnl = 1234.5,
   double winRate = 62,
   int trades = 48,
+  DateTime? viewOnlyAt,
 }) {
   return LiveStrategy(
     id: 'QF-TEST01',
@@ -33,6 +34,7 @@ LiveStrategy _strategy({
     trades: trades,
     winRate: winRate,
     spark: const <double>[100, 102, 101, 105, 108, 107, 112],
+    viewOnlyAt: viewOnlyAt,
   );
 }
 
@@ -75,6 +77,17 @@ void main() {
     expect(find.byType(LiveSparkline), findsOneWidget);
   });
 
+  testWidgets('主体指标对齐 front：总收益 + 交易次数', (WidgetTester tester) async {
+    await _pump(tester, _strategy(totalPnl: 1234.5, trades: 48));
+    expect(find.text('总收益'), findsOneWidget);
+    expect(find.text('+12.30%'), findsOneWidget);
+    expect(find.text('+\$1234.50'), findsOneWidget);
+    expect(find.text('交易次数'), findsOneWidget);
+    expect(find.text('48'), findsOneWidget);
+    expect(find.text('今日'), findsNothing);
+    expect(find.text('累计'), findsNothing);
+  });
+
   testWidgets('footer 展示 ID · 运行 · 笔数 · 胜率', (WidgetTester tester) async {
     await _pump(tester, _strategy(winRate: 62, trades: 48));
     // mono meta：胜率整数不带小数；footer 按设计稿拆成可换行片段。
@@ -89,7 +102,7 @@ void main() {
     expect(find.textContaining('胜率 58.5%'), findsOneWidget);
   });
 
-  testWidgets('running 卡 footer 显示暂停按钮，点击触发 onToggle', (
+  testWidgets('running 卡 footer 显示停止按钮，点击触发 onToggle', (
     WidgetTester tester,
   ) async {
     bool toggled = false;
@@ -111,15 +124,26 @@ void main() {
     expect(opened, isTrue);
   });
 
-  testWidgets('paused 卡 toggle 提示为开启语义', (WidgetTester tester) async {
-    await _pump(tester, _strategy(status: LiveStrategyStatus.paused));
+  testWidgets('stopped 卡 toggle 提示为恢复语义', (WidgetTester tester) async {
+    await _pump(tester, _strategy(status: LiveStrategyStatus.stopped));
     final Tooltip tip = tester.widget<Tooltip>(
       find.descendant(
         of: find.byKey(const Key('live-card-toggle')),
         matching: find.byType(Tooltip),
       ),
     );
-    expect(tip.message, '开启策略');
+    expect(tip.message, '恢复策略');
+  });
+
+  testWidgets('history 卡隐藏 toggle', (WidgetTester tester) async {
+    await _pump(
+      tester,
+      _strategy(
+        status: LiveStrategyStatus.stopped,
+        viewOnlyAt: DateTime(2026, 6, 1),
+      ),
+    );
+    expect(find.byKey(const Key('live-card-toggle')), findsNothing);
   });
 
   testWidgets('点击主体区触发 onTap', (WidgetTester tester) async {

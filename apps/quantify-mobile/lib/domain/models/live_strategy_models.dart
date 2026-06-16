@@ -10,7 +10,7 @@ library;
 /// 实盘策略运行状态。
 ///
 /// - [running]：运行中（可能持仓）
-/// - [paused]：已暂停（持仓已平或转手动）
+/// - [paused]：旧暂停状态，兼容历史 mock / 旧接口；UI 统一展示为已停止
 /// - [warning]：需关注（接近风控阈值）
 /// - [stopped]：已停止（软删除，保留 30 天）
 enum LiveStrategyStatus { running, paused, warning, stopped }
@@ -39,7 +39,7 @@ class LiveStrategy {
 
   final LiveStrategyStatus status;
 
-  /// 状态附注，例如 `已暂停 · 等待恢复`；null 不渲染。
+  /// 状态附注，例如 `已停止 · 等待恢复`；null 不渲染。
   final String? statusNote;
 
   /// 运行时长展示串，例如 `14 天`。
@@ -54,6 +54,9 @@ class LiveStrategy {
 
   /// 胜率百分比（0..100）。
   final double winRate;
+
+  /// 最大回撤百分比（0..100），对齐 front `metrics.maxDrawdownPct`。
+  final double maxDrawdown;
 
   /// 权益曲线原始采样点。
   final List<double> spark;
@@ -70,6 +73,9 @@ class LiveStrategy {
 
   /// 当前部署执行杠杆。
   final double? deploymentLeverage;
+
+  /// 非空表示 front 口径的「历史记录」/ 只读策略。
+  final DateTime? viewOnlyAt;
 
   const LiveStrategy({
     required this.id,
@@ -89,15 +95,20 @@ class LiveStrategy {
     required this.trades,
     required this.winRate,
     required this.spark,
+    this.maxDrawdown = 0,
     this.statusNote,
     this.publishedSnapshotId,
     this.deployedAt,
     this.deployAccountName,
     this.deploymentLeverage,
+    this.viewOnlyAt,
   });
 
-  /// 是否处于活跃态（参与聚合统计）。stopped 不计入。
-  bool get isActive => status != LiveStrategyStatus.stopped;
+  /// 是否处于活跃态（参与聚合统计）。stopped / 历史记录不计入。
+  bool get isActive => status != LiveStrategyStatus.stopped && !isHistory;
+
+  /// front 口径：`viewOnlyAt != null` 即历史记录，仅只读展示。
+  bool get isHistory => viewOnlyAt != null;
 
   /// 是否可能持仓（仅 running / warning）。
   bool get mayHavePosition =>
@@ -111,6 +122,7 @@ class LiveStrategy {
   LiveStrategy copyWith({
     LiveStrategyStatus? status,
     Object? statusNote = _unset,
+    Object? viewOnlyAt = _unset,
   }) {
     return LiveStrategy(
       id: id,
@@ -132,11 +144,15 @@ class LiveStrategy {
       capital: capital,
       trades: trades,
       winRate: winRate,
+      maxDrawdown: maxDrawdown,
       spark: spark,
       publishedSnapshotId: publishedSnapshotId,
       deployedAt: deployedAt,
       deployAccountName: deployAccountName,
       deploymentLeverage: deploymentLeverage,
+      viewOnlyAt: identical(viewOnlyAt, _unset)
+          ? this.viewOnlyAt
+          : viewOnlyAt as DateTime?,
     );
   }
 }
@@ -235,13 +251,19 @@ class LiveStrategySummary {
   /// 需关注（warning）策略数。计入活跃统计。
   final int warningCount;
 
-  /// 已暂停（paused）策略数。计入活跃统计。
+  /// 旧暂停（paused）策略数。展示层合并到已停止。
   final int pausedCount;
   final int stoppedCount;
 
   /// 活跃策略综合胜率（0..100），按成交数加权平均。无成交时为 0。
   /// 可选默认 0：旧调用点（仅关心计数/盈亏）无需感知该字段。
   final double winRate;
+
+  /// 对齐 front 顶部统计：活跃策略平均收益率（0..100）。
+  final double averageReturnPct;
+
+  /// 对齐 front 顶部统计：活跃策略平均胜率（0..100）。
+  final double averageWinRatePct;
 
   const LiveStrategySummary({
     required this.totalAssets,
@@ -253,6 +275,8 @@ class LiveStrategySummary {
     required this.pausedCount,
     required this.stoppedCount,
     this.winRate = 0,
+    this.averageReturnPct = 0,
+    this.averageWinRatePct = 0,
   });
 
   /// 活跃策略总数（非 stopped），口径与设计稿 `active.length` 一致。

@@ -61,7 +61,7 @@ class _FailingLiveStrategyRepository implements LiveStrategyRepository {
       const <LiveStrategyParam>[];
 
   @override
-  Future<LiveStrategy> pause(String id) async =>
+  Future<LiveStrategy> pause(String id, {bool liquidate = false}) async =>
       throw StateError('backend down');
 
   @override

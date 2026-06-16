@@ -69,8 +69,11 @@ void main() {
     // 运行中策略卡存在（默认 all 过滤掉 stopped → BNB 高频不在）
     expect(find.byKey(const Key('live-card-QF-AY7K2P')), findsOneWidget);
     expect(find.byKey(const Key('live-card-QF-5J1RT8')), findsNothing);
-    // 聚合摘要标题
-    expect(find.text('总资产 (持仓 + 可用)'), findsOneWidget);
+    // 聚合摘要对齐 front 统计口径
+    expect(find.text('平均收益'), findsOneWidget);
+    expect(find.text('运行中'), findsWidgets);
+    expect(find.text('已停止'), findsWidgets);
+    expect(find.text('平均胜率'), findsWidgets);
   });
 
   testWidgets('点击策略卡进入详情', (WidgetTester tester) async {
@@ -95,20 +98,41 @@ void main() {
     expect(find.text('detail QF-AY7K2P'), findsOneWidget);
   });
 
-  testWidgets('暂停按钮按设计稿打开持仓处理 sheet', (WidgetTester tester) async {
+  testWidgets('停止按钮按设计稿打开持仓处理 sheet', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('live-card-toggle')).first);
     await tester.pumpAndSettle();
-    expect(find.text('暂停策略'), findsWidgets);
+    expect(find.text('停止策略'), findsWidgets);
     expect(find.textContaining('BTC 趋势 · 双均线'), findsWidgets);
+    expect(find.text('等待止损/止盈触发'), findsNothing);
+  });
+
+  testWidgets('无持仓 running 策略停止也打开选择 sheet', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('live-card-toggle')).at(1));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('live-pause-confirm')), findsOneWidget);
+    expect(find.textContaining('ETH 均值回归 · 4H'), findsWidgets);
+    expect(find.text('市价平仓后停止'), findsOneWidget);
+    expect(find.text('保留持仓，仅停止策略'), findsOneWidget);
+    expect(find.text('等待止损/止盈触发'), findsNothing);
   });
 
   testWidgets('已停止筛选展示 stopped 策略 + 保留提示', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.text('已停止 1'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('live-card-QF-5J1RT8')), findsOneWidget);
+    expect(find.byKey(const Key('live-card-QF-2H8N5W')), findsOneWidget);
     expect(find.textContaining('保留 30 天'), findsOneWidget);
+  });
+
+  testWidgets('历史记录筛选展示 viewOnly 策略且隐藏 toggle', (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.text('历史记录 1'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('live-card-QF-5J1RT8')), findsOneWidget);
+    expect(find.byKey(const Key('live-card-toggle')), findsNothing);
   });
 
   testWidgets('排序入口：打开筛选 & 排序 sheet', (WidgetTester tester) async {
@@ -135,7 +159,7 @@ void main() {
     expect(find.text('查看 1 个策略'), findsOneWidget);
     await tester.tap(find.byKey(const Key('live-sort-apply')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('live-card-QF-5J1RT8')), findsOneWidget);
+    expect(find.byKey(const Key('live-card-QF-2H8N5W')), findsOneWidget);
     expect(find.byKey(const Key('live-card-QF-AY7K2P')), findsNothing);
   });
 

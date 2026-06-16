@@ -70,6 +70,7 @@ void main() {
               'status': 'running',
               'totalPnl': 123.4,
               'todayPnl': 5.6,
+              'metrics': <String, dynamic>{'maxDrawdownPct': 12.4},
             },
           ],
         },
@@ -82,6 +83,7 @@ void main() {
       expect(rows.first.pair, 'BTCUSDT'); // symbol 键解析到 pair
       expect(rows.first.totalPnl, 123.4);
       expect(rows.first.todayPnl, 5.6);
+      expect(rows.first.maxDrawdown, 12.4);
       expect(rows.first.status, LiveStrategyStatus.running);
     });
 
@@ -329,27 +331,31 @@ void main() {
   });
 
   group('真实状态操作', () {
-    test('pause/resume 调用 action endpoint 并解析返回详情', () async {
+    test('pause/resume 调用真实 action endpoint 并解析返回详情', () async {
       final _StubLiveStrategyService svc = _StubLiveStrategyService(
         detailResponse: <String, dynamic>{
           'data': <String, dynamic>{
             'id': 'real-1',
             'name': '真实策略',
             'symbol': 'BTCUSDT',
-            'status': 'paused',
+            'status': 'stopped',
           },
         },
       );
       final ApiLiveStrategyRepository repo = ApiLiveStrategyRepository(svc);
 
-      final LiveStrategy paused = await repo.pause('real-1');
-      expect(paused.status, LiveStrategyStatus.paused);
+      final LiveStrategy stopped = await repo.pause('real-1');
+      expect(stopped.status, LiveStrategyStatus.stopped);
       expect(svc.actionCalls, 1);
-      expect(svc.lastAction, 'pause');
+      expect(svc.lastAction, 'stop');
+
+      await repo.pause('real-1', liquidate: true);
+      expect(svc.actionCalls, 2);
+      expect(svc.lastAction, 'liquidate_and_stop');
 
       await repo.resume('real-1');
-      expect(svc.actionCalls, 2);
-      expect(svc.lastAction, 'resume');
+      expect(svc.actionCalls, 3);
+      expect(svc.lastAction, 'run');
     });
 
     test('softDelete/permanentDelete 调用 delete endpoint 参数正确', () async {

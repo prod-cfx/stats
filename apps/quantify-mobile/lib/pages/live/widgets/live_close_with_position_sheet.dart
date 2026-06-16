@@ -7,29 +7,28 @@ import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 part 'live_close_with_position_sheet.parts.part.dart';
 
-/// 暂停持仓处理模式（#1773）。
-enum LivePauseMode { market, natural, keep }
+/// 停止持仓处理模式（#1773）。
+enum LivePauseMode { market, keep }
 
-/// 暂停含持仓策略的对话框（#1773）。
+/// 停止含持仓策略的对话框（#1773）。
 ///
-/// 对齐设计稿 `m-screens-livestrats.jsx:1170-1393`：三模式单选（市价平仓后暂停
-/// [推荐] / 等待止损止盈 / 保留持仓[warn]）+ 持仓卡 + 恢复说明。确认回选中模式；
-/// 取消返回 null。三种模式在 mock 下均落到「暂停」状态转换，模式差异仅用于
-/// 文案语义（真实平仓依赖 #1682/#1683，本迭代不接通）。
+/// 对齐设计稿 `m-screens-livestrats.jsx:1170-1393`：两模式单选（市价平仓后停止
+/// [推荐] / 保留持仓[warn]）+ 持仓卡 + 恢复说明。确认回选中模式；
+/// 取消返回 null。等待止损止盈暂无真实后端动作，先隐藏。
 class LiveCloseWithPositionSheet extends StatefulWidget {
   const LiveCloseWithPositionSheet({
     super.key,
     required this.strategy,
-    required this.position,
+    this.position,
   });
 
   final LiveStrategy strategy;
-  final LiveStrategyPosition position;
+  final LiveStrategyPosition? position;
 
   static Future<LivePauseMode?> show(
     BuildContext context, {
     required LiveStrategy strategy,
-    required LiveStrategyPosition position,
+    LiveStrategyPosition? position,
   }) {
     return showModalBottomSheet<LivePauseMode>(
       context: context,
@@ -54,8 +53,6 @@ class _LiveCloseWithPositionSheetState
     switch (_mode) {
       case LivePauseMode.market:
         return l10n.livePausePrimaryMarket;
-      case LivePauseMode.natural:
-        return l10n.livePausePrimaryNatural;
       case LivePauseMode.keep:
         return l10n.livePausePrimaryKeep;
     }
@@ -66,6 +63,7 @@ class _LiveCloseWithPositionSheetState
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final EdgeInsets safe = MediaQuery.viewPaddingOf(context);
+    final LiveStrategyPosition? position = widget.position;
 
     return Container(
       constraints: BoxConstraints(
@@ -141,28 +139,33 @@ class _LiveCloseWithPositionSheetState
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const TextSpan(text: '」当前有 '),
-                        TextSpan(
-                          text: l10n.livePausePositionHolding,
-                          style: TextStyle(
-                            color: c.statusWarn,
-                            fontWeight: FontWeight.w700,
+                        if (position == null) ...<InlineSpan>[
+                          const TextSpan(text: '」当前正在运行，请选择如何处理后再停止。'),
+                        ] else ...<InlineSpan>[
+                          const TextSpan(text: '」当前有 '),
+                          TextSpan(
+                            text: l10n.livePausePositionHolding,
+                            style: TextStyle(
+                              color: c.statusWarn,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const TextSpan(text: '，请选择如何处理后再暂停。'),
+                          const TextSpan(text: '，请选择如何处理后再停止。'),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-              child: _PositionCard(
-                strategy: widget.strategy,
-                position: widget.position,
+            if (position != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                child: _PositionCard(
+                  strategy: widget.strategy,
+                  position: position,
+                ),
               ),
-            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Column(
@@ -173,16 +176,8 @@ class _LiveCloseWithPositionSheetState
                     label: l10n.livePauseModeMarketLabel,
                     tag: l10n.livePauseModeMarketTag,
                     desc: l10n.livePauseModeMarketDesc,
-                    effect: _MarketEffect(pnl: widget.position.pnl),
+                    effect: _MarketEffect(pnl: position?.pnl ?? 0),
                     onTap: () => setState(() => _mode = LivePauseMode.market),
-                  ),
-                  _ModeOption(
-                    mode: LivePauseMode.natural,
-                    selected: _mode == LivePauseMode.natural,
-                    label: l10n.livePauseModeNaturalLabel,
-                    desc: l10n.livePauseModeNaturalDesc,
-                    effect: _NaturalEffect(position: widget.position),
-                    onTap: () => setState(() => _mode = LivePauseMode.natural),
                   ),
                   _ModeOption(
                     mode: LivePauseMode.keep,
@@ -249,4 +244,3 @@ class _LiveCloseWithPositionSheetState
     );
   }
 }
-
