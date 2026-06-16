@@ -2,7 +2,7 @@
 
 import type { ElementType, ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
-import { createContext, useCallback, use, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, use, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface Toast {
@@ -23,8 +23,14 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const dismissTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
   const removeToast = useCallback((id: string) => {
+    const timer = dismissTimers.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      dismissTimers.current.delete(id)
+    }
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }, [])
 
@@ -35,11 +41,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => [...prev, { ...toast, id }])
 
     if (duration > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         removeToast(id)
       }, duration)
+      dismissTimers.current.set(id, timer)
     }
   }, [removeToast])
+
+  useEffect(() => {
+    const timers = dismissTimers.current
+    return () => {
+      timers.forEach(timer => clearTimeout(timer))
+      timers.clear()
+    }
+  }, [])
 
   const value = useMemo(() => ({ toasts, showToast, removeToast }), [toasts, showToast, removeToast])
 
@@ -52,14 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
-    setMounted(true)
-  }, [])
-
-  if (!mounted) return null
+  if (toasts.length === 0 || typeof document === 'undefined') return null
 
   return createPortal(
     <div className="pointer-events-none fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[9999] flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-full sm:max-w-sm">

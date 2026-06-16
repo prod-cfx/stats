@@ -1,26 +1,13 @@
 'use client'
 
 import { Moon, Sun } from 'lucide-react'
-import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/components/providers/ThemeProvider'
 
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
+  const { toggleTheme } = useTheme()
   const { t } = useTranslation()
-  const [mounted, setMounted] = React.useState(false)
 
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- hydrate on mount only
-    setMounted(true)
-  }, [])
-
-  // Avoid hydration mismatches (server can't know localStorage/theme)
-  if (!mounted) {
-    return <div className="min-h-10 w-10 md:min-h-8 md:w-8" aria-hidden="true" />
-  }
-
-  const Icon = theme === 'dark' ? Moon : Sun
   const toggleLabel = t('theme.toggle', { defaultValue: 'Toggle light/dark mode' })
 
   return (
@@ -31,7 +18,12 @@ export function ThemeToggle() {
       aria-label={toggleLabel}
       title={toggleLabel}
     >
-      <Icon className="h-4 w-4 text-[color:var(--cf-muted)]" />
+      <span className="hidden dark:inline-flex" aria-hidden="true">
+        <Moon className="h-4 w-4 text-[color:var(--cf-muted)]" />
+      </span>
+      <span className="inline-flex dark:hidden" aria-hidden="true">
+        <Sun className="h-4 w-4 text-[color:var(--cf-muted)]" />
+      </span>
     </button>
   )
 }

@@ -10,7 +10,6 @@ import React, {
   useReducer,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from '@/components/account/UserAvatar'
@@ -96,18 +95,6 @@ function navbarUiReducer(state: NavbarUiState, action: NavbarUiAction): NavbarUi
     default:
       return state
   }
-}
-
-function subscribeYear() {
-  return () => {}
-}
-
-function getCurrentYearSnapshot() {
-  return new Date().getFullYear()
-}
-
-function getServerYearSnapshot() {
-  return COPYRIGHT_YEAR
 }
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'
@@ -214,7 +201,7 @@ export const Navbar = () => {
   const accountIdLabel = session
     ? `id:${session.userId.length <= 14 ? session.userId : `${session.userId.slice(0, 5)}...${session.userId.slice(-6)}`}`
     : ''
-  const year = useSyncExternalStore(subscribeYear, getCurrentYearSnapshot, getServerYearSnapshot)
+  const year = COPYRIGHT_YEAR
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成

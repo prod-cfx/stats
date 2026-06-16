@@ -1,7 +1,7 @@
 'use client'
 
 import { AlertTriangle } from 'lucide-react'
-import React, { useEffect, useId, useState } from 'react'
+import { useEffect, useId } from 'react'
 import { createPortal } from 'react-dom'
 
 interface ConfirmDialogProps {
@@ -27,14 +27,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const [mounted, setMounted] = useState(false)
   const titleId = useId()
   const descriptionId = useId()
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- hydrate on mount only
-    setMounted(true)
-  }, [])
 
   useEffect(() => {
     if (isOpen) {
@@ -47,7 +41,7 @@ export function ConfirmDialog({
     }
   }, [isOpen])
 
-  if (!mounted || !isOpen) return null
+  if (!isOpen || typeof document === 'undefined') return null
 
   const confirmButtonClass =
     confirmVariant === 'danger'

@@ -9,14 +9,7 @@ export function LanguageSwitcher() {
   const { i18n } = useTranslation()
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Avoid hydration mismatch
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
-    setMounted(true)
-  }, [])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -28,8 +21,6 @@ export function LanguageSwitcher() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  if (!mounted) return null
-
   const languages = [
     { code: 'en', label: 'English' },
     { code: 'zh', label: '中文' },
@@ -40,21 +31,21 @@ export function LanguageSwitcher() {
     document.cookie = `i18next=${code}; Path=/; Max-Age=31536000; SameSite=Lax`
     await i18n.changeLanguage(code)
     setIsOpen(false)
-    
+
     // 重定向到对应语言的页面，保留 query params 和 hash
-    const currentPath = window.location.pathname;
-    const currentSearch = window.location.search;
-    const currentHash = window.location.hash;
-    const pathParts = currentPath.split('/').filter(Boolean);
-    
+    const currentPath = window.location.pathname
+    const currentSearch = window.location.search
+    const currentHash = window.location.hash
+    const pathParts = currentPath.split('/').filter(Boolean)
+
     // 移除当前语言前缀（如果存在）
     if (pathParts[0] === 'zh' || pathParts[0] === 'en') {
-      pathParts.shift();
+      pathParts.shift()
     }
-    
+
     // 添加新语言前缀，保留 query params 和 hash
-    const newPath = `/${code}/${pathParts.join('/')}${currentSearch}${currentHash}`;
-    router.push(newPath);
+    const newPath = `/${code}/${pathParts.join('/')}${currentSearch}${currentHash}`
+    router.push(newPath)
   }
 
   return (

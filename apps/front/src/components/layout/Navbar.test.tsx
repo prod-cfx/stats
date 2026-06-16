@@ -313,7 +313,7 @@ describe('Navbar mobile menu', () => {
     expect(mockRouterReplace).toHaveBeenCalledWith('/zh')
   })
 
-  it('uses the current client year in the footer after hydration', async () => {
+  it('uses the stable copyright year in the footer after hydration', async () => {
     jest.useFakeTimers({ now: new Date('2027-01-02T00:00:00.000Z') })
 
     await act(async () => {
@@ -328,10 +328,10 @@ describe('Navbar mobile menu', () => {
       mobileMenuButton?.click()
     })
 
-    expect(container.textContent).toContain('© 2027 CoinFlux')
+    expect(container.textContent).toContain('© 2026 CoinFlux')
   })
 
-  it('refreshes the footer year when opening the mobile menu after year changes', async () => {
+  it('keeps the footer year stable when opening the mobile menu after year changes', async () => {
     jest.useFakeTimers({ now: new Date('2026-06-01T00:00:00.000Z') })
 
     await act(async () => {
@@ -366,6 +366,6 @@ describe('Navbar mobile menu', () => {
       reopenMenuButton?.click()
     })
 
-    expect(container.textContent).toContain('© 2027 CoinFlux')
+    expect(container.textContent).toContain('© 2026 CoinFlux')
   })
 })
