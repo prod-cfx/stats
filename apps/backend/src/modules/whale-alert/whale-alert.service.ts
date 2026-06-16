@@ -3,12 +3,12 @@ import type {
   RealtimeWhaleAlertDto,
 } from './dto/realtime-whale-alert.dto'
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
-import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
+import type { WhaleAlertIngestionPort, WhaleAlertTradeIngestionPayload } from './whale-alert-ingestion.service'
 import { WhaleAlertSide, WhaleAlertTradeSide } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
-import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 import { Prisma } from '@/prisma/prisma.types'
+import { WHALE_ALERT_INGESTION_SERVICE } from './whale-alert-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { WhaleAlertRepository } from './whale-alert.repository'
 
@@ -18,9 +18,13 @@ export class WhaleAlertService {
 
   constructor(
     private readonly whaleAlertRepository: WhaleAlertRepository,
-    @Inject(WhaleNotificationOrchestratorServiceToken)
-    private readonly whaleNotificationOrchestrator: WhaleNotificationOrchestratorService,
+    @Inject(WHALE_ALERT_INGESTION_SERVICE)
+    private readonly whaleAlertIngestionService: WhaleAlertIngestionPort,
   ) {}
+
+  async recordWhaleTrade(data: WhaleAlertTradeIngestionPayload): Promise<void> {
+    await this.whaleAlertIngestionService.recordWhaleTrade(data)
+  }
 
   /**
    * 获取 Hyperliquid 鲸鱼持仓预警的"实时"列表
@@ -183,57 +187,4 @@ export class WhaleAlertService {
     return new BasePaginationResponseDto(total, page, limit, items)
   }
 
-  /**
-   * 获取所有活跃鲸鱼地址(用于 Adapter 订阅)
-   */
-  async getActiveWhaleAddresses(): Promise<string[]> {
-    const rows = await this.whaleAlertRepository.findDistinctWhaleAddresses()
-
-    const addresses: string[] = []
-    for (const row of rows) {
-      const address = row.userAddress?.trim().toLowerCase()
-      if (!address) continue
-      addresses.push(address)
-    }
-
-    return addresses
-  }
-
-  /**
-   * 记录鲸鱼交易(用于 Adapter 写入数据)
-   */
-  async recordWhaleTrade(data: {
-    whaleAddress: string
-    coin: string
-    side: string
-    tradeSize: number
-    price: number
-    tradeValueUsd: number
-    tradeTime: Date
-  }): Promise<void> {
-    const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = data
-
-    const insertResult = await this.whaleAlertRepository.createManyTrades([{
-      userAddress: whaleAddress,
-      symbol: coin,
-      side,
-      tradeSize,
-      price,
-      tradeValueUsd,
-      tradeTime,
-    }])
-
-    if (insertResult.count === 0) {
-      return
-    }
-
-    // 仅在首次插入成交时触发编排，避免重放历史成交产生重复通知
-    await this.whaleNotificationOrchestrator.processTradeEvent({
-      whaleAddress,
-      symbol: coin,
-      side,
-      tradeValueUsd,
-      tradeTime,
-    })
-  }
 }

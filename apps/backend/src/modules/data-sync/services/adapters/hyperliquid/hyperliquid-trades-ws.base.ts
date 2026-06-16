@@ -4,7 +4,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Mutex } from 'async-mutex'
 import WebSocket from 'ws'
-import { WhaleAlertService } from '@/modules/whale-alert/whale-alert.service'
+import {
+  WHALE_ALERT_INGESTION_SERVICE,
+  type WhaleAlertIngestionPort,
+} from '@/modules/whale-alert/whale-alert-ingestion.service'
 import { HyperliquidTradesWsConfig } from './hyperliquid-trades-ws.config'
 
 interface HyperliquidWsTrade {
@@ -78,8 +81,8 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     protected readonly configService: ConfigService,
     @Inject(HyperliquidTradesWsConfig)
     protected readonly hyperliquidTradesConfig: HyperliquidTradesWsConfig,
-    @Inject(WhaleAlertService)
-    protected readonly whaleAlertService: WhaleAlertService,
+    @Inject(WHALE_ALERT_INGESTION_SERVICE)
+    protected readonly whaleAlertIngestionService: WhaleAlertIngestionPort,
   ) {}
 
   async ensureConnected(): Promise<void> {
@@ -172,7 +175,7 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
 
   refreshWhaleList(): Promise<void> {
     return this.whaleRefreshMutex.runExclusive(async () => {
-      const addresses = await this.whaleAlertService.getActiveWhaleAddresses()
+      const addresses = await this.whaleAlertIngestionService.getActiveWhaleAddresses()
       const next = new Set<string>()
       for (const address of addresses) {
         next.add(address)
@@ -267,7 +270,7 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
   }): Promise<void> {
     const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = payload
     try {
-      await this.whaleAlertService.recordWhaleTrade({
+      await this.whaleAlertIngestionService.recordWhaleTrade({
         whaleAddress,
         coin,
         side,

@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common'
+import { Module } from '@nestjs/common'
 import { GoogleTranslateClient } from '@/clients/google-translate/google-translate.client'
 import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarket'
 import { AuthModule } from '@/modules/auth/auth.module'
@@ -10,7 +10,7 @@ import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-conf
 import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { TradesConfigModule } from '@/modules/trades-config/trades-config.module'
-import { WhaleAlertModule } from '@/modules/whale-alert/whale-alert.module'
+import { WhaleAlertIngestionModule } from '@/modules/whale-alert/whale-alert-ingestion.module'
 import { WhaleTrackingModule } from '@/modules/whale-tracking/whale-tracking.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
@@ -46,7 +46,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     SettingsModule,
     CryptoStockQuotesModule,
     TradesConfigModule,
-    forwardRef(() => WhaleAlertModule),
+    WhaleAlertIngestionModule,
     WhaleTrackingModule,
     MarketsModule,
   ],
