@@ -58,6 +58,7 @@ export class RedisService implements OnApplicationShutdown {
       status: 'ready',
       quit: async () => {},
       disconnect: () => {},
+      ping: async () => 'PONG',
       get: async () => null,
       set: async () => 'OK',
       del: async () => 0,

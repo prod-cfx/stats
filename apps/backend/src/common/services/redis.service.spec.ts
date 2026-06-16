@@ -96,6 +96,20 @@ describe('RedisService', () => {
     expect(jest.mocked(envService.isTest)).toHaveBeenCalled()
   })
 
+  it('supports ping on the mock client for readiness probes', async () => {
+    const configService = createConfigService({
+      'app.appEnv': 'test',
+      'redis.url': undefined,
+      USE_MOCK_DATA: false,
+    })
+    const logger = createLogger()
+    const envService = createEnvService({ isTest: true })
+
+    const service = new RedisService(configService, logger, envService)
+
+    await expect(service.getClient().ping()).resolves.toBe('PONG')
+  })
+
   it('uses the mock client when EnvService says redis connect should be skipped', () => {
     const configService = createConfigService({
       'app.appEnv': 'production',
