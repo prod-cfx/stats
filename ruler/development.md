@@ -29,17 +29,33 @@
 - 合约：`dx build contracts`（无 `--dev`/`--prod` 分支）
 - 测试：`unit` 可以全量跑（`dx test unit all`）；E2E 不可以全量跑，必须使用 `dx test e2e <target> <file-or-dir> [-t "case name"]`
 
-## 4) 前端日志（最小约定）
+## 4) Front React Doctor 检测
+
+- 入口命令：从仓库根目录运行 `react-doctor apps/front --full --offline --json --fail-on none`；需要人工阅读时可去掉 `--json`。
+- 配置文件名必须是 `react-doctor.config.json`，或写入 `package.json` 的 `reactDoctor` key；`doctor.config.json` 不会被 react-doctor 读取。
+- `apps/front/public/tradingview/charting_library/**` 是 TradingView vendor bundle，必须通过 react-doctor ignore 排除；不要修改 vendor bundle 来“修”诊断。
+- 如果 `npx -y react-doctor@latest` 报 `No matching version found for ora@^9.4.0`，优先确认 registry：`npm --silent view ora version --registry=https://registry.npmjs.org/ --json`。本机默认 registry 可能拿到旧元数据。
+- 遇到 npx 卡住或无输出时，用临时目录隔离安装再执行：
+  ```bash
+  tmpdir=$(mktemp -d /tmp/react-doctor.XXXXXX)
+  cd "$tmpdir"
+  npm --silent init -y >/dev/null
+  npm_config_registry=https://registry.npmjs.org/ npm --silent install react-doctor@0.1.6 --ignore-scripts --no-audit --no-fund
+  cd /Users/a1/work/stats
+  "$tmpdir/node_modules/.bin/react-doctor" apps/front --full --offline --json --fail-on none
+  ```
+
+## 5) 前端日志（最小约定）
 
 - 构建期：Next.js 用 `NEXT_PUBLIC_LOG_LEVEL`
 - 运行期临时覆盖：`localStorage.logLevel`（优先级最高）
 
-## 5) Flutter mobile（开发运行）
+## 6) Flutter mobile（开发运行）
 
 - 发现移动端有更新时，优先复用已有 `flutter run` 会话，在该会话中发送 `r` 触发热重载。
 - 不要每次重新编译；只有确认没有可复用 `flutter run` 会话时，才启动新的 `flutter run`。
 
-## 6) Seed（最小约定）
+## 7) Seed（最小约定）
 
 - 入口与目录：`apps/backend/prisma/seed.ts`、`apps/backend/prisma/seed/`
 - Quantify 入口：`apps/quantify/prisma/seed.ts`
