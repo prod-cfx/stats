@@ -3,7 +3,15 @@
 import { Bell, Bot, LogIn, LogOut, Menu, Search, Settings, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from '@/components/account/UserAvatar'
 import { ClientTimeText } from '@/components/time/ClientTimeText'
@@ -27,6 +35,81 @@ import { ThemeToggle } from './ThemeToggle'
 
 const COPYRIGHT_YEAR = 2026
 
+interface NavbarUiState {
+  searchOpen: boolean
+  mobileMenuOpen: boolean
+  expandedMobileMenus: string[]
+  bellOpen: boolean
+  accountMenuOpen: boolean
+}
+
+type NavbarUiAction =
+  | { type: 'close-account-menu' }
+  | { type: 'close-bell' }
+  | { type: 'close-mobile-menu' }
+  | { type: 'close-search' }
+  | { type: 'open-mobile-menu' }
+  | { type: 'open-search' }
+  | { type: 'route-changed' }
+  | { type: 'toggle-account-menu' }
+  | { type: 'toggle-bell' }
+  | { type: 'toggle-mobile-submenu', name: string }
+  | { type: 'toggle-search' }
+
+const initialNavbarUiState: NavbarUiState = {
+  searchOpen: false,
+  mobileMenuOpen: false,
+  expandedMobileMenus: [],
+  bellOpen: false,
+  accountMenuOpen: false,
+}
+
+function navbarUiReducer(state: NavbarUiState, action: NavbarUiAction): NavbarUiState {
+  switch (action.type) {
+    case 'close-account-menu':
+      return { ...state, accountMenuOpen: false }
+    case 'close-bell':
+      return { ...state, bellOpen: false }
+    case 'close-mobile-menu':
+      return { ...state, mobileMenuOpen: false }
+    case 'close-search':
+      return { ...state, searchOpen: false }
+    case 'open-mobile-menu':
+      return { ...state, mobileMenuOpen: true, bellOpen: false, accountMenuOpen: false }
+    case 'open-search':
+      return { ...state, searchOpen: true }
+    case 'route-changed':
+      return { ...state, mobileMenuOpen: false, bellOpen: false, accountMenuOpen: false }
+    case 'toggle-account-menu':
+      return { ...state, accountMenuOpen: !state.accountMenuOpen }
+    case 'toggle-bell':
+      return { ...state, bellOpen: !state.bellOpen }
+    case 'toggle-mobile-submenu':
+      return {
+        ...state,
+        expandedMobileMenus: state.expandedMobileMenus.includes(action.name)
+          ? state.expandedMobileMenus.filter(item => item !== action.name)
+          : [...state.expandedMobileMenus, action.name],
+      }
+    case 'toggle-search':
+      return { ...state, searchOpen: !state.searchOpen }
+    default:
+      return state
+  }
+}
+
+function subscribeYear() {
+  return () => {}
+}
+
+function getCurrentYearSnapshot() {
+  return new Date().getFullYear()
+}
+
+function getServerYearSnapshot() {
+  return COPYRIGHT_YEAR
+}
+
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'
 
 interface SearchEntry {
@@ -41,25 +124,22 @@ interface SearchEntry {
 
 export const Navbar = () => {
   const pathname = usePathname()
-  const router = useRouter()
+  const { push, refresh, replace } = useRouter()
   const { t } = useTranslation()
   const { info } = useToast()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
   const bellWrapRef = useRef<HTMLDivElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [extraBases, _setExtraBases] = useState<string[]>([])
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
-  const [bellOpen, setBellOpen] = useState(false)
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [uiState, dispatchUi] = useReducer(navbarUiReducer, initialNavbarUiState)
   const accountMenuRef = useRef<HTMLDivElement>(null)
   const { session, logout } = useAuth()
   const { openAuth } = useAuthSheet()
   const { unreadCount, refresh: refreshUnreadCount } = useWhaleNotificationUnreadCount()
   const inbox = useWhaleNotificationInbox()
+  const { searchOpen, mobileMenuOpen, expandedMobileMenus, bellOpen, accountMenuOpen } = uiState
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
@@ -83,11 +163,11 @@ export const Navbar = () => {
   const handleLogout = useCallback(() => {
     suppressNextAuthGate()
     logout()
-    setAccountMenuOpen(false)
+    dispatchUi({ type: 'close-account-menu' })
     if (pathname?.startsWith(`/${currentLng}/account`)) {
-      router.replace(`/${currentLng}`)
+      replace(`/${currentLng}`)
     }
-  }, [currentLng, logout, pathname, router])
+  }, [currentLng, logout, pathname, replace])
 
   const { items: catalogItems } = useMarketDataCatalog()
 
@@ -134,11 +214,7 @@ export const Navbar = () => {
   const accountIdLabel = session
     ? `id:${session.userId.length <= 14 ? session.userId : `${session.userId.slice(0, 5)}...${session.userId.slice(-6)}`}`
     : ''
-  const [year, setYear] = useState(COPYRIGHT_YEAR)
-
-  useEffect(() => {
-    setYear(new Date().getFullYear())
-  }, [])
+  const year = useSyncExternalStore(subscribeYear, getCurrentYearSnapshot, getServerYearSnapshot)
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成
@@ -204,8 +280,8 @@ export const Navbar = () => {
   const _handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchResults.length > 0) {
-      router.push(searchResults[activeIndex].href)
-      setSearchOpen(false)
+      push(searchResults[activeIndex].href)
+      dispatchUi({ type: 'close-search' })
     } else {
       // 默认搜索跳转
       // router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
@@ -220,7 +296,7 @@ export const Navbar = () => {
       e.preventDefault()
       setActiveIndex(prev => (prev - 1 + searchResults.length) % searchResults.length)
     } else if (e.key === 'Escape') {
-      setSearchOpen(false)
+      dispatchUi({ type: 'close-search' })
     }
   }
 
@@ -228,10 +304,10 @@ export const Navbar = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
-        setSearchOpen(false)
+        dispatchUi({ type: 'close-search' })
       }
       if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
-        setAccountMenuOpen(false)
+        dispatchUi({ type: 'close-account-menu' })
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -250,7 +326,7 @@ export const Navbar = () => {
         !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)
       ) {
         e.preventDefault()
-        setSearchOpen(true)
+        dispatchUi({ type: 'open-search' })
         if (focusTimer) clearTimeout(focusTimer)
         focusTimer = setTimeout(() => searchInputRef.current?.focus(), 0)
       }
@@ -263,9 +339,7 @@ export const Navbar = () => {
   }, [searchOpen])
 
   useEffect(() => {
-    setMobileMenuOpen(false)
-    setBellOpen(false)
-    setAccountMenuOpen(false)
+    dispatchUi({ type: 'route-changed' })
   }, [pathname])
 
   // 高亮匹配文字
@@ -289,21 +363,16 @@ export const Navbar = () => {
   }
 
   const toggleMobileSubmenu = (name: string) => {
-    setExpandedMobileMenus(prev =>
-      prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name],
-    )
+    dispatchUi({ type: 'toggle-mobile-submenu', name })
   }
 
   const openMobileMenu = () => {
-    setYear(new Date().getFullYear())
-    setBellOpen(false)
-    setAccountMenuOpen(false)
-    setMobileMenuOpen(true)
+    dispatchUi({ type: 'open-mobile-menu' })
   }
 
   const openLoginSheet = useCallback(() => {
-    setMobileMenuOpen(false)
-    setAccountMenuOpen(false)
+    dispatchUi({ type: 'close-mobile-menu' })
+    dispatchUi({ type: 'close-account-menu' })
     openAuth({ lng: currentLng, redirect: getCurrentRedirect() })
   }, [currentLng, getCurrentRedirect, openAuth])
 
@@ -319,7 +388,7 @@ export const Navbar = () => {
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
       if (bellWrapRef.current && !bellWrapRef.current.contains(event.target as Node)) {
-        setBellOpen(false)
+        dispatchUi({ type: 'close-bell' })
       }
     }
     document.addEventListener('mousedown', handleOutside)
@@ -377,7 +446,7 @@ export const Navbar = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setSearchOpen(!searchOpen)
+                  dispatchUi({ type: 'toggle-search' })
                   if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100)
                 }}
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:h-10 md:w-10"
@@ -417,7 +486,7 @@ export const Navbar = () => {
                       <Link
                         key={result.id}
                         href={result.href}
-                        onClick={() => setSearchOpen(false)}
+                        onClick={() => dispatchUi({ type: 'close-search' })}
                         className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
                           idx === activeIndex ? 'bg-[color:var(--cf-surface-hover)]' : ''
                         }`}
@@ -475,7 +544,7 @@ export const Navbar = () => {
           <button
             type="button"
             aria-label="whale-notification-bell"
-            onClick={() => setBellOpen(prev => !prev)}
+            onClick={() => dispatchUi({ type: 'toggle-bell' })}
             className="relative inline-flex min-h-10 w-10 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)] md:min-h-8 md:w-8"
           >
             <Bell className="h-4 w-4" />
@@ -525,8 +594,8 @@ export const Navbar = () => {
                           await inbox.markRead(item.id)
                           await refreshUnreadCount()
                         }
-                        setBellOpen(false)
-                        router.push(withLng('/whale-tracking/notifications'))
+                        dispatchUi({ type: 'close-bell' })
+                        push(withLng('/whale-tracking/notifications'))
                       }}
                       className={`mb-2 w-full rounded-lg border p-3 text-left transition-colors last:mb-0 ${
                         item.read
@@ -552,13 +621,13 @@ export const Navbar = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setBellOpen(false)
+                    dispatchUi({ type: 'close-bell' })
                     const target = withLng('/whale-tracking/notifications')
                     if (pathname === target) {
-                      router.refresh()
+                      refresh()
                       return
                     }
-                    router.push(target)
+                    push(target)
                   }}
                   className="w-full rounded-lg px-3 py-2 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                 >
@@ -574,7 +643,7 @@ export const Navbar = () => {
             <div ref={accountMenuRef} className="relative flex items-center">
               <button
                 type="button"
-                onClick={() => setAccountMenuOpen(prev => !prev)}
+                onClick={() => dispatchUi({ type: 'toggle-account-menu' })}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-opacity hover:opacity-90"
                 aria-label={t('account.settings')}
               >
@@ -606,7 +675,7 @@ export const Navbar = () => {
                   </div>
                   <Link
                     href={withLng('/account?tab=settings')}
-                    onClick={() => setAccountMenuOpen(false)}
+                    onClick={() => dispatchUi({ type: 'close-account-menu' })}
                     className="flex items-center gap-2.5 px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
                     <Settings className="h-4 w-4 text-[color:var(--cf-muted)]" />
@@ -614,7 +683,7 @@ export const Navbar = () => {
                   </Link>
                   <Link
                     href={withLng('/account?tab=ai-quant')}
-                    onClick={() => setAccountMenuOpen(false)}
+                    onClick={() => dispatchUi({ type: 'close-account-menu' })}
                     className="flex items-center gap-2.5 px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
                     <Bot className="h-4 w-4 text-[color:var(--cf-muted)]" />
@@ -651,7 +720,7 @@ export const Navbar = () => {
           year={year}
           t={t}
           withLng={withLng}
-          onClose={() => setMobileMenuOpen(false)}
+          onClose={() => dispatchUi({ type: 'close-mobile-menu' })}
           onToggleSubmenu={toggleMobileSubmenu}
           onOpenLogin={openLoginSheet}
           onFooterSocialClick={handleMobileFooterSocialClick}

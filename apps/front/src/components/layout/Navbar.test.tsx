@@ -1,10 +1,18 @@
 /** @jest-environment jsdom */
 
+import fs from 'node:fs'
+import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import zhCommon from '../../../public/locales/zh/common.json'
 import { Navbar } from './Navbar'
+
+const navbarPath = path.join(__dirname, 'Navbar.tsx')
+
+function readNavbarSource() {
+  return fs.readFileSync(navbarPath, 'utf8')
+}
 
 const mockOpenAuth = jest.fn()
 const mockLogout = jest.fn()
@@ -159,6 +167,19 @@ describe('Navbar mobile menu', () => {
     expect(zhCommon.nav.realtime_whales).toBe('实时')
     expect(zhCommon.nav.whale_holdings).toBe('持仓')
     expect(zhCommon.nav.whale_notifications).toBe('监控')
+  })
+
+  it('keeps route-change menu reset in one reducer dispatch', () => {
+    const source = readNavbarSource()
+    const routeResetAction = source.indexOf("type: 'route-changed'")
+    const routeResetEffect = source.slice(Math.max(0, routeResetAction - 260), routeResetAction + 80)
+
+    expect(source).toContain('useReducer')
+    expect(routeResetAction).toBeGreaterThanOrEqual(0)
+    expect(routeResetEffect).not.toContain('setMobileMenuOpen(false)')
+    expect(routeResetEffect).not.toContain('setBellOpen(false)')
+    expect(routeResetEffect).not.toContain('setAccountMenuOpen(false)')
+    expect(routeResetEffect).toContain("type: 'route-changed'")
   })
 
   it('keeps mobile submenu cards visible while exposing expanded state to assistive tech', async () => {

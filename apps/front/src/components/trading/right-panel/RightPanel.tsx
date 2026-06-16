@@ -4,7 +4,7 @@ import type { AggregatedLevel, OrderBookLevel as SharedOrderBookLevel } from '@a
 import type { Socket } from 'socket.io-client'
 import type { TickerData } from '@/lib/api'
 import type { DataSource, MarketType } from '@/types/trading'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 import { logger } from '@/lib/logger'
@@ -106,6 +106,111 @@ interface OrderbookEventData {
   orderbook: SingleVenueOrderbook | AggregatedOrderbook
 }
 
+interface BookRow {
+  price: string
+  amount: string
+  total: string
+  depth: number
+}
+
+interface DisplayTrade {
+  id: number
+  price: string
+  amount: string
+  time: string
+  type: 'buy' | 'sell'
+}
+
+interface OrderbookRows {
+  sells: BookRow[]
+  buys: BookRow[]
+}
+
+interface DeterministicMockData {
+  initialOrderbook: OrderbookRows
+  initialTrades: DisplayTrade[]
+  meta: {
+    basePrice: number
+    tick: number
+    priceOffset: number
+    volumeMultiplier: number
+  }
+}
+
+interface RightPanelState {
+  tradeTab: string
+  loading: boolean
+  isDecimalMenuOpen: boolean
+  orderbook: OrderbookRows
+  orderbookSource: DeterministicMockData
+  trades: DisplayTrade[]
+  lastPrice: number | null
+  tickerData: TickerData | null
+}
+
+type RightPanelAction =
+  | { type: 'decimal-menu-closed' }
+  | { type: 'decimal-menu-toggled' }
+  | { type: 'loading-finished' }
+  | { type: 'loading-started' }
+  | { type: 'mock-source-changed', source: DeterministicMockData }
+  | { type: 'orderbook-received', orderbook: OrderbookRows }
+  | { type: 'tab-changed', tab: string }
+  | { type: 'ticker-received', tickerData: TickerData }
+  | { type: 'trades-received', trades: DisplayTrade[], lastPrice: number | null }
+
+function createInitialRightPanelState(source: DeterministicMockData): RightPanelState {
+  return {
+    tradeTab: 'latest',
+    loading: false,
+    isDecimalMenuOpen: false,
+    orderbook: source.initialOrderbook,
+    orderbookSource: source,
+    trades: [],
+    lastPrice: null,
+    tickerData: null,
+  }
+}
+
+function rightPanelReducer(state: RightPanelState, action: RightPanelAction): RightPanelState {
+  switch (action.type) {
+    case 'decimal-menu-closed':
+      return { ...state, isDecimalMenuOpen: false }
+    case 'decimal-menu-toggled':
+      return { ...state, isDecimalMenuOpen: !state.isDecimalMenuOpen }
+    case 'loading-finished':
+      return { ...state, loading: false }
+    case 'loading-started':
+      return { ...state, loading: true }
+    case 'mock-source-changed':
+      if (state.orderbookSource === action.source) return state
+      return {
+        ...state,
+        loading: false,
+        orderbook: action.source.initialOrderbook,
+        orderbookSource: action.source,
+        trades: [],
+        lastPrice: null,
+        tickerData: null,
+      }
+    case 'orderbook-received':
+      return { ...state, orderbook: action.orderbook }
+    case 'tab-changed':
+      if (state.tradeTab === action.tab) return state
+      return { ...state, tradeTab: action.tab, loading: true }
+    case 'ticker-received':
+      return { ...state, tickerData: action.tickerData }
+    case 'trades-received':
+      return {
+        ...state,
+        trades: action.trades,
+        lastPrice: action.lastPrice ?? state.lastPrice,
+      }
+    default:
+      return state
+  }
+}
+
 function formatHmsLocal(ts: number) {
   const d = new Date(ts)
   const hh = String(d.getHours()).padStart(2, '0')
@@ -155,8 +260,6 @@ export const RightPanel = ({
   marketType,
 }: RightPanelProps) => {
   const { t, i18n } = useTranslation()
-  const [tradeTab, setTradeTab] = useState('latest')
-  const [loading, setLoading] = useState(false)
   const sellsRef = useRef<HTMLDivElement>(null)
   const decimalMenuRef = useRef<HTMLDivElement>(null)
   const tabLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -172,7 +275,6 @@ export const RightPanel = ({
   // Precision definition:
   //  2 => 0.01, 1 => 0.1, 0 => 1, -1 => 10, -2 => 100
   const [pricePrecision, setPricePrecision] = useState<number>(2)
-  const [isDecimalMenuOpen, setIsDecimalMenuOpen] = useState(false)
   const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
   const baseAsset = getBaseAssetFromSymbol(symbol).toUpperCase()
 
@@ -245,25 +347,23 @@ export const RightPanel = ({
     symbol,
   ])
 
-  const [orderbook, setOrderbook] = useState(() => createDeterministicMock.initialOrderbook)
-  const [orderbookSource, setOrderbookSource] = useState(createDeterministicMock)
-  const [trades, setTrades] = useState<
-    Array<{ id: number; price: string; amount: string; time: string; type: 'buy' | 'sell' }>
-  >([])
-  const [lastPrice, setLastPrice] = useState<number | null>(null) // 最新成交价
-  const [tickerData, setTickerData] = useState<TickerData | null>(null) // 24h 统计数据
+  const [panelState, dispatchPanel] = useReducer(
+    rightPanelReducer,
+    createDeterministicMock,
+    createInitialRightPanelState,
+  )
+  const { tradeTab, loading, isDecimalMenuOpen, orderbook, trades, lastPrice, tickerData } =
+    panelState
 
-  if (orderbookSource !== createDeterministicMock) {
-    setOrderbookSource(createDeterministicMock)
-    setOrderbook(createDeterministicMock.initialOrderbook)
-    setLoading(false)
-  }
+  useEffect(() => {
+    dispatchPanel({ type: 'mock-source-changed', source: createDeterministicMock })
+  }, [createDeterministicMock])
 
   // Close decimal menu when clicking outside
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (decimalMenuRef.current && !decimalMenuRef.current.contains(e.target as Node)) {
-        setIsDecimalMenuOpen(false)
+        dispatchPanel({ type: 'decimal-menu-closed' })
       }
     }
     if (isDecimalMenuOpen) {
@@ -274,7 +374,7 @@ export const RightPanel = ({
 
   // WebSocket 连接管理 - Trades 实时数据
   useEffect(() => {
-    setLoading(true)
+    dispatchPanel({ type: 'loading-started' })
 
     const wsBaseUrl = getWsBaseUrl()
     // 获取 token（从 localStorage）
@@ -330,7 +430,7 @@ export const RightPanel = ({
 
     const handleOrderbookSubscribed = (data: OrderbookSubscribedData) => {
       logger.debug('[RightPanel] Orderbook subscribed:', data)
-      setLoading(false)
+      dispatchPanel({ type: 'loading-finished' })
     }
 
     const handleTrades = (data: TradesEventData) => {
@@ -349,16 +449,16 @@ export const RightPanel = ({
           }
         })
 
-        setTrades(formattedTrades)
-
         // 更新最新成交价（Last Price）- 业内标准做法
+        let latestPrice: number | null = null
         if (receivedTrades.length > 0) {
           const latestTrade = receivedTrades[0] // trades 数组按时间倒序，第一个是最新的
           const price = Number(latestTrade.price)
           if (Number.isFinite(price)) {
-            setLastPrice(price)
+            latestPrice = price
           }
         }
+        dispatchPanel({ type: 'trades-received', trades: formattedTrades, lastPrice: latestPrice })
       }
     }
 
@@ -427,7 +527,7 @@ export const RightPanel = ({
           topBuy: formattedOrderbook.buys[0],
         })
 
-        setOrderbook(formattedOrderbook)
+        dispatchPanel({ type: 'orderbook-received', orderbook: formattedOrderbook })
       } else {
         logger.warn('[RightPanel] Orderbook data is empty or invalid, keeping mock data')
       }
@@ -473,7 +573,9 @@ export const RightPanel = ({
       }
 
       // 更新 tickerData
-      setTickerData({
+      dispatchPanel({
+        type: 'ticker-received',
+        tickerData: {
         symbol: data.symbol,
         currentPrice: data.currentPrice?.toString() ?? '0',
         indexPrice: data.indexPrice?.toString() ?? undefined,
@@ -483,6 +585,7 @@ export const RightPanel = ({
         openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
         high24h: data.high24h?.toString() ?? undefined,
         low24h: data.low24h?.toString() ?? undefined,
+        },
       })
     }
 
@@ -497,12 +600,12 @@ export const RightPanel = ({
 
     const handleConnectError = (error: Error) => {
       logger.error('[RightPanel] Socket.IO connection error:', error)
-      setLoading(true)
+      dispatchPanel({ type: 'loading-started' })
     }
 
     const handleDisconnect = (reason: Socket.DisconnectReason) => {
       logger.warn('[RightPanel] Socket.IO disconnected:', reason)
-      setLoading(true)
+      dispatchPanel({ type: 'loading-started' })
     }
 
     socket.on('connect', handleConnect)
@@ -587,11 +690,13 @@ export const RightPanel = ({
 
   const handleTabChange = (tab: string) => {
     if (tab === tradeTab) return
-    setLoading(true)
-    setTradeTab(tab)
+    dispatchPanel({ type: 'tab-changed', tab })
     // Tab switching loading: 600-1000ms
     if (tabLoadingTimeoutRef.current) clearTimeout(tabLoadingTimeoutRef.current)
-    tabLoadingTimeoutRef.current = setTimeout(() => setLoading(false), 800)
+    tabLoadingTimeoutRef.current = setTimeout(
+      () => dispatchPanel({ type: 'loading-finished' }),
+      800,
+    )
   }
 
   // Dynamic Static Info Values
@@ -683,10 +788,10 @@ export const RightPanel = ({
       sellsRef={sellsRef}
       decimalMenuRef={decimalMenuRef}
       t={t}
-      onToggleDecimalMenu={() => setIsDecimalMenuOpen(v => !v)}
+      onToggleDecimalMenu={() => dispatchPanel({ type: 'decimal-menu-toggled' })}
       onSelectPrecision={precision => {
         setPricePrecision(precision)
-        setIsDecimalMenuOpen(false)
+        dispatchPanel({ type: 'decimal-menu-closed' })
       }}
       onTabChange={handleTabChange}
     />
