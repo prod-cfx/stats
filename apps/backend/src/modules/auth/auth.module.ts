@@ -4,7 +4,6 @@ import { seconds, ThrottlerModule } from '@nestjs/throttler'
 import { MailService } from '@/common/services/mail.service'
 import { RedisService } from '@/common/services/redis.service'
 import { BetaCodeModule } from '@/modules/beta-code/beta-code.module'
-import { PrismaModule } from '@/prisma/prisma.module'
 import { AuthAccessModule } from './auth-access.module'
 import { AuthController } from './auth.controller'
 import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard'
@@ -16,7 +15,6 @@ import { VerificationCodeService } from './services/verification-code.service'
 @Module({
   imports: [
     ConfigModule,
-    PrismaModule,
     AuthAccessModule,
     ThrottlerModule.forRootAsync({
       inject: [RedisService],

@@ -12,7 +12,6 @@ import { SettingsModule } from '@/modules/settings/settings.module'
 import { TradesConfigModule } from '@/modules/trades-config/trades-config.module'
 import { WhaleAlertModule } from '@/modules/whale-alert/whale-alert.module'
 import { WhaleTrackingModule } from '@/modules/whale-tracking/whale-tracking.module'
-import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
@@ -40,7 +39,6 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
 
 @Module({
   imports: [
-    PrismaModule,
     AuthModule,
     LiquidationHeatmapModule,
     OpenInterestModule,

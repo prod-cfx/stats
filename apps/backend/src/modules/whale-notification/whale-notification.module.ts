@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common'
 import { MailService } from '@/common/services/mail.service'
 import { AuthModule } from '@/modules/auth/auth.module'
-import { PrismaModule } from '@/prisma/prisma.module'
 import { WhaleNotificationInboxController } from './controllers/whale-notification-inbox.controller'
 import { WhaleNotificationMetricsController } from './controllers/whale-notification-metrics.controller'
 import { WhaleNotificationRulesController } from './controllers/whale-notification-rules.controller'
@@ -16,7 +15,7 @@ import { WhaleNotificationOrchestratorService } from './services/whale-notificat
 import { WhaleNotificationRulesService } from './services/whale-notification-rules.service'
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [AuthModule],
   controllers: [WhaleNotificationRulesController, WhaleNotificationInboxController, WhaleNotificationMetricsController],
   providers: [
     MailService,

@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common'
-import { PrismaModule } from '@/prisma/prisma.module'
 import { AuthModule } from '../auth/auth.module'
 import { CleanupOldTradesJob } from './jobs/cleanup-old-trades.job'
 import { MarketsController } from './markets.controller'
@@ -10,7 +9,7 @@ import { MarketTradesRepository } from './repositories/market-trades.repository'
 import { TakerBuySellVolumeRepository } from './repositories/taker-buy-sell-volume.repository'
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [AuthModule],
   providers: [
     MarketsService,
     LongShortRatioRepository,
