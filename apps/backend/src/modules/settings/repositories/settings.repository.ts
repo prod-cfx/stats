@@ -3,11 +3,15 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type { SystemSetting } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 @Injectable()
 export class SettingsRepository {
+  private readonly logger = new Logger(SettingsRepository.name)
+
   constructor(
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
   ) {}
@@ -20,8 +24,12 @@ export class SettingsRepository {
         orderBy: { category: 'asc' },
       })
     } catch (error) {
-      console.error('Database error in findAll settings, falling back to mock data', error)
-      return this.generateMockSettings()
+      this.logDatabaseError('findAll', {}, error)
+      throw new DomainException('settings.database_error', {
+        code: ErrorCode.INTERNAL_SERVER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { detail: 'DatabaseError' },
+      })
     }
   }
 
@@ -62,9 +70,22 @@ export class SettingsRepository {
         where: { key },
       })
     } catch (error) {
-      console.error('Database error in findByKey setting, falling back to mock data', error)
-      return this.generateMockSettings().find(s => s.key === key) || null
+      this.logDatabaseError('findByKey', { key }, error)
+      throw new DomainException('settings.database_error', {
+        code: ErrorCode.INTERNAL_SERVER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { detail: 'DatabaseError' },
+      })
     }
+  }
+
+  private logDatabaseError(method: string, payload: Record<string, unknown>, error: unknown): void {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : undefined
+    this.logger.error(
+      `Database error in ${method}: ${JSON.stringify({ ...payload, errorMessage })}`,
+      stack,
+    )
   }
 
   async findByCategory(category: string): Promise<SystemSetting[]> {
@@ -131,4 +152,3 @@ export class SettingsRepository {
     })
   }
 }
-

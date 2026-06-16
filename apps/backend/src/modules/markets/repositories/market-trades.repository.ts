@@ -2,8 +2,10 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type { MarketTrade } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { Prisma } from '@/prisma/prisma.types'
 
 export interface FindTradesOptions {
@@ -35,6 +37,8 @@ export interface CreateMarketTradeRecordInput {
 
 @Injectable()
 export class MarketTradesRepository {
+  private readonly logger = new Logger(MarketTradesRepository.name)
+
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
 
   async createManyTrades(records: CreateMarketTradeRecordInput[]): Promise<void> {
@@ -103,23 +107,14 @@ export class MarketTradesRepository {
         skip: options.offset ?? 0,
       })
 
-      if (trades.length === 0) {
-        return this.generateMockTrades(
-          options.exchange || 'Binance',
-          options.instrumentType || 'FUTURES',
-          options.symbol || 'BTCUSDT',
-          options.limit || 50,
-        )
-      }
       return trades
     } catch (error) {
-      console.error('Database error in findTrades, falling back to mock data', error)
-      return this.generateMockTrades(
-        options.exchange || 'Binance',
-        options.instrumentType || 'FUTURES',
-        options.symbol || 'BTCUSDT',
-        options.limit || 50,
-      )
+      this.logDatabaseError('findTrades', { options }, error)
+      throw new DomainException('market_trades.database_error', {
+        code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { detail: 'DatabaseError' },
+      })
     }
   }
 
@@ -151,16 +146,28 @@ export class MarketTradesRepository {
         }),
         this.txHost.tx.marketTrade.count({ where }),
       ])
-      if (trades.length === 0 && total === 0) {
-        const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
-        return { items, total: items.length }
-      }
       return { items: trades, total }
     } catch (error) {
-      console.error('Database error in findLatestTrades, falling back to mock data', error)
-      const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
-      return { items, total: items.length }
+      this.logDatabaseError('findLatestTrades', { exchange, instrumentType, symbol, limit, page }, error)
+      throw new DomainException('market_trades.database_error', {
+        code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { detail: 'DatabaseError' },
+      })
     }
+  }
+
+  private logDatabaseError(method: string, payload: Record<string, unknown>, error: unknown): void {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : undefined
+    this.logger.error(
+      `Database error in ${method}: ${this.stringifyLogPayload({ ...payload, errorMessage })}`,
+      stack,
+    )
+  }
+
+  private stringifyLogPayload(payload: Record<string, unknown>): string {
+    return JSON.stringify(payload, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
   }
 
   private generateMockTrades(
