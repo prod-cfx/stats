@@ -188,4 +188,92 @@ describe('account ai-quant detail/action mock fallback guard', () => {
       }),
     )
   })
+
+  it('does not send userId in deploy request body because backend reads the caller from auth headers', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          id: 'strategy-1',
+          name: 'Strategy 1',
+          status: 'running',
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          isSubscribed: true,
+          paramSchema: null,
+          paramValues: null,
+          schemaVersion: null,
+          metrics: {
+            returnPct: 0,
+            maxDrawdownPct: 0,
+            winRatePct: 0,
+            tradeCount: 0,
+          },
+          updatedAt: '2026-04-25T00:00:00.000Z',
+          totalPnl: 0,
+          todayPnl: 0,
+          equitySeries: [],
+          snapshot: {
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            positionPct: 10,
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'hash-1',
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+          },
+          timeline: [],
+          runtimeExecutionStates: [],
+          accountOverview: {
+            initialBalance: 10000,
+            totalEquity: 10000,
+            availableBalance: 10000,
+            totalPnl: 0,
+            todayPnl: 0,
+            baseCurrency: 'USDT',
+          },
+          positionOverview: {
+            openPositionsCount: 0,
+            closedPositionsCount: 0,
+            totalRealizedPnl: 0,
+            totalUnrealizedPnl: 0,
+          },
+          latestOrders: [],
+          runtimeSemanticSummary: null,
+        },
+      }),
+    }) as unknown as typeof fetch
+
+    const { deployAccountAiQuantStrategy } = await import('./api')
+
+    await deployAccountAiQuantStrategy({
+      userId: 'user-1',
+      name: 'Strategy 1',
+      deployRequestId: 'deploy-req-1',
+      publishedSnapshotId: 'snapshot-1',
+      exchangeAccountId: 'acct-1',
+      exchangeAccountName: 'okx-test-api',
+      deploymentExecutionConfig: { leverage: 3 },
+    })
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://localhost:3000/api/account/ai-quant/strategies/deploy',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Strategy 1',
+          deployRequestId: 'deploy-req-1',
+          publishedSnapshotId: 'snapshot-1',
+          exchangeAccountId: 'acct-1',
+          exchangeAccountName: 'okx-test-api',
+          deploymentExecutionConfig: { leverage: 3 },
+        }),
+      }),
+    )
+  })
 })
