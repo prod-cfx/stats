@@ -550,7 +550,7 @@ function useLongShortRatioData(pairSymbol: string, tvInterval: string) {
 
   useEffect(() => {
     void fetchData()
-    timerRef.current = setInterval(() => {
+    timerRef.current = scheduleInterval(() => {
       void fetchData()
     }, LONG_SHORT_RATIO_REFRESH_INTERVAL_MS)
 
@@ -1155,13 +1155,79 @@ function setButtonActive(btn: HTMLElement | null, active: boolean) {
   else btn.classList.remove('is-active')
 }
 
+function assignElementStyles(
+  element: HTMLElement | null,
+  styles: Partial<CSSStyleDeclaration>,
+) {
+  if (!element) return
+  Object.assign(element.style, styles)
+}
+
+function waitAnimationFrame() {
+  return new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+}
+
+function scheduleTimeout(handler: () => void, timeoutMs: number) {
+  return globalThis.setTimeout(handler, timeoutMs)
+}
+
+function scheduleInterval(handler: () => void, timeoutMs: number) {
+  return globalThis.setInterval(handler, timeoutMs)
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+async function waitForChartContainer(
+  getContainer: () => HTMLDivElement | null,
+  shouldCancel: () => boolean,
+  attemptsLeft = 10,
+): Promise<HTMLDivElement | null> {
+  const container = getContainer()
+  if (container || shouldCancel() || attemptsLeft <= 0) return container
+  await waitAnimationFrame()
+  return waitForChartContainer(getContainer, shouldCancel, attemptsLeft - 1)
+}
+
+const createNameCandidateSet = (label: string) => {
+  const candidates = Array.from(new Set(['清算地图', label, 'Liquidation Map'].filter(Boolean)))
+  return new Set(candidates.map(String))
+}
+
+function hasNameCandidateText(nameCandidates: Set<string>, text: string) {
+  for (const name of nameCandidates) {
+    if (new RegExp(escapeRegExp(name)).test(text)) return true
+  }
+  return false
+}
+
+function collectVisibleLegendButtons(row: HTMLElement) {
+  const seen = new Set<HTMLElement>()
+  const buttons: HTMLElement[] = []
+  const candidates = Array.from(
+    row.querySelectorAll('button,[role="button"],[tabindex]'),
+  ) as HTMLElement[]
+
+  for (const el of candidates) {
+    if (seen.has(el)) continue
+    seen.add(el)
+    const r = el.getBoundingClientRect()
+    if (!r || r.width <= 0 || r.height <= 0) continue
+    if (r.width <= 40 && r.height <= 40) buttons.push(el)
+  }
+
+  return buttons
+}
+
 function applyHeaderButtonStyle(btn: HTMLElement | null) {
-  if (!btn) return
-  btn.style.fontSize = '12px'
-  btn.style.fontWeight = '600'
-  btn.style.lineHeight = '20px'
-  btn.style.letterSpacing = '0'
-  btn.style.borderRadius = '6px'
+  assignElementStyles(btn, {
+    fontSize: '12px',
+    fontWeight: '600',
+    lineHeight: '20px',
+    letterSpacing: '0',
+    borderRadius: '6px',
+  })
 }
 
 function createBodyDropdown(
@@ -1170,32 +1236,38 @@ function createBodyDropdown(
 ) {
   const doc = anchor.ownerDocument
   const menu = doc.createElement('div')
-  menu.style.position = 'fixed'
-  menu.style.zIndex = '99999'
-  menu.style.minWidth = '120px'
-  menu.style.padding = '4px'
-  menu.style.borderRadius = '8px'
-  menu.style.border = '1px solid rgba(148, 163, 184, 0.2)'
-  menu.style.background = '#151a22'
-  menu.style.color = '#d7dde8'
-  menu.style.boxShadow = '0 8px 20px rgba(0,0,0,0.28)'
-  menu.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  assignElementStyles(menu, {
+    position: 'fixed',
+    zIndex: '99999',
+    minWidth: '120px',
+    padding: '4px',
+    borderRadius: '8px',
+    border: '1px solid rgba(148, 163, 184, 0.2)',
+    background: '#151a22',
+    color: '#d7dde8',
+    boxShadow: '0 8px 20px rgba(0,0,0,0.28)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  })
 
   const rect = anchor.getBoundingClientRect()
-  menu.style.left = `${rect.left}px`
-  menu.style.top = `${rect.bottom + 6}px`
+  assignElementStyles(menu, {
+    left: `${rect.left}px`,
+    top: `${rect.bottom + 6}px`,
+  })
 
   items.forEach(it => {
     const row = doc.createElement('div')
     row.textContent = it.label
-    row.style.padding = '8px 10px'
-    row.style.fontSize = '12px'
-    row.style.fontWeight = '600'
-    row.style.lineHeight = '20px'
-    row.style.letterSpacing = '0'
-    row.style.cursor = 'pointer'
-    row.style.borderRadius = '6px'
-    row.style.transition = 'background 0.1s ease'
+    assignElementStyles(row, {
+      padding: '8px 10px',
+      fontSize: '12px',
+      fontWeight: '600',
+      lineHeight: '20px',
+      letterSpacing: '0',
+      cursor: 'pointer',
+      borderRadius: '6px',
+      transition: 'background 0.1s ease',
+    })
 
     row.addEventListener('mouseenter', () => {
       row.style.background = 'rgba(57, 107, 255, 0.12)'
@@ -1252,22 +1324,22 @@ export const TradingViewChart = (
     // ---- 清算地图 overlay（Coinglass-style）----
     const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
     const chartAdapterRef = useRef<ChartAdapter | null>(null)
-    const [mainPaneHeight, setMainPaneHeight] = useReducer(
+    const [mainPaneHeight, commitMainPaneHeight] = useReducer(
       (_value: number | null, nextValue: number | null) => nextValue,
       null,
     )
     const mainPaneHeightRef = useRef<number | null>(null)
     // 清算地图（native drawings）：用 TradingView 的矩形 drawing 来画“右侧柱状热力条”，
     // 这样用户可以通过 TV 自己的对象树(Object Tree)/绘图管理能力进行隐藏/删除。
-    const [liqNativeSupported, setLiqNativeSupported] = useReducer(
+    const [liqNativeSupported, commitLiqNativeSupported] = useReducer(
       (_value: boolean, nextValue: boolean) => nextValue,
       false,
     )
-    const [liqNativeActive, setLiqNativeActive] = useReducer(
+    const [liqNativeActive, commitLiqNativeActive] = useReducer(
       (_value: boolean, nextValue: boolean) => nextValue,
       false,
     ) // 已成功绘制过至少一批 native rectangles
-    const [liqHidden, setLiqHidden] = useReducer(
+    const [liqHidden, commitLiqHidden] = useReducer(
       (_value: boolean, nextValue: boolean | ((prev: boolean) => boolean)) =>
         typeof nextValue === 'function' ? nextValue(_value) : nextValue,
       false,
@@ -1305,7 +1377,7 @@ export const TradingViewChart = (
       cumLong: number
       cumShort: number
     }
-    const [liqSelected, setLiqSelected] = useReducer(
+    const [liqSelected, commitLiqSelected] = useReducer(
       (
         value: LiqSelection,
         nextValue: LiqSelection | ((prev: LiqSelection) => LiqSelection),
@@ -1413,7 +1485,7 @@ export const TradingViewChart = (
     )
     const liqDataRef = useRef<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
     const liqCurrentPriceRef = useRef<number>(0)
-    const [liqData, setLiqData] = useReducer(
+    const [liqData, commitLiqData] = useReducer(
       (
         _value: ReturnType<typeof generateLiquidationMapMockData> | null,
         nextValue: ReturnType<typeof generateLiquidationMapMockData> | null,
@@ -1533,7 +1605,7 @@ export const TradingViewChart = (
       }
 
       // 延迟执行 resetData，确保 setContext 已完成且避免竞态条件
-      resetTimerRef.current = setTimeout(() => {
+      resetTimerRef.current = scheduleTimeout(() => {
         const widget = widgetRef.current
         if (!widget || !chartReadyRef.current) return
 
@@ -1598,10 +1670,14 @@ export const TradingViewChart = (
 
       // 聚合开关：外观保持与旧页面一致（渐变开/灰色关 + 白色滑块）
       if (els.aggSwitch && els.aggKnob) {
-        els.aggSwitch.style.background = agg
-          ? 'linear-gradient(90deg, #396bff 0%, #8b5cff 100%)'
-          : 'rgba(127,127,127,0.35)'
-        els.aggKnob.style.transform = agg ? 'translateX(16px)' : 'translateX(2px)'
+        assignElementStyles(els.aggSwitch, {
+          background: agg
+            ? 'linear-gradient(90deg, #396bff 0%, #8b5cff 100%)'
+            : 'rgba(127,127,127,0.35)',
+        })
+        assignElementStyles(els.aggKnob, {
+          transform: agg ? 'translateX(16px)' : 'translateX(2px)',
+        })
       }
       setButtonActive(els.aggBtn, agg)
 
@@ -1831,7 +1907,7 @@ export const TradingViewChart = (
 
       async function init() {
         // 延迟一帧执行，确保 DOM 已经挂载
-        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+        await waitAnimationFrame()
         if (cancelled) return
 
         try {
@@ -1847,14 +1923,10 @@ export const TradingViewChart = (
           }
 
           // 使用 ref 获取容器，避免 dev StrictMode / 异步初始化导致的时序问题
-          let containerEl = containerRef.current
-          // 兜底：最多等 ~10 帧
-          for (let i = 0; i < 10 && !containerEl; i += 1) {
-            if (cancelled) break
-            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-            if (cancelled) break
-            containerEl = containerRef.current
-          }
+          const containerEl = await waitForChartContainer(
+            () => containerRef.current,
+            () => cancelled,
+          )
           if (cancelled) return
           if (!containerEl) throw new Error(`Chart container not found: #${containerId}`)
 
@@ -1966,7 +2038,7 @@ export const TradingViewChart = (
                 /* ignore */
               })
             // Fallback 2: last resort time-based (guarded + overlay effect has try/catch)
-            readyTimer = setTimeout(() => markReady(), 1500)
+            readyTimer = scheduleTimeout(() => markReady(), 1500)
 
             // Listen for interval changes
             widget.onChartReady(() => {
@@ -2041,37 +2113,45 @@ export const TradingViewChart = (
               // 聚合（显示开/关）
               const aggBtn: HTMLElement = widget.createButton({ align: 'right' })
               aggBtn.classList.add('tv-custom-btn')
-              aggBtn.style.display = 'flex'
-              aggBtn.style.alignItems = 'center'
-              aggBtn.style.gap = '6px'
-              aggBtn.style.padding = '0 8px'
+              assignElementStyles(aggBtn, {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 8px',
+              })
               applyHeaderButtonStyle(aggBtn)
 
               const aggLabel = document.createElement('span')
               aggLabel.textContent = t('chart.toolbar.aggregate')
-              aggLabel.style.fontSize = '12px'
-              aggLabel.style.fontWeight = '600'
-              aggLabel.style.lineHeight = '20px'
-              aggLabel.style.letterSpacing = '0'
-              aggLabel.style.cursor = 'pointer'
+              assignElementStyles(aggLabel, {
+                fontSize: '12px',
+                fontWeight: '600',
+                lineHeight: '20px',
+                letterSpacing: '0',
+                cursor: 'pointer',
+              })
 
               const aggSwitch = document.createElement('span')
-              aggSwitch.style.position = 'relative'
-              aggSwitch.style.width = '34px'
-              aggSwitch.style.height = '18px'
-              aggSwitch.style.borderRadius = '9999px'
-              aggSwitch.style.transition = 'background 150ms ease'
-              aggSwitch.style.cursor = 'pointer'
+              assignElementStyles(aggSwitch, {
+                position: 'relative',
+                width: '34px',
+                height: '18px',
+                borderRadius: '9999px',
+                transition: 'background 150ms ease',
+                cursor: 'pointer',
+              })
 
               const aggKnob = document.createElement('span')
-              aggKnob.style.position = 'absolute'
-              aggKnob.style.top = '2px'
-              aggKnob.style.left = '0px'
-              aggKnob.style.width = '14px'
-              aggKnob.style.height = '14px'
-              aggKnob.style.borderRadius = '9999px'
-              aggKnob.style.background = '#fff'
-              aggKnob.style.transition = 'transform 150ms ease'
+              assignElementStyles(aggKnob, {
+                position: 'absolute',
+                top: '2px',
+                left: '0px',
+                width: '14px',
+                height: '14px',
+                borderRadius: '9999px',
+                background: '#fff',
+                transition: 'transform 150ms ease',
+              })
 
               aggSwitch.appendChild(aggKnob)
               aggBtn.appendChild(aggLabel)
@@ -2200,7 +2280,7 @@ export const TradingViewChart = (
           try {
             const panes = chart?.getPanes?.()
             const h = panes?.[0]?.getHeight?.()
-            if (typeof h === 'number' && Number.isFinite(h) && h > 0) setMainPaneHeight(h)
+            if (typeof h === 'number' && Number.isFinite(h) && h > 0) commitMainPaneHeight(h)
           } catch {
             // ignore
           }
@@ -2326,7 +2406,7 @@ export const TradingViewChart = (
             liqNativeRemovingRef.current = false
             liqNativeShapeIdsRef.current = []
             liqNativeMissRef.current = 0
-            setLiqNativeActive(false)
+            commitLiqNativeActive(false)
           }
         }
 
@@ -2445,9 +2525,11 @@ export const TradingViewChart = (
           if (!tr) return
 
           // 为避免性能问题，我们对价格阶梯做采样（保留整体观感 + tooltip 插值仍然精细）
-          const xs = data.labels
-            .map(parsePriceLabel)
-            .filter(n => typeof n === 'number' && Number.isFinite(n)) as number[]
+          const xs = data.labels.reduce<number[]>((acc, label) => {
+            const value = parsePriceLabel(label)
+            if (typeof value === 'number' && Number.isFinite(value)) acc.push(value)
+            return acc
+          }, [])
           if (!xs.length) return
 
           // step：用于把每一条 bar 变成一个“有厚度”的矩形
@@ -2536,12 +2618,12 @@ export const TradingViewChart = (
             void Promise.all(pending).then(() => {
               liqNativeShapeIdsRef.current = created
               liqNativeMissRef.current = 0
-              setLiqNativeActive(created.length > 0)
+              commitLiqNativeActive(created.length > 0)
             })
           } else {
             liqNativeShapeIdsRef.current = created
             liqNativeMissRef.current = 0
-            setLiqNativeActive(created.length > 0)
+            commitLiqNativeActive(created.length > 0)
           }
         }
 
@@ -2551,7 +2633,7 @@ export const TradingViewChart = (
           if (liqHiddenRef.current) return
           if (drawingsSyncPending) return
           drawingsSyncPending = true
-          drawingsSyncTimer = setTimeout(() => {
+          drawingsSyncTimer = scheduleTimeout(() => {
             drawingsSyncPending = false
             const d = liqDataRef.current
             if (d) buildAndDrawLiqMap(d)
@@ -2560,7 +2642,7 @@ export const TradingViewChart = (
 
         if (showLiqOverlay) {
           // 显示时默认不隐藏（避免上一次隐藏状态残留导致“看起来没效果”）
-          if (liqHiddenRef.current) setLiqHidden(false)
+          if (liqHiddenRef.current) commitLiqHidden(false)
 
           // 1) 创建 legend 占位 study（这样清算地图会出现在指标 legend 上，并且有 eye/X 按钮）
           // 防御：历史遗留的错误值（把 Promise stringify 成了 "[object Promise]"）会导致后续定位/删除全部失效
@@ -2604,7 +2686,7 @@ export const TradingViewChart = (
               const iframe = containerEl.querySelector('iframe') as HTMLIFrameElement | null
               const doc = iframe?.contentDocument
               if (!doc) {
-                retryTimer = setTimeout(attach, 250)
+                retryTimer = scheduleTimeout(attach, 250)
                 return
               }
               let liqLegendRowEl: HTMLElement | null = null
@@ -2623,23 +2705,13 @@ export const TradingViewChart = (
 
               // ✅ 事件驱动的 legend 行定位：从用户点击目标向上找包含“清算地图”的那一行
               const findRowFromTarget = (target: Element): HTMLElement | null => {
-                const nameCandidates = [
-                  '清算地图',
-                  t('chart.indicators.liquidationMap'),
-                  'Liquidation Map',
-                ].filter(Boolean)
+                const nameCandidates = createNameCandidateSet(t('chart.indicators.liquidationMap'))
                 let cur: HTMLElement | null = target as any
                 for (let i = 0; i < 16 && cur; i += 1) {
                   try {
                     const txt = (cur.textContent || '').trim()
-                    const hasName = nameCandidates.some(k => txt.includes(String(k)))
-                    const candidates = Array.from(
-                      cur.querySelectorAll('button,[role="button"],[tabindex]'),
-                    ) as HTMLElement[]
-                    const buttons = candidates.filter(el => {
-                      const r = el.getBoundingClientRect()
-                      return r.width > 0 && r.height > 0 && r.width <= 44 && r.height <= 44
-                    })
+                    const hasName = hasNameCandidateText(nameCandidates, txt)
+                    const buttons = collectVisibleLegendButtons(cur)
                     const h = cur.getBoundingClientRect().height
                     if (hasName && buttons.length >= 1 && h > 14 && h < 90) return cur
                   } catch {
@@ -2653,11 +2725,7 @@ export const TradingViewChart = (
               const findLiqLegendRow = () => {
                 try {
                   const sid = liqLegendStudyIdRef.current
-                  const nameCandidates = [
-                    '清算地图',
-                    t('chart.indicators.liquidationMap'),
-                    'Liquidation Map',
-                  ].filter(Boolean)
+                  const nameCandidates = createNameCandidateSet(t('chart.indicators.liquidationMap'))
 
                   // Strategy 1: textContent XPath (may be 0 on some builds)
                   let node: HTMLElement | null = null
@@ -2685,7 +2753,7 @@ export const TradingViewChart = (
                     node =
                       elems.find(el => {
                         const tAttr = `${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`
-                        return nameCandidates.some(k => tAttr.includes(k))
+                        return hasNameCandidateText(nameCandidates, tAttr)
                       }) ?? null
                   }
 
@@ -2760,17 +2828,7 @@ export const TradingViewChart = (
                 const btn =
                   (target.closest?.('button,[role="button"],[tabindex]') as HTMLElement | null) ??
                   null
-                const candidates = Array.from(
-                  row.querySelectorAll('button,[role="button"],[tabindex]'),
-                ) as HTMLElement[]
-                const buttons = candidates
-                  .filter(el => {
-                    const r = el.getBoundingClientRect()
-                    if (!r || r.width <= 0 || r.height <= 0) return false
-                    // 过滤掉整行容器等大块元素
-                    return r.width <= 40 && r.height <= 40
-                  })
-                  .filter((el, idx, arr) => arr.indexOf(el) === idx)
+                const buttons = collectVisibleLegendButtons(row)
 
                 // 优先：title/aria 能识别时
                 if (btn && (isRemoveEl(btn) || isVisibilityEl(btn)))
@@ -2818,11 +2876,11 @@ export const TradingViewChart = (
                       liqLegendStudyMissRef.current = 0
                     }
                   }
-                  setLiqHidden(false)
+                  commitLiqHidden(false)
                   removeAllLiqDrawings()
                   // 立刻本地隐藏（避免父组件状态同步延迟导致“看起来没效果”）
-                  setLiqData(null)
-                  setLiqSelected(null)
+                  commitLiqData(null)
+                  commitLiqSelected(null)
                   liqLockedRef.current = false
                   liqLockedPriceRef.current = null
                   callbacksRef.current.onRemoveIndicator?.('liquidation-map')
@@ -2831,12 +2889,12 @@ export const TradingViewChart = (
 
                 if (action === 'toggle') {
                   // 隐藏/显示：不改变“已添加”状态，只隐藏 map（drawings + overlay）
-                  setLiqHidden(prev => {
+                  commitLiqHidden(prev => {
                     const next = !prev
                     if (next) {
                       // hide
                       removeAllLiqDrawings()
-                      setLiqSelected(null)
+                      commitLiqSelected(null)
                       liqLockedRef.current = false
                       liqLockedPriceRef.current = null
                     } else {
@@ -2876,7 +2934,7 @@ export const TradingViewChart = (
           }
 
           // 2) 监听用户通过 legend 的 X 删除 study：被删除后同步关闭清算地图
-          legendStudyTimer = setInterval(() => {
+          legendStudyTimer = scheduleInterval(() => {
             try {
               const sid = liqLegendStudyIdRef.current
               if (!sid) return
@@ -2909,13 +2967,13 @@ export const TradingViewChart = (
           }, 700)
 
           // Native drawings 支持探测（部分内置精简版可能没有 createMultipointShape）
-          setLiqNativeSupported(typeof chart?.createMultipointShape === 'function')
+          commitLiqNativeSupported(typeof chart?.createMultipointShape === 'function')
 
-          paneSizeTimer = setInterval(() => computeMainPaneHeight(), 800)
+          paneSizeTimer = scheduleInterval(() => computeMainPaneHeight(), 800)
           // 如果用户在 TradingView 自己的 UI（对象树/绘图管理）里把这些矩形全删了，
           // 我们需要把“清算地图”同步为未启用（按钮状态回退）。
           if (typeof chart?.getShapeById === 'function') {
-            drawingsGcTimer = setInterval(() => {
+            drawingsGcTimer = scheduleInterval(() => {
               try {
                 if (!showLiqOverlayRef.current) return
                 if (liqNativeRemovingRef.current) return
@@ -2960,7 +3018,7 @@ export const TradingViewChart = (
             const anchor = mid > 0 ? mid : fallbackAnchor
             liqCurrentPriceRef.current = anchor
             const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
-            setLiqData(d)
+            commitLiqData(d)
             // 同步绘制 native rectangles（如果支持）
             try {
               if (typeof chart?.createMultipointShape === 'function') buildAndDrawLiqMap(d)
@@ -2996,10 +3054,10 @@ export const TradingViewChart = (
 
           removeAllLiqDrawings()
           removeLiqHoverLine()
-          setLiqHidden(false)
+          commitLiqHidden(false)
 
-          setLiqData(null)
-          setLiqSelected(null)
+          commitLiqData(null)
+          commitLiqSelected(null)
           liqLockedRef.current = false
           liqLockedPriceRef.current = null
         }
@@ -3013,7 +3071,7 @@ export const TradingViewChart = (
             if (liqLockedRef.current && liqLockedPriceRef.current != null) {
               const y = adapter.getPriceToY(liqLockedPriceRef.current)
               if (typeof y === 'number' && Number.isFinite(y))
-                setLiqSelected(prev => (prev ? { ...prev, y } : prev))
+                commitLiqSelected(prev => (prev ? { ...prev, y } : prev))
             }
           }),
         )
@@ -3047,7 +3105,7 @@ export const TradingViewChart = (
               }
               base = base || symUpper.slice(0, 3) || 'BTC'
               const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
-              setLiqData(d)
+              commitLiqData(d)
               try {
                 if (typeof chart?.createMultipointShape === 'function') buildAndDrawLiqMap(d)
               } catch {
@@ -3073,12 +3131,12 @@ export const TradingViewChart = (
               if (lockedPrice == null) return
               const y = adapter.getPriceToY(lockedPrice)
               if (typeof y === 'number' && Number.isFinite(y))
-                setLiqSelected(prev => (prev ? { ...prev, y } : prev))
+                commitLiqSelected(prev => (prev ? { ...prev, y } : prev))
               return
             }
 
             if (pt.x < x1 || pt.x > x2 || pt.y < 0 || pt.y > y2) {
-              setLiqSelected(null)
+              commitLiqSelected(null)
               return
             }
 
@@ -3097,7 +3155,7 @@ export const TradingViewChart = (
             const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
             const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
 
-            setLiqSelected({
+            commitLiqSelected({
               locked: false,
               x: pt.x,
               y: pt.y,
@@ -3143,7 +3201,7 @@ export const TradingViewChart = (
 
                 // 不在清算地图区域：清掉 hover tooltip
                 if (x < x1 || x > x2 || y < 0 || y > y2) {
-                  if (!liqLockedRef.current) setLiqSelected(null)
+                  if (!liqLockedRef.current) commitLiqSelected(null)
                   removeLiqHoverLine()
                   return
                 }
@@ -3163,7 +3221,7 @@ export const TradingViewChart = (
                 const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
                 const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
 
-                setLiqSelected({
+                commitLiqSelected({
                   locked: false,
                   x,
                   y,
@@ -3216,7 +3274,7 @@ export const TradingViewChart = (
               if (liqLockedRef.current) {
                 liqLockedRef.current = false
                 liqLockedPriceRef.current = null
-                setLiqSelected(null)
+                commitLiqSelected(null)
                 refreshOverlay()
               }
               return
@@ -3226,7 +3284,7 @@ export const TradingViewChart = (
             if (liqLockedRef.current) {
               liqLockedRef.current = false
               liqLockedPriceRef.current = null
-              setLiqSelected(null)
+              commitLiqSelected(null)
               refreshOverlay()
               return
             }
@@ -3247,7 +3305,7 @@ export const TradingViewChart = (
 
             liqLockedRef.current = true
             liqLockedPriceRef.current = price
-            setLiqSelected({
+            commitLiqSelected({
               locked: true,
               x: pt.x,
               y: pt.y,
