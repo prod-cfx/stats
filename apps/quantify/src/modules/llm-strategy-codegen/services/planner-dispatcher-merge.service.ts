@@ -166,6 +166,8 @@ export class PlannerDispatcherMergeService {
     if (!patch.rules?.length) return null
     this.hydrateExplicitPercentRisksFromText(patch, userMessage)
     this.pruneInvalidDeterministicNoiseRules(patch, { rules: patch.rules }, userMessage)
+    this.appendExplicitPercentExitRulesFromText(patch, userMessage)
+    patch.rules = this.dropOpenRulesCoveredByReversePosition(patch.rules)
     return patch
   }
 
@@ -342,22 +344,101 @@ export class PlannerDispatcherMergeService {
     dispatcherRules: readonly SemanticRule[] | undefined,
   ): SemanticRule[] | undefined {
     const planner = [...(plannerRules ?? [])]
-    const dispatcher = [...(dispatcherRules ?? [])]
+    const dispatcher = this.expandDispatcherPercentExitRules(dispatcherRules ?? [])
     if (!planner.length && !dispatcher.length) return undefined
     // No planner spine → dispatcher rules become the fallback spine.
-    if (!planner.length) return this.dedupeRulesBySignature(dispatcher)
+    if (!planner.length) return this.dropOpenRulesCoveredByReversePosition(this.dedupeRulesBySignature(dispatcher))
 
-    // Contract (codegen-conversation.service.ts: "rules tree 是唯一策略语义真源；
-    // deterministic dispatcher 只校准执行槽位，禁止 union 补 rule"):
-    // planner rules are the only semantic spine. Dispatcher rules may ONLY enrich a
-    // semantically-matching planner rule (fill missing leaf params); they are never
-    // appended. A dispatcher rule that matches no planner rule is dropped.
+    // Planner rules remain the semantic spine. Dispatcher may enrich matching rules,
+    // and may append only explicit percent exits/risks whose evidence is user text.
+    // This keeps the historical no-union guard for entry actions while recovering
+    // planner omissions such as staging s06: three explicit sell/stop/take-profit exits.
     const spine = this.dedupeRulesBySignature(planner)
     for (const incoming of dispatcher) {
       const targetIndex = spine.findIndex(rule => this.rulesRepresentSameExecution(rule, incoming))
       if (targetIndex >= 0) spine[targetIndex] = this.mergeEquivalentRule(spine[targetIndex], incoming)
+      else if (this.isAppendableExplicitPercentExitOrRisk(incoming, spine)) spine.push(incoming)
     }
     return spine
+  }
+
+  private expandDispatcherPercentExitRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const out: SemanticRule[] = []
+    for (const rule of rules) {
+      const expanded = this.expandDispatcherPercentExitRule(rule)
+      out.push(...(expanded ?? [rule]))
+    }
+    return out
+  }
+
+  private expandDispatcherPercentExitRule(rule: SemanticRule): SemanticRule[] | null {
+    if (rule.phase !== 'exit') return null
+    if (this.closeActionSet(rule).size === 0) return null
+    if (rule.condition.kind !== 'and' && rule.condition.kind !== 'or') return null
+    const children = rule.condition.children ?? []
+    if (children.length < 2) return null
+    const percentChildren = children.filter((child): child is AtomExprAtom =>
+      child.kind === 'atom' && child.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+    )
+    if (percentChildren.length !== children.length) return null
+
+    return percentChildren.map((condition, index) => ({
+      ...rule,
+      id: `${rule.id}-percent-exit-${index + 1}`,
+      condition: this.normalizeDispatcherPercentExitCondition(condition),
+      effects: this.keepCloseActionAndExecutionScopeEffects(rule.effects),
+    }))
+  }
+
+  private normalizeDispatcherPercentExitCondition(condition: AtomExprAtom): AtomExprAtom {
+    const params = { ...(condition.params ?? {}) }
+    const evidenceText = this.readEvidenceText(condition) ?? ''
+    if (!params.basis && /前收盘|上一根K线收盘|上一根 K 线收盘|prev(?:ious)?\s*close/iu.test(evidenceText)) {
+      params.basis = 'prev_close'
+    }
+    if (params.direction === 'down' && typeof params.valuePct === 'number' && params.valuePct < 0) {
+      params.valuePct = Math.abs(params.valuePct)
+    }
+    return { ...condition, params }
+  }
+
+  private keepCloseActionAndExecutionScopeEffects(effects: RuleEffects): RuleEffectsByRole {
+    const byRole = this.toRuleEffectsByRole(effects)
+    return {
+      actions: byRole.actions.filter(effect => collectAtomLeaves(effect).some(leaf => this.isLifecycleActionAtom(leaf.key))),
+      risks: [],
+      positions: [],
+      orchestration: byRole.orchestration,
+      programs: byRole.programs,
+    }
+  }
+
+  private isAppendableExplicitPercentExitOrRisk(rule: SemanticRule, existingRules: readonly SemanticRule[]): boolean {
+    if (rule.phase !== 'exit') return false
+    if (!this.ruleHasUserEvidence(rule)) return false
+    if (!this.ruleHasExplicitPercentExitOrRiskSemantics(rule)) return false
+    const signature = this.ruleSemanticSignature(rule)
+    return !existingRules.some(existing => this.ruleSemanticSignature(existing) === signature)
+  }
+
+  private ruleHasExplicitPercentExitOrRiskSemantics(rule: SemanticRule): boolean {
+    const percentKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+      ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
+      ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key,
+    ])
+    return [rule.condition, ...listRuleEffects(rule.effects)]
+      .some(expr => collectAtomLeaves(expr).some(leaf => percentKeys.has(leaf.key)))
+  }
+
+  private ruleHasUserEvidence(rule: SemanticRule): boolean {
+    const evidence = (rule as { evidence?: { text?: unknown } }).evidence
+    if (typeof evidence?.text === 'string' && evidence.text.trim().length > 0) return true
+    const exprs = [rule.condition, ...listRuleEffects(rule.effects)]
+    return exprs.some(expr => collectAtomLeaves(expr).some((leaf) => {
+      const leafEvidence = (leaf as { evidence?: { text?: unknown } }).evidence
+      return typeof leafEvidence?.text === 'string' && leafEvidence.text.trim().length > 0
+    }))
   }
 
   private dedupeRulesBySignature(rules: readonly SemanticRule[]): SemanticRule[] {
@@ -379,6 +460,72 @@ export class PlannerDispatcherMergeService {
     }
     const deduped = order.map(id => byId.get(id) as SemanticRule)
     return this.foldProgramOrchestrationSubsetRules(deduped)
+  }
+
+  private dropOpenRulesCoveredByReversePosition(rules: readonly SemanticRule[]): SemanticRule[] {
+    const next = [...rules]
+    const dropIndexes = new Set<number>()
+
+    for (let reverseIndex = 0; reverseIndex < next.length; reverseIndex += 1) {
+      const reverseRule = next[reverseIndex]
+      if (!reverseRule || reverseRule.phase !== 'entry') continue
+      const coveredOpenKeys = this.resolveOpenKeysCoveredByReversePosition(listRuleEffects(reverseRule.effects))
+      if (coveredOpenKeys.size === 0) continue
+
+      for (let openIndex = 0; openIndex < next.length; openIndex += 1) {
+        if (openIndex === reverseIndex || dropIndexes.has(openIndex)) continue
+        const openRule = next[openIndex]
+        if (!openRule || (openRule.phase !== 'entry' && openRule.phase !== 'exit')) continue
+        if (!this.sideScopesCompatible(reverseRule.sideScope, openRule.sideScope)) continue
+        if (this.atomExprSignature(reverseRule.condition) !== this.atomExprSignature(openRule.condition)) continue
+        if (
+          !this.ruleHasOnlyCoveredOpenLifecycleAction(openRule, coveredOpenKeys)
+          && !this.ruleHasNoLifecycleActionAndOnlyScopeEffects(openRule)
+        ) continue
+
+        next[reverseIndex] = {
+          ...reverseRule,
+          condition: this.mergeMissingAtomParams(reverseRule.condition, openRule.condition),
+          effects: this.mergeCoveredOpenRuleNonLifecycleEffects(reverseRule.effects, openRule.effects),
+        }
+        dropIndexes.add(openIndex)
+      }
+    }
+
+    return next.filter((_, index) => !dropIndexes.has(index))
+  }
+
+  private ruleHasOnlyCoveredOpenLifecycleAction(rule: SemanticRule, coveredOpenKeys: ReadonlySet<string>): boolean {
+    const lifecycleKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.reverse_position'].key,
+    ])
+    const lifecycleLeaves = listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .filter(leaf => lifecycleKeys.has(leaf.key))
+    return lifecycleLeaves.length > 0 && lifecycleLeaves.every(leaf => coveredOpenKeys.has(leaf.key))
+  }
+
+  private ruleHasNoLifecycleActionAndOnlyScopeEffects(rule: SemanticRule): boolean {
+    const byRole = this.toRuleEffectsByRole(rule.effects)
+    if (byRole.actions.some(effect => collectAtomLeaves(effect).some(leaf => this.readAtomBucket(leaf.key) === 'action'))) return false
+    if (byRole.risks.length > 0 || byRole.positions.length > 0 || byRole.programs.length > 0) return false
+    return byRole.orchestration.every(effect => collectAtomLeaves(effect).every(leaf => leaf.key.startsWith('scope.')))
+  }
+
+  private mergeCoveredOpenRuleNonLifecycleEffects(reverseEffects: RuleEffects, openEffects: RuleEffects): RuleEffects {
+    const reverseByRole = this.toRuleEffectsByRole(reverseEffects)
+    const openByRole = this.toRuleEffectsByRole(openEffects)
+    return {
+      actions: reverseByRole.actions,
+      risks: this.mergeAppendMissingEffectListParams(reverseByRole.risks, openByRole.risks),
+      positions: this.mergeAppendMissingEffectListParams(reverseByRole.positions, openByRole.positions),
+      orchestration: this.mergeAppendMissingEffectListParams(reverseByRole.orchestration, openByRole.orchestration),
+      programs: this.mergeAppendMissingEffectListParams(reverseByRole.programs, openByRole.programs),
+    }
   }
 
   /**
@@ -1750,7 +1897,9 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`foldSubsetConditionRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
     if (Array.isArray(merged.rules) && merged.rules.length > 0) {
-      merged.rules = this.dedupeRulesBySignature(merged.rules as readonly SemanticRule[])
+      merged.rules = this.dropOpenRulesCoveredByReversePosition(
+        this.dedupeRulesBySignature(merged.rules as readonly SemanticRule[]),
+      )
     }
     return merged
   }
@@ -1763,7 +1912,10 @@ export class PlannerDispatcherMergeService {
     if (!this.isNonEmpty(plannerPatch)) {
       return this.buildRulesTreeFallbackFromDispatcher(dispatcherPatch, userMessage) ?? plannerPatch ?? null
     }
-    const dispatcher = dispatcherPatch as InternalPlannerPatch | null | undefined
+    const rawDispatcher = dispatcherPatch as InternalPlannerPatch | null | undefined
+    const dispatcher = rawDispatcher?.rules?.length
+      ? { ...rawDispatcher, rules: this.expandDispatcherPercentExitRules(rawDispatcher.rules) }
+      : rawDispatcher
     const merged = this.mergeRulesNativePatches(plannerPatch, dispatcher) ?? this.cloneRulesNativePatch(plannerPatch as InternalPlannerPatch)
     if (dispatcher) {
       this.appendDispatcherRulesForMissingLifecyclePhases(merged, dispatcher)
@@ -1815,7 +1967,9 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`foldSubsetConditionRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
     }
     if (Array.isArray(merged.rules) && merged.rules.length > 0) {
-      merged.rules = this.dedupeRulesBySignature(merged.rules as readonly SemanticRule[])
+      merged.rules = this.dropOpenRulesCoveredByReversePosition(
+        this.dedupeRulesBySignature(merged.rules as readonly SemanticRule[]),
+      )
     }
     return merged
   }
@@ -1957,7 +2111,10 @@ export class PlannerDispatcherMergeService {
 
     for (const rule of rules) {
       const normalizedConditionInitial = this.repairMissingRsiReclaimSequence(
-        this.normalizeRuleConditionNoise(rule.condition, userMessage),
+        this.repairMovingAveragePairGateCondition(
+          this.normalizeRuleConditionNoise(rule.condition, userMessage),
+          userMessage,
+        ),
         userMessage,
         rule,
       )
@@ -2048,6 +2205,75 @@ export class PlannerDispatcherMergeService {
       userMessage,
     )
     this.clearLifecycleOnlyTopLevelPositionSizing(merged)
+  }
+
+  private repairMovingAveragePairGateCondition(condition: AtomExpr, userMessage: string): AtomExpr {
+    const pair = this.extractMovingAveragePair(userMessage)
+    if (!pair) return condition
+    if (this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.leftPeriod)) return condition
+
+    const repair = (expr: AtomExpr): AtomExpr => {
+      if (expr.kind === 'and') {
+        const timeframe = this.findMovingAveragePairGateTimeframe(expr, userMessage)
+        let removedMovingAveragePriceGates = false
+        const children = expr.children
+          .map(child => repair(child))
+          .filter((child): child is AtomExpr => {
+            if (!this.isNoisyMovingAveragePairPriceGate(child, pair)) return true
+            removedMovingAveragePriceGates = true
+            return false
+          })
+
+        if (!removedMovingAveragePriceGates) return { ...expr, children }
+
+        const pairGate: AtomExprAtom = {
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+          params: {
+            indicator: pair.indicator,
+            period: pair.leftPeriod,
+            'reference.period': pair.rightPeriod,
+            referenceRole: pair.rightPeriod >= pair.leftPeriod ? 'long_term' : 'short_term',
+            ...(timeframe ? { timeframe } : {}),
+          },
+          evidence: { text: this.extractMovingAveragePairEvidence(userMessage) ?? userMessage },
+        }
+        return { ...expr, children: [pairGate, ...children] }
+      }
+      if (expr.kind === 'or') return { ...expr, children: expr.children.map(child => repair(child)) }
+      if (expr.kind === 'not') return { ...expr, child: repair(expr.child) }
+      if (expr.kind === 'sequence') return { ...expr, steps: expr.steps.map(step => repair(step)) }
+      return expr
+    }
+
+    return repair(condition)
+  }
+
+  private userMessageHasExplicitPriceAboveMovingAverage(userMessage: string, period: number): boolean {
+    const escapedPeriod = String(period).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(?:价格|收盘价)\\s*(?:在|位于)?\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod}\\s*(?:上方|之上|高于)`, 'iu').test(userMessage)
+  }
+
+  private isNoisyMovingAveragePairPriceGate(expr: AtomExpr, pair: { indicator: string, leftPeriod: number, rightPeriod: number }): boolean {
+    if (expr.kind !== 'atom') return false
+    if (expr.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key) return false
+    const indicator = this.readStringParam(expr.params, 'indicator')
+    if (indicator && !this.indicatorAliasesMatch(indicator, pair.indicator)) return false
+    const period = this.readIndicatorPeriodParam(expr.params)
+      ?? this.readNumericParam(expr.params, 'period')
+      ?? this.readNumericParam(expr.params, 'reference.period')
+    return period !== null && (Math.abs(period - pair.leftPeriod) <= 1e-9 || Math.abs(period - pair.rightPeriod) <= 1e-9)
+  }
+
+  private findMovingAveragePairGateTimeframe(condition: AtomExpr, userMessage: string): string | null {
+    const timeframe = collectAtomLeaves(condition)
+      .map(leaf => this.readStringParam(leaf.params, 'timeframe'))
+      .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    return timeframe ?? this.extractTimeframeTokens(userMessage)[0] ?? null
+  }
+
+  private extractMovingAveragePairEvidence(userMessage: string): string | null {
+    return /(EMA|MA|SMA)\s*\d{1,4}\s*(?:在|高于|大于|>)\s*(EMA|MA|SMA)\s*\d{1,4}\s*(?:上方|之上)?/iu.exec(userMessage)?.[0] ?? null
   }
 
   private repairRelativeEntryPercentExitSideDrift(
@@ -2623,8 +2849,9 @@ export class PlannerDispatcherMergeService {
 
   private extractExplicitPercentRiskEffects(userMessage: string): AtomExprAtom[] {
     const out: AtomExprAtom[] = []
-    const stopLoss = /(?:(?:亏损|亏|loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止损|平仓|退出|stop\s*loss)|(?:止损|stop\s*loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%)/iu.exec(userMessage)
+    const stopLoss = /(?:(?:亏损|亏|下跌|跌|loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止损|平仓|退出|卖出|stop\s*loss)|(?:止损|stop\s*loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%)/iu.exec(userMessage)
     const takeProfit = /(?:止盈|take\s*profit)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
+      ?? /(?:上涨|涨|盈利|获利|收益|profit)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止盈|take\s*profit)/iu.exec(userMessage)
       // 兼容「盈利/获利/收益 达到 X% 时卖出平仓」这类出场式止盈表述（区间低买高卖模板）。
       // 要求百分比后近距离出现平仓动词，排除「盈利 X% 后加仓」的 pyramiding 语义。
       ?? this.matchProfitExitTakeProfit(userMessage)
@@ -2652,6 +2879,96 @@ export class PlannerDispatcherMergeService {
       }
     }
     return out
+  }
+
+  private appendExplicitPercentExitRulesFromText(
+    merged: InternalPlannerPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+    const additions = this.extractExplicitPercentExitRulesFromText(userMessage, merged.contextSlots?.timeframe)
+    if (additions.length === 0) return
+    const existingSignatures = new Set(rules.map(rule => this.ruleSemanticSignature(rule)))
+    const missing = additions.filter(rule => !existingSignatures.has(this.ruleSemanticSignature(rule)))
+    if (missing.length === 0) return
+    merged.rules = this.dedupeRulesBySignature([...rules, ...missing])
+  }
+
+  private extractExplicitPercentExitRulesFromText(
+    userMessage: string,
+    timeframe: unknown,
+  ): SemanticRule[] {
+    const window = typeof timeframe === 'string' && timeframe.trim().length > 0 ? timeframe.trim() : undefined
+    const rules: SemanticRule[] = []
+    const prevCloseExit = /价格?[^，。；;:：\n]{0,12}(?:相对|较|比)[^，。；;:：\n]{0,8}(?:前收盘|前收|上一根(?:K线| K 线)?收盘|prev(?:ious)?\s*close)[^\d，。；;:：\n]{0,12}(?:上涨|涨|上升|增加|超过|高于)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,16}(?:卖出|平仓|清仓|出场|离场)/iu.exec(userMessage)
+    if (prevCloseExit?.[1]) {
+      const valuePct = Number(prevCloseExit[1])
+      if (Number.isFinite(valuePct) && valuePct > 0) {
+        rules.push(this.makeExplicitPercentExitRule({
+          id: 'deterministic-explicit-prev-close-exit',
+          conditionKey: ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+          conditionParams: {
+            basis: 'prev_close',
+            direction: 'up',
+            valuePct,
+            ...(window ? { window } : {}),
+          },
+          evidenceText: prevCloseExit[0].trim(),
+          effects: [],
+        }))
+      }
+    }
+
+    for (const risk of this.extractExplicitPercentRiskEffects(userMessage)) {
+      const valuePct = this.readNumericParam(risk.params, 'valuePct')
+      if (valuePct === null || valuePct <= 0) continue
+      const isStopLoss = risk.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key
+      const isTakeProfit = risk.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+      if (!isStopLoss && !isTakeProfit) continue
+      rules.push(this.makeExplicitPercentExitRule({
+        id: isStopLoss ? 'deterministic-explicit-stop-loss-exit' : 'deterministic-explicit-take-profit-exit',
+        conditionKey: ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+        conditionParams: {
+          basis: 'entry_avg_price',
+          valuePct,
+          direction: isStopLoss ? 'down' : 'up',
+        },
+        evidenceText: risk.evidence?.text ?? (isStopLoss ? '止损' : '止盈'),
+        effects: [risk],
+      }))
+    }
+
+    return rules
+  }
+
+  private makeExplicitPercentExitRule(input: {
+    id: string
+    conditionKey: string
+    conditionParams: Record<string, unknown>
+    evidenceText: string
+    effects: AtomExprAtom[]
+  }): SemanticRule {
+    return {
+      id: input.id,
+      phase: 'exit',
+      sideScope: 'long',
+      evidence: { text: input.evidenceText },
+      condition: {
+        kind: 'atom',
+        key: input.conditionKey,
+        params: input.conditionParams,
+        sideScope: 'long',
+        evidence: { text: input.evidenceText },
+      },
+      effects: {
+        actions: [{ kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.close_long'].key, params: {}, sideScope: 'long' }],
+        risks: input.effects,
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    }
   }
 
   // 「盈利/获利/收益 [达到|超过] X% [时] 卖出/平仓/清仓/出场」→ 出场式止盈百分比。
@@ -3438,7 +3755,10 @@ export class PlannerDispatcherMergeService {
     const plannerLeaves = collectAtomLeaves(plannerRule.condition)
     const dispatcherLeaves = collectAtomLeaves(dispatcherRule.condition)
     if (plannerLeaves.length === 0 || dispatcherLeaves.length === 0) return false
-    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf) || plannerLeaf.key === dispatcherLeaf.key))
+    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf =>
+      this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf)
+      || this.conditionLeavesMayMergeByKey(plannerLeaf, dispatcherLeaf),
+    ))
   }
 
   private lifecycleActionsCompatible(plannerRule: SemanticRule, dispatcherRule: SemanticRule): boolean {
@@ -3458,7 +3778,15 @@ export class PlannerDispatcherMergeService {
     for (const key of dispatcherActions) if (plannerActions.has(key)) return false
     const plannerLeaves = collectAtomLeaves(plannerRule.condition)
     const dispatcherLeaves = collectAtomLeaves(dispatcherRule.condition)
-    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf => this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf) || plannerLeaf.key === dispatcherLeaf.key))
+    return plannerLeaves.some(plannerLeaf => dispatcherLeaves.some(dispatcherLeaf =>
+      this.conditionLeafRepresents(plannerLeaf, dispatcherLeaf)
+      || this.conditionLeavesMayMergeByKey(plannerLeaf, dispatcherLeaf),
+    ))
+  }
+
+  private conditionLeavesMayMergeByKey(left: AtomExprAtom, right: AtomExprAtom): boolean {
+    if (left.key !== right.key) return false
+    return left.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key
   }
 
   private collectLifecycleActionEffects(rule: SemanticRule): AtomExprAtom[] {
@@ -3526,7 +3854,7 @@ export class PlannerDispatcherMergeService {
     const existingLeaves = collectAtomLeaves(enriched)
     const missing = conditionAdditions.filter(addition =>
       !existingLeaves.some(existingLeaf => this.conditionLeafRepresents(existingLeaf, addition))
-      && !existingLeaves.some(existingLeaf => existingLeaf.key === addition.key)
+      && !existingLeaves.some(existingLeaf => this.sameConditionKeyBlocksAppend(existingLeaf, addition))
       && !existingLeaves.some(existingLeaf => this.sameMovingAverageCrossConditionKey(existingLeaf, addition)),
     )
     if (missing.length === 0) return enriched
@@ -3536,11 +3864,11 @@ export class PlannerDispatcherMergeService {
 
   private mergeExplicitConditionLeafParams(existing: AtomExpr, additions: readonly AtomExprAtom[]): AtomExpr {
     if (existing.kind === 'atom') {
-      const candidate = additions.find(addition => addition.key === existing.key)
+      const candidate = additions.find(addition => this.conditionLeafCanFillParams(existing, addition))
       if (!candidate) return existing
       return {
         ...existing,
-        params: { ...(existing.params ?? {}), ...(candidate.params ?? {}) },
+        params: this.mergeExplicitConditionParams(existing.params, candidate.params),
       }
     }
     if (existing.kind === 'and' || existing.kind === 'or') {
@@ -3556,6 +3884,34 @@ export class PlannerDispatcherMergeService {
       return { ...existing, steps: existing.steps.map(step => this.mergeExplicitConditionLeafParams(step, additions)) }
     }
     return existing
+  }
+
+  private sameConditionKeyBlocksAppend(existing: AtomExprAtom, addition: AtomExprAtom): boolean {
+    if (existing.key !== addition.key) return false
+    return existing.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+  }
+
+  private conditionLeafCanFillParams(existing: AtomExprAtom, addition: AtomExprAtom): boolean {
+    if (existing.key !== addition.key) return false
+    if (existing.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key) return true
+    return this.conditionLeafRepresents(existing, addition)
+  }
+
+  private mergeExplicitConditionParams(
+    existing: Record<string, unknown> | undefined,
+    candidate: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    const merged = { ...(existing ?? {}), ...(candidate ?? {}) }
+    if (
+      existing
+      && candidate
+      && typeof existing.operator === 'string'
+      && typeof candidate.operator === 'string'
+      && existing.operator.toLowerCase() !== candidate.operator.toLowerCase()
+    ) {
+      merged.operator = existing.operator
+    }
+    return Object.keys(merged).length > 0 ? merged : existing
   }
 
   private appendDedupedTypedRuleEffects(existing: RuleEffects, additions: readonly AtomExpr[]): RuleEffectsByRole {

@@ -2082,6 +2082,27 @@ describe('PlannerDispatcherMergeService — preserves explicit dispatcher semant
     }],
   }) as unknown as CodegenSemanticPatch
 
+  it('deduplicates dispatcher-only open-short when reverse-position has the same condition', () => {
+    const text = 'OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(null, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(entryRules)
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const fallbackEntryRules = fallback?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const fallbackSerialized = JSON.stringify(fallbackEntryRules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).toContain('action.reverse_position')
+    expect(serialized).not.toContain('action.open_short')
+    expect(serialized).toContain('position.sizing')
+    expect(fallbackEntryRules).toHaveLength(1)
+    expect(fallbackSerialized).toContain('action.reverse_position')
+    expect(fallbackSerialized).not.toContain('action.open_short')
+    expect(fallbackSerialized).toContain('position.sizing')
+  })
+
   it('overrides noisy planner params with explicit dispatcher params for plaza predicates', () => {
     const cases = [{
       text: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。',

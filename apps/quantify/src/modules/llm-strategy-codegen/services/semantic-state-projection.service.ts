@@ -1485,7 +1485,7 @@ export class SemanticStateProjectionService {
       return []
     }
 
-    const text = this.formatDisplayActionText(actionKey, position)
+    const text = this.formatDisplayActionText(actionKey, position, trigger)
     return text
       ? [{
           kind: 'action',
@@ -1520,8 +1520,15 @@ export class SemanticStateProjectionService {
   private formatDisplayActionText(
     actionKey: string,
     position: SemanticState['position'],
+    trigger?: SemanticTriggerState,
   ): string {
     const sizingText = this.buildDisplayPositionSizingValue(position)
+
+    if (trigger?.key === 'execution.on_start') {
+      if (actionKey === 'open_long') return sizingText ? `立即开始时市价买入 ${sizingText}` : '立即开始时市价买入'
+      if (actionKey === 'open_short') return sizingText ? `立即开始时市价开空 ${sizingText}` : '立即开始时市价开空'
+      if (actionKey === 'open_both') return sizingText ? `立即开始时市价开仓 ${sizingText}` : '立即开始时市价开仓'
+    }
 
     if (actionKey === 'open_long') return sizingText ? `开多 ${sizingText}` : '开多'
     if (actionKey === 'open_short') return sizingText ? `开空 ${sizingText}` : '开空'
@@ -3265,6 +3272,13 @@ export class SemanticStateProjectionService {
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
+  private readNumber(value: unknown): number | null {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (typeof value !== 'string' || value.trim().length === 0) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
   private readUnknownShape(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? value as Record<string, unknown>
@@ -3791,6 +3805,10 @@ export class SemanticStateProjectionService {
   private renderAtomExpr(expr: AtomExpr): string {
     switch (expr.kind) {
       case 'atom': {
+        if (expr.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
+          return this.renderReversePositionAction(expr.params, this.readAtomEvidenceText(expr))
+        }
+
         const semanticSummary = this.tryRenderRulesTreeAtomSummary(expr.key, expr.params)
         if (semanticSummary && semanticSummary.length > 0) return semanticSummary
 
@@ -4182,7 +4200,7 @@ export class SemanticStateProjectionService {
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
     const rawEffectParts = listRuleEffects(rule.effects)
-      .map(effect => this.renderAtomExpr(effect))
+      .map(effect => this.renderRuleEffectExpr(rule, effect))
       .filter(s => s.length > 0)
 
     // Issue #1443 通用 UI 简化：condition 是 always-on runtime gate atom（如
@@ -4197,15 +4215,23 @@ export class SemanticStateProjectionService {
       && ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
     const hasOrchestrationEffect = listRuleEffects(rule.effects)
       .some(effect => collectAtomLeaves(effect).some(leaf => ATOM_CONTRACT_REGISTRY[leaf.key]?.bucket === 'orchestration'))
+    const effectPartsForDisplay = isAlwaysOnCondition && rule.phase === 'entry'
+      ? rawEffectParts.map((part) => {
+          if (part === '开多') return '立即开始时市价买入'
+          if (part === '开空') return '立即开始时市价开空'
+          if (part === '开仓') return '立即开始时市价开仓'
+          return part
+        })
+      : rawEffectParts
 
     let bodyText: string
     if (isAlwaysOnCondition || (rule.phase === 'gate' && hasOrchestrationEffect)) {
       // 跳过技术性 gate condition；只输出 effects（如 "账户最大回撤超过 15% 时阻止开新仓"）。
-      const effectParts = this.dedupeKeepOrder(rawEffectParts)
+      const effectParts = this.dedupeKeepOrder(effectPartsForDisplay)
       bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
     }
     else {
-      const effectParts = this.dedupeKeepOrder(rawEffectParts)
+      const effectParts = this.dedupeKeepOrder(effectPartsForDisplay)
       const condition = this.renderUserFacingRuleCondition(rule.condition)
       if (!condition || condition.length === 0) {
         bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
@@ -4238,6 +4264,43 @@ export class SemanticStateProjectionService {
     //   通用机制：所有 rule 一律不带 sideScope 括号；若未来需保留（如纯 condition 无
     //   方向暗示的场景），按 condition+effects 内是否含方向词智能判定再加。
     return `${phaseLabel}：${bodyText}`
+  }
+
+  private renderRuleEffectExpr(rule: SemanticRule, expr: AtomExpr): string {
+    if (expr.kind === 'atom' && expr.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
+      return this.renderReversePositionAction(expr.params, this.readAtomEvidenceText(expr), rule.sideScope)
+    }
+    return this.renderAtomExpr(expr)
+  }
+
+  private renderReversePositionAction(
+    params: Record<string, unknown> | undefined,
+    evidenceText?: string | null,
+    sideScope?: SemanticRuleSideScope,
+  ): string {
+    const text = evidenceText ?? ''
+    const fromSide = this.readString(params?.fromSide)
+    const toSide = this.readString(params?.toSide)
+      ?? (sideScope === 'long' || sideScope === 'short' ? sideScope : null)
+      ?? (/做空|开空|short/iu.test(text) ? 'short' : /做多|开多|long/iu.test(text) ? 'long' : null)
+    const inferredFromSide = fromSide
+      ?? (/从多头|由多|多头反手|多翻空|平多/iu.test(text) ? 'long' : null)
+      ?? (/从空头|由空|空头反手|空翻多|平空/iu.test(text) ? 'short' : null)
+      ?? (toSide === 'short' ? 'long' : toSide === 'long' ? 'short' : null)
+
+    if (inferredFromSide === 'long' && toSide === 'short') return '从多头反手做空'
+    if (inferredFromSide === 'short' && toSide === 'long') return '从空头反手做多'
+    if (toSide === 'short') return '反手做空'
+    if (toSide === 'long') return '反手做多'
+    return '反手'
+  }
+
+  private readAtomEvidenceText(expr: AtomExpr): string | null {
+    if (expr.kind !== 'atom') return null
+    const evidence = (expr as { evidence?: { text?: unknown } }).evidence
+    return typeof evidence?.text === 'string' && evidence.text.trim().length > 0
+      ? evidence.text.trim()
+      : null
   }
 
   // Task B：从 rule 的 atom key 家族 + evidence 文本探测风险语义提示。
@@ -4279,8 +4342,8 @@ export class SemanticStateProjectionService {
         const direction = typeof params.direction === 'string' ? params.direction : ''
         const rawValue = params.valuePct ?? params.value
         const numericValue = typeof rawValue === 'number' ? rawValue : Number(rawValue)
-        const isUp = direction === 'up' || (Number.isFinite(numericValue) && numericValue > 0)
-        const isDown = direction === 'down' || (Number.isFinite(numericValue) && numericValue < 0)
+        const isUp = direction === 'up' || (!direction && Number.isFinite(numericValue) && numericValue > 0)
+        const isDown = direction === 'down' || (!direction && Number.isFinite(numericValue) && numericValue < 0)
         if (isUp) hints.add('take_profit')
         if (isDown) hints.add('stop_loss')
       }
@@ -4325,7 +4388,7 @@ export class SemanticStateProjectionService {
     for (const hint of hints) {
       const aliases = aliasByHint[hint] ?? []
       const hasAlias = aliases.some(alias => bodyText.includes(alias)) || bodyText.includes(hint)
-      if (!hasAlias) suffixes.push(`（${hint}）`)
+      if (!hasAlias) suffixes.push(`（${aliases[0] ?? hint}）`)
     }
     return suffixes.length > 0 ? `${bodyText}${suffixes.join('')}` : bodyText
   }
@@ -4344,9 +4407,10 @@ export class SemanticStateProjectionService {
   }
 
   private buildRulesSummary(rules: readonly SemanticRule[]): string {
-    const sharedScopeTexts = this.collectSharedScopeTexts(rules)
+    const displayRules = this.dropRedundantEntryAverageRiskExitRules(rules)
+    const sharedScopeTexts = this.collectSharedScopeTexts(displayRules)
     const lines: string[] = []
-    for (const rule of rules) {
+    for (const rule of displayRules) {
       const line = this.renderRule(this.removeSharedScopeEffectsFromRule(rule, sharedScopeTexts))
       if (line.length > 0) lines.push(line)
     }
@@ -4354,6 +4418,48 @@ export class SemanticStateProjectionService {
       lines.push(`前置：${sharedScopeTexts.join('，')}`)
     }
     return lines.join('；')
+  }
+
+  private dropRedundantEntryAverageRiskExitRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const entryRiskSignatures = new Set<string>()
+    for (const rule of rules) {
+      if (rule.phase !== 'entry') continue
+      for (const effect of listRuleEffects(rule.effects)) {
+        for (const leaf of collectAtomLeaves(effect)) {
+          const signature = this.entryAverageRiskSignature(leaf)
+          if (signature) entryRiskSignatures.add(signature)
+        }
+      }
+    }
+    if (entryRiskSignatures.size === 0) return [...rules]
+
+    return rules.filter((rule) => {
+      if (rule.phase !== 'exit') return true
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      return !conditionLeaves.some(leaf => this.entryAverageExitSignature(leaf) !== null && entryRiskSignatures.has(this.entryAverageExitSignature(leaf) as string))
+    })
+  }
+
+  private entryAverageRiskSignature(leaf: { key: string, params?: Record<string, unknown> }): string | null {
+    if (leaf.key !== 'risk.stop_loss_pct' && leaf.key !== 'risk.take_profit_pct') return null
+    const params = leaf.params ?? {}
+    if (params.basis !== 'entry_avg_price') return null
+    const valuePct = this.readNumber(params.valuePct ?? params.pct)
+    if (valuePct === null) return null
+    const kind = leaf.key === 'risk.stop_loss_pct' ? 'stop_loss' : 'take_profit'
+    return `${kind}:${Math.abs(valuePct)}`
+  }
+
+  private entryAverageExitSignature(leaf: { key: string, params?: Record<string, unknown> }): string | null {
+    if (leaf.key !== 'price.percent_change') return null
+    const params = leaf.params ?? {}
+    if (params.basis !== 'entry_avg_price') return null
+    const valuePct = this.readNumber(params.valuePct ?? params.pct ?? params.thresholdPct)
+    if (valuePct === null) return null
+    const direction = typeof params.direction === 'string' ? params.direction : ''
+    if (direction === 'down' || direction === 'loss') return `stop_loss:${Math.abs(valuePct)}`
+    if (direction === 'up' || direction === 'profit') return `take_profit:${Math.abs(valuePct)}`
+    return null
   }
 
   private collectSharedScopeTexts(rules: readonly SemanticRule[]): string[] {
