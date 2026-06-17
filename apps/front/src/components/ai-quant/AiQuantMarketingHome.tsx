@@ -10,10 +10,10 @@ import { useTranslation } from 'react-i18next'
 type FeatureKey = 'conversation' | 'backtest' | 'deploy' | 'plaza'
 type AdvantageKey = 'barrier' | 'logic' | 'validation' | 'closedLoop'
 
-const sectionShell = 'relative border-t border-slate-200/70 bg-white/45 px-6 py-20 dark:border-white/[0.06] dark:bg-[#080c12]/80 md:px-8 md:py-24'
-const alternateSectionShell = 'relative border-t border-slate-200/70 bg-[#f8fafc] px-6 py-20 dark:border-white/[0.06] dark:bg-[#020305] md:px-8 md:py-24'
-const panelClass = 'border border-slate-200/80 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#10151d]/72 dark:shadow-[0_28px_100px_rgba(0,0,0,0.35)]'
-const mutedText = 'text-slate-600 dark:text-[#8f98aa]'
+const sectionShell = 'relative border-t border-zinc-200/70 bg-white/45 px-6 py-20 dark:border-white/[0.06] dark:bg-[#080c12]/80 md:px-8 md:py-24'
+const alternateSectionShell = 'relative border-t border-zinc-200/70 bg-[#f8fafc] px-6 py-20 dark:border-white/[0.06] dark:bg-[#020305] md:px-8 md:py-24'
+const panelClass = 'border border-zinc-200/80 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#10151d]/72 dark:shadow-[0_28px_100px_rgba(0,0,0,0.35)]'
+const mutedText = 'text-zinc-600 dark:text-[#8f98aa]'
 
 const revealUp = {
   hidden: { opacity: 0, y: 24 },
@@ -33,7 +33,7 @@ export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
   const ctaHref = `/${lng}/ai-quant`
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f6f8fc] text-slate-950 selection:bg-primary/20 dark:bg-[#020305] dark:text-white">
+    <main className="relative min-h-screen overflow-hidden bg-[#f6f8fc] text-zinc-950 selection:bg-primary/20 dark:bg-[#020305] dark:text-white">
       <ThemeAmbientBackground />
       <div className="relative z-10">
         <HeroSection ctaHref={ctaHref} lng={lng} />
@@ -81,7 +81,7 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
           {t('aiQuant.homepage.hero.eyebrow')}
         </div>
         <div aria-hidden="true" className="h-10 shrink-0 md:h-11" />
-        <h1 className="!m-0 !text-[2.2rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-[3.45rem] md:!text-[3.75rem] lg:!text-[3.95rem] lg:!leading-[1.05] xl:!text-[4.2rem]">
+        <h1 className="!m-0 !text-[2.2rem] !leading-[1.08] !font-semibold !tracking-normal text-balance text-zinc-950 antialiased dark:text-white sm:!text-[3.45rem] md:!text-[3.75rem] lg:!text-[3.95rem] lg:!leading-[1.05] xl:!text-[4.2rem]">
           <GradientTitle title={title} lng={lng} />
         </h1>
         <div aria-hidden="true" className="h-9 shrink-0 md:h-10" />
@@ -124,7 +124,7 @@ function GradientTitle({ title, lng }: { title: string, lng: 'zh' | 'en' }) {
       <>
         <span className="block">{parts[0].trim()}</span>
         <span className="block text-[0.86em] sm:text-[1em]">
-          <span className="bg-gradient-to-r from-[#3e69ff] via-[#6d57ff] to-[#8a5bff] bg-clip-text text-transparent dark:from-[#60a5fa] dark:via-primary dark:to-[#c084fc]">
+          <span className="text-primary dark:text-[#9ca8ff]">
             {target}
           </span>
           {' '}
@@ -137,7 +137,7 @@ function GradientTitle({ title, lng }: { title: string, lng: 'zh' | 'en' }) {
   return (
     <>
       <span>{parts[0]}</span>
-      <span className="bg-gradient-to-r from-[#3e69ff] via-[#6d57ff] to-[#8a5bff] bg-clip-text text-transparent dark:from-[#60a5fa] dark:via-primary dark:to-[#c084fc]">
+      <span className="text-primary dark:text-[#9ca8ff]">
         {target}
       </span>
       <span>{parts.slice(1).join(target)}</span>
@@ -202,10 +202,10 @@ function WorkflowSection() {
   const shouldReduceMotion = useReducedMotion()
 
   return (
-    <section id="workflow" className="relative border-t border-slate-200/70 bg-white/45 px-6 py-24 dark:border-white/[0.06] dark:bg-[#080d14]/92 md:px-8 md:py-28 lg:py-30">
+    <section id="workflow" className="relative border-t border-zinc-200/70 bg-white/45 px-6 py-24 dark:border-white/[0.06] dark:bg-[#080d14]/92 md:px-8 md:py-28 lg:py-30">
       <div className="mx-auto max-w-[76rem]">
         <div className="text-center">
-          <h2 className="!m-0 !text-[1.75rem] !leading-[1.22] font-black tracking-normal text-slate-950 dark:text-white md:!text-[2rem]">
+          <h2 className="!m-0 !text-[1.75rem] !leading-[1.22] font-semibold tracking-normal text-zinc-950 dark:text-white md:!text-[2rem]">
             {t('aiQuant.homepage.workflow.title')}
           </h2>
         </div>
@@ -224,7 +224,7 @@ function WorkflowSection() {
             >
               <div className="text-[13px] leading-none font-black text-primary">0{index + 1}</div>
               <div aria-hidden="true" className="h-4 shrink-0 md:h-5" />
-              <h3 className="!m-0 !text-[17px] !leading-snug font-bold text-slate-950 dark:text-white md:!text-[19px]">
+              <h3 className="!m-0 !text-[17px] !leading-snug font-semibold text-zinc-950 dark:text-white md:!text-[19px]">
                 {t(`aiQuant.homepage.workflow.items.${key}.title`)}
               </h3>
               <div aria-hidden="true" className="h-3 shrink-0 md:h-[14px]" />
@@ -266,7 +266,7 @@ function FeatureSection({
             {t(`aiQuant.homepage.features.${featureKey}.eyebrow`)}
           </div>
           {usesFeatureCopyScale && <div aria-hidden="true" className="h-5 shrink-0 md:h-6" />}
-          <h2 className={`${usesFeatureCopyScale ? '!m-0 !text-[1.65rem] !leading-[1.2] md:!text-[1.9rem]' : 'text-2xl leading-tight md:text-3xl'} font-black tracking-normal text-slate-950 dark:text-white`}>
+          <h2 className={`${usesFeatureCopyScale ? '!m-0 !text-[1.65rem] !leading-[1.2] md:!text-[1.9rem]' : 'text-2xl leading-tight md:text-3xl'} font-semibold tracking-normal text-zinc-950 dark:text-white`}>
             {t(`aiQuant.homepage.features.${featureKey}.title`)}
           </h2>
           {usesFeatureCopyScale && <div aria-hidden="true" className="h-5 shrink-0 md:h-6" />}
@@ -333,26 +333,26 @@ function ConversationStrategyVisual() {
 
   return (
     <div className="mx-auto w-full max-w-[592px]">
-      <div className="rounded-xl border border-slate-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#050607]/92 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-7">
+      <div className="rounded-xl border border-zinc-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#050607]/92 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-7">
         <div className="flex items-start gap-4">
-          <div className="mt-2 flex size-4 shrink-0 items-center justify-center text-slate-500 dark:text-white/70">
+          <div className="mt-2 flex size-4 shrink-0 items-center justify-center text-zinc-500 dark:text-white/70">
             <CircleDot className="size-3.5" />
           </div>
-          <div className="rounded-xl border border-slate-200/75 bg-slate-100 px-5 py-4 text-[14px] leading-relaxed text-slate-700 shadow-sm dark:border-[#1b2940] dark:bg-[#101827] dark:text-[#b9c3d4]">
+          <div className="rounded-xl border border-zinc-200/75 bg-zinc-100 px-5 py-4 text-[14px] leading-relaxed text-zinc-700 shadow-sm dark:border-[#1b2940] dark:bg-[#101827] dark:text-[#b9c3d4]">
             {t('aiQuant.homepage.visual.assistant')}
           </div>
         </div>
         <div className="mt-4 flex items-center justify-end gap-3">
-          <div className="max-w-[82%] rounded-xl border border-slate-400/80 bg-transparent px-5 py-3 text-[14px] leading-relaxed text-slate-900 dark:border-white/80 dark:text-white">
+          <div className="max-w-[82%] rounded-xl border border-zinc-400/80 bg-transparent px-5 py-3 text-[14px] leading-relaxed text-zinc-900 dark:border-white/80 dark:text-white">
             {t('aiQuant.homepage.visual.userPrompt')}
           </div>
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-300 text-slate-600 dark:bg-[#344154] dark:text-white">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-300 text-zinc-600 dark:bg-[#344154] dark:text-white">
             <UserRound className="size-4" />
           </div>
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-slate-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#060708]/94 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-6">
+      <div className="mt-4 rounded-xl border border-zinc-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#060708]/94 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 text-[12px] font-bold tracking-[0.12em] text-primary">
             <span className="flex size-5 items-center justify-center rounded-full bg-primary/10">
@@ -373,16 +373,16 @@ function ConversationStrategyVisual() {
               whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}
               transition={shouldReduceMotion ? undefined : { duration: 0.45, ease: 'easeOut', delay: index * 0.08 }}
-              className="flex items-center gap-3 rounded-xl border border-slate-200/75 bg-slate-50/90 px-3.5 py-3 dark:border-white/[0.07] dark:bg-[#0c1119]"
+              className="flex items-center gap-3 rounded-xl border border-zinc-200/75 bg-zinc-50/90 px-3.5 py-3 dark:border-white/[0.07] dark:bg-[#0c1119]"
             >
               <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${rule.iconClass}`}>
                 <rule.icon className="size-[18px]" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] leading-none text-slate-500 dark:text-[#6f7a8c]">
+                <div className="text-[11px] leading-none text-zinc-500 dark:text-[#6f7a8c]">
                   {rule.meta}
                 </div>
-                <div className="mt-1.5 text-[14px] leading-snug font-bold text-slate-900 dark:text-white">
+                <div className="mt-1.5 text-[14px] leading-snug font-bold text-zinc-900 dark:text-white">
                   {rule.text}
                 </div>
               </div>
@@ -421,7 +421,7 @@ function BacktestResultVisual() {
   return (
     <div className={`mx-auto w-full max-w-[568px] overflow-hidden rounded-[1.35rem] p-6 sm:p-7 dark:!border-[#1d2937]/75 dark:!bg-[#10151b]/72 ${panelClass}`}>
       <div className="flex items-center justify-between">
-        <div className="!text-[15px] !leading-none font-black tracking-normal text-slate-900 dark:text-white/90">
+        <div className="!text-[15px] !leading-none font-black tracking-normal text-zinc-900 dark:text-white/90">
           {t('aiQuant.backtestResult')}
         </div>
         <div className="flex size-8 items-center justify-center rounded-lg border border-primary/25 bg-primary/12 text-primary shadow-[0_0_18px_rgba(59,130,246,0.12)]">
@@ -430,19 +430,19 @@ function BacktestResultVisual() {
       </div>
 
       <div className="relative mt-10 h-[178px] pl-10 pr-2 pb-7 sm:mt-11 sm:h-[190px] sm:pl-12">
-        <span className="absolute left-0 top-[18%] text-[11px] font-semibold text-slate-400/78 dark:text-white/[0.32]">100</span>
-        <span className="absolute left-1 top-[53%] text-[11px] font-semibold text-slate-400/78 dark:text-white/[0.32]">50</span>
-        <span className="absolute bottom-6 left-2 text-[11px] font-semibold text-slate-400/78 dark:text-white/[0.32]">0</span>
+        <span className="absolute left-0 top-[18%] text-[11px] font-semibold text-zinc-400/78 dark:text-white/[0.32]">100</span>
+        <span className="absolute left-1 top-[53%] text-[11px] font-semibold text-zinc-400/78 dark:text-white/[0.32]">50</span>
+        <span className="absolute bottom-6 left-2 text-[11px] font-semibold text-zinc-400/78 dark:text-white/[0.32]">0</span>
 
         <div className="absolute top-0 right-2 bottom-7 left-10 sm:left-12">
           <div className="absolute inset-0 flex justify-between">
             {bars.map(bar => (
-              <span key={`grid-${bar.label}`} className="h-full w-px bg-slate-200/65 dark:bg-white/[0.035]" />
+              <span key={`grid-${bar.label}`} className="h-full w-px bg-zinc-200/65 dark:bg-white/[0.035]" />
             ))}
           </div>
-          <div className="absolute inset-x-0 top-[22%] h-px bg-slate-200/80 dark:bg-white/[0.065]" />
-          <div className="absolute inset-x-0 top-[56%] h-px bg-slate-200/80 dark:bg-white/[0.065]" />
-          <div className="absolute inset-x-0 bottom-0 h-px bg-slate-400/70 dark:bg-white/[0.18]" />
+          <div className="absolute inset-x-0 top-[22%] h-px bg-zinc-200/80 dark:bg-white/[0.065]" />
+          <div className="absolute inset-x-0 top-[56%] h-px bg-zinc-200/80 dark:bg-white/[0.065]" />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-zinc-400/70 dark:bg-white/[0.18]" />
 
           <div className="relative z-10 flex h-full items-end justify-between px-1">
             {bars.map((bar, index) => (
@@ -485,7 +485,7 @@ function BacktestResultVisual() {
 
         <div className="absolute right-2 bottom-0 left-10 grid grid-cols-[repeat(14,minmax(0,1fr))] gap-2 sm:left-12 sm:gap-3">
           {bars.map((bar, index) => (
-            <span key={bar.label} className="text-center text-[11px] font-bold text-slate-400 dark:text-white/[0.32]">
+            <span key={bar.label} className="text-center text-[11px] font-bold text-zinc-400 dark:text-white/[0.32]">
               <span className="hidden sm:inline">{bar.label}</span>
               <span className="sm:hidden">{index % 2 === 0 ? bar.label : ''}</span>
             </span>
@@ -503,11 +503,11 @@ function BacktestResultVisual() {
 
 function MetricCard({ label, value, positive = false }: { label: string, value: string, positive?: boolean }) {
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white/[0.78] p-4 shadow-sm dark:border-[#1d2937] dark:bg-[#0d131e]">
+    <div className="rounded-xl border border-zinc-200/80 bg-white/[0.78] p-4 shadow-sm dark:border-[#1d2937] dark:bg-[#0d131e]">
       <div className={`!text-[12px] !leading-none font-semibold ${mutedText}`}>
         {label}
       </div>
-      <div className={`mt-3 !text-[17px] !leading-tight font-black ${positive ? 'text-emerald-500/82 dark:text-emerald-400/78' : 'text-slate-950/82 dark:text-white/78'}`}>
+      <div className={`mt-3 !text-[17px] !leading-tight font-black ${positive ? 'text-emerald-500/82 dark:text-emerald-400/78' : 'text-zinc-950/82 dark:text-white/78'}`}>
         {value}
       </div>
     </div>
@@ -518,23 +518,23 @@ function DeployOrbitVisual() {
   const shouldReduceMotion = useReducedMotion()
 
   return (
-    <div className="relative mx-auto aspect-[1.22] w-full max-w-[570px] overflow-hidden rounded-[1.65rem] border border-slate-200/75 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.09)] dark:border-white/[0.045] dark:bg-[#080713]">
+    <div className="relative mx-auto aspect-[1.22] w-full max-w-[570px] overflow-hidden rounded-[1.65rem] border border-zinc-200/75 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.09)] dark:border-white/[0.045] dark:bg-[#080713]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.18),transparent_34%),radial-gradient(circle_at_50%_62%,rgba(168,85,247,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(238,244,255,0.92))] dark:bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.20),transparent_34%),radial-gradient(circle_at_50%_62%,rgba(168,85,247,0.12),transparent_34%),linear-gradient(135deg,rgba(18,23,36,0.92),rgba(5,5,12,0.96))]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.055),transparent_48%)] dark:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.035),transparent_52%)]" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="absolute aspect-square w-[54%] rounded-full border-[5px] border-slate-400/20 dark:border-white/[0.13]" />
-        <div className="absolute aspect-square w-[34%] rounded-full border border-slate-500/34 dark:border-white/70" />
+        <div className="absolute aspect-square w-[54%] rounded-full border-[5px] border-zinc-400/20 dark:border-white/[0.13]" />
+        <div className="absolute aspect-square w-[34%] rounded-full border border-zinc-500/34 dark:border-white/70" />
         <motion.div
           aria-hidden="true"
           animate={shouldReduceMotion ? { opacity: 0.54, scale: 1 } : { opacity: [0, 0.58, 0.22, 0], scale: [0.64, 0.72, 1.08, 1.58] }}
           transition={shouldReduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: 'easeOut', times: [0, 0.08, 0.66, 1] }}
-          className="absolute aspect-square w-[34%] rounded-full border border-slate-500/40 dark:border-white/78"
+          className="absolute aspect-square w-[34%] rounded-full border border-zinc-500/40 dark:border-white/78"
         />
         <motion.div
           aria-hidden="true"
           animate={shouldReduceMotion ? { opacity: 0.28, scale: 1 } : { opacity: [0, 0.36, 0.14, 0], scale: [0.72, 0.8, 1.2, 1.68] }}
           transition={shouldReduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: 'easeOut', delay: 1.45, times: [0, 0.08, 0.66, 1] }}
-          className="absolute aspect-square w-[34%] rounded-full border border-slate-500/28 dark:border-white/50"
+          className="absolute aspect-square w-[34%] rounded-full border border-zinc-500/28 dark:border-white/50"
         />
         <motion.div
           aria-hidden="true"
@@ -556,8 +556,8 @@ function DeployOrbitVisual() {
             transition={shouldReduceMotion ? undefined : { duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
             className="absolute right-4 top-9 h-[74px] w-[76px] rounded-xl border border-emerald-300/42 bg-gradient-to-br from-emerald-100/58 via-cyan-100/42 to-white/20 shadow-[0_18px_48px_rgba(20,184,166,0.10)] dark:border-emerald-300/34 dark:from-emerald-400/18 dark:via-cyan-400/12 dark:to-transparent dark:shadow-[0_18px_48px_rgba(20,184,166,0.14)]"
           />
-          <div className="absolute left-1/2 top-[42px] z-10 flex h-[78px] w-[84px] -translate-x-1/2 items-center justify-center rounded-2xl border border-slate-300/70 bg-gradient-to-br from-white/92 via-violet-50/92 to-slate-100/90 shadow-[0_24px_70px_rgba(100,108,255,0.20)] backdrop-blur-xl dark:border-white/46 dark:from-purple-400/34 dark:via-[#342344]/86 dark:to-[#111525]/88 dark:shadow-[0_24px_70px_rgba(100,108,255,0.28)]">
-            <div className="absolute left-4 top-4 size-2.5 rounded-full bg-slate-400/40 dark:bg-white/26" />
+          <div className="absolute left-1/2 top-[42px] z-10 flex h-[78px] w-[84px] -translate-x-1/2 items-center justify-center rounded-2xl border border-zinc-300/70 bg-gradient-to-br from-white/92 via-violet-50/92 to-zinc-100/90 shadow-[0_24px_70px_rgba(100,108,255,0.20)] backdrop-blur-xl dark:border-white/46 dark:from-purple-400/34 dark:via-[#342344]/86 dark:to-[#111525]/88 dark:shadow-[0_24px_70px_rgba(100,108,255,0.28)]">
+            <div className="absolute left-4 top-4 size-2.5 rounded-full bg-zinc-400/40 dark:bg-white/26" />
             <div className="space-y-2">
               <div className="h-2.5 w-10 rounded-full bg-violet-500/58 shadow-[0_0_18px_rgba(139,92,246,0.28)] dark:bg-violet-300/80 dark:shadow-[0_0_18px_rgba(196,181,253,0.45)]" />
               <div className="h-2.5 w-10 rounded-full bg-violet-500/54 shadow-[0_0_18px_rgba(139,92,246,0.22)] dark:bg-violet-300/78 dark:shadow-[0_0_18px_rgba(196,181,253,0.38)]" />
@@ -570,12 +570,12 @@ function DeployOrbitVisual() {
           >
             <RefreshCw className="size-6" />
           </motion.div>
-          <div className="absolute -bottom-4 left-1/2 z-30 -translate-x-1/2 text-[15px] font-black tracking-normal text-slate-950 drop-shadow-[0_4px_14px_rgba(255,255,255,0.72)] dark:text-white dark:drop-shadow-[0_4px_14px_rgba(0,0,0,0.72)]">
+          <div className="absolute -bottom-4 left-1/2 z-30 -translate-x-1/2 text-[15px] font-black tracking-normal text-zinc-950 drop-shadow-[0_4px_14px_rgba(255,255,255,0.72)] dark:text-white dark:drop-shadow-[0_4px_14px_rgba(0,0,0,0.72)]">
             DEPLOY
           </div>
         </div>
       </div>
-      <div className="absolute inset-0 rounded-[1.65rem] ring-1 ring-inset ring-slate-900/[0.04] dark:ring-white/[0.03]" />
+      <div className="absolute inset-0 rounded-[1.65rem] ring-1 ring-inset ring-zinc-900/[0.04] dark:ring-white/[0.03]" />
     </div>
   )
 }
@@ -635,7 +635,7 @@ function StrategyPlazaVisual() {
   ]
 
   return (
-    <div className="relative mx-auto aspect-[1.22] w-full max-w-[560px] overflow-hidden rounded-[1.65rem] border border-slate-200/65 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.09)] dark:border-white/[0.035] dark:bg-[#05050b]">
+    <div className="relative mx-auto aspect-[1.22] w-full max-w-[560px] overflow-hidden rounded-[1.65rem] border border-zinc-200/65 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.09)] dark:border-white/[0.035] dark:bg-[#05050b]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(99,102,241,0.16),transparent_36%),radial-gradient(circle_at_50%_56%,rgba(124,58,237,0.08),transparent_42%),linear-gradient(145deg,rgba(255,255,255,0.98),rgba(239,245,255,0.92))] dark:bg-[radial-gradient(circle_at_50%_48%,rgba(72,72,180,0.24),transparent_36%),radial-gradient(circle_at_50%_56%,rgba(124,58,237,0.16),transparent_42%),linear-gradient(145deg,rgba(11,11,22,0.98),rgba(2,2,6,0.98))]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(255,255,255,0.36),transparent_28%)] dark:bg-[radial-gradient(circle_at_50%_48%,rgba(255,255,255,0.045),transparent_28%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:44px_44px] opacity-30 dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.014)_1px,transparent_1px)] dark:opacity-20" />
@@ -651,14 +651,14 @@ function StrategyPlazaVisual() {
           key={card.id}
           animate={shouldReduceMotion ? undefined : { y: [0, -7, 0] }}
           transition={shouldReduceMotion ? undefined : { duration: 5.2, repeat: Infinity, ease: 'easeInOut', delay: card.delay }}
-          className={`absolute rounded-xl border border-slate-200/80 bg-white/64 p-4 opacity-[0.70] shadow-[0_22px_70px_rgba(15,23,42,0.10)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#151a26]/42 dark:opacity-[0.58] dark:shadow-[0_22px_70px_rgba(0,0,0,0.22)] ${card.className}`}
+          className={`absolute rounded-xl border border-zinc-200/80 bg-white/64 p-4 opacity-[0.70] shadow-[0_22px_70px_rgba(15,23,42,0.10)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#151a26]/42 dark:opacity-[0.58] dark:shadow-[0_22px_70px_rgba(0,0,0,0.22)] ${card.className}`}
         >
           <div className="flex min-h-[84px] items-start gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/16 text-primary">
               <card.icon className="size-4" />
             </div>
             <div className="min-w-0">
-              {card.title && <div className="truncate text-[12px] font-black text-slate-700/48 dark:text-white/38">{card.title}</div>}
+              {card.title && <div className="truncate text-[12px] font-black text-zinc-700/48 dark:text-white/38">{card.title}</div>}
               {card.stat && <div className="mt-3 text-[18px] font-black text-emerald-500/52 dark:text-emerald-400/48">{card.stat}</div>}
               {card.id === 'reversion' && (
                 <div className="mt-5 flex h-9 items-end gap-1">
@@ -673,22 +673,22 @@ function StrategyPlazaVisual() {
       ))}
 
       <div className="absolute inset-0 flex items-center justify-center p-6">
-        <div className="relative w-[44%] min-w-[238px] rounded-[1.35rem] border-2 border-slate-300/90 bg-white/82 p-5 shadow-[0_28px_90px_rgba(80,86,255,0.16)] backdrop-blur-xl dark:border-white/74 dark:bg-[#131c2b]/94 dark:shadow-[0_28px_90px_rgba(80,86,255,0.24)]">
+        <div className="relative w-[44%] min-w-[238px] rounded-[1.35rem] border-2 border-zinc-300/90 bg-white/82 p-5 shadow-[0_28px_90px_rgba(80,86,255,0.16)] backdrop-blur-xl dark:border-white/74 dark:bg-[#131c2b]/94 dark:shadow-[0_28px_90px_rgba(80,86,255,0.24)]">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4">
               <div className="mt-2 text-primary">
                 <TrendingUp className="size-5" />
               </div>
               <div>
-                <div className="text-[16px] font-black leading-none text-slate-950/78 dark:text-white/82">
+                <div className="text-[16px] font-black leading-none text-zinc-950/78 dark:text-white/82">
                   {t('aiQuant.homepage.visual.plaza.trend')}
                 </div>
-                <div className="mt-3 text-[11px] leading-none text-slate-500/56 dark:text-white/26">
+                <div className="mt-3 text-[11px] leading-none text-zinc-500/56 dark:text-white/26">
                   {t('aiQuant.homepage.visual.plaza.template')}
                 </div>
               </div>
             </div>
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-300/80 bg-white/74 text-primary dark:border-white/72 dark:bg-white/[0.025]">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300/80 bg-white/74 text-primary dark:border-white/72 dark:bg-white/[0.025]">
               <Star className="size-4 fill-current" />
             </div>
           </div>
@@ -723,7 +723,7 @@ function AdvantageSection() {
     <section className={alternateSectionShell}>
       <div className="mx-auto max-w-5xl">
         <div className="text-center">
-          <h2 className="!m-0 !text-[1.65rem] !leading-[1.2] font-black tracking-normal text-slate-950 dark:text-white md:!text-[1.9rem]">
+          <h2 className="!m-0 !text-[1.65rem] !leading-[1.2] font-semibold tracking-normal text-zinc-950 dark:text-white md:!text-[1.9rem]">
             {t('aiQuant.homepage.advantages.title')}
           </h2>
         </div>
@@ -740,8 +740,8 @@ function AdvantageSection() {
               whileHover={shouldReduceMotion ? undefined : { y: -4 }}
               className={`relative overflow-hidden rounded-xl p-8 ${panelClass}`}
             >
-              <div className="pointer-events-none absolute top-4 right-6 text-7xl font-black leading-none text-slate-950/[0.045] dark:text-white/[0.035]">0{index + 1}</div>
-              <h3 className="relative text-xl font-bold text-slate-950 dark:text-white">
+              <div className="pointer-events-none absolute top-4 right-6 text-7xl font-black leading-none text-zinc-950/[0.045] dark:text-white/[0.035]">0{index + 1}</div>
+              <h3 className="relative text-xl font-semibold text-zinc-950 dark:text-white">
                 {t(`aiQuant.homepage.advantages.items.${key}.title`)}
               </h3>
               <div aria-hidden="true" className="relative h-4 shrink-0 md:h-5" />
@@ -771,7 +771,7 @@ function FinalCtaSection({ ctaHref }: { ctaHref: string }) {
         transition={shouldReduceMotion ? undefined : revealTransition}
         className={`mx-auto flex max-w-4xl flex-col items-center rounded-2xl px-8 py-12 text-center md:px-20 md:py-14 ${panelClass}`}
       >
-        <h2 className="!m-0 !text-[1.78rem] !leading-[1.18] font-black text-slate-950 dark:text-white md:!text-[2.08rem]">
+        <h2 className="!m-0 !text-[1.78rem] !leading-[1.18] font-semibold text-zinc-950 dark:text-white md:!text-[2.08rem]">
           {t('aiQuant.homepage.final.title')}
         </h2>
         <div aria-hidden="true" className="h-5 shrink-0 md:h-6" />
