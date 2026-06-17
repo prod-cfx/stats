@@ -73,6 +73,15 @@ Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
 }
 
 void main() {
+  testWidgets('深链进入详情页时返回兜底到实盘策略列表', (WidgetTester tester) async {
+    await _pump(tester, 'QF-AY7K2P');
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('list-stub')), findsOneWidget);
+  });
+
   testWidgets('概览：展示名称、总收益额与 front 指标', (WidgetTester tester) async {
     await _pump(tester, 'QF-AY7K2P');
     // hero 名称（subtitle 在 top bar）

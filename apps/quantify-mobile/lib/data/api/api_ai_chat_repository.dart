@@ -424,6 +424,28 @@ AiSession _sessionFromStrategyDetail(
   );
 }
 
+AiSession? _sessionFromStrategyDetailMap(Map<String, dynamic> map) {
+  final String id = asString(
+    pick(map, <String>['id', 'strategyInstanceId']),
+  ).trim();
+  final String name = asString(pick(map, <String>['name'])).trim();
+  final String status = asString(pick(map, <String>['status'])).trim();
+  if (id.isEmpty || name.isEmpty || status.isEmpty) return null;
+  const Set<String> strategyStatuses = <String>{'running', 'stopped', 'draft'};
+  if (!strategyStatuses.contains(status.toLowerCase())) return null;
+
+  return AiSession(
+    id: id,
+    title: name,
+    category: 'AI 量化',
+    updatedAt: asDateTime(pick(map, <String>['updatedAt'])),
+    messages: const <ChatTurn>[],
+    pair: asStringOrNull(pick(map, <String>['symbol', 'pair'])),
+    timeframe: asStringOrNull(pick(map, <String>['timeframe'])),
+    deployedTo: id,
+  );
+}
+
 ChatTurn _turnFromCodegen(CodegenSessionResponseDto response) {
   final bool isConfirmGate =
       response.status == CodegenSessionResponseDtoStatusEnum.CONFIRM_GATE;
@@ -465,7 +487,6 @@ AiSession _sessionFromCodegen(CodegenSessionResponseDto response) {
     messages: <ChatTurn>[turn],
     llmCodegenSessionId: response.id,
     pendingCanonicalDigest: _pendingCanonicalDigest(response),
-    deployedTo: response.strategyInstanceId,
   );
 }
 
@@ -518,6 +539,43 @@ class ApiAiChatRepository implements AiChatRepository {
     return _rows(
       await _service.listSessions(),
     ).map(_parseSession).toList(growable: false);
+  }
+
+  @override
+  Future<AiSession> getSession(String sessionId) async {
+    if (sessionId.startsWith('local-codegen-')) {
+      final String? codegenId = _localCodegenSessionIds[sessionId];
+      if (codegenId != null) {
+        return _sessionFromCodegen(await getCodegenSession(codegenId));
+      }
+    }
+
+    Object? detailError;
+    try {
+      return _parseSession(
+        _unwrapObjectEnvelope(await _service.getConversation(sessionId)),
+      );
+    } catch (error) {
+      detailError = error;
+    }
+
+    try {
+      for (final Map<String, dynamic> row in _rows(
+        await _service.listSessions(),
+      )) {
+        if (asString(pick(row, <String>['id'])) == sessionId) {
+          return _parseSession(row);
+        }
+      }
+    } catch (_) {
+      // Preserve the original detail error; it is closer to the requested API.
+    }
+
+    final String? codegenId = _localCodegenSessionIds[sessionId];
+    if (codegenId != null) {
+      return _sessionFromCodegen(await getCodegenSession(codegenId));
+    }
+    throw detailError;
   }
 
   @override
@@ -757,9 +815,9 @@ class ApiAiChatRepository implements AiChatRepository {
   /// deploy 结果轮询上限（有界，防死循环）。
   static const int _deployPollLimit = 45;
 
-  String _deployName(String publishedSnapshotId, String? strategyName) {
+  String _deployName(String? strategyName) {
     final String name = strategyName?.trim() ?? '';
-    return name.isNotEmpty ? name : publishedSnapshotId;
+    return name.isNotEmpty ? name : 'AI Strategy';
   }
 
   ApiException? _apiExceptionFrom(Object error) {
@@ -829,10 +887,12 @@ class ApiAiChatRepository implements AiChatRepository {
         if (hasData) {
           if (data == null) continue;
           final Map<String, dynamic> result = asMap(data);
-          if (result.isNotEmpty) return _parseSession(result);
+          final AiSession? session = _sessionFromStrategyDetailMap(result);
+          if (session != null) return session;
           continue;
         }
-        if (envelope.isNotEmpty) return _parseSession(envelope);
+        final AiSession? session = _sessionFromStrategyDetailMap(envelope);
+        if (session != null) return session;
       } catch (error) {
         if (!_isTransientDeployError(error)) rethrow;
       }
@@ -850,7 +910,7 @@ class ApiAiChatRepository implements AiChatRepository {
     Map<String, Object?>? deploymentExecutionConfig,
   }) async {
     final String deployRequestId = '$sessionId-$publishedSnapshotId';
-    final String name = _deployName(publishedSnapshotId, strategyName);
+    final String name = _deployName(strategyName);
     final AccountAiQuantApi? api = _accountAiQuantApi;
     if (api != null) {
       try {
@@ -905,9 +965,13 @@ class ApiAiChatRepository implements AiChatRepository {
       final Object? data = deployEnvelope['data'];
       if (hasData) {
         final Map<String, dynamic> direct = asMap(data);
-        if (direct.isNotEmpty) return _parseSession(direct);
+        final AiSession? session = _sessionFromStrategyDetailMap(direct);
+        if (session != null) return session;
       } else if (deployEnvelope.isNotEmpty) {
-        return _parseSession(deployEnvelope);
+        final AiSession? session = _sessionFromStrategyDetailMap(
+          deployEnvelope,
+        );
+        if (session != null) return session;
       }
     } catch (error) {
       if (!_isTransientDeployError(error)) rethrow;

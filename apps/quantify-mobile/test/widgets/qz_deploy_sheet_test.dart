@@ -96,6 +96,12 @@ class _FakeAiChatRepo implements AiChatRepository {
   Future<List<AiSession>> listSessions() async => sessions;
 
   @override
+  Future<AiSession> getSession(String sessionId) async => sessions.firstWhere(
+    (AiSession session) => session.id == sessionId,
+    orElse: () => session ?? sessions.first,
+  );
+
+  @override
   Future<AiSession> createSession({String? title}) async =>
       throw UnimplementedError();
 
@@ -182,7 +188,8 @@ class _FakeLiveStrategyRepo implements LiveStrategyRepository {
       throw UnimplementedError();
 
   @override
-  Future<LiveStrategy> pause(String id) async => throw UnimplementedError();
+  Future<LiveStrategy> pause(String id, {bool liquidate = false}) async =>
+      throw UnimplementedError();
 
   @override
   Future<LiveStrategy> resume(String id) async => throw UnimplementedError();
@@ -520,6 +527,9 @@ void main() {
       tester,
       repo: repo,
       aiRepo: _FakeAiChatRepo(sessions: <AiSession>[deployedSession]),
+      liveRepo: _FakeLiveStrategyRepo(<LiveStrategy>[
+        _liveStrategyFromSnapshot(id: 'live-real-2310'),
+      ]),
     );
 
     await tester.pump();
@@ -668,6 +678,52 @@ void main() {
     expect(aiRepo.deployCalls.single.exchangeAccountName, 'mobile-test');
   });
 
+  testWidgets('QzDeploySheet: 名称兜底不把 publishedSnapshotId 当策略名', (
+    WidgetTester tester,
+  ) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'okx-testnet-1',
+        exchange: 'okx',
+        label: 'mobile-test',
+        maskedKey: '785d****33da',
+        isTestnet: true,
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    final _FakeAiChatRepo aiRepo = _FakeAiChatRepo(session: _deployedSession());
+    const DeploymentContext context = DeploymentContext(
+      sessionId: 'sess-mobile-name',
+      publishedSnapshotId: 'cmqen7ulv0p0hlwqsgdtyptkm',
+      exchangeAccountId: 'okx-testnet-1',
+      amount: 5000,
+      perTradePct: 20,
+      maxDailyLossPct: 10,
+      notifyOpen: true,
+      notifyClose: true,
+      notifyStopLoss: true,
+      exchange: 'okx',
+      marketType: 'perp',
+      leverage: 1,
+    );
+
+    await _pumpSheet(tester, repo: repo, aiRepo: aiRepo, context: context);
+
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('deploy-preflight-confirm')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2200));
+    await tester.pump();
+
+    expect(aiRepo.deployCalls, hasLength(1));
+    expect(
+      aiRepo.deployCalls.single.publishedSnapshotId,
+      'cmqen7ulv0p0hlwqsgdtyptkm',
+    );
+    expect(aiRepo.deployCalls.single.strategyName, 'AI Strategy');
+  });
+
   testWidgets('QzDeploySheet: 部署失败显示仓库错误且不进入成功态（#2310）', (
     WidgetTester tester,
   ) async {
@@ -800,6 +856,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('live:live-real-2310'), findsOneWidget);
+
+    router.pop();
+    await tester.pumpAndSettle();
+
+    expect(find.text('查看实盘策略'), findsOneWidget);
   });
 
   testWidgets('QzDeploySheet: 整屏成功态底部显示已部署运行且不可点击', (

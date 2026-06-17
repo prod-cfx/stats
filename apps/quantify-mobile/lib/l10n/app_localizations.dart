@@ -251,13 +251,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiSessionNewButton.
   ///
   /// In zh, this message translates to:
-  /// **'新建方案'**
+  /// **'新建会话'**
   String get aiSessionNewButton;
 
   /// No description provided for @aiSessionEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'暂无会话，点击「新建方案」开始一个策略对话。'**
+  /// **'暂无会话，点击「新建会话」开始一个策略对话。'**
   String get aiSessionEmptyHint;
 
   /// No description provided for @aiSessionStatusLive.
@@ -287,7 +287,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiSessionDeleteTitle.
   ///
   /// In zh, this message translates to:
-  /// **'删除该方案？'**
+  /// **'删除该会话？'**
   String get aiSessionDeleteTitle;
 
   /// No description provided for @aiSessionDeleteBodyPrefix.
@@ -307,6 +307,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'删除'**
   String get aiSessionDeleteConfirm;
+
+  /// No description provided for @aiSessionDeleteUnknownTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法删除'**
+  String get aiSessionDeleteUnknownTitle;
+
+  /// No description provided for @aiSessionDeleteUnknownBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。'**
+  String get aiSessionDeleteUnknownBody;
 
   /// No description provided for @aiQuickReply1.
   ///
@@ -1293,7 +1305,7 @@ abstract class AppLocalizations {
   /// No description provided for @deployedBubbleArchivedNotice.
   ///
   /// In zh, this message translates to:
-  /// **'这条对话已归档，后续调整请新建方案或在实盘策略中操作。'**
+  /// **'这条对话已归档，后续调整请新建会话或在实盘策略中操作。'**
   String get deployedBubbleArchivedNotice;
 
   /// No description provided for @deploySheetTitleAllocate.

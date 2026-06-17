@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error/error_router.dart';
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/ai_strategy_context.dart';
 import '../../data/models/backtest_models.dart';
@@ -10,15 +11,16 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
-import 'widgets/qz_ai_session_drawer.dart';
 import '../../widgets/qz_ai_top_bar.dart';
 import 'widgets/qz_chat_bubble.dart';
 import '../../widgets/qz_quick_reply_chips.dart';
 import '../../widgets/qz_typing_indicator.dart';
+import '../live/widgets/live_need_pause_sheet.dart';
 import 'ai_backtest_chat_handoff.dart';
 import 'ai_confirm_chat_handoff.dart';
 import 'ai_home_page_controller.dart';
 import 'ai_home_page_state.dart';
+import 'widgets/qz_ai_session_drawer.dart';
 
 /// AI 多会话对话页 — `/ai` tab 根（#1557）。
 ///
@@ -76,8 +78,9 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     _input.text = id == null ? '' : _ctrl.draftFor(id);
   }
 
-  void _switchSession(String id) {
-    final bool switched = _ctrl.switchSession(id);
+  Future<void> _switchSession(String id) async {
+    final bool switched = await _ctrl.switchSessionAndSync(id);
+    if (!mounted) return;
     if (switched) {
       _syncInputTo(id);
       _scrollToBottom();
@@ -96,9 +99,70 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   }
 
   Future<void> _deleteSession(String id) async {
-    await _ctrl.deleteSession(id);
+    final AiSession? session = ref
+        .read(aiHomePageControllerProvider)
+        .sessions[id];
+    if (session == null) return;
+    try {
+      await _ctrl.ensureSessionCanBeDeleted(id);
+      if (!mounted) return;
+      final bool confirmed = await showQzAiSessionDeleteDialog(
+        context,
+        session: session,
+      );
+      if (!confirmed || !mounted) return;
+      await _ctrl.deleteSession(id);
+    } on AiSessionDeleteBlockedException catch (error) {
+      if (!mounted) return;
+      await _handleDeleteBlocked(error);
+      return;
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorRouter.normalize(error).message)),
+      );
+      return;
+    }
     if (!mounted) return;
     _syncInputTo(ref.read(aiHomePageControllerProvider).currentId);
+  }
+
+  void _renameSession(String id, String title) {
+    _ctrl.renameSession(id, title);
+  }
+
+  Future<void> _handleDeleteBlocked(
+    AiSessionDeleteBlockedException error,
+  ) async {
+    if (error.reason == AiSessionDeleteBlockReason.runningStrategy) {
+      final bool? goLive = await LiveNeedPauseSheet.show(
+        context,
+        name: error.strategyName?.trim().isNotEmpty == true
+            ? error.strategyName!.trim()
+            : error.strategyId,
+      );
+      if (goLive == true && mounted) {
+        if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+          Navigator.of(context).pop();
+        }
+        context.push('/me/live/${Uri.encodeComponent(error.strategyId)}');
+      }
+      return;
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.aiSessionDeleteUnknownTitle),
+        content: Text(l10n.aiSessionDeleteUnknownBody),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _send({String? overrideText}) async {
@@ -547,9 +611,13 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
           ? QzAiSessionDrawer(
               sessions: st.orderedSessions,
               currentId: st.currentId,
-              onSelect: _switchSession,
+              onSelect: (String id) {
+                _switchSession(id);
+              },
               onCreate: _createSession,
               onDelete: _deleteSession,
+              onRename: _renameSession,
+              onRefresh: _loadSessions,
             )
           : null,
       appBar: QzAiTopBar(

@@ -182,7 +182,7 @@ void main() {
           expect(find.byKey(const Key('ai-bubble-deployed')), findsOneWidget);
           expect(find.text('策略已部署到 BINANCE'), findsOneWidget);
           expect(find.text('策略 ID QF-AY7K2P · 当前运行中'), findsOneWidget);
-          expect(find.text('这条对话已归档，后续调整请新建方案或在实盘策略中操作。'), findsOneWidget);
+          expect(find.text('这条对话已归档，后续调整请新建会话或在实盘策略中操作。'), findsOneWidget);
           // #1833 验收 2：气泡内「查看实盘策略」CTA。
           expect(find.byKey(const Key('ai-bubble-view-live')), findsOneWidget);
           expect(find.text('查看实盘策略'), findsOneWidget);

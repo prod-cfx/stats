@@ -105,7 +105,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiSessionUntitled => 'Untitled';
 
   @override
-  String get aiSessionDeleteTitle => 'Delete this strategy?';
+  String get aiSessionDeleteTitle => 'Delete this session?';
 
   @override
   String get aiSessionDeleteBodyPrefix => '\"';
@@ -116,6 +116,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiSessionDeleteConfirm => 'Delete';
+
+  @override
+  String get aiSessionDeleteUnknownTitle => 'Cannot delete yet';
+
+  @override
+  String get aiSessionDeleteUnknownBody =>
+      'We could not confirm whether the linked strategy is running. To avoid deleting a live strategy by mistake, try again later.';
 
   @override
   String get aiQuickReply1 => 'Logic graph';

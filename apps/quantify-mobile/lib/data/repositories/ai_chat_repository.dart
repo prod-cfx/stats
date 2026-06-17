@@ -13,6 +13,7 @@ import 'package:backend_api_contracts/backend_api_contracts.dart';
 ///   返回更新后的会话；找不到会话时返回 null
 abstract class AiChatRepository {
   Future<List<AiSession>> listSessions();
+  Future<AiSession> getSession(String sessionId);
   Future<AiSession> createSession({String? title});
   Future<void> deleteSession(String sessionId);
   Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn);

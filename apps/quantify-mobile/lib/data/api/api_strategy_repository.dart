@@ -320,8 +320,10 @@ class ApiStrategyRepository implements StrategyRepository {
     String id, {
     int limit = 20,
   }) async {
-    final response = await _strategyPlazaApi
-        .strategyPlazaProxyControllerSignals(id: id, limit: limit.toString());
+    final response = await _strategyPlazaApi.strategyPlazaProxyControllerSignals(
+      id: id,
+      limit: limit,
+    );
     return response.data?.data.map(_signal).toList(growable: false) ??
         const <StrategySignal>[];
   }

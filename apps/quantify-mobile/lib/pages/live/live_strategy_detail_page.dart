@@ -38,6 +38,14 @@ class LiveStrategyDetailPage extends ConsumerStatefulWidget {
 
 class _LiveStrategyDetailPageState
     extends ConsumerState<LiveStrategyDetailPage> {
+  void _backToLiveList() {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go('/me/live');
+  }
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
@@ -53,7 +61,7 @@ class _LiveStrategyDetailPageState
         error: (Object e, StackTrace _) => Scaffold(
           appBar: QzTopBar(
             title: l10n.liveDetailTitle,
-            onBack: () => context.pop(),
+            onBack: _backToLiveList,
           ),
           body: Center(
             child: Text(
@@ -79,7 +87,7 @@ class _LiveStrategyDetailPageState
         QzTopBar(
           title: l10n.liveDetailTitle,
           subtitle: s.name,
-          onBack: () => context.pop(),
+          onBack: _backToLiveList,
         ),
         Expanded(
           child: Stack(
@@ -157,4 +165,3 @@ class _LiveStrategyDetailPageState
     return 'overview';
   }
 }
-

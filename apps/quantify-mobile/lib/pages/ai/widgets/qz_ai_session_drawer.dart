@@ -6,11 +6,13 @@ import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
 
+typedef AiSessionRenameCallback = void Function(String sessionId, String title);
+
 /// AI 多会话历史抽屉（#1557）。
 ///
 /// 左侧 Drawer，宽度 ~82% 屏宽。包含：
-/// - 头部：标题「策略方案」+ 副标题 + 「新建方案」CTA
-/// - 列表：每条 session（标题 + 分类副本 + CAGR 标签 + 更新时间 + 消息数）
+/// - 头部：标题「策略方案」+ 副标题 + 「新建会话」CTA
+/// - 列表：每条 session（标题 + 状态徽标 + 更新时间）
 /// - 当前会话高亮（accentSoft 背景）；可点删除按钮
 class QzAiSessionDrawer extends StatelessWidget {
   const QzAiSessionDrawer({
@@ -20,6 +22,8 @@ class QzAiSessionDrawer extends StatelessWidget {
     required this.onSelect,
     required this.onCreate,
     required this.onDelete,
+    required this.onRename,
+    required this.onRefresh,
   });
 
   final List<AiSession> sessions;
@@ -27,6 +31,8 @@ class QzAiSessionDrawer extends StatelessWidget {
   final ValueChanged<String> onSelect;
   final VoidCallback onCreate;
   final ValueChanged<String> onDelete;
+  final AiSessionRenameCallback onRename;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -102,26 +108,44 @@ class QzAiSessionDrawer extends StatelessWidget {
             ),
             Divider(height: 1, color: c.border),
             Expanded(
-              child: sessions.isEmpty
-                  ? _Empty(scheme: c, hint: l10n.aiSessionEmptyHint)
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: QzSpacing.sm,
-                        vertical: QzSpacing.sm,
+              child: RefreshIndicator(
+                onRefresh: onRefresh,
+                color: c.accent,
+                child: sessions.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(QzSpacing.lg),
+                        children: <Widget>[
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.45,
+                            child: _Empty(
+                              scheme: c,
+                              hint: l10n.aiSessionEmptyHint,
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: QzSpacing.sm,
+                          vertical: QzSpacing.sm,
+                        ),
+                        itemCount: sessions.length,
+                        separatorBuilder: (BuildContext _, int _) =>
+                            const SizedBox(height: 4),
+                        itemBuilder: (BuildContext ctx, int i) {
+                          final AiSession s = sessions[i];
+                          return _SessionTile(
+                            session: s,
+                            isCurrent: s.id == currentId,
+                            onTap: () => onSelect(s.id),
+                            onDelete: () => onDelete(s.id),
+                            onRename: (String title) => onRename(s.id, title),
+                          );
+                        },
                       ),
-                      itemCount: sessions.length,
-                      separatorBuilder: (BuildContext _, int _) =>
-                          const SizedBox(height: 4),
-                      itemBuilder: (BuildContext ctx, int i) {
-                        final AiSession s = sessions[i];
-                        return _SessionTile(
-                          session: s,
-                          isCurrent: s.id == currentId,
-                          onTap: () => onSelect(s.id),
-                          onDelete: () => onDelete(s.id),
-                        );
-                      },
-                    ),
+              ),
             ),
             Divider(height: 1, color: c.border),
             Padding(
@@ -156,27 +180,93 @@ class QzAiSessionDrawer extends StatelessWidget {
   }
 }
 
-class _SessionTile extends StatelessWidget {
+class _SessionTile extends StatefulWidget {
   const _SessionTile({
     required this.session,
     required this.isCurrent,
     required this.onTap,
     required this.onDelete,
+    required this.onRename,
   });
 
   final AiSession session;
   final bool isCurrent;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final ValueChanged<String> onRename;
+
+  @override
+  State<_SessionTile> createState() => _SessionTileState();
+}
+
+class _SessionTileState extends State<_SessionTile> {
+  late final TextEditingController _titleController;
+  late final FocusNode _titleFocus;
+  bool _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.session.title);
+    _titleFocus = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SessionTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editing && widget.session.title != _titleController.text) {
+      _titleController.text = widget.session.title;
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _titleFocus.dispose();
+    super.dispose();
+  }
+
+  void _beginRename() {
+    setState(() {
+      _editing = true;
+      _titleController.text = widget.session.title;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _titleFocus.requestFocus();
+      _titleController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _titleController.text.length,
+      );
+    });
+  }
+
+  void _cancelRename() {
+    setState(() {
+      _editing = false;
+      _titleController.text = widget.session.title;
+    });
+    _titleFocus.unfocus();
+  }
+
+  void _commitRename() {
+    final String title = _titleController.text.trim();
+    if (title.isNotEmpty && title != widget.session.title) {
+      widget.onRename(title);
+    }
+    if (!mounted) return;
+    setState(() => _editing = false);
+    _titleFocus.unfocus();
+  }
 
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool isDeployed = session.deployedTo != null;
+    final bool isDeployed = widget.session.deployedTo != null;
     return InkWell(
-      key: Key('ai-session-tile-${session.id}'),
-      onTap: onTap,
+      key: Key('ai-session-tile-${widget.session.id}'),
+      onTap: _editing ? null : widget.onTap,
       borderRadius: BorderRadius.circular(QzRadii.input),
       child: Container(
         padding: const EdgeInsets.symmetric(
@@ -184,114 +274,183 @@ class _SessionTile extends StatelessWidget {
           vertical: QzSpacing.sm,
         ),
         decoration: BoxDecoration(
-          color: isCurrent ? c.accentSoft : Colors.transparent,
+          color: widget.isCurrent ? c.accentSoft : Colors.transparent,
           border: Border.all(
-            color: isCurrent
+            color: widget.isCurrent
                 ? c.accent.withValues(alpha: 0.3)
                 : Colors.transparent,
           ),
           borderRadius: BorderRadius.circular(QzRadii.input),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isCurrent ? c.accent : c.bgSoft,
-                borderRadius: BorderRadius.circular(QzRadii.input),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.auto_awesome,
-                size: 16,
-                color: isCurrent ? c.accentOn : c.textDim,
-              ),
-            ),
-            const SizedBox(width: QzSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(
-                          session.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isCurrent ? c.accent : c.text,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: widget.isCurrent ? c.accent : c.bgSoft,
+                    borderRadius: BorderRadius.circular(QzRadii.input),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.auto_awesome,
+                    size: 16,
+                    color: widget.isCurrent ? c.accentOn : c.textDim,
+                  ),
+                ),
+                const SizedBox(width: QzSpacing.sm),
+                Expanded(
+                  child: _editing
+                      ? TextField(
+                          key: Key(
+                            'ai-session-title-input-${widget.session.id}',
                           ),
+                          controller: _titleController,
+                          focusNode: _titleFocus,
+                          textInputAction: TextInputAction.done,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: QzSpacing.sm,
+                              vertical: 8,
+                            ),
+                            filled: true,
+                            fillColor: c.bgSoft,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: c.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: c.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: c.accent),
+                            ),
+                          ),
+                          onSubmitted: (_) => _commitRename(),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Flexible(
+                                  child: Text(
+                                    widget.session.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: widget.isCurrent
+                                          ? c.accent
+                                          : c.text,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: QzSpacing.xs),
+                                _StatusBadge(
+                                  label: isDeployed
+                                      ? l10n.aiSessionStatusLive
+                                      : l10n.aiSessionStatusPending,
+                                  dotColor: isDeployed
+                                      ? c.marketUp
+                                      : c.statusWarn,
+                                  textColor: isDeployed
+                                      ? c.accent
+                                      : c.statusWarn,
+                                  bgColor: isDeployed
+                                      ? c.accentSoft
+                                      : c.statusWarn.withValues(alpha: 0.12),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              _formatUpdatedAt(widget.session.updatedAt),
+                              style: TextStyle(
+                                color: c.textFaint,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: QzSpacing.xs),
-                      _StatusBadge(
-                        label: isDeployed
-                            ? l10n.aiSessionStatusLive
-                            : l10n.aiSessionStatusPending,
-                        dotColor: isDeployed ? c.marketUp : c.statusWarn,
-                        textColor: isDeployed ? c.accent : c.statusWarn,
-                        bgColor: isDeployed
-                            ? c.accentSoft
-                            : c.statusWarn.withValues(alpha: 0.12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    session.category,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: c.textDim, fontSize: 11),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    _previewText(session),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: c.textFaint, fontSize: 10),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    _formatUpdatedAt(session.updatedAt),
-                    style: TextStyle(color: c.textFaint, fontSize: 10),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            if (isCurrent)
-              IconButton(
-                key: Key('ai-session-delete-${session.id}'),
-                onPressed: () => _confirmDelete(context),
-                visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.delete_outline, size: 16, color: c.textDim),
-              ),
+            const SizedBox(height: QzSpacing.xs),
+            Padding(
+              padding: const EdgeInsets.only(left: 32 + QzSpacing.sm),
+              child: _editing
+                  ? Row(
+                      children: <Widget>[
+                        OutlinedButton(
+                          key: Key(
+                            'ai-session-rename-cancel-${widget.session.id}',
+                          ),
+                          onPressed: _cancelRename,
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            minimumSize: const Size(48, 32),
+                            foregroundColor: c.textDim,
+                            side: BorderSide(color: c.border),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: Text(l10n.commonCancel),
+                        ),
+                        const SizedBox(width: QzSpacing.xs),
+                        FilledButton(
+                          key: Key(
+                            'ai-session-rename-save-${widget.session.id}',
+                          ),
+                          onPressed: _commitRename,
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            minimumSize: const Size(48, 32),
+                            backgroundColor: c.accent,
+                            foregroundColor: c.accentOn,
+                            shape: const StadiumBorder(),
+                          ),
+                          child: const Text('保存'),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: <Widget>[
+                        _SessionActionButton(
+                          key: Key('ai-session-rename-${widget.session.id}'),
+                          icon: Icons.edit_outlined,
+                          tooltip: '编辑名称',
+                          onPressed: _beginRename,
+                        ),
+                        const SizedBox(width: QzSpacing.xs),
+                        _SessionActionButton(
+                          key: Key('ai-session-delete-${widget.session.id}'),
+                          icon: Icons.delete_outline,
+                          tooltip: l10n.aiSessionDeleteConfirm,
+                          onPressed: widget.onDelete,
+                          danger: true,
+                        ),
+                      ],
+                    ),
+            ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _confirmDelete(BuildContext context) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (BuildContext ctx) => _DeleteSessionDialog(session: session),
-    );
-    if (confirmed == true) onDelete();
-  }
-
-  String _previewText(AiSession session) {
-    for (final ChatTurn turn in session.messages.reversed) {
-      if (turn.kind == ChatTurnKind.deployed) return '✓ 已部署 · 实盘运行中';
-      if (turn.content.trim().isNotEmpty) return turn.content.trim();
-    }
-    return '${session.messages.length} 条消息';
   }
 
   String _formatUpdatedAt(DateTime updatedAt) {
@@ -302,6 +461,56 @@ class _SessionTile extends StatelessWidget {
     if (diff.inDays == 1) return '昨天';
     return '${diff.inDays} 天前';
   }
+}
+
+class _SessionActionButton extends StatelessWidget {
+  const _SessionActionButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final Color color = danger ? const Color(0xFFE5484D) : c.textDim;
+    return SizedBox.square(
+      dimension: 34,
+      child: IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          backgroundColor: c.bgSoft,
+          foregroundColor: color,
+          side: BorderSide(color: c.border),
+          shape: const CircleBorder(),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        icon: Icon(icon, size: 17),
+      ),
+    );
+  }
+}
+
+Future<bool> showQzAiSessionDeleteDialog(
+  BuildContext context, {
+  required AiSession session,
+}) async {
+  final bool? confirmed = await showDialog<bool>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    builder: (BuildContext ctx) => _DeleteSessionDialog(session: session),
+  );
+  return confirmed == true;
 }
 
 class _DeleteSessionDialog extends StatelessWidget {

@@ -11,9 +11,29 @@ import '../../data/models/backtest_models.dart';
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
+import '../../data/repositories/live_strategy_repository.dart';
 import '../../data/repositories/strategy_repository.dart';
 import '../../data/services/api_client.dart';
+import '../../domain/models/live_strategy_models.dart';
 import 'ai_home_page_state.dart';
+
+enum AiSessionDeleteBlockReason { runningStrategy, unknownStrategyState }
+
+class AiSessionDeleteBlockedException implements Exception {
+  const AiSessionDeleteBlockedException({
+    required this.reason,
+    required this.strategyId,
+    this.strategyName,
+  });
+
+  final AiSessionDeleteBlockReason reason;
+  final String strategyId;
+  final String? strategyName;
+
+  @override
+  String toString() =>
+      'AiSessionDeleteBlockedException(reason=$reason, strategyId=$strategyId)';
+}
 
 /// AI 多会话对话页控制器（issue #2186 三件套迁移）。
 ///
@@ -32,6 +52,8 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   bool get mounted => _life.mounted;
 
   AiChatRepository get _chatRepo => ref.read(aiChatRepositoryProvider);
+  LiveStrategyRepository get _liveRepo =>
+      ref.read(liveStrategyRepositoryProvider);
   StrategyRepository get _strategyRepo => ref.read(strategyRepositoryProvider);
 
   @override
@@ -55,12 +77,21 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   }
 
   Future<void> loadSessions() async {
-    state = state.copyWith(loadError: null, initialized: false);
+    final String? previousCurrentId = state.currentId;
+    final bool hadLoaded = state.initialized;
+    state = state.copyWith(loadError: null);
     List<AiSession> list;
     try {
       list = await _chatRepo.listSessions();
     } catch (error) {
       if (!mounted) return;
+      if (hadLoaded) {
+        state = state.copyWith(
+          initialized: true,
+          loadError: ErrorRouter.normalize(error).message,
+        );
+        return;
+      }
       state = state.copyWith(
         sessions: const <String, AiSession>{},
         order: const <String>[],
@@ -70,16 +101,112 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       );
       return;
     }
+    final List<AiSession> reconciledList = await _reconcileDeployedSessions(
+      list,
+    );
     if (!mounted) return;
+    final Map<String, AiSession> sessions = <String, AiSession>{
+      for (final AiSession s in reconciledList) s.id: s,
+    };
+    final String? nextCurrentId =
+        previousCurrentId != null && sessions.containsKey(previousCurrentId)
+        ? previousCurrentId
+        : (reconciledList.isNotEmpty ? reconciledList.first.id : null);
     state = state.copyWith(
-      sessions: <String, AiSession>{for (final AiSession s in list) s.id: s},
-      order: <String>[for (final AiSession s in list) s.id],
-      currentId: list.isNotEmpty ? list.first.id : null,
+      sessions: sessions,
+      order: <String>[for (final AiSession s in reconciledList) s.id],
+      currentId: nextCurrentId,
       initialized: true,
       loadError: null,
     );
+    await _syncSessionFromRemote(nextCurrentId);
     await _restorePublishedCodegenForCurrentSession();
     await _restoreLatestBacktestForCurrentSession();
+  }
+
+  Future<void> syncCurrentSession() async {
+    final String? id = state.currentId;
+    await _syncSessionFromRemote(id);
+    await _restorePublishedCodegenForCurrentSession();
+    await _restoreLatestBacktestForCurrentSession();
+  }
+
+  Future<void> _syncSessionFromRemote(String? id) async {
+    if (id == null) return;
+    if (!state.sessions.containsKey(id)) return;
+    AiSession detail;
+    try {
+      detail = await _chatRepo.getSession(id);
+      final List<AiSession> reconciled = await _reconcileDeployedSessions(
+        <AiSession>[detail],
+      );
+      detail = reconciled.first;
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(loadError: ErrorRouter.normalize(error).message);
+      return;
+    }
+    if (!mounted || !state.sessions.containsKey(id)) return;
+    state = state.copyWith(
+      sessions: <String, AiSession>{...state.sessions, id: detail},
+      loadError: null,
+    );
+  }
+
+  Future<List<AiSession>> _reconcileDeployedSessions(
+    List<AiSession> sessions,
+  ) async {
+    if (sessions.isEmpty) return sessions;
+    List<LiveStrategy> strategies;
+    try {
+      strategies = await _liveRepo.listStrategies();
+    } catch (_) {
+      return <AiSession>[
+        for (final AiSession session in sessions)
+          _copySessionWithDeployedTo(session, null),
+      ];
+    }
+
+    final Map<String, LiveStrategy> bySnapshotId = <String, LiveStrategy>{};
+    for (final LiveStrategy strategy in strategies) {
+      if (strategy.isHistory) continue;
+      final String snapshotId = strategy.publishedSnapshotId?.trim() ?? '';
+      if (snapshotId.isEmpty) continue;
+      bySnapshotId.putIfAbsent(snapshotId, () => strategy);
+    }
+
+    return <AiSession>[
+      for (final AiSession session in sessions)
+        _copySessionWithDeployedTo(
+          session,
+          bySnapshotId[_publishedSnapshotIdForSession(session)]?.id,
+        ),
+    ];
+  }
+
+  String? _publishedSnapshotIdForSession(AiSession session) {
+    for (final ChatTurn turn in session.messages.reversed) {
+      final String snapshotId =
+          turn.strategyContext?.publishedSnapshotId?.trim() ?? '';
+      if (snapshotId.isNotEmpty) return snapshotId;
+    }
+    return null;
+  }
+
+  AiSession _copySessionWithDeployedTo(AiSession session, String? deployedTo) {
+    return AiSession(
+      id: session.id,
+      title: session.title,
+      category: session.category,
+      updatedAt: session.updatedAt,
+      messages: session.messages,
+      pair: session.pair,
+      timeframe: session.timeframe,
+      cagrLabel: session.cagrLabel,
+      deployedTo: deployedTo,
+      llmCodegenSessionId: session.llmCodegenSessionId,
+      pendingCanonicalDigest: session.pendingCanonicalDigest,
+    );
   }
 
   Future<void> _restoreLatestBacktestForCurrentSession() async {
@@ -206,6 +333,12 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     return true;
   }
 
+  Future<bool> switchSessionAndSync(String id) async {
+    final bool switched = switchSession(id);
+    await syncCurrentSession();
+    return switched;
+  }
+
   Future<void> createSession(String untitledTitle) async {
     final AiSession fresh = await _chatRepo.createSession(title: untitledTitle);
     if (!mounted) return;
@@ -221,6 +354,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
   }
 
   Future<void> deleteSession(String id) async {
+    await ensureSessionCanBeDeleted(id);
     await _chatRepo.deleteSession(id);
     if (!mounted) return;
     final Map<String, AiSession> sessions = Map<String, AiSession>.of(
@@ -239,6 +373,60 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       drafts: drafts,
       currentId: currentId,
     );
+  }
+
+  void renameSession(String id, String title) {
+    final String nextTitle = title.trim();
+    if (nextTitle.isEmpty) return;
+    final AiSession? session = state.sessions[id];
+    if (session == null || session.title == nextTitle) return;
+    final DateTime now = DateTime.now();
+    final List<String> order = <String>[
+      id,
+      for (final String item in state.order)
+        if (item != id) item,
+    ];
+    state = state.copyWith(
+      sessions: <String, AiSession>{
+        ...state.sessions,
+        id: session.copyWith(title: nextTitle, updatedAt: now),
+      },
+      order: order,
+    );
+  }
+
+  Future<void> ensureSessionCanBeDeleted(String id) async {
+    final AiSession? session = state.sessions[id];
+    final String strategyId = session?.deployedTo?.trim() ?? '';
+    if (strategyId.isEmpty) return;
+
+    LiveStrategy strategy;
+    try {
+      strategy = await _liveRepo.getStrategy(strategyId);
+    } on ApiException catch (error) {
+      if (error.statusCode == 404 ||
+          error.code == 'ACCOUNT_STRATEGY_NOT_FOUND') {
+        return;
+      }
+      throw AiSessionDeleteBlockedException(
+        reason: AiSessionDeleteBlockReason.unknownStrategyState,
+        strategyId: strategyId,
+      );
+    } catch (_) {
+      throw AiSessionDeleteBlockedException(
+        reason: AiSessionDeleteBlockReason.unknownStrategyState,
+        strategyId: strategyId,
+      );
+    }
+
+    if (strategy.status == LiveStrategyStatus.running ||
+        strategy.status == LiveStrategyStatus.warning) {
+      throw AiSessionDeleteBlockedException(
+        reason: AiSessionDeleteBlockReason.runningStrategy,
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+      );
+    }
   }
 
   /// 发送一条消息：追加 user turn → thinking → 取完整 reply → 立即显示。

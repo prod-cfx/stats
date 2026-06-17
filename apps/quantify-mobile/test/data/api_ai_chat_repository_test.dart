@@ -8,12 +8,16 @@ import 'package:quantify_mobile/data/services/api_client.dart';
 /// （deploy → 轮询 deploy-requests/{id}/result，上限 45 次）与 latestBacktest
 /// unsupported 行为；不发真实 HTTP（issue #2285）。
 class _StubAiChatService extends AiChatService {
-  _StubAiChatService({required this.deployResults, this.deployError})
-    : super(ApiClient(baseUrl: 'http://localhost'));
+  _StubAiChatService({
+    required this.deployResults,
+    this.deployError,
+    this.deployResponse,
+  }) : super(ApiClient(baseUrl: 'http://localhost'));
 
   /// 每次 getDeployResult 顺序返回；超出长度后复用最后一项。
   final List<Object?> deployResults;
   final Object? deployError;
+  final Object? deployResponse;
 
   int deployCallCount = 0;
   int resultCallCount = 0;
@@ -25,7 +29,7 @@ class _StubAiChatService extends AiChatService {
     deployBodies.add(body);
     final Object? error = deployError;
     if (error != null) throw error;
-    return <String, dynamic>{'data': <String, dynamic>{}};
+    return deployResponse ?? <String, dynamic>{'data': <String, dynamic>{}};
   }
 
   @override
@@ -44,12 +48,14 @@ class _StubAiChatService extends AiChatService {
 class _StubListAiChatService extends AiChatService {
   _StubListAiChatService({
     required this.rows,
+    this.conversationDetails = const <String, Map<String, dynamic>>{},
     this.createResponse,
     this.codegenSessions = const [],
     this.codegenError,
   }) : super(ApiClient(baseUrl: 'http://localhost'));
 
   final List<Map<String, dynamic>> rows;
+  final Map<String, Map<String, dynamic>> conversationDetails;
   final Object? createResponse;
   final List<Map<String, dynamic>> codegenSessions;
   final Object? codegenError;
@@ -57,6 +63,7 @@ class _StubListAiChatService extends AiChatService {
   final List<Map<String, dynamic>> createBodies = <Map<String, dynamic>>[];
   final List<Map<String, dynamic>> sendBodies = <Map<String, dynamic>>[];
   int listCallCount = 0;
+  int detailCallCount = 0;
   int createCallCount = 0;
   int codegenCallCount = 0;
   int sendCallCount = 0;
@@ -65,6 +72,16 @@ class _StubListAiChatService extends AiChatService {
   Future<dynamic> listSessions() async {
     listCallCount++;
     return rows;
+  }
+
+  @override
+  Future<dynamic> getConversation(String conversationId) async {
+    detailCallCount++;
+    final Map<String, dynamic>? detail = conversationDetails[conversationId];
+    if (detail == null) {
+      throw ApiException(message: 'not found', statusCode: 404);
+    }
+    return <String, dynamic>{'data': detail};
   }
 
   @override
@@ -101,6 +118,22 @@ class _StubListAiChatService extends AiChatService {
   }
 }
 
+Map<String, dynamic> _strategyDetail({
+  String id = 'strategy-1',
+  String name = 'BTCUSDT 15m AI策略',
+  String status = 'running',
+}) => <String, dynamic>{
+  'id': id,
+  'name': name,
+  'status': status,
+  'exchange': 'OKX',
+  'symbol': 'BTCUSDT',
+  'timeframe': '15m',
+  'isSubscribed': true,
+  'metrics': <String, dynamic>{},
+  'updatedAt': '2026-06-17T02:35:00.000Z',
+};
+
 void main() {
   group('ApiAiChatRepository.listSessions 会话 metadata', () {
     test('读取 activeCodegenSessionId 作为确认策略 codegen session', () async {
@@ -136,6 +169,7 @@ void main() {
             'updatedAt': '2026-06-15T08:10:08.616Z',
             'activeCodegenSessionId': 'cmq9u5yka0bh3eaqsjnuvpn41',
             'status': 'PUBLISHED',
+            'strategyInstanceId': 'cmqen7ul40p0flwqsr181f7ym',
             'canonicalDigest': 'sha256:872719e1',
             'scriptCode': 'export default function strategy() { return true; }',
             'publishedSnapshotId': 'cmqen7ulv0p0hlwqsgdtyptkm',
@@ -175,6 +209,7 @@ void main() {
 
       expect(session.id, 'cmq9u5ykn0bh9eaqs5rqt2o0r');
       expect(session.llmCodegenSessionId, 'cmq9u5yka0bh3eaqsjnuvpn41');
+      expect(session.deployedTo, isNull);
       final ChatTurn scriptReady = session.messages.firstWhere(
         (ChatTurn turn) => turn.kind == ChatTurnKind.scriptReady,
       );
@@ -184,6 +219,10 @@ void main() {
       );
       expect(scriptReady.strategyContext?.scriptCode, contains('strategy'));
       expect(scriptReady.strategyContext?.symbol, 'BTCUSDT');
+      expect(
+        scriptReady.strategyContext?.toDeploymentContext().strategyName,
+        '入场：15m k线里面 价格在e',
+      );
 
       final ChatTurn resultTurn = session.messages.firstWhere(
         (ChatTurn turn) => turn.kind == ChatTurnKind.result,
@@ -192,6 +231,101 @@ void main() {
       expect(resultTurn.backtestSummary?.totalReturnPercent, -0.33);
       expect(resultTurn.backtestSummary?.maxDrawdownPercent, 0.39);
       expect(resultTurn.backtestSummary?.trades, 139);
+    });
+
+    test('PUBLISHED 会话里的 strategyInstanceId 不等于部署成功实例', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'conversation-1',
+            'conversationTitle': '未部署会话',
+            'updatedAt': '2026-06-17T03:59:05.390Z',
+            'activeCodegenSessionId': 'codegen-1',
+            'status': 'PUBLISHED',
+            'strategyInstanceId': 'draft-source-instance',
+            'publishedSnapshotId': 'snapshot-1',
+            'scriptCode': 'export default function strategy() {}',
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final AiSession session = (await repo.listSessions()).single;
+
+      expect(session.deployedTo, isNull);
+      expect(
+        session.messages.any(
+          (ChatTurn t) => t.kind == ChatTurnKind.scriptReady,
+        ),
+        isTrue,
+      );
+    });
+
+    test('getSession 读取会话详情并恢复完整页面状态', () async {
+      final _StubListAiChatService svc = _StubListAiChatService(
+        rows: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'conversation-1',
+            'conversationTitle': '列表摘要',
+            'updatedAt': '2026-06-15T08:00:00.000Z',
+          },
+        ],
+        conversationDetails: <String, Map<String, dynamic>>{
+          'conversation-1': <String, dynamic>{
+            'id': 'conversation-1',
+            'conversationTitle': '详情标题',
+            'updatedAt': '2026-06-15T08:10:08.616Z',
+            'activeCodegenSessionId': 'codegen-1',
+            'status': 'PUBLISHED',
+            'canonicalDigest': 'sha256:detail',
+            'scriptCode': 'export default function strategy() { return true; }',
+            'publishedSnapshotId': 'snapshot-1',
+            'publishedSnapshotParamValues': <String, dynamic>{
+              'symbol': 'ETHUSDT',
+              'baseTimeframe': '5m',
+            },
+            'conversationMessages': <Map<String, dynamic>>[
+              <String, dynamic>{'role': 'user', 'content': 'front 新建策略'},
+              <String, dynamic>{'role': 'assistant', 'content': '策略逻辑如下'},
+            ],
+            'lastBacktestRef': <String, dynamic>{
+              'jobId': 'btjob-detail-1',
+              'summary': <String, dynamic>{
+                'maxDrawdownPct': 1.2,
+                'totalReturnPct': 3.4,
+                'tradeCount': 8,
+              },
+            },
+          },
+        },
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(svc);
+
+      final AiSession session = await repo.getSession('conversation-1');
+
+      expect(svc.detailCallCount, 1);
+      expect(session.title, '详情标题');
+      expect(session.llmCodegenSessionId, 'codegen-1');
+      expect(
+        session.messages.any((ChatTurn turn) => turn.content == 'front 新建策略'),
+        isTrue,
+      );
+      expect(
+        session.messages
+            .firstWhere(
+              (ChatTurn turn) => turn.kind == ChatTurnKind.scriptReady,
+            )
+            .strategyContext
+            ?.symbol,
+        'ETHUSDT',
+      );
+      expect(
+        session.messages
+            .firstWhere((ChatTurn turn) => turn.kind == ChatTurnKind.result)
+            .backtestSummary
+            ?.id,
+        'btjob-detail-1',
+      );
     });
   });
 
@@ -639,14 +773,12 @@ void main() {
   });
 
   group('ApiAiChatRepository.markDeployed 异步两段预埋', () {
-    test('首次 pending（data:null）后成功（data:{...}）→ 返回非空 session，'
+    test('首次 pending（data:null）后真实策略详情 → 返回非空 session，'
         '轮询次数 ≤ 45', () async {
       final _StubAiChatService svc = _StubAiChatService(
         deployResults: <Object?>[
           <String, dynamic>{'data': null},
-          <String, dynamic>{
-            'data': <String, dynamic>{'id': 's-1', 'title': '已部署'},
-          },
+          <String, dynamic>{'data': _strategyDetail(id: 'live-1')},
         ],
       );
       final ApiAiChatRepository repo = ApiAiChatRepository(
@@ -657,10 +789,57 @@ void main() {
       final AiSession? s = await repo.markDeployed('sess-1', 'inst-1');
 
       expect(s, isNotNull);
-      expect(s!.id, 's-1');
-      expect(s.title, '已部署');
+      expect(s!.id, 'live-1');
+      expect(s.title, 'BTCUSDT 15m AI策略');
+      expect(s.deployedTo, 'live-1');
       expect(svc.resultCallCount, lessThanOrEqualTo(45));
       expect(svc.resultCallCount, 2);
+    });
+
+    test('deploy POST 直接返回真实策略详情 → 不轮询并返回成功 session', () async {
+      final _StubAiChatService svc = _StubAiChatService(
+        deployResponse: <String, dynamic>{
+          'data': _strategyDetail(id: 'live-direct', name: '直返成功'),
+        },
+        deployResults: <Object?>[
+          <String, dynamic>{'data': null},
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
+
+      final AiSession? s = await repo.markDeployed('sess-1', 'inst-1');
+
+      expect(s, isNotNull);
+      expect(s!.id, 'live-direct');
+      expect(s.title, '直返成功');
+      expect(s.deployedTo, 'live-direct');
+      expect(svc.resultCallCount, 0);
+    });
+
+    test('返回 conversation 形状不会误判为部署成功', () async {
+      final _StubAiChatService svc = _StubAiChatService(
+        deployResults: <Object?>[
+          <String, dynamic>{
+            'data': <String, dynamic>{
+              'id': 'conversation-1',
+              'conversationTitle': '测试会话',
+              'strategyInstanceId': null,
+            },
+          },
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
+
+      final AiSession? s = await repo.markDeployed('sess-1', 'inst-1');
+
+      expect(s, isNull);
+      expect(svc.resultCallCount, 45);
     });
 
     test('恒 pending（data:null）→ 返回 null 且轮询恰 45 次（有界，不死循环）', () async {
@@ -732,13 +911,31 @@ void main() {
       },
     );
 
+    test('strategyName 为空时 deploy name 用 front 默认名而不是 snapshot id', () async {
+      final _StubAiChatService svc = _StubAiChatService(
+        deployResults: <Object?>[
+          <String, dynamic>{'data': null},
+        ],
+      );
+      final ApiAiChatRepository repo = ApiAiChatRepository(
+        svc,
+        deployPollInterval: Duration.zero,
+      );
+
+      await repo.markDeployed('sess-A', 'cmqen7ulv0p0hlwqsgdtyptkm');
+
+      final Map<String, dynamic> body = svc.deployBodies.single;
+      expect(body['publishedSnapshotId'], 'cmqen7ulv0p0hlwqsgdtyptkm');
+      expect(body['name'], 'AI Strategy');
+    });
+
     test('deploy POST 超时后用同一 deployRequestId 对账成功', () async {
       final _StubAiChatService svc = _StubAiChatService(
         deployError: const ApiException(message: 'The request took longer'),
         deployResults: <Object?>[
           <String, dynamic>{'data': null},
           <String, dynamic>{
-            'data': <String, dynamic>{'id': 's-timeout', 'title': '对账成功'},
+            'data': _strategyDetail(id: 'live-timeout', name: '对账成功'),
           },
         ],
       );
@@ -754,8 +951,9 @@ void main() {
       );
 
       expect(s, isNotNull);
-      expect(s!.id, 's-timeout');
+      expect(s!.id, 'live-timeout');
       expect(s.title, '对账成功');
+      expect(s.deployedTo, 'live-timeout');
       expect(svc.deployBodies.single['name'], 'BTCUSDT 15m AI策略');
       expect(svc.resultCallCount, 2);
     });

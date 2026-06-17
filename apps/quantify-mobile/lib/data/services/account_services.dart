@@ -31,6 +31,9 @@ class AiChatService {
   Future<dynamic> listSessions() =>
       _client.get('/account/ai-quant/conversations');
 
+  Future<dynamic> getConversation(String conversationId) =>
+      _client.get('/account/ai-quant/conversations/$conversationId');
+
   Future<dynamic> createSession({String? title}) => _client.post(
     '/llm-strategy-codegen/sessions',
     body: <String, dynamic>{'title': ?title},

@@ -84,10 +84,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiSessionDrawerSubtitle => '每个方案独立上下文 · 互不污染';
 
   @override
-  String get aiSessionNewButton => '新建方案';
+  String get aiSessionNewButton => '新建会话';
 
   @override
-  String get aiSessionEmptyHint => '暂无会话，点击「新建方案」开始一个策略对话。';
+  String get aiSessionEmptyHint => '暂无会话，点击「新建会话」开始一个策略对话。';
 
   @override
   String get aiSessionStatusLive => '实盘';
@@ -102,7 +102,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiSessionUntitled => '新方案';
 
   @override
-  String get aiSessionDeleteTitle => '删除该方案？';
+  String get aiSessionDeleteTitle => '删除该会话？';
 
   @override
   String get aiSessionDeleteBodyPrefix => '「';
@@ -112,6 +112,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiSessionDeleteConfirm => '删除';
+
+  @override
+  String get aiSessionDeleteUnknownTitle => '暂时无法删除';
+
+  @override
+  String get aiSessionDeleteUnknownBody => '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。';
 
   @override
   String get aiQuickReply1 => '逻辑图';
@@ -630,7 +636,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deployedBubbleArchivedNotice => '这条对话已归档，后续调整请新建方案或在实盘策略中操作。';
+  String get deployedBubbleArchivedNotice => '这条对话已归档，后续调整请新建会话或在实盘策略中操作。';
 
   @override
   String get deploySheetTitleAllocate => '资金配置';

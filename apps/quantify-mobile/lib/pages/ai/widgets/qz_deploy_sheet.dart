@@ -162,16 +162,8 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
     final DeploymentContext? deploymentContext = widget.deploymentContext;
     if (deploymentContext == null) return;
     try {
-      final List<AiSession> sessions = await ref
-          .read(aiChatRepositoryProvider)
-          .listSessions();
-      final AiSession? deployed = _findDeployedSession(
-        sessions,
-        deploymentContext,
-      );
-      final DeploymentResult? result = deployed == null
-          ? await _findDeploymentResultFromLiveStrategy(deploymentContext)
-          : _deploymentResultFromSession(deployed, deploymentContext);
+      final DeploymentResult? result =
+          await _findDeploymentResultFromLiveStrategy(deploymentContext);
       if (!mounted || widget.deploymentContext != deploymentContext) return;
       setState(() {
         _deployError = null;
@@ -361,7 +353,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       final String base = symbol.split('·').first.trim();
       if (base.isNotEmpty) return '$base AI策略';
     }
-    return context.publishedSnapshotId;
+    return 'AI Strategy';
   }
 
   /// 兼容旧入口（空列表场景），打开当前策略交易所 API 表单。
@@ -404,7 +396,7 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
       return;
     }
     final String instanceId = result.instanceId.trim();
-    context.go(instanceId.isEmpty ? '/me/live' : '/me/live/$instanceId');
+    context.push(instanceId.isEmpty ? '/me/live' : '/me/live/$instanceId');
   }
 
   _DeployTarget _targetFromKeys(List<ExchangeApiKey> keys) {

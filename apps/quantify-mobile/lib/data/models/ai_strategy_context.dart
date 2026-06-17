@@ -17,6 +17,7 @@ class AiPublishedStrategyContext {
     required this.deploymentExecutionConstraints,
     required this.compatibilityMetadata,
     this.conversationId,
+    this.conversationTitle,
     this.strategyInstanceId,
     this.publishedSnapshotId,
     this.scriptCode,
@@ -32,6 +33,7 @@ class AiPublishedStrategyContext {
     return AiPublishedStrategyContext(
       codegenSessionId: response.id,
       conversationId: _blankToNull(response.conversationId),
+      conversationTitle: _blankToNull(response.conversationTitle),
       strategyInstanceId: _blankToNull(response.strategyInstanceId),
       publishedSnapshotId: _blankToNull(response.publishedSnapshotId),
       status: response.status.name,
@@ -57,6 +59,7 @@ class AiPublishedStrategyContext {
 
   final String codegenSessionId;
   final String? conversationId;
+  final String? conversationTitle;
   final String? strategyInstanceId;
   final String? publishedSnapshotId;
   final String status;
@@ -126,6 +129,8 @@ class AiPublishedStrategyContext {
   );
 
   String get displayTitle {
+    final String? title = _blankToNull(conversationTitle);
+    if (title != null) return title;
     final String? explicit = _findString(
       <String>['name', 'title', 'strategyName', 'displayName'],
       [strategyConfig, snapshotParamValues],

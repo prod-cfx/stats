@@ -12,6 +12,8 @@ Future<void> _pump(
   List<AiSession> sessions, {
   String? currentId,
   ValueChanged<String>? onDelete,
+  AiSessionRenameCallback? onRename,
+  Future<void> Function()? onRefresh,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 900));
   await tester.pumpWidget(
@@ -29,6 +31,8 @@ Future<void> _pump(
           onSelect: (_) {},
           onCreate: () {},
           onDelete: onDelete ?? (_) {},
+          onRename: onRename ?? (_, _) {},
+          onRefresh: onRefresh ?? () async {},
         ),
       ),
     ),
@@ -37,7 +41,7 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('会话项显示状态徽标、消息预览和更新时间（#2069）', (WidgetTester tester) async {
+  testWidgets('会话项显示状态徽标、更新时间和常驻删除按钮（#2069）', (WidgetTester tester) async {
     final DateTime now = DateTime.now();
     await _pump(tester, <AiSession>[
       AiSession(
@@ -74,11 +78,17 @@ void main() {
 
     expect(find.text('实盘'), findsOneWidget);
     expect(find.text('待部署'), findsOneWidget);
-    expect(find.text('✓ 已部署 · 实盘运行中'), findsOneWidget);
-    expect(find.text('已生成策略参数'), findsOneWidget);
+    expect(find.text('趋势跟踪'), findsNothing);
+    expect(find.text('网格'), findsNothing);
+    expect(find.text('✓ 已部署 · 实盘运行中'), findsNothing);
+    expect(find.text('已生成策略参数'), findsNothing);
     expect(find.text('+31.6%'), findsNothing);
     expect(find.text('5 分钟前'), findsOneWidget);
     expect(find.text('刚刚'), findsOneWidget);
+    expect(find.byKey(const Key('ai-session-rename-s-live')), findsOneWidget);
+    expect(find.byKey(const Key('ai-session-rename-s-wip')), findsOneWidget);
+    expect(find.byKey(const Key('ai-session-delete-s-live')), findsOneWidget);
+    expect(find.byKey(const Key('ai-session-delete-s-wip')), findsOneWidget);
   });
 
   testWidgets('抽屉底部显示隐私脚注（#2069）', (WidgetTester tester) async {
@@ -87,7 +97,51 @@ void main() {
     expect(find.byKey(const Key('ai-session-privacy-footer')), findsOneWidget);
   });
 
-  testWidgets('删除当前方案前先确认，取消不触发删除', (WidgetTester tester) async {
+  testWidgets('非空会话列表支持下拉刷新', (WidgetTester tester) async {
+    final DateTime now = DateTime.now();
+    int refreshes = 0;
+    await _pump(
+      tester,
+      <AiSession>[
+        AiSession(
+          id: 's-wip',
+          title: 'ETH 4H 均值回归',
+          category: '均值回归',
+          updatedAt: now,
+          messages: const <ChatTurn>[],
+        ),
+      ],
+      currentId: 's-wip',
+      onRefresh: () async => refreshes++,
+    );
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.fling(find.byType(ListView), const Offset(0, 360), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(refreshes, 1);
+  });
+
+  testWidgets('空会话列表也支持下拉刷新', (WidgetTester tester) async {
+    int refreshes = 0;
+    await _pump(
+      tester,
+      const <AiSession>[],
+      onRefresh: () async => refreshes++,
+    );
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.fling(find.byType(ListView), const Offset(0, 360), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(refreshes, 1);
+  });
+
+  testWidgets('点击删除按钮把会话 id 交给页面流程处理', (WidgetTester tester) async {
     final DateTime now = DateTime.now();
     final List<String> deletedIds = <String>[];
     await _pump(
@@ -108,21 +162,39 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-session-delete-s-wip')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('ai-session-delete-dialog')), findsOneWidget);
-    expect(find.text('删除该方案？'), findsOneWidget);
-    expect(find.textContaining('全部对话上下文'), findsOneWidget);
-    expect(deletedIds, isEmpty);
-
-    await tester.tap(find.byKey(const Key('ai-session-delete-cancel')));
-    await tester.pumpAndSettle();
     expect(find.byKey(const Key('ai-session-delete-dialog')), findsNothing);
-    expect(deletedIds, isEmpty);
-
-    await tester.tap(find.byKey(const Key('ai-session-delete-s-wip')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('ai-session-delete-confirm')));
-    await tester.pumpAndSettle();
-
     expect(deletedIds, <String>['s-wip']);
+  });
+
+  testWidgets('点击编辑按钮后可保存会话名称', (WidgetTester tester) async {
+    final DateTime now = DateTime.now();
+    final List<String> renamed = <String>[];
+    await _pump(
+      tester,
+      <AiSession>[
+        AiSession(
+          id: 's-wip',
+          title: 'ETH 4H 均值回归',
+          category: '均值回归',
+          updatedAt: now,
+          messages: const <ChatTurn>[],
+        ),
+      ],
+      currentId: 's-wip',
+      onRename: (String id, String title) => renamed.add('$id:$title'),
+    );
+
+    await tester.tap(find.byKey(const Key('ai-session-rename-s-wip')));
+    await tester.pumpAndSettle();
+
+    final Finder input = find.byKey(const Key('ai-session-title-input-s-wip'));
+    expect(input, findsOneWidget);
+
+    await tester.enterText(input, 'ETH 改名会话');
+    await tester.tap(find.byKey(const Key('ai-session-rename-save-s-wip')));
+    await tester.pumpAndSettle();
+
+    expect(renamed, <String>['s-wip:ETH 改名会话']);
+    expect(input, findsNothing);
   });
 }

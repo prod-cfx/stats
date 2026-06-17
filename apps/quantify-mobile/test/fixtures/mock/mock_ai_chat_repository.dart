@@ -29,6 +29,12 @@ class MockAiChatRepository implements AiChatRepository {
   }
 
   @override
+  Future<AiSession> getSession(String sessionId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    return _sessions.firstWhere((AiSession session) => session.id == sessionId);
+  }
+
+  @override
   Future<AiSession> createSession({String? title}) async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     final DateTime now = DateTime.now();
@@ -108,7 +114,6 @@ class MockAiChatRepository implements AiChatRepository {
 
   @override
   Future<BacktestSummary?> latestBacktest(String sessionId) async {
-    await Future<void>.delayed(const Duration(milliseconds: 200));
     return mockLatestBacktestSummary;
   }
 

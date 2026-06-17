@@ -62,7 +62,7 @@ class QzChatBubble extends StatelessWidget {
   /// 会话已部署锁定态（#1834）。由会话 `deployedTo != null` 推导，
   /// 经 `ai_home_page.dart` 注入。为 true 时参数卡顶部渲染 LockedBanner
   /// 「策略已部署，参数已锁定」，并隐藏 #1831 的「确认策略」CTA——
-  /// 表达已部署方案参数不可再改、请新建方案。对齐设计稿
+  /// 表达已部署方案参数不可再改、请新建会话。对齐设计稿
   /// m-screens-1.jsx:403 `locked = !!current.deployedTo`。
   final bool locked;
 

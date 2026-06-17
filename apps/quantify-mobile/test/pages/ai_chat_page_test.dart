@@ -14,6 +14,8 @@ import 'package:quantify_mobile/data/models/deploy_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/ai_chat_repository.dart';
 import 'package:quantify_mobile/data/repositories/backtest_repository.dart';
+import 'package:quantify_mobile/data/repositories/live_strategy_repository.dart';
+import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
@@ -96,8 +98,8 @@ Future<void> _pump(WidgetTester tester, {List<Override>? overrides}) async {
     ),
   );
   await tester.pump();
-  // 让 postFrame loadSessions（50ms）和 latestBacktest（200ms）解析。
-  await tester.pump(const Duration(milliseconds: 350));
+  // 让 postFrame loadSessions、实盘对账和 latestBacktest（200ms）解析。
+  await tester.pump(const Duration(milliseconds: 650));
   await tester.pump();
 }
 
@@ -133,6 +135,7 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
   int sendMessageCalls = 0;
   int confirmStrategyCalls = 0;
   int getCodegenSessionCalls = 0;
+  final List<String> deletedIds = <String>[];
   String? confirmedSessionId;
   String? confirmedDigest;
 
@@ -145,10 +148,15 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
   Future<List<AiSession>> listSessions() async => <AiSession>[session];
 
   @override
+  Future<AiSession> getSession(String sessionId) async => session;
+
+  @override
   Future<AiSession> createSession({String? title}) async => session;
 
   @override
-  Future<void> deleteSession(String sessionId) async {}
+  Future<void> deleteSession(String sessionId) async {
+    deletedIds.add(sessionId);
+  }
 
   @override
   Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async {
@@ -205,6 +213,90 @@ class _ConfirmIntentAiChatRepository implements AiChatRepository {
     Map<String, Object?>? deploymentExecutionConfig,
   }) async => null;
 }
+
+class _OneLiveStrategyRepository implements LiveStrategyRepository {
+  const _OneLiveStrategyRepository(this.strategy);
+
+  final LiveStrategy strategy;
+
+  @override
+  Future<LiveStrategy> getStrategy(String id) async => strategy;
+
+  @override
+  Future<List<LiveStrategy>> listStrategies() async => <LiveStrategy>[strategy];
+
+  @override
+  Future<LiveStrategySummary> getSummary() async => throw UnimplementedError();
+
+  @override
+  Future<LiveStrategyPosition?> getPosition(String id) async => null;
+
+  @override
+  Future<List<LiveStrategyTrade>> listTrades(
+    String id, {
+    int limit = 6,
+  }) async => const <LiveStrategyTrade>[];
+
+  @override
+  Future<List<LiveStrategyParam>> listParams(String id) async =>
+      const <LiveStrategyParam>[];
+
+  @override
+  Future<LiveStrategy> pause(String id, {bool liquidate = false}) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<LiveStrategy> resume(String id) async => throw UnimplementedError();
+
+  @override
+  Future<void> softDelete(String id) async {}
+
+  @override
+  Future<void> permanentDelete(String id) async {}
+}
+
+LiveStrategy _liveStrategy(String id, LiveStrategyStatus status) =>
+    LiveStrategy(
+      id: id,
+      name: '运行策略',
+      pair: 'BTCUSDT',
+      timeframe: '15m',
+      exchange: 'okx',
+      exchangeGlyph: 'O',
+      market: '永续',
+      status: status,
+      runFor: '',
+      todayPct: 0,
+      todayPnl: 0,
+      totalPct: 0,
+      totalPnl: 0,
+      capital: 0,
+      trades: 0,
+      winRate: 0,
+      spark: const <double>[],
+      publishedSnapshotId: 'snap-$id',
+    );
+
+ChatTurn _scriptReadyTurn(String snapshotId) => ChatTurn(
+  id: 'script-$snapshotId',
+  role: 'assistant',
+  content: '策略脚本已生成',
+  timestamp: DateTime(2026, 6, 10, 22, 42),
+  kind: ChatTurnKind.scriptReady,
+  strategyContext: AiPublishedStrategyContext(
+    codegenSessionId: 'codegen-$snapshotId',
+    status: 'PUBLISHED',
+    params: const <String, String>{},
+    snapshotParamValues: const <String, Object?>{},
+    strategyConfig: const <String, Object?>{},
+    backtestConfigDefaults: const <String, Object?>{},
+    deploymentExecutionDefaults: const <String, Object?>{},
+    deploymentExecutionConstraints: const <String, Object?>{},
+    compatibilityMetadata: const <String, Object?>{},
+    publishedSnapshotId: snapshotId,
+    scriptCode: 'export default function strategy() {}',
+  ),
+);
 
 class _ResultBacktestRepository implements BacktestRepository {
   _ResultBacktestRepository(this.result, {this.delay = Duration.zero});
@@ -310,6 +402,10 @@ class _LoadErrorAiChatRepository implements AiChatRepository {
     if (failListSessions) throw StateError('sessions unavailable');
     return const <AiSession>[];
   }
+
+  @override
+  Future<AiSession> getSession(String sessionId) async =>
+      throw StateError('sessions unavailable');
 
   @override
   Future<AiSession> createSession({String? title}) async => AiSession(
@@ -992,7 +1088,7 @@ void main() {
 
     expect(repo.listSessionsCalls, 2);
     expect(find.byKey(const Key('ai-load-error-title')), findsNothing);
-    expect(find.text('暂无会话，点击「新建方案」开始一个策略对话。'), findsOneWidget);
+    expect(find.text('暂无会话，点击「新建会话」开始一个策略对话。'), findsOneWidget);
   });
 
   testWidgets('已部署会话：首屏渲染实盘终态卡和查看实盘 CTA', (WidgetTester tester) async {
@@ -1029,6 +1125,42 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-drawer-close')));
     await tester.pumpAndSettle();
     expect(find.text('BTC 趋势 · 双均线'), findsOneWidget);
+  });
+
+  testWidgets('删除关联运行中实盘策略的会话：先拦截，不显示删除确认', (WidgetTester tester) async {
+    final _ConfirmIntentAiChatRepository repo = _ConfirmIntentAiChatRepository(
+      session: AiSession(
+        id: 'running-session',
+        title: '运行中会话',
+        category: '未分类',
+        updatedAt: DateTime(2026, 6, 10, 22, 42),
+        deployedTo: 'live-running',
+        messages: <ChatTurn>[_scriptReadyTurn('snap-live-running')],
+      ),
+    );
+
+    await _pump(
+      tester,
+      overrides: <Override>[
+        aiChatRepositoryProvider.overrideWithValue(repo),
+        liveStrategyRepositoryProvider.overrideWithValue(
+          _OneLiveStrategyRepository(
+            _liveStrategy('live-running', LiveStrategyStatus.running),
+          ),
+        ),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('ai-appbar-history')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('ai-session-delete-running-session')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ai-session-delete-dialog')), findsNothing);
+    expect(find.text('需要先停止策略'), findsOneWidget);
+    expect(repo.deletedIds, isEmpty);
   });
 
   testWidgets('顶部栏：历史 + 回测 + 新建会话，无设计稿外的「参数」按钮（#2014）', (
@@ -1250,8 +1382,9 @@ void main() {
     expect(placeholder.style?.fontWeight, FontWeight.w700);
     expect(placeholder.style?.letterSpacing, -0.2);
 
-    // 排空 postFrame loadSessions（50ms）与 latestBacktest（200ms）定时器。
-    await tester.pump(const Duration(milliseconds: 350));
+    // 排空 postFrame loadSessions、实盘对账和 latestBacktest（200ms）定时器。
+    await tester.pump(const Duration(milliseconds: 650));
+    await tester.pump();
   });
 
   testWidgets('草稿不串台：在 s5 输入后切到 s2 输入框为空，再切回 s5 草稿仍在', (

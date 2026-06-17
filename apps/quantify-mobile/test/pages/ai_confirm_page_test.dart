@@ -162,6 +162,10 @@ class _FakeAiChatRepository implements AiChatRepository {
   }
 
   @override
+  Future<AiSession> getSession(String sessionId) async =>
+      sessions.firstWhere((AiSession session) => session.id == sessionId);
+
+  @override
   Future<AiSession> createSession({String? title}) async {
     final AiSession session = AiSession(
       id: 'chat-session-created',
