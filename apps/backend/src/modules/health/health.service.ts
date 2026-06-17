@@ -1,13 +1,13 @@
 import { buildHealthPayload } from '@ai/shared'
 import { Injectable, ServiceUnavailableException } from '@nestjs/common'
 import { RedisService } from '@/common/services/redis.service'
-import { PrismaService } from '@/prisma/prisma.service'
+import { HealthRepository } from './health.repository'
 import { ShutdownStateService } from './shutdown-state.service'
 
 @Injectable()
 export class HealthService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly healthRepository: HealthRepository,
     private readonly redis: RedisService,
     private readonly shutdownState: ShutdownStateService,
   ) {}
@@ -26,7 +26,7 @@ export class HealthService {
     }
 
     try {
-      await this.prisma.$queryRaw`SELECT 1`
+      await this.healthRepository.checkDatabaseReady()
       await this.redis.getClient().ping()
     } catch (error) {
       throw new ServiceUnavailableException('Backend dependencies are not ready', { cause: error })

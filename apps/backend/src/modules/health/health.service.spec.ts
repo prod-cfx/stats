@@ -1,11 +1,11 @@
 import { ServiceUnavailableException } from '@nestjs/common'
 import { RedisService } from '@/common/services/redis.service'
-import { PrismaService } from '@/prisma/prisma.service'
+import { HealthRepository } from './health.repository'
 import { HealthService } from './health.service'
 import { ShutdownStateService } from './shutdown-state.service'
 
-interface PrismaProbe {
-  $queryRaw: jest.Mock<Promise<unknown>, [TemplateStringsArray, ...unknown[]]>
+interface HealthRepositoryProbe {
+  checkDatabaseReady: jest.Mock<Promise<void>, []>
 }
 
 interface RedisProbe {
@@ -13,8 +13,8 @@ interface RedisProbe {
 }
 
 function createSubject() {
-  const prisma: PrismaProbe = {
-    $queryRaw: jest.fn<Promise<unknown>, [TemplateStringsArray, ...unknown[]]>(async () => [{ ok: 1 }]),
+  const healthRepository: HealthRepositoryProbe = {
+    checkDatabaseReady: jest.fn(async () => undefined),
   }
   const redisClient: RedisProbe = {
     ping: jest.fn(async () => 'PONG'),
@@ -24,12 +24,12 @@ function createSubject() {
   }
   const shutdownState = new ShutdownStateService()
   const service = new HealthService(
-    prisma as unknown as PrismaService,
+    healthRepository as unknown as HealthRepository,
     redis as unknown as RedisService,
     shutdownState,
   )
 
-  return { prisma, redis, redisClient, service, shutdownState }
+  return { healthRepository, redis, redisClient, service, shutdownState }
 }
 
 describe('HealthService', () => {
@@ -43,26 +43,26 @@ describe('HealthService', () => {
   })
 
   it('returns live health without touching Prisma or Redis', () => {
-    const { prisma, redis, service } = createSubject()
+    const { healthRepository, redis, service } = createSubject()
 
     const payload = service.getLiveHealth()
 
     expect(payload).toMatchObject({ service: 'backend', status: 'ok' })
-    expect(prisma.$queryRaw).not.toHaveBeenCalled()
+    expect(healthRepository.checkDatabaseReady).not.toHaveBeenCalled()
     expect(redis.getClient).not.toHaveBeenCalled()
   })
 
-  it('returns ready health after Prisma and Redis probes succeed', async () => {
-    const { prisma, redisClient, service } = createSubject()
+  it('returns ready health after repository and Redis probes succeed', async () => {
+    const { healthRepository, redisClient, service } = createSubject()
 
     await expect(service.getReadyHealth()).resolves.toMatchObject({ service: 'backend', status: 'ok' })
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
+    expect(healthRepository.checkDatabaseReady).toHaveBeenCalledTimes(1)
     expect(redisClient.ping).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects readiness when Prisma probe fails', async () => {
-    const { prisma, service } = createSubject()
-    prisma.$queryRaw.mockRejectedValueOnce(new Error('db down'))
+  it('rejects readiness when repository probe fails', async () => {
+    const { healthRepository, service } = createSubject()
+    healthRepository.checkDatabaseReady.mockRejectedValueOnce(new Error('db down'))
 
     await expect(service.getReadyHealth()).rejects.toBeInstanceOf(ServiceUnavailableException)
   })
@@ -75,12 +75,12 @@ describe('HealthService', () => {
   })
 
   it('rejects readiness during shutdown while live health still avoids dependencies', async () => {
-    const { prisma, redis, service, shutdownState } = createSubject()
+    const { healthRepository, redis, service, shutdownState } = createSubject()
     shutdownState.beforeApplicationShutdown()
 
     await expect(service.getReadyHealth()).rejects.toBeInstanceOf(ServiceUnavailableException)
     expect(service.getLiveHealth()).toMatchObject({ service: 'backend', status: 'ok' })
-    expect(prisma.$queryRaw).not.toHaveBeenCalled()
+    expect(healthRepository.checkDatabaseReady).not.toHaveBeenCalled()
     expect(redis.getClient).not.toHaveBeenCalled()
   })
 })
