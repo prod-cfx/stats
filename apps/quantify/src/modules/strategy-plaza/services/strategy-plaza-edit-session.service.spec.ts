@@ -296,6 +296,27 @@ describe('StrategyPlazaEditSessionService', () => {
     }))
   })
 
+  it('starts EMA trend continuation edit through the first-turn semantic recognition path', async () => {
+    const emaTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ema-trend-continuation')!
+    const templates = { getRequired: jest.fn().mockReturnValue(emaTemplate) }
+    const codegenConversationService = {
+      startSession: jest.fn().mockResolvedValue({ id: 'session-ema', conversationId: 'conversation-ema' }),
+      updateConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
+    }
+    const service = new StrategyPlazaEditSessionService(
+      templates as never,
+      codegenConversationService as never,
+    )
+
+    await service.startEditSession({ userId: 'user-1', templateId: 'ema-trend-continuation' })
+
+    expect(codegenConversationService.startSession).toHaveBeenCalledWith({
+      initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。风控：仓位 25%，2 倍杠杆。',
+      guideConfig: emaTemplate.editSeed.guideConfig,
+      locale: 'zh',
+    }, 'user-1')
+  })
+
   it('uses the 7D default backtest window only for selected official templates', async () => {
     const emaTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'ema-trend-continuation')!
     const breakdownTemplate = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(template => template.id === 'breakdown-short-follow')!

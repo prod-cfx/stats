@@ -894,6 +894,95 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-1')
   })
 
+  it('continues deploy when on-demand market subscription is slow', async () => {
+    jest.useFakeTimers()
+    try {
+      const repo = {
+        deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-slow-symbol-1', mode: 'TESTNET' }),
+        findStrategyForUser: jest.fn().mockResolvedValue(null),
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+        createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-slow-symbol-1' }),
+        markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+        markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+        upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+        activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+        markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+      }
+      const snapshotsRepository = {
+        findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
+          id: 'snapshot-slow-symbol-1',
+          snapshotHash: 'snapshot-hash-slow-symbol-1',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'SOLUSDT',
+            baseTimeframe: '5m',
+            marketType: 'spot',
+            positionPct: 10,
+          },
+          deploymentExecutionDefaults: {
+            leverage: 1,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'GTC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 5,
+            defaultLeverage: 1,
+            supportedPriceSources: ['close'],
+            supportedOrderTypes: ['market'],
+            supportedTimeInForce: ['GTC'],
+          },
+          strategyInstanceId: 'inst-draft-slow-symbol-1',
+          strategyTemplateId: 'template-slow-symbol-1',
+          astSnapshot: {
+            runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+          },
+        })),
+      }
+      const marketDataIngestionService = {
+        ensureSymbolsSubscribed: jest.fn().mockReturnValue(new Promise(() => undefined)),
+      }
+
+      const service = new AccountStrategyViewService(
+        repo as any,
+        { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+        { updateInstance: jest.fn() } as any,
+        marketDataIngestionService as any,
+        undefined,
+        undefined,
+        undefined,
+        snapshotsRepository as any,
+        createRuntimeExecutionStateService() as any,
+      )
+      service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-slow-symbol-1' } as any)
+
+      const deployPromise = service.deployStrategy({
+        userId: 'user-1',
+        name: 'OKX SOL 5m',
+        publishedSnapshotId: 'snapshot-slow-symbol-1',
+        deployRequestId: 'deploy-req-slow-symbol-1',
+        exchangeAccountId: 'acc-1',
+      } as any)
+
+      await Promise.resolve()
+      expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
+
+      await jest.advanceTimersByTimeAsync(1_500)
+      await expect(deployPromise).resolves.toEqual({ id: 'inst-slow-symbol-1' })
+
+      expect(marketDataIngestionService.ensureSymbolsSubscribed).toHaveBeenCalledWith(['SOLUSDT'])
+      expect(repo.deployStrategyForUser).toHaveBeenCalled()
+      expect(repo.markDeployRequestSucceeded).toHaveBeenCalledWith('req-slow-symbol-1', 'inst-slow-symbol-1')
+      expect(repo.activateStrategyInstanceForRuntime).toHaveBeenCalledWith({
+        strategyInstanceId: 'inst-slow-symbol-1',
+        mode: 'TESTNET',
+        userId: 'user-1',
+      })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('deploys fixed quote sizing snapshots without requiring legacy positionPct', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-fixed', mode: 'TESTNET' }),

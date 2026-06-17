@@ -1272,7 +1272,7 @@ export class AccountStrategyViewService {
     let strategyInstanceIdForBinding: string | null = null
     let deployedStrategyInstanceId: string | null = null
     try {
-      await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
+      await this.ensureMarketSymbolsSubscribedForDeploy([resolvedDeploy.symbol])
 
       const deployResult = await this.repo.deployStrategyForUser({
         userId: dto.userId,
@@ -1301,6 +1301,15 @@ export class AccountStrategyViewService {
       })
       strategyInstanceIdForBinding = deployResult.strategyInstanceId
       deployedStrategyInstanceId = deployResult.strategyInstanceId
+
+      const bindStrategyInstance = this.publishedSnapshotsRepository?.bindStrategyInstance
+      if (bindStrategyInstance) {
+        await bindStrategyInstance.call(this.publishedSnapshotsRepository, {
+          snapshotId: resolvedDeploy.publishedSnapshotId,
+          userId: dto.userId,
+          strategyInstanceId: deployResult.strategyInstanceId,
+        })
+      }
 
       await this.ensureExternalSignalSubscriptionsForDeploy({
         userId: dto.userId,
@@ -1393,6 +1402,18 @@ export class AccountStrategyViewService {
       strategyInstanceId: input.strategyInstanceId,
       requirements: [...bySignalId.values()],
     })
+  }
+
+  private async ensureMarketSymbolsSubscribedForDeploy(symbols: string[]): Promise<void> {
+    try {
+      await this.withBestEffortTimeout(this.marketDataIngestionService.ensureSymbolsSubscribed(symbols))
+    } catch (error) {
+      this.logger.warn(
+        `Best-effort market data subscription during deploy timed out or failed for ${symbols.join(',')}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
   }
 
   async getDeployResult(userId: string, deployRequestId: string): Promise<AccountStrategyDetailResponseDto | null> {

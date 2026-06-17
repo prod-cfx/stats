@@ -48,7 +48,6 @@ export class StrategyPlazaEditSessionService {
         this.backtestDraftConfigBuilder.build(template),
       )
     }
-
     return {
       sessionId: session.id,
       templateId: template.id,

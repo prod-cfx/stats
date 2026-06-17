@@ -2101,6 +2101,59 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
+  it('continues backtest submission when active conversation ref is not hydrated yet', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      id: 'conv-ref-stale',
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+    mockCreateBacktestJob.mockResolvedValueOnce({
+      id: 'btjob-ref-stale',
+      status: 'succeeded',
+      createdAt: '2026-03-24T12:00:00.000Z',
+    })
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 10,
+        netProfitPct: 1,
+        maxDrawdownPct: 2,
+        winRate: 0.5,
+        profitFactor: 1.2,
+        totalTrades: 3,
+      },
+    })
+
+    const activeConversationIdRef = { current: '' }
+    let currentConversation = activeConversation
+    const states: ConversationState['backtestExecutionState'][] = []
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef,
+      backtestCapabilities: { allowedBaseTimeframes: ['15m'] },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: (_conversationId, state) => {
+        states.push(state)
+      },
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(activeConversationIdRef.current).toBe('conv-ref-stale')
+    expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledTimes(1)
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(states).toEqual(expect.arrayContaining(['submitting', 'succeeded']))
+    expect(currentConversation.backtestResult?.id).toBe('btjob-ref-stale')
+  })
+
   it('uses serverConversationId in the backtest payload when a local conversation has been persisted', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     const activeConversation = {

@@ -1556,6 +1556,95 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result[0]).not.toHaveProperty('scriptCode')
   })
 
+  it('includes latest published snapshot fields in conversation summaries before any backtest has run', async () => {
+    mockConversationsRepo.listSummariesByUser.mockResolvedValue([
+      {
+        id: 'conv-published-summary',
+        userId: 'u1',
+        title: '已发布未回测',
+        codegenSessionId: 'session-published-summary',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        backtestDraftConfig: null,
+        lastBacktestRef: null,
+      },
+    ])
+    mockRepo.listSummariesByIds.mockResolvedValue([{
+      id: 'session-published-summary',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'instance-1',
+    }])
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-summary-1',
+      strategyInstanceId: 'instance-1',
+      paramsSnapshot: { exchange: 'okx', symbol: 'ETHUSDT', timeframe: '15m' },
+      lockedParams: { positionPct: 10 },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        defaultLeverage: 1,
+      },
+      executionPolicy: { allowPartialFill: false },
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(mockRepo.findLatestBySessionId).toHaveBeenCalledWith('session-published-summary')
+    expect(result[0]).toMatchObject({
+      id: 'conv-published-summary',
+      publishedSnapshotId: 'snapshot-summary-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '15m',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        backtestAllowPartial: false,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      publishedSnapshotCompatibilityMetadata: {
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
+      },
+    })
+  })
+
   it('does not list strategy plaza run sessions as AI Quant conversations', async () => {
     mockConversationsRepo.listSummariesByUser.mockResolvedValue([
       {

@@ -530,6 +530,7 @@ export async function runAiQuantBacktest(args: {
 
   const runToken = (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1
   backtestRunTokenRef.current.set(conversationId, runToken)
+  activeConversationIdRef.current = conversationId
   const backtestMessageId = `bt-${Date.now()}`
   const updateBacktestMessage = (content: string) => {
     updateConversationById(conversationId, curr => {

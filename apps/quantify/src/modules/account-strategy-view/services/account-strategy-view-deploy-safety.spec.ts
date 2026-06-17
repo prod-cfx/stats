@@ -325,7 +325,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
 
-    return { service, repo }
+    return { service, repo, snapshotsRepository }
   }
 
   it('requires deployRequestId', async () => {
@@ -465,6 +465,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
             }],
           },
         })),
+        bindStrategyInstance: jest.fn().mockResolvedValue(undefined),
       },
       runtimeExecutionStateService,
     })
@@ -550,7 +551,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue([]),
       initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
     }
-    const { service, repo } = buildService({
+    const { service, repo, snapshotsRepository } = buildService({
       snapshotsRepository: {
         findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
           id: 'snapshot-official-plaza-continuous',
@@ -586,6 +587,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
             runtimeExecutionSemantics: [],
           },
         })),
+        bindStrategyInstance: jest.fn().mockResolvedValue(undefined),
       },
       runtimeExecutionStateService,
     })
@@ -618,6 +620,11 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
         publishedSnapshotId: 'snapshot-official-plaza-continuous',
       }),
     }))
+    expect(snapshotsRepository.bindStrategyInstance).toHaveBeenCalledWith({
+      snapshotId: 'snapshot-official-plaza-continuous',
+      userId: 'user-1',
+      strategyInstanceId: 'inst-1',
+    })
   })
 
   it('returns existing result for succeeded idempotent request', async () => {
