@@ -42,6 +42,19 @@ describe('accountAiQuantConversationsController', () => {
     expect(response).toBeDefined()
   })
 
+  it('forwards AI Quant conversation detail through the proxy service', async () => {
+    const service = {
+      getAiQuantConversation: jest.fn().mockResolvedValue({ id: 'conv-1', conversationTitle: 'detail' }),
+    }
+    const controller = new AccountAiQuantConversationsController(service as never)
+
+    await expect(controller.detail('user-1', 'Bearer token-1', 'conv-1')).resolves.toEqual({
+      id: 'conv-1',
+      conversationTitle: 'detail',
+    })
+    expect(service.getAiQuantConversation).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'conv-1')
+  })
+
   it('forwards AI Quant conversation deletion through the proxy service', async () => {
     const service = {
       deleteAiQuantConversation: jest.fn().mockResolvedValue(undefined),

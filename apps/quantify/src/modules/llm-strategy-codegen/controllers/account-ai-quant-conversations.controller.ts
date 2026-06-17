@@ -27,6 +27,18 @@ export class AccountAiQuantConversationsController {
     return this.service.listConversations(callerUserId)
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: '查询当前用户的 AI Quant 会话详情' })
+  @ApiResponse({ status: 200, type: AiQuantConversationResponseDto })
+  async detail(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
+    @Param('id') id: string,
+  ): Promise<AiQuantConversationResponseDto> {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    return this.service.getConversation(id, callerUserId)
+  }
+
   @Post('edit-session')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '恢复或创建 AI Quant 修改会话' })

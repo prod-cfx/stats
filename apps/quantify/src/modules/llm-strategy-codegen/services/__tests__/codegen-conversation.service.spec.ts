@@ -53,6 +53,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     createSession: jest.fn(),
     findById: jest.fn(),
     listByUser: jest.fn(),
+    listSummariesByIds: jest.fn(),
     updateSession: jest.fn(),
     tryMarkGenerating: jest.fn(),
     tryRequeueFromProcessing: jest.fn(),
@@ -79,7 +80,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   }
   const mockConversationsRepo = {
     listByUser: jest.fn(),
+    listSummariesByUser: jest.fn(),
     listKnownSessionIdsByUser: jest.fn(),
+    findActiveByIdAndUser: jest.fn(),
     findActiveDeleteContextByIdAndUser: jest.fn(),
     findByCodegenSessionId: jest.fn(),
     upsertConversationSnapshot: jest.fn(),
@@ -921,6 +924,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       consistencyReport: {},
     })
     mockRepo.findLatestBySessionId.mockResolvedValue(null)
+    mockRepo.listSummariesByIds.mockResolvedValue([])
     mockRepo.createDraftStrategyInstanceFromPublishedSession.mockResolvedValue({
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
@@ -931,7 +935,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     mockRepo.bindPublishedSnapshotToStrategyInstance.mockResolvedValue(undefined)
     mockConversationsRepo.listByUser.mockResolvedValue([])
+    mockConversationsRepo.listSummariesByUser.mockResolvedValue([])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)
     mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue(null)
     mockConversationsRepo.findByCodegenSessionId.mockResolvedValue(null)
     mockConversationsRepo.upsertConversationSnapshot.mockResolvedValue(undefined)
@@ -1514,7 +1520,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('lists conversations from the dedicated conversation aggregate instead of raw session rows', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
+    mockConversationsRepo.listSummariesByUser.mockResolvedValue([
       {
         id: 'conv-1',
         userId: 'u1',
@@ -1522,49 +1528,36 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         codegenSessionId: 'session-1',
         createdAt: new Date('2026-04-10T20:00:00.000Z'),
         updatedAt: new Date('2026-04-10T20:01:00.000Z'),
-        messages: [
-          { role: 'user', content: '来自会话聚合的用户消息' },
-          { role: 'assistant', content: '来自会话聚合的助手消息' },
-        ],
+        backtestDraftConfig: null,
+        lastBacktestRef: null,
       },
     ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
-    mockRepo.listByUser.mockResolvedValue([])
-    mockRepo.findById.mockResolvedValue({
+    mockRepo.listSummariesByIds.mockResolvedValue([{
       id: 'session-1',
-      userId: 'u1',
       status: 'CONFIRM_GATE',
-      checklist: {},
-      clarificationState: { status: 'CLEAR', items: [] },
-      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
-      latestDraftCode: null,
-      latestSpecDesc: null,
-      rejectReason: null,
-      createdAt: new Date('2026-04-10T20:00:00.000Z'),
-      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
       strategyInstanceId: null,
-    })
+    }])
 
     const result = await service.listConversations('u1')
 
-    expect(mockConversationsRepo.listByUser).toHaveBeenCalledWith('u1')
-    expect(mockRepo.listByUser).toHaveBeenCalledWith('u1')
+    expect(mockConversationsRepo.listSummariesByUser).toHaveBeenCalledWith('u1')
+    expect(mockRepo.listSummariesByIds).toHaveBeenCalledWith(['session-1'])
+    expect(mockRepo.findById).not.toHaveBeenCalled()
     expect(result).toEqual([
       expect.objectContaining({
         id: 'conv-1',
         activeCodegenSessionId: 'session-1',
         conversationTitle: '服务器会话',
-        conversationMessages: [
-          { role: 'user', content: '来自会话聚合的用户消息' },
-          { role: 'assistant', content: '来自会话聚合的助手消息' },
-        ],
         status: 'CONFIRM_GATE',
       }),
     ])
+    expect(result[0]).not.toHaveProperty('conversationMessages')
+    expect(result[0]).not.toHaveProperty('specDesc')
+    expect(result[0]).not.toHaveProperty('scriptCode')
   })
 
   it('does not list strategy plaza run sessions as AI Quant conversations', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
+    mockConversationsRepo.listSummariesByUser.mockResolvedValue([
       {
         id: 'conv-visible',
         userId: 'u1',
@@ -1572,7 +1565,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         codegenSessionId: 'session-visible',
         createdAt: new Date('2026-04-10T20:00:00.000Z'),
         updatedAt: new Date('2026-04-10T20:01:00.000Z'),
-        messages: [{ role: 'user', content: '从编辑进入' }],
+        backtestDraftConfig: null,
+        lastBacktestRef: null,
       },
       {
         id: 'conv-plaza-run',
@@ -1581,30 +1575,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         codegenSessionId: 'strategy-plaza:official:ma-cross:user:hash:source:hash',
         createdAt: new Date('2026-04-10T20:00:00.000Z'),
         updatedAt: new Date('2026-04-10T20:02:00.000Z'),
-        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+        backtestDraftConfig: null,
+        lastBacktestRef: null,
       },
     ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([
-      'session-visible',
-      'strategy-plaza:official:ma-cross:user:hash:source:hash',
-    ])
-    mockRepo.listByUser.mockResolvedValue([
-      { id: 'strategy-plaza:official:grid:user:hash:source:hash', userId: 'u1' },
-    ])
-    mockRepo.findById.mockResolvedValue({
+    mockRepo.listSummariesByIds.mockResolvedValue([{
       id: 'session-visible',
-      userId: 'u1',
       status: 'CONFIRM_GATE',
-      checklist: {},
-      clarificationState: { status: 'CLEAR', items: [] },
-      constraintPack: { conversationHistory: ['U: 从编辑进入'] },
-      latestDraftCode: null,
-      latestSpecDesc: null,
-      rejectReason: null,
-      createdAt: new Date('2026-04-10T20:00:00.000Z'),
-      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
       strategyInstanceId: null,
-    })
+    }])
 
     const result = await service.listConversations('u1')
 
@@ -1615,26 +1594,24 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       conversationTitle: '编辑会话',
     })
     expect(mockConversationsRepo.upsertConversationSnapshot).not.toHaveBeenCalled()
-    expect(mockRepo.findById).not.toHaveBeenCalledWith('strategy-plaza:official:ma-cross:user:hash:source:hash')
-    expect(mockRepo.findById).not.toHaveBeenCalledWith('strategy-plaza:official:grid:user:hash:source:hash')
+    expect(mockRepo.listSummariesByIds).toHaveBeenCalledWith(['session-visible'])
+    expect(mockRepo.findById).not.toHaveBeenCalled()
   })
 
-  it('includes snapshot-bound param values when listing published conversations', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
-      {
-        id: 'conv-published',
-        userId: 'u1',
-        title: '已发布会话',
-        codegenSessionId: 'session-published',
-        createdAt: new Date('2026-04-10T20:00:00.000Z'),
-        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
-        messages: [
-          { role: 'assistant', content: '来自会话聚合的助手消息' },
-        ],
-      },
-    ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published'])
-    mockRepo.listByUser.mockResolvedValue([])
+  it('includes snapshot-bound param values when getting a published conversation detail', async () => {
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+      id: 'conv-published',
+      userId: 'u1',
+      title: '已发布会话',
+      codegenSessionId: 'session-published',
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: null,
+      messages: [
+        { role: 'assistant', content: '来自会话聚合的助手消息' },
+      ],
+    })
     mockRepo.findById.mockResolvedValue({
       id: 'session-published',
       userId: 'u1',
@@ -1691,10 +1668,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     })
 
-    const result = await service.listConversations('u1')
+    const result = await service.getConversation('conv-published', 'u1')
 
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({
+    expect(result).toMatchObject({
       id: 'conv-published',
       publishedSnapshotId: 'snapshot-1',
       publishedSnapshotParamValues: {
@@ -1742,22 +1718,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
-  it('restores published script code from the latest snapshot when listing conversations', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
-      {
-        id: 'conv-published-script',
-        userId: 'u1',
-        title: '已发布脚本会话',
-        codegenSessionId: 'session-published-script',
-        createdAt: new Date('2026-04-10T20:00:00.000Z'),
-        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
-        backtestDraftConfig: null,
-        lastBacktestRef: null,
-        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
-      },
-    ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published-script'])
-    mockRepo.listByUser.mockResolvedValue([])
+  it('restores published script code from the latest snapshot when getting conversation detail', async () => {
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+      id: 'conv-published-script',
+      userId: 'u1',
+      title: '已发布脚本会话',
+      codegenSessionId: 'session-published-script',
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: null,
+      messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+    })
     mockRepo.findById.mockResolvedValue({
       id: 'session-published-script',
       userId: 'u1',
@@ -1782,10 +1754,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       consistencyReport: { status: 'PASSED' },
     })
 
-    const result = await service.listConversations('u1')
+    const result = await service.getConversation('conv-published-script', 'u1')
 
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({
+    expect(result).toMatchObject({
       id: 'conv-published-script',
       status: 'PUBLISHED',
       publishedSnapshotId: 'snapshot-script-1',
@@ -1793,22 +1764,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
-  it('does not fabricate script code when a published session has no draft code or snapshot script', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
-      {
-        id: 'conv-published-missing-script',
-        userId: 'u1',
-        title: '缺少脚本的已发布会话',
-        codegenSessionId: 'session-published-missing-script',
-        createdAt: new Date('2026-04-10T20:00:00.000Z'),
-        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
-        backtestDraftConfig: null,
-        lastBacktestRef: null,
-        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
-      },
-    ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published-missing-script'])
-    mockRepo.listByUser.mockResolvedValue([])
+  it('does not fabricate script code when a published conversation detail has no draft code or snapshot script', async () => {
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+      id: 'conv-published-missing-script',
+      userId: 'u1',
+      title: '缺少脚本的已发布会话',
+      codegenSessionId: 'session-published-missing-script',
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: null,
+      messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+    })
     mockRepo.findById.mockResolvedValue({
       id: 'session-published-missing-script',
       userId: 'u1',
@@ -1833,10 +1800,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       consistencyReport: { status: 'PASSED' },
     })
 
-    const result = await service.listConversations('u1')
+    const result = await service.getConversation('conv-published-missing-script', 'u1')
 
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({
+    expect(result).toMatchObject({
       id: 'conv-published-missing-script',
       status: 'PUBLISHED',
       publishedSnapshotId: 'snapshot-missing-script',
@@ -1897,17 +1863,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('includes lastBacktestRef when it matches the current published snapshot', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
-      {
-        id: 'conv-1',
-        userId: 'user-1',
-        codegenSessionId: 'session-1',
-        title: 'conv',
-        archivedAt: null,
-        createdAt: new Date('2026-04-23T00:00:00.000Z'),
-        updatedAt: new Date('2026-04-23T00:05:00.000Z'),
-        lastBacktestRef: {
+  it('includes lastBacktestRef in detail when it matches the current published snapshot', async () => {
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'user-1',
+      codegenSessionId: 'session-1',
+      title: 'conv',
+      archivedAt: null,
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
           config: {
@@ -1930,13 +1896,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             tradeCount: 5,
             marketType: 'spot',
           },
-          completedAt: new Date('2026-04-23T00:04:00.000Z'),
-        },
-        messages: [],
+        completedAt: new Date('2026-04-23T00:04:00.000Z'),
       },
-    ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
-    mockRepo.listByUser.mockResolvedValue([])
+      messages: [],
+    })
     mockRepo.findById.mockResolvedValue({
       id: 'session-1',
       userId: 'user-1',
@@ -1956,9 +1919,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       consistencyReport: { status: 'PASSED' },
     })
 
-    const result = await service.listConversations('user-1')
+    const result = await service.getConversation('conv-1', 'user-1')
 
-    expect(result[0]).toMatchObject({
+    expect(result).toMatchObject({
       id: 'conv-1',
       lastBacktestRef: {
         jobId: 'btjob-1',
@@ -1987,17 +1950,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
-  it('hides lastBacktestRef when it no longer matches the current published snapshot', async () => {
-    mockConversationsRepo.listByUser.mockResolvedValue([
-      {
-        id: 'conv-1',
-        userId: 'user-1',
-        codegenSessionId: 'session-1',
-        title: 'conv',
-        archivedAt: null,
-        createdAt: new Date('2026-04-23T00:00:00.000Z'),
-        updatedAt: new Date('2026-04-23T00:05:00.000Z'),
-        lastBacktestRef: {
+  it('hides lastBacktestRef in detail when it no longer matches the current published snapshot', async () => {
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'user-1',
+      codegenSessionId: 'session-1',
+      title: 'conv',
+      archivedAt: null,
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
           config: {
@@ -2020,13 +1983,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             tradeCount: 5,
             marketType: 'spot',
           },
-          completedAt: new Date('2026-04-23T00:04:00.000Z'),
-        },
-        messages: [],
+        completedAt: new Date('2026-04-23T00:04:00.000Z'),
       },
-    ])
-    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
-    mockRepo.listByUser.mockResolvedValue([])
+      messages: [],
+    })
     mockRepo.findById.mockResolvedValue({
       id: 'session-1',
       userId: 'user-1',
@@ -2046,9 +2006,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       consistencyReport: { status: 'PASSED' },
     })
 
-    const result = await service.listConversations('user-1')
+    const result = await service.getConversation('conv-1', 'user-1')
 
-    expect(result[0]?.lastBacktestRef).toBeNull()
+    expect(result.lastBacktestRef).toBeNull()
   })
 
   it('keeps published snapshot params faithful to snapshot sources without injecting default execution values', () => {
@@ -2141,7 +2101,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyInstanceId: null,
     }))
 
-    await service.listConversations('u1')
+    await service.backfillMissingConversationProjections('u1')
 
     expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledTimes(1)
     expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({

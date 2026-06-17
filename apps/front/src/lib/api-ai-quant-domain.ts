@@ -375,6 +375,28 @@ export async function listAiQuantConversations(): Promise<AiQuantConversationRes
   )
 }
 
+export async function getAiQuantConversation(conversationId: string): Promise<AiQuantConversationResponse> {
+  validateId(conversationId, 'AI Quant conversation ID')
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
+    method: 'GET',
+    headers: authHeaders,
+  })
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, '查询 AI Quant 会话详情失败')
+    throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
+  }
+  return unwrapResponse<AiQuantConversationResponse>(
+    json as AiQuantConversationResponse | { data?: AiQuantConversationResponse; message?: string },
+  )
+}
+
 export async function deleteAiQuantConversation(
   conversationId: string,
   options: { deleteStoppedStrategy?: boolean } = {},

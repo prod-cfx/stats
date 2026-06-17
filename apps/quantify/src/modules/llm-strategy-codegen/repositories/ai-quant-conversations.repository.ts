@@ -61,6 +61,17 @@ export interface AiQuantConversationDeleteContextRecord {
   codegenSessionId: string
 }
 
+export interface AiQuantConversationSummaryRecord {
+  id: string
+  userId: string
+  codegenSessionId: string
+  title: string
+  createdAt: Date
+  updatedAt: Date
+  backtestDraftConfig: AiQuantConversationBacktestDraftConfigRecord | null
+  lastBacktestRef: AiQuantConversationLastBacktestRefRecord | null
+}
+
 @Injectable()
 export class AiQuantConversationsRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -113,6 +124,30 @@ export class AiQuantConversationsRepository {
     })
 
     return conversations.map(conversation => this.mapSnapshotRecord(conversation))
+  }
+
+  async listSummariesByUser(userId: string, limit = 50): Promise<AiQuantConversationSummaryRecord[]> {
+    const conversations = await this.txHost.tx.aiQuantConversation.findMany({
+      where: { userId, archivedAt: null },
+      orderBy: { updatedAt: 'desc' },
+      take: Math.max(1, Math.min(limit, 100)),
+      select: {
+        id: true,
+        userId: true,
+        codegenSessionId: true,
+        title: true,
+        createdAt: true,
+        updatedAt: true,
+        backtestDraftConfig: true,
+        lastBacktestRef: true,
+      },
+    })
+
+    return conversations.map(conversation => ({
+      ...conversation,
+      backtestDraftConfig: this.parseBacktestDraftConfig(conversation.backtestDraftConfig),
+      lastBacktestRef: this.parseLastBacktestRef(conversation.lastBacktestRef),
+    }))
   }
 
   async listKnownSessionIdsByUser(userId: string): Promise<string[]> {

@@ -535,6 +535,24 @@ describe('aiQuantProxyService', () => {
     })
   })
 
+  it('proxies AI Quant conversation detail with authorization header', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockResolvedValue({ id: 'conv-1', conversationTitle: 'detail' })
+
+    await expect(service.getAiQuantConversation('user-1', 'Bearer token-1', 'conv-1')).resolves.toEqual({
+      id: 'conv-1',
+      conversationTitle: 'detail',
+    })
+
+    expect(quantifyClient.get).toHaveBeenCalledWith(
+      '/account/ai-quant/conversations/conv-1',
+      {
+        timeoutMs: codegenTimeoutMs,
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+      },
+    )
+  })
+
   it('proxies AI Quant backtest draft updates with authorization header', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.patch.mockResolvedValue(undefined)

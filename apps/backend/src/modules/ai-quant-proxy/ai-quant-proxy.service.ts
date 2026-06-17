@@ -132,6 +132,17 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async getAiQuantConversation(
+    userId: string,
+    authorization: string | undefined,
+    conversationId: string,
+  ): Promise<AiQuantConversationResponseDto> {
+    return this.quantifyClient.get<AiQuantConversationResponseDto>(`/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
+      timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async listStrategyPlazaTemplates(): Promise<StrategyPlazaTemplateResponseDto[]> {
     return this.quantifyClient.listStrategyPlazaTemplates<StrategyPlazaTemplateResponseDto[]>()
       .catch(error => { throw this.mapQuantifyError(error) })

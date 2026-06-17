@@ -45,6 +45,7 @@ import {
   fetchAccountAiQuantStrategyDetail,
   fetchStrategyPlazaTemplates,
   fetchUserExchangeAccountStatuses,
+  getAiQuantConversation,
   listAiQuantConversations,
   performAccountAiQuantStrategyAction,
   recoverAiQuantEditConversation,
@@ -289,6 +290,7 @@ export function AiQuantPageClient({
   const backtestSummarySyncRef = useRef(new Set<string>())
   const codegenRequestMutexRef = useRef(new Set<string>())
   const restoredSessionReconciliationRef = useRef(new Set<string>())
+  const serverConversationDetailHydrationRef = useRef(new Set<string>())
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -365,6 +367,46 @@ export function AiQuantPageClient({
     setConversationStorageReady(true)
   }
 
+  const applyServerConversationDetail = (response: Awaited<ReturnType<typeof getAiQuantConversation>>) => {
+    const hydrated = createConversationFromServerConversation(response, t)
+    setConversations(prev => prev.map(conversation => (
+      conversation.id === hydrated.id || conversation.serverConversationId === hydrated.serverConversationId
+        ? hydrated
+        : conversation
+    )))
+  }
+
+  const hydrateServerConversationDetail = async (conversationId: string, isCancelled: () => boolean) => {
+    if (serverConversationDetailHydrationRef.current.has(conversationId)) {
+      return
+    }
+    serverConversationDetailHydrationRef.current.add(conversationId)
+    try {
+      const detail = await getAiQuantConversation(conversationId)
+      if (!isCancelled()) {
+        applyServerConversationDetail(detail)
+      }
+    } catch {
+      serverConversationDetailHydrationRef.current.delete(conversationId)
+      // Summary rows are enough for the sidebar; detail failures surface when the user retries actions.
+    }
+  }
+
+  useEffect(() => {
+    if (!serverOwnedConversations || conversationSyncState !== 'ready') return
+    const serverConversationId = activeConversation?.serverConversationId?.trim()
+    if (!serverConversationId) return
+
+    let cancelled = false
+    void hydrateServerConversationDetail(serverConversationId, () => cancelled)
+
+    return () => {
+      cancelled = true
+    }
+    // Detail hydration is intentionally keyed by the selected server conversation id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversation?.serverConversationId, conversationSyncState, serverOwnedConversations])
+
   useEffect(() => {
     const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
     if (!session?.userId || !publishedStrategyInstanceId) {
@@ -411,6 +453,7 @@ export function AiQuantPageClient({
             if (matched) {
               clearIntent()
               applyConversationSyncSnapshot(restored, matched.id, 'ready')
+              void hydrateServerConversationDetail(matched.serverConversationId ?? matched.id, () => cancelled)
               return
             }
 
@@ -441,6 +484,9 @@ export function AiQuantPageClient({
 
           const fallback = restored.length > 0 ? restored : [createConversation(t)]
           applyConversationSyncSnapshot(fallback, fallback[0].id, 'ready')
+          if (fallback[0]?.serverConversationId) {
+            void hydrateServerConversationDetail(fallback[0].serverConversationId, () => cancelled)
+          }
         } catch {
           if (cancelled) return
           const restored = readPersistedConversations({
