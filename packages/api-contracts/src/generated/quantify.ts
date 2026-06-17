@@ -2038,6 +2038,30 @@ const endpoints = makeApi([
     response: z.array(AiQuantConversationResponseDto),
   },
   {
+    method: 'get',
+    path: '/account/ai-quant/conversations/:id',
+    alias: 'AccountAiQuantConversationsController_detail',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: AiQuantConversationResponseDto,
+  },
+  {
     method: 'delete',
     path: '/account/ai-quant/conversations/:id',
     alias: 'AccountAiQuantConversationsController_remove',

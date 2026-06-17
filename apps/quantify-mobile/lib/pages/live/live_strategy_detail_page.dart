@@ -28,8 +28,13 @@ part 'live_strategy_detail_page.positions.part.dart';
 /// 开启/暂停/恢复/删除走 mock 状态转换（#1773）；脚本/回测/部署档案入口仍依赖
 /// 真实数据，保持禁用占位（future）。
 class LiveStrategyDetailPage extends ConsumerStatefulWidget {
-  const LiveStrategyDetailPage({super.key, required this.id});
+  const LiveStrategyDetailPage({
+    super.key,
+    required this.id,
+    this.fromStrategyPlaza = false,
+  });
   final String id;
+  final bool fromStrategyPlaza;
 
   @override
   ConsumerState<LiveStrategyDetailPage> createState() =>
@@ -38,7 +43,23 @@ class LiveStrategyDetailPage extends ConsumerStatefulWidget {
 
 class _LiveStrategyDetailPageState
     extends ConsumerState<LiveStrategyDetailPage> {
+  Future<void> _refreshDetail() async {
+    final Future<LiveStrategy> detail = ref.refresh(
+      liveStrategyDetailProvider(widget.id).future,
+    );
+    await detail;
+    await Future.wait(<Future<Object?>>[
+      ref.refresh(liveStrategyPositionProvider(widget.id).future),
+      ref.refresh(liveStrategyTradesProvider(widget.id).future),
+      ref.refresh(liveStrategyParamsProvider(widget.id).future),
+    ]);
+  }
+
   void _backToLiveList() {
+    if (widget.fromStrategyPlaza) {
+      context.go('/strategy');
+      return;
+    }
     if (context.canPop()) {
       context.pop();
       return;
@@ -92,31 +113,35 @@ class _LiveStrategyDetailPageState
         Expanded(
           child: Stack(
             children: <Widget>[
-              ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  QzSpacing.lg,
-                  QzSpacing.md,
-                  QzSpacing.lg,
-                  100,
-                ),
-                children: <Widget>[
-                  _Hero(strategy: s),
-                  const SizedBox(height: QzSpacing.md),
-                  _DetailTabs(
-                    options: <String>[
-                      l10n.liveTabOverview,
-                      l10n.liveTabPositions,
-                      l10n.liveTabHistory,
-                      l10n.liveTabParams,
-                    ],
-                    value: _labelFor(tab, l10n),
-                    onChanged: (String v) => ref
-                        .read(liveStrategyDetailControllerProvider.notifier)
-                        .setTab(_keyFor(v, l10n)),
+              RefreshIndicator(
+                onRefresh: _refreshDetail,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    QzSpacing.lg,
+                    QzSpacing.md,
+                    QzSpacing.lg,
+                    100,
                   ),
-                  const SizedBox(height: QzSpacing.md),
-                  _tabBody(tab, s),
-                ],
+                  children: <Widget>[
+                    _Hero(strategy: s),
+                    const SizedBox(height: QzSpacing.md),
+                    _DetailTabs(
+                      options: <String>[
+                        l10n.liveTabOverview,
+                        l10n.liveTabPositions,
+                        l10n.liveTabHistory,
+                        l10n.liveTabParams,
+                      ],
+                      value: _labelFor(tab, l10n),
+                      onChanged: (String v) => ref
+                          .read(liveStrategyDetailControllerProvider.notifier)
+                          .setTab(_keyFor(v, l10n)),
+                    ),
+                    const SizedBox(height: QzSpacing.md),
+                    _tabBody(tab, s),
+                  ],
+                ),
               ),
               Positioned(
                 left: 0,

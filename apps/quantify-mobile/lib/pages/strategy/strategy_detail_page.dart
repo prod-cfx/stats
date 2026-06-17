@@ -22,6 +22,7 @@ import 'strategy_detail_controller.dart';
 import 'strategy_detail_state.dart';
 import 'widgets/equity_curve_view.dart';
 import 'widgets/load_conversation_toast.dart';
+import 'widgets/strategy_existing_run_sheet.dart';
 import 'widgets/strategy_metric_card.dart';
 part 'strategy_detail_page.header.part.dart';
 part 'strategy_detail_page.sections.part.dart';
@@ -87,8 +88,11 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
   /// 「『名』已启动 · 进入实盘监控」，~700ms 后跳实盘监控 `/me/live`。
   Future<void> _onRun(StrategyDetail d) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    StrategyRunResult result;
     try {
-      await ref.read(strategyRepositoryProvider).runTemplate(d.card.id);
+      result = await ref
+          .read(strategyRepositoryProvider)
+          .runTemplate(d.card.id);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -97,11 +101,23 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
       return;
     }
     if (!mounted) return;
+    final String route =
+        '/me/live/${Uri.encodeComponent(result.strategyId)}?from=strategy';
+    if (result.existing) {
+      final bool? viewDetail = await showStrategyExistingRunSheet(
+        context,
+        result: result,
+        fallbackCard: d.card,
+      );
+      if (!mounted || viewDetail != true) return;
+      context.go(route);
+      return;
+    }
     ref
         .read(strategyDetailControllerProvider.notifier)
         .fireToastAndNav(
           message: l10n.strategyHomeStartedToast(d.card.name),
-          route: '/me/live',
+          route: route,
         );
   }
 

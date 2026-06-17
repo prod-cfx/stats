@@ -36,6 +36,7 @@ export class UserController {
       avatarUrl: profile.avatarUrl ?? null,
       emailVerified: profile.emailVerified,
       isGuest: profile.isGuest,
+      telegram: profile.telegram,
       roles: profile.roles,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,

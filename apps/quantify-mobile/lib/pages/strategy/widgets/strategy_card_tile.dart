@@ -72,22 +72,26 @@ class StrategyCardTile extends StatelessWidget {
       // 卡片层级不会用到 all，仅为枚举完备性。
       StrategyCategory.all => '',
       StrategyCategory.trend => l10n.strategyCategoryTrend,
-      StrategyCategory.grid => l10n.strategyCategoryGrid,
-      StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
+      StrategyCategory.breakout => l10n.strategyCategoryBreakout,
       StrategyCategory.reversal => l10n.strategyCategoryReversal,
-      StrategyCategory.hedge => l10n.strategyCategoryHedge,
-      StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
+      StrategyCategory.grid => l10n.strategyCategoryGrid,
+      StrategyCategory.dca => l10n.strategyCategoryDca,
+      StrategyCategory.orderbook => l10n.strategyCategoryOrderbook,
+      StrategyCategory.derivativeEvent => l10n.strategyCategoryDerivativeEvent,
+      StrategyCategory.riskRobust => l10n.strategyCategoryRiskRobust,
     };
   }
 
   QzChipTone _categoryTone(StrategyCategory category) {
     return switch (category) {
       StrategyCategory.trend => QzChipTone.accent,
-      StrategyCategory.grid => QzChipTone.info,
-      StrategyCategory.arbitrage => QzChipTone.ok,
+      StrategyCategory.breakout => QzChipTone.ok,
       StrategyCategory.reversal => QzChipTone.warn,
-      StrategyCategory.hedge => QzChipTone.info,
-      StrategyCategory.highFreq => QzChipTone.danger,
+      StrategyCategory.grid => QzChipTone.info,
+      StrategyCategory.dca => QzChipTone.accent,
+      StrategyCategory.orderbook => QzChipTone.danger,
+      StrategyCategory.derivativeEvent => QzChipTone.info,
+      StrategyCategory.riskRobust => QzChipTone.ok,
       StrategyCategory.all => QzChipTone.neutral,
     };
   }

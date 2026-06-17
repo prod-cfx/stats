@@ -1932,6 +1932,18 @@ abstract class AppLocalizations {
   /// **'注册'**
   String get authRegisterButton;
 
+  /// No description provided for @authRegisterComingSoonTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'即将开放'**
+  String get authRegisterComingSoonTitle;
+
+  /// No description provided for @authRegisterComingSoonSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册功能正在准备中，请先使用登录或 Telegram 继续。'**
+  String get authRegisterComingSoonSubtitle;
+
   /// No description provided for @authRegisterFailedPrefix.
   ///
   /// In zh, this message translates to:
@@ -3351,7 +3363,7 @@ abstract class AppLocalizations {
   /// No description provided for @meStatsCumulativeReturn.
   ///
   /// In zh, this message translates to:
-  /// **'累计收益'**
+  /// **'平均收益'**
   String get meStatsCumulativeReturn;
 
   /// No description provided for @meStatsWinRate.
@@ -3419,6 +3431,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'@victor_qf'**
   String get meSettingsTelegramHandle;
+
+  /// No description provided for @meTelegramBindTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'绑定 Telegram'**
+  String get meTelegramBindTitle;
+
+  /// No description provided for @meTelegramBindDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'将打开 Telegram 完成授权。授权成功后返回应用，账户页会自动刷新绑定状态。'**
+  String get meTelegramBindDescription;
+
+  /// No description provided for @meTelegramBindAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'去 Telegram 绑定'**
+  String get meTelegramBindAction;
+
+  /// No description provided for @meTelegramBindSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'Telegram 已绑定'**
+  String get meTelegramBindSuccess;
+
+  /// No description provided for @meTelegramBindFailedPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'Telegram 绑定失败：'**
+  String get meTelegramBindFailedPrefix;
 
   /// No description provided for @meSettingsSecurity.
   ///
@@ -4230,11 +4272,41 @@ abstract class AppLocalizations {
   /// **'趋势'**
   String get strategyCategoryTrend;
 
+  /// No description provided for @strategyCategoryBreakout.
+  ///
+  /// In zh, this message translates to:
+  /// **'突破'**
+  String get strategyCategoryBreakout;
+
   /// No description provided for @strategyCategoryGrid.
   ///
   /// In zh, this message translates to:
   /// **'网格'**
   String get strategyCategoryGrid;
+
+  /// No description provided for @strategyCategoryDca.
+  ///
+  /// In zh, this message translates to:
+  /// **'DCA'**
+  String get strategyCategoryDca;
+
+  /// No description provided for @strategyCategoryOrderbook.
+  ///
+  /// In zh, this message translates to:
+  /// **'盘口'**
+  String get strategyCategoryOrderbook;
+
+  /// No description provided for @strategyCategoryDerivativeEvent.
+  ///
+  /// In zh, this message translates to:
+  /// **'衍生品事件'**
+  String get strategyCategoryDerivativeEvent;
+
+  /// No description provided for @strategyCategoryRiskRobust.
+  ///
+  /// In zh, this message translates to:
+  /// **'风控稳健'**
+  String get strategyCategoryRiskRobust;
 
   /// No description provided for @strategyCategoryArbitrage.
   ///
@@ -4572,6 +4644,12 @@ abstract class AppLocalizations {
   /// **'收益'**
   String get strategyHomeSortReturn;
 
+  /// No description provided for @strategyHomeSortTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易'**
+  String get strategyHomeSortTrades;
+
   /// No description provided for @strategyHomeSortSharpe.
   ///
   /// In zh, this message translates to:
@@ -4583,6 +4661,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'低回撤'**
   String get strategyHomeSortLowDrawdown;
+
+  /// No description provided for @strategyHomeSortLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最新'**
+  String get strategyHomeSortLatest;
 
   /// No description provided for @strategyHomeSortLabel.
   ///

@@ -1017,6 +1017,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authRegisterButton => 'Create account';
 
   @override
+  String get authRegisterComingSoonTitle => 'Coming soon';
+
+  @override
+  String get authRegisterComingSoonSubtitle =>
+      'Sign-up is being prepared. Please continue with sign-in or Telegram for now.';
+
+  @override
   String get authRegisterFailedPrefix => 'Sign up failed: ';
 
   @override
@@ -1764,7 +1771,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meStatsActiveStrategies => 'Active Strategies';
 
   @override
-  String get meStatsCumulativeReturn => 'Cumulative Return';
+  String get meStatsCumulativeReturn => 'Average Return';
 
   @override
   String get meStatsWinRate => 'Win Rate';
@@ -1798,6 +1805,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get meSettingsTelegramHandle => '@victor_qf';
+
+  @override
+  String get meTelegramBindTitle => 'Bind Telegram';
+
+  @override
+  String get meTelegramBindDescription =>
+      'We will open Telegram to complete authorization. Return to the app after confirming, and this page will refresh the binding state.';
+
+  @override
+  String get meTelegramBindAction => 'Bind in Telegram';
+
+  @override
+  String get meTelegramBindSuccess => 'Telegram linked';
+
+  @override
+  String get meTelegramBindFailedPrefix => 'Telegram binding failed: ';
 
   @override
   String get meSettingsSecurity => 'Security';
@@ -2229,7 +2252,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyCategoryTrend => 'Trend';
 
   @override
+  String get strategyCategoryBreakout => 'Breakout';
+
+  @override
   String get strategyCategoryGrid => 'Grid';
+
+  @override
+  String get strategyCategoryDca => 'DCA';
+
+  @override
+  String get strategyCategoryOrderbook => 'Orderbook';
+
+  @override
+  String get strategyCategoryDerivativeEvent => 'Derivatives';
+
+  @override
+  String get strategyCategoryRiskRobust => 'Risk Control';
 
   @override
   String get strategyCategoryArbitrage => 'Arbitrage';
@@ -2411,10 +2449,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyHomeSortReturn => 'Return';
 
   @override
+  String get strategyHomeSortTrades => 'Trades';
+
+  @override
   String get strategyHomeSortSharpe => 'Trades';
 
   @override
   String get strategyHomeSortLowDrawdown => 'Low DD';
+
+  @override
+  String get strategyHomeSortLatest => 'Latest';
 
   @override
   String get strategyHomeSortLabel => 'Sort';

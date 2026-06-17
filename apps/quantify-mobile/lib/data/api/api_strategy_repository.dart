@@ -13,23 +13,45 @@ StrategyCategory _categoryFromText(Object? raw) {
   for (final StrategyCategory c in StrategyCategory.values) {
     if (c.name == s) return c;
   }
-  if (has('grid') || hasChinese('网格') || has('dca')) {
+  if (has('dca') || hasChinese('定投')) {
+    return StrategyCategory.dca;
+  }
+  if (has('grid') || hasChinese('网格') || has('range')) {
     return StrategyCategory.grid;
+  }
+  if (has('reversion') || has('reversal') || hasChinese('反转') || has('rsi')) {
+    return StrategyCategory.reversal;
+  }
+  if (has('orderbook') || has('depth') || has('hft') || hasChinese('盘口')) {
+    return StrategyCategory.orderbook;
+  }
+  if (has('funding') ||
+      has('arbitrage') ||
+      has('open interest') ||
+      has('oi') ||
+      has('perp') ||
+      has('basis') ||
+      hasChinese('衍生') ||
+      hasChinese('资金费率') ||
+      hasChinese('持仓量')) {
+    return StrategyCategory.derivativeEvent;
+  }
+  if (has('risk') ||
+      has('hedge') ||
+      has('exposure') ||
+      has('cooldown') ||
+      hasChinese('风控') ||
+      hasChinese('稳健') ||
+      hasChinese('对冲') ||
+      hasChinese('冷却') ||
+      hasChinese('止损')) {
+    return StrategyCategory.riskRobust;
+  }
+  if (has('breakout') || hasChinese('突破')) {
+    return StrategyCategory.breakout;
   }
   if (has('trend') || hasChinese('趋势') || has('ema') || has('macd')) {
     return StrategyCategory.trend;
-  }
-  if (has('reversal') || hasChinese('反转') || has('rsi')) {
-    return StrategyCategory.reversal;
-  }
-  if (has('hedge') || hasChinese('对冲') || hasChinese('风控')) {
-    return StrategyCategory.hedge;
-  }
-  if (has('arbitrage') || hasChinese('套利')) {
-    return StrategyCategory.arbitrage;
-  }
-  if (hasChinese('突破') || hasChinese('盘口') || hasChinese('衍生品事件')) {
-    return StrategyCategory.highFreq;
   }
   return StrategyCategory.all;
 }
@@ -37,6 +59,8 @@ StrategyCategory _categoryFromText(Object? raw) {
 StrategyCategory _categoryFromApi(StrategyPlazaTemplateResponseDto dto) {
   final String haystack = <String>[
     dto.name,
+    dto.description,
+    dto.logicDescription,
     dto.scenario,
     ...dto.tags,
   ].join(' ');
@@ -157,6 +181,7 @@ class ApiStrategyRepository implements StrategyRepository {
       subscribers: dto.displayMetrics.users?.toInt() ?? 0,
       tags: dto.tags.toList(growable: false),
       category: _categoryFromApi(dto),
+      displayOrder: dto.displayOrder.toInt(),
       status:
           _badgeFromApi(dto.status.name) ??
           (dto.status == StrategyPlazaTemplateResponseDtoStatusEnum.live
@@ -320,10 +345,8 @@ class ApiStrategyRepository implements StrategyRepository {
     String id, {
     int limit = 20,
   }) async {
-    final response = await _strategyPlazaApi.strategyPlazaProxyControllerSignals(
-      id: id,
-      limit: limit,
-    );
+    final response = await _strategyPlazaApi
+        .strategyPlazaProxyControllerSignals(id: id, limit: limit);
     return response.data?.data.map(_signal).toList(growable: false) ??
         const <StrategySignal>[];
   }
@@ -353,7 +376,15 @@ class ApiStrategyRepository implements StrategyRepository {
     );
     final Object? value = response.data?.data.oneOf.value;
     if (value is StrategyPlazaRunExistingResponseDto) {
-      return StrategyRunResult(strategyId: value.strategy.id, existing: true);
+      final AccountAiQuantStrategyDetailResponseDto strategy = value.strategy;
+      return StrategyRunResult(
+        strategyId: strategy.id,
+        existing: true,
+        name: strategy.name,
+        symbol: strategy.symbol,
+        timeframe: strategy.timeframe,
+        status: strategy.status.name,
+      );
     }
     if (value is AccountAiQuantStrategyDetailResponseDto) {
       return StrategyRunResult(strategyId: value.id);

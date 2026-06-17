@@ -3,17 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/live/live_strategy_detail_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../fixtures/mock/fixtures/live_strategies.dart';
+import '../../fixtures/mock/mock_live_strategy_repository.dart';
 import '../../helpers/test_overrides.dart';
 
-GoRouter _router(String id) {
+GoRouter _router(String id, {bool fromStrategyPlaza = false}) {
+  final String initialLocation = fromStrategyPlaza
+      ? '/me/live/$id?from=strategy'
+      : '/me/live/$id';
   return GoRouter(
-    initialLocation: '/me/live/$id',
+    initialLocation: initialLocation,
     routes: <RouteBase>[
       GoRoute(
         path: '/me/live',
@@ -25,9 +31,20 @@ GoRouter _router(String id) {
           GoRoute(
             path: ':id',
             builder: (BuildContext _, GoRouterState s) =>
-                LiveStrategyDetailPage(id: s.pathParameters['id']!),
+                LiveStrategyDetailPage(
+                  id: s.pathParameters['id']!,
+                  fromStrategyPlaza:
+                      s.uri.queryParameters['from'] == 'strategy',
+                ),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/strategy',
+        builder: (_, _) => const Scaffold(
+          key: Key('strategy-stub'),
+          body: Center(child: Text('strategy')),
+        ),
       ),
       GoRoute(
         path: '/ai',
@@ -42,7 +59,11 @@ GoRouter _router(String id) {
   );
 }
 
-Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  String id, {
+  bool fromStrategyPlaza = false,
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 2000));
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -63,7 +84,7 @@ Future<ProviderContainer> _pump(WidgetTester tester, String id) async {
         theme: buildQzThemeData(
           const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
         ),
-        routerConfig: _router(id),
+        routerConfig: _router(id, fromStrategyPlaza: fromStrategyPlaza),
       ),
     ),
   );
@@ -80,6 +101,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('list-stub')), findsOneWidget);
+  });
+
+  testWidgets('策略广场运行进入详情页时返回兜底到策略广场', (WidgetTester tester) async {
+    await _pump(tester, 'QF-AY7K2P', fromStrategyPlaza: true);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('strategy-stub')), findsOneWidget);
+    expect(find.byKey(const Key('list-stub')), findsNothing);
   });
 
   testWidgets('概览：展示名称、总收益额与 front 指标', (WidgetTester tester) async {
@@ -119,6 +150,46 @@ void main() {
     expect(find.text('入场价'), findsOneWidget);
     expect(find.text('当前价'), findsOneWidget);
     expect(find.text('止损价'), findsOneWidget);
+  });
+
+  testWidgets('下拉刷新详情页同步当前策略和明细数据', (WidgetTester tester) async {
+    final ProviderContainer container = await _pump(tester, 'QF-AY7K2P');
+    final MockLiveStrategyRepository repo =
+        container.read(liveStrategyRepositoryProvider)
+            as MockLiveStrategyRepository;
+
+    final int getBefore = repo.getStrategyCalls;
+    final int positionBefore = repo.getPositionCalls;
+    final int tradesBefore = repo.listTradesCalls;
+    final int paramsBefore = repo.listParamsCalls;
+
+    repo.upsertForTest(mockLiveStrategies.first.copyWith(statusNote: 'PC 已同步'));
+
+    await tester.drag(find.byType(RefreshIndicator), const Offset(0, 500));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(repo.getStrategyCalls, greaterThan(getBefore));
+    expect(repo.getPositionCalls, greaterThan(positionBefore));
+    expect(repo.listTradesCalls, greaterThan(tradesBefore));
+    expect(repo.listParamsCalls, greaterThan(paramsBefore));
+    expect(find.text('PC 已同步'), findsOneWidget);
+  });
+
+  testWidgets('详情接口失败时回退列表缓存，避免整页加载失败', (WidgetTester tester) async {
+    final ProviderContainer container = await _pump(tester, 'QF-AY7K2P');
+    final MockLiveStrategyRepository repo =
+        container.read(liveStrategyRepositoryProvider)
+            as MockLiveStrategyRepository;
+
+    await container.read(liveStrategyStoreProvider.future);
+    repo.failDetailForTest('QF-AY7K2P');
+    container.invalidate(liveStrategyDetailProvider('QF-AY7K2P'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('实盘策略加载失败'), findsNothing);
+    expect(find.text('BTC 趋势 · 双均线'), findsWidgets);
   });
 
   testWidgets('停止策略持仓 tab：展示空态', (WidgetTester tester) async {

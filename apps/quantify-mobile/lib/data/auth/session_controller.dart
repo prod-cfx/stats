@@ -98,6 +98,15 @@ class SessionController extends AsyncNotifier<AuthSession?> {
     });
   }
 
+  Future<void> bindTelegram() async {
+    state = const AsyncLoading<AuthSession?>();
+    state = await AsyncValue.guard<AuthSession?>(() async {
+      final AuthSession session = await _repo.bindTelegram();
+      await _storage.write(kSessionStorageKey, jsonEncode(session.toMap()));
+      return session;
+    });
+  }
+
   /// 游客登录：通过 repository 获取后端签发的 guest session；mock 模式保留
   /// 本地 mock 语义。
   Future<void> loginGuest() async {

@@ -52,8 +52,7 @@ class StrategySearchOverlay extends ConsumerStatefulWidget {
       _StrategySearchOverlayState();
 }
 
-class _StrategySearchOverlayState
-    extends ConsumerState<StrategySearchOverlay> {
+class _StrategySearchOverlayState extends ConsumerState<StrategySearchOverlay> {
   final TextEditingController _ctrl = TextEditingController();
   final FocusNode _focus = FocusNode();
 
@@ -82,11 +81,19 @@ class _StrategySearchOverlayState
   ) {
     return <({StrategyCategory key, String label})>[
       (key: StrategyCategory.trend, label: l10n.strategyCategoryTrend),
-      (key: StrategyCategory.grid, label: l10n.strategyCategoryGrid),
-      (key: StrategyCategory.arbitrage, label: l10n.strategyCategoryArbitrage),
+      (key: StrategyCategory.breakout, label: l10n.strategyCategoryBreakout),
       (key: StrategyCategory.reversal, label: l10n.strategyCategoryReversal),
-      (key: StrategyCategory.hedge, label: l10n.strategyCategoryHedge),
-      (key: StrategyCategory.highFreq, label: l10n.strategyCategoryHighFreq),
+      (key: StrategyCategory.grid, label: l10n.strategyCategoryGrid),
+      (key: StrategyCategory.dca, label: l10n.strategyCategoryDca),
+      (key: StrategyCategory.orderbook, label: l10n.strategyCategoryOrderbook),
+      (
+        key: StrategyCategory.derivativeEvent,
+        label: l10n.strategyCategoryDerivativeEvent,
+      ),
+      (
+        key: StrategyCategory.riskRobust,
+        label: l10n.strategyCategoryRiskRobust,
+      ),
     ];
   }
 
@@ -102,8 +109,10 @@ class _StrategySearchOverlayState
       final AppLocalizations l10n = AppLocalizations.of(context);
       final String lower = q.toLowerCase();
       tags = _categoryEntries(l10n)
-          .where((({StrategyCategory key, String label}) e) =>
-              e.label.toLowerCase().contains(lower))
+          .where(
+            (({StrategyCategory key, String label}) e) =>
+                e.label.toLowerCase().contains(lower),
+          )
           .map((({StrategyCategory key, String label}) e) => e.key)
           .toList(growable: false);
     }
@@ -112,8 +121,7 @@ class _StrategySearchOverlayState
 
   void _setQuery(String term) {
     _ctrl.text = term;
-    _ctrl.selection =
-        TextSelection.collapsed(offset: term.length);
+    _ctrl.selection = TextSelection.collapsed(offset: term.length);
     _focus.requestFocus();
     _onChanged(term);
   }
@@ -175,7 +183,11 @@ class _StrategySearchOverlayState
   ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
+        QzSpacing.lg,
+        QzSpacing.sm,
+        QzSpacing.lg,
+        QzSpacing.sm,
+      ),
       child: Row(
         children: <Widget>[
           Expanded(
@@ -205,8 +217,7 @@ class _StrategySearchOverlayState
                         border: InputBorder.none,
                         isCollapsed: true,
                         hintText: l10n.strategyHomeSearchHint,
-                        hintStyle:
-                            TextStyle(color: c.textDim, fontSize: 13),
+                        hintStyle: TextStyle(color: c.textDim, fontSize: 13),
                       ),
                     ),
                   ),
@@ -214,8 +225,7 @@ class _StrategySearchOverlayState
                     GestureDetector(
                       key: const Key('strategy-search-clear-input'),
                       onTap: _clearInput,
-                      child: Icon(Icons.cancel,
-                          size: 16, color: c.textDim),
+                      child: Icon(Icons.cancel, size: 16, color: c.textDim),
                     ),
                 ],
               ),
@@ -225,8 +235,10 @@ class _StrategySearchOverlayState
           TextButton(
             key: const Key('strategy-search-cancel'),
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.commonCancel,
-                style: TextStyle(color: c.textMid, fontSize: 13)),
+            child: Text(
+              l10n.commonCancel,
+              style: TextStyle(color: c.textMid, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -241,7 +253,11 @@ class _StrategySearchOverlayState
     final List<String> history = ref.watch(strategySearchHistoryProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, QzSpacing.xl),
+        QzSpacing.lg,
+        QzSpacing.xs,
+        QzSpacing.lg,
+        QzSpacing.xl,
+      ),
       children: <Widget>[
         _sectionLabel(l10n.strategySearchTrendingLabel, c),
         Wrap(
@@ -262,8 +278,7 @@ class _StrategySearchOverlayState
                   ref.read(strategySearchHistoryProvider.notifier).clear(),
               child: Tooltip(
                 message: l10n.strategySearchClearHistory,
-                child: Icon(Icons.delete_outline,
-                    size: 16, color: c.textDim),
+                child: Icon(Icons.delete_outline, size: 16, color: c.textDim),
               ),
             ),
           ),
@@ -287,7 +302,8 @@ class _StrategySearchOverlayState
     AppLocalizations l10n,
     QzColorScheme c,
   ) {
-    final bool noResults = !st.loading &&
+    final bool noResults =
+        !st.loading &&
         st.stratHits.isEmpty &&
         st.authorHits.isEmpty &&
         st.tagHits.isEmpty;
@@ -306,7 +322,11 @@ class _StrategySearchOverlayState
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, QzSpacing.xl),
+        QzSpacing.lg,
+        QzSpacing.xs,
+        QzSpacing.lg,
+        QzSpacing.xl,
+      ),
       children: <Widget>[
         if (st.tagHits.isNotEmpty) ...<Widget>[
           _sectionLabel(l10n.strategySearchTagSection, c),
@@ -359,19 +379,27 @@ class _StrategySearchOverlayState
     );
   }
 
-  Widget _termChip(String label, QzColorScheme c, {required VoidCallback onTap}) {
+  Widget _termChip(
+    String label,
+    QzColorScheme c, {
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: c.bgElev,
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(label,
-            style: TextStyle(
-                color: c.textMid, fontSize: 13, fontWeight: FontWeight.w500)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: c.textMid,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
@@ -379,22 +407,28 @@ class _StrategySearchOverlayState
   String _categoryLabel(StrategyCategory cat, AppLocalizations l10n) =>
       switch (cat) {
         StrategyCategory.trend => l10n.strategyCategoryTrend,
-        StrategyCategory.grid => l10n.strategyCategoryGrid,
-        StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
+        StrategyCategory.breakout => l10n.strategyCategoryBreakout,
         StrategyCategory.reversal => l10n.strategyCategoryReversal,
-        StrategyCategory.hedge => l10n.strategyCategoryHedge,
-        StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
+        StrategyCategory.grid => l10n.strategyCategoryGrid,
+        StrategyCategory.dca => l10n.strategyCategoryDca,
+        StrategyCategory.orderbook => l10n.strategyCategoryOrderbook,
+        StrategyCategory.derivativeEvent =>
+          l10n.strategyCategoryDerivativeEvent,
+        StrategyCategory.riskRobust => l10n.strategyCategoryRiskRobust,
         StrategyCategory.all => l10n.commonAll,
       };
 
-  Widget _tagChip(StrategyCategory cat, AppLocalizations l10n, QzColorScheme c) {
+  Widget _tagChip(
+    StrategyCategory cat,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     final String label = _categoryLabel(cat, l10n);
     return GestureDetector(
       key: Key('strategy-search-tag-${cat.name}'),
       onTap: () => _pickTag(cat, label),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: c.accentSoft,
           borderRadius: BorderRadius.circular(999),
@@ -402,7 +436,10 @@ class _StrategySearchOverlayState
         child: Text(
           l10n.strategySearchTagChip(label),
           style: TextStyle(
-              color: c.accent, fontSize: 13, fontWeight: FontWeight.w500),
+            color: c.accent,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
@@ -427,20 +464,25 @@ class _StrategySearchOverlayState
               child: Row(
                 children: <Widget>[
                   Flexible(
-                    child: Text(a.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: c.text,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
+                    child: Text(
+                      a.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                   if (a.verified) ...<Widget>[
                     const SizedBox(width: 5),
-                    Icon(Icons.verified,
-                        key: Key('strategy-search-author-verified-${a.name}'),
-                        size: 13,
-                        color: c.accent),
+                    Icon(
+                      Icons.verified,
+                      key: Key('strategy-search-author-verified-${a.name}'),
+                      size: 13,
+                      color: c.accent,
+                    ),
                   ],
                 ],
               ),
@@ -456,7 +498,10 @@ class _StrategySearchOverlayState
   }
 
   Widget _stratRow(
-      StrategyMarketItem item, AppLocalizations l10n, QzColorScheme c) {
+    StrategyMarketItem item,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     final StrategyCard card = item.card;
     final bool up = item.stats.cagr >= 0;
     final int winPct = (item.stats.winRate * 100).round();
@@ -480,13 +525,16 @@ class _StrategySearchOverlayState
                   Row(
                     children: <Widget>[
                       Flexible(
-                        child: Text(card.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: c.text,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          card.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       _stratTagChip(card.category, l10n, c),
@@ -499,18 +547,21 @@ class _StrategySearchOverlayState
                         'CAGR ${up ? '+' : ''}'
                         '${item.stats.cagr.toStringAsFixed(1)}%',
                         style: TextStyle(
-                            color: up ? c.marketUp : c.marketDown,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600),
+                          color: up ? c.marketUp : c.marketDown,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: QzSpacing.md),
-                      Text(l10n.strategySearchStratWinRate(winPct),
-                          style:
-                              TextStyle(color: c.textDim, fontSize: 11)),
+                      Text(
+                        l10n.strategySearchStratWinRate(winPct),
+                        style: TextStyle(color: c.textDim, fontSize: 11),
+                      ),
                       const SizedBox(width: QzSpacing.md),
-                      Text(l10n.strategySearchStratFollow(item.stats.users),
-                          style:
-                              TextStyle(color: c.textDim, fontSize: 11)),
+                      Text(
+                        l10n.strategySearchStratFollow(item.stats.users),
+                        style: TextStyle(color: c.textDim, fontSize: 11),
+                      ),
                     ],
                   ),
                 ],
@@ -524,7 +575,10 @@ class _StrategySearchOverlayState
 
   /// 策略行名字旁的类型标签 chip（设计稿 `StratRow` 紫 pill）。
   Widget _stratTagChip(
-      StrategyCategory cat, AppLocalizations l10n, QzColorScheme c) {
+    StrategyCategory cat,
+    AppLocalizations l10n,
+    QzColorScheme c,
+  ) {
     return Container(
       key: Key('strategy-search-strat-tag-${cat.name}'),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -535,7 +589,10 @@ class _StrategySearchOverlayState
       child: Text(
         _categoryLabel(cat, l10n),
         style: TextStyle(
-            color: c.accent, fontSize: 10, fontWeight: FontWeight.w600),
+          color: c.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

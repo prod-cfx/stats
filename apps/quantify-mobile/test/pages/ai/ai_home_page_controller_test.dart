@@ -464,7 +464,7 @@ void main() {
       expect(s.sessions['fake']?.deployedTo, isNull);
     });
 
-    test('loadSessions 实盘列表失败时部署态 fail closed', () async {
+    test('loadSessions 实盘列表失败时保留会话自带部署态', () async {
       final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
         _session(
           'fake',
@@ -480,7 +480,29 @@ void main() {
 
       await ctrl(c).loadSessions();
 
-      expect(read(c).sessions['fake']?.deployedTo, isNull);
+      expect(read(c).sessions['fake']?.deployedTo, 'stale-live');
+    });
+
+    test('loadSessions 实盘列表未匹配时保留 strategyInstanceId 部署态', () async {
+      final _FakeAiChatRepository repo = _FakeAiChatRepository(<AiSession>[
+        _session(
+          'staging',
+          messages: <ChatTurn>[_scriptReadyTurn('snap-staging')],
+          deployedTo: 'cmqhok7ol19iukfqsalb7sjzi',
+        ),
+      ]);
+      final ProviderContainer c = makeContainer(
+        repo,
+        liveRepo: _FakeLiveStrategyRepository(const <String, LiveStrategy>{}),
+      );
+      pin(c);
+
+      await ctrl(c).loadSessions();
+
+      expect(
+        read(c).sessions['staging']?.deployedTo,
+        'cmqhok7ol19iukfqsalb7sjzi',
+      );
     });
 
     test('loadSessions 恢复当前会话远端已发布脚本状态', () async {

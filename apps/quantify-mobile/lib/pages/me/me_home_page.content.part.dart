@@ -58,6 +58,83 @@ class _LanguageOptionRow extends StatelessWidget {
   }
 }
 
+Future<void> showTelegramBindSheet(BuildContext context, WidgetRef ref) async {
+  final AppLocalizations l10n = AppLocalizations.of(context);
+  final QzColorScheme c = context.qzScheme;
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    backgroundColor: c.bgElev,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (BuildContext sheetContext) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            QzSpacing.lg,
+            4,
+            QzSpacing.lg,
+            QzSpacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                l10n.meTelegramBindTitle,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l10n.meTelegramBindDescription,
+                style: TextStyle(color: c.textMid, fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: QzSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    try {
+                      await ref
+                          .read(sessionControllerProvider.notifier)
+                          .bindTelegram();
+                      final AsyncValue<AuthSession?> sessionState = ref.read(
+                        sessionControllerProvider,
+                      );
+                      if (sessionState.hasError) throw sessionState.error!;
+                      ref.invalidate(accountInfoProvider);
+                      if (!sheetContext.mounted) return;
+                      Navigator.of(sheetContext).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.meTelegramBindSuccess)),
+                      );
+                    } catch (error) {
+                      if (!sheetContext.mounted) return;
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${l10n.meTelegramBindFailedPrefix}${_safeLoadErrorMessage(error)}',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: Text(l10n.meTelegramBindAction),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class _Content extends ConsumerWidget {
   const _Content({required this.info, required this.apiKeys});
   final AsyncValue<AccountInfo> info;
@@ -67,23 +144,17 @@ class _Content extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    // header chip 状态从真实数据派生：binance 由 apiKeys 中是否有 Binance
-    // 凭据决定；telegram 当前 mobile 端无 binding 字段，按 mock fixture 的
-    // `meSettingsTelegramUnbound` 一致策略，渲染 chip 仅当 binding 字段
-    // 被填充。这里先以 `meSettingsTelegram` 是否非占位判断（mock 永远占位
-    // → false）；待 `AccountInfo.bindings` 真接通后切换。
     final bool binanceConnected = apiKeys.maybeWhen(
       data: (List<ExchangeApiKey> list) =>
           list.any((ExchangeApiKey k) => k.exchange.toLowerCase() == 'binance'),
       orElse: () => false,
     );
-    // 当前 mock 已绑定 Telegram（原型 m-screens-4 第 9 屏 chip + 列表
-    // `@victor_qf`）；UI 直接读 fixture 模拟值，等真接口后改读 binding。
-    const bool telegramBound = true;
     final AccountInfo? accountInfo = info.maybeWhen(
       data: (AccountInfo v) => v,
       orElse: () => null,
     );
+    final AccountTelegramBinding? telegram = accountInfo?.telegram;
+    final bool telegramBound = telegram?.isLinked == true;
     final String accountErrorText = info.hasError
         ? '${l10n.meHomeLoadErrorPrefix}${_safeLoadErrorMessage(info.error!)}'
         : '';
@@ -94,6 +165,12 @@ class _Content extends ConsumerWidget {
         accountInfo?.email ??
         (accountLoading ? l10n.meAccountLoading : l10n.meAccountUnavailable);
     final String uid = accountInfo?.uid ?? '--';
+
+    void showComingSoon(String message) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -138,12 +215,16 @@ class _Content extends ConsumerWidget {
                   QzSettingsRow(label: 'UID', value: uid, mono: true),
                   QzSettingsRow(
                     label: l10n.meSettingsTelegram,
-                    // mock 阶段对齐设计稿 `m-screens-4.jsx:1009`：直接显示
-                    // handle + ok tone（与上方 `telegramBound=true` 同源）。
-                    // 接通 `AccountInfo.bindings` 后改为按真实状态分支。
-                    value: l10n.meSettingsTelegramHandle,
-                    tone: QzSettingsRowTone.ok,
+                    value: telegramBound
+                        ? telegram!.displayName
+                        : l10n.meSettingsTelegramUnbound,
+                    tone: telegramBound
+                        ? QzSettingsRowTone.ok
+                        : QzSettingsRowTone.warn,
                     trailing: const QzSettingsCaret(),
+                    onTap: telegramBound
+                        ? null
+                        : () => showTelegramBindSheet(context, ref),
                   ),
                   QzSettingsRow(
                     label: l10n.meSettingsSecurity,
@@ -151,6 +232,7 @@ class _Content extends ConsumerWidget {
                     // 真实安全状态接通后改读 `AccountInfo.security`。
                     value: l10n.meSettingsSecurityValue,
                     trailing: const QzSettingsCaret(),
+                    onTap: () => showComingSoon('安全设置即将上线'),
                     last: true,
                   ),
                 ],
@@ -182,6 +264,7 @@ class _Content extends ConsumerWidget {
                     value: l10n.meSettingsNotificationsValue,
                     tone: QzSettingsRowTone.ok,
                     trailing: const QzSettingsCaret(),
+                    onTap: () => showComingSoon('推送通知即将上线'),
                     last: true,
                   ),
                 ],
@@ -217,23 +300,13 @@ class _Content extends ConsumerWidget {
 }
 
 class _StatsCard extends ConsumerWidget {
-  // 三栏（活跃策略 / 累计收益 / 胜率）派生自 `liveStrategySummaryProvider`，
-  // 与同页大卡同源（#1902）。加载/错误态退化为 0：count=0 / +$0 / 0.0%，
+  // 三栏（活跃策略 / 平均收益 / 胜率）派生自 `liveStrategySummaryProvider`，
+  // 与同页大卡同源（#1902）。加载/错误态退化为 0：count=0 / +0.0% / 0.0%，
   // 整卡始终可见，不崩。待后端实例接口接通后随 provider 自动切真实数据。
   const _StatsCard();
 
-  /// 累计收益展示串，口径对齐 live 列表页 `_money`：`+$8,420` / `-$1,200`。
-  /// 千分位分组，无小数（统计卡为概览，精度交详情页）。
-  static String _formatPnl(double v) {
-    final String sign = v >= 0 ? '+\$' : '-\$';
-    final String digits = v.abs().round().toString();
-    final StringBuffer grouped = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
-      grouped.write(digits[i]);
-    }
-    return '$sign$grouped';
-  }
+  static String _formatSignedPct(double v) =>
+      '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}%';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -272,8 +345,8 @@ class _StatsCard extends ConsumerWidget {
           ),
         ],
       ),
-      // 三栏统计：活跃策略数 / 累计收益 / 综合胜率，均派生自 summary。
-      // 累计收益正负分别用 ok / danger tone（0 视为非负，走 ok）。
+      // 三栏统计：活跃策略数 / 平均收益 / 综合胜率，均派生自 summary。
+      // 平均收益正负分别用 ok / danger tone（0 视为非负，走 ok）。
       child: Row(
         children: <Widget>[
           _Stat(
@@ -284,8 +357,8 @@ class _StatsCard extends ConsumerWidget {
           _StatDivider(color: c.borderSoft),
           _Stat(
             label: l10n.meStatsCumulativeReturn,
-            value: _formatPnl(s.totalPnl),
-            color: s.totalPnl >= 0 ? c.statusOk : c.statusDanger,
+            value: _formatSignedPct(s.averageReturnPct),
+            color: s.averageReturnPct >= 0 ? c.statusOk : c.statusDanger,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(

@@ -161,10 +161,7 @@ class AiHomePageController extends Notifier<AiHomePageState> {
     try {
       strategies = await _liveRepo.listStrategies();
     } catch (_) {
-      return <AiSession>[
-        for (final AiSession session in sessions)
-          _copySessionWithDeployedTo(session, null),
-      ];
+      return sessions;
     }
 
     final Map<String, LiveStrategy> bySnapshotId = <String, LiveStrategy>{};
@@ -179,7 +176,8 @@ class AiHomePageController extends Notifier<AiHomePageState> {
       for (final AiSession session in sessions)
         _copySessionWithDeployedTo(
           session,
-          bySnapshotId[_publishedSnapshotIdForSession(session)]?.id,
+          bySnapshotId[_publishedSnapshotIdForSession(session)]?.id ??
+              session.deployedTo,
         ),
     ];
   }

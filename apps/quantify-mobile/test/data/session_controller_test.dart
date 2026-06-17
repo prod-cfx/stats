@@ -17,6 +17,7 @@ class _RecordingAuthRepository extends MockAuthRepository {
   Object? guestError;
   int emailLoginCalls = 0;
   int telegramCalls = 0;
+  int telegramBindCalls = 0;
   int guestCalls = 0;
 
   @override
@@ -38,6 +39,16 @@ class _RecordingAuthRepository extends MockAuthRepository {
       userId: 'tg-real-user',
       token: 'tg-real-token',
       email: 'tg-real@example.com',
+    );
+  }
+
+  @override
+  Future<AuthSession> bindTelegram() async {
+    telegramBindCalls++;
+    return const AuthSession(
+      userId: 'tg-bound-user',
+      token: 'tg-bound-token',
+      email: 'bound@example.com',
     );
   }
 
@@ -190,6 +201,22 @@ void main() {
       expect(cur.token, 'tg-real-token');
       expect(repo.telegramCalls, 1);
       expect(repo.emailLoginCalls, 0);
+      expect(storage.snapshot[kSessionStorageKey], isNotNull);
+    });
+
+    test('bindTelegram 调 repository 并刷新持久化 session', () async {
+      final InMemoryTokenStorage storage = InMemoryTokenStorage();
+      final _RecordingAuthRepository repo = _RecordingAuthRepository();
+      final ProviderContainer c = _container(storage: storage, repo: repo);
+      addTearDown(c.dispose);
+
+      await c.read(sessionControllerProvider.future);
+      await c.read(sessionControllerProvider.notifier).bindTelegram();
+
+      final AuthSession? cur = c.read(sessionControllerProvider).value;
+      expect(cur, isNotNull);
+      expect(cur!.token, 'tg-bound-token');
+      expect(repo.telegramBindCalls, 1);
       expect(storage.snapshot[kSessionStorageKey], isNotNull);
     });
 

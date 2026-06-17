@@ -20,6 +20,7 @@ import 'widgets/category_chip_bar.dart';
 import 'widgets/featured_hero_card.dart';
 import 'widgets/load_conversation_toast.dart';
 import 'widgets/strategy_card_tile.dart';
+import 'widgets/strategy_existing_run_sheet.dart';
 import 'widgets/strategy_search_overlay.dart';
 import 'widgets/strategy_sort_sheet.dart';
 part 'strategy_home_page.parts.part.dart';
@@ -101,8 +102,11 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   /// 实盘监控 `/me/live`。
   Future<void> _onRun(StrategyMarketItem item) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    StrategyRunResult result;
     try {
-      await ref.read(strategyRepositoryProvider).runTemplate(item.card.id);
+      result = await ref
+          .read(strategyRepositoryProvider)
+          .runTemplate(item.card.id);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -111,9 +115,21 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
       return;
     }
     if (!mounted) return;
+    final String route =
+        '/me/live/${Uri.encodeComponent(result.strategyId)}?from=strategy';
+    if (result.existing) {
+      final bool? viewDetail = await showStrategyExistingRunSheet(
+        context,
+        result: result,
+        fallbackCard: item.card,
+      );
+      if (!mounted || viewDetail != true) return;
+      context.go(route);
+      return;
+    }
     _ctrl.fireToastAndNav(
       message: l10n.strategyHomeStartedToast(item.card.name),
-      route: '/me/live',
+      route: route,
     );
   }
 

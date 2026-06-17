@@ -1,8 +1,18 @@
 /// 策略分类（页面顶部 chip 切换用）。
 ///
-/// 对齐设计稿 `design/project/mobile/m-screens-2.jsx` `TAG_FILTERS`：
-/// `全部 / 趋势 / 网格 / 套利 / 反转 / 对冲 / 高频`。
-enum StrategyCategory { all, trend, grid, arbitrage, reversal, hedge, highFreq }
+/// 对齐 front 策略广场筛选：
+/// `全部 / 趋势 / 突破 / 反转 / 网格 / DCA / 盘口 / 衍生品事件 / 风控稳健`。
+enum StrategyCategory {
+  all,
+  trend,
+  breakout,
+  reversal,
+  grid,
+  dca,
+  orderbook,
+  derivativeEvent,
+  riskRobust,
+}
 
 /// 策略卡 status badge 类型（#1565）。
 ///
@@ -39,6 +49,9 @@ class StrategyCard {
   /// 周期标签，例如 `7D` / `30D` / `1Y`（#1595）。
   final String period;
 
+  /// 策略广场展示顺序。front 的「最新」排序使用该值升序。
+  final int displayOrder;
+
   const StrategyCard({
     required this.id,
     required this.name,
@@ -52,6 +65,7 @@ class StrategyCard {
     this.verified = false,
     this.pair = '',
     this.period = '',
+    this.displayOrder = 0,
   });
 
   /// 头像展示用币种符号，对齐设计稿 `s.sym`（`m-screens-2.jsx`）。
@@ -232,8 +246,19 @@ class StrategyDetail {
 class StrategyRunResult {
   final String strategyId;
   final bool existing;
+  final String? name;
+  final String? symbol;
+  final String? timeframe;
+  final String? status;
 
-  const StrategyRunResult({required this.strategyId, this.existing = false});
+  const StrategyRunResult({
+    required this.strategyId,
+    this.existing = false,
+    this.name,
+    this.symbol,
+    this.timeframe,
+    this.status,
+  });
 }
 
 class StrategyEditSession {

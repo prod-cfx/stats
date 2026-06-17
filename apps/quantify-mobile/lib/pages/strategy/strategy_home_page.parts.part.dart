@@ -142,11 +142,7 @@ class _FavoritesEmptyState extends StatelessWidget {
               color: _amber.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.star_rounded,
-              size: 26,
-              color: _amber,
-            ),
+            child: const Icon(Icons.star_rounded, size: 26, color: _amber),
           ),
           const SizedBox(height: QzSpacing.lg),
           Text(
@@ -164,11 +160,7 @@ class _FavoritesEmptyState extends StatelessWidget {
             child: Text(
               l10n.strategyHomeFavEmptyHint,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: c.textDim,
-                fontSize: 13,
-                height: 1.6,
-              ),
+              style: TextStyle(color: c.textDim, fontSize: 13, height: 1.6),
             ),
           ),
           const SizedBox(height: QzSpacing.lg),
@@ -199,9 +191,10 @@ class _SortRow extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(ctx);
     return switch (k) {
       StrategySortKey.hot => l10n.strategyHomeSortHot,
-      StrategySortKey.cagr => l10n.strategyHomeSortReturn,
-      StrategySortKey.sharpe => l10n.strategyHomeSortSharpe,
-      StrategySortKey.mddLow => l10n.strategyHomeSortLowDrawdown,
+      StrategySortKey.returnPct => l10n.strategyHomeSortReturn,
+      StrategySortKey.trades => l10n.strategyHomeSortTrades,
+      StrategySortKey.drawdownLow => l10n.strategyHomeSortLowDrawdown,
+      StrategySortKey.latest => l10n.strategyHomeSortLatest,
     };
   }
 
@@ -211,7 +204,11 @@ class _SortRow extends StatelessWidget {
     final QzColorScheme c = context.qzScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, 0),
+        QzSpacing.lg,
+        QzSpacing.xs,
+        QzSpacing.lg,
+        0,
+      ),
       child: Row(
         children: <Widget>[
           Text(
@@ -284,11 +281,7 @@ class _SortChip extends StatelessWidget {
                 ),
                 if (selected) ...<Widget>[
                   const SizedBox(width: 4),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 10,
-                    color: c.accent,
-                  ),
+                  Icon(Icons.keyboard_arrow_down, size: 10, color: c.accent),
                 ],
               ],
             ),

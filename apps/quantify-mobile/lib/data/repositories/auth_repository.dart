@@ -17,6 +17,7 @@ abstract class AuthRepository {
   Future<AuthSession> loginTelegram({
     Map<String, dynamic> payload = const <String, dynamic>{},
   });
+  Future<AuthSession> bindTelegram();
   Future<AuthSession> loginGuest();
   Future<void> logout();
 }

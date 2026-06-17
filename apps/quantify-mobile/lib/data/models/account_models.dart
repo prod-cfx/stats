@@ -7,6 +7,7 @@ class AccountInfo {
   final String userId;
   final String email;
   final String uid;
+  final AccountTelegramBinding? telegram;
   final double totalEquityUsd;
   final double availableBalanceUsd;
   final double unrealizedPnlUsd;
@@ -15,8 +16,27 @@ class AccountInfo {
     required this.userId,
     required this.email,
     required this.uid,
+    this.telegram,
     required this.totalEquityUsd,
     required this.availableBalanceUsd,
     required this.unrealizedPnlUsd,
   });
+}
+
+class AccountTelegramBinding {
+  final String id;
+  final String? username;
+  final bool isLinked;
+
+  const AccountTelegramBinding({
+    required this.id,
+    required this.username,
+    required this.isLinked,
+  });
+
+  String get displayName {
+    final String? name = username?.trim();
+    if (name != null && name.isNotEmpty) return '@$name';
+    return 'ID $id';
+  }
 }

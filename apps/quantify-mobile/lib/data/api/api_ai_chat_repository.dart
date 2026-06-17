@@ -88,7 +88,9 @@ AiSession _parseSession(Map<String, dynamic> m) {
     pair: asStringOrNull(pick(m, <String>['pair'])),
     timeframe: asStringOrNull(pick(m, <String>['timeframe'])),
     cagrLabel: asStringOrNull(pick(m, <String>['cagrLabel'])),
-    deployedTo: asStringOrNull(pick(m, <String>['deployedTo'])),
+    deployedTo: asStringOrNull(
+      pick(m, <String>['deployedTo', 'strategyInstanceId']),
+    ),
     llmCodegenSessionId: asStringOrNull(
       pick(m, <String>[
         'llmCodegenSessionId',

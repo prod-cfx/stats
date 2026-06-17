@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/domain/models/live_strategy_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/live/live_strategies_page.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../fixtures/mock/fixtures/live_strategies.dart';
+import '../../fixtures/mock/mock_live_strategy_repository.dart';
 import '../../helpers/test_overrides.dart';
 
 /// 测试 router：`/me/live` 落 [LiveStrategiesPage]，`/me/live/:id` 用 stub
@@ -59,6 +63,37 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
   return container;
 }
 
+LiveStrategy _copyStrategy(
+  LiveStrategy source, {
+  required String id,
+  required String name,
+}) {
+  return LiveStrategy(
+    id: id,
+    name: name,
+    pair: source.pair,
+    timeframe: source.timeframe,
+    exchange: source.exchange,
+    exchangeGlyph: source.exchangeGlyph,
+    market: source.market,
+    status: LiveStrategyStatus.running,
+    runFor: source.runFor,
+    todayPct: source.todayPct,
+    todayPnl: source.todayPnl,
+    totalPct: source.totalPct,
+    totalPnl: source.totalPnl,
+    capital: source.capital,
+    trades: source.trades,
+    winRate: source.winRate,
+    spark: source.spark,
+    maxDrawdown: source.maxDrawdown,
+    publishedSnapshotId: source.publishedSnapshotId,
+    deployedAt: source.deployedAt,
+    deployAccountName: source.deployAccountName,
+    deploymentLeverage: source.deploymentLeverage,
+  );
+}
+
 void main() {
   testWidgets('列表展示策略名称、状态、收益摘要', (WidgetTester tester) async {
     await _pump(tester);
@@ -82,6 +117,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('detail-stub')), findsOneWidget);
     expect(find.text('detail QF-AY7K2P'), findsOneWidget);
+  });
+
+  testWidgets('下拉刷新同步 PC 端新增实盘策略', (WidgetTester tester) async {
+    final ProviderContainer container = await _pump(tester);
+    final MockLiveStrategyRepository repo =
+        container.read(liveStrategyRepositoryProvider)
+            as MockLiveStrategyRepository;
+
+    expect(find.byKey(const Key('live-card-QF-PCSYNC')), findsNothing);
+
+    repo.upsertForTest(
+      _copyStrategy(mockLiveStrategies.first, id: 'QF-PCSYNC', name: 'PC 新建策略'),
+    );
+
+    await tester.drag(find.byType(RefreshIndicator), const Offset(0, 500));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(repo.listStrategiesCalls, greaterThanOrEqualTo(2));
+    expect(find.byKey(const Key('live-card-QF-PCSYNC')), findsOneWidget);
+    expect(find.text('PC 新建策略'), findsOneWidget);
   });
 
   testWidgets('更多按钮打开动作菜单，查看详情进入详情页', (WidgetTester tester) async {

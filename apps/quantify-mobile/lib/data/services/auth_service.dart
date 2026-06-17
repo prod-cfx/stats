@@ -92,6 +92,49 @@ class AuthService {
     return response.data;
   }
 
+  Future<TelegramDesktopIntentResponseDto> createTelegramDesktopIntent({
+    required String intent,
+    required String lng,
+  }) async {
+    final response = await _auth.authControllerCreateTelegramDesktopIntent(
+      createTelegramDesktopIntentRequestDto:
+          CreateTelegramDesktopIntentRequestDto(
+            (b) => b
+              ..intent =
+                  CreateTelegramDesktopIntentRequestDtoIntentEnum.valueOf(
+                    intent,
+                  )
+              ..lng = CreateTelegramDesktopIntentRequestDtoLngEnum.valueOf(lng),
+          ),
+    );
+    return response.data!.data;
+  }
+
+  Future<String> getTelegramDesktopIntentStatus(String intentId) async {
+    final response = await _auth.authControllerGetTelegramDesktopIntentStatus(
+      intentId: intentId,
+    );
+    return response.data!.data.status.name;
+  }
+
+  Future<dynamic> exchangeTelegramDesktopIntent(String intentId) async {
+    final response = await _auth.authControllerTelegramDesktopExchange(
+      telegramDesktopExchangeRequestDto: TelegramDesktopExchangeRequestDto(
+        (b) => b.intentId = intentId,
+      ),
+    );
+    return response.data;
+  }
+
+  Future<dynamic> bindTelegramDesktopIntent(String intentId) async {
+    final response = await _auth.authControllerBindTelegramByDesktopIntent(
+      telegramDesktopExchangeRequestDto: TelegramDesktopExchangeRequestDto(
+        (b) => b.intentId = intentId,
+      ),
+    );
+    return response.data;
+  }
+
   Future<dynamic> loginGuest() async {
     final response = await _auth.authControllerLoginGuest();
     return response.data;

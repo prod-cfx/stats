@@ -65,6 +65,16 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AuthSession> bindTelegram() async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    return const AuthSession(
+      userId: 'mock-user',
+      token: 'mock-token',
+      email: 'victor@example.com',
+    );
+  }
+
+  @override
   Future<AuthSession> loginGuest() async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     return const AuthSession(

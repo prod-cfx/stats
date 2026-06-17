@@ -209,7 +209,7 @@ void main() {
 
       expect(session.id, 'cmq9u5ykn0bh9eaqs5rqt2o0r');
       expect(session.llmCodegenSessionId, 'cmq9u5yka0bh3eaqsjnuvpn41');
-      expect(session.deployedTo, isNull);
+      expect(session.deployedTo, 'cmqen7ul40p0flwqsr181f7ym');
       final ChatTurn scriptReady = session.messages.firstWhere(
         (ChatTurn turn) => turn.kind == ChatTurnKind.scriptReady,
       );
@@ -233,17 +233,17 @@ void main() {
       expect(resultTurn.backtestSummary?.trades, 139);
     });
 
-    test('PUBLISHED 会话里的 strategyInstanceId 不等于部署成功实例', () async {
+    test('staging 会话用 strategyInstanceId 标记已部署实例', () async {
       final _StubListAiChatService svc = _StubListAiChatService(
         rows: <Map<String, dynamic>>[
           <String, dynamic>{
-            'id': 'conversation-1',
-            'conversationTitle': '未部署会话',
-            'updatedAt': '2026-06-17T03:59:05.390Z',
-            'activeCodegenSessionId': 'codegen-1',
+            'id': 'cmqhoiptw16w2kfqsm5zwei4p',
+            'conversationTitle': '15min k线里面 价格在em',
+            'updatedAt': '2026-06-17T08:53:02.518Z',
+            'activeCodegenSessionId': 'cmqhoiptj16vykfqsgmfe5vf8',
             'status': 'PUBLISHED',
-            'strategyInstanceId': 'draft-source-instance',
-            'publishedSnapshotId': 'snapshot-1',
+            'strategyInstanceId': 'cmqhok7ol19iukfqsalb7sjzi',
+            'publishedSnapshotId': 'cmqhok7p919iykfqsk5tkddlh',
             'scriptCode': 'export default function strategy() {}',
           },
         ],
@@ -252,7 +252,7 @@ void main() {
 
       final AiSession session = (await repo.listSessions()).single;
 
-      expect(session.deployedTo, isNull);
+      expect(session.deployedTo, 'cmqhok7ol19iukfqsalb7sjzi');
       expect(
         session.messages.any(
           (ChatTurn t) => t.kind == ChatTurnKind.scriptReady,

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../../data/auth/session_controller.dart';
 import '../../data/models/account_models.dart';
 import '../../data/models/api_key_models.dart';
+import '../../data/models/auth_models.dart';
 import '../../domain/models/live_strategy_models.dart';
 import '../../domain/use_cases/live_strategy_use_cases.dart';
 import '../../data/providers.dart';

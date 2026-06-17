@@ -14,15 +14,44 @@ class ApiAccountRepository implements AccountRepository {
 
   final GeneratedBackendApi _api;
 
-  static AccountInfo mapProfile(UserProfileResponseDto dto) {
+  static AccountInfo mapProfile(
+    UserProfileResponseDto dto, {
+    AccountTelegramBinding? telegram,
+  }) {
     return AccountInfo(
       userId: dto.id,
       email: dto.email,
       uid: dto.id,
+      telegram: telegram,
       totalEquityUsd: 0,
       availableBalanceUsd: 0,
       unrealizedPnlUsd: 0,
     );
+  }
+
+  static AccountTelegramBinding? mapTelegramBinding(Object? raw) {
+    if (raw is! Map) return null;
+    final Object? linked = raw['isLinked'];
+    final Object? id = raw['id'];
+    if (linked != true || id == null || id.toString().trim().isEmpty) {
+      return null;
+    }
+    final Object? username = raw['username'];
+    final String? normalizedUsername =
+        username == null || username.toString().trim().isEmpty
+        ? null
+        : username.toString().trim().replaceFirst(RegExp(r'^@'), '');
+    return AccountTelegramBinding(
+      id: id.toString().trim(),
+      username: normalizedUsername,
+      isLinked: true,
+    );
+  }
+
+  Map<Object?, Object?> _payloadMap(Object? raw) {
+    if (raw is Map && raw['data'] is Map) return raw['data'] as Map;
+    if (raw is Map) return raw;
+    return const <Object?, Object?>{};
   }
 
   UserProfileResponseDto _deserializeProfile(Object? raw) {
@@ -44,7 +73,11 @@ class ApiAccountRepository implements AccountRepository {
   @override
   Future<AccountInfo> getInfo() async {
     final Response<Object?> response = await _api.dio.get<Object?>('/users/me');
-    return mapProfile(_deserializeProfile(response.data));
+    final Map<Object?, Object?> payload = _payloadMap(response.data);
+    return mapProfile(
+      _deserializeProfile(response.data),
+      telegram: mapTelegramBinding(payload['telegram']),
+    );
   }
 
   @override

@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:backend_api_contracts/backend_api_contracts.dart' as contracts;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/auth_models.dart';
 import '../repositories/auth_repository.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/json_codec.dart';
+
+const Duration _telegramPollInterval = Duration(seconds: 2);
+const Duration _telegramPollTimeout = Duration(minutes: 3);
 
 /// [AuthRepository] 真实现（issue #2189）。
 ///
@@ -132,8 +138,58 @@ class ApiAuthRepository implements AuthRepository {
   Future<AuthSession> loginTelegram({
     Map<String, dynamic> payload = const <String, dynamic>{},
   }) async {
+    if (payload.isEmpty) {
+      final String intentId = await _startTelegramDesktopIntent('login');
+      await _waitTelegramConfirmation(intentId);
+      final dynamic raw = await _service.exchangeTelegramDesktopIntent(
+        intentId,
+      );
+      return _parse(raw, fallbackEmail: '');
+    }
+
     final dynamic raw = await _service.loginTelegram(payload: payload);
     return _parse(raw, fallbackEmail: '');
+  }
+
+  @override
+  Future<AuthSession> bindTelegram() async {
+    final String intentId = await _startTelegramDesktopIntent('bind');
+    await _waitTelegramConfirmation(intentId);
+    final dynamic raw = await _service.bindTelegramDesktopIntent(intentId);
+    return _parse(raw, fallbackEmail: '');
+  }
+
+  Future<String> _startTelegramDesktopIntent(String intent) async {
+    final contracts.TelegramDesktopIntentResponseDto desktopIntent =
+        await _service.createTelegramDesktopIntent(intent: intent, lng: 'zh');
+    final bool opened =
+        await _openTelegramLink(desktopIntent.deepLink) ||
+        await _openTelegramLink(desktopIntent.webLink);
+    if (!opened) {
+      throw const ApiException(message: '无法打开 Telegram，请确认已安装 Telegram 或稍后重试');
+    }
+    return desktopIntent.intentId;
+  }
+
+  Future<bool> _openTelegramLink(String url) async {
+    final Uri? uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _waitTelegramConfirmation(String intentId) async {
+    final DateTime deadline = DateTime.now().add(_telegramPollTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final String status = await _service.getTelegramDesktopIntentStatus(
+        intentId,
+      );
+      if (status == 'confirmed') return;
+      if (status == 'expired') {
+        throw const ApiException(message: 'Telegram 授权已过期，请重新发起');
+      }
+      await Future<void>.delayed(_telegramPollInterval);
+    }
+    throw const ApiException(message: '等待 Telegram 授权超时，请重试');
   }
 
   @override

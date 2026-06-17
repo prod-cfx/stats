@@ -11,15 +11,42 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
     mockLiveStrategies,
   );
 
+  int listStrategiesCalls = 0;
+  int getStrategyCalls = 0;
+  int getPositionCalls = 0;
+  int listTradesCalls = 0;
+  int listParamsCalls = 0;
+  final Set<String> _failingDetailIds = <String>{};
+
+  void upsertForTest(LiveStrategy strategy) {
+    final int index = _strategies.indexWhere(
+      (LiveStrategy s) => s.id == strategy.id,
+    );
+    if (index < 0) {
+      _strategies.add(strategy);
+      return;
+    }
+    _strategies[index] = strategy;
+  }
+
+  void failDetailForTest(String id) {
+    _failingDetailIds.add(id);
+  }
+
   @override
   Future<List<LiveStrategy>> listStrategies() async {
+    listStrategiesCalls++;
     await Future<void>.delayed(const Duration(milliseconds: 200));
     return List<LiveStrategy>.of(_strategies);
   }
 
   @override
   Future<LiveStrategy> getStrategy(String id) async {
+    getStrategyCalls++;
     await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_failingDetailIds.contains(id)) {
+      throw StateError('detail unavailable: $id');
+    }
     // 未命中即抛错：详情页据此落入 error 态渲染 liveLoadError，
     // 而非静默回退首条掩盖无效 id（与 repository 注释「调用方决定空态」一致）。
     return _strategies.firstWhere((LiveStrategy s) => s.id == id);
@@ -80,6 +107,7 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
 
   @override
   Future<LiveStrategyPosition?> getPosition(String id) async {
+    getPositionCalls++;
     await Future<void>.delayed(const Duration(milliseconds: 120));
     final LiveStrategy s = _strategies.firstWhere(
       (LiveStrategy x) => x.id == id,
@@ -90,12 +118,14 @@ class MockLiveStrategyRepository implements LiveStrategyRepository {
 
   @override
   Future<List<LiveStrategyTrade>> listTrades(String id, {int limit = 6}) async {
+    listTradesCalls++;
     await Future<void>.delayed(const Duration(milliseconds: 150));
     return mockLiveTrades.take(limit).toList();
   }
 
   @override
   Future<List<LiveStrategyParam>> listParams(String id) async {
+    listParamsCalls++;
     await Future<void>.delayed(const Duration(milliseconds: 120));
     return mockLiveParams;
   }

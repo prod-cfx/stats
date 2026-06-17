@@ -220,6 +220,39 @@ class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
     return ref.watch(liveStrategyRepositoryProvider).listStrategies();
   }
 
+  /// 手动同步列表：供 `/me/live` 下拉刷新拉取 PC 端新建/变更的策略。
+  Future<void> refreshAll() async {
+    state = const AsyncLoading<List<LiveStrategy>>();
+    state = await AsyncValue.guard(
+      () => ref.read(liveStrategyRepositoryProvider).listStrategies(),
+    );
+  }
+
+  /// 手动同步单条详情：详情页进入与下拉刷新只取当前策略，避免全量拉取。
+  Future<LiveStrategy> refreshOne(String id) async {
+    LiveStrategy strategy;
+    try {
+      strategy = await ref.read(liveStrategyRepositoryProvider).getStrategy(id);
+    } catch (_) {
+      strategy = await _cachedOrListedStrategy(id);
+    }
+    _upsertLocal(strategy);
+    return strategy;
+  }
+
+  Future<LiveStrategy> _cachedOrListedStrategy(String id) async {
+    final List<LiveStrategy>? current = state.value;
+    if (current != null) {
+      final int index = current.indexWhere((LiveStrategy s) => s.id == id);
+      if (index >= 0) return current[index];
+    }
+    final List<LiveStrategy> latest = await ref
+        .read(liveStrategyRepositoryProvider)
+        .listStrategies();
+    state = AsyncData<List<LiveStrategy>>(latest);
+    return latest.firstWhere((LiveStrategy s) => s.id == id);
+  }
+
   /// 停止：running / warning -> stopped，附「等待恢复」状态注。
   Future<void> pause(String id, {bool liquidate = false}) async {
     final List<LiveStrategy>? previous = state.value;
@@ -306,18 +339,31 @@ class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
     );
   }
 
+  void _upsertLocal(LiveStrategy strategy) {
+    final List<LiveStrategy>? current = state.value;
+    if (current == null) return;
+    bool replaced = false;
+    final List<LiveStrategy> next = current
+        .map((LiveStrategy s) {
+          if (s.id != strategy.id) return s;
+          replaced = true;
+          return strategy;
+        })
+        .toList(growable: true);
+    if (!replaced) next.add(strategy);
+    state = AsyncData<List<LiveStrategy>>(next);
+  }
+
   void _restore(List<LiveStrategy>? previous) {
     if (previous == null) return;
     state = AsyncData<List<LiveStrategy>>(previous);
   }
 
   Future<void> _refreshAfterAction(String id) async {
+    ref.invalidate(liveStrategyDetailProvider(id));
     ref.invalidate(liveStrategyTradesProvider(id));
     ref.invalidate(liveStrategyParamsProvider(id));
-    state = const AsyncLoading<List<LiveStrategy>>();
-    state = await AsyncValue.guard(
-      () => ref.read(liveStrategyRepositoryProvider).listStrategies(),
-    );
+    await refreshAll();
   }
 }
 
@@ -396,13 +442,10 @@ final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
       );
     });
 
-/// 单个实盘策略详情（#1752）。派生自 store；未命中抛错（详情页落 error 态）。
+/// 单个实盘策略详情（#1752）。进入详情时拉取单条最新数据。
 final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
     FutureProvider.family<LiveStrategy, String>((Ref ref, String id) async {
-      final List<LiveStrategy> all = await ref.watch(
-        liveStrategyStoreProvider.future,
-      );
-      return all.firstWhere((LiveStrategy s) => s.id == id);
+      return ref.read(liveStrategyStoreProvider.notifier).refreshOne(id);
     });
 
 /// 单个实盘策略持仓（#1752）。null 表示无持仓（已停止）。

@@ -27,6 +27,11 @@ class _UsersMeInterceptor extends Interceptor {
             'emailVerified': true,
             'isGuest': false,
             'roles': <String>['user'],
+            'telegram': <String, Object>{
+              'id': '123456789',
+              'username': 'victor_qf',
+              'isLinked': true,
+            },
             'createdAt': '2026-06-08T00:00:00.000Z',
             'updatedAt': '2026-06-08T00:00:00.000Z',
           },
@@ -64,6 +69,27 @@ void main() {
       expect(info.unrealizedPnlUsd, 0);
     });
 
+    test('maps Telegram binding from raw profile payload', () {
+      final AccountTelegramBinding? telegram =
+          ApiAccountRepository.mapTelegramBinding(<String, Object>{
+            'id': '123456789',
+            'username': '@victor_qf',
+            'isLinked': true,
+          });
+
+      expect(telegram, isNotNull);
+      expect(telegram!.displayName, '@victor_qf');
+    });
+
+    test('returns null Telegram binding when profile is unbound', () {
+      final AccountTelegramBinding? telegram =
+          ApiAccountRepository.mapTelegramBinding(<String, Object>{
+            'isLinked': false,
+          });
+
+      expect(telegram, isNull);
+    });
+
     test(
       'getInfo unwraps backend envelope and deserializes typed profile',
       () async {
@@ -79,6 +105,7 @@ void main() {
         expect(calls, <String>['/users/me']);
         expect(info.uid, 'cmp42glf60001yxqs0ivc09ff');
         expect(info.userId, info.uid);
+        expect(info.telegram?.displayName, '@victor_qf');
       },
     );
   });

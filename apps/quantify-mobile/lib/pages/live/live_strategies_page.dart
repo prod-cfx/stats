@@ -35,6 +35,10 @@ class LiveStrategiesPage extends ConsumerStatefulWidget {
 }
 
 class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
+  Future<void> _refreshStrategies() async {
+    await ref.read(liveStrategyStoreProvider.notifier).refreshAll();
+  }
+
   Future<void> _openSortSheet(AsyncValue<List<LiveStrategy>> strategies) async {
     final LiveStrategiesState st = ref.read(liveStrategiesControllerProvider);
     final LiveSortStatusCounts counts = strategies.maybeWhen(
@@ -194,8 +198,10 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
             style: TextStyle(color: c.statusDanger),
           ),
         ),
-        data: (List<LiveStrategy> list) =>
-            _content(context, l10n, c, list, summary),
+        data: (List<LiveStrategy> list) => RefreshIndicator(
+          onRefresh: _refreshStrategies,
+          child: _content(context, l10n, c, list, summary),
+        ),
       ),
     );
   }
@@ -211,6 +217,7 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     final List<LiveStrategy> visible = liveVisibleStrategies(all, st);
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         QzSpacing.lg,
         QzSpacing.md,

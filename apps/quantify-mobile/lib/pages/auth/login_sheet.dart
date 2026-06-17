@@ -131,9 +131,9 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
       LoginErrorKind.register => l10n.authRegisterFailedPrefix,
       LoginErrorKind.login => l10n.authLoginFailedPrefix,
     };
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$prefix$msg')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$prefix$msg')));
   }
 
   void _onTermsTap() {
@@ -152,7 +152,9 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
 
   void _showRegisterComingSoon() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('coming soon')),
+      SnackBar(
+        content: Text(AppLocalizations.of(context).authRegisterComingSoonTitle),
+      ),
     );
   }
 
@@ -276,8 +278,9 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                                 children: <Widget>[
                                   LoginTextField(
                                     fieldKey: const Key('login-email-field'),
-                                    shellKey:
-                                        const Key('login-email-field-shell'),
+                                    shellKey: const Key(
+                                      'login-email-field-shell',
+                                    ),
                                     labelKey: const Key('login-email-label'),
                                     controller: _email,
                                     enabled: !busy,
@@ -290,13 +293,15 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                                   const SizedBox(height: 10),
                                   if (isRegister) ...<Widget>[
                                     LoginTextField(
-                                      fieldKey:
-                                          const Key('register-password-field'),
+                                      fieldKey: const Key(
+                                        'register-password-field',
+                                      ),
                                       shellKey: const Key(
                                         'register-password-field-shell',
                                       ),
-                                      labelKey:
-                                          const Key('register-password-label'),
+                                      labelKey: const Key(
+                                        'register-password-label',
+                                      ),
                                       controller: _password,
                                       enabled: !busy,
                                       label: l10n.authRegisterPasswordLabel,
@@ -307,13 +312,15 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                                     ),
                                     const SizedBox(height: 10),
                                     LoginTextField(
-                                      fieldKey:
-                                          const Key('register-beta-code-field'),
+                                      fieldKey: const Key(
+                                        'register-beta-code-field',
+                                      ),
                                       shellKey: const Key(
                                         'register-beta-code-field-shell',
                                       ),
-                                      labelKey:
-                                          const Key('register-beta-code-label'),
+                                      labelKey: const Key(
+                                        'register-beta-code-label',
+                                      ),
                                       controller: _betaCode,
                                       enabled: !busy,
                                       label: l10n.authRegisterBetaCodeLabel,
@@ -324,8 +331,9 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                                   ] else
                                     LoginTextField(
                                       fieldKey: const Key('login-code-field'),
-                                      shellKey:
-                                          const Key('login-code-field-shell'),
+                                      shellKey: const Key(
+                                        'login-code-field-shell',
+                                      ),
                                       labelKey: const Key('login-code-label'),
                                       controller: _code,
                                       enabled: !busy,
@@ -362,8 +370,8 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                               onPressed: busy
                                   ? null
                                   : (isRegister
-                                      ? _submitRegister
-                                      : _submitEmail),
+                                        ? _submitRegister
+                                        : _submitEmail),
                               colors: c,
                             ),
                           ),
@@ -371,14 +379,11 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                       ),
                       if (isRegister)
                         Positioned.fill(
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              key: const Key(
-                                'login-sheet-register-coming-soon-overlay',
-                              ),
-                              onTap: _showRegisterComingSoon,
-                            ),
+                          child: _RegisterComingSoonOverlay(
+                            colors: c,
+                            title: l10n.authRegisterComingSoonTitle,
+                            subtitle: l10n.authRegisterComingSoonSubtitle,
+                            onTap: _showRegisterComingSoon,
                           ),
                         ),
                     ],
@@ -420,6 +425,80 @@ class _LoginSheetState extends ConsumerState<LoginSheet> {
                       onPrivacyTap: _onPrivacyTap,
                       colors: c,
                       l10n: l10n,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RegisterComingSoonOverlay extends StatelessWidget {
+  const _RegisterComingSoonOverlay({
+    required this.colors,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final QzColorScheme colors;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: title,
+      child: Material(
+        color: colors.bgElev.withValues(alpha: 0.68),
+        child: InkWell(
+          key: const Key('login-sheet-register-coming-soon-overlay'),
+          onTap: onTap,
+          child: Center(
+            child: Container(
+              key: const Key('login-sheet-register-coming-soon-message'),
+              margin: const EdgeInsets.symmetric(horizontal: 26),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              decoration: BoxDecoration(
+                color: colors.bgElev.withValues(alpha: 0.94),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colors.borderSoft),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x24000000),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.lock_clock, color: colors.accent, size: 22),
+                  const SizedBox(height: 8),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: colors.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: colors.textDim,
+                      fontSize: 12,
+                      height: 1.4,
                     ),
                   ),
                 ],

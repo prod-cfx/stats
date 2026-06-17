@@ -237,6 +237,13 @@ void main() {
     await tester.tap(find.byKey(const Key('auth-mode-register')));
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const Key('login-sheet-register-coming-soon-message')),
+      findsOneWidget,
+    );
+    expect(find.text('即将开放'), findsOneWidget);
+    expect(find.text('注册功能正在准备中，请先使用登录或 Telegram 继续。'), findsOneWidget);
+
     await tester.enterText(
       find.byKey(const Key('login-email-field')),
       'new@quantify.dev',
@@ -251,7 +258,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('login-sheet')), findsOneWidget);
-    expect(find.text('coming soon'), findsOneWidget);
+    expect(find.text('即将开放'), findsWidgets);
     expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
     expect(storage.snapshot.containsKey(kSessionStorageKey), isFalse);
     expect(container.read(sessionControllerProvider).value, isNull);

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/auth/session_controller.dart';
+import 'package:quantify_mobile/data/models/account_models.dart';
 import '../../fixtures/mock/mock_account_repository.dart';
 import '../../fixtures/mock/mock_api_key_repository.dart';
 import '../../fixtures/mock/mock_auth_repository.dart';
@@ -34,8 +35,10 @@ Future<ProviderContainer> _pumpMe(
     pausedCount: 1,
     stoppedCount: 1,
     winRate: 62.4,
+    averageReturnPct: 18.0,
   ),
   Object? accountInfoError,
+  AccountInfo? accountInfo,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -60,6 +63,8 @@ Future<ProviderContainer> _pumpMe(
         accountInfoProvider.overrideWith(
           (Ref ref) async => throw accountInfoError,
         ),
+      if (accountInfo != null)
+        accountInfoProvider.overrideWith((Ref ref) async => accountInfo),
       apiKeyRepositoryProvider.overrideWithValue(MockApiKeyRepository()),
       // 大卡计数（#1792 / #1816）直接喂确定值，避免 mock repo 的 200ms 延时
       // 在 widget 树 dispose 后留下 pending timer。
@@ -324,10 +329,10 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('统计卡主字段为活跃策略 / 累计收益 / 胜率', (WidgetTester tester) async {
+  testWidgets('统计卡主字段为活跃策略 / 平均收益 / 胜率', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
     expect(find.text('活跃策略'), findsOneWidget);
-    expect(find.text('累计收益'), findsOneWidget);
+    expect(find.text('平均收益'), findsOneWidget);
     expect(find.text('胜率'), findsOneWidget);
   });
 
@@ -337,13 +342,13 @@ void main() {
     await _pumpMe(tester, initialSession: kSession);
     // active = running 2 + warning 1 + paused 1 = 4。
     expect(find.text('4'), findsWidgets);
-    // 累计收益 totalPnl=8420 → 千分位 +$8,420（旧硬编码同值，但现来自 provider）。
-    expect(find.text('+\$8,420'), findsOneWidget);
+    // 平均收益 averageReturnPct=18.0 → +18.0%。
+    expect(find.text('+18.0%'), findsOneWidget);
     // 胜率 62.4 → 62.4%。
     expect(find.text('62.4%'), findsOneWidget);
   });
 
-  testWidgets('统计卡退化态：summary 全 0 → 0 / +\$0 / 0.0%，不崩（#1902）', (
+  testWidgets('统计卡退化态：summary 全 0 → 0 / +0.0% / 0.0%，不崩（#1902）', (
     WidgetTester tester,
   ) async {
     await _pumpMe(
@@ -360,24 +365,47 @@ void main() {
         stoppedCount: 0,
       ),
     );
-    expect(find.text('+\$0'), findsOneWidget);
+    expect(find.text('+0.0%'), findsOneWidget);
     expect(find.text('0.0%'), findsOneWidget);
     // 旧硬编码值不再出现。
     expect(find.text('62.4%'), findsNothing);
-    expect(find.text('+\$8,420'), findsNothing);
+    expect(find.text('+18.0%'), findsNothing);
   });
 
-  testWidgets('header 显示 Telegram 已绑定 chip', (WidgetTester tester) async {
-    await _pumpMe(tester, initialSession: kSession);
-    expect(find.text('Telegram 已绑定'), findsOneWidget);
-  });
-
-  testWidgets('账户分组 Telegram 行显示 handle、安全行显示双重认证状态', (
+  testWidgets('Telegram 未绑定时 header 不显示 chip，账户行显示未绑定', (
     WidgetTester tester,
   ) async {
     await _pumpMe(tester, initialSession: kSession);
-    // 对齐设计稿 m-screens-4.jsx:1009-1010
+    expect(find.text('Telegram 已绑定'), findsNothing);
+    expect(find.text('未绑定'), findsOneWidget);
+  });
+
+  testWidgets('Telegram 已绑定时 header 显示 chip，账户行显示 handle', (
+    WidgetTester tester,
+  ) async {
+    await _pumpMe(
+      tester,
+      initialSession: kSession,
+      accountInfo: const AccountInfo(
+        userId: 'mock-user',
+        email: 'victor@gmail.com',
+        uid: 'cmp42glf60001yxqs0ivc09ff',
+        telegram: AccountTelegramBinding(
+          id: '123456789',
+          username: 'victor_qf',
+          isLinked: true,
+        ),
+        totalEquityUsd: 0,
+        availableBalanceUsd: 0,
+        unrealizedPnlUsd: 0,
+      ),
+    );
+    expect(find.text('Telegram 已绑定'), findsOneWidget);
     expect(find.text('@victor_qf'), findsOneWidget);
+  });
+
+  testWidgets('安全行显示双重认证状态', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
     expect(find.text('双重认证 · 已开启'), findsOneWidget);
     // 「查看」文案不再出现（推送通知行已改为「Telegram · 开启」#1817）
     expect(find.text('查看'), findsNothing);
@@ -388,6 +416,22 @@ void main() {
   ) async {
     await _pumpMe(tester, initialSession: kSession);
     expect(find.text('Telegram · 开启'), findsOneWidget);
+  });
+
+  testWidgets('点击安全设置提示即将上线', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    await tester.tap(find.text('安全设置'));
+    await tester.pump();
+
+    expect(find.text('安全设置即将上线'), findsOneWidget);
+  });
+
+  testWidgets('点击推送通知提示即将上线', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    await tester.tap(find.text('推送通知'));
+    await tester.pump();
+
+    expect(find.text('推送通知即将上线'), findsOneWidget);
   });
 
   testWidgets('点击语言行弹出底部抽屉（含两选项 + 取消）（#1817）', (WidgetTester tester) async {

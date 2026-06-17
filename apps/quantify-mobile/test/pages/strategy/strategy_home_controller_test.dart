@@ -13,7 +13,7 @@ import 'package:quantify_mobile/pages/strategy/widgets/strategy_sort_sheet.dart'
 /// 覆盖 category/sort 变更触发 reset+首页加载、loadMore 翻页与 hasMore 终止、
 /// 重复 loadMore 短路、toast 设置后超时自动清空。
 void main() {
-  StrategyMarketItem item(String id, {required int users}) {
+  StrategyMarketItem item(String id, {required int users, double cagr = 0}) {
     return StrategyMarketItem(
       card: StrategyCard(
         id: id,
@@ -27,7 +27,7 @@ void main() {
       ),
       sparkline: const <double>[],
       stats: StrategyMarketStats(
-        cagr: 0,
+        cagr: cagr,
         sharpe: 0,
         maxDrawdown: 0,
         winRate: 0,
@@ -37,13 +37,13 @@ void main() {
   }
 
   group('StrategyHomeController', () {
-    test('reload：重置回第 1 页 + 按 users 降序加载首页 + 关闭 loading', () async {
+    test('reload：重置回第 1 页 + 按收益降序加载首页 + 关闭 loading', () async {
       final ProviderContainer c = makeContainer(
         _FakeRepo(<int, StrategyMarketPage>{
           1: _page(<StrategyMarketItem>[
-            item('a', users: 10),
-            item('b', users: 30),
-            item('c', users: 20),
+            item('a', users: 10, cagr: 1),
+            item('b', users: 30, cagr: 3),
+            item('c', users: 20, cagr: 2),
           ], hasMore: true),
         }),
       );
@@ -52,7 +52,7 @@ void main() {
       expect(s.loading, isFalse);
       expect(s.page, 1);
       expect(s.hasMore, isTrue);
-      // 默认 sort=hot 按 users 降序。
+      // 默认 sort=hot 按收益降序。
       expect(
         s.items.map((StrategyMarketItem e) => e.card.id).toList(),
         <String>['b', 'c', 'a'],
@@ -99,10 +99,10 @@ void main() {
       final ProviderContainer c = makeContainer(repo);
       await ctrl(c).reload();
       final int callsBefore = repo.listCalls;
-      // 切到 cagr（全 0 相等，稳定）后再切回 hot 验证不触发新请求。
-      ctrl(c).setSort(StrategySortKey.cagr);
+      // 切到 returnPct（全 0 相等，稳定）后验证不触发新请求。
+      ctrl(c).setSort(StrategySortKey.returnPct);
       expect(repo.listCalls, callsBefore, reason: 'setSort 不应重拉');
-      expect(read(c).sort, StrategySortKey.cagr);
+      expect(read(c).sort, StrategySortKey.returnPct);
     });
 
     test('loadMore：翻页累加 items + 推进 page', () async {

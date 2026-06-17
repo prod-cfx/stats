@@ -44,10 +44,10 @@ class MockStrategyRepository implements StrategyRepository {
   static StrategyMarketStats _statsFor(StrategyCard c) {
     final Random rng = Random(c.id.hashCode ^ 0x1A2B);
     final double sharpe = 0.6 + rng.nextDouble() * 2.6; // 0.6..3.2
-    // 套利 / 对冲类策略回撤偏小，其他类（趋势 / 网格 / 反转 / 高频）回撤偏大。
+    // 衍生品事件 / 风控稳健类策略回撤偏小，其他类回撤偏大。
     final bool lowVol =
-        c.category == StrategyCategory.arbitrage ||
-        c.category == StrategyCategory.hedge;
+        c.category == StrategyCategory.derivativeEvent ||
+        c.category == StrategyCategory.riskRobust;
     final double mddBase = lowVol ? 3 : 10;
     final double mddSpan = lowVol ? 6 : 20;
     final double winRate = 0.42 + rng.nextDouble() * 0.45; // 0.42..0.87

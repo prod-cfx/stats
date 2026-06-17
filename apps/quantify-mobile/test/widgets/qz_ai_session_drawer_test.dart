@@ -197,4 +197,54 @@ void main() {
     expect(renamed, <String>['s-wip:ETH 改名会话']);
     expect(input, findsNothing);
   });
+
+  testWidgets('删除确认使用底部抽屉并返回确认结果', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    final DateTime now = DateTime.now();
+    final AiSession session = AiSession(
+      id: 's-wip',
+      title: 'ETH 4H 均值回归',
+      category: '均值回归',
+      updatedAt: now,
+      messages: const <ChatTurn>[],
+    );
+    bool? confirmed;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: buildQzThemeData(
+          const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (BuildContext context) => TextButton(
+              onPressed: () async {
+                confirmed = await showQzAiSessionDeleteDialog(
+                  context,
+                  session: session,
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ai-session-delete-dialog')), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('删除该会话？'), findsOneWidget);
+    expect(find.text('ETH 4H 均值回归'), findsOneWidget);
+
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
+    expect(confirmed, isTrue);
+  });
 }

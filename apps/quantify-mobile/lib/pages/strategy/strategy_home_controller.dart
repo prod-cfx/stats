@@ -113,7 +113,7 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
   }
 
   /// 在当前内存列表上排序，避免 repository 暴露 sortKey。
-  /// hot=users 降；cagr=cagr 降；sharpe=tradeCount 降；mddLow=maxDrawdown 升序近 0。
+  /// 对齐 front：hot/return=收益降序；trades=交易数降序；drawdownLow=绝对回撤升序；latest=displayOrder 升序。
   List<StrategyMarketItem> _applySort(
     List<StrategyMarketItem> items,
     StrategySortKey k,
@@ -121,13 +121,16 @@ class StrategyHomeController extends Notifier<StrategyHomeState> {
     final List<StrategyMarketItem> sorted = <StrategyMarketItem>[...items];
     sorted.sort((StrategyMarketItem a, StrategyMarketItem b) {
       return switch (k) {
-        StrategySortKey.hot => b.stats.users.compareTo(a.stats.users),
-        StrategySortKey.cagr => b.stats.cagr.compareTo(a.stats.cagr),
-        StrategySortKey.sharpe => (b.stats.tradeCount ?? -1).compareTo(
+        StrategySortKey.hot => b.stats.cagr.compareTo(a.stats.cagr),
+        StrategySortKey.returnPct => b.stats.cagr.compareTo(a.stats.cagr),
+        StrategySortKey.trades => (b.stats.tradeCount ?? -1).compareTo(
           a.stats.tradeCount ?? -1,
         ),
-        StrategySortKey.mddLow => b.stats.maxDrawdown.compareTo(
-          a.stats.maxDrawdown,
+        StrategySortKey.drawdownLow => a.stats.maxDrawdown.abs().compareTo(
+          b.stats.maxDrawdown.abs(),
+        ),
+        StrategySortKey.latest => a.card.displayOrder.compareTo(
+          b.card.displayOrder,
         ),
       };
     });

@@ -17,6 +17,11 @@ export class UserRepository {
         avatarUrl: true,
         emailVerified: true,
         isGuest: true,
+        credentials: {
+          where: { value: { startsWith: 'telegram:' } },
+          select: { value: true },
+          take: 1,
+        },
         createdAt: true,
         updatedAt: true,
       },

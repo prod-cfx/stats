@@ -27,6 +27,7 @@ dependencies:
   backend_api_contracts:
     path: ../../packages/api-contracts-dart
   logger: ^2.5.0
+  url_launcher: ^6.3.1
   k_chart_plus: ^1.0.4
   intl: any
 

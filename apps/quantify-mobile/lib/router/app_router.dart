@@ -249,7 +249,10 @@ GoRouter buildRouter({
         path: '/me/live/:id',
         builder: (BuildContext context, GoRouterState s) => read() == null
             ? const _LoginSheetGatePage()
-            : LiveStrategyDetailPage(id: s.pathParameters['id']!),
+            : LiveStrategyDetailPage(
+                id: s.pathParameters['id']!,
+                fromStrategyPlaza: s.uri.queryParameters['from'] == 'strategy',
+              ),
       ),
       if (kDebugMode)
         GoRoute(

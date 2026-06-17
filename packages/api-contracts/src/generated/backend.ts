@@ -45,6 +45,9 @@ const UpdateSettingDto = z
     isSystem: z.boolean().optional(),
   })
   .passthrough()
+const UserTelegramBindingResponseDto = z
+  .object({ id: z.string(), username: z.string().nullish(), isLinked: z.boolean() })
+  .passthrough()
 const UserProfileResponseDto = z
   .object({
     id: z.string(),
@@ -53,6 +56,7 @@ const UserProfileResponseDto = z
     avatarUrl: z.string().optional(),
     emailVerified: z.boolean(),
     isGuest: z.boolean(),
+    telegram: UserTelegramBindingResponseDto.nullish(),
     roles: z.array(z.string()),
     createdAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
@@ -1735,6 +1739,7 @@ export const schemas = {
   SettingResponseDto,
   CreateSettingDto,
   UpdateSettingDto,
+  UserTelegramBindingResponseDto,
   UserProfileResponseDto,
   TelegramWebAuthorizeUrlResponseDto,
   CreateTelegramDesktopIntentRequestDto,
@@ -1919,6 +1924,25 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(AiQuantConversationResponseDto),
+  },
+  {
+    method: 'get',
+    path: '/account/ai-quant/conversations/:id',
+    alias: 'AccountAiQuantConversationsController_detail',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: AiQuantConversationResponseDto,
   },
   {
     method: 'delete',

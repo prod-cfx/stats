@@ -1,8 +1,8 @@
 import 'package:quantify_mobile/data/models/strategy_models.dart';
 
-/// 策略广场 mock fixtures：22 条，覆盖 6 个非 all category。
+/// 策略广场 mock fixtures：22 条，覆盖 front 对齐后的 8 个非 all category。
 ///
-/// 分布按设计稿 `TAG_FILTERS`（趋势 / 网格 / 套利 / 反转 / 对冲 / 高频）映射，
+/// 分布按 front 策略广场（趋势 / 突破 / 反转 / 网格 / DCA / 盘口 / 衍生品事件 / 风控稳健）映射，
 /// 保证每类至少 1 条；具体归类参考各条 tags。
 ///
 /// 排序约定（被现有 widget test 依赖，请勿轻易破坏）：
@@ -66,7 +66,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 22.3,
     subscribers: 540,
     tags: <String>['dca', 'SOLUSDT'],
-    category: StrategyCategory.trend,
+    category: StrategyCategory.dca,
     status: StrategyStatusBadge.official,
     verified: true,
     pair: 'SOL/USDT',
@@ -80,7 +80,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 31.7,
     subscribers: 612,
     tags: <String>['momentum', 'ETHUSDT'],
-    category: StrategyCategory.trend,
+    category: StrategyCategory.breakout,
     status: StrategyStatusBadge.pro,
     verified: true,
     pair: 'ETH/USDT',
@@ -208,7 +208,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 4.6,
     subscribers: 142,
     tags: <String>['neutral', 'BTC', 'ETH'],
-    category: StrategyCategory.hedge,
+    category: StrategyCategory.riskRobust,
     pair: 'BTC-ETH',
     period: '90D',
   ),
@@ -220,7 +220,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 7.2,
     subscribers: 121,
     tags: <String>['pair', 'SOL', 'AVAX'],
-    category: StrategyCategory.hedge,
+    category: StrategyCategory.riskRobust,
     pair: 'SOL-AVAX',
     period: '30D',
   ),
@@ -232,12 +232,12 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 7.8,
     subscribers: 22,
     tags: <String>['vol', 'ETHUSDT'],
-    category: StrategyCategory.hedge,
+    category: StrategyCategory.riskRobust,
     pair: 'ETH/USDT',
     period: '14D',
   ),
 
-  // highFreq
+  // orderbook
   StrategyCard(
     id: 'st-grid-pepe',
     name: 'PEPE 高频网格',
@@ -246,12 +246,12 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 28.9,
     subscribers: 411,
     tags: <String>['grid', 'PEPEUSDT'],
-    category: StrategyCategory.highFreq,
+    category: StrategyCategory.orderbook,
     pair: 'PEPE/USDT',
     period: '7D',
   ),
 
-  // arbitrage（放在末尾以满足 "last subscribers 最低" 的测试约定）
+  // derivativeEvent（放在末尾以满足 "last subscribers 最低" 的测试约定）
   StrategyCard(
     id: 'st-arb-stable',
     name: '稳定币套利',
@@ -260,7 +260,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 3.1,
     subscribers: 98,
     tags: <String>['arbitrage', 'stable'],
-    category: StrategyCategory.arbitrage,
+    category: StrategyCategory.derivativeEvent,
     pair: '多币种',
     period: '14D',
   ),
@@ -272,7 +272,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 6.8,
     subscribers: 320,
     tags: <String>['yield', 'USDT'],
-    category: StrategyCategory.arbitrage,
+    category: StrategyCategory.riskRobust,
     pair: 'USDT',
     period: '1Y',
   ),
@@ -284,7 +284,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 5.4,
     subscribers: 76,
     tags: <String>['funding', 'ETHUSDT'],
-    category: StrategyCategory.arbitrage,
+    category: StrategyCategory.derivativeEvent,
     pair: 'ETH/USDT',
     period: '14D',
   ),
@@ -296,7 +296,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 6.3,
     subscribers: 14,
     tags: <String>['basis', 'perp'],
-    category: StrategyCategory.arbitrage,
+    category: StrategyCategory.derivativeEvent,
     pair: '多币种',
     period: '7D',
   ),
@@ -312,7 +312,7 @@ const List<StrategyCard> mockMyStrategies = <StrategyCard>[
     pnlPercent: -1.5,
     subscribers: 1,
     tags: <String>['grid', 'mine'],
-    category: StrategyCategory.highFreq,
+    category: StrategyCategory.orderbook,
     pair: 'BTC/USDT',
     period: '7D',
   ),

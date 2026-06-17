@@ -22,10 +22,23 @@ class _FixtureInterceptor extends Interceptor {
     final Object data = switch (options.path) {
       '/strategy-plaza/templates' => <String, Object>{
         'data': <Map<String, Object>>[
-          _template('real-grid'),
-          _template('fallback-equity', includeSparkline: false),
+          _template('real-grid', displayOrder: 2),
           _template(
-            'fallback-official',
+            'real-risk',
+            name: 'BTC止损后冷却',
+            description: '止损后等待冷却窗口再开仓。',
+            tags: <String>['风控', '冷却', '止损'],
+            scenario: '风控稳健',
+            displayOrder: 1,
+            includeSparkline: false,
+          ),
+          _template(
+            'real-derivative',
+            name: 'BTC持仓量突破确认',
+            description: '未平仓量增长确认价格突破。',
+            tags: <String>['OI', '突破', '衍生品'],
+            scenario: '衍生品事件',
+            displayOrder: 3,
             includeSparkline: false,
             includeEquityCurve: false,
           ),
@@ -69,6 +82,27 @@ class _FixtureInterceptor extends Interceptor {
           'latestOrders': <Map<String, Object>>[],
         },
       },
+      '/strategy-plaza/templates/real-risk/run' => <String, Object>{
+        'data': <String, Object>{
+          'result': 'existing',
+          'strategy': <String, Object>{
+            'id': 'existing-risk-1',
+            'name': 'BTC止损后冷却',
+            'status': 'running',
+            'symbol': 'BTC-USDT-SWAP',
+            'timeframe': '15m',
+            'isSubscribed': true,
+            'metrics': <String, Object>{},
+            'updatedAt': '2026-06-10T00:00:00.000Z',
+            'equitySeries': <Map<String, Object>>[],
+            'snapshot': <String, Object>{},
+            'timeline': <Map<String, Object>>[],
+            'accountOverview': <String, Object>{},
+            'positionOverview': <String, Object>{},
+            'latestOrders': <Map<String, Object>>[],
+          },
+        },
+      },
       '/strategy-plaza/templates/real-grid/edit-session' => <String, Object>{
         'data': <String, Object>{
           'sessionId': 'session-real-grid',
@@ -86,17 +120,22 @@ class _FixtureInterceptor extends Interceptor {
 
 Map<String, Object> _template(
   String id, {
+  String name = '真实网格策略',
+  String description = '真实接口返回的策略',
+  List<String> tags = const <String>['grid', 'real'],
+  String scenario = '震荡行情',
+  int displayOrder = 1,
   bool includeSparkline = true,
   bool includeEquityCurve = true,
 }) {
   return <String, Object>{
     'id': id,
-    'name': '真实网格策略',
-    'description': '真实接口返回的策略',
+    'name': name,
+    'description': description,
     'logicDescription': '低买高卖',
-    'tags': <String>['grid', 'real'],
+    'tags': tags,
     'riskLevel': 'medium',
-    'scenario': '震荡行情',
+    'scenario': scenario,
     'exchange': 'okx',
     'environment': 'demo',
     'marketType': 'perp',
@@ -105,7 +144,7 @@ Map<String, Object> _template(
     'positionPct': 25,
     'leverage': 3,
     'status': 'live',
-    'displayOrder': 1,
+    'displayOrder': displayOrder,
     'displayMetrics': <String, Object>{
       'label': 'official_sample_backtest',
       'returnPct': 42.5,
@@ -204,6 +243,28 @@ void main() {
       expect(page.items[2].sparkline, <double>[1, 1.14]);
     });
 
+    test('front 对齐分类和 displayOrder 数据源来自真实 template DTO', () async {
+      final List<String> calls = <String>[];
+      final ApiStrategyRepository repo = _buildRepo(calls);
+
+      final StrategyMarketPage all = await repo.listMarket(pageSize: 10);
+      final StrategyMarketPage risk = await repo.listMarket(
+        pageSize: 10,
+        category: StrategyCategory.riskRobust,
+      );
+      final StrategyMarketPage derivative = await repo.listMarket(
+        pageSize: 10,
+        category: StrategyCategory.derivativeEvent,
+      );
+
+      expect(
+        all.items.map((StrategyMarketItem i) => i.card.displayOrder),
+        <int>[2, 1, 3],
+      );
+      expect(risk.items.single.card.id, 'real-risk');
+      expect(derivative.items.single.card.id, 'real-derivative');
+    });
+
     test('signals 和 equity curve 使用真实 endpoint，空响应保持空态', () async {
       final List<String> calls = <String>[];
       final ApiStrategyRepository repo = _buildRepo(calls);
@@ -258,6 +319,21 @@ void main() {
       expect(edit.sessionId, 'session-real-grid');
       expect(edit.templateId, 'real-grid');
       expect(edit.initialMessage, '编辑真实网格策略');
+    });
+
+    test('run 返回 existing 时保留已有策略详情字段', () async {
+      final List<String> calls = <String>[];
+      final ApiStrategyRepository repo = _buildRepo(calls);
+
+      final StrategyRunResult run = await repo.runTemplate('real-risk');
+
+      expect(calls, contains('/strategy-plaza/templates/real-risk/run'));
+      expect(run.strategyId, 'existing-risk-1');
+      expect(run.existing, isTrue);
+      expect(run.name, 'BTC止损后冷却');
+      expect(run.symbol, 'BTC-USDT-SWAP');
+      expect(run.timeframe, '15m');
+      expect(run.status, 'running');
     });
   });
 }

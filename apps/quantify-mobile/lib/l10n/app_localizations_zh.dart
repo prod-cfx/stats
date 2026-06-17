@@ -968,6 +968,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authRegisterButton => '注册';
 
   @override
+  String get authRegisterComingSoonTitle => '即将开放';
+
+  @override
+  String get authRegisterComingSoonSubtitle => '注册功能正在准备中，请先使用登录或 Telegram 继续。';
+
+  @override
   String get authRegisterFailedPrefix => '注册失败：';
 
   @override
@@ -1710,7 +1716,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meStatsActiveStrategies => '活跃策略';
 
   @override
-  String get meStatsCumulativeReturn => '累计收益';
+  String get meStatsCumulativeReturn => '平均收益';
 
   @override
   String get meStatsWinRate => '胜率';
@@ -1744,6 +1750,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get meSettingsTelegramHandle => '@victor_qf';
+
+  @override
+  String get meTelegramBindTitle => '绑定 Telegram';
+
+  @override
+  String get meTelegramBindDescription =>
+      '将打开 Telegram 完成授权。授权成功后返回应用，账户页会自动刷新绑定状态。';
+
+  @override
+  String get meTelegramBindAction => '去 Telegram 绑定';
+
+  @override
+  String get meTelegramBindSuccess => 'Telegram 已绑定';
+
+  @override
+  String get meTelegramBindFailedPrefix => 'Telegram 绑定失败：';
 
   @override
   String get meSettingsSecurity => '安全设置';
@@ -2167,7 +2189,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyCategoryTrend => '趋势';
 
   @override
+  String get strategyCategoryBreakout => '突破';
+
+  @override
   String get strategyCategoryGrid => '网格';
+
+  @override
+  String get strategyCategoryDca => 'DCA';
+
+  @override
+  String get strategyCategoryOrderbook => '盘口';
+
+  @override
+  String get strategyCategoryDerivativeEvent => '衍生品事件';
+
+  @override
+  String get strategyCategoryRiskRobust => '风控稳健';
 
   @override
   String get strategyCategoryArbitrage => '套利';
@@ -2347,10 +2384,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyHomeSortReturn => '收益';
 
   @override
+  String get strategyHomeSortTrades => '交易';
+
+  @override
   String get strategyHomeSortSharpe => '交易';
 
   @override
   String get strategyHomeSortLowDrawdown => '低回撤';
+
+  @override
+  String get strategyHomeSortLatest => '最新';
 
   @override
   String get strategyHomeSortLabel => '排序';

@@ -41,6 +41,15 @@ GoRouter _buildTestRouter({String id = _kId}) {
           key: Key('live-stub'),
           body: Center(child: Text('live stub')),
         ),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':id',
+            builder: (BuildContext _, GoRouterState state) => Scaffold(
+              key: const Key('live-detail-stub'),
+              body: Center(child: Text('live ${state.pathParameters['id']}')),
+            ),
+          ),
+        ],
       ),
     ],
   );
@@ -260,7 +269,7 @@ void main() {
     expect(find.byKey(const Key('strategy-detail-tf-y1')), findsNothing);
   });
 
-  testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘监控 /me/live（#1825）', (
+  testWidgets('运行按钮：点击 → toast → 700ms 后跳实盘详情并标记广场来源', (
     WidgetTester tester,
   ) async {
     final ({ProviderContainer container, GoRouter router}) ctx =
@@ -282,13 +291,14 @@ void main() {
       contains('/strategy/'),
     );
 
-    // 到 700ms 跳实盘监控
+    // 到 700ms 跳实盘详情，保留广场返回来源。
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump();
     expect(
       ctx.router.routerDelegate.currentConfiguration.uri.toString(),
-      contains('/me/live'),
+      '/me/live/$_kId?from=strategy',
     );
+    expect(find.byKey(const Key('live-detail-stub')), findsOneWidget);
 
     // 让 toast 自然消失
     await tester.pump(const Duration(milliseconds: 2000));

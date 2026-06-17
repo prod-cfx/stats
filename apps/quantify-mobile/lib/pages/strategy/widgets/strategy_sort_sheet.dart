@@ -12,8 +12,8 @@ import '../../../theme/tokens.dart';
 /// 42×4 handle。与通用 [QzSheet] 分离，避免改动通用外壳波及其余 15 处调用。
 const Color _sheetShadow = Color(0x330F0B22);
 
-/// 排序键（#1565）：热门 / 收益 / Sharpe / 低回撤。
-enum StrategySortKey { hot, cagr, sharpe, mddLow }
+/// 排序键：对齐 front 策略广场 `热门 / 收益 / 交易 / 低回撤 / 最新`。
+enum StrategySortKey { hot, returnPct, trades, drawdownLow, latest }
 
 /// 「筛选 & 排序」底部 sheet 内容（#1565 / #2128）。
 ///
@@ -113,11 +113,13 @@ class StrategySortSheet extends StatelessWidget {
     return switch (c) {
       StrategyCategory.all => l10n.commonAll,
       StrategyCategory.trend => l10n.strategyCategoryTrend,
-      StrategyCategory.grid => l10n.strategyCategoryGrid,
-      StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
+      StrategyCategory.breakout => l10n.strategyCategoryBreakout,
       StrategyCategory.reversal => l10n.strategyCategoryReversal,
-      StrategyCategory.hedge => l10n.strategyCategoryHedge,
-      StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
+      StrategyCategory.grid => l10n.strategyCategoryGrid,
+      StrategyCategory.dca => l10n.strategyCategoryDca,
+      StrategyCategory.orderbook => l10n.strategyCategoryOrderbook,
+      StrategyCategory.derivativeEvent => l10n.strategyCategoryDerivativeEvent,
+      StrategyCategory.riskRobust => l10n.strategyCategoryRiskRobust,
     };
   }
 
@@ -125,9 +127,10 @@ class StrategySortSheet extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(ctx);
     return switch (k) {
       StrategySortKey.hot => l10n.strategyHomeSortHot,
-      StrategySortKey.cagr => l10n.strategyHomeSortReturn,
-      StrategySortKey.sharpe => l10n.strategyHomeSortSharpe,
-      StrategySortKey.mddLow => l10n.strategyHomeSortLowDrawdown,
+      StrategySortKey.returnPct => l10n.strategyHomeSortReturn,
+      StrategySortKey.trades => l10n.strategyHomeSortTrades,
+      StrategySortKey.drawdownLow => l10n.strategyHomeSortLowDrawdown,
+      StrategySortKey.latest => l10n.strategyHomeSortLatest,
     };
   }
 

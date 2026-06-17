@@ -200,7 +200,7 @@ void main() {
     expect(find.byType(StrategyDetailPage), findsOneWidget);
   });
 
-  testWidgets('顶部栏：策略广场 + 副标题 + 筛选按钮 + 7 个分类 chip (#1594)', (
+  testWidgets('顶部栏：策略广场 + 副标题 + 筛选按钮 + front 对齐分类 chip (#1594)', (
     WidgetTester tester,
   ) async {
     await _pump(tester);
@@ -224,27 +224,38 @@ void main() {
       ),
       findsNothing,
     );
-    // 7 个分类 chip key
+    // front 对齐分类 chip key
     expect(find.byKey(const Key('strategy-chip-all')), findsOneWidget);
     expect(find.byKey(const Key('strategy-chip-trend')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-chip-grid')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-chip-arbitrage')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-breakout')), findsOneWidget);
     expect(find.byKey(const Key('strategy-chip-reversal')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-chip-hedge')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-chip-highFreq')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-grid')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-dca')), findsOneWidget);
+    final Finder categoryScroller = find.byWidgetPredicate(
+      (Widget w) => w is ListView && w.scrollDirection == Axis.horizontal,
+    );
+    await tester.drag(categoryScroller, const Offset(-520, 0));
+    await tester.pump();
+    expect(find.byKey(const Key('strategy-chip-orderbook')), findsOneWidget);
+    expect(
+      find.byKey(const Key('strategy-chip-derivativeEvent')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('strategy-chip-riskRobust')), findsOneWidget);
   });
 
-  testWidgets('排序行：4 个排序 chip + 结果计数 (#1565)', (WidgetTester tester) async {
+  testWidgets('排序行：5 个排序 chip + 结果计数 (#1565)', (WidgetTester tester) async {
     await _pump(tester);
     expect(find.byKey(const Key('strategy-sort-hot')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-sort-cagr')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-sort-sharpe')), findsOneWidget);
-    expect(find.byKey(const Key('strategy-sort-mddLow')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-returnPct')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-trades')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-drawdownLow')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-latest')), findsOneWidget);
     expect(find.text('交易'), findsWidgets);
     expect(find.text('置信'), findsWidgets);
     expect(find.text('编辑'), findsWidgets);
-    // 默认 hot 选中：tap cagr 切换不抛
-    await tester.tap(find.byKey(const Key('strategy-sort-cagr')));
+    // 默认 hot 选中：tap returnPct 切换不抛
+    await tester.tap(find.byKey(const Key('strategy-sort-returnPct')));
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
@@ -284,20 +295,20 @@ void main() {
       ),
     );
     expect(hotArrow.size, 10);
-    // 未选中 cagr：无箭头
+    // 未选中 returnPct：无箭头
     expect(
       find.descendant(
-        of: find.byKey(const Key('strategy-sort-cagr')),
+        of: find.byKey(const Key('strategy-sort-returnPct')),
         matching: find.byIcon(Icons.keyboard_arrow_down),
       ),
       findsNothing,
     );
-    // 切到 cagr 后箭头随选中态迁移
-    await tester.tap(find.byKey(const Key('strategy-sort-cagr')));
+    // 切到 returnPct 后箭头随选中态迁移
+    await tester.tap(find.byKey(const Key('strategy-sort-returnPct')));
     await tester.pump();
     expect(
       find.descendant(
-        of: find.byKey(const Key('strategy-sort-cagr')),
+        of: find.byKey(const Key('strategy-sort-returnPct')),
         matching: find.byIcon(Icons.keyboard_arrow_down),
       ),
       findsOneWidget,
@@ -470,13 +481,13 @@ void main() {
     expect(find.text('按 交易 排序'), findsOneWidget);
     expect(find.text('按 低回撤 排序'), findsOneWidget);
 
-    // #2128：点排序即时生效——sheet 仍打开时排序行已切到 sharpe（active 箭头）。
-    await tester.tap(find.byKey(const Key('strategy-sheet-sort-sharpe')));
+    // #2128：点排序即时生效——sheet 仍打开时排序行已切到 trades（active 箭头）。
+    await tester.tap(find.byKey(const Key('strategy-sheet-sort-trades')));
     await tester.pump();
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
     expect(
       find.descendant(
-        of: find.byKey(const Key('strategy-sort-sharpe')),
+        of: find.byKey(const Key('strategy-sort-trades')),
         matching: find.byIcon(Icons.keyboard_arrow_down),
       ),
       findsOneWidget,
@@ -487,7 +498,7 @@ void main() {
     expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsNothing);
     expect(
       find.descendant(
-        of: find.byKey(const Key('strategy-sort-sharpe')),
+        of: find.byKey(const Key('strategy-sort-trades')),
         matching: find.byIcon(Icons.keyboard_arrow_down),
       ),
       findsOneWidget,
@@ -694,7 +705,7 @@ void main() {
       findsOneWidget,
       reason: '未到 700ms 时不应跳转',
     );
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
     expect(
       find.text('live-stub'),
