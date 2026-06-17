@@ -10,7 +10,7 @@ import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-co
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
-import type { SemanticIntentCoverageDiagnostics, SemanticIntentCoverageItem, SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
+import type { SemanticExpression, SemanticIntentCoverageDiagnostics, SemanticIntentCoverageItem, SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
  *
@@ -698,12 +698,20 @@ function extractDcaPerOrderSizingRole(clause: string): ExtractedSizingRole | nul
 function extractTopLevelPositionSizingRole(clauses: readonly string[], fullText: string): ExtractedSizingRole | null {
   const isLifecycleClause = (clause: string): boolean =>
     /(?:DCA|dca|定投|加投|加仓|补仓|回撤)/u.test(clause)
+  const riskControlSizing = extractRiskControlSizingRole(fullText)
+  if (riskControlSizing) return riskControlSizing
 
   return clauses
     .filter(clause => !isLifecycleClause(clause))
     .map(clause => extractSizingRoleFromText(clause))
     .find((role): role is ExtractedSizingRole => role !== null)
     ?? (isLifecycleClause(fullText) ? null : extractSizingRoleFromText(fullText))
+}
+
+function extractRiskControlSizingRole(fullText: string): ExtractedSizingRole | null {
+  const normalized = fullText.trim().replace(/％/gu, '%')
+  const match = normalized.match(/(?:风控|风险控制)[^。；;\n]{0,48}(?:仓位|单笔仓位|单次仓位)\s*[：:]?\s*(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*%)/u)
+  return match?.[0] ? extractSizingRoleFromText(match[0]) : null
 }
 
 function toPerOrderSizingShape(sizing: SemanticPositionSizingContract): Record<string, unknown> {
@@ -1894,10 +1902,12 @@ export class GenericSeedDispatcher {
     return rules
       .map((rule) => {
         if (!isRuleEffectsByRole(rule.effects)) return rule
+        if (this.ruleConditionContainsEmptyCooldown(rule.condition)) return null
         if (rule.phase === 'entry') {
           const filteredCondition = this.filterConditionAtoms(rule.condition, atom => this.isDcaExitOrPausePredicate(atom))
             ?? this.buildOnStartCondition(userMessage, 'entry')
           const positions = this.mergeDcaScheduleEffects(rule.effects.positions, scheduleParams)
+          const risks = this.mergeDcaPauseRiskEffects(rule.effects.risks, userMessage, rule.sideScope)
           return {
             ...rule,
             sideScope: 'long',
@@ -1905,6 +1915,7 @@ export class GenericSeedDispatcher {
             effects: {
               ...rule.effects,
               positions,
+              risks,
             },
           }
         }
@@ -1962,6 +1973,17 @@ export class GenericSeedDispatcher {
     return false
   }
 
+  private ruleConditionContainsEmptyCooldown(expr: AtomExpr): boolean {
+    if (expr.kind === 'atom') {
+      if (expr.key !== ATOM_CONTRACT_REGISTRY['risk.cooldown'].key) return false
+      const params = expr.params ?? {}
+      return params.durationBars === undefined && params.durationMs === undefined
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') return expr.children.some(child => this.ruleConditionContainsEmptyCooldown(child))
+    if (expr.kind === 'not') return this.ruleConditionContainsEmptyCooldown(expr.child)
+    return expr.steps.some(step => this.ruleConditionContainsEmptyCooldown(step))
+  }
+
   private withDcaAveragePriceExitBasis(expr: AtomExpr): AtomExpr {
     if (expr.kind === 'atom') {
       if (expr.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key) return expr
@@ -1994,6 +2016,45 @@ export class GenericSeedDispatcher {
         sideScope: 'long',
       },
     ]
+  }
+
+  private mergeDcaPauseRiskEffects(existing: readonly AtomExpr[], userMessage: string, sideScope: SemanticRule['sideScope']): AtomExpr[] {
+    const pauseRisk = this.extractMovingAveragePauseRisk(userMessage, sideScope)
+    if (!pauseRisk) return [...existing]
+    const alreadyPresent = existing.some(effect =>
+      effect.kind === 'atom'
+      && effect.key === pauseRisk.key
+      && JSON.stringify(effect.params) === JSON.stringify(pauseRisk.params),
+    )
+    return alreadyPresent ? [...existing] : [...existing, pauseRisk]
+  }
+
+  private extractMovingAveragePauseRisk(userMessage: string, sideScope: SemanticRule['sideScope']): Extract<AtomExpr, { kind: 'atom' }> | null {
+    const match = userMessage.match(/价格\s*(?:跌破|低于|下破|跌穿)\s*(\d{1,4})\s*(?:日|周期)?均线\s*(\d+(?:\.\d+)?)\s*%\s*时?\s*(?:暂停|停止)/u)
+    if (!match?.[1] || !match[2]) return null
+    const period = Number(match[1])
+    const offsetPct = Number(match[2])
+    if (!Number.isInteger(period) || period <= 0 || !Number.isFinite(offsetPct) || offsetPct <= 0) return null
+
+    const condition: SemanticExpression = {
+      kind: 'predicate',
+      left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+      op: 'LTE',
+      right: { kind: 'indicator', name: 'sma', params: { period, offsetPct: -offsetPct } },
+    }
+    return {
+      kind: 'atom',
+      key: 'risk.condition_expression',
+      params: {
+        condition,
+        effect: { type: 'pause_strategy' },
+        scope: 'strategy',
+        capabilityStatus: 'recognized_unsupported',
+        unsupportedReason: 'pause_strategy_public_beta_unsupported',
+      },
+      sideScope,
+      evidence: { text: match[0].trim() },
+    }
   }
 
   private extractDcaScheduleParamsFromMessage(userMessage: string): Record<string, unknown> {
@@ -3084,7 +3145,9 @@ export class GenericSeedDispatcher {
         })
       }
     }
-    if (this.hasFixedNotionalIntent(userMessage) && !out.some(effect => effect.kind === 'atom' && effect.key === 'position.fixed_notional')) {
+    if (this.resolveGenericExecutionProgramKeyFromMessage(userMessage) !== 'program.dca'
+      && this.hasFixedNotionalIntent(userMessage)
+      && !out.some(effect => effect.kind === 'atom' && effect.key === 'position.fixed_notional')) {
       const notional = this.extractFirstNumber(userMessage, '(?:固定|每次|单笔)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|美元)')
       pushAtom({
         key: 'position.fixed_notional',

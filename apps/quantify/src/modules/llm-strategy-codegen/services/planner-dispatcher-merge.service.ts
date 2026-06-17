@@ -3335,8 +3335,15 @@ export class PlannerDispatcherMergeService {
   ): AtomExpr | null {
     return this.filterAtomExpr(condition, leaf =>
       leaf.key === ATOM_CONTRACT_REGISTRY['time.cooldown_window'].key
-      || this.isMovingAverageCooldownDurationNoise(leaf),
+      || this.isMovingAverageCooldownDurationNoise(leaf)
+      || this.isEmptyCooldownConditionNoise(leaf),
     )
+  }
+
+  private isEmptyCooldownConditionNoise(atom: AtomExprAtom): boolean {
+    if (atom.key !== ATOM_CONTRACT_REGISTRY['risk.cooldown'].key) return false
+    const params = atom.params ?? {}
+    return params.durationBars === undefined && params.durationMs === undefined
   }
 
   private removeMovingAverageCooldownDurationNoise(effects: RuleEffects): RuleEffects {

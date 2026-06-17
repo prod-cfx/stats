@@ -3986,6 +3986,12 @@ export class SemanticStateProjectionService {
       return label && label.length > 0 ? label : '表达式条件'
     }
 
+    if (atomKey === 'risk.condition_expression') {
+      const condition = this.formatSemanticExpression(params.condition)
+      if (condition.length > 0) return `风控：当${condition}时${this.describeRiskExpressionEffect(params.effect)}`
+      return '风控表达式'
+    }
+
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.per_order_budget is a sizing effect leaf, not yet an atom contract key
     if (atomKey === 'position.per_order_budget') {
       const value = this.readFiniteNumber(params.value)

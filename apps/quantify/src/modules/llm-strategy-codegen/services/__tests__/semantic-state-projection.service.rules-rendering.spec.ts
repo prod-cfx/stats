@@ -81,6 +81,17 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(signals.hasShortIntent).toBe(false)
   })
 
+  it('renders timed DCA sizing, pause guard, and concrete cooldown without duplicate notional sizing', () => {
+    const summary = summarizePrompt('基于 OKX 模拟盘 BTC-USDT 现货 1h，创建定时 DCA 策略。规则：策略启动后每 24 小时买入一次，每次 100 USDT，最多执行 10 次，总预算 1000 USDT；每 10 根 K 线最多开仓一次；持仓 2 根 K 线后平多；价格跌破 30 日均线 8% 时暂停；风控：仓位 70%，止盈 0.12%，亏损 3% 止损。')
+
+    expect(summary).toContain('单笔仓位 70%')
+    expect(summary).toContain('每次 100 USDT')
+    expect(summary).toContain('交易冷却：10 根 K 线')
+    expect(summary).toContain('暂停策略')
+    expect(summary).not.toContain('交易冷却期')
+    expect(summary).not.toContain('单笔 100 USDT')
+  })
+
   it('keeps recommendation intent compatibility for legacy bare and reduce action keys', () => {
     const signals = (service as unknown as {
       buildRecommendationSignals(input: {

@@ -3111,15 +3111,25 @@ describe('PlannerDispatcherMergeService — rules mainflow cooldown and DCA regr
     const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
     const rules = fallback?.rules ?? []
     const serialized = JSON.stringify(rules)
+    const conditionLeaves = rules.flatMap(rule => collectAtomLeaves(rule.condition))
     const effectLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+    const positionLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+      .filter(leaf => leaf.key.startsWith('position.'))
 
     expect(serialized).not.toContain('"durationMs":"30d"')
     expect(serialized).not.toContain('交易时间窗口')
+    expect(conditionLeaves.filter(leaf => leaf.key === 'risk.cooldown')).toHaveLength(0)
     expect(effectLeaves).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.cooldown', params: expect.objectContaining({ durationBars: 10 }) }),
       expect.objectContaining({ key: 'risk.time_stop_bars', params: expect.objectContaining({ maxBars: 2 }) }),
       expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.12 }) }),
       expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 3 }) }),
+      expect.objectContaining({ key: 'risk.condition_expression', params: expect.objectContaining({ effect: { type: 'pause_strategy' } }) }),
     ]))
+    expect(positionLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'position.sizing', params: expect.objectContaining({ sizing: expect.objectContaining({ kind: 'ratio', value: 0.7 }) }) }),
+      expect.objectContaining({ key: 'position.dca_schedule', params: expect.objectContaining({ perOrderSizing: expect.objectContaining({ kind: 'quote', value: 100, asset: 'USDT' }) }) }),
+    ]))
+    expect(positionLeaves.map(leaf => leaf.key)).not.toContain('position.fixed_notional')
   })
 })
