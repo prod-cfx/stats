@@ -616,9 +616,17 @@ export class CodegenConversationService {
         .map(session => [session.id, session]),
     )
 
-    return summaries.map((conversation) => {
+    return Promise.all(summaries.map(async (conversation) => {
       const session = sessionSummaries.get(conversation.codegenSessionId)
-      const publishedSnapshotId = conversation.lastBacktestRef?.publishedSnapshotId ?? null
+      const latestSnapshot = session?.status === 'PUBLISHED'
+        ? await this.publishedSnapshotsRepo.findLatestBySessionId(session.id)
+        : null
+      const publishedSnapshotId = latestSnapshot?.id ?? conversation.lastBacktestRef?.publishedSnapshotId ?? null
+      const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
+        publishedSnapshotId,
+        snapshot: latestSnapshot,
+        strategyInstanceId: session?.strategyInstanceId ?? null,
+      })
       return {
         id: conversation.id,
         activeCodegenSessionId: session && this.isEditableConversationSessionStatus(session.status) ? session.id : null,
@@ -637,9 +645,11 @@ export class CodegenConversationService {
             }
           : null,
         publishedSnapshotId,
+        publishedSnapshotParamValues: this.buildPublishedSnapshotParamValues(latestSnapshot),
+        ...publishedSnapshotProjection,
         strategyInstanceId: session?.strategyInstanceId ?? null,
       }
-    })
+    }))
   }
 
   async getConversation(conversationId: string, userId: string): Promise<AiQuantConversationResponseDto> {

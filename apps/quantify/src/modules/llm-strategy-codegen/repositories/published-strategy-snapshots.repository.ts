@@ -205,6 +205,20 @@ export class PublishedStrategySnapshotsRepository {
     })
   }
 
+  async bindStrategyInstance(input: {
+    snapshotId: string
+    userId: string
+    strategyInstanceId: string
+  }): Promise<void> {
+    await this.txHost.tx.publishedStrategySnapshot.updateMany({
+      where: {
+        id: input.snapshotId,
+        session: { userId: input.userId },
+      },
+      data: { strategyInstanceId: input.strategyInstanceId },
+    })
+  }
+
   async findEditableSnapshotForUser(input: {
     userId: string
     strategyInstanceId: string
