@@ -165,6 +165,7 @@ export class SemanticContractReadinessService {
     let materialized: ReadinessMaterializedState
     if (hasRules) {
       state = this.repairPairSpreadEntryMainflow(state)
+      state = withStagedDcaScheduleProjectedToProgramRules(state)
       state = this.withGridSizingProjectedToProgramRules(
         this.dropStandalonePositionSizingRules(
           this.withTopLevelPositionSizingProjectedToRules(state),
@@ -304,7 +305,12 @@ export class SemanticContractReadinessService {
           && rulesReady.hasExit
         )
       : flatReady
-    const resultState = this.withMaterializedFlatBuckets(nextState, nextMaterialized)
+    const resultState = this.withMaterializedFlatBuckets(
+      nextState,
+      ready && rulesReady !== null
+        ? withIgnorableRulesMainflowOrchestrationSlotsCleared(nextMaterialized)
+        : nextMaterialized,
+    )
 
     return {
       state: resultState,
@@ -1720,6 +1726,67 @@ function isIgnorableRulesMainflowOrchestrationBlock(
   })
 }
 
+function withStagedDcaScheduleProjectedToProgramRules(state: SemanticState): SemanticState {
+  if (!state.rules?.length) return state
+  const legacy = state as SemanticState & {
+    positionConstraint?: SemanticPositionConstraintState[]
+  }
+  const stagedDca = legacy.positionConstraint?.find(constraint => constraint.key === 'position.dca_schedule')
+  if (!stagedDca) return state
+
+  let changed = false
+  const rules = state.rules.map((rule) => {
+    const effects = isRuleEffectsByRole(rule.effects)
+      ? rule.effects
+      : null
+    if (!effects || !effects.programs.some(hasProgramDcaLeaf) || effects.positions.some(hasDcaScheduleLeaf)) {
+      return rule
+    }
+
+    changed = true
+    const dcaAtom: AtomExprAtom = {
+      kind: 'atom',
+      key: 'position.dca_schedule',
+      params: { ...stagedDca.params },
+      sideScope: rule.sideScope === 'both' ? 'long' : rule.sideScope,
+    }
+    return {
+      ...rule,
+      effects: {
+        ...effects,
+        positions: [...effects.positions, dcaAtom],
+      },
+    }
+  })
+
+  return changed ? { ...state, rules } : state
+}
+
+function hasProgramDcaLeaf(effect: AtomExpr): boolean {
+  return collectAtomLeaves(effect).some(leaf => leaf.key === 'program.dca')
+}
+
+function hasDcaScheduleLeaf(effect: AtomExpr): boolean {
+  return collectAtomLeaves(effect).some(leaf => leaf.key === 'position.dca_schedule')
+}
+
+function withIgnorableRulesMainflowOrchestrationSlotsCleared(
+  materialized: ReadinessMaterializedState,
+): ReadinessMaterializedState {
+  return {
+    ...materialized,
+    orchestration: materialized.orchestration.map((node) => {
+      if (!isIgnorableRulesMainflowOrchestrationBlock([node])) return node
+      if (!node.openSlots?.length) return node
+      return {
+        ...node,
+        status: 'locked' as SemanticNodeStatus,
+        openSlots: [],
+      }
+    }),
+  }
+}
+
 function normalizePhase0Orchestration(
   orchestration: readonly SemanticOrchestrationNode[] | undefined,
   registry: SemanticOrchestrationRegistryService,
@@ -1943,7 +2010,7 @@ function isSupportedDcaProgram(
   const programKind = typeof node.programKind === 'string'
     ? node.programKind
     : readOrchestrationNodeParamString(node, 'programKind')
-  if (programKind !== 'dca') return false
+  if (programKind !== undefined && programKind !== 'dca') return false
   const contract = registry.getContractByKey('program.dca')
   if (!contract) return false
   if (!strategyVersion) return false

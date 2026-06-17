@@ -57,6 +57,10 @@ function buildRulesFromMessage(message: string): readonly SemanticRule[] {
   return buildStateFromMessage(message).rules ?? []
 }
 
+function atom(key: string, params: Record<string, unknown> = {}, sideScope?: 'long' | 'short' | 'both'): AtomExprAtom {
+  return { kind: 'atom', key, params, ...(sideScope ? { sideScope } : {}) }
+}
+
 function collectRuleAtoms(rules: readonly SemanticRule[]): AtomExprAtom[] {
   return rules.flatMap(rule => [
     ...collectAtomLeaves(rule.condition),
@@ -241,6 +245,73 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     expect(artifacts.compiled.ir.ruleBlocks.some(block =>
       block.actions.some(action => action.kind === 'ADD_LONG'),
     )).toBe(true)
+    expect(artifacts.ast.decisionPrograms.some(program =>
+      program.actions.some(action => action.kind === 'ADD_LONG'),
+    )).toBe(true)
+    expect(artifacts.compiledScript).toContain('ADD_LONG')
+  })
+
+  it('compiles staged drawdown DCA program with flat schedule facts into ADD_LONG', async () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [{
+        id: 'dispatcher-typed-rule-2:rules-1-effects-positions-2',
+        key: 'position.dca_schedule',
+        params: {
+          triggerMode: 'price_interval',
+          dropPct: 3,
+          priceIntervalPct: 3,
+          maxCount: 3,
+          perOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+          drawdownPerOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+          capitalCap: { kind: 'quote', asset: 'USDT', value: 1000 },
+        },
+        status: 'open',
+        source: 'derived',
+        openSlots: [],
+      }],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: { slotKey: 'exchange', value: 'okx', status: 'locked', fieldPath: 'contextSlots.exchange', priority: 'context', questionHint: '', affectsExecution: true },
+        symbol: { slotKey: 'symbol', value: 'BTCUSDT', status: 'locked', fieldPath: 'contextSlots.symbol', priority: 'context', questionHint: '', affectsExecution: true },
+        marketType: { slotKey: 'marketType', value: 'perp', status: 'locked', fieldPath: 'contextSlots.marketType', priority: 'context', questionHint: '', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', value: '1h', status: 'locked', fieldPath: 'contextSlots.timeframe', priority: 'context', questionHint: '', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-06-17T00:00:00.000Z',
+      rules: [
+        {
+          id: 'exit-8pct',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { basis: 'entry_avg_price', valuePct: -8, direction: 'down' }),
+          effects: [atom('action.close_long')],
+        },
+        {
+          id: 'dca-program',
+          phase: 'program',
+          sideScope: 'long',
+          condition: atom('execution.on_start'),
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [atom('program.dca', {}, 'both')],
+          },
+        },
+      ],
+    }
+    const readiness = new SemanticContractReadinessService().normalize(state)
+    const artifacts = await createPublicationStage().generate({ semanticState: readiness.state })
+
+    expect(readiness.ready).toBe(true)
     expect(artifacts.ast.decisionPrograms.some(program =>
       program.actions.some(action => action.kind === 'ADD_LONG'),
     )).toBe(true)

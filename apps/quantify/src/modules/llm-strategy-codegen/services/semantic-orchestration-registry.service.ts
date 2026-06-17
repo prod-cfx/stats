@@ -870,7 +870,7 @@ export class SemanticOrchestrationRegistryService {
       ? node.programKind
       : readOrchestrationParamString(node, 'programKind')
 
-    if (programKind !== 'dca') {
+    if (programKind !== undefined && programKind !== 'dca') {
       pushSlot('program_kind', '请确认 programKind 为 dca')
     }
     if (node.onDeactivate !== undefined && node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') {
