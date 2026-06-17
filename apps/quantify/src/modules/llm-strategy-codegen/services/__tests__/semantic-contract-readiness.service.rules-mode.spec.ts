@@ -153,7 +153,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.missing).not.toContain('missing_risk')
   })
 
-  it('entry-only executable rules can compile without explicit exit semantics', () => {
+  it('entry-only executable rules still require explicit exit semantics', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'entry-only',
@@ -166,8 +166,8 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     const r = svc.evaluateRulesReadiness(rules)
 
     expect(r.hasEntry).toBe(true)
-    expect(r.hasExit).toBe(true)
-    expect(r.missing).not.toContain('missing_exit')
+    expect(r.hasExit).toBe(false)
+    expect(r.missing).toContain('missing_exit')
   })
 
   it('grid.range_rebalance with breakoutAction=stop 强化 exit', () => {

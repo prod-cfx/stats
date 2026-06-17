@@ -1468,7 +1468,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('出场：价格百分比变化（上涨，10%，相对入场均价）')
   })
 
-  it('recovers ORDI on-start entry and all explicit percent exits when planner returns no rules (staging dispatcher-only)', async () => {
+  it('recovers ORDI on-start entry and keeps entry-average risks without duplicate exit rules when planner returns no rules (staging dispatcher-only)', async () => {
     const initialMessage = '在 OKX 现货 ORDI/USDT 上，主周期 1h，使用 10% 固定仓位只做多；入场动作为立即开始时市价买入；出场规则为价格相对前收盘上涨 1% 时卖出，另有相对入场均价下跌 5% 止损卖出、相对入场均价上涨 10% 止盈卖出。'
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -1502,7 +1502,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(serializedRules).toContain('valuePct":1')
     expect(serializedRules).toContain('valuePct":5')
     expect(serializedRules).toContain('valuePct":10')
-    expect(rules.filter((rule: any) => rule.phase === 'exit')).toHaveLength(3)
+    expect(rules.filter((rule: any) => rule.phase === 'exit')).toHaveLength(1)
+    expect(rules.find((rule: any) => rule.phase === 'entry')?.effects?.risks ?? []).toHaveLength(2)
     expect(result.assistantPrompt).toContain('立即开始时市价买入')
     expect(result.assistantPrompt).toContain('相对上一根收盘价')
     expect(result.assistantPrompt).toContain('1')

@@ -4440,7 +4440,7 @@ export class SemanticStateProjectionService {
   }
 
   private buildRulesSummary(rules: readonly SemanticRule[]): string {
-    const displayRules = this.dropRedundantEntryAverageRiskExitRules(rules)
+    const displayRules = this.orderRulesForSummary(this.dropRedundantEntryAverageRiskExitRules(rules))
     const sharedScopeTexts = this.collectSharedScopeTexts(displayRules)
     const lines: string[] = []
     for (const rule of displayRules) {
@@ -4451,6 +4451,22 @@ export class SemanticStateProjectionService {
       lines.push(`前置：${sharedScopeTexts.join('，')}`)
     }
     return lines.join('；')
+  }
+
+  private orderRulesForSummary(rules: readonly SemanticRule[]): SemanticRule[] {
+    const phaseOrder: Record<SemanticRule['phase'], number> = {
+      entry: 0,
+      exit: 1,
+      gate: 2,
+      program: 3,
+    }
+    return rules
+      .map((rule, index) => ({ rule, index }))
+      .sort((left, right) => {
+        const phaseDelta = phaseOrder[left.rule.phase] - phaseOrder[right.rule.phase]
+        return phaseDelta !== 0 ? phaseDelta : left.index - right.index
+      })
+      .map(item => item.rule)
   }
 
   private dropRedundantEntryAverageRiskExitRules(rules: readonly SemanticRule[]): SemanticRule[] {

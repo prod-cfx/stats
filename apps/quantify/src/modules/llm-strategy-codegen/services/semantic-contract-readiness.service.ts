@@ -1029,10 +1029,6 @@ export class SemanticContractReadinessService {
         return getAtomFulfillsStrategyPhase(leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY).includes(phase)
       }
       const entryCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'entry'))
-      const nonReverseEntryCapableEffect = effectLeaves.some(leaf =>
-        leaf.key !== ATOM_CONTRACT_REGISTRY['action.reverse_position'].key
-        && fulfillsPhase(leaf, 'entry'),
-      )
       const exitCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'exit'))
       const exitCapableRiskEffect = effectLeaves.some((leaf) => {
         if (!leaf.key.startsWith('risk.')) return false
@@ -1045,9 +1041,6 @@ export class SemanticContractReadinessService {
       if (rule.phase === 'entry' || rule.phase === 'gate') {
         if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || entryCapableEffect) {
           summary.hasEntry = true
-        }
-        if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || nonReverseEntryCapableEffect) {
-          summary.hasExit = true
         }
         if (exitCapableRiskEffect) {
           summary.hasExit = true
@@ -1166,16 +1159,9 @@ export class SemanticContractReadinessService {
       || gridRuleIndexes.has(leaf.ruleIndex)
       || executableProgramRuleIndexes.has(leaf.ruleIndex),
     )
-    const hasExecutableEntryLifecycle = hasEntry && read.leaves.some(leaf =>
-      entryRuleIndexes.has(leaf.ruleIndex)
-      && leaf.role === 'action'
-      && (leaf.key === 'action.open_long' || leaf.key === 'action.open_short' || leaf.key === 'action.add_position'),
-    )
-    const effectiveHasExit = hasExit || hasExecutableEntryLifecycle
-
     const blockingReasons = [
       ...(!hasEntry ? ['missing_entry_rules'] : []),
-      ...(!effectiveHasExit ? ['missing_exit_rules'] : []),
+      ...(!hasExit ? ['missing_exit_rules'] : []),
       ...(openSlots.length > 0 ? ['missing_required_rule_params'] : []),
     ]
 

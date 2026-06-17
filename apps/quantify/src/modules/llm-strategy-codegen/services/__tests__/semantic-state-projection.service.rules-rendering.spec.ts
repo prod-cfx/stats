@@ -752,6 +752,21 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).toContain('止损')
   })
 
+  it('renders rules summary with entry before exit and without duplicated risk exits', () => {
+    const summary = summarizePrompt('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建资金费率和持仓量确认策略。规则：价格突破最近 8 根 K 线高点，资金费率为正且未平仓量增加超过 0.5% 时开多；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；跌破 EMA20 时平多；风控：仓位 70%，亏损 3% 止损，止盈 0.12%。')
+
+    expect(summary.indexOf('入场：')).toBeGreaterThanOrEqual(0)
+    expect(summary.indexOf('出场：')).toBeGreaterThan(summary.indexOf('入场：'))
+    expect(summary).toContain('入场：')
+    expect(summary).toContain('价格突破过去 8 根 K 线滚动高点')
+    expect(summary).toContain('资金费率大于 0')
+    expect(summary).toContain('未平仓量增加大于 0.5%')
+    expect(summary).toContain('出场：价格低于 EMA20')
+    expect(summary).not.toContain('出场：价格突破过去 8 根 K 线滚动高点 同时 价格低于 EMA20')
+    expect(summary.match(/出场：价格百分比变化（下跌，3%，相对入场均价）/gu) ?? []).toHaveLength(0)
+    expect(summary.match(/出场：价格百分比变化（上涨，0\.12%，相对入场均价）/gu) ?? []).toHaveLength(0)
+  })
+
   // 审查 R2-2 修复：≥2 个未注册 atom 的兜底文案不应在 and/or/sequence 内被乘积量重复
   it('and 子节点全是未注册 atom 时兜底文案只显示一次（不出现「X 同时 X」噪声）', () => {
     const rules: SemanticRule[] = [{
