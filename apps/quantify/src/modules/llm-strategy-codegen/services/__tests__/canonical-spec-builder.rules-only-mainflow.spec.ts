@@ -1050,6 +1050,53 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
       .toThrow('UnsupportedSemanticRuleRiskEffect: key=risk.unsupported sourcePath=rules[0].effects.risks[0]')
   })
 
+  it('skips recognized-unsupported risk condition expressions in rules effects without blocking DCA compilation', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-dca-with-pause-guard',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{
+            kind: 'atom',
+            key: 'risk.condition_expression',
+            params: {
+              condition: {
+                kind: 'predicate',
+                left: { kind: 'series', source: 'bar', field: 'close' },
+                op: 'LTE',
+                right: { kind: 'indicator', name: 'sma', params: { period: 30, offsetPct: -8 } },
+              },
+              effect: { type: 'pause_strategy' },
+              scope: 'strategy',
+              capabilityStatus: 'recognized_unsupported',
+            },
+          }],
+          positions: [{
+            kind: 'atom',
+            key: 'position.dca_schedule',
+            params: {
+              triggerMode: 'time_interval',
+              intervalHours: 24,
+              maxCount: 10,
+              perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+              capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+            },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.map(rule => rule.metadata?.semanticKey)).not.toContain('risk.condition_expression')
+    expect(spec.rules.map(rule => rule.metadata?.semanticKey)).toContain('position.dca_schedule')
+  })
+
   it('throws fail-closed for invalid rules position sizing with source path', () => {
     const state = baseState({
       rules: [{
@@ -2159,6 +2206,66 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
           }),
         }),
       }),
+    ]))
+  })
+
+  it('ignores DCA schedule position constraints attached to exit rules', () => {
+    const state = baseState({
+      rules: [
+        {
+          id: 'rule-dca-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: {
+                triggerMode: 'price_interval',
+                priceIntervalPct: -3,
+                maxCount: 3,
+                perOrderBudget: 100,
+                capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+              },
+            }],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'rule-dca-exit-with-sibling-position-constraint',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', valuePct: -8 } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [{
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: {
+                triggerMode: 'price_interval',
+                priceIntervalPct: -3,
+                maxCount: 3,
+                perOrderBudget: 100,
+                capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+              },
+            }],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.filter(rule => rule.metadata?.semanticKey === 'position.dca_schedule')).toHaveLength(1)
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'semantic-exit-rule-dca-exit-with-sibling-position-constraint' }),
     ]))
   })
 

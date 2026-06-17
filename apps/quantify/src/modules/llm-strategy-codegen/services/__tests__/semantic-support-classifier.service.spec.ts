@@ -101,6 +101,63 @@ describe('semanticSupportClassifierService', () => {
     expect(result.unknownAtoms).toEqual([])
   })
 
+  it('does not block rules-mainflow DCA on recognized-unsupported pause semantics', () => {
+    const result = service.classify(baseState({
+      risk: [{
+        id: 'pause-flat',
+        key: 'risk.condition_expression',
+        params: {
+          effect: { type: 'pause_strategy' },
+          capabilityStatus: 'recognized_unsupported',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      rules: [{
+        id: 'entry-timed-dca',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [{
+            kind: 'atom',
+            key: 'risk.condition_expression',
+            params: {
+              condition: {
+                kind: 'predicate',
+                left: { kind: 'series', source: 'bar', field: 'close' },
+                op: 'LT',
+                right: { kind: 'indicator', name: 'sma', params: { period: 30, offsetPct: -8 } },
+              },
+              effect: { type: 'pause_strategy' },
+              scope: 'strategy',
+              capabilityStatus: 'recognized_unsupported',
+            },
+          }],
+          positions: [{
+            kind: 'atom',
+            key: 'position.dca_schedule',
+            params: {
+              triggerMode: 'time_interval',
+              intervalHours: 24,
+              maxCount: 10,
+              perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+              capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+            },
+          }],
+          orchestration: [],
+          programs: [{ kind: 'atom', key: 'program.dca', params: {} }],
+        },
+      }],
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.unknownAtoms).toEqual([])
+  })
+
   it('fails closed for versioned executable atoms when deployedAtSemanticVersion is null', () => {
     const result = service.classify(baseState({
       trigger: [{

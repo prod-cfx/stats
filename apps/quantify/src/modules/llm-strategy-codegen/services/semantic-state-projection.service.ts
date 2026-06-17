@@ -2640,6 +2640,9 @@ export class SemanticStateProjectionService {
     }
 
     if (expression.kind === 'predicate') {
+      const indicatorCompare = this.tryFormatSemanticIndicatorComparePredicate(expression)
+      if (indicatorCompare) return indicatorCompare
+
       const left = this.formatSemanticExpressionOperand(expression.left)
       const right = this.formatSemanticExpressionOperand(expression.right)
       const operator = this.formatSemanticExpressionOperator(expression.op)
@@ -2668,6 +2671,36 @@ export class SemanticStateProjectionService {
       return `非（${children[0]}）`
     }
     return children.join(expression.kind === 'AND' ? '且' : '或')
+  }
+
+  private tryFormatSemanticIndicatorComparePredicate(expression: Extract<SemanticExpression, { kind: 'predicate' }>): string | null {
+    if (expression.op !== 'GT' && expression.op !== 'GTE' && expression.op !== 'LT' && expression.op !== 'LTE') return null
+    if (expression.right.kind !== 'indicator') return null
+
+    const right = this.formatSemanticExpressionIndicatorReference(expression.right)
+    if (!right) return null
+
+    const isAbove = expression.op === 'GT' || expression.op === 'GTE'
+    if (expression.left.kind === 'series' && expression.left.source === 'bar' && expression.left.field === 'close') {
+      return isAbove ? `价格在 ${right} 上方` : `价格低于 ${right}`
+    }
+
+    if (expression.left.kind === 'indicator') {
+      const left = this.formatSemanticExpressionIndicatorReference(expression.left)
+      if (!left) return null
+      return isAbove ? `${left} 在 ${right} 上方` : `${left} 低于 ${right}`
+    }
+
+    return null
+  }
+
+  private formatSemanticExpressionIndicatorReference(operand: Extract<SemanticExpressionOperand, { kind: 'indicator' }>): string | null {
+    const name = operand.name.toLowerCase()
+    const indicator = name === 'sma' ? 'MA' : name.toUpperCase()
+    if (indicator !== 'MA' && indicator !== 'EMA') return null
+    const period = this.readFiniteNumber(operand.params.period)
+    if (period === null) return null
+    return `${indicator}${this.formatNumber(period)}`
   }
 
   private formatSemanticExpressionOperand(operand: SemanticExpressionOperand): string {
@@ -3953,6 +3986,12 @@ export class SemanticStateProjectionService {
       return label && label.length > 0 ? label : '表达式条件'
     }
 
+    if (atomKey === 'risk.condition_expression') {
+      const condition = this.formatSemanticExpression(params.condition)
+      if (condition.length > 0) return `风控：当${condition}时${this.describeRiskExpressionEffect(params.effect)}`
+      return '风控表达式'
+    }
+
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.per_order_budget is a sizing effect leaf, not yet an atom contract key
     if (atomKey === 'position.per_order_budget') {
       const value = this.readFiniteNumber(params.value)
@@ -4407,7 +4446,7 @@ export class SemanticStateProjectionService {
   }
 
   private buildRulesSummary(rules: readonly SemanticRule[]): string {
-    const displayRules = this.dropRedundantEntryAverageRiskExitRules(rules)
+    const displayRules = this.orderRulesForSummary(this.dropRedundantEntryAverageRiskExitRules(rules))
     const sharedScopeTexts = this.collectSharedScopeTexts(displayRules)
     const lines: string[] = []
     for (const rule of displayRules) {
@@ -4418,6 +4457,22 @@ export class SemanticStateProjectionService {
       lines.push(`前置：${sharedScopeTexts.join('，')}`)
     }
     return lines.join('；')
+  }
+
+  private orderRulesForSummary(rules: readonly SemanticRule[]): SemanticRule[] {
+    const phaseOrder: Record<SemanticRule['phase'], number> = {
+      entry: 0,
+      exit: 1,
+      gate: 2,
+      program: 3,
+    }
+    return rules
+      .map((rule, index) => ({ rule, index }))
+      .sort((left, right) => {
+        const phaseDelta = phaseOrder[left.rule.phase] - phaseOrder[right.rule.phase]
+        return phaseDelta !== 0 ? phaseDelta : left.index - right.index
+      })
+      .map(item => item.rule)
   }
 
   private dropRedundantEntryAverageRiskExitRules(rules: readonly SemanticRule[]): SemanticRule[] {

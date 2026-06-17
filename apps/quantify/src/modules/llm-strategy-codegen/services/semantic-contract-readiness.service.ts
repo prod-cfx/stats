@@ -165,6 +165,7 @@ export class SemanticContractReadinessService {
     let materialized: ReadinessMaterializedState
     if (hasRules) {
       state = this.repairPairSpreadEntryMainflow(state)
+      state = withStagedDcaScheduleProjectedToProgramRules(state)
       state = this.withGridSizingProjectedToProgramRules(
         this.dropStandalonePositionSizingRules(
           this.withTopLevelPositionSizingProjectedToRules(state),
@@ -291,18 +292,25 @@ export class SemanticContractReadinessService {
       && !timeframeBound.hasBlockingSlots
       && !dataSourceBindingHasBlockingSlots
       && !subStrategyBindingHasBlockingSlots
+    const rulesOrchestrationHasBlockingSlots = orchestrationResult.hasBlockingSlots
+      && !isIgnorableRulesMainflowOrchestrationBlock(nextMaterialized.orchestration)
 
     const ready = rulesReady !== null
       ? (
           unsupportedOrUnknownOwnerKeys.size === 0
           && missingRequirements.length === 0
-          && !orchestrationResult.hasBlockingSlots
+          && !rulesOrchestrationHasBlockingSlots
           && !executableContextGate.hasBlockingSlots
           && rulesReady.hasEntry
           && rulesReady.hasExit
         )
       : flatReady
-    const resultState = this.withMaterializedFlatBuckets(nextState, nextMaterialized)
+    const resultState = this.withMaterializedFlatBuckets(
+      nextState,
+      ready && rulesReady !== null
+        ? withIgnorableRulesMainflowOrchestrationSlotsCleared(nextMaterialized)
+        : nextMaterialized,
+    )
 
     return {
       state: resultState,
@@ -1029,10 +1037,6 @@ export class SemanticContractReadinessService {
         return getAtomFulfillsStrategyPhase(leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY).includes(phase)
       }
       const entryCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'entry'))
-      const nonReverseEntryCapableEffect = effectLeaves.some(leaf =>
-        leaf.key !== ATOM_CONTRACT_REGISTRY['action.reverse_position'].key
-        && fulfillsPhase(leaf, 'entry'),
-      )
       const exitCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'exit'))
       const exitCapableRiskEffect = effectLeaves.some((leaf) => {
         if (!leaf.key.startsWith('risk.')) return false
@@ -1045,9 +1049,6 @@ export class SemanticContractReadinessService {
       if (rule.phase === 'entry' || rule.phase === 'gate') {
         if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || entryCapableEffect) {
           summary.hasEntry = true
-        }
-        if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || nonReverseEntryCapableEffect) {
-          summary.hasExit = true
         }
         if (exitCapableRiskEffect) {
           summary.hasExit = true
@@ -1166,16 +1167,9 @@ export class SemanticContractReadinessService {
       || gridRuleIndexes.has(leaf.ruleIndex)
       || executableProgramRuleIndexes.has(leaf.ruleIndex),
     )
-    const hasExecutableEntryLifecycle = hasEntry && read.leaves.some(leaf =>
-      entryRuleIndexes.has(leaf.ruleIndex)
-      && leaf.role === 'action'
-      && (leaf.key === 'action.open_long' || leaf.key === 'action.open_short' || leaf.key === 'action.add_position'),
-    )
-    const effectiveHasExit = hasExit || hasExecutableEntryLifecycle
-
     const blockingReasons = [
       ...(!hasEntry ? ['missing_entry_rules'] : []),
-      ...(!effectiveHasExit ? ['missing_exit_rules'] : []),
+      ...(!hasExit ? ['missing_exit_rules'] : []),
       ...(openSlots.length > 0 ? ['missing_required_rule_params'] : []),
     ]
 
@@ -1720,6 +1714,79 @@ function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resol
   return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
 }
 
+function isIgnorableRulesMainflowOrchestrationBlock(
+  nodes: readonly SemanticOrchestrationNode[] | undefined,
+): boolean {
+  if (!nodes || nodes.length === 0) return true
+  return nodes.every((node) => {
+    const slots = node.openSlots ?? []
+    if (slots.length === 0) return true
+    if (!slots.every(slot => slot.slotKey === 'orchestration.phase0.unsupported')) return false
+    return node.key === 'scope.symbol' || node.key === 'program.dca'
+  })
+}
+
+function withStagedDcaScheduleProjectedToProgramRules(state: SemanticState): SemanticState {
+  if (!state.rules?.length) return state
+  const legacy = state as SemanticState & {
+    positionConstraint?: SemanticPositionConstraintState[]
+  }
+  const stagedDca = legacy.positionConstraint?.find(constraint => constraint.key === 'position.dca_schedule')
+  if (!stagedDca) return state
+
+  let changed = false
+  const rules = state.rules.map((rule) => {
+    const effects = isRuleEffectsByRole(rule.effects)
+      ? rule.effects
+      : null
+    if (!effects || !effects.programs.some(hasProgramDcaLeaf) || effects.positions.some(hasDcaScheduleLeaf)) {
+      return rule
+    }
+
+    changed = true
+    const dcaAtom: AtomExprAtom = {
+      kind: 'atom',
+      key: 'position.dca_schedule',
+      params: { ...stagedDca.params },
+      sideScope: rule.sideScope === 'both' ? 'long' : rule.sideScope,
+    }
+    return {
+      ...rule,
+      effects: {
+        ...effects,
+        positions: [...effects.positions, dcaAtom],
+      },
+    }
+  })
+
+  return changed ? { ...state, rules } : state
+}
+
+function hasProgramDcaLeaf(effect: AtomExpr): boolean {
+  return collectAtomLeaves(effect).some(leaf => leaf.key === 'program.dca')
+}
+
+function hasDcaScheduleLeaf(effect: AtomExpr): boolean {
+  return collectAtomLeaves(effect).some(leaf => leaf.key === 'position.dca_schedule')
+}
+
+function withIgnorableRulesMainflowOrchestrationSlotsCleared(
+  materialized: ReadinessMaterializedState,
+): ReadinessMaterializedState {
+  return {
+    ...materialized,
+    orchestration: materialized.orchestration.map((node) => {
+      if (!isIgnorableRulesMainflowOrchestrationBlock([node])) return node
+      if (!node.openSlots?.length) return node
+      return {
+        ...node,
+        status: 'locked' as SemanticNodeStatus,
+        openSlots: [],
+      }
+    }),
+  }
+}
+
 function normalizePhase0Orchestration(
   orchestration: readonly SemanticOrchestrationNode[] | undefined,
   registry: SemanticOrchestrationRegistryService,
@@ -1809,6 +1876,10 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  if (isSupportedDcaProgram(node, registry, strategyVersion)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
   if (isSupportedDynamicGrid(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry)
   }
@@ -1864,9 +1935,14 @@ function isSupportedSymbolScope(
   if (node.kind !== 'scope') return false
   // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'scope.symbol') return false
-  if (node.symbolScopeKind !== 'symbol') return false
+  const symbolScopeKind = typeof node.symbolScopeKind === 'string'
+    ? node.symbolScopeKind
+    : readOrchestrationNodeParamString(node, 'symbolScopeKind')
+  if (symbolScopeKind !== 'symbol') return false
 
-  const symbols = node.symbols
+  const symbols = Array.isArray(node.symbols)
+    ? node.symbols
+    : readOrchestrationNodeParamArray(node, 'symbols')
   if (!Array.isArray(symbols) || symbols.length === 0) return false
 
   const SYMBOL_FORMAT = /^[A-Z]{2,5}USDT$/u
@@ -1880,10 +1956,14 @@ function isSupportedSymbolScope(
   const dedupedSet = new Set(trimmed)
   if (dedupedSet.size !== trimmed.length) return false
 
-  if (node.primarySymbol !== undefined) {
-    const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+  const primarySymbol = typeof node.primarySymbol === 'string'
+    ? node.primarySymbol
+    : readOrchestrationNodeParamString(node, 'primarySymbol')
+  if (primarySymbol !== undefined) {
+    const primary = primarySymbol.trim()
     if (primary === '' || !dedupedSet.has(primary)) return false
   }
+  const myPrimary = typeof primarySymbol === 'string' ? primarySymbol.trim() : ''
 
   // (5) 与其它 status='locked' 且 key='scope.symbol' 节点对比 — symbols 不重叠 + primarySymbol 不冲突
   const otherLockedScopes = siblingNodes.filter(
@@ -1895,16 +1975,19 @@ function isSupportedSymbolScope(
       && other.status === 'locked',
   )
   for (const other of otherLockedScopes) {
-    const otherSymbols = Array.isArray(other.symbols) ? other.symbols : []
+    const otherSymbols = Array.isArray(other.symbols) ? other.symbols : readOrchestrationNodeParamArray(other, 'symbols') ?? []
+    if (sameSymbolScope(trimmed, myPrimary, other)) {
+      continue
+    }
     if (otherSymbols.some((s) => typeof s === 'string' && dedupedSet.has(s.trim()))) {
       return false
     }
   }
-  const myPrimary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
   if (myPrimary !== '') {
     if (
       otherLockedScopes.some(
-        (other) => typeof other.primarySymbol === 'string' && other.primarySymbol.trim() === myPrimary,
+        (other) => !sameSymbolScope(trimmed, myPrimary, other)
+          && (typeof other.primarySymbol === 'string' ? other.primarySymbol : readOrchestrationNodeParamString(other, 'primarySymbol'))?.trim() === myPrimary,
       )
     ) {
       return false
@@ -1915,6 +1998,55 @@ function isSupportedSymbolScope(
   if (!contract) return false
   if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+function isSupportedDcaProgram(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+): boolean {
+  if (!isProgramNode(node)) return false
+  if (node.key !== 'program.dca') return false
+  const programKind = typeof node.programKind === 'string'
+    ? node.programKind
+    : readOrchestrationNodeParamString(node, 'programKind')
+  if (programKind !== undefined && programKind !== 'dca') return false
+  const contract = registry.getContractByKey('program.dca')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+function readOrchestrationNodeParams(node: SemanticOrchestrationNode): Record<string, unknown> {
+  return node.params && typeof node.params === 'object' && !Array.isArray(node.params)
+    ? node.params as Record<string, unknown>
+    : {}
+}
+
+function readOrchestrationNodeParamString(node: SemanticOrchestrationNode, key: string): string | undefined {
+  const value = readOrchestrationNodeParams(node)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function readOrchestrationNodeParamArray(node: SemanticOrchestrationNode, key: string): unknown[] | undefined {
+  const value = readOrchestrationNodeParams(node)[key]
+  return Array.isArray(value) ? value : undefined
+}
+
+function sameSymbolScope(
+  symbols: readonly string[],
+  primarySymbol: string,
+  other: SemanticOrchestrationNode,
+): boolean {
+  const otherSymbols = (Array.isArray(other.symbols) ? other.symbols : readOrchestrationNodeParamArray(other, 'symbols') ?? [])
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.trim())
+    .sort()
+  const normalized = [...symbols].sort()
+  const otherPrimary = (typeof other.primarySymbol === 'string' ? other.primarySymbol : readOrchestrationNodeParamString(other, 'primarySymbol'))?.trim() ?? ''
+  return primarySymbol === otherPrimary
+    && normalized.length === otherSymbols.length
+    && normalized.every((value, index) => value === otherSymbols[index])
 }
 
 /**

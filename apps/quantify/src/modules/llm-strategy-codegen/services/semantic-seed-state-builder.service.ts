@@ -386,7 +386,124 @@ export class SemanticSeedStateBuilderService {
       consumed.add(i)
     }
 
-    return normalized.filter((_rule, index) => !consumed.has(index))
+    return this.removeEntryConditionPredicatesFromExitRules(
+      normalized.filter((_rule, index) => !consumed.has(index)),
+    )
+  }
+
+  private removeEntryConditionPredicatesFromExitRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const entryConditionSignatures = new Set<string>()
+    for (const rule of rules) {
+      if (rule.phase !== 'entry' && rule.phase !== 'gate') continue
+      if (!this.ruleHasOpenAction(rule)) continue
+      for (const leaf of collectAtomLeaves(rule.condition)) {
+        entryConditionSignatures.add(this.atomLeafSemanticSignature(leaf))
+      }
+    }
+    if (entryConditionSignatures.size === 0) return [...rules]
+
+    return rules.map((rule) => {
+      if (rule.phase !== 'exit') return rule
+      if (!this.ruleHasCloseAction(rule)) return rule
+      if (rule.condition.kind !== 'and') return rule
+
+      const leaves = collectAtomLeaves(rule.condition)
+      const duplicatedEntryLeaves = leaves.filter(leaf => entryConditionSignatures.has(this.atomLeafSemanticSignature(leaf)))
+      if (duplicatedEntryLeaves.length === 0 || duplicatedEntryLeaves.length === leaves.length) return rule
+
+      const stripped = this.filterAtomExpr(rule.condition, leaf => entryConditionSignatures.has(this.atomLeafSemanticSignature(leaf)))
+      return stripped ? { ...rule, condition: stripped } : rule
+    })
+  }
+
+  private ruleHasOpenAction(rule: SemanticRule): boolean {
+    const effects = this.normalizeRuleEffectsToTyped(rule.effects)
+    return effects.actions.some(effect => collectAtomLeaves(effect).some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+      || leaf.key === 'open_long'
+      || leaf.key === 'open_short',
+    ))
+  }
+
+  private ruleHasCloseAction(rule: SemanticRule): boolean {
+    const effects = this.normalizeRuleEffectsToTyped(rule.effects)
+    return effects.actions.some(effect => collectAtomLeaves(effect).some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+      || leaf.key === 'close_long'
+      || leaf.key === 'close_short',
+    ))
+  }
+
+  private filterAtomExpr(
+    expr: AtomExpr,
+    shouldRemove: (atom: AtomExprAtom) => boolean,
+  ): AtomExpr | null {
+    if (expr.kind === 'atom') return shouldRemove(expr) ? null : expr
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      const children = expr.children
+        .map(child => this.filterAtomExpr(child, shouldRemove))
+        .filter((child): child is AtomExpr => child !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0]
+      return { ...expr, children }
+    }
+    if (expr.kind === 'not') {
+      const child = this.filterAtomExpr(expr.child, shouldRemove)
+      return child ? { ...expr, child } : null
+    }
+    if (expr.kind === 'sequence') {
+      const steps = expr.steps
+        .map(step => this.filterAtomExpr(step, shouldRemove))
+        .filter((step): step is AtomExpr => step !== null)
+      if (steps.length === 0) return null
+      if (steps.length === 1) return steps[0]
+      return { ...expr, steps }
+    }
+    return expr
+  }
+
+  private atomLeafSemanticSignature(atom: AtomExprAtom): string {
+    const normalized = this.normalizeConditionSignatureAtom(atom)
+    return `${normalized.key}|${this.stableParamsHash(this.omitDerivedParams(normalized.params))}`
+  }
+
+  private normalizeConditionSignatureAtom(atom: AtomExprAtom): { key: string, params: Record<string, unknown> } {
+    const params = { ...(atom.params ?? {}) }
+    if (atom.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key && params.reference === 'channel_high') {
+      return {
+        key: ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key,
+        params: {
+          event: 'breakout_up',
+          extrema: 'high',
+          lookbackBars: params.period,
+        },
+      }
+    }
+    if (atom.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key && params.reference === 'channel_low') {
+      return {
+        key: ATOM_CONTRACT_REGISTRY['price.rolling_extrema_breakout'].key,
+        params: {
+          event: 'breakout_down',
+          extrema: 'low',
+          lookbackBars: params.period,
+        },
+      }
+    }
+    return { key: atom.key, params }
+  }
+
+  private omitDerivedParams(params: Record<string, unknown>): Record<string, unknown> {
+    const omitted = new Set<string>([...STATE_DERIVED_PARAM_KEYS, 'phase', 'source', 'basisSource'])
+    return Object.fromEntries(Object.entries(params).filter(([key]) => !omitted.has(key)))
+  }
+
+  private stableParamsHash(value: unknown): string {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value)
+    if (Array.isArray(value)) return `[${value.map(item => this.stableParamsHash(item)).join(',')}]`
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${this.stableParamsHash(record[key])}`).join(',')}}`
   }
 
   private normalizeRuleEffectsToTyped(effects: SemanticRule['effects']): RuleEffectsByRole {

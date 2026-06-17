@@ -167,6 +167,7 @@ export class PlannerDispatcherMergeService {
     this.hydrateExplicitPercentRisksFromText(patch, userMessage)
     this.pruneInvalidDeterministicNoiseRules(patch, { rules: patch.rules }, userMessage)
     this.appendExplicitPercentExitRulesFromText(patch, userMessage)
+    patch.rules = this.dropRiskConditionRulesCoveredByRiskEffects(patch.rules ?? [])
     patch.rules = this.dropOpenRulesCoveredByReversePosition(patch.rules)
     return patch
   }
@@ -2108,6 +2109,7 @@ export class PlannerDispatcherMergeService {
     )
     const seen = new Set<string>()
     const next: SemanticRule[] = []
+    const conditionlessRiskEffects: AtomExprAtom[] = []
 
     for (const rule of rules) {
       const normalizedConditionInitial = this.repairMissingRsiReclaimSequence(
@@ -2126,7 +2128,9 @@ export class PlannerDispatcherMergeService {
         normalizedConditionInitial,
         normalizedEffectInput,
       )
-      const dedupedEffects = this.dedupeRuleEffects(normalizedEffectInput)
+      const dedupedEffects = this.removeMovingAverageCooldownDurationNoise(
+        this.dedupeRuleEffects(normalizedEffectInput),
+      )
       const withoutUnsupportedNoise = this.removeUnsupportedEffectNoise(
         dedupedEffects,
         collectAtomLeaves(normalizedCondition),
@@ -2139,6 +2143,12 @@ export class PlannerDispatcherMergeService {
       )
       const effectLeaves = listRuleEffects(sideScopedEffects).flatMap(effect => collectAtomLeaves(effect))
       normalizedCondition = this.repairLifecycleConditionNoise(normalizedCondition, effectLeaves)
+      const cleanedCondition = this.removeLifecycleConditionNoise(normalizedCondition, effectLeaves)
+      if (!cleanedCondition) {
+        conditionlessRiskEffects.push(...effectLeaves.filter(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.cooldown'].key))
+        continue
+      }
+      normalizedCondition = cleanedCondition
       const conditionLeaves = collectAtomLeaves(normalizedCondition)
       if ((rule.phase === 'entry' || rule.phase === 'exit') && effectLeaves.length === 0) continue
       const hasInvalidConditionBucket = conditionLeaves.some((leaf) => {
@@ -2194,11 +2204,14 @@ export class PlannerDispatcherMergeService {
             },
       )
     }
+    const nextWithConditionlessRisks = this.attachConditionlessRiskEffectsToEntry(next, conditionlessRiskEffects)
     merged.rules = this.repairRelativeEntryPercentExitSideDrift(
-      this.dropDuplicateLifecycleRules(
-        this.dropDuplicateGridProgramRules(
-          this.dropDuplicateExternalSignalLifecycleRules(
-            this.dropRulesCoveredByStrongerComposite(next),
+      this.dropRiskConditionRulesCoveredByRiskEffects(
+        this.dropDuplicateLifecycleRules(
+          this.dropDuplicateGridProgramRules(
+            this.dropDuplicateExternalSignalLifecycleRules(
+              this.dropRulesCoveredByStrongerComposite(nextWithConditionlessRisks),
+            ),
           ),
         ),
       ),
@@ -2210,7 +2223,10 @@ export class PlannerDispatcherMergeService {
   private repairMovingAveragePairGateCondition(condition: AtomExpr, userMessage: string): AtomExpr {
     const pair = this.extractMovingAveragePair(userMessage)
     if (!pair) return condition
-    if (this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.leftPeriod)) return condition
+    if (
+      this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.leftPeriod)
+      || this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.rightPeriod)
+    ) return condition
 
     const repair = (expr: AtomExpr): AtomExpr => {
       if (expr.kind === 'and') {
@@ -2251,7 +2267,7 @@ export class PlannerDispatcherMergeService {
 
   private userMessageHasExplicitPriceAboveMovingAverage(userMessage: string, period: number): boolean {
     const escapedPeriod = String(period).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`(?:价格|收盘价)\\s*(?:在|位于)?\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod}\\s*(?:上方|之上|高于)`, 'iu').test(userMessage)
+    return new RegExp(`(?:价格|收盘价)\\s*(?:(?:在|位于)?\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod}\\s*(?:上方|之上)|(?:高于|大于|>)\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod})`, 'iu').test(userMessage)
   }
 
   private isNoisyMovingAveragePairPriceGate(expr: AtomExpr, pair: { indicator: string, leftPeriod: number, rightPeriod: number }): boolean {
@@ -2693,7 +2709,7 @@ export class PlannerDispatcherMergeService {
       }
     })
     if (!mutated) return
-    merged.rules = nextRules
+    merged.rules = this.dropRiskEffectsCoveredByEntryRules(nextRules)
       .map((rule): SemanticRule | null => {
         if (rule.phase === 'gate') {
           const effects = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
@@ -2712,6 +2728,60 @@ export class PlannerDispatcherMergeService {
         return { ...rule, condition: strippedCondition }
       })
       .filter((rule): rule is SemanticRule => rule !== null)
+  }
+
+  private dropRiskEffectsCoveredByEntryRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const entryRiskSignatures = new Set<string>()
+    for (const rule of rules) {
+      if (rule.phase !== 'entry') continue
+      for (const leaf of listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))) {
+        const signature = this.percentRiskSignature(leaf)
+        if (signature) entryRiskSignatures.add(signature)
+      }
+    }
+    if (entryRiskSignatures.size === 0) return [...rules]
+
+    return rules.map((rule) => {
+      if (rule.phase === 'entry') return rule
+      const effects = this.filterRuleEffects(rule.effects, leaf => {
+        const signature = this.percentRiskSignature(leaf)
+        return signature !== null && entryRiskSignatures.has(signature)
+      })
+      return effects === rule.effects ? rule : { ...rule, effects }
+    })
+  }
+
+  private attachConditionlessRiskEffectsToEntry(
+    rules: readonly SemanticRule[],
+    riskEffects: readonly AtomExprAtom[],
+  ): SemanticRule[] {
+    if (riskEffects.length === 0) return [...rules]
+    let attached = false
+    return rules.map((rule) => {
+      if (attached || rule.phase !== 'entry' || !this.ruleHasOpenAction(rule)) return rule
+      attached = true
+      return {
+        ...rule,
+        effects: this.appendDedupedTypedRuleEffects(rule.effects, riskEffects),
+      }
+    })
+  }
+
+  private filterRuleEffects(
+    effects: RuleEffects,
+    shouldRemove: (atom: AtomExprAtom) => boolean,
+  ): RuleEffects {
+    const filter = (effect: AtomExpr): AtomExpr | null => this.filterAtomExpr(effect, shouldRemove)
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.map(filter).filter((effect): effect is AtomExpr => effect !== null),
+        risks: effects.risks.map(filter).filter((effect): effect is AtomExpr => effect !== null),
+        positions: effects.positions.map(filter).filter((effect): effect is AtomExpr => effect !== null),
+        orchestration: effects.orchestration.map(filter).filter((effect): effect is AtomExpr => effect !== null),
+        programs: effects.programs.map(filter).filter((effect): effect is AtomExpr => effect !== null),
+      }
+    }
+    return effects.map(filter).filter((effect): effect is AtomExpr => effect !== null)
   }
 
   /**
@@ -2890,9 +2960,51 @@ export class PlannerDispatcherMergeService {
     const additions = this.extractExplicitPercentExitRulesFromText(userMessage, merged.contextSlots?.timeframe)
     if (additions.length === 0) return
     const existingSignatures = new Set(rules.map(rule => this.ruleSemanticSignature(rule)))
-    const missing = additions.filter(rule => !existingSignatures.has(this.ruleSemanticSignature(rule)))
+    const missing = additions.filter(rule =>
+      !existingSignatures.has(this.ruleSemanticSignature(rule))
+      && !this.existingRiskEffectsCoverExplicitPercentExit(rules, rule),
+    )
     if (missing.length === 0) return
     merged.rules = this.dedupeRulesBySignature([...rules, ...missing])
+  }
+
+  private existingRiskEffectsCoverExplicitPercentExit(
+    rules: readonly SemanticRule[],
+    candidate: SemanticRule,
+  ): boolean {
+    const condition = collectAtomLeaves(candidate.condition).find(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key)
+    if (!condition) return false
+    const basis = condition.params?.basis
+    if (basis !== 'entry_avg_price') return false
+    const valuePct = this.readNumericParam(condition.params, 'valuePct')
+    if (valuePct === null) return false
+    const direction = typeof condition.params?.direction === 'string' ? condition.params.direction : null
+    const riskKey = direction === 'down'
+      ? ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key
+      : direction === 'up'
+        ? ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+        : null
+    if (!riskKey) return false
+    const candidateCloseActions = this.closeActionSet(candidate)
+    if (candidateCloseActions.size === 0) return false
+
+    return rules.some((rule) => {
+      if (rule.phase !== 'entry' && rule.phase !== 'exit') return false
+      if (!this.sideScopesCompatible(rule.sideScope, candidate.sideScope)) return false
+      if (this.closeActionSet(rule).size > 0) {
+        const coversAction = [...candidateCloseActions].every(action => this.closeActionSet(rule).has(action))
+        if (!coversAction) return false
+      }
+      return listRuleEffects(rule.effects)
+        .flatMap(effect => collectAtomLeaves(effect))
+        .some((leaf) => {
+          if (leaf.key !== riskKey) return false
+          const riskPct = this.readNumericParam(leaf.params, 'valuePct') ?? this.readNumericParam(leaf.params, 'pct')
+          if (riskPct === null || Math.abs(riskPct - valuePct) > 1e-9) return false
+          const riskBasis = leaf.params?.basis
+          return riskBasis === undefined || riskBasis === null || riskBasis === 'entry_avg_price'
+        })
+    })
   }
 
   private extractExplicitPercentExitRulesFromText(
@@ -3217,6 +3329,44 @@ export class PlannerDispatcherMergeService {
     }
   }
 
+  private removeLifecycleConditionNoise(
+    condition: AtomExpr,
+    effectLeaves: readonly AtomExprAtom[],
+  ): AtomExpr | null {
+    return this.filterAtomExpr(condition, leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['time.cooldown_window'].key
+      || this.isMovingAverageCooldownDurationNoise(leaf)
+      || this.isEmptyCooldownConditionNoise(leaf),
+    )
+  }
+
+  private isEmptyCooldownConditionNoise(atom: AtomExprAtom): boolean {
+    if (atom.key !== ATOM_CONTRACT_REGISTRY['risk.cooldown'].key) return false
+    const params = atom.params ?? {}
+    return params.durationBars === undefined && params.durationMs === undefined
+  }
+
+  private removeMovingAverageCooldownDurationNoise(effects: RuleEffects): RuleEffects {
+    const remove = (effect: AtomExpr): AtomExpr | null => this.filterAtomExpr(effect, leaf => this.isMovingAverageCooldownDurationNoise(leaf))
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.map(remove).filter((effect): effect is AtomExpr => effect !== null),
+        risks: effects.risks.map(remove).filter((effect): effect is AtomExpr => effect !== null),
+        positions: effects.positions.map(remove).filter((effect): effect is AtomExpr => effect !== null),
+        orchestration: effects.orchestration.map(remove).filter((effect): effect is AtomExpr => effect !== null),
+        programs: effects.programs.map(remove).filter((effect): effect is AtomExpr => effect !== null),
+      }
+    }
+    return effects.map(remove).filter((effect): effect is AtomExpr => effect !== null)
+  }
+
+  private isMovingAverageCooldownDurationNoise(atom: AtomExprAtom): boolean {
+    if (atom.key !== ATOM_CONTRACT_REGISTRY['risk.cooldown'].key) return false
+    if (typeof atom.params?.durationMs !== 'string') return false
+    const evidence = this.readEvidenceText(atom) ?? ''
+    return /\d+\s*(?:日|天|day|days)\s*均线|(?:MA|EMA|SMA)\s*\d+/iu.test(evidence)
+  }
+
   private isEmptyPositionPresenceGateRule(
     rule: SemanticRule,
     conditionLeaves: readonly AtomExprAtom[],
@@ -3476,6 +3626,41 @@ export class PlannerDispatcherMergeService {
       out.push(rule)
     }
     return out
+  }
+
+  private dropRiskConditionRulesCoveredByRiskEffects(rules: readonly SemanticRule[]): SemanticRule[] {
+    const riskConditionKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
+      ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key,
+    ])
+    const riskEffectSignatures = new Map<string, number[]>()
+    rules.forEach((rule, index) => {
+      for (const leaf of listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))) {
+        if (!riskConditionKeys.has(leaf.key)) continue
+        const signature = this.percentRiskSignature(leaf)
+        if (!signature) continue
+        riskEffectSignatures.set(signature, [...(riskEffectSignatures.get(signature) ?? []), index])
+      }
+    })
+
+    return rules.filter((rule, index) => {
+      if (rule.phase !== 'exit') return true
+      if (this.closeActionSet(rule).size === 0) return true
+      const leaves = collectAtomLeaves(rule.condition)
+      if (leaves.length !== 1) return true
+      const condition = leaves[0]
+      if (!condition || !riskConditionKeys.has(condition.key)) return true
+      const signature = this.percentRiskSignature(condition)
+      if (!signature) return true
+      return !(riskEffectSignatures.get(signature) ?? []).some(effectRuleIndex => effectRuleIndex !== index)
+    })
+  }
+
+  private percentRiskSignature(leaf: AtomExprAtom): string | null {
+    const valuePct = this.readNumericParam(leaf.params, 'valuePct') ?? this.readNumericParam(leaf.params, 'pct')
+    if (valuePct === null) return null
+    const basis = this.readStringParam(leaf.params, 'basis') ?? 'entry_avg_price'
+    return `${leaf.key}|${basis}|${Math.abs(valuePct)}`
   }
 
   private closeActionSet(rule: SemanticRule): Set<string> {
@@ -4386,6 +4571,12 @@ export class PlannerDispatcherMergeService {
       existing.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       || existing.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key
     ) {
+      const existingLeftPeriod = this.readNumericParam(existing.params, 'period')
+      const candidateLeftPeriod = this.readNumericParam(candidate.params, 'period')
+      if (existingLeftPeriod !== candidateLeftPeriod) return false
+      const existingReferencePeriod = this.readNumericParam(existing.params, 'reference.period')
+      const candidateReferencePeriod = this.readNumericParam(candidate.params, 'reference.period')
+      if (existingReferencePeriod !== null || candidateReferencePeriod !== null) return existingReferencePeriod === candidateReferencePeriod
       const existingPeriod = this.readIndicatorPeriodParam(existing.params)
       const candidatePeriod = this.readIndicatorPeriodParam(candidate.params)
       if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod

@@ -153,7 +153,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.missing).not.toContain('missing_risk')
   })
 
-  it('entry-only executable rules can compile without explicit exit semantics', () => {
+  it('entry-only executable rules still require explicit exit semantics', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'entry-only',
@@ -166,8 +166,8 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     const r = svc.evaluateRulesReadiness(rules)
 
     expect(r.hasEntry).toBe(true)
-    expect(r.hasExit).toBe(true)
-    expect(r.missing).not.toContain('missing_exit')
+    expect(r.hasExit).toBe(false)
+    expect(r.missing).toContain('missing_exit')
   })
 
   it('grid.range_rebalance with breakoutAction=stop 强化 exit', () => {
@@ -290,6 +290,97 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasEntry).toBe(true)
     expect(r.hasExit).toBe(true)
     expect(r.missing).not.toContain('missing_exit')
+  })
+
+  it('projects staged DCA schedule facts back onto an empty program.dca rules node', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [{
+        id: 'dispatcher-typed-rule-2:rules-1-effects-positions-2',
+        key: 'position.dca_schedule',
+        params: {
+          triggerMode: 'price_interval',
+          dropPct: 3,
+          priceIntervalPct: 3,
+          maxCount: 3,
+          perOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+          capitalCap: { kind: 'quote', asset: 'USDT', value: 1000 },
+        },
+        status: 'open',
+        source: 'derived',
+        openSlots: [],
+      }],
+      orchestration: [{
+        id: 'dispatcher-typed-rule-3:rules-2-effects-programs-0',
+        key: 'program.dca',
+        kind: 'program',
+        params: {},
+        source: 'derived',
+        status: 'open',
+        contracts: [],
+        openSlots: [{
+          status: 'open',
+          slotKey: 'orchestration.phase0.unsupported',
+          priority: 'behavior',
+          fieldPath: 'rules[2].effects.programs[0]',
+          questionHint: 'Phase 0 暂不支持部署 orchestration runtime。',
+          affectsExecution: true,
+        }],
+      }],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: { slotKey: 'exchange', value: 'okx', status: 'locked', fieldPath: 'contextSlots.exchange', priority: 'context', questionHint: '', affectsExecution: true },
+        symbol: { slotKey: 'symbol', value: 'BTCUSDT', status: 'locked', fieldPath: 'contextSlots.symbol', priority: 'context', questionHint: '', affectsExecution: true },
+        marketType: { slotKey: 'marketType', value: 'perp', status: 'locked', fieldPath: 'contextSlots.marketType', priority: 'context', questionHint: '', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', value: '1h', status: 'locked', fieldPath: 'contextSlots.timeframe', priority: 'context', questionHint: '', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-06-17T00:00:00.000Z',
+      rules: [
+        rule({
+          id: 'exit-8pct',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { basis: 'entry_avg_price', valuePct: -8, direction: 'down' }),
+          effects: [atom('action.close_long')],
+        }),
+        rule({
+          id: 'dca-program',
+          phase: 'program',
+          sideScope: 'long',
+          condition: atom('execution.on_start'),
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [atomWithSide('program.dca', 'both')],
+          },
+        }),
+      ],
+    }
+
+    const normalized = svc.normalize(state)
+    const dcaRule = normalized.state.rules?.find(item => item.id === 'dca-program')
+    const openOrchestrationSlots = normalized.state.orchestration?.flatMap(node => node.openSlots ?? []) ?? []
+
+    expect(normalized.ready).toBe(true)
+    expect(dcaRule?.effects).toEqual(expect.objectContaining({
+      positions: [expect.objectContaining({
+        key: 'position.dca_schedule',
+        params: expect.objectContaining({
+          triggerMode: 'price_interval',
+          dropPct: 3,
+          perOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+        }),
+      })],
+    }))
+    expect(openOrchestrationSlots).toEqual([])
   })
 
   it('program.rebalance does not require single-order position sizing when allocation is program-defined', () => {

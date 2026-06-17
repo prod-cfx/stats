@@ -1468,7 +1468,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('出场：价格百分比变化（上涨，10%，相对入场均价）')
   })
 
-  it('recovers ORDI on-start entry and all explicit percent exits when planner returns no rules (staging dispatcher-only)', async () => {
+  it('recovers ORDI on-start entry and keeps entry-average risks without duplicate exit rules when planner returns no rules (staging dispatcher-only)', async () => {
     const initialMessage = '在 OKX 现货 ORDI/USDT 上，主周期 1h，使用 10% 固定仓位只做多；入场动作为立即开始时市价买入；出场规则为价格相对前收盘上涨 1% 时卖出，另有相对入场均价下跌 5% 止损卖出、相对入场均价上涨 10% 止盈卖出。'
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -1502,7 +1502,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(serializedRules).toContain('valuePct":1')
     expect(serializedRules).toContain('valuePct":5')
     expect(serializedRules).toContain('valuePct":10')
-    expect(rules.filter((rule: any) => rule.phase === 'exit')).toHaveLength(3)
+    expect(rules.filter((rule: any) => rule.phase === 'exit')).toHaveLength(1)
+    expect(rules.find((rule: any) => rule.phase === 'entry')?.effects?.risks ?? []).toHaveLength(2)
     expect(result.assistantPrompt).toContain('立即开始时市价买入')
     expect(result.assistantPrompt).toContain('相对上一根收盘价')
     expect(result.assistantPrompt).toContain('1')
@@ -4002,6 +4003,98 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('REJECTED')
     expect(result.assistantPrompt).toBe('当前会话缺少语义状态，请重新输入完整策略。')
+  })
+
+  it('uses server-side confirmation digest tolerance for explicit confirmGenerate requests', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-explicit-confirm',
+      userId: 'u-1',
+      status: 'CONFIRM_GATE',
+      checklist: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+
+    const continueConfirmedSession = jest
+      .spyOn(service as any, 'continueConfirmedSession')
+      .mockResolvedValue({ id: 'session-explicit-confirm', status: 'GENERATING', clarificationGate: { blocked: false, summary: null, items: [], pendingItems: [] } })
+
+    await service.continueSession('session-explicit-confirm', {
+      userId: 'u-1',
+      message: 'Confirm code generation',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:client-view',
+    })
+
+    expect(continueConfirmedSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-explicit-confirm' }),
+      expect.objectContaining({ confirmGenerate: true, confirmedCanonicalDigest: 'sha256:client-view' }),
+      'u-1',
+      expect.objectContaining({ allowServerSideConfirmationDigest: true }),
+    )
+  })
+
+  it('does not treat recognized-unsupported pause risk as projection loss', () => {
+    const semanticState: SemanticStateType = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [{
+        id: 'pause-risk',
+        key: 'risk.condition_expression',
+        params: {
+          effect: { type: 'pause_strategy' },
+          capabilityStatus: 'recognized_unsupported',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      position: null,
+      rules: [{
+        id: 'exit-pause-risk',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [{
+            kind: 'atom',
+            key: 'risk.condition_expression',
+            params: {
+              effect: { type: 'pause_strategy' },
+              capabilityStatus: 'recognized_unsupported',
+            },
+          }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-06-17T00:00:00.000Z',
+    }
+
+    const result = (service as any).evaluateSemanticProjectionLoss(semanticState, {
+      rules: [{ metadata: { semanticKey: 'position.dca_schedule' } }],
+    })
+
+    expect(result).toEqual({ blocked: false, reasons: [] })
   })
 
   it('rejects processing-session requeue when confirmedCanonicalDigest mismatches current semantic view', async () => {

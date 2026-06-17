@@ -81,6 +81,17 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(signals.hasShortIntent).toBe(false)
   })
 
+  it('renders timed DCA sizing, pause guard, and concrete cooldown without duplicate notional sizing', () => {
+    const summary = summarizePrompt('基于 OKX 模拟盘 BTC-USDT 现货 1h，创建定时 DCA 策略。规则：策略启动后每 24 小时买入一次，每次 100 USDT，最多执行 10 次，总预算 1000 USDT；每 10 根 K 线最多开仓一次；持仓 2 根 K 线后平多；价格跌破 30 日均线 8% 时暂停；风控：仓位 70%，止盈 0.12%，亏损 3% 止损。')
+
+    expect(summary).toContain('单笔仓位 70%')
+    expect(summary).toContain('每次 100 USDT')
+    expect(summary).toContain('交易冷却：10 根 K 线')
+    expect(summary).toContain('暂停策略')
+    expect(summary).not.toContain('交易冷却期')
+    expect(summary).not.toContain('单笔 100 USDT')
+  })
+
   it('keeps recommendation intent compatibility for legacy bare and reduce action keys', () => {
     const signals = (service as unknown as {
       buildRecommendationSignals(input: {
@@ -217,6 +228,11 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
         prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 上穿 EMA50 时开多；价格跌破 EMA20 时平多；风控：仓位 25%，2 倍杠杆，亏损 2% 止损。',
         contains: ['价格在 EMA50 上方', 'EMA20 上穿 EMA50', '出场：价格低于 EMA20 → 平多'],
         excludes: ['同时 收盘价低于EMA20', '价格低于 EMA20 同时 收盘价低于EMA20'],
+      },
+      {
+        prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。风控：仓位 25%，2 倍杠杆。',
+        contains: ['价格在 EMA50 上方', 'EMA20 在 EMA50 上方', '交易冷却：4 根 K 线', '出场：价格低于 EMA20 → 平多'],
+        excludes: ['EMA20 在 EMA50 上方 同时 EMA20高于EMA50', '15m EMA20 在 EMA50 上方 同时 EMA20高于EMA50'],
       },
       {
         prompt: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建资金费率反转策略。规则：资金费率大于 0.01% 且 RSI14 高于 70 时开空；RSI14 低于 40 时平空；风控：仓位 10%，2 倍杠杆，亏损 1.5% 止损。',
@@ -490,7 +506,7 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const view = service.buildConversationView(baseState({ rules }))
-      expect(view.summary).toContain('收盘价高于EMA20')
+      expect(view.summary).toContain('价格在 EMA20 上方')
       expect(view.summary).toContain('单笔仓位 10 USDT')
       expect(view.summary).not.toContain('condition.expression')
       expect(view.summary).not.toContain('position.per_order_budget')
@@ -745,6 +761,21 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).toContain('出场')
     expect(view.summary).toContain('前置')
     expect(view.summary).toContain('止损')
+  })
+
+  it('renders rules summary with entry before exit and without duplicated risk exits', () => {
+    const summary = summarizePrompt('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建资金费率和持仓量确认策略。规则：价格突破最近 8 根 K 线高点，资金费率为正且未平仓量增加超过 0.5% 时开多；每 6 根 K 线最多开仓一次；持仓 4 根 K 线后平多；跌破 EMA20 时平多；风控：仓位 70%，亏损 3% 止损，止盈 0.12%。')
+
+    expect(summary.indexOf('入场：')).toBeGreaterThanOrEqual(0)
+    expect(summary.indexOf('出场：')).toBeGreaterThan(summary.indexOf('入场：'))
+    expect(summary).toContain('入场：')
+    expect(summary).toContain('价格突破过去 8 根 K 线滚动高点')
+    expect(summary).toContain('资金费率大于 0')
+    expect(summary).toContain('未平仓量增加大于 0.5%')
+    expect(summary).toContain('出场：价格低于 EMA20')
+    expect(summary).not.toContain('出场：价格突破过去 8 根 K 线滚动高点 同时 价格低于 EMA20')
+    expect(summary.match(/出场：价格百分比变化（下跌，3%，相对入场均价）/gu) ?? []).toHaveLength(0)
+    expect(summary.match(/出场：价格百分比变化（上涨，0\.12%，相对入场均价）/gu) ?? []).toHaveLength(0)
   })
 
   // 审查 R2-2 修复：≥2 个未注册 atom 的兜底文案不应在 and/or/sequence 内被乘积量重复

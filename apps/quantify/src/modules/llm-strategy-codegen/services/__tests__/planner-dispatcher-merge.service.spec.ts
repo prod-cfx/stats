@@ -2270,8 +2270,9 @@ describe('PlannerDispatcherMergeService — preserves explicit dispatcher semant
 
     const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
 
-    expect(atomKeys(merged)).toEqual(expect.arrayContaining(['action.open_short', 'risk.stop_loss_pct', 'risk.cooldown', 'time.cooldown_window']))
-    expect(merged?.rules?.some(rule => rule.phase === 'gate')).toBe(true)
+    expect(atomKeys(merged)).toEqual(expect.arrayContaining(['action.open_short', 'risk.stop_loss_pct', 'risk.cooldown']))
+    expect(atomKeys(merged)).not.toContain('time.cooldown_window')
+    expect(merged?.rules?.some(rule => rule.phase === 'gate')).toBe(false)
   })
 
   it('repairs wrong exit action side when dispatcher evidence says close short', () => {
@@ -3070,5 +3071,65 @@ describe('PlannerDispatcherMergeService — structural action preservation', () 
 
     expect(effectKeys).toContain('action.add_position')
     expect(effectKeys).toContain('position.pyramiding_limit')
+  })
+})
+
+describe('PlannerDispatcherMergeService — rules mainflow cooldown and DCA regressions', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  it('keeps stop-loss cooldown as risk effect without duplicating stop-loss exit rules', () => {
+    const text = '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建止损后冷却策略。规则：MA20 上穿 MA50 开多；亏损 3% 止损；止损后冷却 5 根 K 线再开仓；跌破 EMA20 平多；风控：单笔仓位 10%。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const rules = fallback?.rules ?? []
+    const conditionLeaves = rules.flatMap(rule => collectAtomLeaves(rule.condition))
+    const effectLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+    const exitPercentStopRules = rules.filter(rule =>
+      rule.phase === 'exit'
+      && collectAtomLeaves(rule.condition).some((leaf) => {
+        const params = leaf.params ?? {}
+        return leaf.key === 'price.percent_change'
+          && params.basis === 'entry_avg_price'
+          && params.direction === 'down'
+          && params.valuePct === 3
+      }),
+    )
+
+    expect(conditionLeaves.map(leaf => leaf.key)).not.toContain('time.cooldown_window')
+    expect(exitPercentStopRules).toHaveLength(0)
+    expect(effectLeaves.filter(leaf => leaf.key === 'risk.stop_loss_pct')).toHaveLength(1)
+    expect(effectLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.cooldown', params: expect.objectContaining({ durationBars: 5 }) }),
+    ]))
+  })
+
+  it('does not parse 30-day moving average pause as 30d trading cooldown in DCA rules', () => {
+    const text = '基于 OKX 模拟盘 BTC-USDT 现货 1h，创建定时 DCA 策略。规则：策略启动后每 24 小时买入一次，每次 100 USDT，最多执行 10 次，总预算 1000 USDT；每 10 根 K 线最多开仓一次；持仓 2 根 K 线后平多；价格跌破 30 日均线 8% 时暂停；风控：仓位 70%，止盈 0.12%，亏损 3% 止损。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const rules = fallback?.rules ?? []
+    const serialized = JSON.stringify(rules)
+    const conditionLeaves = rules.flatMap(rule => collectAtomLeaves(rule.condition))
+    const effectLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+    const positionLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+      .filter(leaf => leaf.key.startsWith('position.'))
+
+    expect(serialized).not.toContain('"durationMs":"30d"')
+    expect(serialized).not.toContain('交易时间窗口')
+    expect(conditionLeaves.filter(leaf => leaf.key === 'risk.cooldown')).toHaveLength(0)
+    expect(effectLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.cooldown', params: expect.objectContaining({ durationBars: 10 }) }),
+      expect.objectContaining({ key: 'risk.time_stop_bars', params: expect.objectContaining({ maxBars: 2 }) }),
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.12 }) }),
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 3 }) }),
+      expect.objectContaining({ key: 'risk.condition_expression', params: expect.objectContaining({ effect: { type: 'pause_strategy' } }) }),
+    ]))
+    expect(positionLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'position.sizing', params: expect.objectContaining({ sizing: expect.objectContaining({ kind: 'ratio', value: 0.7 }) }) }),
+      expect.objectContaining({ key: 'position.dca_schedule', params: expect.objectContaining({ perOrderSizing: expect.objectContaining({ kind: 'quote', value: 100, asset: 'USDT' }) }) }),
+    ]))
+    expect(positionLeaves.map(leaf => leaf.key)).not.toContain('position.fixed_notional')
   })
 })

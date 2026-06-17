@@ -147,6 +147,96 @@ describe('SemanticOrchestrationRegistryService', () => {
     })
   })
 
+  describe('scope.symbol', () => {
+    function buildSymbolScopeNode(
+      overrides: Partial<SemanticOrchestrationNode> = {},
+    ): SemanticOrchestrationNode {
+      return {
+        id: 'scope-symbol-1',
+        kind: 'scope',
+        key: 'scope.symbol',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+        symbolScopeKind: 'symbol',
+        symbols: ['BTCUSDT'],
+        primarySymbol: 'BTCUSDT',
+        ...overrides,
+      }
+    }
+
+    it('validate accepts symbol fields stored in params', () => {
+      const node = buildSymbolScopeNode({
+        symbolScopeKind: undefined,
+        symbols: undefined,
+        primarySymbol: undefined,
+        params: {
+          symbolScopeKind: 'symbol',
+          symbols: ['BTCUSDT'],
+          primarySymbol: 'BTCUSDT',
+        },
+      })
+
+      expect(service.validate(node)).toEqual({ ok: true, missingSlots: [] })
+    })
+
+    it('validate allows duplicate identical symbol scopes', () => {
+      const first = buildSymbolScopeNode({ id: 'scope-symbol-1', status: 'locked' })
+      const duplicate = buildSymbolScopeNode({ id: 'scope-symbol-2' })
+
+      expect(service.validate(duplicate, [first, duplicate])).toEqual({ ok: true, missingSlots: [] })
+    })
+  })
+
+  describe('program.dca', () => {
+    function buildDcaProgramNode(
+      overrides: Partial<SemanticOrchestrationNode> = {},
+    ): SemanticOrchestrationNode {
+      return {
+        id: 'pgm-dca-1',
+        kind: 'program',
+        key: 'program.dca',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+        programKind: 'dca',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'static',
+        ...overrides,
+      }
+    }
+
+    it('getContractByKey returns an executable DCA program contract', () => {
+      const contract = service.getContractByKey('program.dca')
+
+      expect(contract).not.toBeNull()
+      expect(contract?.id).toBe('program.dca')
+      expect(contract?.kind).toBe('program')
+      expect(contract?.capabilities).toEqual([
+        { domain: 'orchestration', verb: 'manage', object: 'dca_schedule', shape: {} },
+      ])
+      expect(contract?.effects).toEqual([
+        { domain: 'guard', verb: 'manage', object: 'dca_schedule' },
+      ])
+      expect(
+        service.isExecutableForStrategy(contract!, { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION }),
+      ).toBe(true)
+    })
+
+    it('validate accepts DCA programKind stored in params', () => {
+      const node = buildDcaProgramNode({
+        programKind: undefined,
+        params: { programKind: 'dca' },
+      })
+
+      expect(service.validate(node)).toEqual({ ok: true, missingSlots: [] })
+    })
+  })
+
   describe('program.fixed_grid_gated', () => {
     function buildProgramNode(
       overrides: Partial<SemanticOrchestrationNode> = {},
