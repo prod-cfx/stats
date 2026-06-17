@@ -609,7 +609,61 @@ export class CodegenConversationService {
   }
 
   async listConversations(userId: string): Promise<AiQuantConversationResponseDto[]> {
-    let conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
+    const summaries = (await this.conversationsRepo.listSummariesByUser(userId))
+      .filter(conversation => !this.isStrategyPlazaRunSessionId(conversation.codegenSessionId))
+    const sessionSummaries = new Map(
+      (await this.sessionsRepo.listSummariesByIds(summaries.map(conversation => conversation.codegenSessionId)))
+        .map(session => [session.id, session]),
+    )
+
+    return summaries.map((conversation) => {
+      const session = sessionSummaries.get(conversation.codegenSessionId)
+      const publishedSnapshotId = conversation.lastBacktestRef?.publishedSnapshotId ?? null
+      return {
+        id: conversation.id,
+        activeCodegenSessionId: session && this.isEditableConversationSessionStatus(session.status) ? session.id : null,
+        conversationTitle: conversation.title,
+        status: session?.status,
+        createdAt: conversation.createdAt.toISOString(),
+        updatedAt: conversation.updatedAt.toISOString(),
+        backtestDraftConfig: conversation.backtestDraftConfig,
+        lastBacktestRef: conversation.lastBacktestRef
+          ? {
+              jobId: conversation.lastBacktestRef.jobId,
+              publishedSnapshotId: conversation.lastBacktestRef.publishedSnapshotId,
+              config: conversation.lastBacktestRef.config,
+              summary: conversation.lastBacktestRef.summary,
+              completedAt: conversation.lastBacktestRef.completedAt.toISOString(),
+            }
+          : null,
+        publishedSnapshotId,
+        strategyInstanceId: session?.strategyInstanceId ?? null,
+      }
+    })
+  }
+
+  async getConversation(conversationId: string, userId: string): Promise<AiQuantConversationResponseDto> {
+    const conversation = await this.conversationsRepo.findActiveByIdAndUser(conversationId, userId)
+    if (!conversation) {
+      throw new DomainException('ai_quant.conversation_not_found', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { conversationId },
+      })
+    }
+
+    if (this.isStrategyPlazaRunSessionId(conversation.codegenSessionId)) {
+      throw new DomainException('ai_quant.conversation_not_found', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { conversationId },
+      })
+    }
+
+    return this.toConversationResponse(conversation)
+  }
+
+  async backfillMissingConversationProjections(userId: string): Promise<void> {
     const knownSessionIds = new Set((await this.conversationsRepo.listKnownSessionIdsByUser(userId))
       .filter(sessionId => !this.isStrategyPlazaRunSessionId(sessionId)))
     const sessions = (await this.sessionsRepo.listByUser(userId))
@@ -618,10 +672,7 @@ export class CodegenConversationService {
 
     if (sessionsNeedingProjection.length > 0) {
       await Promise.all(sessionsNeedingProjection.map(session => this.persistConversationProjectionForSessionId(session.id, userId)))
-      conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
     }
-
-    return Promise.all(conversations.map(conversation => this.toConversationResponse(conversation)))
   }
 
   async deleteConversation(

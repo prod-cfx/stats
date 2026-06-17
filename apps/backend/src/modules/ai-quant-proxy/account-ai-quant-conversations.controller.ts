@@ -27,6 +27,17 @@ export class AccountAiQuantConversationsController {
     return this.service.listAiQuantConversations(userId, authorization)
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get AI Quant conversation detail from the backend proxy facade' })
+  @ApiResponse({ status: 200, type: AiQuantConversationResponseDto })
+  async detail(
+    @CurrentUser('id') userId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ): Promise<AiQuantConversationResponseDto> {
+    return this.service.getAiQuantConversation(userId, authorization, id)
+  }
+
   @Delete(':id')
   @ApiQuery({ name: 'deleteStoppedStrategy', required: false, type: String })
   async remove(

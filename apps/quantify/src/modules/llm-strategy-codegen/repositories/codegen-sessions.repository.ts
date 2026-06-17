@@ -101,6 +101,12 @@ const SESSION_SELECT_WITH_STRATEGY_WITHOUT_SEMANTIC_OR_CLARIFICATION = {
 
 const MAX_TRANSACTION_START_RETRIES = 3
 
+export interface LlmStrategyCodegenSessionSummaryRecord {
+  id: string
+  status: LlmStrategyCodegenSession['status']
+  strategyInstanceId: string | null
+}
+
 @Injectable()
 export class CodegenSessionsRepository {
   private strategyInstanceColumnMissing = false
@@ -147,6 +153,30 @@ export class CodegenSessionsRepository {
       if (!this.markMissingOptionalSessionColumn(error)) throw error
       return this.listByUser(userId)
     }
+  }
+
+  async listSummariesByIds(ids: string[]): Promise<LlmStrategyCodegenSessionSummaryRecord[]> {
+    const normalizedIds = Array.from(new Set(ids.map(id => id.trim()).filter(Boolean)))
+    if (normalizedIds.length === 0) return []
+
+    if (this.strategyInstanceColumnMissing) {
+      const rows = await this.txHost.tx.llmStrategyCodegenSession.findMany({
+        where: { id: { in: normalizedIds } },
+        select: { id: true, status: true },
+      })
+      return rows.map(row => ({ ...row, strategyInstanceId: null }))
+    }
+
+    return this.txHost.tx.llmStrategyCodegenSession.findMany({
+      where: { id: { in: normalizedIds } },
+      select: { id: true, status: true, strategyInstanceId: true },
+    }).catch(error => {
+      if (this.isMissingStrategyInstanceColumnError(error)) {
+        this.strategyInstanceColumnMissing = true
+        return this.listSummariesByIds(normalizedIds)
+      }
+      throw error
+    })
   }
 
   async findSessionStrategyInstanceId(id: string): Promise<string | null> {
