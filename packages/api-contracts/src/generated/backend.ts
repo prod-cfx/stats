@@ -187,6 +187,955 @@ const CreateBetaCodeBatchDto = z
   .object({ count: z.number().gte(1).lte(500), maxUsesPerCode: z.number().gte(1).lte(1000) })
   .passthrough()
 const UpdateBetaCodeStatusDto = z.object({ isActive: z.boolean() }).passthrough()
+const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
+const AdminProfileDto = z
+  .object({
+    id: z.string(),
+    username: z.string(),
+    email: z.string().nullish(),
+    nickName: z.string().nullish(),
+    isFrozen: z.boolean(),
+    menuPermissions: z.array(z.string()),
+  })
+  .passthrough()
+const AdminAuthResponseDto = z
+  .object({
+    accessToken: z.string(),
+    refreshToken: z.string().optional(),
+    expiresIn: z.string().optional(),
+    admin: AdminProfileDto,
+  })
+  .passthrough()
+const AdminRefreshDto = z.object({ refreshToken: z.string() }).passthrough()
+const AdminRegisterDto = z
+  .object({
+    username: z.string(),
+    password: z.string(),
+    email: z.string().optional(),
+    nickName: z.string().optional(),
+    roleCodes: z.array(z.string()).optional(),
+  })
+  .passthrough()
+const AdminMenuPermissionDto = z
+  .object({
+    id: z.string(),
+    parentId: z.string().nullish(),
+    name: z.string(),
+    route: z.string().nullish(),
+    icon: z.string().nullish(),
+    sortOrder: z.number(),
+    code: z.string().nullable(),
+    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
+    children: z.array(z.object({}).partial().passthrough()).optional(),
+  })
+  .passthrough()
+const AdminUserInfoDto = z
+  .object({
+    id: z.string(),
+    username: z.string(),
+    nickName: z.string().nullish(),
+    headPic: z.string().nullish(),
+    menus: z.array(AdminMenuPermissionDto),
+    menuPermissions: z.array(z.string()),
+    featurePermissions: z.array(z.string()),
+    apiPermissions: z.array(z.string()),
+  })
+  .passthrough()
+const AdminAssignedRoleDto = z
+  .object({ id: z.string(), code: z.string(), name: z.string(), description: z.string().nullish() })
+  .passthrough()
+const AdminUserDto = z
+  .object({
+    id: z.string(),
+    username: z.string(),
+    nickName: z.string().nullable(),
+    email: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    phone: z.string().nullable(),
+    isFrozen: z.boolean(),
+    roles: z.array(AdminAssignedRoleDto).default([]),
+  })
+  .passthrough()
+const CreateAdminUserDto = z
+  .object({
+    username: z.string(),
+    password: z.string(),
+    nickName: z.string().max(50).optional(),
+    email: z.string().optional(),
+    avatarUrl: z.string().optional(),
+    phone: z.string().optional(),
+    roleIds: z.array(z.string()).optional(),
+  })
+  .passthrough()
+const UpdateAdminUserDto = z
+  .object({
+    nickName: z.string().max(50),
+    email: z.string(),
+    avatarUrl: z.string(),
+    phone: z.string(),
+    isFrozen: z.boolean(),
+    roleIds: z.array(z.string()),
+  })
+  .partial()
+  .passthrough()
+const CreateAdminRoleDto = z
+  .object({
+    code: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    menuPermissions: z.array(z.string()).optional(),
+    featurePermissions: z.array(z.string()).optional(),
+    apiPermissions: z.array(z.string()).optional(),
+  })
+  .passthrough()
+const AdminRoleResponseDto = z
+  .object({
+    id: z.string(),
+    code: z.string(),
+    name: z.string(),
+    description: z.string().nullish(),
+    menuPermissions: z.array(z.string()),
+    featurePermissions: z.array(z.string()),
+    apiPermissions: z.array(z.string()),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const UpdateAdminRoleDto = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    menuPermissions: z.array(z.string()),
+    featurePermissions: z.array(z.string()),
+    apiPermissions: z.array(z.string()),
+  })
+  .partial()
+  .passthrough()
+const AdminDeleteResultResponseDto = z.object({ success: z.boolean() }).passthrough()
+const AdminMenuTreeNodeResponseDto = z
+  .object({
+    id: z.string(),
+    parentId: z.string().nullish(),
+    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
+    title: z.string(),
+    icon: z.string().nullish(),
+    code: z.string().nullish(),
+    path: z.string().nullish(),
+    description: z.string().nullish(),
+    i18nKey: z.string().nullish(),
+    sort: z.number(),
+    isShow: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+    children: z.array(z.object({}).partial().passthrough()),
+  })
+  .passthrough()
+const CreateAdminMenuDto = z
+  .object({
+    parentId: z.string().optional(),
+    type: z.string(),
+    title: z.string(),
+    icon: z.string().optional(),
+    code: z.string().optional(),
+    path: z.string().optional(),
+    description: z.string().optional(),
+    i18nKey: z.string().optional(),
+    sort: z.number().optional().default(0),
+    isShow: z.boolean().optional().default(true),
+  })
+  .passthrough()
+const AdminMenuResponseDto = z
+  .object({
+    id: z.string(),
+    parentId: z.string().nullish(),
+    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
+    title: z.string(),
+    icon: z.string().nullish(),
+    code: z.string().nullish(),
+    path: z.string().nullish(),
+    description: z.string().nullish(),
+    i18nKey: z.string().nullish(),
+    sort: z.number(),
+    isShow: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const UpdateAdminMenuDto = z
+  .object({
+    parentId: z.string(),
+    type: z.string(),
+    title: z.string(),
+    icon: z.string(),
+    code: z.string(),
+    path: z.string(),
+    description: z.string(),
+    i18nKey: z.string(),
+    sort: z.number(),
+    isShow: z.boolean(),
+  })
+  .partial()
+  .passthrough()
+const TradingPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    displaySymbol: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(['DEX', 'CEX']),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
+    pricePrecision: z.number(),
+    quantityPrecision: z.number(),
+    minNotional: z.number().optional(),
+    minQuantity: z.number().optional(),
+    enabled: z.boolean(),
+    exchange: z.enum(['BINANCE', 'OKX', 'BYBIT']).optional(),
+    exchangeSymbol: z.string().optional(),
+    maxLeverage: z.number().optional(),
+    contractSize: z.number().optional(),
+    chainId: z.number().optional(),
+    baseTokenAddress: z.string().optional(),
+    quoteTokenAddress: z.string().optional(),
+    routerAddress: z.string().optional(),
+    poolAddress: z.string().optional(),
+    dexName: z.string().optional(),
+  })
+  .passthrough()
+const LongShortRatioPointResponseDto = z
+  .object({
+    tradingPairId: z.string(),
+    interval: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
+    timestamp: z.string(),
+    longShortRatio: z.string(),
+    longAccountRatio: z.string().nullish(),
+    shortAccountRatio: z.string().nullish(),
+    longVolume: z.string().nullish(),
+    shortVolume: z.string().nullish(),
+    longShortAccountRatio: z.string().nullish(),
+    source: z.string(),
+  })
+  .passthrough()
+const BaseResponseDto = z
+  .object({ data: z.object({}).partial().passthrough(), message: z.string().optional() })
+  .passthrough()
+const ExchangeLongShortRatioResponseDto = z
+  .object({
+    rank: z.number(),
+    name: z.string(),
+    logoUrl: z.string().optional(),
+    longPercent: z.number(),
+    shortPercent: z.number(),
+    longAmountUsd: z.number(),
+    shortAmountUsd: z.number(),
+  })
+  .passthrough()
+const MarketTradeResponseDto = z
+  .object({
+    id: z.number(),
+    exchange: z.string(),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    tradeId: z.string(),
+    price: z.string(),
+    size: z.string(),
+    side: z.enum(['buy', 'sell']),
+    tradeTimestamp: z.string(),
+    createdAt: z.string(),
+  })
+  .passthrough()
+const AggregatedVolumeResponseDto = z
+  .object({
+    id: z.number(),
+    exchange: z.string(),
+    symbol: z.string(),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL']).optional(),
+    volumeUsd: z.string(),
+    dataTimestamp: z.string(),
+    source: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const AggregatedVolumeRowDto = z.object({ exchange: z.string(), value: z.number() }).passthrough()
+const AggregatedVolumeSnapshotResponseDto = z
+  .object({ symbol: z.string(), total: z.number(), rows: z.array(AggregatedVolumeRowDto) })
+  .passthrough()
+const TickerResponseDto = z
+  .object({
+    symbol: z.string(),
+    exchange: z.string().optional(),
+    currentPrice: z.string(),
+    indexPrice: z.string().optional(),
+    priceChangePercent24h: z.string().optional(),
+    volumeUsd: z.string(),
+    openInterestUsd: z.string().optional(),
+    fundingRate: z.string().optional(),
+    nextFundingTime: z.string().optional(),
+    high24h: z.string().optional(),
+    low24h: z.string().optional(),
+  })
+  .passthrough()
+const LiquidationHeatmapResponseDto = z
+  .object({
+    snapshotId: z.number(),
+    symbol: z.string(),
+    exchangeCode: z.string().nullable(),
+    tradingPair: z.string().nullable(),
+    contractType: z.string().nullable(),
+    modelType: z.enum(['MODEL1', 'MODEL2', 'MODEL3']),
+    timeInterval: z.string().nullable(),
+    valueCurrency: z.string(),
+    fetchedAt: z.string().datetime({ offset: true }),
+    effectiveFrom: z.string().datetime({ offset: true }).nullable(),
+    effectiveTo: z.string().datetime({ offset: true }).nullable(),
+    y_axis: z.array(z.number()),
+    liquidation_leverage_data: z.array(z.array(z.number())),
+    price_candlesticks: z.array(z.array(z.union([z.number(), z.string()]))),
+  })
+  .passthrough()
+const LiquidationSummaryItemDto = z
+  .object({
+    timeframe: z.enum(['1h', '4h', '12h', '24h']),
+    totalUsd: z.number(),
+    longUsd: z.number(),
+    shortUsd: z.number(),
+  })
+  .passthrough()
+const AggregatedLiquidationSummaryDto = z
+  .object({ symbol: z.string(), items: z.array(LiquidationSummaryItemDto) })
+  .passthrough()
+const ExchangeLiquidationRowDto = z
+  .object({
+    exchange: z.string(),
+    symbol: z.string(),
+    timeframe: z.enum(['1h', '4h', '12h', '24h']),
+    amountUsd: z.number(),
+    longUsd: z.number(),
+    shortUsd: z.number(),
+    longShare: z.number().optional(),
+    isTotal: z.boolean().optional(),
+  })
+  .passthrough()
+const ExchangeLiquidationResponseDto = z
+  .object({
+    symbol: z.string(),
+    timeframe: z.enum(['1h', '4h', '12h', '24h']),
+    rows: z.array(ExchangeLiquidationRowDto),
+  })
+  .passthrough()
+const OrderbookPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    pairId: z.string(),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(['CEX', 'DEX']),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().nullish(),
+    depthLevels: z.number().nullish(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    description: z.string().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateOrderbookPairConfigDto = z
+  .object({
+    pairId: z.string().regex(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(['CEX', 'DEX']),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
+    enabled: z.boolean().optional().default(true),
+    pullIntervalSeconds: z.number().gte(1).nullish(),
+    depthLevels: z.number().gte(5).lte(500).nullish(),
+    priority: z.number().gte(1).lte(1000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough()
+const UpdateOrderbookPairConfigDto = z
+  .object({
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().gte(1).nullable(),
+    depthLevels: z.number().gte(5).lte(500).nullable(),
+    priority: z.number().gte(1).lte(1000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    description: z.string().nullable(),
+  })
+  .partial()
+  .passthrough()
+const OrderBookLevelDto = z.object({ price: z.number(), size: z.number() }).passthrough()
+const VenueOrderBookDto = z
+  .object({
+    venueId: z.string(),
+    marketKey: z.string(),
+    bids: z.array(OrderBookLevelDto),
+    asks: z.array(OrderBookLevelDto),
+    exchangeTs: z.number().nullish(),
+    receivedTs: z.number(),
+    version: z.number(),
+  })
+  .passthrough()
+const AggregatedOrderbookMarketResponseDto = z
+  .object({ base: z.string(), type: z.enum(['spot', 'perp']), venues: z.array(z.string()) })
+  .passthrough()
+const VenueDetailDto = z.object({ venueId: z.string(), size: z.number() }).passthrough()
+const AggregatedLevelDto = z
+  .object({ price: z.number(), sizeTotal: z.number(), details: z.array(VenueDetailDto) })
+  .passthrough()
+const AggregatedOrderbookResponseDto = z
+  .object({
+    marketKey: z.string(),
+    base: z.string(),
+    type: z.string(),
+    asks: z.array(AggregatedLevelDto),
+    bids: z.array(AggregatedLevelDto),
+    midPrice: z.number(),
+    updatedAt: z.number(),
+    venues: z.array(z.string()),
+    mergedQuotes: z.array(z.string()),
+  })
+  .passthrough()
+const KlineBarDto = z
+  .object({
+    time: z.number(),
+    open: z.number(),
+    high: z.number(),
+    low: z.number(),
+    close: z.number(),
+    volume: z.number(),
+  })
+  .passthrough()
+const TradesPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    pairId: z.string(),
+    exchange: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
+    canonicalInstId: z.string().nullish(),
+    enabled: z.boolean(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    description: z.string().nullish(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const CreateTradesPairConfigDto = z
+  .object({
+    pairId: z.string().regex(/^[A-Z0-9_-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+    exchange: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
+    enabled: z.boolean().optional().default(true),
+    priority: z.number().gte(1).lte(1000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough()
+const UpdateTradesPairConfigDto = z
+  .object({
+    enabled: z.boolean(),
+    priority: z.number().gte(1).lte(1000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    description: z.string().nullable(),
+  })
+  .partial()
+  .passthrough()
+const ExchangeConfigResponseDto = z
+  .object({
+    id: z.string(),
+    code: z.string(),
+    name: z.string(),
+    avatarUrl: z.string().nullish(),
+    intro: z.string().nullish(),
+    websiteUrl: z.string().nullish(),
+    venueType: z.enum(['CEX', 'DEX']).nullish(),
+    enabled: z.boolean(),
+    sort: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateExchangeConfigDto = z
+  .object({
+    code: z.string().regex(/^[A-Z0-9_]+$/),
+    name: z.string(),
+    avatarUrl: z.string().nullish(),
+    intro: z.string().nullish(),
+    websiteUrl: z.string().nullish(),
+    venueType: z.enum(['CEX', 'DEX']).nullish(),
+    enabled: z.boolean().optional().default(true),
+    sort: z.number().gte(0).lte(100000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
+const UpdateExchangeConfigDto = z
+  .object({
+    code: z.string().regex(/^[A-Z0-9_]+$/),
+    name: z.string(),
+    avatarUrl: z.string().nullable(),
+    intro: z.string().nullable(),
+    websiteUrl: z.string().nullable(),
+    venueType: z.enum(['CEX', 'DEX']).nullable(),
+    enabled: z.boolean(),
+    sort: z.number().gte(0).lte(100000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+  })
+  .partial()
+  .passthrough()
+const CreateOpenInterestDto = z
+  .object({
+    exchange: z.string(),
+    symbol: z.string(),
+    open_interest_usd: z.number(),
+    open_interest_quantity: z.number(),
+    open_interest_by_stable_coin_margin: z.number().optional(),
+    open_interest_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_stable_coin_margin: z.number().optional(),
+    open_interest_change_percent_5m: z.number().optional(),
+    open_interest_change_percent_15m: z.number().optional(),
+    open_interest_change_percent_30m: z.number().optional(),
+    open_interest_change_percent_1h: z.number().optional(),
+    open_interest_change_percent_4h: z.number().optional(),
+    open_interest_change_percent_24h: z.number().optional(),
+    data_timestamp: z.string(),
+  })
+  .passthrough()
+const OpenInterestDto = z
+  .object({
+    exchange: z.string(),
+    symbol: z.string(),
+    open_interest_usd: z.number(),
+    open_interest_quantity: z.number(),
+    open_interest_by_stable_coin_margin: z.number().optional(),
+    open_interest_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_stable_coin_margin: z.number().optional(),
+    open_interest_change_percent_5m: z.number().optional(),
+    open_interest_change_percent_15m: z.number().optional(),
+    open_interest_change_percent_30m: z.number().optional(),
+    open_interest_change_percent_1h: z.number().optional(),
+    open_interest_change_percent_4h: z.number().optional(),
+    open_interest_change_percent_24h: z.number().optional(),
+    data_timestamp: z.string().optional(),
+  })
+  .passthrough()
+const OiAggregateTotalDto = z
+  .object({ qty: z.number(), usd: z.number(), h24: z.number() })
+  .passthrough()
+const OiAggregateRowDto = z
+  .object({
+    exchange: z.string(),
+    qty: z.number(),
+    usd: z.number(),
+    pct: z.number(),
+    h1: z.number(),
+    h4: z.number(),
+    h24: z.number(),
+    oiVol: z.number(),
+  })
+  .passthrough()
+const OiAggregateSnapshotDto = z
+  .object({
+    symbol: z.string(),
+    dataTimestamp: z.string(),
+    total: OiAggregateTotalDto,
+    rows: z.array(OiAggregateRowDto),
+  })
+  .passthrough()
+const OpenInterestStatsDto = z
+  .object({
+    symbol: z.string(),
+    startTime: z.string().datetime({ offset: true }),
+    endTime: z.string().datetime({ offset: true }),
+    dataPoints: z.number(),
+    max: z.number(),
+    min: z.number(),
+    avg: z.number(),
+    latest: z.number(),
+    earliest: z.number(),
+    change: z.number(),
+    changePercent: z.number(),
+  })
+  .passthrough()
+const PredictionMarketOutcomeDto = z
+  .object({ label: z.string(), probability: z.string() })
+  .passthrough()
+const PredictionMarketRulesDto = z
+  .object({ paragraphs: z.array(z.string()), createdAt: z.string().optional() })
+  .passthrough()
+const PredictionMarketCardDto = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    options: z.array(PredictionMarketOutcomeDto).optional(),
+    probability: z.string().optional(),
+    status: z.string().optional(),
+    volume24h: z.string().optional(),
+    volumeTotal: z.string().optional(),
+    openInterest: z.string().optional(),
+    rules: PredictionMarketRulesDto.optional(),
+  })
+  .passthrough()
+const CryptoStockQuoteResponseDto = z
+  .object({
+    id: z.number(),
+    symbol: z.string(),
+    name: z.string().nullish(),
+    exchange: z.string().nullish(),
+    price: z.string(),
+    openPrice: z.string().nullish(),
+    highPrice: z.string().nullish(),
+    lowPrice: z.string().nullish(),
+    closePrice: z.string().nullish(),
+    volume: z.string().nullish(),
+    turnover: z.string().nullish(),
+    priceChange: z.string().nullish(),
+    priceChangePercent: z.string().nullish(),
+    marketCap: z.string().nullish(),
+    peRatio: z.string().nullish(),
+    high52Week: z.string().nullish(),
+    low52Week: z.string().nullish(),
+    assetSymbol: z.string().nullish(),
+    assetLogoUrl: z.string().nullish(),
+    companyLogoUrl: z.string().nullish(),
+    holdingsValue: z.string().nullish(),
+    holdingsAmount: z.string().nullish(),
+    mNav: z.string().nullish(),
+    holdingValue: z.string().nullish(),
+    holdingQuantity: z.string().nullish(),
+    companyType: z.string().nullish(),
+    infoParagraphs: z.array(z.string()).optional(),
+    source: z.string(),
+    quoteTimestamp: z.string().datetime({ offset: true }),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const AdminDataPullTaskResponseDto = z
+  .object({
+    id: z.number(),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean(),
+    cursor: z.string().nullish(),
+    lastStatus: z.string().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
+    lastError: z.string().nullish(),
+    meta: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateAdminDataPullTaskDto = z
+  .object({
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean().optional().default(true),
+    cursor: z.string().nullish(),
+    meta: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
+const AdminDataPullExecutionResponseDto = z
+  .object({
+    id: z.number(),
+    taskId: z.number(),
+    status: z.string(),
+    fetchedCount: z.number(),
+    startedAt: z.string().datetime({ offset: true }),
+    finishedAt: z.string().datetime({ offset: true }).nullish(),
+    errorMessage: z.string().nullish(),
+    meta: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
+const UpdateAdminDataPullTaskDto = z
+  .object({
+    name: z.string(),
+    source: z.string().nullable(),
+    type: z.string().nullable(),
+    cron: z.string().nullable(),
+    intervalSeconds: z.number().nullable(),
+    enabled: z.boolean(),
+    cursor: z.string().nullable(),
+    meta: z.object({}).partial().passthrough().nullable(),
+  })
+  .partial()
+  .passthrough()
+const WhaleNotificationChannelsDto = z
+  .object({ web: z.boolean(), email: z.boolean(), telegram: z.boolean() })
+  .passthrough()
+const WhaleNotificationRuleResponseDto = z
+  .object({
+    id: z.string(),
+    type: z.enum(['ADDRESS', 'SYMBOL']),
+    address: z.string().optional(),
+    symbol: z.string().optional(),
+    thresholdUsd: z.number(),
+    note: z.string().optional(),
+    channels: WhaleNotificationChannelsDto,
+    isActive: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const CreateWhaleNotificationRuleDto = z
+  .object({
+    type: z.enum(['ADDRESS', 'SYMBOL']),
+    address: z.string().optional(),
+    symbol: z.string().optional(),
+    thresholdUsd: z.number(),
+    note: z.string().optional(),
+    channels: WhaleNotificationChannelsDto,
+  })
+  .passthrough()
+const UpdateWhaleNotificationRuleDto = z
+  .object({
+    thresholdUsd: z.number(),
+    note: z.string(),
+    channels: WhaleNotificationChannelsDto,
+    isActive: z.boolean(),
+  })
+  .partial()
+  .passthrough()
+const WhaleNotificationDeliveryMapDto = z
+  .object({ web: z.string(), email: z.string(), telegram: z.string() })
+  .passthrough()
+const WhaleNotificationInboxResponseDto = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    content: z.string(),
+    ruleId: z.string().optional(),
+    channels: WhaleNotificationDeliveryMapDto,
+    read: z.boolean(),
+    createdAt: z.string(),
+  })
+  .passthrough()
+const WhaleDiscoverTraderAiTagDto = z
+  .object({
+    key: z.enum(['bullWarGod', 'swingKing', 'smartTrader', 'treasuryKeeper', 'twitterKol']),
+    color: z.string(),
+    bgColor: z.string(),
+    descriptionKey: z
+      .enum(['bullWarGod', 'swingKing', 'smartTrader', 'treasuryKeeper', 'twitterKol'])
+      .optional(),
+  })
+  .passthrough()
+const WhaleDiscoverTraderDto = z
+  .object({
+    variant: z.enum(['recommended', 'detail']),
+    address: z.string(),
+    handle: z.string().nullish(),
+    tag: z.string().nullish(),
+    totalValueUsd: z.number(),
+    pnlUsd: z.number(),
+    pnlLabelKey: z.enum(['realizedPnl', 'realizedPnl1m']).optional(),
+    trades: z.number().optional(),
+    positions: z.number().optional(),
+    winRatePct: z.number(),
+    winRateLabelKey: z.enum(['winRate', 'winRate1m']).optional(),
+    avatarColor: z.string(),
+    aiTags: z.array(WhaleDiscoverTraderAiTagDto).optional(),
+  })
+  .passthrough()
+const WhaleDiscoverResponseDto = z
+  .object({
+    recommended: z.array(WhaleDiscoverTraderDto),
+    details: z.array(WhaleDiscoverTraderDto),
+  })
+  .passthrough()
+const WhaleTraderSummaryPerformanceDto = z
+  .object({
+    address: z.string(),
+    lookbackDays: z.number(),
+    symbolFilter: z.string().optional(),
+    trades: z.number(),
+    positions: z.number(),
+    totalValueUsd: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+    winRatePct: z.number(),
+    pnlUsd: z.number(),
+  })
+  .passthrough()
+const WhaleAssetPerformanceDto = z
+  .object({
+    symbol: z.string(),
+    totalValueUsd: z.number(),
+    trades: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+  })
+  .passthrough()
+const WhaleTradeHistoryItemDto = z
+  .object({
+    address: z.string(),
+    symbol: z.string(),
+    side: z.enum(['LONG', 'SHORT']),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number(),
+    positionAction: z.union([z.literal(1), z.literal(2)]),
+    createTime: z.string(),
+  })
+  .passthrough()
+const WhaleAddressPerformanceResponseDto = z
+  .object({
+    summary: WhaleTraderSummaryPerformanceDto,
+    byAsset: z.array(WhaleAssetPerformanceDto),
+    trades: z.array(WhaleTradeHistoryItemDto),
+  })
+  .passthrough()
+const SnapshotPerpDto = z
+  .object({
+    accountValue: z.number(),
+    totalMarginUsed: z.number(),
+    totalPositionValue: z.number(),
+    withdrawable: z.number(),
+    marginUsagePercent: z.number(),
+    leverageRatio: z.number(),
+    unrealizedPnl: z.number(),
+    roi: z.number(),
+  })
+  .passthrough()
+const SpotBalanceItemDto = z
+  .object({
+    coin: z.string(),
+    total: z.number(),
+    hold: z.number(),
+    value: z.number(),
+    sharePercent: z.number(),
+  })
+  .passthrough()
+const SnapshotSpotDto = z
+  .object({ totalValue: z.number(), balances: z.array(SpotBalanceItemDto) })
+  .passthrough()
+const SnapshotTotalDto = z
+  .object({ accountValue: z.number(), perpPercent: z.number(), spotPercent: z.number() })
+  .passthrough()
+const TraderSnapshotResponseDto = z
+  .object({ perp: SnapshotPerpDto, spot: SnapshotSpotDto, total: SnapshotTotalDto })
+  .passthrough()
+const LeverageDto = z
+  .object({ type: z.enum(['cross', 'isolated']), value: z.number() })
+  .passthrough()
+const PerpPositionDto = z
+  .object({
+    coin: z.string(),
+    side: z.enum(['LONG', 'SHORT']),
+    size: z.number(),
+    entryPrice: z.number(),
+    markPrice: z.number(),
+    liquidationPrice: z.number(),
+    positionValue: z.number(),
+    marginUsed: z.number(),
+    leverage: LeverageDto,
+    unrealizedPnl: z.number(),
+    unrealizedPnlPercent: z.number(),
+    fundingRate: z.number().optional(),
+    roi: z.number(),
+  })
+  .passthrough()
+const SpotBalanceDto = z
+  .object({
+    coin: z.string(),
+    total: z.number(),
+    hold: z.number(),
+    available: z.number(),
+    value: z.number(),
+  })
+  .passthrough()
+const TraderPositionsResponseDto = z
+  .object({ perp: z.array(PerpPositionDto), spot: z.array(SpotBalanceDto) })
+  .passthrough()
+const OpenOrderDto = z
+  .object({
+    orderId: z.number(),
+    coin: z.string(),
+    side: z.enum(['BUY', 'SELL']),
+    type: z.string(),
+    price: z.number(),
+    size: z.number(),
+    origSize: z.number(),
+    value: z.number(),
+    timestamp: z.string(),
+    triggerPrice: z.number().optional(),
+    triggerCondition: z.string().optional(),
+    reduceOnly: z.boolean(),
+  })
+  .passthrough()
+const TraderOpenOrdersResponseDto = z.object({ orders: z.array(OpenOrderDto) }).passthrough()
+const TraderDiscoverTagsResponseDto = z
+  .object({ tag: z.string().nullish(), aiTags: z.array(WhaleDiscoverTraderAiTagDto) })
+  .passthrough()
+const WhaleAlertSide = z.enum(['Long', 'Short'])
+const RealtimeWhaleAlertDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    position_size: z.number(),
+    entry_price: z.number(),
+    liq_price: z.number(),
+    position_value_usd: z.number(),
+    position_action: z.number(),
+    create_time: z.string(),
+    side: WhaleAlertSide,
+  })
+  .passthrough()
+const WhaleTradeDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    side: z.enum(['Long', 'Short']),
+    trade_size: z.number(),
+    price: z.number(),
+    trade_value_usd: z.number(),
+    trade_time: z.string(),
+  })
+  .passthrough()
+const WhaleHoldingDto = z
+  .object({
+    userAddress: z.string(),
+    symbol: z.string(),
+    side: z.enum(['LONG', 'SHORT']),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number().nullable(),
+    pnl: z.number().nullable(),
+    roe: z.number().nullable(),
+    leverage: z.number().nullable(),
+    snapshotTime: z.string(),
+  })
+  .passthrough()
 const AccountExchangeAccountResponseDto = z
   .object({
     id: z.string().nullish(),
@@ -781,955 +1730,6 @@ const StrategyPlazaRunExistingResponseDto = z
 const StrategyPlazaEditSessionResponseDto = z
   .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
   .passthrough()
-const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
-const AdminProfileDto = z
-  .object({
-    id: z.string(),
-    username: z.string(),
-    email: z.string().nullish(),
-    nickName: z.string().nullish(),
-    isFrozen: z.boolean(),
-    menuPermissions: z.array(z.string()),
-  })
-  .passthrough()
-const AdminAuthResponseDto = z
-  .object({
-    accessToken: z.string(),
-    refreshToken: z.string().optional(),
-    expiresIn: z.string().optional(),
-    admin: AdminProfileDto,
-  })
-  .passthrough()
-const AdminRefreshDto = z.object({ refreshToken: z.string() }).passthrough()
-const AdminRegisterDto = z
-  .object({
-    username: z.string(),
-    password: z.string(),
-    email: z.string().optional(),
-    nickName: z.string().optional(),
-    roleCodes: z.array(z.string()).optional(),
-  })
-  .passthrough()
-const AdminMenuPermissionDto = z
-  .object({
-    id: z.string(),
-    parentId: z.string().nullish(),
-    name: z.string(),
-    route: z.string().nullish(),
-    icon: z.string().nullish(),
-    sortOrder: z.number(),
-    code: z.string().nullable(),
-    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
-    children: z.array(z.object({}).partial().passthrough()).optional(),
-  })
-  .passthrough()
-const AdminUserInfoDto = z
-  .object({
-    id: z.string(),
-    username: z.string(),
-    nickName: z.string().nullish(),
-    headPic: z.string().nullish(),
-    menus: z.array(AdminMenuPermissionDto),
-    menuPermissions: z.array(z.string()),
-    featurePermissions: z.array(z.string()),
-    apiPermissions: z.array(z.string()),
-  })
-  .passthrough()
-const AdminAssignedRoleDto = z
-  .object({ id: z.string(), code: z.string(), name: z.string(), description: z.string().nullish() })
-  .passthrough()
-const AdminUserDto = z
-  .object({
-    id: z.string(),
-    username: z.string(),
-    nickName: z.string().nullable(),
-    email: z.string().nullable(),
-    avatarUrl: z.string().nullable(),
-    phone: z.string().nullable(),
-    isFrozen: z.boolean(),
-    roles: z.array(AdminAssignedRoleDto).default([]),
-  })
-  .passthrough()
-const CreateAdminUserDto = z
-  .object({
-    username: z.string(),
-    password: z.string(),
-    nickName: z.string().max(50).optional(),
-    email: z.string().optional(),
-    avatarUrl: z.string().optional(),
-    phone: z.string().optional(),
-    roleIds: z.array(z.string()).optional(),
-  })
-  .passthrough()
-const UpdateAdminUserDto = z
-  .object({
-    nickName: z.string().max(50),
-    email: z.string(),
-    avatarUrl: z.string(),
-    phone: z.string(),
-    isFrozen: z.boolean(),
-    roleIds: z.array(z.string()),
-  })
-  .partial()
-  .passthrough()
-const CreateAdminRoleDto = z
-  .object({
-    code: z.string(),
-    name: z.string(),
-    description: z.string().optional(),
-    menuPermissions: z.array(z.string()).optional(),
-    featurePermissions: z.array(z.string()).optional(),
-    apiPermissions: z.array(z.string()).optional(),
-  })
-  .passthrough()
-const AdminRoleResponseDto = z
-  .object({
-    id: z.string(),
-    code: z.string(),
-    name: z.string(),
-    description: z.string().nullish(),
-    menuPermissions: z.array(z.string()),
-    featurePermissions: z.array(z.string()),
-    apiPermissions: z.array(z.string()),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const UpdateAdminRoleDto = z
-  .object({
-    name: z.string(),
-    description: z.string(),
-    menuPermissions: z.array(z.string()),
-    featurePermissions: z.array(z.string()),
-    apiPermissions: z.array(z.string()),
-  })
-  .partial()
-  .passthrough()
-const AdminDeleteResultResponseDto = z.object({ success: z.boolean() }).passthrough()
-const AdminMenuTreeNodeResponseDto = z
-  .object({
-    id: z.string(),
-    parentId: z.string().nullish(),
-    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
-    title: z.string(),
-    icon: z.string().nullish(),
-    code: z.string().nullish(),
-    path: z.string().nullish(),
-    description: z.string().nullish(),
-    i18nKey: z.string().nullish(),
-    sort: z.number(),
-    isShow: z.boolean(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-    children: z.array(z.object({}).partial().passthrough()),
-  })
-  .passthrough()
-const CreateAdminMenuDto = z
-  .object({
-    parentId: z.string().optional(),
-    type: z.string(),
-    title: z.string(),
-    icon: z.string().optional(),
-    code: z.string().optional(),
-    path: z.string().optional(),
-    description: z.string().optional(),
-    i18nKey: z.string().optional(),
-    sort: z.number().optional().default(0),
-    isShow: z.boolean().optional().default(true),
-  })
-  .passthrough()
-const AdminMenuResponseDto = z
-  .object({
-    id: z.string(),
-    parentId: z.string().nullish(),
-    type: z.enum(['DIRECTORY', 'MENU', 'FEATURE']),
-    title: z.string(),
-    icon: z.string().nullish(),
-    code: z.string().nullish(),
-    path: z.string().nullish(),
-    description: z.string().nullish(),
-    i18nKey: z.string().nullish(),
-    sort: z.number(),
-    isShow: z.boolean(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const UpdateAdminMenuDto = z
-  .object({
-    parentId: z.string(),
-    type: z.string(),
-    title: z.string(),
-    icon: z.string(),
-    code: z.string(),
-    path: z.string(),
-    description: z.string(),
-    i18nKey: z.string(),
-    sort: z.number(),
-    isShow: z.boolean(),
-  })
-  .partial()
-  .passthrough()
-const AdminDataPullTaskResponseDto = z
-  .object({
-    id: z.number(),
-    key: z.string(),
-    name: z.string(),
-    source: z.string().nullish(),
-    type: z.string().nullish(),
-    cron: z.string().nullish(),
-    intervalSeconds: z.number().nullish(),
-    enabled: z.boolean(),
-    cursor: z.string().nullish(),
-    lastStatus: z.string().nullish(),
-    lastRunAt: z.string().datetime({ offset: true }).nullish(),
-    lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
-    lastError: z.string().nullish(),
-    meta: z.object({}).partial().passthrough().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const CreateAdminDataPullTaskDto = z
-  .object({
-    key: z.string(),
-    name: z.string(),
-    source: z.string().nullish(),
-    type: z.string().nullish(),
-    cron: z.string().nullish(),
-    intervalSeconds: z.number().nullish(),
-    enabled: z.boolean().optional().default(true),
-    cursor: z.string().nullish(),
-    meta: z.object({}).partial().passthrough().nullish(),
-  })
-  .passthrough()
-const AdminDataPullExecutionResponseDto = z
-  .object({
-    id: z.number(),
-    taskId: z.number(),
-    status: z.string(),
-    fetchedCount: z.number(),
-    startedAt: z.string().datetime({ offset: true }),
-    finishedAt: z.string().datetime({ offset: true }).nullish(),
-    errorMessage: z.string().nullish(),
-    meta: z.object({}).partial().passthrough().nullish(),
-  })
-  .passthrough()
-const UpdateAdminDataPullTaskDto = z
-  .object({
-    name: z.string(),
-    source: z.string().nullable(),
-    type: z.string().nullable(),
-    cron: z.string().nullable(),
-    intervalSeconds: z.number().nullable(),
-    enabled: z.boolean(),
-    cursor: z.string().nullable(),
-    meta: z.object({}).partial().passthrough().nullable(),
-  })
-  .partial()
-  .passthrough()
-const LiquidationHeatmapResponseDto = z
-  .object({
-    snapshotId: z.number(),
-    symbol: z.string(),
-    exchangeCode: z.string().nullable(),
-    tradingPair: z.string().nullable(),
-    contractType: z.string().nullable(),
-    modelType: z.enum(['MODEL1', 'MODEL2', 'MODEL3']),
-    timeInterval: z.string().nullable(),
-    valueCurrency: z.string(),
-    fetchedAt: z.string().datetime({ offset: true }),
-    effectiveFrom: z.string().datetime({ offset: true }).nullable(),
-    effectiveTo: z.string().datetime({ offset: true }).nullable(),
-    y_axis: z.array(z.number()),
-    liquidation_leverage_data: z.array(z.array(z.number())),
-    price_candlesticks: z.array(z.array(z.union([z.number(), z.string()]))),
-  })
-  .passthrough()
-const CreateOpenInterestDto = z
-  .object({
-    exchange: z.string(),
-    symbol: z.string(),
-    open_interest_usd: z.number(),
-    open_interest_quantity: z.number(),
-    open_interest_by_stable_coin_margin: z.number().optional(),
-    open_interest_by_coin_margin: z.number().optional(),
-    open_interest_quantity_by_coin_margin: z.number().optional(),
-    open_interest_quantity_by_stable_coin_margin: z.number().optional(),
-    open_interest_change_percent_5m: z.number().optional(),
-    open_interest_change_percent_15m: z.number().optional(),
-    open_interest_change_percent_30m: z.number().optional(),
-    open_interest_change_percent_1h: z.number().optional(),
-    open_interest_change_percent_4h: z.number().optional(),
-    open_interest_change_percent_24h: z.number().optional(),
-    data_timestamp: z.string(),
-  })
-  .passthrough()
-const BaseResponseDto = z
-  .object({ data: z.object({}).partial().passthrough(), message: z.string().optional() })
-  .passthrough()
-const OpenInterestDto = z
-  .object({
-    exchange: z.string(),
-    symbol: z.string(),
-    open_interest_usd: z.number(),
-    open_interest_quantity: z.number(),
-    open_interest_by_stable_coin_margin: z.number().optional(),
-    open_interest_by_coin_margin: z.number().optional(),
-    open_interest_quantity_by_coin_margin: z.number().optional(),
-    open_interest_quantity_by_stable_coin_margin: z.number().optional(),
-    open_interest_change_percent_5m: z.number().optional(),
-    open_interest_change_percent_15m: z.number().optional(),
-    open_interest_change_percent_30m: z.number().optional(),
-    open_interest_change_percent_1h: z.number().optional(),
-    open_interest_change_percent_4h: z.number().optional(),
-    open_interest_change_percent_24h: z.number().optional(),
-    data_timestamp: z.string().optional(),
-  })
-  .passthrough()
-const OiAggregateTotalDto = z
-  .object({ qty: z.number(), usd: z.number(), h24: z.number() })
-  .passthrough()
-const OiAggregateRowDto = z
-  .object({
-    exchange: z.string(),
-    qty: z.number(),
-    usd: z.number(),
-    pct: z.number(),
-    h1: z.number(),
-    h4: z.number(),
-    h24: z.number(),
-    oiVol: z.number(),
-  })
-  .passthrough()
-const OiAggregateSnapshotDto = z
-  .object({
-    symbol: z.string(),
-    dataTimestamp: z.string(),
-    total: OiAggregateTotalDto,
-    rows: z.array(OiAggregateRowDto),
-  })
-  .passthrough()
-const OpenInterestStatsDto = z
-  .object({
-    symbol: z.string(),
-    startTime: z.string().datetime({ offset: true }),
-    endTime: z.string().datetime({ offset: true }),
-    dataPoints: z.number(),
-    max: z.number(),
-    min: z.number(),
-    avg: z.number(),
-    latest: z.number(),
-    earliest: z.number(),
-    change: z.number(),
-    changePercent: z.number(),
-  })
-  .passthrough()
-const OrderbookPairConfigResponseDto = z
-  .object({
-    id: z.string(),
-    pairId: z.string(),
-    venue: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    venueType: z.enum(['CEX', 'DEX']),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
-    enabled: z.boolean(),
-    pullIntervalSeconds: z.number().nullish(),
-    depthLevels: z.number().nullish(),
-    priority: z.number(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    description: z.string().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const CreateOrderbookPairConfigDto = z
-  .object({
-    pairId: z.string().regex(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
-    venue: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    venueType: z.enum(['CEX', 'DEX']),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
-    enabled: z.boolean().optional().default(true),
-    pullIntervalSeconds: z.number().gte(1).nullish(),
-    depthLevels: z.number().gte(5).lte(500).nullish(),
-    priority: z.number().gte(1).lte(1000).optional().default(100),
-    metadata: z.object({}).partial().passthrough().optional(),
-    description: z.string().optional(),
-  })
-  .passthrough()
-const UpdateOrderbookPairConfigDto = z
-  .object({
-    enabled: z.boolean(),
-    pullIntervalSeconds: z.number().gte(1).nullable(),
-    depthLevels: z.number().gte(5).lte(500).nullable(),
-    priority: z.number().gte(1).lte(1000),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    description: z.string().nullable(),
-  })
-  .partial()
-  .passthrough()
-const OrderBookLevelDto = z.object({ price: z.number(), size: z.number() }).passthrough()
-const VenueOrderBookDto = z
-  .object({
-    venueId: z.string(),
-    marketKey: z.string(),
-    bids: z.array(OrderBookLevelDto),
-    asks: z.array(OrderBookLevelDto),
-    exchangeTs: z.number().nullish(),
-    receivedTs: z.number(),
-    version: z.number(),
-  })
-  .passthrough()
-const CryptoStockQuoteResponseDto = z
-  .object({
-    id: z.number(),
-    symbol: z.string(),
-    name: z.string().nullish(),
-    exchange: z.string().nullish(),
-    price: z.string(),
-    openPrice: z.string().nullish(),
-    highPrice: z.string().nullish(),
-    lowPrice: z.string().nullish(),
-    closePrice: z.string().nullish(),
-    volume: z.string().nullish(),
-    turnover: z.string().nullish(),
-    priceChange: z.string().nullish(),
-    priceChangePercent: z.string().nullish(),
-    marketCap: z.string().nullish(),
-    peRatio: z.string().nullish(),
-    high52Week: z.string().nullish(),
-    low52Week: z.string().nullish(),
-    assetSymbol: z.string().nullish(),
-    assetLogoUrl: z.string().nullish(),
-    companyLogoUrl: z.string().nullish(),
-    holdingsValue: z.string().nullish(),
-    holdingsAmount: z.string().nullish(),
-    mNav: z.string().nullish(),
-    holdingValue: z.string().nullish(),
-    holdingQuantity: z.string().nullish(),
-    companyType: z.string().nullish(),
-    infoParagraphs: z.array(z.string()).optional(),
-    source: z.string(),
-    quoteTimestamp: z.string().datetime({ offset: true }),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const TradesPairConfigResponseDto = z
-  .object({
-    id: z.string(),
-    pairId: z.string(),
-    exchange: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
-    canonicalInstId: z.string().nullish(),
-    enabled: z.boolean(),
-    priority: z.number(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    description: z.string().nullish(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough()
-const CreateTradesPairConfigDto = z
-  .object({
-    pairId: z.string().regex(/^[A-Z0-9_-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
-    exchange: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
-    enabled: z.boolean().optional().default(true),
-    priority: z.number().gte(1).lte(1000).optional().default(100),
-    metadata: z.object({}).partial().passthrough().optional(),
-    description: z.string().optional(),
-  })
-  .passthrough()
-const UpdateTradesPairConfigDto = z
-  .object({
-    enabled: z.boolean(),
-    priority: z.number().gte(1).lte(1000),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    description: z.string().nullable(),
-  })
-  .partial()
-  .passthrough()
-const WhaleNotificationChannelsDto = z
-  .object({ web: z.boolean(), email: z.boolean(), telegram: z.boolean() })
-  .passthrough()
-const WhaleNotificationRuleResponseDto = z
-  .object({
-    id: z.string(),
-    type: z.enum(['ADDRESS', 'SYMBOL']),
-    address: z.string().optional(),
-    symbol: z.string().optional(),
-    thresholdUsd: z.number(),
-    note: z.string().optional(),
-    channels: WhaleNotificationChannelsDto,
-    isActive: z.boolean(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough()
-const CreateWhaleNotificationRuleDto = z
-  .object({
-    type: z.enum(['ADDRESS', 'SYMBOL']),
-    address: z.string().optional(),
-    symbol: z.string().optional(),
-    thresholdUsd: z.number(),
-    note: z.string().optional(),
-    channels: WhaleNotificationChannelsDto,
-  })
-  .passthrough()
-const UpdateWhaleNotificationRuleDto = z
-  .object({
-    thresholdUsd: z.number(),
-    note: z.string(),
-    channels: WhaleNotificationChannelsDto,
-    isActive: z.boolean(),
-  })
-  .partial()
-  .passthrough()
-const WhaleNotificationDeliveryMapDto = z
-  .object({ web: z.string(), email: z.string(), telegram: z.string() })
-  .passthrough()
-const WhaleNotificationInboxResponseDto = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    content: z.string(),
-    ruleId: z.string().optional(),
-    channels: WhaleNotificationDeliveryMapDto,
-    read: z.boolean(),
-    createdAt: z.string(),
-  })
-  .passthrough()
-const WhaleDiscoverTraderAiTagDto = z
-  .object({
-    key: z.enum(['bullWarGod', 'swingKing', 'smartTrader', 'treasuryKeeper', 'twitterKol']),
-    color: z.string(),
-    bgColor: z.string(),
-    descriptionKey: z
-      .enum(['bullWarGod', 'swingKing', 'smartTrader', 'treasuryKeeper', 'twitterKol'])
-      .optional(),
-  })
-  .passthrough()
-const WhaleDiscoverTraderDto = z
-  .object({
-    variant: z.enum(['recommended', 'detail']),
-    address: z.string(),
-    handle: z.string().nullish(),
-    tag: z.string().nullish(),
-    totalValueUsd: z.number(),
-    pnlUsd: z.number(),
-    pnlLabelKey: z.enum(['realizedPnl', 'realizedPnl1m']).optional(),
-    trades: z.number().optional(),
-    positions: z.number().optional(),
-    winRatePct: z.number(),
-    winRateLabelKey: z.enum(['winRate', 'winRate1m']).optional(),
-    avatarColor: z.string(),
-    aiTags: z.array(WhaleDiscoverTraderAiTagDto).optional(),
-  })
-  .passthrough()
-const WhaleDiscoverResponseDto = z
-  .object({
-    recommended: z.array(WhaleDiscoverTraderDto),
-    details: z.array(WhaleDiscoverTraderDto),
-  })
-  .passthrough()
-const WhaleTraderSummaryPerformanceDto = z
-  .object({
-    address: z.string(),
-    lookbackDays: z.number(),
-    symbolFilter: z.string().optional(),
-    trades: z.number(),
-    positions: z.number(),
-    totalValueUsd: z.number(),
-    longCount: z.number(),
-    shortCount: z.number(),
-    winRatePct: z.number(),
-    pnlUsd: z.number(),
-  })
-  .passthrough()
-const WhaleAssetPerformanceDto = z
-  .object({
-    symbol: z.string(),
-    totalValueUsd: z.number(),
-    trades: z.number(),
-    longCount: z.number(),
-    shortCount: z.number(),
-  })
-  .passthrough()
-const WhaleTradeHistoryItemDto = z
-  .object({
-    address: z.string(),
-    symbol: z.string(),
-    side: z.enum(['LONG', 'SHORT']),
-    positionSize: z.number(),
-    positionValueUsd: z.number(),
-    entryPrice: z.number(),
-    liquidationPrice: z.number(),
-    positionAction: z.union([z.literal(1), z.literal(2)]),
-    createTime: z.string(),
-  })
-  .passthrough()
-const WhaleAddressPerformanceResponseDto = z
-  .object({
-    summary: WhaleTraderSummaryPerformanceDto,
-    byAsset: z.array(WhaleAssetPerformanceDto),
-    trades: z.array(WhaleTradeHistoryItemDto),
-  })
-  .passthrough()
-const SnapshotPerpDto = z
-  .object({
-    accountValue: z.number(),
-    totalMarginUsed: z.number(),
-    totalPositionValue: z.number(),
-    withdrawable: z.number(),
-    marginUsagePercent: z.number(),
-    leverageRatio: z.number(),
-    unrealizedPnl: z.number(),
-    roi: z.number(),
-  })
-  .passthrough()
-const SpotBalanceItemDto = z
-  .object({
-    coin: z.string(),
-    total: z.number(),
-    hold: z.number(),
-    value: z.number(),
-    sharePercent: z.number(),
-  })
-  .passthrough()
-const SnapshotSpotDto = z
-  .object({ totalValue: z.number(), balances: z.array(SpotBalanceItemDto) })
-  .passthrough()
-const SnapshotTotalDto = z
-  .object({ accountValue: z.number(), perpPercent: z.number(), spotPercent: z.number() })
-  .passthrough()
-const TraderSnapshotResponseDto = z
-  .object({ perp: SnapshotPerpDto, spot: SnapshotSpotDto, total: SnapshotTotalDto })
-  .passthrough()
-const LeverageDto = z
-  .object({ type: z.enum(['cross', 'isolated']), value: z.number() })
-  .passthrough()
-const PerpPositionDto = z
-  .object({
-    coin: z.string(),
-    side: z.enum(['LONG', 'SHORT']),
-    size: z.number(),
-    entryPrice: z.number(),
-    markPrice: z.number(),
-    liquidationPrice: z.number(),
-    positionValue: z.number(),
-    marginUsed: z.number(),
-    leverage: LeverageDto,
-    unrealizedPnl: z.number(),
-    unrealizedPnlPercent: z.number(),
-    fundingRate: z.number().optional(),
-    roi: z.number(),
-  })
-  .passthrough()
-const SpotBalanceDto = z
-  .object({
-    coin: z.string(),
-    total: z.number(),
-    hold: z.number(),
-    available: z.number(),
-    value: z.number(),
-  })
-  .passthrough()
-const TraderPositionsResponseDto = z
-  .object({ perp: z.array(PerpPositionDto), spot: z.array(SpotBalanceDto) })
-  .passthrough()
-const OpenOrderDto = z
-  .object({
-    orderId: z.number(),
-    coin: z.string(),
-    side: z.enum(['BUY', 'SELL']),
-    type: z.string(),
-    price: z.number(),
-    size: z.number(),
-    origSize: z.number(),
-    value: z.number(),
-    timestamp: z.string(),
-    triggerPrice: z.number().optional(),
-    triggerCondition: z.string().optional(),
-    reduceOnly: z.boolean(),
-  })
-  .passthrough()
-const TraderOpenOrdersResponseDto = z.object({ orders: z.array(OpenOrderDto) }).passthrough()
-const TraderDiscoverTagsResponseDto = z
-  .object({ tag: z.string().nullish(), aiTags: z.array(WhaleDiscoverTraderAiTagDto) })
-  .passthrough()
-const TradingPairConfigResponseDto = z
-  .object({
-    id: z.string(),
-    displaySymbol: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    venueType: z.enum(['DEX', 'CEX']),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
-    pricePrecision: z.number(),
-    quantityPrecision: z.number(),
-    minNotional: z.number().optional(),
-    minQuantity: z.number().optional(),
-    enabled: z.boolean(),
-    exchange: z.enum(['BINANCE', 'OKX', 'BYBIT']).optional(),
-    exchangeSymbol: z.string().optional(),
-    maxLeverage: z.number().optional(),
-    contractSize: z.number().optional(),
-    chainId: z.number().optional(),
-    baseTokenAddress: z.string().optional(),
-    quoteTokenAddress: z.string().optional(),
-    routerAddress: z.string().optional(),
-    poolAddress: z.string().optional(),
-    dexName: z.string().optional(),
-  })
-  .passthrough()
-const LongShortRatioPointResponseDto = z
-  .object({
-    tradingPairId: z.string(),
-    interval: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
-    timestamp: z.string(),
-    longShortRatio: z.string(),
-    longAccountRatio: z.string().nullish(),
-    shortAccountRatio: z.string().nullish(),
-    longVolume: z.string().nullish(),
-    shortVolume: z.string().nullish(),
-    longShortAccountRatio: z.string().nullish(),
-    source: z.string(),
-  })
-  .passthrough()
-const ExchangeLongShortRatioResponseDto = z
-  .object({
-    rank: z.number(),
-    name: z.string(),
-    logoUrl: z.string().optional(),
-    longPercent: z.number(),
-    shortPercent: z.number(),
-    longAmountUsd: z.number(),
-    shortAmountUsd: z.number(),
-  })
-  .passthrough()
-const MarketTradeResponseDto = z
-  .object({
-    id: z.number(),
-    exchange: z.string(),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL', 'FUTURE']),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    tradeId: z.string(),
-    price: z.string(),
-    size: z.string(),
-    side: z.enum(['buy', 'sell']),
-    tradeTimestamp: z.string(),
-    createdAt: z.string(),
-  })
-  .passthrough()
-const AggregatedVolumeResponseDto = z
-  .object({
-    id: z.number(),
-    exchange: z.string(),
-    symbol: z.string(),
-    instrumentType: z.enum(['SPOT', 'PERPETUAL']).optional(),
-    volumeUsd: z.string(),
-    dataTimestamp: z.string(),
-    source: z.string(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough()
-const AggregatedVolumeRowDto = z.object({ exchange: z.string(), value: z.number() }).passthrough()
-const AggregatedVolumeSnapshotResponseDto = z
-  .object({ symbol: z.string(), total: z.number(), rows: z.array(AggregatedVolumeRowDto) })
-  .passthrough()
-const TickerResponseDto = z
-  .object({
-    symbol: z.string(),
-    exchange: z.string().optional(),
-    currentPrice: z.string(),
-    indexPrice: z.string().optional(),
-    priceChangePercent24h: z.string().optional(),
-    volumeUsd: z.string(),
-    openInterestUsd: z.string().optional(),
-    fundingRate: z.string().optional(),
-    nextFundingTime: z.string().optional(),
-    high24h: z.string().optional(),
-    low24h: z.string().optional(),
-  })
-  .passthrough()
-const PredictionMarketOutcomeDto = z
-  .object({ label: z.string(), probability: z.string() })
-  .passthrough()
-const PredictionMarketRulesDto = z
-  .object({ paragraphs: z.array(z.string()), createdAt: z.string().optional() })
-  .passthrough()
-const PredictionMarketCardDto = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    options: z.array(PredictionMarketOutcomeDto).optional(),
-    probability: z.string().optional(),
-    status: z.string().optional(),
-    volume24h: z.string().optional(),
-    volumeTotal: z.string().optional(),
-    openInterest: z.string().optional(),
-    rules: PredictionMarketRulesDto.optional(),
-  })
-  .passthrough()
-const LiquidationSummaryItemDto = z
-  .object({
-    timeframe: z.enum(['1h', '4h', '12h', '24h']),
-    totalUsd: z.number(),
-    longUsd: z.number(),
-    shortUsd: z.number(),
-  })
-  .passthrough()
-const AggregatedLiquidationSummaryDto = z
-  .object({ symbol: z.string(), items: z.array(LiquidationSummaryItemDto) })
-  .passthrough()
-const ExchangeLiquidationRowDto = z
-  .object({
-    exchange: z.string(),
-    symbol: z.string(),
-    timeframe: z.enum(['1h', '4h', '12h', '24h']),
-    amountUsd: z.number(),
-    longUsd: z.number(),
-    shortUsd: z.number(),
-    longShare: z.number().optional(),
-    isTotal: z.boolean().optional(),
-  })
-  .passthrough()
-const ExchangeLiquidationResponseDto = z
-  .object({
-    symbol: z.string(),
-    timeframe: z.enum(['1h', '4h', '12h', '24h']),
-    rows: z.array(ExchangeLiquidationRowDto),
-  })
-  .passthrough()
-const AggregatedOrderbookMarketResponseDto = z
-  .object({ base: z.string(), type: z.enum(['spot', 'perp']), venues: z.array(z.string()) })
-  .passthrough()
-const VenueDetailDto = z.object({ venueId: z.string(), size: z.number() }).passthrough()
-const AggregatedLevelDto = z
-  .object({ price: z.number(), sizeTotal: z.number(), details: z.array(VenueDetailDto) })
-  .passthrough()
-const AggregatedOrderbookResponseDto = z
-  .object({
-    marketKey: z.string(),
-    base: z.string(),
-    type: z.string(),
-    asks: z.array(AggregatedLevelDto),
-    bids: z.array(AggregatedLevelDto),
-    midPrice: z.number(),
-    updatedAt: z.number(),
-    venues: z.array(z.string()),
-    mergedQuotes: z.array(z.string()),
-  })
-  .passthrough()
-const KlineBarDto = z
-  .object({
-    time: z.number(),
-    open: z.number(),
-    high: z.number(),
-    low: z.number(),
-    close: z.number(),
-    volume: z.number(),
-  })
-  .passthrough()
-const ExchangeConfigResponseDto = z
-  .object({
-    id: z.string(),
-    code: z.string(),
-    name: z.string(),
-    avatarUrl: z.string().nullish(),
-    intro: z.string().nullish(),
-    websiteUrl: z.string().nullish(),
-    venueType: z.enum(['CEX', 'DEX']).nullish(),
-    enabled: z.boolean(),
-    sort: z.number(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const CreateExchangeConfigDto = z
-  .object({
-    code: z.string().regex(/^[A-Z0-9_]+$/),
-    name: z.string(),
-    avatarUrl: z.string().nullish(),
-    intro: z.string().nullish(),
-    websiteUrl: z.string().nullish(),
-    venueType: z.enum(['CEX', 'DEX']).nullish(),
-    enabled: z.boolean().optional().default(true),
-    sort: z.number().gte(0).lte(100000).optional().default(100),
-    metadata: z.object({}).partial().passthrough().nullish(),
-  })
-  .passthrough()
-const UpdateExchangeConfigDto = z
-  .object({
-    code: z.string().regex(/^[A-Z0-9_]+$/),
-    name: z.string(),
-    avatarUrl: z.string().nullable(),
-    intro: z.string().nullable(),
-    websiteUrl: z.string().nullable(),
-    venueType: z.enum(['CEX', 'DEX']).nullable(),
-    enabled: z.boolean(),
-    sort: z.number().gte(0).lte(100000),
-    metadata: z.object({}).partial().passthrough().nullable(),
-  })
-  .partial()
-  .passthrough()
-const WhaleAlertSide = z.enum(['Long', 'Short'])
-const RealtimeWhaleAlertDto = z
-  .object({
-    user_address: z.string(),
-    symbol: z.string(),
-    position_size: z.number(),
-    entry_price: z.number(),
-    liq_price: z.number(),
-    position_value_usd: z.number(),
-    position_action: z.number(),
-    create_time: z.string(),
-    side: WhaleAlertSide,
-  })
-  .passthrough()
-const WhaleTradeDto = z
-  .object({
-    user_address: z.string(),
-    symbol: z.string(),
-    side: z.enum(['Long', 'Short']),
-    trade_size: z.number(),
-    price: z.number(),
-    trade_value_usd: z.number(),
-    trade_time: z.string(),
-  })
-  .passthrough()
-const WhaleHoldingDto = z
-  .object({
-    userAddress: z.string(),
-    symbol: z.string(),
-    side: z.enum(['LONG', 'SHORT']),
-    positionSize: z.number(),
-    positionValueUsd: z.number(),
-    entryPrice: z.number(),
-    liquidationPrice: z.number().nullable(),
-    pnl: z.number().nullable(),
-    roe: z.number().nullable(),
-    leverage: z.number().nullable(),
-    snapshotTime: z.string(),
-  })
-  .passthrough()
 
 export const schemas = {
   SettingResponseDto,
@@ -1761,6 +1761,98 @@ export const schemas = {
   BetaCodeResponseDto,
   CreateBetaCodeBatchDto,
   UpdateBetaCodeStatusDto,
+  AdminLoginDto,
+  AdminProfileDto,
+  AdminAuthResponseDto,
+  AdminRefreshDto,
+  AdminRegisterDto,
+  AdminMenuPermissionDto,
+  AdminUserInfoDto,
+  AdminAssignedRoleDto,
+  AdminUserDto,
+  CreateAdminUserDto,
+  UpdateAdminUserDto,
+  CreateAdminRoleDto,
+  AdminRoleResponseDto,
+  UpdateAdminRoleDto,
+  AdminDeleteResultResponseDto,
+  AdminMenuTreeNodeResponseDto,
+  CreateAdminMenuDto,
+  AdminMenuResponseDto,
+  UpdateAdminMenuDto,
+  TradingPairConfigResponseDto,
+  LongShortRatioPointResponseDto,
+  BaseResponseDto,
+  ExchangeLongShortRatioResponseDto,
+  MarketTradeResponseDto,
+  AggregatedVolumeResponseDto,
+  AggregatedVolumeRowDto,
+  AggregatedVolumeSnapshotResponseDto,
+  TickerResponseDto,
+  LiquidationHeatmapResponseDto,
+  LiquidationSummaryItemDto,
+  AggregatedLiquidationSummaryDto,
+  ExchangeLiquidationRowDto,
+  ExchangeLiquidationResponseDto,
+  OrderbookPairConfigResponseDto,
+  CreateOrderbookPairConfigDto,
+  UpdateOrderbookPairConfigDto,
+  OrderBookLevelDto,
+  VenueOrderBookDto,
+  AggregatedOrderbookMarketResponseDto,
+  VenueDetailDto,
+  AggregatedLevelDto,
+  AggregatedOrderbookResponseDto,
+  KlineBarDto,
+  TradesPairConfigResponseDto,
+  CreateTradesPairConfigDto,
+  UpdateTradesPairConfigDto,
+  ExchangeConfigResponseDto,
+  CreateExchangeConfigDto,
+  UpdateExchangeConfigDto,
+  CreateOpenInterestDto,
+  OpenInterestDto,
+  OiAggregateTotalDto,
+  OiAggregateRowDto,
+  OiAggregateSnapshotDto,
+  OpenInterestStatsDto,
+  PredictionMarketOutcomeDto,
+  PredictionMarketRulesDto,
+  PredictionMarketCardDto,
+  CryptoStockQuoteResponseDto,
+  AdminDataPullTaskResponseDto,
+  CreateAdminDataPullTaskDto,
+  AdminDataPullExecutionResponseDto,
+  UpdateAdminDataPullTaskDto,
+  WhaleNotificationChannelsDto,
+  WhaleNotificationRuleResponseDto,
+  CreateWhaleNotificationRuleDto,
+  UpdateWhaleNotificationRuleDto,
+  WhaleNotificationDeliveryMapDto,
+  WhaleNotificationInboxResponseDto,
+  WhaleDiscoverTraderAiTagDto,
+  WhaleDiscoverTraderDto,
+  WhaleDiscoverResponseDto,
+  WhaleTraderSummaryPerformanceDto,
+  WhaleAssetPerformanceDto,
+  WhaleTradeHistoryItemDto,
+  WhaleAddressPerformanceResponseDto,
+  SnapshotPerpDto,
+  SpotBalanceItemDto,
+  SnapshotSpotDto,
+  SnapshotTotalDto,
+  TraderSnapshotResponseDto,
+  LeverageDto,
+  PerpPositionDto,
+  SpotBalanceDto,
+  TraderPositionsResponseDto,
+  OpenOrderDto,
+  TraderOpenOrdersResponseDto,
+  TraderDiscoverTagsResponseDto,
+  WhaleAlertSide,
+  RealtimeWhaleAlertDto,
+  WhaleTradeDto,
+  WhaleHoldingDto,
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
@@ -1811,98 +1903,6 @@ export const schemas = {
   StrategyPlazaRunRequestDto,
   StrategyPlazaRunExistingResponseDto,
   StrategyPlazaEditSessionResponseDto,
-  AdminLoginDto,
-  AdminProfileDto,
-  AdminAuthResponseDto,
-  AdminRefreshDto,
-  AdminRegisterDto,
-  AdminMenuPermissionDto,
-  AdminUserInfoDto,
-  AdminAssignedRoleDto,
-  AdminUserDto,
-  CreateAdminUserDto,
-  UpdateAdminUserDto,
-  CreateAdminRoleDto,
-  AdminRoleResponseDto,
-  UpdateAdminRoleDto,
-  AdminDeleteResultResponseDto,
-  AdminMenuTreeNodeResponseDto,
-  CreateAdminMenuDto,
-  AdminMenuResponseDto,
-  UpdateAdminMenuDto,
-  AdminDataPullTaskResponseDto,
-  CreateAdminDataPullTaskDto,
-  AdminDataPullExecutionResponseDto,
-  UpdateAdminDataPullTaskDto,
-  LiquidationHeatmapResponseDto,
-  CreateOpenInterestDto,
-  BaseResponseDto,
-  OpenInterestDto,
-  OiAggregateTotalDto,
-  OiAggregateRowDto,
-  OiAggregateSnapshotDto,
-  OpenInterestStatsDto,
-  OrderbookPairConfigResponseDto,
-  CreateOrderbookPairConfigDto,
-  UpdateOrderbookPairConfigDto,
-  OrderBookLevelDto,
-  VenueOrderBookDto,
-  CryptoStockQuoteResponseDto,
-  TradesPairConfigResponseDto,
-  CreateTradesPairConfigDto,
-  UpdateTradesPairConfigDto,
-  WhaleNotificationChannelsDto,
-  WhaleNotificationRuleResponseDto,
-  CreateWhaleNotificationRuleDto,
-  UpdateWhaleNotificationRuleDto,
-  WhaleNotificationDeliveryMapDto,
-  WhaleNotificationInboxResponseDto,
-  WhaleDiscoverTraderAiTagDto,
-  WhaleDiscoverTraderDto,
-  WhaleDiscoverResponseDto,
-  WhaleTraderSummaryPerformanceDto,
-  WhaleAssetPerformanceDto,
-  WhaleTradeHistoryItemDto,
-  WhaleAddressPerformanceResponseDto,
-  SnapshotPerpDto,
-  SpotBalanceItemDto,
-  SnapshotSpotDto,
-  SnapshotTotalDto,
-  TraderSnapshotResponseDto,
-  LeverageDto,
-  PerpPositionDto,
-  SpotBalanceDto,
-  TraderPositionsResponseDto,
-  OpenOrderDto,
-  TraderOpenOrdersResponseDto,
-  TraderDiscoverTagsResponseDto,
-  TradingPairConfigResponseDto,
-  LongShortRatioPointResponseDto,
-  ExchangeLongShortRatioResponseDto,
-  MarketTradeResponseDto,
-  AggregatedVolumeResponseDto,
-  AggregatedVolumeRowDto,
-  AggregatedVolumeSnapshotResponseDto,
-  TickerResponseDto,
-  PredictionMarketOutcomeDto,
-  PredictionMarketRulesDto,
-  PredictionMarketCardDto,
-  LiquidationSummaryItemDto,
-  AggregatedLiquidationSummaryDto,
-  ExchangeLiquidationRowDto,
-  ExchangeLiquidationResponseDto,
-  AggregatedOrderbookMarketResponseDto,
-  VenueDetailDto,
-  AggregatedLevelDto,
-  AggregatedOrderbookResponseDto,
-  KlineBarDto,
-  ExchangeConfigResponseDto,
-  CreateExchangeConfigDto,
-  UpdateExchangeConfigDto,
-  WhaleAlertSide,
-  RealtimeWhaleAlertDto,
-  WhaleTradeDto,
-  WhaleHoldingDto,
 }
 
 const endpoints = makeApi([
