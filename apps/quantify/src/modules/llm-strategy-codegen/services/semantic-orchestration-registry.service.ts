@@ -25,6 +25,7 @@ const PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_KEY = 'portfolioRisk.substrategy_exposu
 const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
 const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
+const PROGRAM_DCA_KEY = 'program.dca'
 // Phase 5 S12 (#1118): event_listener
 const PROGRAM_EVENT_LISTENER_KEY = 'program.event_listener'
 const EVENT_LISTENER_PERMISSION_SCOPE_PATTERN = /^[a-z][a-z0-9_:]{2,63}$/u
@@ -291,6 +292,51 @@ const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
       domain: 'guard',
       verb: 'manage',
       object: 'limit_ladder',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+const PROGRAM_DCA_CONTRACT: SemanticOrchestrationContract = {
+  id: 'program.dca',
+  kind: 'program',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'manage',
+      object: 'dca_schedule',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'account_equity',
+    },
+  ],
+  stateRequirements: [
+    {
+      domain: 'state',
+      verb: 'read_write',
+      object: 'dca_fired_count',
+    },
+  ],
+  orderRequirements: [
+    {
+      domain: 'order',
+      verb: 'support',
+      object: 'market_order',
+    },
+  ],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'guard',
+      verb: 'manage',
+      object: 'dca_schedule',
     },
   ],
   executableSinceVersion: CURRENT_SEMANTIC_VERSION,
@@ -636,6 +682,7 @@ export class SemanticOrchestrationRegistryService {
     [PORTFOLIO_SYMBOL_EXPOSURE_CAP_KEY, PORTFOLIO_SYMBOL_EXPOSURE_CAP_CONTRACT],
     [PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_KEY, PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_CONTRACT],
     [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
+    [PROGRAM_DCA_KEY, PROGRAM_DCA_CONTRACT],
     [PROGRAM_DYNAMIC_GRID_KEY, PROGRAM_DYNAMIC_GRID_CONTRACT],
     [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
     [PROGRAM_EVENT_LISTENER_KEY, PROGRAM_EVENT_LISTENER_CONTRACT],
@@ -797,7 +844,43 @@ export class SemanticOrchestrationRegistryService {
     if (node.key === PROGRAM_EVENT_LISTENER_KEY) {
       return this.validateEventListenerProgramNode(node, siblingNodes)
     }
+    if (node.key === PROGRAM_DCA_KEY) {
+      return this.validateDcaProgramNode(node)
+    }
     return this.validateFixedGridGatedNode(node)
+  }
+
+  private validateDcaProgramNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.program.dca[${node.id}]`
+    const pushSlot = (field: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.program.dca.${field}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    const programKind = typeof node.programKind === 'string'
+      ? node.programKind
+      : readOrchestrationParamString(node, 'programKind')
+
+    if (programKind !== 'dca') {
+      pushSlot('program_kind', '请确认 programKind 为 dca')
+    }
+    if (node.onDeactivate !== undefined && node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') {
+      pushSlot('on_deactivate', '请确认停用时行为（cancel/keep/close）')
+    }
+    if (node.rebuildPolicy !== undefined && node.rebuildPolicy !== 'static') {
+      pushSlot('rebuild_policy', '请确认重建策略（仅支持 static）')
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
   }
 
   private validateFixedGridGatedNode(
@@ -1242,11 +1325,16 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('unsupported_kind', '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource / scope.subStrategy')
       return { ok: false, missingSlots }
     }
-    if (node.symbolScopeKind !== 'symbol') {
+    const symbolScopeKind = typeof node.symbolScopeKind === 'string'
+      ? node.symbolScopeKind
+      : readOrchestrationParamString(node, 'symbolScopeKind')
+    if (symbolScopeKind !== 'symbol') {
       pushSlot('symbol.scope_kind', '请确认 scopeKind 为 symbol')
     }
 
-    const symbols = node.symbols
+    const symbols = Array.isArray(node.symbols)
+      ? node.symbols
+      : readOrchestrationParamArray(node, 'symbols')
     if (!Array.isArray(symbols) || symbols.length === 0) {
       pushSlot('symbol.symbols', '请确认要绑定的标的列表')
       return { ok: false, missingSlots }
@@ -1274,8 +1362,11 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('symbol.symbols', '标的列表不允许重复')
     }
 
-    if (node.primarySymbol !== undefined) {
-      const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+    const primarySymbol = typeof node.primarySymbol === 'string'
+      ? node.primarySymbol
+      : readOrchestrationParamString(node, 'primarySymbol')
+    if (primarySymbol !== undefined) {
+      const primary = primarySymbol.trim()
       if (primary === '' || !dedupedSet.has(primary)) {
         pushSlot('symbol.primary_symbol', '主标的必须在标的列表中')
       }
@@ -1290,7 +1381,10 @@ export class SemanticOrchestrationRegistryService {
         && other.status === 'locked',
     )
     for (const other of otherSupportedScopes) {
-      const otherSymbols = Array.isArray(other.symbols) ? other.symbols : []
+      if (sameOrchestrationSymbolScope(trimmedSymbols, primarySymbol ?? '', other)) {
+        continue
+      }
+      const otherSymbols = Array.isArray(other.symbols) ? other.symbols : readOrchestrationParamArray(other, 'symbols') ?? []
       const overlap = otherSymbols.some(
         (s) => typeof s === 'string' && dedupedSet.has(s.trim()),
       )
@@ -1299,10 +1393,11 @@ export class SemanticOrchestrationRegistryService {
         break
       }
     }
-    const myPrimary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+    const myPrimary = typeof primarySymbol === 'string' ? primarySymbol.trim() : ''
     if (myPrimary !== '') {
       const collision = otherSupportedScopes.some(
-        (other) => typeof other.primarySymbol === 'string' && other.primarySymbol.trim() === myPrimary,
+        (other) => !sameOrchestrationSymbolScope(trimmedSymbols, myPrimary, other)
+          && (typeof other.primarySymbol === 'string' ? other.primarySymbol : readOrchestrationParamString(other, 'primarySymbol'))?.trim() === myPrimary,
       )
       if (collision) {
         pushSlot('symbol.primary_symbol_collision', '多 scope 主标的必须各自唯一')
@@ -1773,4 +1868,36 @@ export class SemanticOrchestrationRegistryService {
 
     return { ok: missingSlots.length === 0, missingSlots }
   }
+}
+
+function readOrchestrationParams(node: SemanticOrchestrationNode): Record<string, unknown> {
+  return node.params && typeof node.params === 'object' && !Array.isArray(node.params)
+    ? node.params as Record<string, unknown>
+    : {}
+}
+
+function readOrchestrationParamString(node: SemanticOrchestrationNode, key: string): string | undefined {
+  const value = readOrchestrationParams(node)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function readOrchestrationParamArray(node: SemanticOrchestrationNode, key: string): unknown[] | undefined {
+  const value = readOrchestrationParams(node)[key]
+  return Array.isArray(value) ? value : undefined
+}
+
+function sameOrchestrationSymbolScope(
+  symbols: readonly string[],
+  primarySymbol: string,
+  other: SemanticOrchestrationNode,
+): boolean {
+  const otherSymbols = (Array.isArray(other.symbols) ? other.symbols : readOrchestrationParamArray(other, 'symbols') ?? [])
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.trim())
+    .sort()
+  const normalized = [...symbols].sort()
+  const otherPrimary = (typeof other.primarySymbol === 'string' ? other.primarySymbol : readOrchestrationParamString(other, 'primarySymbol'))?.trim() ?? ''
+  return primarySymbol === otherPrimary
+    && normalized.length === otherSymbols.length
+    && normalized.every((value, index) => value === otherSymbols[index])
 }

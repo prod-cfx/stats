@@ -16,6 +16,7 @@ import { StrategyConsistencyService } from '@/modules/llm-strategy-codegen/servi
 import { StrategySummaryBuilderService } from '@/modules/llm-strategy-codegen/services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '@/modules/llm-strategy-codegen/services/strategy-summary-observation.service'
 import { SemanticStateProjectionService } from '@/modules/llm-strategy-codegen/services/semantic-state-projection.service'
+import { SemanticContractReadinessService } from '@/modules/llm-strategy-codegen/services/semantic-contract-readiness.service'
 import { collectAtomLeaves, listRuleEffects } from '@/modules/llm-strategy-codegen/types/atom-expr'
 import type { SemanticState } from '@/modules/llm-strategy-codegen/types/semantic-state'
 import { evaluateExprPool, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
@@ -234,6 +235,18 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
     }))
   })
 
+  it('compiles drawdown DCA into an executable long order program', async () => {
+    const artifacts = await generateArtifactsFromTemplate('drawdown-dca-budget')
+
+    expect(artifacts.compiled.ir.ruleBlocks.some(block =>
+      block.actions.some(action => action.kind === 'ADD_LONG'),
+    )).toBe(true)
+    expect(artifacts.ast.decisionPrograms.some(program =>
+      program.actions.some(action => action.kind === 'ADD_LONG'),
+    )).toBe(true)
+    expect(artifacts.compiledScript).toContain('ADD_LONG')
+  })
+
   it('keeps timed DCA as a long-only spot program without short-market conflict', () => {
     const rules = buildRulesFromMessage(getTemplateInitialMessage('timed-dca-budget'))
     const atoms = collectRuleAtoms(rules)
@@ -266,6 +279,23 @@ describe('Strategy Plaza official edit seed rules mainflow codegen', () => {
       timeIntervalMs: 24 * 60 * 60 * 1000,
     }))
     expect(artifacts.compiledScript).toContain('ADD_LONG')
+  })
+
+  it('does not block timed DCA generation on recognized-unsupported pause semantics', () => {
+    const state = buildStateFromMessage(getTemplateInitialMessage('timed-dca-budget'))
+    const readinessService = new SemanticContractReadinessService()
+    const readiness = readinessService.normalize(state)
+
+    expect(readiness.ready).toBe(true)
+    expect(readiness.missingRequirements).toEqual([])
+    expect(readiness.state.rules?.some(rule =>
+      listRuleEffects(rule.effects).some(effect =>
+        collectAtomLeaves(effect).some(atom =>
+          atom.key === 'risk.condition_expression'
+          && atom.params.capabilityStatus === 'recognized_unsupported',
+        ),
+      ),
+    )).toBe(true)
   })
 
   it('keeps Funding plus OI threshold in rules mainflow', () => {

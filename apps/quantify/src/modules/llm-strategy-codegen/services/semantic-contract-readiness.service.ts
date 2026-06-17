@@ -291,12 +291,14 @@ export class SemanticContractReadinessService {
       && !timeframeBound.hasBlockingSlots
       && !dataSourceBindingHasBlockingSlots
       && !subStrategyBindingHasBlockingSlots
+    const rulesOrchestrationHasBlockingSlots = orchestrationResult.hasBlockingSlots
+      && !isIgnorableRulesMainflowOrchestrationBlock(nextMaterialized.orchestration)
 
     const ready = rulesReady !== null
       ? (
           unsupportedOrUnknownOwnerKeys.size === 0
           && missingRequirements.length === 0
-          && !orchestrationResult.hasBlockingSlots
+          && !rulesOrchestrationHasBlockingSlots
           && !executableContextGate.hasBlockingSlots
           && rulesReady.hasEntry
           && rulesReady.hasExit
@@ -1706,6 +1708,18 @@ function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resol
   return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
 }
 
+function isIgnorableRulesMainflowOrchestrationBlock(
+  nodes: readonly SemanticOrchestrationNode[] | undefined,
+): boolean {
+  if (!nodes || nodes.length === 0) return true
+  return nodes.every((node) => {
+    const slots = node.openSlots ?? []
+    if (slots.length === 0) return true
+    if (!slots.every(slot => slot.slotKey === 'orchestration.phase0.unsupported')) return false
+    return node.key === 'scope.symbol' || node.key === 'program.dca'
+  })
+}
+
 function normalizePhase0Orchestration(
   orchestration: readonly SemanticOrchestrationNode[] | undefined,
   registry: SemanticOrchestrationRegistryService,
@@ -1795,6 +1809,10 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  if (isSupportedDcaProgram(node, registry, strategyVersion)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
   if (isSupportedDynamicGrid(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry)
   }
@@ -1850,9 +1868,14 @@ function isSupportedSymbolScope(
   if (node.kind !== 'scope') return false
   // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'scope.symbol') return false
-  if (node.symbolScopeKind !== 'symbol') return false
+  const symbolScopeKind = typeof node.symbolScopeKind === 'string'
+    ? node.symbolScopeKind
+    : readOrchestrationNodeParamString(node, 'symbolScopeKind')
+  if (symbolScopeKind !== 'symbol') return false
 
-  const symbols = node.symbols
+  const symbols = Array.isArray(node.symbols)
+    ? node.symbols
+    : readOrchestrationNodeParamArray(node, 'symbols')
   if (!Array.isArray(symbols) || symbols.length === 0) return false
 
   const SYMBOL_FORMAT = /^[A-Z]{2,5}USDT$/u
@@ -1866,10 +1889,14 @@ function isSupportedSymbolScope(
   const dedupedSet = new Set(trimmed)
   if (dedupedSet.size !== trimmed.length) return false
 
-  if (node.primarySymbol !== undefined) {
-    const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+  const primarySymbol = typeof node.primarySymbol === 'string'
+    ? node.primarySymbol
+    : readOrchestrationNodeParamString(node, 'primarySymbol')
+  if (primarySymbol !== undefined) {
+    const primary = primarySymbol.trim()
     if (primary === '' || !dedupedSet.has(primary)) return false
   }
+  const myPrimary = typeof primarySymbol === 'string' ? primarySymbol.trim() : ''
 
   // (5) 与其它 status='locked' 且 key='scope.symbol' 节点对比 — symbols 不重叠 + primarySymbol 不冲突
   const otherLockedScopes = siblingNodes.filter(
@@ -1881,16 +1908,19 @@ function isSupportedSymbolScope(
       && other.status === 'locked',
   )
   for (const other of otherLockedScopes) {
-    const otherSymbols = Array.isArray(other.symbols) ? other.symbols : []
+    const otherSymbols = Array.isArray(other.symbols) ? other.symbols : readOrchestrationNodeParamArray(other, 'symbols') ?? []
+    if (sameSymbolScope(trimmed, myPrimary, other)) {
+      continue
+    }
     if (otherSymbols.some((s) => typeof s === 'string' && dedupedSet.has(s.trim()))) {
       return false
     }
   }
-  const myPrimary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
   if (myPrimary !== '') {
     if (
       otherLockedScopes.some(
-        (other) => typeof other.primarySymbol === 'string' && other.primarySymbol.trim() === myPrimary,
+        (other) => !sameSymbolScope(trimmed, myPrimary, other)
+          && (typeof other.primarySymbol === 'string' ? other.primarySymbol : readOrchestrationNodeParamString(other, 'primarySymbol'))?.trim() === myPrimary,
       )
     ) {
       return false
@@ -1901,6 +1931,55 @@ function isSupportedSymbolScope(
   if (!contract) return false
   if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+function isSupportedDcaProgram(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+): boolean {
+  if (!isProgramNode(node)) return false
+  if (node.key !== 'program.dca') return false
+  const programKind = typeof node.programKind === 'string'
+    ? node.programKind
+    : readOrchestrationNodeParamString(node, 'programKind')
+  if (programKind !== 'dca') return false
+  const contract = registry.getContractByKey('program.dca')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+function readOrchestrationNodeParams(node: SemanticOrchestrationNode): Record<string, unknown> {
+  return node.params && typeof node.params === 'object' && !Array.isArray(node.params)
+    ? node.params as Record<string, unknown>
+    : {}
+}
+
+function readOrchestrationNodeParamString(node: SemanticOrchestrationNode, key: string): string | undefined {
+  const value = readOrchestrationNodeParams(node)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function readOrchestrationNodeParamArray(node: SemanticOrchestrationNode, key: string): unknown[] | undefined {
+  const value = readOrchestrationNodeParams(node)[key]
+  return Array.isArray(value) ? value : undefined
+}
+
+function sameSymbolScope(
+  symbols: readonly string[],
+  primarySymbol: string,
+  other: SemanticOrchestrationNode,
+): boolean {
+  const otherSymbols = (Array.isArray(other.symbols) ? other.symbols : readOrchestrationNodeParamArray(other, 'symbols') ?? [])
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.trim())
+    .sort()
+  const normalized = [...symbols].sort()
+  const otherPrimary = (typeof other.primarySymbol === 'string' ? other.primarySymbol : readOrchestrationNodeParamString(other, 'primarySymbol'))?.trim() ?? ''
+  return primarySymbol === otherPrimary
+    && normalized.length === otherSymbols.length
+    && normalized.every((value, index) => value === otherSymbols[index])
 }
 
 /**
