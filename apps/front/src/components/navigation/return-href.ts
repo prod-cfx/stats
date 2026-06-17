@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 export function getSameOriginReturnHref(fallbackHref: string, currentHref?: string) {
   if (typeof window === 'undefined') return fallbackHref
   if (!document.referrer) return fallbackHref
@@ -17,4 +19,14 @@ export function getSameOriginReturnHref(fallbackHref: string, currentHref?: stri
   } catch {
     return fallbackHref
   }
+}
+
+export function useSameOriginReturnHref(fallbackHref: string) {
+  const [returnHref, setReturnHref] = useState(fallbackHref)
+
+  useEffect(() => {
+    setReturnHref(getSameOriginReturnHref(fallbackHref))
+  }, [fallbackHref])
+
+  return returnHref
 }

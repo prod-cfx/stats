@@ -2,7 +2,7 @@
 
 import type { WidgetCatalogGroup, WidgetCatalogItem } from '@/features/dashboards/widgets/widgets-catalog';
 import { Database, TrendingUp, Zap } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { WidgetConfigurator } from '@/features/dashboards/components/WidgetConfigurator';
@@ -18,6 +18,13 @@ interface AddWidgetModalProps {
 
 type Step = 'groups' | 'preview' | 'configure'
 
+interface WidgetModalState {
+  loading: boolean
+  step: Step
+  selectedGroup: WidgetCatalogGroup | null
+  selectedItem: WidgetCatalogItem | null
+}
+
 const GROUP_ICONS: Record<string, React.ComponentType<any>> = {
   market: TrendingUp,
   derivatives: Database,
@@ -32,37 +39,45 @@ const GROUP_COLORS: Record<string, string> = {
 
 export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalProps) => {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(isOpen);
-  const [step, setStep] = useState<Step>('groups')
-  const [selectedGroup, setSelectedGroup] = useState<WidgetCatalogGroup | null>(null)
-  const [selectedItem, setSelectedItem] = useState<WidgetCatalogItem | null>(null)
-  const [lastOpenState, setLastOpenState] = useState(isOpen)
+  const [modalState, setModalState] = useState<WidgetModalState>({
+    loading: isOpen,
+    step: 'groups',
+    selectedGroup: null,
+    selectedItem: null,
+  })
+  const lastOpenStateRef = useRef(isOpen)
 
-  if (lastOpenState !== isOpen) {
-    setLastOpenState(isOpen)
+  useLayoutEffect(() => {
+    if (lastOpenStateRef.current === isOpen) return
+    lastOpenStateRef.current = isOpen
+
     if (isOpen) {
-      setLoading(true)
-      setStep('groups')
-      setSelectedGroup(null)
-      setSelectedItem(null)
+      setModalState({
+        loading: true,
+        step: 'groups',
+        selectedGroup: null,
+        selectedItem: null,
+      })
     }
-  }
+  }, [isOpen])
+
+  const { loading, step, selectedGroup, selectedItem } = modalState
 
   useEffect(() => {
     if (isOpen) {
-      const timer = setTimeout(() => setLoading(false), 300);
+      const timer = setTimeout(() => {
+        setModalState(prev => ({ ...prev, loading: false }))
+      }, 300);
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
   const handleSelectGroup = (group: WidgetCatalogGroup) => {
-    setSelectedGroup(group)
-    setStep('preview')
+    setModalState(prev => ({ ...prev, selectedGroup: group, step: 'preview' }))
   }
 
   const handleSelectWidget = (item: WidgetCatalogItem) => {
-    setSelectedItem(item)
-    setStep('configure')
+    setModalState(prev => ({ ...prev, selectedItem: item, step: 'configure' }))
   }
 
   const handleSaveWidget = (config: Record<string, any>, layout: { w: number; h: number }) => {
@@ -81,11 +96,9 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
 
   const handleBack = () => {
     if (step === 'preview') {
-      setStep('groups')
-      setSelectedGroup(null)
+      setModalState(prev => ({ ...prev, step: 'groups', selectedGroup: null }))
     } else if (step === 'configure') {
-      setStep('preview')
-      setSelectedItem(null)
+      setModalState(prev => ({ ...prev, step: 'preview', selectedItem: null }))
     }
   }
 

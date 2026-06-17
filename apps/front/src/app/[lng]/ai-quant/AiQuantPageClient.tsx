@@ -37,7 +37,7 @@ import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStra
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
-import { getSameOriginReturnHref } from '@/components/navigation/return-href'
+import { useSameOriginReturnHref } from '@/components/navigation/return-href'
 import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -127,6 +127,23 @@ type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
 type StrategyEditIntent = Extract<ReturnType<typeof getIntent>, { type: 'strategy-edit-session' }>
+
+interface DeploymentUiState {
+  detail: AccountAiQuantStrategyDetail | null
+  status: DeploymentDetailStatus
+  actionPending: boolean
+  editGuardOpen: boolean
+  stopDialogOpen: boolean
+  guardErrorMessage: string | null
+}
+
+interface GuestPlazaState {
+  templates: StrategyPlazaTemplate[]
+  loading: boolean
+  error: string | null
+  pendingTemplateId: string | null
+  pendingAction: 'run' | 'edit' | null
+}
 
 type ConversationDeleteDialogState = {
   conversation: ConversationState
@@ -228,7 +245,7 @@ export function AiQuantPageClient({
   const { session, isLoading } = useAuth()
   const apiConfigHref = buildApiConfigHref(lng)
   const defaultReturnHref = `/${lng}/account?tab=ai-quant`
-  const [returnHref, setReturnHref] = useState(defaultReturnHref)
+  const returnHref = useSameOriginReturnHref(defaultReturnHref)
 
   // Initialize state lazily to avoid hydration mismatch if possible,
   // but here we need to read from localStorage which is a side effect.
@@ -254,26 +271,21 @@ export function AiQuantPageClient({
     (_state: ConversationSyncState, nextState: ConversationSyncState) => nextState,
     'idle' as ConversationSyncState,
   )
-  const [deploymentDetail, setDeploymentDetail] = useState<AccountAiQuantStrategyDetail | null>(
-    null,
-  )
-  const [deploymentDetailStatus, setDeploymentDetailStatus] =
-    useState<DeploymentDetailStatus>('idle')
-  const [deploymentActionPending, setDeploymentActionPending] = useState(false)
-  const [editGuardOpen, setEditGuardOpen] = useState(false)
-  const [stopDialogOpen, setStopDialogOpen] = useState(false)
-  const [deploymentGuardErrorMessage, setDeploymentGuardErrorMessage] = useState<string | null>(
-    null,
-  )
-  const [guestPlazaTemplates, setGuestPlazaTemplates] = useState<StrategyPlazaTemplate[]>([])
-  const [guestPlazaLoading, setGuestPlazaLoading] = useState(true)
-  const [guestPlazaError, setGuestPlazaError] = useState<string | null>(null)
-  const [guestPlazaPendingTemplateId, setGuestPlazaPendingTemplateId] = useState<string | null>(
-    null,
-  )
-  const [guestPlazaPendingAction, setGuestPlazaPendingAction] = useState<'run' | 'edit' | null>(
-    null,
-  )
+  const [deploymentUi, setDeploymentUi] = useState<DeploymentUiState>({
+    detail: null,
+    status: 'idle',
+    actionPending: false,
+    editGuardOpen: false,
+    stopDialogOpen: false,
+    guardErrorMessage: null,
+  })
+  const [guestPlazaState, setGuestPlazaState] = useState<GuestPlazaState>({
+    templates: [],
+    loading: true,
+    error: null,
+    pendingTemplateId: null,
+    pendingAction: null,
+  })
   const [conversationDeleteDialog, setConversationDeleteDialog] =
     useState<ConversationDeleteDialogState>(null)
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
@@ -290,34 +302,40 @@ export function AiQuantPageClient({
   const codegenRequestMutexRef = useRef(new Set<string>())
   const restoredSessionReconciliationRef = useRef(new Set<string>())
 
+  const deploymentDetail = deploymentUi.detail
+  const deploymentDetailStatus = deploymentUi.status
+  const deploymentActionPending = deploymentUi.actionPending
+  const editGuardOpen = deploymentUi.editGuardOpen
+  const stopDialogOpen = deploymentUi.stopDialogOpen
+  const deploymentGuardErrorMessage = deploymentUi.guardErrorMessage
+  const guestPlazaTemplates = guestPlazaState.templates
+  const guestPlazaLoading = guestPlazaState.loading
+  const guestPlazaError = guestPlazaState.error
+  const guestPlazaPendingTemplateId = guestPlazaState.pendingTemplateId
+  const guestPlazaPendingAction = guestPlazaState.pendingAction
+
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
     return conversations.find(x => x.id === activeConversationId) || conversations[0]
   }, [activeConversationId, conversations])
 
   useEffect(() => {
-    setReturnHref(getSameOriginReturnHref(defaultReturnHref))
-  }, [defaultReturnHref])
-
-  useEffect(() => {
     if (isLoading || session) return
     let cancelled = false
 
-    setGuestPlazaLoading(true)
-    setGuestPlazaError(null)
+    setGuestPlazaState(prev => ({ ...prev, loading: true, error: null }))
     void fetchStrategyPlazaTemplates()
       .then(templates => {
-        if (!cancelled) setGuestPlazaTemplates(templates)
+        if (!cancelled) {
+          setGuestPlazaState(prev => ({ ...prev, templates, loading: false, error: null }))
+        }
       })
       .catch(error => {
         if (!cancelled) {
           const message =
             error instanceof Error && error.message.trim() ? error.message : plazaLoadFailedMessage
-          setGuestPlazaError(message)
+          setGuestPlazaState(prev => ({ ...prev, error: message, loading: false }))
         }
-      })
-      .finally(() => {
-        if (!cancelled) setGuestPlazaLoading(false)
       })
 
     return () => {
@@ -330,28 +348,26 @@ export function AiQuantPageClient({
   }
 
   const clearDeploymentDetailState = () => {
-    setDeploymentDetail(null)
-    setDeploymentDetailStatus('idle')
-    setDeploymentActionPending(false)
-    setEditGuardOpen(false)
-    setStopDialogOpen(false)
-    setDeploymentGuardErrorMessage(null)
+    setDeploymentUi({
+      detail: null,
+      status: 'idle',
+      actionPending: false,
+      editGuardOpen: false,
+      stopDialogOpen: false,
+      guardErrorMessage: null,
+    })
   }
 
   const markDeploymentDetailLoading = () => {
-    setDeploymentDetail(null)
-    setDeploymentDetailStatus('loading')
-    setDeploymentGuardErrorMessage(null)
+    setDeploymentUi(prev => ({ ...prev, detail: null, status: 'loading', guardErrorMessage: null }))
   }
 
   const applyDeploymentDetailReady = (detail: AccountAiQuantStrategyDetail) => {
-    setDeploymentDetail(detail)
-    setDeploymentDetailStatus('ready')
+    setDeploymentUi(prev => ({ ...prev, detail, status: 'ready' }))
   }
 
   const applyDeploymentDetailError = (status: DeploymentDetailStatus) => {
-    setDeploymentDetail(null)
-    setDeploymentDetailStatus(status)
+    setDeploymentUi(prev => ({ ...prev, detail: null, status }))
   }
 
   const applyConversationSyncSnapshot = (
@@ -917,8 +933,7 @@ export function AiQuantPageClient({
 
   function requestLogicGraphRevision() {
     if (deploymentState === 'running' || deploymentState === 'unknown') {
-      setDeploymentGuardErrorMessage(null)
-      setEditGuardOpen(true)
+      setDeploymentUi(prev => ({ ...prev, guardErrorMessage: null, editGuardOpen: true }))
       return
     }
 
@@ -948,8 +963,7 @@ export function AiQuantPageClient({
       return
     }
 
-    setDeploymentActionPending(true)
-    setDeploymentGuardErrorMessage(null)
+    setDeploymentUi(prev => ({ ...prev, actionPending: true, guardErrorMessage: null }))
 
     try {
       const latestDetail = await fetchAccountAiQuantStrategyDetail(
@@ -957,24 +971,26 @@ export function AiQuantPageClient({
         session.userId,
       )
       if (!isMountedRef.current) return
-      setDeploymentDetail(latestDetail)
-      setDeploymentDetailStatus('ready')
-      setStopDialogOpen(true)
+      setDeploymentUi(prev => ({
+        ...prev,
+        detail: latestDetail,
+        status: 'ready',
+        stopDialogOpen: true,
+        actionPending: false,
+      }))
     } catch (error) {
       if (!isMountedRef.current) return
-      setDeploymentGuardErrorMessage(
-        resolveLocalizedRuntimeErrorMessage(
+      setDeploymentUi(prev => ({
+        ...prev,
+        actionPending: false,
+        guardErrorMessage: resolveLocalizedRuntimeErrorMessage(
           error,
           lng === 'en'
             ? 'Unable to confirm the latest strategy status. Please try again later.'
             : '无法确认策略最新状态，请稍后重试。',
           lng,
         ),
-      )
-    } finally {
-      if (isMountedRef.current) {
-        setDeploymentActionPending(false)
-      }
+      }))
     }
   }
 
@@ -984,8 +1000,7 @@ export function AiQuantPageClient({
       return
     }
 
-    setDeploymentActionPending(true)
-    setDeploymentGuardErrorMessage(null)
+    setDeploymentUi(prev => ({ ...prev, actionPending: true, guardErrorMessage: null }))
 
     try {
       const nextDetail = await performAccountAiQuantStrategyAction(strategyInstanceId, {
@@ -993,14 +1008,20 @@ export function AiQuantPageClient({
         action,
       })
       if (!isMountedRef.current) return
-      setDeploymentDetail(nextDetail)
-      setDeploymentDetailStatus('ready')
-      setEditGuardOpen(false)
-      setStopDialogOpen(false)
+      setDeploymentUi(prev => ({
+        ...prev,
+        detail: nextDetail,
+        status: 'ready',
+        editGuardOpen: false,
+        stopDialogOpen: false,
+        actionPending: false,
+      }))
     } catch (error) {
       if (!isMountedRef.current) return
-      setDeploymentGuardErrorMessage(
-        resolveLocalizedRuntimeErrorMessage(
+      setDeploymentUi(prev => ({
+        ...prev,
+        actionPending: false,
+        guardErrorMessage: resolveLocalizedRuntimeErrorMessage(
           error,
           action === 'liquidate_and_stop'
             ? lng === 'en'
@@ -1011,11 +1032,7 @@ export function AiQuantPageClient({
               : '停止策略失败，请稍后重试。',
           lng,
         ),
-      )
-    } finally {
-      if (isMountedRef.current) {
-        setDeploymentActionPending(false)
-      }
+      }))
     }
   }
 
@@ -1532,14 +1549,20 @@ export function AiQuantPageClient({
   }
 
   const runGuestPlazaTemplate = (templateId: string) => {
-    setGuestPlazaPendingTemplateId(templateId)
-    setGuestPlazaPendingAction('run')
+    setGuestPlazaState(prev => ({
+      ...prev,
+      pendingTemplateId: templateId,
+      pendingAction: 'run',
+    }))
     goLoginWithPlazaIntent({ type: 'plaza-run', templateId })
   }
 
   const editGuestPlazaTemplate = (templateId: string) => {
-    setGuestPlazaPendingTemplateId(templateId)
-    setGuestPlazaPendingAction('edit')
+    setGuestPlazaState(prev => ({
+      ...prev,
+      pendingTemplateId: templateId,
+      pendingAction: 'edit',
+    }))
     goLoginWithPlazaIntent({ type: 'plaza-edit', templateId })
   }
 
@@ -1784,8 +1807,7 @@ export function AiQuantPageClient({
     if (!deployedDetail) {
       return
     }
-    setDeploymentDetail(deployedDetail)
-    setDeploymentDetailStatus('ready')
+    setDeploymentUi(prev => ({ ...prev, detail: deployedDetail, status: 'ready' }))
     updateActiveConversation(curr => ({
       ...curr,
       publishedStrategyInstanceId: deployedDetail.id,
@@ -2243,16 +2265,19 @@ export function AiQuantPageClient({
         errorMessage={deploymentGuardErrorMessage}
         onViewRunningStrategy={viewRunningStrategy}
         onStopStrategy={() => {
-          setDeploymentGuardErrorMessage(null)
+          setDeploymentUi(prev => ({ ...prev, guardErrorMessage: null }))
           void openStopDialogWithLatestDeploymentDetail()
         }}
         onClose={() => {
           if (deploymentActionPending) {
             return
           }
-          setEditGuardOpen(false)
-          setStopDialogOpen(false)
-          setDeploymentGuardErrorMessage(null)
+          setDeploymentUi(prev => ({
+            ...prev,
+            editGuardOpen: false,
+            stopDialogOpen: false,
+            guardErrorMessage: null,
+          }))
         }}
       />
 
@@ -2271,8 +2296,7 @@ export function AiQuantPageClient({
           if (deploymentActionPending) {
             return
           }
-          setStopDialogOpen(false)
-          setDeploymentGuardErrorMessage(null)
+          setDeploymentUi(prev => ({ ...prev, stopDialogOpen: false, guardErrorMessage: null }))
         }}
       />
 

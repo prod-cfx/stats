@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
-import { getSameOriginReturnHref } from '@/components/navigation/return-href'
+import { useSameOriginReturnHref } from '@/components/navigation/return-href'
 import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -26,6 +26,19 @@ import { ApiError } from '@/lib/errors'
 import { STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE } from './strategy-plaza-client-errors'
 
 const INTENT_TTL_MS = 10 * 60 * 1000
+
+interface PlazaTemplateState {
+  templates: StrategyPlazaTemplate[]
+  loading: boolean
+  error: string | null
+}
+
+interface PlazaActionState {
+  error: string | null
+  runningTemplateId: string | null
+  pendingAction: 'run' | 'edit' | null
+  existingStrategy: ExistingStrategyPlazaRunResult['strategy'] | null
+}
 
 function isExistingStrategyPlazaRunResult(
   result: StrategyPlazaRunResult,
@@ -121,17 +134,27 @@ export function AiQuantPlazaPageClient() {
   const plazaReturnHref = `/${lng}/ai-quant/plaza`
   const strategyDetailHref = (strategyId: string) =>
     `/${lng}/account/ai-quant/strategy/${strategyId}?from=${encodeURIComponent(plazaReturnHref)}`
-  const [returnHref, setReturnHref] = useState(defaultReturnHref)
-  const [templates, setTemplates] = useState<StrategyPlazaTemplate[]>([])
-  const [loadingTemplates, setLoadingTemplates] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [runningTemplateId, setRunningTemplateId] = useState<string | null>(null)
-  const [pendingAction, setPendingAction] = useState<'run' | 'edit' | null>(null)
-  const [existingStrategy, setExistingStrategy] = useState<
-    ExistingStrategyPlazaRunResult['strategy'] | null
-  >(null)
+  const returnHref = useSameOriginReturnHref(defaultReturnHref)
+  const [templateState, setTemplateState] = useState<PlazaTemplateState>({
+    templates: [],
+    loading: true,
+    error: null,
+  })
+  const [actionState, setActionState] = useState<PlazaActionState>({
+    error: null,
+    runningTemplateId: null,
+    pendingAction: null,
+    existingStrategy: null,
+  })
   const resumingIntentKeyRef = useRef<string | null>(null)
+
+  const templates = templateState.templates
+  const loadingTemplates = templateState.loading
+  const loadError = templateState.error
+  const actionError = actionState.error
+  const runningTemplateId = actionState.runningTemplateId
+  const pendingAction = actionState.pendingAction
+  const existingStrategy = actionState.existingStrategy
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
@@ -144,24 +167,21 @@ export function AiQuantPlazaPageClient() {
   }
 
   useEffect(() => {
-    setReturnHref(getSameOriginReturnHref(defaultReturnHref))
-  }, [defaultReturnHref])
-
-  useEffect(() => {
     let cancelled = false
 
     async function loadTemplates() {
-      setLoadingTemplates(true)
-      setLoadError(null)
+      setTemplateState(prev => ({ ...prev, loading: true, error: null }))
       try {
         const data = await fetchStrategyPlazaTemplates()
-        if (!cancelled) setTemplates(data)
+        if (!cancelled) setTemplateState({ templates: data, loading: false, error: null })
       } catch (error) {
         if (!cancelled) {
-          setLoadError(getErrorMessage(error, t('aiQuant.plazaPage.loadFailed')))
+          setTemplateState(prev => ({
+            ...prev,
+            loading: false,
+            error: getErrorMessage(error, t('aiQuant.plazaPage.loadFailed')),
+          }))
         }
-      } finally {
-        if (!cancelled) setLoadingTemplates(false)
       }
     }
 
@@ -179,14 +199,16 @@ export function AiQuantPlazaPageClient() {
     }
     if (runningTemplateId) return
 
-    setRunningTemplateId(templateId)
-    setPendingAction('run')
-    setActionError(null)
-    setExistingStrategy(null)
+    setActionState({
+      error: null,
+      runningTemplateId: templateId,
+      pendingAction: 'run',
+      existingStrategy: null,
+    })
     try {
       const strategy = await runStrategyPlazaTemplate(templateId, createStrategyPlazaRunRequestId())
       if (isExistingStrategyPlazaRunResult(strategy)) {
-        setExistingStrategy(strategy.strategy)
+        setActionState(prev => ({ ...prev, existingStrategy: strategy.strategy }))
         return
       }
       router.push(strategyDetailHref(strategy.id))
@@ -196,15 +218,18 @@ export function AiQuantPlazaPageClient() {
         error.code === STRATEGY_PLAZA_OKX_DEMO_BINDING_REQUIRED_ERROR_CODE
       ) {
         setIntent({ type: 'plaza-run', templateId })
+        setActionState(prev => ({ ...prev, runningTemplateId: null, pendingAction: null }))
         router.push(
           `/${lng}/account?tab=settings&redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}#exchange-api`,
         )
         return
       }
-      setActionError(getErrorMessage(error, t('aiQuant.plazaPage.runFailed')))
+      setActionState(prev => ({
+        ...prev,
+        error: getErrorMessage(error, t('aiQuant.plazaPage.runFailed')),
+      }))
     } finally {
-      setRunningTemplateId(null)
-      setPendingAction(null)
+      setActionState(prev => ({ ...prev, runningTemplateId: null, pendingAction: null }))
     }
   }
 
@@ -215,18 +240,23 @@ export function AiQuantPlazaPageClient() {
     }
     if (runningTemplateId) return
 
-    setRunningTemplateId(templateId)
-    setPendingAction('edit')
-    setActionError(null)
+    setActionState(prev => ({
+      ...prev,
+      error: null,
+      runningTemplateId: templateId,
+      pendingAction: 'edit',
+    }))
     try {
       const editSession = await startStrategyPlazaEditSession(templateId, lng)
       setIntent({ type: 'plaza-chat-session', sessionId: editSession.sessionId })
       router.push(`/${lng}/ai-quant`)
     } catch (error) {
-      setActionError(getErrorMessage(error, t('aiQuant.plazaPage.editSessionFailed')))
+      setActionState(prev => ({
+        ...prev,
+        error: getErrorMessage(error, t('aiQuant.plazaPage.editSessionFailed')),
+      }))
     } finally {
-      setRunningTemplateId(null)
-      setPendingAction(null)
+      setActionState(prev => ({ ...prev, runningTemplateId: null, pendingAction: null }))
     }
   }
 
@@ -235,7 +265,7 @@ export function AiQuantPlazaPageClient() {
   }
 
   const closeExistingStrategyDialog = () => {
-    setExistingStrategy(null)
+    setActionState(prev => ({ ...prev, existingStrategy: null }))
   }
 
   const openExistingStrategyDetail = () => {

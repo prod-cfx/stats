@@ -37,7 +37,11 @@ interface BacktestReportProps {
   } | null
 }
 
-type DetailedReportState = 'idle' | 'loading' | 'ready' | 'error'
+type DetailedReportState =
+  | { status: 'idle', report: null }
+  | { status: 'loading', report: null }
+  | { status: 'ready', report: LiveBacktestReportInput }
+  | { status: 'error', report: null }
 
 const LazyBacktestEquityChart = dynamic(
   () => import('./BacktestEquityChart').then(mod => mod.BacktestEquityChart),
@@ -501,33 +505,30 @@ export function BacktestReportClient({
   reportContext = null,
   partialCoverageNotice = null,
 }: BacktestReportProps) {
-  const [detailedReport, setDetailedReport] = useState<LiveBacktestReportInput | null>(report)
   const [detailedReportState, setDetailedReportState] = useState<DetailedReportState>(() => {
     if (report) {
-      return 'ready'
+      return { status: 'ready', report }
     }
     if (metrics) {
-      return 'loading'
+      return { status: 'loading', report: null }
     }
-    return 'idle'
+    return { status: 'idle', report: null }
   })
+  const detailedReport = detailedReportState.report
 
   React.useEffect(() => {
     if (report) {
-      setDetailedReport(report)
-      setDetailedReportState('ready')
+      setDetailedReportState({ status: 'ready', report })
       return
     }
 
     if (!metrics) {
-      setDetailedReport(null)
-      setDetailedReportState('idle')
+      setDetailedReportState({ status: 'idle', report: null })
       return
     }
 
     let cancelled = false
-    setDetailedReport(null)
-    setDetailedReportState('loading')
+    setDetailedReportState({ status: 'loading', report: null })
 
     void getBacktestJobResult(id)
       .then(result => {
@@ -537,8 +538,9 @@ export function BacktestReportClient({
 
         const nextReport = mapDetailedReport(result)
         startTransition(() => {
-          setDetailedReport(nextReport)
-          setDetailedReportState(nextReport ? 'ready' : 'error')
+          setDetailedReportState(
+            nextReport ? { status: 'ready', report: nextReport } : { status: 'error', report: null },
+          )
         })
       })
       .catch(() => {
@@ -546,8 +548,7 @@ export function BacktestReportClient({
           return
         }
         startTransition(() => {
-          setDetailedReport(null)
-          setDetailedReportState('error')
+          setDetailedReportState({ status: 'error', report: null })
         })
       })
 
@@ -730,7 +731,7 @@ export function BacktestReportClient({
             <OpenPositionsSection lng={lng} marketType={normalizedMarketType} openPositions={reportData.openPositions} />
           )}
         </>
-      ) : detailedReportState === 'loading' && metrics ? (
+      ) : detailedReportState.status === 'loading' && metrics ? (
         <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {lng === 'en' ? 'Loading detailed backtest report data...' : '正在加载详细回测数据...'}
         </div>
