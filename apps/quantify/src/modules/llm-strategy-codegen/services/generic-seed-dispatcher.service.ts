@@ -268,6 +268,7 @@ const PARSER_PERCENT: ParserFn = (clause, spec) => {
 }
 
 const PARSER_DURATION: ParserFn = (clause, spec) => {
+  if (/\d+\s*(?:日|天|day|days)\s*均线|(?:MA|EMA|SMA)\s*\d+/iu.test(clause)) return undefined
   const re = spec.pattern ? new RegExp(spec.pattern) : /(\d+)\s*([mhdw])/i
   const m = clause.match(re)
     ?? clause.match(/(\d+)\s*(分钟|分|min|m|小时|时|h|天|日|d|周|w)/iu)
