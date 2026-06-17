@@ -544,7 +544,7 @@ function splitClauseByEventBoundary(clause: string): string[] {
 
 function splitClauseByLogicalBoundary(clause: string): string[] {
   const parts = clause
-    .split(/(?:且|并且|同时|以及)/u)
+    .split(/(?:并且|同时满足|以及|或者|任意一个|任意条件|任一条件|任一|之一|其一|且|同时|或|\bAND\b|\bOR\b|\+|&)/iu)
     .map(part => part.trim())
     .filter(Boolean)
   return parts.length > 0 ? parts : [clause]
@@ -855,13 +855,12 @@ function normalizeLifecycleParams(
 }
 
 function extractSinglePriceCrossReferencePeriod(clause: string): number | null {
-  const hasPriceSubject = /价格|price|close/iu.test(clause)
+  const hasPriceSubject = /价格|\bprice\b|\bclose\b/iu.test(clause)
+  if (!hasPriceSubject) return null
   const periodMatches = [...clause.matchAll(/(?:EMA|MA|SMA)\s*(\d{1,4})/giu)]
   if (periodMatches.length !== 1) return null
-  const hasSingleIndicatorCross = hasPriceSubject
-    ? /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
-    : /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?|break(?:s|out)?|breakdown)/iu.test(clause)
-  if (!hasPriceSubject && !hasSingleIndicatorCross) return null
+  const hasSingleIndicatorCross = /(?:上穿|下穿|突破|跌破|cross(?:es)?\s*(?:over|under)?)/iu.test(clause)
+  if (!hasSingleIndicatorCross) return null
   const period = Number(periodMatches[0]?.[1])
   return Number.isFinite(period) && period > 0 ? period : null
 }
@@ -1596,24 +1595,7 @@ export class GenericSeedDispatcher {
           evidence: { text: this.findEvidenceText(userMessage, '(?:平仓|平多|平空|平掉|止盈|止损|离场|卖出|出场|退出|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)') ?? 'exit' },
         })
       }
-      const condition = conditionPredicates.length > 1
-        ? {
-            kind: 'and' as const,
-            children: conditionPredicates.map(item => ({
-              kind: 'atom' as const,
-              key: item.key,
-              params: item.params ?? {},
-              sideScope: item.sideScope && item.sideScope !== 'both' ? item.sideScope : sideScope,
-              ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
-            })),
-          }
-        : {
-            kind: 'atom' as const,
-            key: predicate.key,
-            params: predicate.params ?? {},
-            sideScope: predicate.sideScope && predicate.sideScope !== 'both' ? predicate.sideScope : sideScope,
-            ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
-          }
+      const condition = this.buildTypedRuleConditionExpression(conditionPredicates, predicate, sideScope, userMessage)
       rules.push({
         id: `dispatcher-typed-rule-${rules.length + 1}`,
         phase,
@@ -2074,6 +2056,189 @@ export class GenericSeedDispatcher {
       sideScope,
       predicates: phasePredicates.filter(item => item.sideScope === sideScope || item.sideScope === 'both'),
     }))
+  }
+
+  private buildTypedRuleConditionExpression(
+    conditionPredicates: readonly PatchAtomNode[],
+    fallbackPredicate: PatchAtomNode,
+    sideScope: 'long' | 'short' | 'both',
+    userMessage: string,
+  ): AtomExpr {
+    const predicates = conditionPredicates.length > 0 ? [...conditionPredicates] : [fallbackPredicate]
+    const ordered = this.sortPredicatesByEvidencePosition(predicates, userMessage)
+    const atoms = ordered.map(item => this.wrapTypedRuleConditionAtomByLocalModifiers(
+      this.toTypedRuleConditionAtom(item, sideScope),
+      item,
+      userMessage,
+    ))
+    if (atoms.length === 1) return atoms[0]!
+
+    const orGroups: AtomExpr[][] = [[]]
+    for (let i = 0; i < atoms.length; i += 1) {
+      const currentGroup = orGroups[orGroups.length - 1]!
+      const current = atoms[i]!
+      if (currentGroup.length > 0) {
+        const previous = ordered[i - 1]!
+        const connector = this.resolveLogicalConnectorBetweenPredicates(previous, ordered[i]!, userMessage)
+        if (connector === 'sequence') {
+          const last = currentGroup.pop()!
+          currentGroup.push(this.composeSequenceCondition(last, current, previous, ordered[i]!, userMessage))
+        }
+        else {
+          currentGroup.push(current)
+        }
+      }
+      else {
+        currentGroup.push(current)
+      }
+      if (i >= atoms.length - 1) continue
+      const connector = this.resolveLogicalConnectorBetweenPredicates(ordered[i]!, ordered[i + 1]!, userMessage)
+      if (connector === 'or') orGroups.push([])
+    }
+
+    const children = orGroups
+      .filter(group => group.length > 0)
+      .map(group => this.composeSameOperatorCondition('and', group))
+    return this.composeSameOperatorCondition('or', children)
+  }
+
+  private wrapTypedRuleConditionAtomByLocalModifiers(
+    atom: Extract<AtomExpr, { kind: 'atom' }>,
+    item: PatchAtomNode,
+    userMessage: string,
+  ): AtomExpr {
+    if (!this.hasClearNegationBeforePredicate(item, userMessage)) return atom
+    return { kind: 'not', child: atom }
+  }
+
+  private toTypedRuleConditionAtom(
+    item: PatchAtomNode,
+    sideScope: 'long' | 'short' | 'both',
+  ): Extract<AtomExpr, { kind: 'atom' }> {
+    return {
+      kind: 'atom' as const,
+      key: item.key,
+      params: item.params ?? {},
+      sideScope: item.sideScope && item.sideScope !== 'both' ? item.sideScope : sideScope,
+      ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
+    }
+  }
+
+  private composeSameOperatorCondition(kind: 'and' | 'or', children: readonly AtomExpr[]): AtomExpr {
+    if (children.length === 1) return children[0]!
+    return { kind, children: [...children] } as AtomExpr
+  }
+
+  private composeSequenceCondition(
+    left: AtomExpr,
+    right: AtomExpr,
+    leftPredicate: PatchAtomNode,
+    rightPredicate: PatchAtomNode,
+    userMessage: string,
+  ): AtomExpr {
+    const steps = left.kind === 'sequence' ? [...left.steps, right] : [left, right]
+    const between = this.readTextBetweenPredicates(leftPredicate, rightPredicate, userMessage)
+    const withinBars = between?.match(/(\d+)\s*(?:根|条|个|bars?)\s*内/iu)?.[1]
+    return {
+      kind: 'sequence',
+      steps,
+      ...(withinBars ? { withinBars: Number.parseInt(withinBars, 10) } : {}),
+      ...(/(?:下一根|next\s+bar)/iu.test(between ?? '') ? { nextBarOnly: true } : {}),
+    }
+  }
+
+  private sortPredicatesByEvidencePosition(
+    predicates: readonly PatchAtomNode[],
+    userMessage: string,
+  ): PatchAtomNode[] {
+    return [...predicates].sort((a, b) => {
+      const ai = this.findPredicateEvidenceIndex(a, userMessage)
+      const bi = this.findPredicateEvidenceIndex(b, userMessage)
+      if (ai === bi) return 0
+      if (ai < 0) return 1
+      if (bi < 0) return -1
+      return ai - bi
+    })
+  }
+
+  private resolveLogicalConnectorBetweenPredicates(
+    left: PatchAtomNode,
+    right: PatchAtomNode,
+    userMessage: string,
+  ): 'and' | 'or' | 'sequence' {
+    const between = this.readTextBetweenPredicates(left, right, userMessage)
+    if (between !== null) return this.classifyLogicalConnectorText(between)
+
+    const leftText = readPatchEvidenceText(left)
+    const rightText = readPatchEvidenceText(right)
+    const combined = [leftText, rightText, userMessage].filter(Boolean).join(' ')
+    return this.classifyLogicalConnectorText(combined)
+  }
+
+  private readTextBetweenPredicates(left: PatchAtomNode, right: PatchAtomNode, userMessage: string): string | null {
+    const leftText = readPatchEvidenceText(left)
+    const rightText = readPatchEvidenceText(right)
+    if (!leftText || !rightText) return null
+    const leftIndex = userMessage.indexOf(leftText)
+    const rightIndex = userMessage.indexOf(rightText, leftIndex >= 0 ? leftIndex + leftText.length : 0)
+    if (leftIndex < 0 || rightIndex < 0 || rightIndex < leftIndex) return null
+    return userMessage.slice(leftIndex + leftText.length, rightIndex)
+  }
+
+  private classifyLogicalConnectorText(text: string): 'and' | 'or' | 'sequence' {
+    if (/(?:先|再|之后|然后|随后|回踩后|突破后等待|下一根|\d+\s*(?:根|条|个|bars?)\s*内|\bthen\b|\bafter\b|\bnext\s+bar\b)/iu.test(text)) return 'sequence'
+    if (/(?:或者|任意一个|任意条件|任一条件|任一|之一|其一|或|\bOR\b|\beither\b)/iu.test(text)) return 'or'
+    return 'and'
+  }
+
+  private hasClearNegationBeforePredicate(predicate: PatchAtomNode, userMessage: string): boolean {
+    const index = this.findPredicateSemanticIndex(predicate, userMessage)
+    if (index < 0) return false
+    const prefix = userMessage.slice(Math.max(0, index - 12), index)
+    return /(?:不满足|不是|未|没有|避免|排除|除非)\s*$/u.test(prefix)
+  }
+
+  private findPredicateSemanticIndex(predicate: PatchAtomNode, userMessage: string): number {
+    for (const phrase of this.buildPredicateSemanticPhrases(predicate)) {
+      const index = userMessage.search(new RegExp(phrase, 'iu'))
+      if (index >= 0) return index
+    }
+    const evidenceText = readPatchEvidenceText(predicate)
+    return evidenceText ? userMessage.indexOf(evidenceText) : -1
+  }
+
+  private buildPredicateSemanticPhrases(predicate: PatchAtomNode): string[] {
+    const indicator = typeof predicate.params?.indicator === 'string' ? predicate.params.indicator.toLowerCase() : null
+    const period = this.readNumericParam(predicate, 'period') ?? this.readNumericParam(predicate, 'reference.period')
+    const periodSuffix = period ? `\\s*${period}` : '\\s*\\d+'
+    if (indicator === 'ma') {
+      if (predicate.key === 'indicator.above') return [`(?:价格|price|close)\\s*(?:在|高于|大于|站上|突破)?\\s*(?:MA|EMA|SMA)${periodSuffix}\\s*(?:上方|之上|以上)?`]
+      if (predicate.key === 'indicator.below') return [`(?:价格|price|close|跌破)\\s*(?:在|低于|小于|跌破)?\\s*(?:MA|EMA|SMA)${periodSuffix}\\s*(?:下方|之下|以下)?`]
+    }
+    if (indicator === 'macd') {
+      if (predicate.key === 'indicator.cross_over') return ['MACD\\s*(?:金叉|上穿|cross\\s*over)']
+      if (predicate.key === 'indicator.cross_under') return ['MACD\\s*(?:死叉|下穿|cross\\s*under)']
+    }
+    if (indicator === 'rsi') {
+      if (predicate.key === 'indicator.cross_over') return ['RSI\\s*\\d*\\s*(?:上穿|突破|cross\\s*over)']
+      if (predicate.key === 'indicator.cross_under') return ['RSI\\s*\\d*\\s*(?:下穿|跌破|cross\\s*under)']
+    }
+    return []
+  }
+
+  private readNumericParam(predicate: PatchAtomNode, key: string): number | null {
+    const raw = predicate.params?.[key]
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+    if (typeof raw === 'string' && raw.trim()) {
+      const parsed = Number(raw)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+  }
+
+  private findPredicateEvidenceIndex(predicate: PatchAtomNode, userMessage: string): number {
+    const evidenceText = readPatchEvidenceText(predicate)
+    return evidenceText ? userMessage.indexOf(evidenceText) : -1
   }
 
   private resolveTypedRuleGroupSideScope(
