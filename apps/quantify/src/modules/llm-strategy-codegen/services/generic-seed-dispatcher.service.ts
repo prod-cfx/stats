@@ -3379,6 +3379,7 @@ export class GenericSeedDispatcher {
         : null
     const referencePeriod = typeof params['reference.period'] === 'number' ? params['reference.period'] : null
     const periodAlias = typeof params.period === 'number' ? {} : referencePeriod !== null ? { period: referencePeriod } : {}
+    if (typeof params.timeframe === 'string' && params.timeframe.trim().length > 0) return periodAlias
     const localTimeframe = this.extractLeadingTimeframe(text)
     if (localTimeframe) return { ...periodAlias, timeframe: localTimeframe }
     if (targetPeriod !== null) {
