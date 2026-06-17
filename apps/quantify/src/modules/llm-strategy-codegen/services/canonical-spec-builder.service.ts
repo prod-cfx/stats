@@ -1134,7 +1134,8 @@ export class CanonicalSpecBuilderService {
   }
 
   private isOpenAtomicRiskEffectLeaf(key: string): boolean {
-    return key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
+    return key === FIELD_KEY.RISK_CONDITION_EXPRESSION
+      || key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
       || key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
       || key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
       || key === 'risk.kill_switch'
@@ -1308,6 +1309,37 @@ export class CanonicalSpecBuilderService {
     sourcePath: string
     priority: number
   }): CanonicalRuleV2 | null {
+    if (input.leaf.key === FIELD_KEY.RISK_CONDITION_EXPRESSION) {
+      if (input.leaf.params.capabilityStatus !== 'supported') return null
+      const condition = this.isValidSemanticExpression(input.leaf.params.condition)
+        ? this.buildConditionFromSemanticExpression(input.leaf.params.condition)
+        : null
+      if (!condition) return null
+      const risk: SemanticRiskState = {
+        id: `rules-mainflow-risk-expression-${input.priority}`,
+        key: input.leaf.key,
+        params: input.leaf.params,
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+      const actions = this.buildActionsForSemanticRiskExpression(risk, input.rule.sideScope)
+      if (actions.length === 0) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: input.rule.sideScope,
+        priority: input.priority,
+        condition,
+        actions,
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+          scope: input.leaf.params.scope,
+          effect: input.leaf.params.effect,
+        },
+      }
+    }
     if (input.leaf.key === FIELD_KEY.RISK_ATR_STOP) {
       const atrParams = extractAtrStopParams(input.leaf.params)
       if (atrParams === null) return null
