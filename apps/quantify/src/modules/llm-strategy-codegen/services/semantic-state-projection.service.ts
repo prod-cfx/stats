@@ -1485,7 +1485,7 @@ export class SemanticStateProjectionService {
       return []
     }
 
-    const text = this.formatDisplayActionText(actionKey, position)
+    const text = this.formatDisplayActionText(actionKey, position, trigger)
     return text
       ? [{
           kind: 'action',
@@ -1520,8 +1520,15 @@ export class SemanticStateProjectionService {
   private formatDisplayActionText(
     actionKey: string,
     position: SemanticState['position'],
+    trigger?: SemanticTriggerState,
   ): string {
     const sizingText = this.buildDisplayPositionSizingValue(position)
+
+    if (trigger?.key === 'execution.on_start') {
+      if (actionKey === 'open_long') return sizingText ? `立即开始时市价买入 ${sizingText}` : '立即开始时市价买入'
+      if (actionKey === 'open_short') return sizingText ? `立即开始时市价开空 ${sizingText}` : '立即开始时市价开空'
+      if (actionKey === 'open_both') return sizingText ? `立即开始时市价开仓 ${sizingText}` : '立即开始时市价开仓'
+    }
 
     if (actionKey === 'open_long') return sizingText ? `开多 ${sizingText}` : '开多'
     if (actionKey === 'open_short') return sizingText ? `开空 ${sizingText}` : '开空'
@@ -4201,15 +4208,23 @@ export class SemanticStateProjectionService {
       && ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
     const hasOrchestrationEffect = listRuleEffects(rule.effects)
       .some(effect => collectAtomLeaves(effect).some(leaf => ATOM_CONTRACT_REGISTRY[leaf.key]?.bucket === 'orchestration'))
+    const effectPartsForDisplay = isAlwaysOnCondition && rule.phase === 'entry'
+      ? rawEffectParts.map((part) => {
+          if (part === '开多') return '立即开始时市价买入'
+          if (part === '开空') return '立即开始时市价开空'
+          if (part === '开仓') return '立即开始时市价开仓'
+          return part
+        })
+      : rawEffectParts
 
     let bodyText: string
     if (isAlwaysOnCondition || (rule.phase === 'gate' && hasOrchestrationEffect)) {
       // 跳过技术性 gate condition；只输出 effects（如 "账户最大回撤超过 15% 时阻止开新仓"）。
-      const effectParts = this.dedupeKeepOrder(rawEffectParts)
+      const effectParts = this.dedupeKeepOrder(effectPartsForDisplay)
       bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
     }
     else {
-      const effectParts = this.dedupeKeepOrder(rawEffectParts)
+      const effectParts = this.dedupeKeepOrder(effectPartsForDisplay)
       const condition = this.renderUserFacingRuleCondition(rule.condition)
       if (!condition || condition.length === 0) {
         bodyText = effectParts.length > 0 ? effectParts.join('，') : ''

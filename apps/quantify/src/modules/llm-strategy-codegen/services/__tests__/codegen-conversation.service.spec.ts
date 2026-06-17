@@ -1466,6 +1466,50 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('10')
   })
 
+  it('recovers ORDI on-start entry and all explicit percent exits when planner returns no rules (staging dispatcher-only)', async () => {
+    const initialMessage = '在 OKX 现货 ORDI/USDT 上，主周期 1h，使用 10% 固定仓位只做多；入场动作为立即开始时市价买入；出场规则为价格相对前收盘上涨 1% 时卖出，另有相对入场均价下跌 5% 止损卖出、相对入场均价上涨 10% 止盈卖出。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '我整理出的策略逻辑如下：OKX ORDIUSDT 现货 1h；入场：开多，止损：价格相对入场均价下跌5% 强制平仓，单笔仓位 10%；请确认是否按这个逻辑生成脚本。',
+        semanticPatch: {
+          contextSlots: {
+            exchange: 'okx',
+            marketType: 'spot',
+            symbol: 'ORDIUSDT',
+            timeframe: '1h',
+          },
+          rules: [],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-staging-ordi-dispatcher-only-percent-exits' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const rules = createPayload.semanticState?.rules ?? []
+    const serializedRules = JSON.stringify(rules)
+
+    expect(rules.find((rule: any) => rule.phase === 'entry')?.condition).toEqual(expect.objectContaining({ key: 'execution.on_start' }))
+    expect(serializedRules).toContain('action.open_long')
+    expect(serializedRules).toContain('position.sizing')
+    expect(serializedRules).toContain('basis":"prev_close')
+    expect(serializedRules).toContain('basis":"entry_avg_price')
+    expect(serializedRules).toContain('valuePct":1')
+    expect(serializedRules).toContain('valuePct":5')
+    expect(serializedRules).toContain('valuePct":10')
+    expect(rules.filter((rule: any) => rule.phase === 'exit')).toHaveLength(3)
+    expect(result.assistantPrompt).toContain('立即开始时市价买入')
+    expect(result.assistantPrompt).toContain('相对上一根收盘价')
+    expect(result.assistantPrompt).toContain('1')
+    expect(result.assistantPrompt).toContain('止损')
+    expect(result.assistantPrompt).toContain('5')
+    expect(result.assistantPrompt).toContain('止盈')
+    expect(result.assistantPrompt).toContain('10')
+  })
+
   it('keeps MA50-above-MA200 as indicator-vs-indicator gate for RSI reclaim strategies', async () => {
     const initialMessage = 'BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。'
     mockAi.chat.mockResolvedValue({

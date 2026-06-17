@@ -166,6 +166,7 @@ export class PlannerDispatcherMergeService {
     if (!patch.rules?.length) return null
     this.hydrateExplicitPercentRisksFromText(patch, userMessage)
     this.pruneInvalidDeterministicNoiseRules(patch, { rules: patch.rules }, userMessage)
+    this.appendExplicitPercentExitRulesFromText(patch, userMessage)
     patch.rules = this.dropOpenRulesCoveredByReversePosition(patch.rules)
     return patch
   }
@@ -2850,6 +2851,7 @@ export class PlannerDispatcherMergeService {
     const out: AtomExprAtom[] = []
     const stopLoss = /(?:(?:亏损|亏|下跌|跌|loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止损|平仓|退出|卖出|stop\s*loss)|(?:止损|stop\s*loss)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%)/iu.exec(userMessage)
     const takeProfit = /(?:止盈|take\s*profit)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
+      ?? /(?:上涨|涨|盈利|获利|收益|profit)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,12}(?:止盈|take\s*profit)/iu.exec(userMessage)
       // 兼容「盈利/获利/收益 达到 X% 时卖出平仓」这类出场式止盈表述（区间低买高卖模板）。
       // 要求百分比后近距离出现平仓动词，排除「盈利 X% 后加仓」的 pyramiding 语义。
       ?? this.matchProfitExitTakeProfit(userMessage)
@@ -2877,6 +2879,96 @@ export class PlannerDispatcherMergeService {
       }
     }
     return out
+  }
+
+  private appendExplicitPercentExitRulesFromText(
+    merged: InternalPlannerPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+    const additions = this.extractExplicitPercentExitRulesFromText(userMessage, merged.contextSlots?.timeframe)
+    if (additions.length === 0) return
+    const existingSignatures = new Set(rules.map(rule => this.ruleSemanticSignature(rule)))
+    const missing = additions.filter(rule => !existingSignatures.has(this.ruleSemanticSignature(rule)))
+    if (missing.length === 0) return
+    merged.rules = this.dedupeRulesBySignature([...rules, ...missing])
+  }
+
+  private extractExplicitPercentExitRulesFromText(
+    userMessage: string,
+    timeframe: unknown,
+  ): SemanticRule[] {
+    const window = typeof timeframe === 'string' && timeframe.trim().length > 0 ? timeframe.trim() : undefined
+    const rules: SemanticRule[] = []
+    const prevCloseExit = /价格?[^，。；;:：\n]{0,12}(?:相对|较|比)[^，。；;:：\n]{0,8}(?:前收盘|前收|上一根(?:K线| K 线)?收盘|prev(?:ious)?\s*close)[^\d，。；;:：\n]{0,12}(?:上涨|涨|上升|增加|超过|高于)[^\d，。；;:：\n]{0,12}(\d+(?:\.\d+)?)\s*%[^，。；;:：\n]{0,16}(?:卖出|平仓|清仓|出场|离场)/iu.exec(userMessage)
+    if (prevCloseExit?.[1]) {
+      const valuePct = Number(prevCloseExit[1])
+      if (Number.isFinite(valuePct) && valuePct > 0) {
+        rules.push(this.makeExplicitPercentExitRule({
+          id: 'deterministic-explicit-prev-close-exit',
+          conditionKey: ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+          conditionParams: {
+            basis: 'prev_close',
+            direction: 'up',
+            valuePct,
+            ...(window ? { window } : {}),
+          },
+          evidenceText: prevCloseExit[0].trim(),
+          effects: [],
+        }))
+      }
+    }
+
+    for (const risk of this.extractExplicitPercentRiskEffects(userMessage)) {
+      const valuePct = this.readNumericParam(risk.params, 'valuePct')
+      if (valuePct === null || valuePct <= 0) continue
+      const isStopLoss = risk.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key
+      const isTakeProfit = risk.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+      if (!isStopLoss && !isTakeProfit) continue
+      rules.push(this.makeExplicitPercentExitRule({
+        id: isStopLoss ? 'deterministic-explicit-stop-loss-exit' : 'deterministic-explicit-take-profit-exit',
+        conditionKey: ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+        conditionParams: {
+          basis: 'entry_avg_price',
+          valuePct,
+          direction: isStopLoss ? 'down' : 'up',
+        },
+        evidenceText: risk.evidence?.text ?? (isStopLoss ? '止损' : '止盈'),
+        effects: [risk],
+      }))
+    }
+
+    return rules
+  }
+
+  private makeExplicitPercentExitRule(input: {
+    id: string
+    conditionKey: string
+    conditionParams: Record<string, unknown>
+    evidenceText: string
+    effects: AtomExprAtom[]
+  }): SemanticRule {
+    return {
+      id: input.id,
+      phase: 'exit',
+      sideScope: 'long',
+      evidence: { text: input.evidenceText },
+      condition: {
+        kind: 'atom',
+        key: input.conditionKey,
+        params: input.conditionParams,
+        sideScope: 'long',
+        evidence: { text: input.evidenceText },
+      },
+      effects: {
+        actions: [{ kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.close_long'].key, params: {}, sideScope: 'long' }],
+        risks: input.effects,
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    }
   }
 
   // 「盈利/获利/收益 [达到|超过] X% [时] 卖出/平仓/清仓/出场」→ 出场式止盈百分比。
