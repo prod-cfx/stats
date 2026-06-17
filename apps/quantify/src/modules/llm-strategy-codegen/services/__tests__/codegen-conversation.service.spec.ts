@@ -4005,6 +4005,98 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toBe('当前会话缺少语义状态，请重新输入完整策略。')
   })
 
+  it('uses server-side confirmation digest tolerance for explicit confirmGenerate requests', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-explicit-confirm',
+      userId: 'u-1',
+      status: 'CONFIRM_GATE',
+      checklist: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+
+    const continueConfirmedSession = jest
+      .spyOn(service as any, 'continueConfirmedSession')
+      .mockResolvedValue({ id: 'session-explicit-confirm', status: 'GENERATING', clarificationGate: { blocked: false, summary: null, items: [], pendingItems: [] } })
+
+    await service.continueSession('session-explicit-confirm', {
+      userId: 'u-1',
+      message: 'Confirm code generation',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:client-view',
+    })
+
+    expect(continueConfirmedSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-explicit-confirm' }),
+      expect.objectContaining({ confirmGenerate: true, confirmedCanonicalDigest: 'sha256:client-view' }),
+      'u-1',
+      expect.objectContaining({ allowServerSideConfirmationDigest: true }),
+    )
+  })
+
+  it('does not treat recognized-unsupported pause risk as projection loss', () => {
+    const semanticState: SemanticStateType = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [{
+        id: 'pause-risk',
+        key: 'risk.condition_expression',
+        params: {
+          effect: { type: 'pause_strategy' },
+          capabilityStatus: 'recognized_unsupported',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      position: null,
+      rules: [{
+        id: 'exit-pause-risk',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [{
+            kind: 'atom',
+            key: 'risk.condition_expression',
+            params: {
+              effect: { type: 'pause_strategy' },
+              capabilityStatus: 'recognized_unsupported',
+            },
+          }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-06-17T00:00:00.000Z',
+    }
+
+    const result = (service as any).evaluateSemanticProjectionLoss(semanticState, {
+      rules: [{ metadata: { semanticKey: 'position.dca_schedule' } }],
+    })
+
+    expect(result).toEqual({ blocked: false, reasons: [] })
+  })
+
   it('rejects processing-session requeue when confirmedCanonicalDigest mismatches current semantic view', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 'session-processing-1',

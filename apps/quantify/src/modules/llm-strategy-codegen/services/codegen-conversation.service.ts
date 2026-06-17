@@ -1685,7 +1685,9 @@ export class CodegenConversationService {
       return this.rejectChecklistOnlySession(session, sessionUserId, responseLocale)
     }
     if (dto.confirmGenerate === true) {
-      return this.continueConfirmedSession(session, dto, sessionUserId)
+      return this.continueConfirmedSession(session, dto, sessionUserId, {
+        allowServerSideConfirmationDigest: true,
+      })
     }
 
     if (semanticEditDecision.kind !== 'NO_EDIT') {
@@ -2875,9 +2877,10 @@ export class CodegenConversationService {
     )
     const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const rawConfirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
-    const confirmedCanonicalDigest = rawConfirmedCanonicalDigest
-      || (options.allowServerSideConfirmationDigest ? confirmationViewDigest : '')
-    if (rawConfirmedCanonicalDigest) {
+    const confirmedCanonicalDigest = options.allowServerSideConfirmationDigest
+      ? (confirmationViewDigest || rawConfirmedCanonicalDigest)
+      : rawConfirmedCanonicalDigest
+    if (rawConfirmedCanonicalDigest && !options.allowServerSideConfirmationDigest) {
       const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
       if (!confirmationViewDigest || rawConfirmedCanonicalDigest !== confirmationViewDigest) {
         throw new DomainException('codegen.confirmation_digest_mismatch', {
@@ -5908,6 +5911,9 @@ export class CodegenConversationService {
         risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION
         && risk.params.capabilityStatus !== 'supported'
       ) {
+        if (this.isRecognizedUnsupportedPauseRisk(risk.params)) {
+          continue
+        }
         reasons.push(`unsupported:${risk.key}`)
         continue
       }
@@ -5920,6 +5926,14 @@ export class CodegenConversationService {
       blocked: reasons.length > 0,
       reasons,
     }
+  }
+
+  private isRecognizedUnsupportedPauseRisk(params: Record<string, unknown>): boolean {
+    const effect = params.effect
+    const effectType = effect && typeof effect === 'object' && 'type' in effect
+      ? (effect as { type?: unknown }).type
+      : null
+    return params.capabilityStatus === 'recognized_unsupported' && effectType === 'pause_strategy'
   }
 
   private conditionContainsAtomKey(condition: unknown, key: string): boolean {
