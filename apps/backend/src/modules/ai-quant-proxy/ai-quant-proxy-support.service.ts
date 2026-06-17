@@ -92,11 +92,10 @@ export class AiQuantProxySupportService {
   }
 
   private buildTransientUnavailableException(error: unknown): DomainException {
-    return new DomainException('量化服务暂时不可用，请稍后重试', {
+    return new DomainException('Quantify service temporarily unavailable', {
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: {
-        reasonMessage: '量化服务暂时不可用，请稍后重试',
         retryable: true,
         upstreamCode: this.getQuantifyErrorCode(error),
       },

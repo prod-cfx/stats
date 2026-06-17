@@ -78,20 +78,28 @@ describe('accountExchangeAccountsService', () => {
       { upstreamBody: '<html>502 Bad Gateway</html>' },
     ))
 
-    await expect(service.upsert(authenticatedUser, {
+    let error: DomainException | undefined
+    try {
+      await service.upsert(authenticatedUser, {
       exchangeId: 'okx',
       apiKey: 'key',
       apiSecret: 'secret',
       passphrase: 'pass',
-    })).rejects.toMatchObject<Partial<DomainException>>({
+      })
+    }
+    catch (caught) {
+      error = caught as DomainException
+    }
+
+    expect(error).toMatchObject<Partial<DomainException>>({
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-      message: '量化服务暂时不可用，请稍后重试',
+      message: 'Quantify service temporarily unavailable',
       args: expect.objectContaining({
-        reasonMessage: '量化服务暂时不可用，请稍后重试',
         retryable: true,
         upstreamCode: 'UPSTREAM_INVALID_RESPONSE',
       }),
     })
+    expect(error?.args).not.toHaveProperty('reasonMessage')
   })
 
   it('maps quantify credential validation errors into stable backend args', async () => {

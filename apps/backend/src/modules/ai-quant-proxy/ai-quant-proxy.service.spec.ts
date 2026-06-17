@@ -625,21 +625,29 @@ describe('aiQuantProxyService', () => {
       { upstreamBody: '<html>502 Bad Gateway</html>' },
     ))
 
-    await expect(service.listAccountStrategies('user-1', 'Bearer token-1', {
+    let error: unknown
+    try {
+      await service.listAccountStrategies('user-1', 'Bearer token-1', {
       page: 1,
       limit: 20,
       subscribedOnly: true,
       excludeDraft: true,
-    })).rejects.toMatchObject({
+      })
+    }
+    catch (caught) {
+      error = caught
+    }
+
+    expect(error).toMatchObject({
       status: 503,
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-      message: '量化服务暂时不可用，请稍后重试',
+      message: 'Quantify service temporarily unavailable',
       args: expect.objectContaining({
-        reasonMessage: '量化服务暂时不可用，请稍后重试',
         retryable: true,
         upstreamCode: 'UPSTREAM_INVALID_RESPONSE',
       }),
     })
+    expect((error as { args?: Record<string, unknown> }).args).not.toHaveProperty('reasonMessage')
   })
 
   it('proxies backtesting capabilities with authorization header', async () => {
@@ -692,16 +700,24 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.getBacktestCapabilities.mockRejectedValue(new QuantifyClientError('Quantify request failed', 502, 'UPSTREAM_REQUEST_FAILED'))
 
-    await expect(service.getBacktestCapabilities('Bearer token-1')).rejects.toMatchObject({
+    let error: unknown
+    try {
+      await service.getBacktestCapabilities('Bearer token-1')
+    }
+    catch (caught) {
+      error = caught
+    }
+
+    expect(error).toMatchObject({
       status: 503,
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-      message: '量化服务暂时不可用，请稍后重试',
+      message: 'Quantify service temporarily unavailable',
       args: expect.objectContaining({
-        reasonMessage: '量化服务暂时不可用，请稍后重试',
         retryable: true,
         upstreamCode: 'UPSTREAM_REQUEST_FAILED',
       }),
     })
+    expect((error as { args?: Record<string, unknown> }).args).not.toHaveProperty('reasonMessage')
     expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledTimes(3)
   })
 
