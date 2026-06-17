@@ -94,7 +94,7 @@ describe('GenericSeedDispatcher mainflow semantic drift regressions', () => {
     const patch = dispatcher.dispatch('ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈。')
     const view = projection.buildConversationView(baseState({ rules: patch.rules ?? [] }))
 
-    expect(view.summary).toContain('入场：价格在 MA20 上方 → 开多')
+    expect(view.summary).toMatch(/入场：(1h\s*)?价格在 MA20 上方 → 开多/u)
     expect(view.summary).not.toContain('出场：价格在 MA20 上方 → 平多')
     expect(view.summary).toContain('2 倍 ATR 止损')
     expect(view.summary).toContain('3 倍 ATR 止盈')

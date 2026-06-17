@@ -41,6 +41,16 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     return service.buildConversationView(state).summary
   }
 
+  it('renders MA100 break or MACD death-cross exit as OR from dispatcher output', () => {
+    const summary = summarizePrompt('SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。')
+
+    expect(summary).toContain('入场')
+    expect(summary).toContain('出场')
+    expect(summary).toContain('价格低于 MA100 或 MACD 12/26/9 死叉')
+    expect(summary).not.toContain('MACD 100/26/9')
+    expect(summary).not.toContain('MACD 12/26/9 死叉 同时 价格低于 MA100')
+  })
+
   it('detects recommendation intent from namespaced action atom keys', () => {
     const signals = (service as unknown as {
       buildRecommendationSignals(input: {
