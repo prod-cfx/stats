@@ -5,17 +5,17 @@ import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BacktestEquityChart } from './BacktestEquityChart'
 
-const mockComposedChart = jest.fn(({ children }: { children: React.ReactNode }) => <svg>{children}</svg>)
+const mockBacktestEquityChartRecharts = jest.fn((props: { chartData: unknown[] }) => (
+  <div data-testid="backtest-equity-chart-body" className="h-[300px] w-full sm:h-[360px] lg:h-[400px]">
+    {props.chartData.length}
+  </div>
+))
 
-jest.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  ComposedChart: (props: { children: React.ReactNode }) => mockComposedChart(props),
-  CartesianGrid: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-  Tooltip: () => null,
-  Area: () => null,
-  Line: () => null,
+jest.mock('next/dynamic', () => ({
+  __esModule: true,
+  default: jest.fn((_loader: unknown, _options?: unknown) => function MockDynamicBacktestEquityChartRecharts(props: { chartData: unknown[] }) {
+    return mockBacktestEquityChartRecharts(props)
+  }),
 }))
 
 describe('BacktestEquityChart mobile layout', () => {
@@ -23,7 +23,7 @@ describe('BacktestEquityChart mobile layout', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    mockComposedChart.mockClear()
+    mockBacktestEquityChartRecharts.mockClear()
     ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     ;(globalThis as unknown as { MutationObserver?: typeof MutationObserver }).MutationObserver = class {
       observe() {}
@@ -66,6 +66,29 @@ describe('BacktestEquityChart mobile layout', () => {
     expect(container.querySelector('[data-testid="backtest-equity-empty"]')?.className).toContain('sm:h-[360px]')
   })
 
+  it('reserves chart height while the recharts chunk is loading', () => {
+    const dynamicMock = jest.requireMock('next/dynamic').default as jest.Mock
+    const dynamicOptions = dynamicMock.mock.calls[0]?.[1] as { loading?: () => React.ReactNode }
+
+    expect(dynamicOptions.loading).toBeDefined()
+
+    const loadingRoot = document.createElement('div')
+    const loadingRenderer = createRoot(loadingRoot)
+
+    act(() => {
+      loadingRenderer.render(dynamicOptions.loading?.())
+    })
+
+    const loadingPlaceholder = loadingRoot.querySelector('[data-testid="backtest-equity-chart-body-loading"]')
+    expect(loadingPlaceholder?.className).toContain('h-[300px]')
+    expect(loadingPlaceholder?.className).toContain('sm:h-[360px]')
+    expect(loadingPlaceholder?.className).toContain('lg:h-[400px]')
+
+    act(() => {
+      loadingRenderer.unmount()
+    })
+  })
+
   it('downsamples large one-minute equity series before passing data to recharts', async () => {
     const data = Array.from({ length: 150_000 }, (_, index) => ({
       time: `t-${index}`,
@@ -77,7 +100,7 @@ describe('BacktestEquityChart mobile layout', () => {
       root.render(<BacktestEquityChart lng="zh" data={data} />)
     })
 
-    const chartProps = mockComposedChart.mock.calls.at(-1)?.[0] as { data?: unknown[] } | undefined
-    expect(chartProps?.data?.length).toBeLessThanOrEqual(1_500)
+    const chartProps = mockBacktestEquityChartRecharts.mock.calls.at(-1)?.[0]
+    expect(chartProps?.chartData.length).toBeLessThanOrEqual(1_500)
   })
 })

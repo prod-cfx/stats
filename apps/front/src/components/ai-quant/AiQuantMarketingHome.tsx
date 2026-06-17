@@ -1,7 +1,7 @@
 'use client'
 
-import type {Transition} from 'framer-motion';
-import { motion,  useReducedMotion } from 'framer-motion'
+import type { Transition } from 'framer-motion'
+import { LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion'
 import { ArrowRight, CircleDot, LineChart, RefreshCw, Sparkles, Star, TrendingUp, UserRound, WalletCards } from 'lucide-react'
 import Link from 'next/link'
 import { useId } from 'react'
@@ -35,15 +35,17 @@ export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#f6f8fc] text-zinc-950 selection:bg-primary/20 dark:bg-[#020305] dark:text-white">
       <ThemeAmbientBackground />
-      <div className="relative z-10">
-        <HeroSection ctaHref={ctaHref} lng={lng} />
-        <WorkflowSection />
-        {featureKeys.map((key, index) => (
-          <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} />
-        ))}
-        <AdvantageSection />
-        <FinalCtaSection ctaHref={ctaHref} />
-      </div>
+      <LazyMotion features={domAnimation}>
+        <div className="relative z-10">
+          <HeroSection ctaHref={ctaHref} lng={lng} />
+          <WorkflowSection />
+          {featureKeys.map((key, index) => (
+            <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} />
+          ))}
+          <AdvantageSection />
+          <FinalCtaSection ctaHref={ctaHref} />
+        </div>
+      </LazyMotion>
     </main>
   )
 }
@@ -69,7 +71,7 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
       <HeroGradientWash />
       <HeroLines />
       <HeroParticles />
-      <motion.div
+      <m.div
         initial="hidden"
         animate="visible"
         variants={revealUp}
@@ -92,7 +94,7 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
         <div>
           <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.heroCta')} />
         </div>
-      </motion.div>
+      </m.div>
     </section>
   )
 }
@@ -159,22 +161,22 @@ function HeroParticles() {
 
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-      <motion.div
+      <m.div
         animate={shouldReduceMotion ? { opacity: 0.5, y: 0 } : { opacity: [0.2, 0.75, 0.2], y: [0, -10, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
         className="absolute top-[26%] left-[18%] size-1.5 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.75)]"
       />
-      <motion.div
+      <m.div
         animate={shouldReduceMotion ? { opacity: 0.44, y: 0 } : { opacity: [0.15, 0.65, 0.15], y: [0, 12, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
         className="absolute top-[34%] right-[20%] size-2 rounded-full bg-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.7)]"
       />
-      <motion.div
+      <m.div
         animate={shouldReduceMotion ? { opacity: 0.38, y: 0 } : { opacity: [0.18, 0.58, 0.18], y: [0, -8, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
         className="absolute bottom-[25%] left-[25%] size-1 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.7)]"
       />
-      <motion.div
+      <m.div
         animate={shouldReduceMotion ? { opacity: 0.32, y: 0 } : { opacity: [0.12, 0.5, 0.12], y: [0, 9, 0] }}
         transition={shouldReduceMotion ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}
         className="absolute right-[28%] bottom-[19%] size-1.5 rounded-full bg-primary shadow-[0_0_18px_rgba(100,108,255,0.72)]"
@@ -211,7 +213,7 @@ function WorkflowSection() {
         </div>
         <div className="mt-16 grid gap-6 sm:grid-cols-2 md:mt-18 lg:grid-cols-4 lg:gap-7">
           {workflowKeys.map((key, index) => (
-            <motion.div
+            <m.div
               key={key}
               initial={shouldReduceMotion ? false : 'hidden'}
               whileInView={shouldReduceMotion ? undefined : 'visible'}
@@ -231,7 +233,7 @@ function WorkflowSection() {
               <p className={`!m-0 !text-[14.5px] !leading-[1.78] md:!text-[15px] ${mutedText}`}>
                 {t(`aiQuant.homepage.workflow.items.${key}.desc`)}
               </p>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </div>
@@ -254,7 +256,7 @@ function FeatureSection({
   return (
     <section className={sectionClass}>
       <div className={`mx-auto grid max-w-7xl items-center gap-12 md:grid-cols-2 md:gap-16 ${reverse ? 'md:[&>*:first-child]:order-2' : ''}`}>
-        <motion.div
+        <m.div
           initial={shouldReduceMotion ? false : 'hidden'}
           whileInView={shouldReduceMotion ? undefined : 'visible'}
           animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
@@ -273,9 +275,9 @@ function FeatureSection({
           <p className={`${usesFeatureCopyScale ? '!m-0 !text-[15px] !leading-[1.75] md:!text-[16px]' : 'mt-5 text-base leading-relaxed'} ${mutedText}`}>
             {t(`aiQuant.homepage.features.${featureKey}.description`)}
           </p>
-        </motion.div>
+        </m.div>
 
-        <motion.div
+        <m.div
           initial={shouldReduceMotion ? false : 'hidden'}
           whileInView={shouldReduceMotion ? undefined : 'visible'}
           animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
@@ -285,7 +287,7 @@ function FeatureSection({
           className="relative min-w-0"
         >
           <FeatureVisual featureKey={featureKey} />
-        </motion.div>
+        </m.div>
       </div>
     </section>
   )
@@ -367,7 +369,7 @@ function ConversationStrategyVisual() {
         </div>
         <div className="mt-5 space-y-3">
           {rules.map((rule, index) => (
-            <motion.div
+            <m.div
               key={rule.id}
               initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
               whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
@@ -389,7 +391,7 @@ function ConversationStrategyVisual() {
               <div className={`rounded-md border px-3 py-2 text-[12px] leading-none font-bold ${rule.actionClass}`}>
                 {rule.action}
               </div>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </div>
@@ -446,7 +448,7 @@ function BacktestResultVisual() {
 
           <div className="relative z-10 flex h-full items-end justify-between px-1">
             {bars.map((bar, index) => (
-              <motion.div
+              <m.div
                 key={bar.label}
                 initial={shouldReduceMotion ? false : { height: 0 }}
                 whileInView={shouldReduceMotion ? undefined : { height: `${bar.height}%` }}
@@ -462,7 +464,7 @@ function BacktestResultVisual() {
             ))}
           </div>
           <svg className="pointer-events-none absolute inset-x-0 top-6 z-20 h-[64%] w-full overflow-visible" viewBox="0 0 420 128" fill="none" aria-hidden="true">
-            <motion.path
+            <m.path
               d="M-14 94 C22 91 50 89 80 85 C112 81 126 86 148 80 C174 72 196 80 218 75 C244 69 264 76 286 70 C312 63 332 69 354 64 C386 57 410 62 434 55"
               initial={shouldReduceMotion ? false : { pathLength: 0, opacity: 0 }}
               whileInView={shouldReduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
@@ -524,19 +526,19 @@ function DeployOrbitVisual() {
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="absolute aspect-square w-[54%] rounded-full border-[5px] border-zinc-400/20 dark:border-white/[0.13]" />
         <div className="absolute aspect-square w-[34%] rounded-full border border-zinc-500/34 dark:border-white/70" />
-        <motion.div
+        <m.div
           aria-hidden="true"
           animate={shouldReduceMotion ? { opacity: 0.54, scale: 1 } : { opacity: [0, 0.58, 0.22, 0], scale: [0.64, 0.72, 1.08, 1.58] }}
           transition={shouldReduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: 'easeOut', times: [0, 0.08, 0.66, 1] }}
           className="absolute aspect-square w-[34%] rounded-full border border-zinc-500/40 dark:border-white/78"
         />
-        <motion.div
+        <m.div
           aria-hidden="true"
           animate={shouldReduceMotion ? { opacity: 0.28, scale: 1 } : { opacity: [0, 0.36, 0.14, 0], scale: [0.72, 0.8, 1.2, 1.68] }}
           transition={shouldReduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: 'easeOut', delay: 1.45, times: [0, 0.08, 0.66, 1] }}
           className="absolute aspect-square w-[34%] rounded-full border border-zinc-500/28 dark:border-white/50"
         />
-        <motion.div
+        <m.div
           aria-hidden="true"
           animate={shouldReduceMotion ? { opacity: 0.34, scale: 1 } : { opacity: [0.28, 0.52, 0.28], scale: [0.92, 1.08, 0.92] }}
           transition={shouldReduceMotion ? undefined : { duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -544,13 +546,13 @@ function DeployOrbitVisual() {
         />
 
         <div className="relative h-[128px] w-[150px]">
-          <motion.div
+          <m.div
             aria-hidden="true"
             animate={shouldReduceMotion ? undefined : { x: [0, -2, 0], y: [0, 2, 0] }}
             transition={shouldReduceMotion ? undefined : { duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
             className="absolute left-3 top-8 h-[70px] w-[76px] rounded-xl border border-amber-300/42 bg-gradient-to-br from-amber-200/58 via-orange-100/42 to-white/20 shadow-[0_18px_50px_rgba(245,158,11,0.12)] dark:border-amber-300/34 dark:from-amber-500/30 dark:via-orange-500/12 dark:to-transparent dark:shadow-[0_18px_50px_rgba(245,158,11,0.18)]"
           />
-          <motion.div
+          <m.div
             aria-hidden="true"
             animate={shouldReduceMotion ? undefined : { x: [0, 2, 0], y: [0, -2, 0] }}
             transition={shouldReduceMotion ? undefined : { duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
@@ -563,13 +565,13 @@ function DeployOrbitVisual() {
               <div className="h-2.5 w-10 rounded-full bg-violet-500/54 shadow-[0_0_18px_rgba(139,92,246,0.22)] dark:bg-violet-300/78 dark:shadow-[0_0_18px_rgba(196,181,253,0.38)]" />
             </div>
           </div>
-          <motion.div
+          <m.div
             animate={shouldReduceMotion ? undefined : { rotate: 360 }}
             transition={shouldReduceMotion ? undefined : { duration: 5.2, repeat: Infinity, ease: 'linear' }}
             className="absolute right-0 top-[36px] z-20 flex size-[58px] items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-50/92 text-cyan-600 shadow-[0_14px_46px_rgba(34,211,238,0.16)] dark:border-cyan-300/22 dark:bg-[#08283a]/88 dark:text-cyan-300 dark:shadow-[0_14px_46px_rgba(34,211,238,0.22)]"
           >
             <RefreshCw className="size-6" />
-          </motion.div>
+          </m.div>
           <div className="absolute -bottom-4 left-1/2 z-30 -translate-x-1/2 text-[15px] font-black tracking-normal text-zinc-950 drop-shadow-[0_4px_14px_rgba(255,255,255,0.72)] dark:text-white dark:drop-shadow-[0_4px_14px_rgba(0,0,0,0.72)]">
             DEPLOY
           </div>
@@ -639,7 +641,7 @@ function StrategyPlazaVisual() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(99,102,241,0.16),transparent_36%),radial-gradient(circle_at_50%_56%,rgba(124,58,237,0.08),transparent_42%),linear-gradient(145deg,rgba(255,255,255,0.98),rgba(239,245,255,0.92))] dark:bg-[radial-gradient(circle_at_50%_48%,rgba(72,72,180,0.24),transparent_36%),radial-gradient(circle_at_50%_56%,rgba(124,58,237,0.16),transparent_42%),linear-gradient(145deg,rgba(11,11,22,0.98),rgba(2,2,6,0.98))]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(255,255,255,0.36),transparent_28%)] dark:bg-[radial-gradient(circle_at_50%_48%,rgba(255,255,255,0.045),transparent_28%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:44px_44px] opacity-30 dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.014)_1px,transparent_1px)] dark:opacity-20" />
-      <motion.div
+      <m.div
         aria-hidden="true"
         animate={shouldReduceMotion ? undefined : { opacity: [0.18, 0.34, 0.18], scale: [0.96, 1.04, 0.96] }}
         transition={shouldReduceMotion ? undefined : { duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
@@ -647,7 +649,7 @@ function StrategyPlazaVisual() {
       />
 
       {backgroundCards.map(card => (
-        <motion.div
+        <m.div
           key={card.id}
           animate={shouldReduceMotion ? undefined : { y: [0, -7, 0] }}
           transition={shouldReduceMotion ? undefined : { duration: 5.2, repeat: Infinity, ease: 'easeInOut', delay: card.delay }}
@@ -669,7 +671,7 @@ function StrategyPlazaVisual() {
               )}
             </div>
           </div>
-        </motion.div>
+        </m.div>
       ))}
 
       <div className="absolute inset-0 flex items-center justify-center p-6">
@@ -698,7 +700,7 @@ function StrategyPlazaVisual() {
           </div>
           <div className="mt-7 flex h-11 items-end gap-2">
             {bars.map((bar, index) => (
-              <motion.div
+              <m.div
                 key={bar.key}
                 initial={shouldReduceMotion ? false : { height: 0 }}
                 whileInView={shouldReduceMotion ? undefined : { height: `${bar.height}%` }}
@@ -729,7 +731,7 @@ function AdvantageSection() {
         </div>
         <div className="mt-14 grid gap-5 md:grid-cols-2">
           {advantageKeys.map((key, index) => (
-            <motion.div
+            <m.div
               key={key}
               initial={shouldReduceMotion ? false : 'hidden'}
               whileInView={shouldReduceMotion ? undefined : 'visible'}
@@ -748,7 +750,7 @@ function AdvantageSection() {
               <p className={`relative !m-0 text-base leading-relaxed ${mutedText}`}>
                 {t(`aiQuant.homepage.advantages.items.${key}.desc`)}
               </p>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </div>
@@ -762,7 +764,7 @@ function FinalCtaSection({ ctaHref }: { ctaHref: string }) {
 
   return (
     <section className={sectionShell}>
-      <motion.div
+      <m.div
         initial={shouldReduceMotion ? false : 'hidden'}
         whileInView={shouldReduceMotion ? undefined : 'visible'}
         animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
@@ -781,7 +783,7 @@ function FinalCtaSection({ ctaHref }: { ctaHref: string }) {
         <div className="mt-9 flex w-full justify-center">
           <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.finalCta')} className="min-h-[56px] px-9 py-3.5 !text-[16px] md:min-h-[60px] md:px-10 md:!text-[17px] [&_svg]:!h-[18px] [&_svg]:!w-[18px]" />
         </div>
-      </motion.div>
+      </m.div>
     </section>
   )
 }

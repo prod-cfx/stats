@@ -1,7 +1,7 @@
 'use client';
 
 import type {AggregatedVolumeApiItem} from '@/lib/api';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'framer-motion';
 import { Check, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -92,7 +92,8 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
   }, []);
 
   return (
-    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg ${isCompact ? 'p-3 gap-3' : 'p-4 gap-4'} flex flex-col shadow-sm h-full min-h-0 relative`}>
+    <LazyMotion features={domAnimation}>
+      <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg ${isCompact ? 'p-3 gap-3' : 'p-4 gap-4'} flex flex-col shadow-sm h-full min-h-0 relative`}>
       {/* Card Header ... */}
       <div className="flex items-center justify-between">
         <SubTitle className={isCompact ? '!text-[13px] !leading-5' : ''}>{title}</SubTitle>
@@ -108,7 +109,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
           
           <AnimatePresence>
             {isDropdownOpen && (
-              <motion.div 
+              <m.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
@@ -130,7 +131,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                     {symbol === t && <Check className={`${isCompact ? 'size-3' : 'size-3.5'} text-white`} />}
                   </button>
                 ))}
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
         </div>
@@ -172,7 +173,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
             {/* Tooltip */}
             <AnimatePresence>
               {hoveredItem?.name === item.name && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, scale: 0.9, y: -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: -10 }}
@@ -191,13 +192,14 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                   </div>
                   {/* Arrow */}
                   <div className="absolute -bottom-1.5 left-1/4 -translate-x-1/2 size-3 bg-[color:var(--cf-surface)] border-r border-b border-[color:var(--cf-border)] rotate-45" />
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           </div>
         ))}
       </div>
-    </div>
+      </div>
+    </LazyMotion>
   );
 };
 
