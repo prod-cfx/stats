@@ -2640,6 +2640,9 @@ export class SemanticStateProjectionService {
     }
 
     if (expression.kind === 'predicate') {
+      const indicatorCompare = this.tryFormatSemanticIndicatorComparePredicate(expression)
+      if (indicatorCompare) return indicatorCompare
+
       const left = this.formatSemanticExpressionOperand(expression.left)
       const right = this.formatSemanticExpressionOperand(expression.right)
       const operator = this.formatSemanticExpressionOperator(expression.op)
@@ -2668,6 +2671,36 @@ export class SemanticStateProjectionService {
       return `非（${children[0]}）`
     }
     return children.join(expression.kind === 'AND' ? '且' : '或')
+  }
+
+  private tryFormatSemanticIndicatorComparePredicate(expression: Extract<SemanticExpression, { kind: 'predicate' }>): string | null {
+    if (expression.op !== 'GT' && expression.op !== 'GTE' && expression.op !== 'LT' && expression.op !== 'LTE') return null
+    if (expression.right.kind !== 'indicator') return null
+
+    const right = this.formatSemanticExpressionIndicatorReference(expression.right)
+    if (!right) return null
+
+    const isAbove = expression.op === 'GT' || expression.op === 'GTE'
+    if (expression.left.kind === 'series' && expression.left.source === 'bar' && expression.left.field === 'close') {
+      return isAbove ? `价格在 ${right} 上方` : `价格低于 ${right}`
+    }
+
+    if (expression.left.kind === 'indicator') {
+      const left = this.formatSemanticExpressionIndicatorReference(expression.left)
+      if (!left) return null
+      return isAbove ? `${left} 在 ${right} 上方` : `${left} 低于 ${right}`
+    }
+
+    return null
+  }
+
+  private formatSemanticExpressionIndicatorReference(operand: Extract<SemanticExpressionOperand, { kind: 'indicator' }>): string | null {
+    const name = operand.name.toLowerCase()
+    const indicator = name === 'sma' ? 'MA' : name.toUpperCase()
+    if (indicator !== 'MA' && indicator !== 'EMA') return null
+    const period = this.readFiniteNumber(operand.params.period)
+    if (period === null) return null
+    return `${indicator}${this.formatNumber(period)}`
   }
 
   private formatSemanticExpressionOperand(operand: SemanticExpressionOperand): string {

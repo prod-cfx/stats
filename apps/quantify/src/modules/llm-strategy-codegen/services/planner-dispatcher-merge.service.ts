@@ -2210,7 +2210,10 @@ export class PlannerDispatcherMergeService {
   private repairMovingAveragePairGateCondition(condition: AtomExpr, userMessage: string): AtomExpr {
     const pair = this.extractMovingAveragePair(userMessage)
     if (!pair) return condition
-    if (this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.leftPeriod)) return condition
+    if (
+      this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.leftPeriod)
+      || this.userMessageHasExplicitPriceAboveMovingAverage(userMessage, pair.rightPeriod)
+    ) return condition
 
     const repair = (expr: AtomExpr): AtomExpr => {
       if (expr.kind === 'and') {
@@ -2251,7 +2254,7 @@ export class PlannerDispatcherMergeService {
 
   private userMessageHasExplicitPriceAboveMovingAverage(userMessage: string, period: number): boolean {
     const escapedPeriod = String(period).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`(?:价格|收盘价)\\s*(?:在|位于)?\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod}\\s*(?:上方|之上|高于)`, 'iu').test(userMessage)
+    return new RegExp(`(?:价格|收盘价)\\s*(?:(?:在|位于)?\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod}\\s*(?:上方|之上)|(?:高于|大于|>)\\s*(?:MA|EMA|SMA)\\s*${escapedPeriod})`, 'iu').test(userMessage)
   }
 
   private isNoisyMovingAveragePairPriceGate(expr: AtomExpr, pair: { indicator: string, leftPeriod: number, rightPeriod: number }): boolean {
@@ -4386,6 +4389,12 @@ export class PlannerDispatcherMergeService {
       existing.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       || existing.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key
     ) {
+      const existingLeftPeriod = this.readNumericParam(existing.params, 'period')
+      const candidateLeftPeriod = this.readNumericParam(candidate.params, 'period')
+      if (existingLeftPeriod !== candidateLeftPeriod) return false
+      const existingReferencePeriod = this.readNumericParam(existing.params, 'reference.period')
+      const candidateReferencePeriod = this.readNumericParam(candidate.params, 'reference.period')
+      if (existingReferencePeriod !== null || candidateReferencePeriod !== null) return existingReferencePeriod === candidateReferencePeriod
       const existingPeriod = this.readIndicatorPeriodParam(existing.params)
       const candidatePeriod = this.readIndicatorPeriodParam(candidate.params)
       if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod

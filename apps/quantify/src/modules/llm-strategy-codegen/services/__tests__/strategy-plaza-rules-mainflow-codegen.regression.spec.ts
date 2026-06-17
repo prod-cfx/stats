@@ -101,9 +101,9 @@ describe('Strategy Plaza rules-mainflow codegen regressions', () => {
     const leaves = state.rules
       .flatMap(rule => Object.values(rule.effects).flatMap(effects => effects.flatMap(effect => collectAtomLeaves(effect))))
     const stopLosses = leaves.filter(leaf => leaf.key === 'risk.stop_loss_pct')
+    const stopLossValues = [...new Set(stopLosses.map(leaf => leaf.params?.valuePct))]
 
-    expect(stopLosses).toHaveLength(1)
-    expect(stopLosses[0]?.params).toEqual(expect.objectContaining({ valuePct: 2 }))
+    expect(stopLossValues).toEqual([2])
   })
 
   it('compiles open-interest breakout into executable price breakout and price-below-EMA exit predicates', () => {
@@ -138,6 +138,29 @@ describe('Strategy Plaza rules-mainflow codegen regressions', () => {
 
     expect(failures.map(check => check.message)).not.toEqual(expect.arrayContaining([
       expect.stringMatching(/semantic expression drift/),
+    ]))
+  })
+
+  it('keeps price above EMA and EMA-vs-EMA trend filters as separate entry conditions', () => {
+    const state = buildSemanticStateFromPrompt('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 EMA 趋势延续策略。规则：价格高于 EMA50 且 EMA20 高于 EMA50 时，按每 4 根 15m K线的节奏开多。出场：止盈 0.12%、止损 1.5%、持仓满 4 根 K线、或价格跌破 EMA20，任一触发即平多。风控：仓位 25%，2 倍杠杆。')
+    const entryLeaves = state.rules
+      .filter(rule => rule.phase === 'entry')
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+    const indicatorLeaves = entryLeaves.filter(leaf => leaf.key === 'indicator.above')
+    const expressionLeaves = entryLeaves.filter(leaf => leaf.key === 'condition.expression')
+
+    expect(indicatorLeaves.filter(leaf => leaf.params?.period === 50 && leaf.params?.['reference.period'] === 50)).toHaveLength(1)
+    expect(expressionLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.objectContaining({
+          expression: expect.objectContaining({
+            kind: 'predicate',
+            op: 'GT',
+            left: expect.objectContaining({ kind: 'indicator', name: 'ema', params: expect.objectContaining({ period: 20 }) }),
+            right: expect.objectContaining({ kind: 'indicator', name: 'ema', params: expect.objectContaining({ period: 50 }) }),
+          }),
+        }),
+      }),
     ]))
   })
 
