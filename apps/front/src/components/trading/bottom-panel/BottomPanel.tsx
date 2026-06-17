@@ -5,6 +5,22 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMockBasePrice } from '@/lib/mock/market';
 
+type OrderTypeKey = 'limit' | 'market'
+type OrderStatusKey = 'open' | 'filled' | 'cancelled'
+type MockPositionSide = 'long' | 'short'
+
+function translateOrderType(t: (key: string) => string, key: OrderTypeKey) {
+  return t(`bottomPanel.orderTypes.${key}`)
+}
+
+function translateOrderStatus(t: (key: string) => string, key: OrderStatusKey) {
+  return t(`bottomPanel.statuses.${key}`)
+}
+
+function translatePositionSide(t: (key: string) => string, side: MockPositionSide) {
+  return side === 'long' ? t('bottomPanel.long') : t('bottomPanel.short')
+}
+
 export const BottomPanel = ({ symbol }: { symbol: string }) => {
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<'orders' | 'history' | 'positions' | 'pos_history' | 'assets'>('orders');
@@ -58,9 +74,6 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
   }, [stableSeed]);
 
   // Mock Data
-  type OrderTypeKey = 'limit' | 'market'
-  type OrderStatusKey = 'open' | 'filled' | 'cancelled'
-
   const mockOrders = useMemo(() => {
     const buyPrice = basePrice * 0.995;
     const sellPrice = basePrice * 1.01;
@@ -114,8 +127,6 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
       }
     ];
   }, [basePrice, seeded, symbol]);
-
-  type MockPositionSide = 'long' | 'short'
 
   const filteredPositions = useMemo(() => {
     if (posSideFilter === 'all') return mockPositions;
@@ -182,11 +193,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
     });
   }, [assetHideSmall, mockAssets.assets, searchQuery]);
 
-  const renderOrderType = (key: OrderTypeKey) => t(`bottomPanel.orderTypes.${key}`)
-  const renderOrderStatus = (key: OrderStatusKey) => t(`bottomPanel.statuses.${key}`)
-  const renderPositionSide = (side: MockPositionSide) => (side === 'long' ? t('bottomPanel.long') : t('bottomPanel.short'))
-
-  const renderContent = () => {
+  const content = useMemo(() => {
     switch (activeTab) {
       case 'orders':
         return (
@@ -211,7 +218,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   <tr key={order.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
                     <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{order.time}</td>
                     <td className="py-2.5 px-4 font-medium">{order.symbol}</td>
-                    <td className="py-2.5 px-4">{renderOrderType(order.type)}</td>
+                    <td className="py-2.5 px-4">{translateOrderType(t, order.type)}</td>
                     <td className={`py-2.5 px-4 font-bold ${order.side === 'buy' ? 'text-[#2ea043]' : 'text-[#da3633]'}`}>
                       {order.side === 'buy' ? t('bottomPanel.buyOpenLong') : t('bottomPanel.sellOpenShort')}
                     </td>
@@ -219,7 +226,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     <td className="py-2.5 px-4">{order.amount}</td>
                     <td className="py-2.5 px-4">{order.filled}</td>
                     <td className="py-2.5 px-4">{order.total}</td>
-                    <td className="py-2.5 px-4">{renderOrderStatus(order.status)}</td>
+                    <td className="py-2.5 px-4">{translateOrderStatus(t, order.status)}</td>
                     <td className="py-2.5 px-4 text-right">
                       <button type="button" className="text-primary hover:opacity-80">{t('bottomPanel.cancel')}</button>
                     </td>
@@ -251,14 +258,14 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   <tr key={item.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
                     <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{item.time}</td>
                     <td className="py-2.5 px-4 font-medium">{item.symbol}</td>
-                    <td className="py-2.5 px-4">{renderOrderType(item.type)}</td>
+                    <td className="py-2.5 px-4">{translateOrderType(t, item.type)}</td>
                     <td className={`py-2.5 px-4 font-bold ${item.side === 'buy' ? 'text-[#2ea043]' : 'text-[#da3633]'}`}>
                       {item.side === 'buy' ? t('bottomPanel.buy') : t('bottomPanel.sell')}
                     </td>
                     <td className="py-2.5 px-4">{item.price}</td>
                     <td className="py-2.5 px-4">{item.filled}</td>
                     <td className="py-2.5 px-4">{item.total}</td>
-                    <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{renderOrderStatus(item.status)}</td>
+                    <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{translateOrderStatus(t, item.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -381,7 +388,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                       return (
                         <tr key={p.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
                           <td className="py-2.5 px-4 font-medium whitespace-nowrap">{p.symbol}</td>
-                          <td className={`py-2.5 px-4 font-bold whitespace-nowrap ${sideColor}`}>{renderPositionSide(p.side)}</td>
+                          <td className={`py-2.5 px-4 font-bold whitespace-nowrap ${sideColor}`}>{translatePositionSide(t, p.side)}</td>
                           <td className="py-2.5 px-4 whitespace-nowrap">{moneyFormatter.format(p.size)} {baseAsset}</td>
                           <td className="py-2.5 px-4 whitespace-nowrap">{priceFormatter.format(p.entry)}</td>
                           <td className="py-2.5 px-4 whitespace-nowrap">{priceFormatter.format(p.exit)}</td>
@@ -510,7 +517,22 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
           </div>
         );
     }
-  };
+  }, [
+    activeTab,
+    assetHideSmall,
+    baseAsset,
+    filteredAssets,
+    filteredPositionHistory,
+    filteredPositions,
+    mockAssets,
+    mockHistory,
+    mockOrders,
+    moneyFormatter,
+    posSideFilter,
+    priceFormatter,
+    searchQuery,
+    t,
+  ]);
 
   return (
     <div
@@ -537,7 +559,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
 
       {/* Content Area */}
       <div className="flex-1 bg-[color:var(--cf-surface)]">
-        {renderContent()}
+        {content}
       </div>
     </div>
   );

@@ -188,6 +188,41 @@ type SortField =
   | null
 type SortDirection = 'asc' | 'desc' | null
 
+function SortIcon({
+  field,
+  sortField,
+  sortDirection,
+}: {
+  field: SortField
+  sortField: SortField
+  sortDirection: SortDirection
+}) {
+  if (sortField !== field) {
+    return (
+      <ArrowUpDown className="size-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
+    )
+  }
+
+  return sortDirection === 'desc' ? (
+    <ChevronDown className="text-primary size-3" />
+  ) : (
+    <ChevronUp className="text-primary size-3" />
+  )
+}
+
+function ValueWithColor({ value }: { value: string }) {
+  const isPositive = value.startsWith('+')
+  const isNegative = value.startsWith('-')
+
+  return (
+    <span
+      className={isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-[#e6edf3]'}
+    >
+      {value}
+    </span>
+  )
+}
+
 export const PublicCompaniesTable = () => {
   const { t, i18n } = useTranslation()
   const [searchTerm, setSearchTerm] = useState('')
@@ -400,18 +435,6 @@ export const PublicCompaniesTable = () => {
     })
   }, [filteredCompanies, sortField, sortDirection])
 
-  const renderValueWithColor = (val: string) => {
-    const isPositive = val.startsWith('+')
-    const isNegative = val.startsWith('-')
-    return (
-      <span
-        className={isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-[#e6edf3]'}
-      >
-        {val}
-      </span>
-    )
-  }
-
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       if (sortDirection === 'desc') {
@@ -426,18 +449,6 @@ export const PublicCompaniesTable = () => {
       setSortField(field)
       setSortDirection('desc')
     }
-  }
-
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field)
-      return (
-        <ArrowUpDown className="size-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
-      )
-    return sortDirection === 'desc' ? (
-      <ChevronDown className="text-primary size-3" />
-    ) : (
-      <ChevronUp className="text-primary size-3" />
-    )
   }
 
   const formatExchange = React.useCallback(
@@ -544,7 +555,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('mNav')}
                       className="group flex w-full items-center justify-center gap-1 uppercase transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      mNAV {renderSortIcon('mNav')}
+                      mNAV <SortIcon field="mNav" sortField={sortField} sortDirection={sortDirection} />
                     </button>
                   </th>
                   <th className="px-2 py-3 !font-semibold md:px-4">
@@ -553,7 +564,8 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('marketCap')}
                       className="group flex w-full items-center justify-center gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      {t('publicCompanies.columns.marketCap')} {renderSortIcon('marketCap')}
+                      {t('publicCompanies.columns.marketCap')}{' '}
+                      <SortIcon field="marketCap" sortField={sortField} sortDirection={sortDirection} />
                     </button>
                   </th>
                   <th className="px-2 py-3 !font-semibold md:px-4">
@@ -562,7 +574,8 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('holdingsValue')}
                       className="group flex w-full items-center justify-center gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      {t('publicCompanies.columns.holdingsValue')} {renderSortIcon('holdingsValue')}
+                      {t('publicCompanies.columns.holdingsValue')}{' '}
+                      <SortIcon field="holdingsValue" sortField={sortField} sortDirection={sortDirection} />
                     </button>
                   </th>
                   <th className="px-2 py-3 !font-semibold md:px-4">
@@ -572,7 +585,7 @@ export const PublicCompaniesTable = () => {
                       className="group flex w-full items-center justify-center gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
                       {t('publicCompanies.columns.holdingsAmount')}{' '}
-                      {renderSortIcon('holdingsAmount')}
+                      <SortIcon field="holdingsAmount" sortField={sortField} sortDirection={sortDirection} />
                     </button>
                   </th>
                   <th className="px-2 py-3 !font-semibold md:px-4">
@@ -581,7 +594,8 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('sharePrice')}
                       className="group flex w-full items-center justify-center gap-1 transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      {t('publicCompanies.columns.sharePrice')} {renderSortIcon('sharePrice')}
+                      {t('publicCompanies.columns.sharePrice')}{' '}
+                      <SortIcon field="sharePrice" sortField={sortField} sortDirection={sortDirection} />
                     </button>
                   </th>
                   <th className="px-2 py-3 !font-semibold md:px-4">
@@ -590,7 +604,8 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('change24h')}
                       className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
                     >
-                      {t('publicCompanies.columns.change24h')} {renderSortIcon('change24h')}
+                      {t('publicCompanies.columns.change24h')}{' '}
+                      <SortIcon field="change24h" sortField={sortField} sortDirection={sortDirection} />
                     </button>
                   </th>
                   {showChange1d && (
@@ -600,7 +615,8 @@ export const PublicCompaniesTable = () => {
                         onClick={() => handleSort('change1d')}
                         className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
                       >
-                        {t('publicCompanies.columns.change1d')} {renderSortIcon('change1d')}
+                        {t('publicCompanies.columns.change1d')}{' '}
+                        <SortIcon field="change1d" sortField={sortField} sortDirection={sortDirection} />
                       </button>
                     </th>
                   )}
@@ -611,7 +627,8 @@ export const PublicCompaniesTable = () => {
                         onClick={() => handleSort('change7d')}
                         className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
                       >
-                        {t('publicCompanies.columns.change7d')} {renderSortIcon('change7d')}
+                        {t('publicCompanies.columns.change7d')}{' '}
+                        <SortIcon field="change7d" sortField={sortField} sortDirection={sortDirection} />
                       </button>
                     </th>
                   )}
@@ -700,16 +717,16 @@ export const PublicCompaniesTable = () => {
                       {row.sharePrice}
                     </td>
                     <td className="px-2 py-3 text-center font-mono md:px-4">
-                      {renderValueWithColor(row.change24h)}
+                      <ValueWithColor value={row.change24h} />
                     </td>
                     {showChange1d && (
                       <td className="px-2 py-3 text-center font-mono md:px-4">
-                        {renderValueWithColor(row.change1d)}
+                        <ValueWithColor value={row.change1d} />
                       </td>
                     )}
                     {showChange7d && (
                       <td className="px-2 py-3 text-center font-mono md:px-4">
-                        {renderValueWithColor(row.change7d)}
+                        <ValueWithColor value={row.change7d} />
                       </td>
                     )}
                   </tr>

@@ -23,6 +23,40 @@ const ChevronUpIcon = ChevronUp as unknown as AnyComponent
 const SearchIcon = Search as unknown as AnyComponent
 const XIcon = X as unknown as AnyComponent
 
+function SortIcon({
+  field,
+  sortField,
+  sortOrder,
+}: {
+  field: string
+  sortField: string | null
+  sortOrder: SortOrder
+}) {
+  if (sortField !== field) {
+    return (
+      <ArrowUpDownIcon className="size-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
+    )
+  }
+
+  return sortOrder === 'desc' ? (
+    <ChevronDownIcon className="text-primary size-3" />
+  ) : (
+    <ChevronUpIcon className="text-primary size-3" />
+  )
+}
+
+function SideBadge({ side, longLabel, shortLabel }: { side: string; longLabel: string; shortLabel: string }) {
+  const isLong = side === 'Long' || side === 'Buy'
+
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${isLong ? 'bg-green-500/20 text-green-500 dark:text-green-400' : 'bg-red-500/20 text-red-500 dark:text-red-400'}`}
+    >
+      {isLong ? longLabel : shortLabel}
+    </span>
+  )
+}
+
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'delegation'
 type SortOrder = 'asc' | 'desc' | null
 
@@ -765,17 +799,9 @@ function useProfileDataTabsRender({
   ]
 
   const handleSort = (field: string) => dispatchTableView({ type: 'toggleSort', field })
-
-  const renderSortIcon = (field: string) => {
-    if (sortField !== field)
-      return (
-        <ArrowUpDownIcon className="size-3 text-[color:var(--cf-muted)] opacity-30 transition-opacity group-hover:opacity-100" />
-      )
-    return sortOrder === 'desc' ? (
-      <ChevronDownIcon className="text-primary size-3" />
-    ) : (
-      <ChevronUpIcon className="text-primary size-3" />
-    )
+  const sideBadgeLabels = {
+    long: t('whaleTracking.side.longAbbr'),
+    short: t('whaleTracking.side.shortAbbr'),
   }
 
   const getFilteredAndSortedData = <T extends { asset: string }>(
@@ -887,19 +913,6 @@ function useProfileDataTabsRender({
     return () => observer.disconnect()
   }, [allHistoryOrdersFiltered.length, canLoadMoreHistory, historyVisibleCount])
 
-  const renderSideBadge = (side: string) => {
-    const isLong = side === 'Long' || side === 'Buy'
-    return (
-      <span
-        className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${isLong ? 'bg-green-500/20 text-green-500 dark:text-green-400' : 'bg-red-500/20 text-red-500 dark:text-red-400'}`}
-      >
-        {side === 'Long' || side === 'Buy'
-          ? t('whaleTracking.side.longAbbr')
-          : t('whaleTracking.side.shortAbbr')}
-      </span>
-    )
-  }
-
   const showTimeColumn =
     activeTab === 'orders' || activeTab === 'trades' || activeTab === 'delegation'
 
@@ -976,7 +989,7 @@ function useProfileDataTabsRender({
                   <div className="text-sm font-bold text-[color:var(--cf-text-strong)]">{pos.asset}</div>
                   <div className="text-[10px] text-[color:var(--cf-muted)] uppercase">{translateMarginType(pos.marginType)} {pos.leverage}</div>
                 </div>
-                {renderSideBadge(pos.side)}
+                <SideBadge side={pos.side} longLabel={sideBadgeLabels.long} shortLabel={sideBadgeLabels.short} />
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.positionValue')}</div><div className="font-semibold text-[color:var(--cf-text-strong)]">{pos.valueUSD}</div><div className="text-[color:var(--cf-muted)]">{pos.valueAsset}</div></div>
@@ -996,7 +1009,7 @@ function useProfileDataTabsRender({
                 <button type="button" className="w-full text-left" onClick={() => toggleOrderExpansion(orderKey)}>
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{order.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(order.timestamp)}</div></div>
-                    <div className="flex items-center gap-2">{renderSideBadge(order.side)}<ChevronDownIcon className={`size-4 text-[color:var(--cf-muted)] ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`} /></div>
+                    <div className="flex items-center gap-2"><SideBadge side={order.side} longLabel={sideBadgeLabels.long} shortLabel={sideBadgeLabels.short} /><ChevronDownIcon className={`size-4 text-[color:var(--cf-muted)] ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`} /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.value')}</div><div className="font-semibold text-[color:var(--cf-text-strong)]">{order.value}</div></div>
@@ -1043,7 +1056,7 @@ function useProfileDataTabsRender({
               <article key={`${order.id}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{order.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(order.timestamp)}</div></div>
-                  {renderSideBadge(order.side)}
+                  <SideBadge side={order.side} longLabel={sideBadgeLabels.long} shortLabel={sideBadgeLabels.short} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.type')}</div><div className="text-[color:var(--cf-text-strong)]">{order.type}</div></div>
@@ -1072,7 +1085,7 @@ function useProfileDataTabsRender({
                     className="group flex items-center gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                   >
                     <span>{t('whaleTracking.profile.columns.time')}</span>
-                    {renderSortIcon('time')}
+                    <SortIcon field="time" sortField={sortField} sortOrder={sortOrder} />
                   </button>
                 </th>
               )}
@@ -1149,7 +1162,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.value')}</span>
-                      {renderSortIcon('value')}
+                      <SortIcon field="value" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1159,7 +1172,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.amount')}</span>
-                      {renderSortIcon('amount')}
+                      <SortIcon field="amount" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1169,7 +1182,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.price')}</span>
-                      {renderSortIcon('price')}
+                      <SortIcon field="price" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                 </>
@@ -1185,7 +1198,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.positionValue')}</span>
-                      {renderSortIcon('valueUSD')}
+                      <SortIcon field="valueUSD" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1195,7 +1208,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.unrealizedPnl')}</span>
-                      {renderSortIcon('pnlUSD')}
+                      <SortIcon field="pnlUSD" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1205,7 +1218,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.entryPrice')}</span>
-                      {renderSortIcon('entryPrice')}
+                      <SortIcon field="entryPrice" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1215,7 +1228,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.markPrice')}</span>
-                      {renderSortIcon('markPrice')}
+                      <SortIcon field="markPrice" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1225,7 +1238,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.liqPrice')}</span>
-                      {renderSortIcon('liqPrice')}
+                      <SortIcon field="liqPrice" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1235,7 +1248,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.margin')}</span>
-                      {renderSortIcon('margin')}
+                      <SortIcon field="margin" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1245,7 +1258,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.fundingFee')}</span>
-                      {renderSortIcon('fundingFee')}
+                      <SortIcon field="fundingFee" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-center whitespace-nowrap">
@@ -1264,7 +1277,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.value')}</span>
-                      {renderSortIcon('value')}
+                      <SortIcon field="value" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1274,7 +1287,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.amount')}</span>
-                      {renderSortIcon('amount')}
+                      <SortIcon field="amount" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right whitespace-nowrap">
@@ -1302,7 +1315,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.amount')}</span>
-                      {renderSortIcon('amount')}
+                      <SortIcon field="amount" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1312,7 +1325,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.startPosition')}</span>
-                      {renderSortIcon('startPosition')}
+                      <SortIcon field="startPosition" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1322,7 +1335,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.value')}</span>
-                      {renderSortIcon('value')}
+                      <SortIcon field="value" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1332,7 +1345,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.price')}</span>
-                      {renderSortIcon('price')}
+                      <SortIcon field="price" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1342,7 +1355,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.closedPnl')}</span>
-                      {renderSortIcon('pnl')}
+                      <SortIcon field="pnl" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1352,7 +1365,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.fee')}</span>
-                      {renderSortIcon('fee')}
+                      <SortIcon field="fee" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-center whitespace-nowrap">
@@ -1374,7 +1387,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.amount')}</span>
-                      {renderSortIcon('amount')}
+                      <SortIcon field="amount" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
@@ -1384,7 +1397,7 @@ function useProfileDataTabsRender({
                       className="group ml-auto flex items-center justify-end gap-1.5 whitespace-nowrap hover:text-[color:var(--cf-text-strong)]"
                     >
                       <span>{t('whaleTracking.profile.columns.price')}</span>
-                      {renderSortIcon('price')}
+                      <SortIcon field="price" sortField={sortField} sortOrder={sortOrder} />
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right whitespace-nowrap">
@@ -1475,7 +1488,7 @@ function useProfileDataTabsRender({
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">{renderSideBadge(pos.side)}</td>
+                  <td className="px-6 py-4"><SideBadge side={pos.side} longLabel={sideBadgeLabels.long} shortLabel={sideBadgeLabels.short} /></td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex flex-col">
                       <span className="text-sm font-bold text-[color:var(--cf-text-strong)]">
