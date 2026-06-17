@@ -1048,6 +1048,9 @@ export class CanonicalSpecBuilderService {
       }
 
       for (const leaf of mainflow.byRole.position.filter(leaf => leaf.ruleId === rule.id && leaf.key === 'position.dca_schedule')) {
+        if (rule.phase !== 'entry' && rule.phase !== 'program') {
+          continue
+        }
         const sameRulePositionLeaves = mainflow.byRole.position.filter(positionLeaf => positionLeaf.ruleId === rule.id)
         canonicalRules.push(this.buildCanonicalDcaRuleFromRuleEffectLeaf({
           leaf: this.atomLeafFromMainflowLeaf(leaf),

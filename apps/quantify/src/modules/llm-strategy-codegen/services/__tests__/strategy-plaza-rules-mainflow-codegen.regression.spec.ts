@@ -88,6 +88,13 @@ describe('Strategy Plaza rules-mainflow codegen regressions', () => {
     }
   })
 
+  it('compiles drawdown DCA plaza edit seed from rules mainflow without invalid position effect', () => {
+    const template = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.find(item => item.id === 'drawdown-dca-budget')
+
+    expect(template).toBeDefined()
+    expect(() => buildCompiledIrFromPrompt(template!.editSeed.initialMessage)).not.toThrow()
+  })
+
   it('compiles EMA20 slope plus volume confirmation after semantic confirmation', () => {
     const compiled = buildCompiledIrFromPrompt('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 EMA 斜率趋势策略。规则：EMA20 斜率连续 3 根向上且成交量确认放大后开多；价格跌破 EMA20 平多；风控：仓位 20%，2 倍杠杆，亏损 2% 止损。')
     const predicateKinds = compiled.ir.signalCatalog.predicates.map(predicate => predicate.kind)

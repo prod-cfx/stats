@@ -2162,6 +2162,66 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     ]))
   })
 
+  it('ignores DCA schedule position constraints attached to exit rules', () => {
+    const state = baseState({
+      rules: [
+        {
+          id: 'rule-dca-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: {
+                triggerMode: 'price_interval',
+                priceIntervalPct: -3,
+                maxCount: 3,
+                perOrderBudget: 100,
+                capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+              },
+            }],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'rule-dca-exit-with-sibling-position-constraint',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', valuePct: -8 } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [{
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: {
+                triggerMode: 'price_interval',
+                priceIntervalPct: -3,
+                maxCount: 3,
+                perOrderBudget: 100,
+                capitalCap: { kind: 'quote', value: 1000, asset: 'USDT' },
+              },
+            }],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.filter(rule => rule.metadata?.semanticKey === 'position.dca_schedule')).toHaveLength(1)
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'semantic-exit-rule-dca-exit-with-sibling-position-constraint' }),
+    ]))
+  })
+
   it('uses same-rule DCA quote sizing and budget cap instead of trigger percent pollution', () => {
     const state = baseState({
       rules: [{
