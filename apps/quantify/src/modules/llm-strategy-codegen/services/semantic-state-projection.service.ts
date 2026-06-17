@@ -3791,6 +3791,10 @@ export class SemanticStateProjectionService {
   private renderAtomExpr(expr: AtomExpr): string {
     switch (expr.kind) {
       case 'atom': {
+        if (expr.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
+          return this.renderReversePositionAction(expr.params, this.readAtomEvidenceText(expr))
+        }
+
         const semanticSummary = this.tryRenderRulesTreeAtomSummary(expr.key, expr.params)
         if (semanticSummary && semanticSummary.length > 0) return semanticSummary
 
@@ -4182,7 +4186,7 @@ export class SemanticStateProjectionService {
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
     const rawEffectParts = listRuleEffects(rule.effects)
-      .map(effect => this.renderAtomExpr(effect))
+      .map(effect => this.renderRuleEffectExpr(rule, effect))
       .filter(s => s.length > 0)
 
     // Issue #1443 通用 UI 简化：condition 是 always-on runtime gate atom（如
@@ -4238,6 +4242,43 @@ export class SemanticStateProjectionService {
     //   通用机制：所有 rule 一律不带 sideScope 括号；若未来需保留（如纯 condition 无
     //   方向暗示的场景），按 condition+effects 内是否含方向词智能判定再加。
     return `${phaseLabel}：${bodyText}`
+  }
+
+  private renderRuleEffectExpr(rule: SemanticRule, expr: AtomExpr): string {
+    if (expr.kind === 'atom' && expr.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
+      return this.renderReversePositionAction(expr.params, this.readAtomEvidenceText(expr), rule.sideScope)
+    }
+    return this.renderAtomExpr(expr)
+  }
+
+  private renderReversePositionAction(
+    params: Record<string, unknown> | undefined,
+    evidenceText?: string | null,
+    sideScope?: SemanticRuleSideScope,
+  ): string {
+    const text = evidenceText ?? ''
+    const fromSide = this.readString(params?.fromSide)
+    const toSide = this.readString(params?.toSide)
+      ?? (sideScope === 'long' || sideScope === 'short' ? sideScope : null)
+      ?? (/做空|开空|short/iu.test(text) ? 'short' : /做多|开多|long/iu.test(text) ? 'long' : null)
+    const inferredFromSide = fromSide
+      ?? (/从多头|由多|多头反手|多翻空|平多/iu.test(text) ? 'long' : null)
+      ?? (/从空头|由空|空头反手|空翻多|平空/iu.test(text) ? 'short' : null)
+      ?? (toSide === 'short' ? 'long' : toSide === 'long' ? 'short' : null)
+
+    if (inferredFromSide === 'long' && toSide === 'short') return '从多头反手做空'
+    if (inferredFromSide === 'short' && toSide === 'long') return '从空头反手做多'
+    if (toSide === 'short') return '反手做空'
+    if (toSide === 'long') return '反手做多'
+    return '反手'
+  }
+
+  private readAtomEvidenceText(expr: AtomExpr): string | null {
+    if (expr.kind !== 'atom') return null
+    const evidence = (expr as { evidence?: { text?: unknown } }).evidence
+    return typeof evidence?.text === 'string' && evidence.text.trim().length > 0
+      ? evidence.text.trim()
+      : null
   }
 
   // Task B：从 rule 的 atom key 家族 + evidence 文本探测风险语义提示。

@@ -1588,7 +1588,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(serializedEntry).toContain('action.reverse_position')
     expect(serializedEntry).not.toContain('action.open_short')
     expect(result.assistantPrompt).not.toContain('入场：EMA20 下穿 EMA50 → 开空；入场：EMA20 下穿 EMA50 → 反手')
-    expect(result.assistantPrompt).toContain('反手')
+    expect(result.assistantPrompt).toContain('从多头反手做空')
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请补充出场条件')
   })
 
   it('deduplicates dispatcher-only open-short when reverse-position is recovered from fallback rules', async () => {
@@ -1621,7 +1623,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(serializedEntry).toContain('action.reverse_position')
     expect(serializedEntry).not.toContain('action.open_short')
     expect(result.assistantPrompt).not.toContain('入场：EMA20 下穿 EMA50 → 开空；入场：EMA20 下穿 EMA50 → 反手')
-    expect(result.assistantPrompt).toContain('反手')
+    expect(result.assistantPrompt).toContain('从多头反手做空')
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请补充出场条件')
   })
 
   it('final semantic-state application recovers rules when plan remains context-only', () => {

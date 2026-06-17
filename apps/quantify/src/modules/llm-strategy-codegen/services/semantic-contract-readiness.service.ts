@@ -1025,9 +1025,14 @@ export class SemanticContractReadinessService {
       const effectKeys = new Set(effectLeaves.map(l => l.key))
       const fulfillsPhase = (leaf: AtomExprAtom, phase: 'entry' | 'exit'): boolean => {
         if (!(leaf.key in ATOM_CONTRACT_REGISTRY)) return false
+        if (phase === 'exit' && leaf.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) return false
         return getAtomFulfillsStrategyPhase(leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY).includes(phase)
       }
       const entryCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'entry'))
+      const nonReverseEntryCapableEffect = effectLeaves.some(leaf =>
+        leaf.key !== ATOM_CONTRACT_REGISTRY['action.reverse_position'].key
+        && fulfillsPhase(leaf, 'entry'),
+      )
       const exitCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'exit'))
       const exitCapableRiskEffect = effectLeaves.some((leaf) => {
         if (!leaf.key.startsWith('risk.')) return false
@@ -1040,6 +1045,8 @@ export class SemanticContractReadinessService {
       if (rule.phase === 'entry' || rule.phase === 'gate') {
         if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || entryCapableEffect) {
           summary.hasEntry = true
+        }
+        if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || nonReverseEntryCapableEffect) {
           summary.hasExit = true
         }
         if (exitCapableRiskEffect) {
@@ -1156,7 +1163,6 @@ export class SemanticContractReadinessService {
       leaf.phase === 'exit'
       || (leaf.role === 'risk' && leaf.key.includes('stop'))
       || (leaf.role === 'risk' && leaf.key === 'risk.max_loss_per_trade')
-      || (leaf.role === 'action' && leaf.key === 'action.reverse_position')
       || gridRuleIndexes.has(leaf.ruleIndex)
       || executableProgramRuleIndexes.has(leaf.ruleIndex),
     )
