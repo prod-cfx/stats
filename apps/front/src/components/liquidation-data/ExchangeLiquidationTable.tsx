@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SectionTitle } from '@/components/ui/Typography'
 import { useMockData } from '@/hooks/use-mock-data'
 import { fetchExchangeLiquidation } from '@/lib/api'
+import { getCachedNumberFormatter } from '@/lib/number-format-cache'
 
 type CoinSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'HYPE'
 
@@ -113,7 +114,7 @@ export const ExchangeLiquidationTable = ({
 
   const currencyFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
+    return getCachedNumberFormatter(locale, {
       style: 'currency',
       currency: 'USD',
       notation: 'compact',

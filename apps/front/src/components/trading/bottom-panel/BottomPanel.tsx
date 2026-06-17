@@ -4,6 +4,7 @@ import { FileSearch } from 'lucide-react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMockBasePrice } from '@/lib/mock/market';
+import { getCachedNumberFormatter } from '@/lib/number-format-cache';
 
 type OrderTypeKey = 'limit' | 'market'
 type OrderStatusKey = 'open' | 'filled' | 'cancelled'
@@ -52,11 +53,11 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
   }, [basePrice]);
 
   const priceFormatter = useMemo(() => {
-    return new Intl.NumberFormat(locale, { minimumFractionDigits: priceDigits, maximumFractionDigits: priceDigits });
+    return getCachedNumberFormatter(locale, { minimumFractionDigits: priceDigits, maximumFractionDigits: priceDigits });
   }, [locale, priceDigits]);
 
   const moneyFormatter = useMemo(() => {
-    return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return getCachedNumberFormatter(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [locale]);
 
   const stableSeed = useMemo(() => {

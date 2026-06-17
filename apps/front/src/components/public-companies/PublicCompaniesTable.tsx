@@ -12,6 +12,7 @@ import { useAsync } from '@/hooks/use-async'
 import { fetchCryptoStockQuotesLatest } from '@/lib/api'
 import { AuthenticationError } from '@/lib/errors'
 import { formatNumber } from '@/lib/formatters'
+import { toSortedCompat } from '@/lib/immutable-sort'
 import { formatSignedAbsoluteChange, formatSignedPercentChange } from './change-formatters'
 import { isPublicCompaniesColumnVisible } from './column-visibility'
 import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
@@ -421,7 +422,7 @@ export const PublicCompaniesTable = () => {
       return parseCompactNumber(raw)
     }
 
-    return [...filteredCompanies].sort((a, b) => {
+    return toSortedCompat(filteredCompanies, (a, b) => {
       const aVal = sortValueOf(a, sortField)
       const bVal = sortValueOf(b, sortField)
       // Always push missing/invalid values to the bottom, regardless of sort direction.

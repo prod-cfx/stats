@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 import { logger } from '@/lib/logger'
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market'
+import { getCachedNumberFormatter } from '@/lib/number-format-cache'
 import { getWsBaseUrl } from '@/lib/ws'
 import { RightPanelView } from './components/RightPanelView'
 
@@ -675,12 +676,12 @@ export const RightPanel = ({
   }, [loading])
 
   const compactFormatter = useMemo(
-    () => new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 }),
+    () => getCachedNumberFormatter(locale, { notation: 'compact', maximumFractionDigits: 2 }),
     [locale],
   )
   const priceFormatter = useMemo(
     () =>
-      new Intl.NumberFormat(locale, {
+      getCachedNumberFormatter(locale, {
         minimumFractionDigits: fractionDigits,
         maximumFractionDigits: fractionDigits,
       }),

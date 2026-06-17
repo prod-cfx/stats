@@ -10,6 +10,8 @@ import { ExchangeLogo } from '@/components/ui/ExchangeLogo'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { LoadingState } from '@/components/ui/loading'
 import { fetchAggregatedOrderbook, fetchAggregatedOrderbookMarkets } from '@/lib/api'
+import { toSortedCompat } from '@/lib/immutable-sort'
+import { getCachedNumberFormatter } from '@/lib/number-format-cache'
 
 const DepthChart = dynamic(
   () => import('@/components/aggregated-orderbook/DepthChart').then(mod => mod.DepthChart),
@@ -77,7 +79,7 @@ function marketsForType(
 }
 
 function sortMarketsByPriority(markets: AggregatedOrderbookMarket[]): AggregatedOrderbookMarket[] {
-  return [...markets].sort((a, b) => {
+  return toSortedCompat(markets, (a, b) => {
     const aPriority = HOT_MARKET_PRIORITY_MAP.get(a.base) ?? Number.MAX_SAFE_INTEGER
     const bPriority = HOT_MARKET_PRIORITY_MAP.get(b.base) ?? Number.MAX_SAFE_INTEGER
     return aPriority - bPriority || a.base.localeCompare(b.base) || a.type.localeCompare(b.type)
@@ -191,7 +193,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
 
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
+    return getCachedNumberFormatter(locale, {
       style: 'currency',
       currency: 'USD',
       notation: 'compact',
@@ -201,7 +203,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
 
   const numberCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
+    return getCachedNumberFormatter(locale, {
       notation: 'compact',
       maximumFractionDigits: 2,
     })

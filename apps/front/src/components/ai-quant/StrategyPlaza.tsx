@@ -5,6 +5,7 @@ import type { StrategyPlazaTemplate } from '@/lib/api'
 import { Activity, Edit3, Loader2, Play } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toSortedCompat } from '@/lib/immutable-sort'
 
 const TRANSLATED_TEMPLATE_TAG_KEYS: Partial<Record<string, readonly string[]>> = {
   'ma-cross': ['trend', 'ma', 'okxDemo'],
@@ -436,29 +437,30 @@ export function StrategyPlaza({
   )
   const hotCards = useMemo(
     () =>
-      cards
-        .slice()
-        .sort((a, b) => (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity))
+      toSortedCompat(cards, (a, b) => (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity))
         .slice(0, Math.min(6, cards.length)),
     [cards],
   )
   const filteredCards = useMemo(() => {
     const search = query.trim().toLowerCase()
-    const list = cards
-      .filter(item =>
-        favoriteOnly
-          ? favorites[item.template.id]
-          : category === '全部' || item.category === category,
-      )
-      .filter(
-        item =>
-          !search ||
-          `${item.name} ${item.description} ${item.category} ${item.tags.join(' ')} ${item.pairLabel} ${item.author}`
-            .toLowerCase()
-            .includes(search),
-      )
+    const list = []
 
-    return list.slice().sort((a, b) => {
+    for (const item of cards) {
+      const matchesFavoriteOrCategory = favoriteOnly
+        ? favorites[item.template.id]
+        : category === '全部' || item.category === category
+      if (!matchesFavoriteOrCategory) continue
+
+      if (search) {
+        const searchable = `${item.name} ${item.description} ${item.category} ${item.tags.join(' ')} ${item.pairLabel} ${item.author}`
+          .toLowerCase()
+        if (!searchable.includes(search)) continue
+      }
+
+      list.push(item)
+    }
+
+    return toSortedCompat(list, (a, b) => {
       if (sort === 'return') return (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity)
       if (sort === 'trades') return (b.tradeCount ?? -Infinity) - (a.tradeCount ?? -Infinity)
       if (sort === 'drawdown')

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { useAsync } from '@/hooks/use-async';
 import { fetchWhaleTrackingDiscover  } from '@/lib/api';
+import { toSortedCompat } from '@/lib/immutable-sort';
 import { TraderCard } from './TraderCard';
 
 const WhaleTradingStatsModal = dynamic(
@@ -39,7 +40,7 @@ export const DiscoverGrid = () => {
   const sortedDetails = useMemo(() => {
     if (!data?.details) return [];
     if (!sortField || !sortOrder) return data.details;
-    return [...data.details].sort((a, b) => {
+    return toSortedCompat(data.details, (a, b) => {
       let valA: number
       let valB: number
       if (sortField === 'winRate') {

@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LazyReactECharts } from '@/components/charts/LazyReactECharts'
+import { toSortedCompat } from '@/lib/immutable-sort';
 
 interface DepthDataPoint {
   price: number;
@@ -24,8 +25,8 @@ export const DepthChart: React.FC<DepthChartProps & { height?: number | string }
   const { t } = useTranslation();
   const option = useMemo(() => {
     // Sort data for depth chart
-    const sortedBids = [...bids].sort((a, b) => a.price - b.price); // Low to High for bids
-    const sortedAsks = [...asks].sort((a, b) => a.price - b.price); // Low to High for asks
+    const sortedBids = toSortedCompat(bids, (a, b) => a.price - b.price); // Low to High for bids
+    const sortedAsks = toSortedCompat(asks, (a, b) => a.price - b.price); // Low to High for asks
 
     return {
       backgroundColor: 'transparent',

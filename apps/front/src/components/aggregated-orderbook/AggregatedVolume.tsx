@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
 import { fetchAggregatedVolume  } from '@/lib/api';
+import { toSortedCompat } from '@/lib/immutable-sort';
 
 interface VolumeItem {
   name: string;
@@ -256,7 +257,7 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
 
         const totalRow = apiItems.find((item) => item.exchange === 'All')
         const exchangeRows = apiItems.filter((item) => item.exchange !== 'All')
-        const sorted = [...exchangeRows].sort((a, b) => Number.parseFloat(b.volumeUsd) - Number.parseFloat(a.volumeUsd))
+        const sorted = toSortedCompat(exchangeRows, (a, b) => Number.parseFloat(b.volumeUsd) - Number.parseFloat(a.volumeUsd))
 
         const totalUsdFromAll = totalRow?.volumeUsd ? Number.parseFloat(totalRow.volumeUsd) : 0
         const totalUsd = totalUsdFromAll > 0 ? totalUsdFromAll : sorted.reduce((s, it) => s + Number.parseFloat(it.volumeUsd || '0'), 0)

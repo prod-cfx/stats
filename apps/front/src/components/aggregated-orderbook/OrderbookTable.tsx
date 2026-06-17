@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo'
+import { toSortedCompat } from '@/lib/immutable-sort'
 import { sampleLevelsForDisplay } from './orderbook-display'
 
 interface OrderItem {
@@ -173,10 +174,12 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   }), [ROW_HEIGHT])
 
   const { rows, canScroll } = useMemo(() => {
-    const asksSorted = [...asks].sort(
+    const asksSorted = toSortedCompat(
+      asks,
       (a, b) => Number.parseFloat(b.price) - Number.parseFloat(a.price),
     )
-    const bidsSorted = [...bids].sort(
+    const bidsSorted = toSortedCompat(
+      bids,
       (a, b) => Number.parseFloat(b.price) - Number.parseFloat(a.price),
     )
 

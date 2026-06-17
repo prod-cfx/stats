@@ -50,26 +50,40 @@ export const CenterChartPanel = ({
   )
   const activeIdSet = new Set(activeIds)
 
-  const chartIndicatorItems = catalogItems
-    .filter(x => x.kind === 'chartSeries' || x.kind === 'chartOverlay')
+  const chartIndicatorItems = []
+  const visibleIndicators = []
+  const activeIndicators = []
+  const indicatorQuery = indicatorSearch.trim().toLowerCase()
+
+  for (const x of catalogItems) {
+    if (x.kind !== 'chartSeries' && x.kind !== 'chartOverlay') continue
     // Remove "Aggregated Orderbook" from indicator modal list (UI-only)
-    .filter(x => x.id !== 'aggregated-orderbook')
-    .map(x => ({
+    if (x.id === 'aggregated-orderbook') continue
+
+    const item = {
       ...x,
       name: t(x.labelKey),
       isActive: activeIdSet.has(x.id),
-      kind: x.kind as 'chartSeries' | 'chartOverlay',
-    }))
+      kind: x.kind,
+    }
 
-  // 临时隐藏：清算地图、聚合爆仓（需要时再恢复展示）
-  const featuredIndicators = chartIndicatorItems
-    .filter(x => x.group === 'featured')
-    .filter(x => x.id !== 'liquidation-map' && x.id !== 'liquidation-data')
-  const visibleIndicators = featuredIndicators.filter(x => {
-    const q = indicatorSearch.trim().toLowerCase()
-    if (!q) return true
-    return x.name.toLowerCase().includes(q)
-  })
+    chartIndicatorItems.push(item)
+
+    if (item.isActive) {
+      activeIndicators.push({
+        id: item.id,
+        label: item.name,
+        kind: item.kind,
+        href: item.href,
+      })
+    }
+
+    // 临时隐藏：清算地图、聚合爆仓（需要时再恢复展示）
+    if (item.group !== 'featured') continue
+    if (item.id === 'liquidation-map' || item.id === 'liquidation-data') continue
+    if (indicatorQuery && !item.name.toLowerCase().includes(indicatorQuery)) continue
+    visibleIndicators.push(item)
+  }
 
   const toggleIndicator = (id: string) => {
     // TradingView Charting Library：集成逻辑
@@ -145,14 +159,7 @@ export const CenterChartPanel = ({
           onOpenDataIndicator={() => {
             setIsIndicatorModalOpen(true)
           }}
-          activeIndicators={chartIndicatorItems
-            .filter(x => x.isActive)
-            .map(x => ({
-              id: x.id,
-              label: x.name,
-              kind: x.kind,
-              href: x.href,
-            }))}
+          activeIndicators={activeIndicators}
           onRemoveIndicator={id => setActiveIds(prev => prev.filter(x => x !== id))}
         />
       </div>

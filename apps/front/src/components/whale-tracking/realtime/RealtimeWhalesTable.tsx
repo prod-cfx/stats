@@ -17,6 +17,7 @@ import { PageTitle } from '@/components/ui/Typography'
 import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { fetchWhaleTradesRealtime } from '@/lib/api'
+import { toSortedCompat } from '@/lib/immutable-sort'
 import { toast } from '@/lib/toast'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { logger } from '@/utils/logger'
@@ -292,7 +293,7 @@ export const RealtimeWhalesTable = () => {
 
   const displayedTransactions = useMemo(() => {
     if (!sortOrder) return transactions
-    return [...transactions].sort((a, b) => {
+    return toSortedCompat(transactions, (a, b) => {
       return sortOrder === 'desc' ? b.winRatePct - a.winRatePct : a.winRatePct - b.winRatePct
     })
   }, [transactions, sortOrder])

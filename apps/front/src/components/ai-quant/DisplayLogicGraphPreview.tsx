@@ -32,6 +32,24 @@ function isExecuteItem(item: DisplayBlock['items'][number]): item is DisplayExec
   return item.kind === 'execute'
 }
 
+function splitBlockItems(items: DisplayBlock['items']) {
+  const executeItems: DisplayExecuteItem[] = []
+  const conditionItems: DisplayBlock['items'] = []
+  const actionItems: DisplayBlock['items'] = []
+
+  for (const item of items) {
+    if (isExecuteItem(item)) {
+      executeItems.push(item)
+    } else if (item.kind === 'condition') {
+      conditionItems.push(item)
+    } else if (item.kind === 'action') {
+      actionItems.push(item)
+    }
+  }
+
+  return { executeItems, conditionItems, actionItems }
+}
+
 export function DisplayLogicGraphPreview({
   graph,
   onConfirm,
@@ -60,8 +78,11 @@ export function DisplayLogicGraphPreview({
       </div>
 
       <div className="mt-4 space-y-3">
-        {localizedGraph.blocks.map(block => (
-          <div key={`${block.type}-${block.items[0]?.id ?? 'block'}`} className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2">
+        {localizedGraph.blocks.map((block) => {
+          const { executeItems, conditionItems, actionItems } = splitBlockItems(block.items)
+
+          return (
+            <div key={`${block.type}-${block.items[0]?.id ?? 'block'}`} className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2">
             <p className="!text-xs !font-semibold !leading-5 uppercase tracking-[0.2em] text-[color:var(--cf-muted)]">
               {getBlockHeading(block.type)}
             </p>
@@ -69,7 +90,7 @@ export function DisplayLogicGraphPreview({
             {block.type === 'EXECUTE'
               ? (
                   <div className="mt-3 flex flex-wrap gap-2 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
-                    {block.items.filter(isExecuteItem).map(item => (
+                    {executeItems.map(item => (
                       <span key={item.id} className="rounded border border-[color:var(--cf-border)] px-2 py-1">
                         {getExecuteLabel(item)}
                       </span>
@@ -78,39 +99,36 @@ export function DisplayLogicGraphPreview({
                 )
               : (
                   <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2">
-                    {block.items.some(item => item.kind === 'condition') && (
+                    {conditionItems.length > 0 && (
                       <div>
                         <p className="!text-xs !font-semibold !leading-5 text-amber-400">IF</p>
                         <div className="mt-2 space-y-2">
-                          {block.items
-                            .filter(item => item.kind === 'condition')
-                            .map(item => (
-                              <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
-                                {item.text}
-                              </div>
-                            ))}
+                          {conditionItems.map(item => (
+                            <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
+                              {item.text}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
 
-                    {block.items.some(item => item.kind === 'action') && (
+                    {actionItems.length > 0 && (
                       <div>
                         <p className="!text-xs !font-semibold !leading-5 text-sky-400">THEN</p>
                         <div className="mt-2 space-y-2">
-                          {block.items
-                            .filter(item => item.kind === 'action')
-                            .map(item => (
-                              <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
-                                {item.text}
-                              </div>
-                            ))}
+                          {actionItems.map(item => (
+                            <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
+                              {item.text}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
-          </div>
-        ))}
+            </div>
+          )
+        })}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">

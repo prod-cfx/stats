@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useMockData } from '@/hooks/use-mock-data';
 import { fetchAggregatedLiquidationSummary } from '@/lib/api';
+import { getCachedNumberFormatter } from '@/lib/number-format-cache';
 
 interface LiquidationCardProps {
   title: string;
@@ -41,7 +42,7 @@ export const LiquidationSummary = () => {
 
   const formatter = React.useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
+    return getCachedNumberFormatter(locale, {
       style: 'currency',
       currency: 'USD',
       notation: 'compact',

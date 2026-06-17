@@ -4,6 +4,7 @@ import type { DataSource } from '@/types/trading';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMockBasePrice, parseUsdtSymbol } from '@/lib/mock/market';
+import { getCachedNumberFormatter } from '@/lib/number-format-cache';
 
 interface LeftTradePanelProps {
   symbol: string;
@@ -36,7 +37,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
   const maxBuyPrice = basePrice * 1.005
   const minSellPrice = basePrice * 0.995
   const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-  const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }), [locale])
+  const priceFormatter = useMemo(() => getCachedNumberFormatter(locale, { maximumFractionDigits: 1 }), [locale])
 
   return (
     <div className="size-full bg-[color:var(--cf-surface)] flex flex-col p-4 text-[color:var(--cf-text)] overflow-y-auto no-scrollbar">

@@ -10,6 +10,7 @@ import { LoadingState } from '@/components/ui/loading'
 import { BodyText, PageTitle } from '@/components/ui/Typography'
 import { useAsync } from '@/hooks/use-async'
 import { fetchExchangeLongShortRatio } from '@/lib/api'
+import { getCachedNumberFormatter } from '@/lib/number-format-cache'
 
 type ExchangeData = ExchangeLongShortRatioApiItem
 
@@ -115,7 +116,7 @@ export function LongShortRatioClient() {
 
   const currencyFormatter = React.useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
+    return getCachedNumberFormatter(locale, {
       style: 'currency',
       currency: 'USD',
       notation: 'compact',

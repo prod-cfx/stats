@@ -12,6 +12,7 @@ import { LoadingState } from '@/components/ui/loading'
 import { BodyText, PageTitle } from '@/components/ui/Typography'
 import { useAsync } from '@/hooks/use-async'
 import { fetchWhaleHoldings } from '@/lib/api'
+import { toSortedCompat } from '@/lib/immutable-sort'
 import { makeWhalePositionKey } from './whale-position-key'
 
 const WhaleTradingStatsModal = dynamic(
@@ -151,7 +152,7 @@ export const WhalePositionsTable = () => {
     const sorted =
       !sortField || !sortOrder
         ? filtered
-        : [...filtered].sort((a, b) => {
+        : toSortedCompat(filtered, (a, b) => {
             let valA: number
             let valB: number
 

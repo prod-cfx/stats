@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getCachedNumberFormatter } from '@/lib/number-format-cache';
 import { toast } from '@/lib/toast';
 import { copyTextToClipboard } from '@/utils/clipboard';
 
@@ -85,12 +86,12 @@ export const TraderCard = ({
 
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
+    return getCachedNumberFormatter(locale, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
   }, [i18n.language])
 
   const percentFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 })
+    return getCachedNumberFormatter(locale, { style: 'percent', maximumFractionDigits: 2 })
   }, [i18n.language])
 
   const resolvedPnlLabel = t(`whaleTracking.discover.labels.${pnlLabelKey}`)

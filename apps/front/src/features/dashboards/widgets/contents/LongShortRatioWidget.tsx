@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { FilterButton } from '@/components/ui/FilterButton'
+import { formatWithCachedNumberFormatter } from '@/lib/number-format-cache'
 
 interface Row {
   exchange: string
@@ -22,7 +23,7 @@ function ProgressBar({ long, short }: { long: number; short: number }) {
 
 function fmtUsd(v: number) {
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(v)
+    return formatWithCachedNumberFormatter(v, 'en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
   } catch {
     return `$${(v / 1e9).toFixed(2)}B`
   }

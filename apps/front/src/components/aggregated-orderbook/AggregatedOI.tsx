@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next'
 import { SectionTitle } from '@/components/ui/Typography'
 import { fetchAggregatedOpenInterest, fetchAggregatedVolume } from '@/lib/api'
 import { AuthenticationError } from '@/lib/errors'
+import { toSortedCompat } from '@/lib/immutable-sort'
+import { getCachedNumberFormatter } from '@/lib/number-format-cache'
 
 interface OIData {
   id: string
@@ -272,7 +274,7 @@ function transformApiData(
   if (!apiData || apiData.length === 0) return []
 
   // 先按时间降序，避免依赖接口返回顺序
-  const sortedApiData = [...apiData].sort((a, b) => {
+  const sortedApiData = toSortedCompat(apiData, (a, b) => {
     const at = a.data_timestamp ? Date.parse(a.data_timestamp) : Number.NEGATIVE_INFINITY
     const bt = b.data_timestamp ? Date.parse(b.data_timestamp) : Number.NEGATIVE_INFINITY
     if (!Number.isFinite(at) && !Number.isFinite(bt)) return 0
@@ -324,7 +326,8 @@ function transformApiData(
     })
   }
 
-  const sortedExchanges = [...exchangeRows].sort(
+  const sortedExchanges = toSortedCompat(
+    exchangeRows,
     (a, b) => b.open_interest_usd - a.open_interest_usd,
   )
 
@@ -470,11 +473,10 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
 
         if (volumeResp && Array.isArray(volumeResp.items) && volumeResp.items.length > 0) {
           // 先按 dataTimestamp 降序，保证同交易所取最新一条
-          const exchangeRows = volumeResp.items
-            .filter(item => item.exchange !== 'All')
-            .sort((a, b) =>
-              String(b.dataTimestamp || '').localeCompare(String(a.dataTimestamp || '')),
-            )
+          const exchangeRows = toSortedCompat(
+            volumeResp.items.filter(item => item.exchange !== 'All'),
+            (a, b) => String(b.dataTimestamp || '').localeCompare(String(a.dataTimestamp || '')),
+          )
 
           for (const row of exchangeRows) {
             const key = normalizeExchangeName(row.exchange)
@@ -518,12 +520,12 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
 
   const numberCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 })
+    return getCachedNumberFormatter(locale, { notation: 'compact', maximumFractionDigits: 2 })
   }, [i18n.language])
 
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
+    return getCachedNumberFormatter(locale, {
       style: 'currency',
       currency: 'USD',
       notation: 'compact',
@@ -537,13 +539,13 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
     const exchangeRows = data.filter(row => !row.isTotal)
     const totalRow = data.find(row => row.isTotal)
 
-    exchangeRows.sort((a, b) => {
+    const sortedExchangeRows = toSortedCompat(exchangeRows, (a, b) => {
       const aVal = a[sortField as keyof OIData] as number
       const bVal = b[sortField as keyof OIData] as number
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
     })
 
-    return totalRow ? [totalRow, ...exchangeRows] : exchangeRows
+    return totalRow ? [totalRow, ...sortedExchangeRows] : sortedExchangeRows
   }, [sortField, sortDirection, data])
 
   const formatRatio = (val: number) => `${val.toFixed(2)}%`

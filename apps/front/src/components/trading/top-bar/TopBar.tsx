@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 import { fetchKlineData } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
+import { getCachedNumberFormatter } from '@/lib/number-format-cache'
 import { getWsBaseUrl } from '@/lib/ws'
 import { logger } from '@/utils/logger'
 import { calculateTopBarDisplayValues } from './price-change'
@@ -115,15 +116,15 @@ export const TopBar = ({
 
   const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
   const priceFormatter = useMemo(
-    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }),
+    () => getCachedNumberFormatter(locale, { maximumFractionDigits: 1 }),
     [locale],
   )
   const priceFormatter2 = useMemo(
-    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+    () => getCachedNumberFormatter(locale, { maximumFractionDigits: 2 }),
     [locale],
   )
   const compactFormatter = useMemo(
-    () => new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 }),
+    () => getCachedNumberFormatter(locale, { notation: 'compact', maximumFractionDigits: 2 }),
     [locale],
   )
   const formatUsd = (n: number) => `$${priceFormatter.format(n)}`
