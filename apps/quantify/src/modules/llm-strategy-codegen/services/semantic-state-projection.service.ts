@@ -3272,6 +3272,13 @@ export class SemanticStateProjectionService {
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
+  private readNumber(value: unknown): number | null {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (typeof value !== 'string' || value.trim().length === 0) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
   private readUnknownShape(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? value as Record<string, unknown>
@@ -4400,9 +4407,10 @@ export class SemanticStateProjectionService {
   }
 
   private buildRulesSummary(rules: readonly SemanticRule[]): string {
-    const sharedScopeTexts = this.collectSharedScopeTexts(rules)
+    const displayRules = this.dropRedundantEntryAverageRiskExitRules(rules)
+    const sharedScopeTexts = this.collectSharedScopeTexts(displayRules)
     const lines: string[] = []
-    for (const rule of rules) {
+    for (const rule of displayRules) {
       const line = this.renderRule(this.removeSharedScopeEffectsFromRule(rule, sharedScopeTexts))
       if (line.length > 0) lines.push(line)
     }
@@ -4410,6 +4418,48 @@ export class SemanticStateProjectionService {
       lines.push(`前置：${sharedScopeTexts.join('，')}`)
     }
     return lines.join('；')
+  }
+
+  private dropRedundantEntryAverageRiskExitRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const entryRiskSignatures = new Set<string>()
+    for (const rule of rules) {
+      if (rule.phase !== 'entry') continue
+      for (const effect of listRuleEffects(rule.effects)) {
+        for (const leaf of collectAtomLeaves(effect)) {
+          const signature = this.entryAverageRiskSignature(leaf)
+          if (signature) entryRiskSignatures.add(signature)
+        }
+      }
+    }
+    if (entryRiskSignatures.size === 0) return [...rules]
+
+    return rules.filter((rule) => {
+      if (rule.phase !== 'exit') return true
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      return !conditionLeaves.some(leaf => this.entryAverageExitSignature(leaf) !== null && entryRiskSignatures.has(this.entryAverageExitSignature(leaf) as string))
+    })
+  }
+
+  private entryAverageRiskSignature(leaf: { key: string, params?: Record<string, unknown> }): string | null {
+    if (leaf.key !== 'risk.stop_loss_pct' && leaf.key !== 'risk.take_profit_pct') return null
+    const params = leaf.params ?? {}
+    if (params.basis !== 'entry_avg_price') return null
+    const valuePct = this.readNumber(params.valuePct ?? params.pct)
+    if (valuePct === null) return null
+    const kind = leaf.key === 'risk.stop_loss_pct' ? 'stop_loss' : 'take_profit'
+    return `${kind}:${Math.abs(valuePct)}`
+  }
+
+  private entryAverageExitSignature(leaf: { key: string, params?: Record<string, unknown> }): string | null {
+    if (leaf.key !== 'price.percent_change') return null
+    const params = leaf.params ?? {}
+    if (params.basis !== 'entry_avg_price') return null
+    const valuePct = this.readNumber(params.valuePct ?? params.pct ?? params.thresholdPct)
+    if (valuePct === null) return null
+    const direction = typeof params.direction === 'string' ? params.direction : ''
+    if (direction === 'down' || direction === 'loss') return `stop_loss:${Math.abs(valuePct)}`
+    if (direction === 'up' || direction === 'profit') return `take_profit:${Math.abs(valuePct)}`
+    return null
   }
 
   private collectSharedScopeTexts(rules: readonly SemanticRule[]): string[] {

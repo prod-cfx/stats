@@ -1464,6 +1464,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('5')
     expect(result.assistantPrompt).toContain('止盈')
     expect(result.assistantPrompt).toContain('10')
+    expect(result.assistantPrompt).not.toContain('出场：价格百分比变化（下跌，5%，相对入场均价）')
+    expect(result.assistantPrompt).not.toContain('出场：价格百分比变化（上涨，10%，相对入场均价）')
   })
 
   it('recovers ORDI on-start entry and all explicit percent exits when planner returns no rules (staging dispatcher-only)', async () => {

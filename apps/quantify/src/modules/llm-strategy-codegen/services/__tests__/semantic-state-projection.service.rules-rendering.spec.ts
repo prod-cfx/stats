@@ -916,6 +916,55 @@ describe('Issue #1443 — renderRule 通用 UI 简化', () => {
     expect(view.summary).toContain('5')
   })
 
+  it('does not repeat entry-average stop-loss and take-profit exits in ORDI dispatcher-only confirmation summary', () => {
+    const rules: SemanticRule[] = [
+      {
+        id: 'dispatcher-typed-rule-1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start', orderType: 'market', occurrence: 'once' } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [
+            { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 5 } },
+            { kind: 'atom', key: 'risk.take_profit_pct', params: { basis: 'entry_avg_price', valuePct: 10 } },
+          ],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      },
+      {
+        id: 'deterministic-explicit-prev-close-exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'prev_close', window: '1h', valuePct: 1, direction: 'up' } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      },
+      {
+        id: 'deterministic-explicit-stop-loss-exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', valuePct: 5, direction: 'down' } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      },
+      {
+        id: 'deterministic-explicit-take-profit-exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', valuePct: 10, direction: 'up' } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      },
+    ]
+    const view = service.buildConversationView(baseState({ rules }))
+
+    expect(view.summary).toContain('止损')
+    expect(view.summary).toContain('止盈')
+    expect(view.summary).toContain('出场：价格百分比变化（上涨，1%，相对上一根收盘价，1h）')
+    expect(view.summary).not.toContain('出场：价格百分比变化（下跌，5%，相对入场均价）')
+    expect(view.summary).not.toContain('出场：价格百分比变化（上涨，10%，相对入场均价）')
+  })
+
   it('(c) enrich 跳过值 === paramSlot.default 的 slot — execution.on_start 默认值不输出', () => {
     // execution.on_start 三个 param 全等 default（timing=on_start / orderType=market /
     //   occurrence=once）→ enrich 跳过全部 → summary 只剩 "启动后执行" 不附加（...）
