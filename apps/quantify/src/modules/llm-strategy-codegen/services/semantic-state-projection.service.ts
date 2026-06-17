@@ -4279,8 +4279,8 @@ export class SemanticStateProjectionService {
         const direction = typeof params.direction === 'string' ? params.direction : ''
         const rawValue = params.valuePct ?? params.value
         const numericValue = typeof rawValue === 'number' ? rawValue : Number(rawValue)
-        const isUp = direction === 'up' || (Number.isFinite(numericValue) && numericValue > 0)
-        const isDown = direction === 'down' || (Number.isFinite(numericValue) && numericValue < 0)
+        const isUp = direction === 'up' || (!direction && Number.isFinite(numericValue) && numericValue > 0)
+        const isDown = direction === 'down' || (!direction && Number.isFinite(numericValue) && numericValue < 0)
         if (isUp) hints.add('take_profit')
         if (isDown) hints.add('stop_loss')
       }
@@ -4325,7 +4325,7 @@ export class SemanticStateProjectionService {
     for (const hint of hints) {
       const aliases = aliasByHint[hint] ?? []
       const hasAlias = aliases.some(alias => bodyText.includes(alias)) || bodyText.includes(hint)
-      if (!hasAlias) suffixes.push(`（${hint}）`)
+      if (!hasAlias) suffixes.push(`（${aliases[0] ?? hint}）`)
     }
     return suffixes.length > 0 ? `${bodyText}${suffixes.join('')}` : bodyText
   }

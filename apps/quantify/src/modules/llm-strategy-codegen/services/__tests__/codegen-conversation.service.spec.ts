@@ -1399,6 +1399,231 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items.map((item: any) => item.reason)).not.toContain('missing_entry_rules')
   })
 
+  it('recovers explicit percent exit rules when planner spine drops them (staging s06)', async () => {
+    const initialMessage = '在 OKX 现货 ORDI/USDT 上，主周期 1h，使用 10% 固定仓位只做多；入场动作为立即开始时市价买入；出场规则为价格相对前收盘上涨 1% 时卖出，另有相对入场均价下跌 5% 止损卖出、相对入场均价上涨 10% 止盈卖出。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '我整理出的策略逻辑如下：OKX ORDIUSDT 现货 1h；入场：开多，止损：价格相对入场均价下跌10% 强制平仓，单笔仓位 10%；请确认是否按这个逻辑生成脚本。',
+        semanticPatch: {
+          contextSlots: {
+            exchange: 'okx',
+            marketType: 'spot',
+            symbol: 'ORDIUSDT',
+            timeframe: '1h',
+          },
+          rules: [
+            {
+              id: 'planner-entry-on-start',
+              phase: 'entry',
+              sideScope: 'long',
+              evidence: { text: '入场动作为立即开始时市价买入' },
+              condition: {
+                kind: 'atom',
+                key: 'execution.on_start',
+                params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+                evidence: { text: '入场动作为立即开始时市价买入' },
+              },
+              effects: {
+                actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+                risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 10 } }],
+                positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+                orchestration: [],
+                programs: [],
+              },
+            },
+          ],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-staging-s06-percent-exits' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const rules = createPayload.semanticState?.rules ?? []
+    const serializedRules = JSON.stringify(rules)
+
+    expect(serializedRules).toContain('basis":"prev_close')
+    expect(serializedRules).toContain('basis":"entry_avg_price')
+    expect(serializedRules).toContain('valuePct":1')
+    expect(serializedRules).toContain('valuePct":5')
+    expect(serializedRules).toContain('valuePct":10')
+    expect(rules.filter((rule: any) => rule.phase === 'exit')).toHaveLength(3)
+    expect(rules.find((rule: any) => rule.phase === 'entry')?.effects?.risks ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 10 }),
+      }),
+    ]))
+    expect(result.assistantPrompt).toContain('出场')
+    expect(result.assistantPrompt).toContain('相对上一根收盘价')
+    expect(result.assistantPrompt).toContain('1')
+    expect(result.assistantPrompt).toContain('止损')
+    expect(result.assistantPrompt).toContain('5')
+    expect(result.assistantPrompt).toContain('止盈')
+    expect(result.assistantPrompt).toContain('10')
+  })
+
+  it('keeps MA50-above-MA200 as indicator-vs-indicator gate for RSI reclaim strategies', async () => {
+    const initialMessage = 'BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我当前理解的策略是：入场：RSI 跌破 35 后重新上穿 35 同时 1h 价格在 MA50 上方 同时 1h 价格在 MA200 上方 同时 RSI14 高于或等于 35 → 开多；出场：RSI14 高于或等于 65 → 平多；请确认单笔仓位大小。',
+        semanticPatch: {
+          contextSlots: {
+            symbol: 'BTCUSDT',
+            timeframe: '1h',
+          },
+          rules: [
+            {
+              id: 'planner-entry-rsi-reclaim-noisy-ma-gates',
+              phase: 'entry',
+              sideScope: 'long',
+              evidence: { text: initialMessage },
+              condition: {
+                kind: 'and',
+                children: [
+                  { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 50, timeframe: '1h' }, evidence: { text: '1h 价格在 MA50 上方' } },
+                  { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 200, timeframe: '1h' }, evidence: { text: '1h 价格在 MA200 上方' } },
+                  { kind: 'atom', key: 'oscillator.rsi_lte', params: { period: 14, threshold: 35, value: 35, timeframe: '1h' }, evidence: { text: 'RSI 跌破 35' } },
+                  { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'rsi', period: 14, threshold: 35, value: 35, timeframe: '1h' }, evidence: { text: '重新上穿 35' } },
+                ],
+              },
+              effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {}, evidence: { text: '买入' } }], risks: [], positions: [], orchestration: [], programs: [] },
+            },
+            {
+              id: 'planner-exit-rsi-65',
+              phase: 'exit',
+              sideScope: 'long',
+              evidence: { text: 'RSI 超过 65 卖出' },
+              condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, threshold: 65, value: 65, timeframe: '1h' }, evidence: { text: 'RSI 超过 65' } },
+              effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: '卖出' } }], risks: [], positions: [], orchestration: [], programs: [] },
+            },
+          ],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-rsi-ma-pair-gate' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const rules = createPayload.semanticState?.rules ?? []
+    const entryRules = rules.filter((rule: any) => rule.phase === 'entry')
+    const serializedEntry = JSON.stringify(entryRules)
+
+    expect(serializedEntry).toContain('"period":50')
+    expect(serializedEntry).toContain('"reference.period":200')
+    expect(serializedEntry).toContain('"sequenceKind":"rsi_reclaim"')
+    expect(serializedEntry).not.toContain('"reference.period":50')
+    expect(entryRules).toHaveLength(1)
+  })
+
+  it('deduplicates open-short entry when the same condition is a reverse-position entry', async () => {
+    const initialMessage = 'OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。'
+    const condition = {
+      kind: 'atom',
+      key: 'indicator.cross_under',
+      params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 50, timeframe: '15m' },
+      evidence: { text: 'EMA20 下穿 EMA50' },
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '我整理出的策略逻辑如下：OKX BTCUSDT 永续合约 15m；入场：EMA20 下穿 EMA50 → 开空；入场：EMA20 下穿 EMA50 → 反手，单笔仓位 10%；请确认是否按这个逻辑生成脚本。',
+        semanticPatch: {
+          contextSlots: {
+            exchange: 'okx',
+            marketType: 'perp',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+          rules: [
+            {
+              id: 'planner-entry-ema-death-open-short',
+              phase: 'entry',
+              sideScope: 'short',
+              evidence: { text: 'EMA20 下穿 EMA50 时从多头反手做空' },
+              condition,
+              effects: {
+                actions: [{ kind: 'atom', key: 'action.open_short', params: {}, evidence: { text: '做空' } }],
+                risks: [],
+                positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+                orchestration: [],
+                programs: [],
+              },
+            },
+            {
+              id: 'planner-entry-ema-death-reverse-short',
+              phase: 'entry',
+              sideScope: 'short',
+              evidence: { text: 'EMA20 下穿 EMA50 时从多头反手做空' },
+              condition,
+              effects: {
+                actions: [{ kind: 'atom', key: 'action.reverse_position', params: { fromSide: 'long', toSide: 'short', sizingSource: 'fixed', sameBarPolicy: 'next_bar_only' }, evidence: { text: '反手做空' } }],
+                risks: [],
+                positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', unit: 'ratio', value: 0.1 } } }],
+                orchestration: [],
+                programs: [],
+              },
+            },
+          ],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-reverse-short-dedupe' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const entryRules = (createPayload.semanticState?.rules ?? []).filter((rule: any) => rule.phase === 'entry')
+    const serializedEntry = JSON.stringify(entryRules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serializedEntry).toContain('action.reverse_position')
+    expect(serializedEntry).not.toContain('action.open_short')
+    expect(result.assistantPrompt).not.toContain('入场：EMA20 下穿 EMA50 → 开空；入场：EMA20 下穿 EMA50 → 反手')
+    expect(result.assistantPrompt).toContain('反手')
+  })
+
+  it('deduplicates dispatcher-only open-short when reverse-position is recovered from fallback rules', async () => {
+    const initialMessage = 'OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。'
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '我整理出的策略逻辑如下：OKX BTCUSDT 永续合约 15m；入场：EMA20 下穿 EMA50 → 开空；入场：EMA20 下穿 EMA50 → 反手，单笔仓位 10%；请确认是否按这个逻辑生成脚本。',
+        semanticPatch: {
+          contextSlots: {
+            exchange: 'okx',
+            marketType: 'perp',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+          rules: [],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-reverse-short-dispatcher-only-dedupe' })
+
+    const result = await service.startSession({ userId: 'u1', initialMessage })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const entryRules = (createPayload.semanticState?.rules ?? []).filter((rule: any) => rule.phase === 'entry')
+    const serializedEntry = JSON.stringify(entryRules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serializedEntry).toContain('action.reverse_position')
+    expect(serializedEntry).not.toContain('action.open_short')
+    expect(result.assistantPrompt).not.toContain('入场：EMA20 下穿 EMA50 → 开空；入场：EMA20 下穿 EMA50 → 反手')
+    expect(result.assistantPrompt).toContain('反手')
+  })
+
   it('final semantic-state application recovers rules when plan remains context-only', () => {
     const initialMessage = 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'
     const state = (service as unknown as { applyConversationPlanToSemanticState: Function }).applyConversationPlanToSemanticState({

@@ -208,8 +208,7 @@ const NEW_IN_CONTEXT_EXAMPLES: readonly string[] = [
   '  rules: [{',
   '    "id": "entry-ma-gate-rsi-seq", "phase": "entry", "sideScope": "long",',
   '    "condition": { "kind": "and", "children": [',
-  '      { "kind": "atom", "key": "indicator.above", "params": { "indicator": "ma", "period": 50, "timeframe": "1h" } },',
-  '      { "kind": "atom", "key": "indicator.above", "params": { "indicator": "ma", "period": 200, "timeframe": "1h" } },',
+  '      { "kind": "atom", "key": "indicator.above", "params": { "indicator": "ma", "period": 50, "reference.period": 200, "timeframe": "1h" } },',
   '      { "kind": "sequence", "steps": [',
   '        { "kind": "atom", "key": "oscillator.rsi_lte", "params": { "period": 14, "threshold": 35, "timeframe": "1h" } },',
   '        { "kind": "atom", "key": "indicator.cross_over", "params": { "indicator": "rsi", "period": 14, "threshold": 35, "timeframe": "1h" } }',
@@ -384,6 +383,12 @@ const COMPOSITIONAL_PATTERN_HINTS: readonly string[] = [
   '  边界：本段处理「方向准入短语 + 单触发原子」二元形态；若用户额外给出 RSI sequence /',
   '  突破回踩等复杂时序触发（命中上一条 MA50/MA200 + RSI sequence hint），按上一条形态执行，',
   '  仍可在 entry rule 的 condition.and.children 内嵌入 sequence 子节点，不要拆为独立 phase=gate rule。',
+  '',
+  '【从多头反手做空 / 从空头反手做多 / reverse position】',
+  '  → 这是单条 entry rule，不是「开空」+「反手」两条 entry。',
+  '  → condition 使用用户给出的触发条件（如 EMA20 下穿 EMA50），effects.actions 只输出 action.reverse_position，',
+  '    params.fromSide/toSide 必须与原话一致（多头反手做空 = fromSide="long", toSide="short"）。',
+  '  禁止：同一 condition 下同时输出 action.open_short/action.open_long 的普通入场 rule；reverse_position 已包含平旧仓 + 开反向仓。',
 ]
 
 /**

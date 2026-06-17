@@ -110,6 +110,14 @@ describe('issue #1395 — planner prompt rules shape', () => {
     expect(prompt).toContain('禁止：把方向准入与触发拆成多条')
   })
 
+  it('contains reverse-position hint that forbids duplicate open-short entry', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    expect(prompt).toContain('从多头反手做空')
+    expect(prompt).toContain('action.reverse_position')
+    expect(prompt).toContain('不是「开空」+「反手」两条 entry')
+    expect(prompt).toContain('reverse_position 已包含平旧仓 + 开反向仓')
+  })
+
   it('Issue #1448: NEGATIVE_EXAMPLES 段含「方向准入 + 触发」拆成 N 条独立 entry 的禁律', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
     expect(prompt).toContain('把「方向准入语句 + 触发条件」拆成 N 条独立 entry rule')
